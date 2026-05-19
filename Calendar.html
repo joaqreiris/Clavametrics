@@ -409,8 +409,9 @@
   .sq-modal-row { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
   .sq-modal-field { display:flex;flex-direction:column;gap:5px; }
   .sq-modal-field label { font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted); }
-  .sq-modal-field input,.sq-modal-field select { height:36px;padding:0 10px;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none; }
-  .sq-modal-field input:focus,.sq-modal-field select:focus { border-color:var(--cm-accent); }
+  .sq-modal-field input,.sq-modal-field select,.sq-modal-field textarea { height:36px;padding:0 10px;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none; }
+  .sq-modal-field textarea { height:auto;padding:8px 10px;resize:vertical;min-height:60px; }
+  .sq-modal-field input:focus,.sq-modal-field select:focus,.sq-modal-field textarea:focus { border-color:var(--cm-accent); }
   .sq-modal-foot { display:flex;align-items:center;gap:8px;padding:14px 20px 18px;border-top:1px solid var(--cm-border); }
   .sq-modal-foot .grow { flex:1; }
   .sq-toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:var(--cm-r-3);padding:8px 16px;font:500 13px/1 var(--cm-font-sans);z-index:500;opacity:0;pointer-events:none;transition:opacity 200ms,transform 200ms; }
@@ -665,7 +666,7 @@
 
           <!-- Days grid: Sun 11 → Sat 17 (week 1, today is Fri 16) -->
                     <div class="mc-days" id="calDaysGrid">
-            <td colspan="7" style="padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading schedule…</td>
+            <div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading schedule…</div>
           </div>
 
         </div>
@@ -824,7 +825,7 @@
 
 <!-- New event modal -->
 <div class="sq-modal-backdrop" id="calEvtBackdrop">
-  <div class="sq-modal" role="dialog">
+  <div class="sq-modal" role="dialog" aria-modal="true" aria-labelledby="calEvtTitle">
     <div class="sq-modal-head">
       <h2 id="calEvtTitle">New event</h2>
       <button class="sq-modal-close" id="calEvtClose"><i class="ti ti-x"></i></button>
@@ -860,7 +861,7 @@
         </div>
         <div class="sq-modal-field">
           <label>Notes</label>
-          <input type="text" id="calEvtF_notes" placeholder="Optional">
+          <textarea id="calEvtF_notes" placeholder="Optional" rows="2"></textarea>
         </div>
       </div>
     </div>
@@ -885,7 +886,7 @@ const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 function fmtShort(d) { return `${DAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`; }
-function addDays(dateStr, n) { const d = new Date(dateStr); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
+function addDays(dateStr, n) { const [y,mo,d] = dateStr.split('-').map(Number); const r = new Date(y, mo-1, d+n); return r.getFullYear()+'-'+String(r.getMonth()+1).padStart(2,'0')+'-'+String(r.getDate()).padStart(2,'0'); }
 function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
 
 function showCalToast(msg) {
@@ -998,13 +999,19 @@ function renderGrid() {
 async function loadSessions() {
   const mc = _allMCs[_mcIdx];
   if (!mc) return;
-  const { data } = await window.sb.from('training_sessions')
+  const grid = document.getElementById('calDaysGrid');
+  if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
+  const { data, error } = await window.sb.from('training_sessions')
     .select('id,title,session_type,duration,session_date,notes')
     .eq('club_id', _clubId)
     .gte('session_date', mc.start_date)
     .lte('session_date', mc.end_date)
     .order('session_date');
-  _sessions = data || [];
+  if (error) {
+    if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Error loading sessions: ${error.message}</div>`;
+    return;
+  }
+  _sessions = (data || []).map(s => ({ ...s, session_date: s.session_date ? s.session_date.split('T')[0] : s.session_date }));
   _weekOffset = 0;
   renderGrid();
 }
@@ -1074,6 +1081,42 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModa
 // ── Week navigation ───────────────────────────────────────────
 document.getElementById('calWeekPrev').addEventListener('click', () => { _weekOffset--; renderGrid(); });
 document.getElementById('calWeekNext').addEventListener('click', () => { _weekOffset++; renderGrid(); });
+
+// ── MC switcher dropdown ──────────────────────────────────────
+document.getElementById('calMcNav').addEventListener('click', function(e) {
+  e.stopPropagation();
+  const existing = document.getElementById('calMcPopover');
+  if (existing) { existing.remove(); return; }
+
+  const rect = this.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.id = 'calMcPopover';
+  pop.setAttribute('style', `position:fixed;top:${rect.bottom+6}px;right:${window.innerWidth-rect.right}px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:0 8px 24px rgba(0,0,0,.14);z-index:150;min-width:240px;max-height:300px;overflow-y:auto;padding:4px`);
+
+  _allMCs.forEach((mc, idx) => {
+    const item = document.createElement('button');
+    item.setAttribute('style', `display:block;width:100%;padding:8px 12px;border:0;background:${idx===_mcIdx?'var(--cm-accent-soft)':'transparent'};cursor:pointer;border-radius:6px;text-align:left;transition:background 100ms`);
+    item.onmouseenter = () => { if (idx !== _mcIdx) item.style.background = 'var(--cm-bg-soft)'; };
+    item.onmouseleave = () => { item.style.background = idx===_mcIdx?'var(--cm-accent-soft)':'transparent'; };
+    const name = mc.name || `MC ${mc.number||idx+1}`;
+    const dates = `${mc.start_date} → ${mc.end_date}`;
+    item.innerHTML = `<div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}</div><div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${dates}</div>`;
+    item.addEventListener('click', async () => {
+      _mcIdx = idx;
+      _weekOffset = 0;
+      pop.remove();
+      await loadSessions();
+    });
+    pop.appendChild(item);
+  });
+
+  document.body.appendChild(pop);
+  setTimeout(() => {
+    document.addEventListener('click', function close(ev) {
+      if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', close); }
+    });
+  }, 0);
+});
 
 // ── Filter pills ──────────────────────────────────────────────
 document.querySelectorAll('.cal-filters').forEach(bar => {
