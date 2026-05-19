@@ -912,7 +912,7 @@
         </div>
         <div class="sq-modal-field">
           <label>Status</label>
-          <select id="sqF_status">
+          <select id="sqF_status" disabled style="opacity:0.5">
             <option value="active">Active</option>
             <option value="injured">Injured</option>
             <option value="loan">On loan</option>
@@ -1072,9 +1072,8 @@ function renderTable() {
 
 async function reloadPlayers() {
   const { data } = await window.sb.from('players')
-    .select('id,first_name,last_name,number,position,nationality,dob,height_cm,weight_kg,dominant_foot,status')
+    .select('id,first_name,last_name,number,position,nationality,dob,height_cm,weight_kg,dominant_foot')
     .eq('club_id', _currentClubId)
-    .neq('status', 'inactive')
     .order('number', { ascending: true });
 
   _allPlayers = data || [];
@@ -1209,7 +1208,6 @@ async function reloadPlayers() {
       height_cm:     parseFloat(document.getElementById('sqF_height_cm').value) || null,
       weight_kg:     parseFloat(document.getElementById('sqF_weight_kg').value) || null,
       dominant_foot: document.getElementById('sqF_dominant_foot').value || null,
-      status:        document.getElementById('sqF_status').value || 'active',
     };
 
     if (!payload.first_name && !payload.last_name) {
@@ -1242,9 +1240,9 @@ async function reloadPlayers() {
 
   async function deletePlayer() {
     if (!_editingId) return;
-    if (!confirm('Remove this player from the squad?')) return;
+    if (!confirm('Delete this player permanently?')) return;
     const { error } = await window.sb.from('players')
-      .update({ status: 'inactive' })
+      .delete()
       .eq('id', _editingId);
     if (error) { showToast('Error: ' + error.message); return; }
     closeModal();
