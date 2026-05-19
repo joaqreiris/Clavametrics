@@ -6,7 +6,6 @@ export const EVT_ICONS = {
   gym:      'ti-barbell',
   match:    'ti-ball-football',
   recovery: 'ti-heart-rate-monitor',
-  travel:   'ti-plane',
 };
 
 export const DAYS_SHORT   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -31,12 +30,13 @@ export function daysBetween(a, b) {
   return Math.round((new Date(b) - new Date(a)) / 86400000);
 }
 
+// Maps DB session_type values to CSS display categories.
+// New schema values: match, gym, recovery, tactical, conditioning, other
 export function focusToClass(focus) {
   if (!focus) return 'training';
   const f = focus.toLowerCase();
-  if (['match', 'game', 'partido'].includes(f))                              return 'match';
-  if (['gym', 'strength', 'weights', 'fuerza'].includes(f))                  return 'gym';
-  if (['recovery', 'rest', 'regenerativo', 'regenerative', 'regen'].includes(f)) return 'recovery';
-  if (['travel', 'viaje', 'trip'].includes(f))                               return 'travel';
-  return 'training';
+  if (f === 'match')    return 'match';
+  if (f === 'gym')      return 'gym';
+  if (f === 'recovery') return 'recovery';
+  return 'training'; // tactical, conditioning, other → training
 }

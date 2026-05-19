@@ -62,32 +62,26 @@ describe('focusToClass', () => {
     it.each([null, undefined, ''])('maps falsy %s to training', v => {
       expect(focusToClass(v)).toBe('training');
     });
-    it.each(['Technical', 'Tactical', 'Conditioning', 'Speed', 'Activation', 'Pressing'])(
+    it.each(['tactical', 'Tactical', 'conditioning', 'Conditioning', 'other', 'Other', 'unknown'])(
       'maps "%s" to training', v => expect(focusToClass(v)).toBe('training')
     );
   });
 
   describe('→ match', () => {
-    it.each(['Match', 'match', 'MATCH', 'Game', 'game', 'partido'])(
+    it.each(['match', 'Match', 'MATCH'])(
       'maps "%s" to match', v => expect(focusToClass(v)).toBe('match')
     );
   });
 
   describe('→ gym', () => {
-    it.each(['Gym', 'gym', 'Strength', 'strength', 'Weights', 'weights', 'Fuerza', 'fuerza'])(
+    it.each(['gym', 'Gym', 'GYM'])(
       'maps "%s" to gym', v => expect(focusToClass(v)).toBe('gym')
     );
   });
 
   describe('→ recovery', () => {
-    it.each(['Recovery', 'recovery', 'Rest', 'rest', 'regenerativo', 'Regenerative', 'regen'])(
+    it.each(['recovery', 'Recovery', 'RECOVERY'])(
       'maps "%s" to recovery', v => expect(focusToClass(v)).toBe('recovery')
-    );
-  });
-
-  describe('→ travel', () => {
-    it.each(['Travel', 'travel', 'viaje', 'trip'])(
-      'maps "%s" to travel', v => expect(focusToClass(v)).toBe('travel')
     );
   });
 
@@ -95,13 +89,23 @@ describe('focusToClass', () => {
     expect(focusToClass('MATCH')).toBe('match');
     expect(focusToClass('GYM')).toBe('gym');
     expect(focusToClass('RECOVERY')).toBe('recovery');
+    expect(focusToClass('TACTICAL')).toBe('training');
+  });
+
+  it('all DB session_type values map correctly', () => {
+    expect(focusToClass('tactical')).toBe('training');
+    expect(focusToClass('conditioning')).toBe('training');
+    expect(focusToClass('gym')).toBe('gym');
+    expect(focusToClass('match')).toBe('match');
+    expect(focusToClass('recovery')).toBe('recovery');
+    expect(focusToClass('other')).toBe('training');
   });
 });
 
 // ── EVT_ICONS ─────────────────────────────────────────────────────────────────
 
 describe('EVT_ICONS', () => {
-  const CATEGORIES = ['training', 'gym', 'match', 'recovery', 'travel'];
+  const CATEGORIES = ['training', 'gym', 'match', 'recovery'];
 
   it('has an icon for every focusToClass output category', () => {
     CATEGORIES.forEach(cat => expect(EVT_ICONS[cat]).toBeDefined());

@@ -882,15 +882,14 @@
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null;
 const TODAY = new Date().toISOString().split('T')[0];
 
-const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor', travel:'ti-plane' };
+const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor' };
 function focusToClass(focus) {
   if (!focus) return 'training';
   const f = focus.toLowerCase();
-  if (['match','game','partido'].includes(f)) return 'match';
-  if (['gym','strength','weights','fuerza'].includes(f)) return 'gym';
-  if (['recovery','rest','regenerativo','regenerative','regen'].includes(f)) return 'recovery';
-  if (['travel','viaje','trip'].includes(f)) return 'travel';
-  return 'training';
+  if (f === 'match')   return 'match';
+  if (f === 'gym')     return 'gym';
+  if (f === 'recovery') return 'recovery';
+  return 'training'; // tactical, conditioning, other → training
 }
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
