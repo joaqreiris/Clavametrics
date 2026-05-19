@@ -882,6 +882,15 @@ let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'al
 const TODAY = new Date().toISOString().split('T')[0];
 
 const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor', travel:'ti-plane' };
+function focusToClass(focus) {
+  if (!focus) return 'training';
+  const f = focus.toLowerCase();
+  if (['match','game','partido'].includes(f)) return 'match';
+  if (['gym','strength','weights','fuerza'].includes(f)) return 'gym';
+  if (['recovery','rest','regenerativo','regenerative','regen'].includes(f)) return 'recovery';
+  if (['travel','viaje','trip'].includes(f)) return 'travel';
+  return 'training';
+}
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -918,8 +927,8 @@ function renderGrid() {
 
   // Summary row
   if (mc.rival) document.getElementById('calMcTarget').innerHTML = `${mc.rival}<small>${mc.home_away ? ' · '+mc.home_away : ''}</small>`;
-  const trainCt = _sessions.filter(s => s.session_type === 'training').length;
-  const gymCt   = _sessions.filter(s => s.session_type === 'gym').length;
+  const trainCt = _sessions.filter(s => focusToClass(s.focus) === 'training').length;
+  const gymCt   = _sessions.filter(s => focusToClass(s.focus) === 'gym').length;
   document.getElementById('calMcSessions').innerHTML = `${trainCt}<small>field + ${gymCt} gym</small>`;
   const totalMin = _sessions.reduce((a, s) => a + (s.duration || 0), 0);
   document.getElementById('calMcDuration').innerHTML = totalMin ? `${Math.round(totalMin/60)}h <small>${totalMin % 60 ? (totalMin % 60) + 'min' : ''}</small>` : '—';
@@ -945,7 +954,7 @@ function renderGrid() {
     if (dateStr > end) { html += '<div class="mc-day" style="background:var(--cm-bg-sunk);opacity:0.4"></div>'; continue; }
     const d = new Date(dateStr + 'T12:00:00');
     const isToday = dateStr === TODAY;
-    const daySessions = _sessions.filter(s => s.session_date === dateStr);
+    const daySessions = _sessions.filter(s => s.date === dateStr);
     const isOff = daySessions.length === 0;
 
     let mdLabel = '';
@@ -960,12 +969,13 @@ function renderGrid() {
 
     const eventsHtml = isOff
       ? '<div class="mc-evt day-off">Rest day</div>'
-      : daySessions.filter(s => _filterType === 'all' || s.session_type === _filterType).map(s => {
-          const icon = EVT_ICONS[s.session_type] || 'ti-calendar';
+      : daySessions.filter(s => _filterType === 'all' || focusToClass(s.focus) === _filterType).map(s => {
+          const cat = focusToClass(s.focus);
+          const icon = EVT_ICONS[cat] || 'ti-calendar';
           const dur = s.duration ? ` ${s.duration}′` : '';
-          return `<div class="mc-evt ${s.session_type||''}" data-id="${s.id}" style="cursor:pointer">
+          return `<div class="mc-evt ${cat}" data-id="${s.id}" style="cursor:pointer">
             <i class="ti ${icon}"></i>
-            <span class="name">${s.title || s.session_type}${dur}</span>
+            <span class="name">${s.name || s.focus || cat}${dur}</span>
           </div>`;
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
 
@@ -1002,16 +1012,16 @@ async function loadSessions() {
   const grid = document.getElementById('calDaysGrid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
   const { data, error } = await window.sb.from('training_sessions')
-    .select('id,title,session_type,duration,session_date,notes')
+    .select('id,name,focus,duration,date,notes,microcycle')
     .eq('club_id', _clubId)
-    .gte('session_date', mc.start_date)
-    .lte('session_date', mc.end_date)
-    .order('session_date');
+    .gte('date', mc.start_date)
+    .lte('date', mc.end_date)
+    .order('date');
   if (error) {
     if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Error loading sessions: ${error.message}</div>`;
     return;
   }
-  _sessions = (data || []).map(s => ({ ...s, session_date: s.session_date ? s.session_date.split('T')[0] : s.session_date }));
+  _sessions = (data || []).map(s => ({ ...s, date: s.date ? s.date.split('T')[0] : s.date }));
   _weekOffset = 0;
   renderGrid();
 }
@@ -1021,9 +1031,9 @@ function openEvtModal(session, defaultDate) {
   _editEvtId = session?.id || null;
   document.getElementById('calEvtTitle').textContent = session ? 'Edit event' : 'New event';
   document.getElementById('calEvtId').value = session?.id || '';
-  document.getElementById('calEvtF_title').value = session?.title || '';
-  document.getElementById('calEvtF_type').value  = session?.session_type || 'training';
-  document.getElementById('calEvtF_date').value  = session?.session_date || defaultDate || TODAY;
+  document.getElementById('calEvtF_title').value = session?.name || '';
+  document.getElementById('calEvtF_type').value  = focusToClass(session?.focus) || 'training';
+  document.getElementById('calEvtF_date').value  = session?.date || defaultDate || TODAY;
   document.getElementById('calEvtF_duration').value = session?.duration || '';
   document.getElementById('calEvtF_notes').value = session?.notes || '';
   document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
@@ -1039,11 +1049,11 @@ async function saveEvt() {
   saving.style.display = 'inline'; saveBtn.disabled = true;
 
   const payload = {
-    title:        document.getElementById('calEvtF_title').value.trim(),
-    session_type: document.getElementById('calEvtF_type').value,
-    session_date: document.getElementById('calEvtF_date').value,
-    duration:     parseInt(document.getElementById('calEvtF_duration').value) || null,
-    notes:        document.getElementById('calEvtF_notes').value.trim() || null,
+    name:     document.getElementById('calEvtF_title').value.trim(),
+    focus:    document.getElementById('calEvtF_type').value,
+    date:     document.getElementById('calEvtF_date').value,
+    duration: parseInt(document.getElementById('calEvtF_duration').value) || null,
+    notes:    document.getElementById('calEvtF_notes').value.trim() || null,
   };
   if (!payload.title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
 
@@ -1053,6 +1063,7 @@ async function saveEvt() {
   } else {
     const clubId = _clubId || await window.getClubId();
     payload.club_id = clubId;
+    payload.microcycle = _allMCs[_mcIdx]?.name || null;
     ({ error } = await window.sb.from('training_sessions').insert(payload));
   }
 
