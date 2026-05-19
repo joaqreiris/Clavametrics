@@ -244,6 +244,59 @@
   .sq-table-foot .grow { flex:1; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* Modal */
+  .sq-modal-backdrop {
+    position:fixed; inset:0; background:rgba(8,10,12,0.5); backdrop-filter:blur(4px);
+    z-index:200; display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity 160ms ease;
+  }
+  .sq-modal-backdrop.is-open { opacity:1; pointer-events:auto; }
+  .sq-modal {
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-5); box-shadow:0 24px 48px rgba(0,0,0,0.18);
+    width:520px; max-width:calc(100vw - 32px); max-height:calc(100vh - 64px);
+    overflow-y:auto; display:flex; flex-direction:column;
+    transform:translateY(8px); transition:transform 160ms ease;
+  }
+  .sq-modal-backdrop.is-open .sq-modal { transform:translateY(0); }
+  .sq-modal-head {
+    display:flex; align-items:center; gap:12px;
+    padding:18px 20px 16px; border-bottom:1px solid var(--cm-border);
+  }
+  .sq-modal-head h2 { font:600 16px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; }
+  .sq-modal-head .sq-modal-close {
+    width:28px; height:28px; border-radius:6px; border:0;
+    background:transparent; color:var(--cm-fg-muted); cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .sq-modal-head .sq-modal-close:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .sq-modal-body { padding:20px; display:flex; flex-direction:column; gap:14px; }
+  .sq-modal-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .sq-modal-field { display:flex; flex-direction:column; gap:5px; }
+  .sq-modal-field label { font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .sq-modal-field input,
+  .sq-modal-field select {
+    height:36px; padding:0 10px; border-radius:var(--cm-r-3);
+    border:1px solid var(--cm-border); background:var(--cm-bg-soft);
+    color:var(--cm-fg); font:var(--cm-body-sm); outline:none;
+  }
+  .sq-modal-field input:focus,
+  .sq-modal-field select:focus { border-color:var(--cm-accent); }
+  .sq-modal-foot {
+    display:flex; align-items:center; gap:8px;
+    padding:14px 20px 18px; border-top:1px solid var(--cm-border);
+  }
+  .sq-modal-foot .grow { flex:1; }
+  .sq-modal-saving { font:var(--cm-meta); color:var(--cm-fg-muted); }
+  .sq-toast {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px);
+    background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3);
+    padding:8px 16px; font:500 13px/1 var(--cm-font-sans);
+    z-index:500; opacity:0; pointer-events:none;
+    transition:opacity 200ms, transform 200ms;
+  }
+  .sq-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
 </head>
 <body class="cm">
@@ -720,6 +773,101 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
+<!-- Player modal (add / edit) -->
+<div class="sq-modal-backdrop" id="sqModalBackdrop">
+  <div class="sq-modal" role="dialog" aria-modal="true">
+    <div class="sq-modal-head">
+      <h2 id="sqModalTitle">Add player</h2>
+      <button class="sq-modal-close" id="sqModalClose" title="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <input type="hidden" id="sqModalId">
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label>First name</label>
+          <input type="text" id="sqF_first_name" placeholder="e.g. Lucas">
+        </div>
+        <div class="sq-modal-field">
+          <label>Last name</label>
+          <input type="text" id="sqF_last_name" placeholder="e.g. García">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label>Dorsal #</label>
+          <input type="number" id="sqF_number" placeholder="e.g. 10" min="1" max="99">
+        </div>
+        <div class="sq-modal-field">
+          <label>Position</label>
+          <select id="sqF_position">
+            <option value="">— Select —</option>
+            <option value="GK">GK — Goalkeeper</option>
+            <option value="CB">CB — Centre back</option>
+            <option value="LB">LB — Left back</option>
+            <option value="RB">RB — Right back</option>
+            <option value="FB">FB — Fullback</option>
+            <option value="DM">DM — Defensive mid</option>
+            <option value="CM">CM — Central mid</option>
+            <option value="MF">MF — Midfielder</option>
+            <option value="WG">WG — Winger</option>
+            <option value="ST">ST — Striker</option>
+            <option value="CF">CF — Centre forward</option>
+          </select>
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label>Date of birth</label>
+          <input type="date" id="sqF_dob">
+        </div>
+        <div class="sq-modal-field">
+          <label>Nationality</label>
+          <input type="text" id="sqF_nationality" placeholder="e.g. Argentina">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label>Height (cm)</label>
+          <input type="number" id="sqF_height_cm" placeholder="e.g. 182" min="140" max="220">
+        </div>
+        <div class="sq-modal-field">
+          <label>Weight (kg)</label>
+          <input type="number" id="sqF_weight_kg" placeholder="e.g. 76" min="40" max="120">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label>Dominant foot</label>
+          <select id="sqF_dominant_foot">
+            <option value="">— Select —</option>
+            <option value="Right">Right</option>
+            <option value="Left">Left</option>
+            <option value="Both">Both</option>
+          </select>
+        </div>
+        <div class="sq-modal-field">
+          <label>Status</label>
+          <select id="sqF_status">
+            <option value="active">Active</option>
+            <option value="injured">Injured</option>
+            <option value="loan">On loan</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <button class="cm-btn is-danger is-sm" id="sqModalDelete" style="display:none"><i class="ti ti-trash" style="font-size:13px"></i>Remove</button>
+      <div class="grow"></div>
+      <span class="sq-modal-saving" id="sqModalSaving" style="display:none">Saving…</span>
+      <button class="cm-btn is-ghost is-sm" id="sqModalCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqModalSave">Save player</button>
+    </div>
+  </div>
+</div>
+
+<div class="sq-toast" id="sqToast"></div>
+
 <script>
 // Position → display config
 const POS_CFG = {
@@ -752,6 +900,8 @@ function fmtDob(dob) {
 let _allPlayers = [];
 let _activeFilter = 'All';
 let _searchQ = '';
+let _editingId = null;
+let _currentClubId = null;
 
 function renderTable() {
   const tbody = document.getElementById('sqTbody');
@@ -812,12 +962,32 @@ function renderTable() {
         <td><span class="sq-anthro">${h}${w}</span></td>
         <td><span class="sq-role-pill">First team</span></td>
         <td class="sq-mono">—</td>
-        <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+        <td><div class="sq-row-actions"><button class="sq-edit-btn" data-id="${p.id}" title="Edit profile"><i class="ti ti-edit"></i></button></div></td>
       </tr>`;
     });
   });
 
   tbody.innerHTML = html;
+
+  // Edit button handlers
+  tbody.querySelectorAll('.sq-edit-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const player = _allPlayers.find(p => p.id === id);
+      if (player) openModal(player);
+    });
+  });
+
+  // Row click opens edit
+  tbody.querySelectorAll('tr:not(.is-group)').forEach(tr => {
+    tr.addEventListener('click', e => {
+      if (e.target.closest('[data-cb]') || e.target.closest('.sq-edit-btn')) return;
+      const id = tr.querySelector('.sq-edit-btn')?.dataset.id;
+      const player = _allPlayers.find(p => p.id === id);
+      if (player) openModal(player);
+    });
+  });
 
   // Re-attach checkbox behaviour
   tbody.querySelectorAll('[data-cb]').forEach(cb => {
@@ -835,12 +1005,43 @@ function renderTable() {
   }
 }
 
+async function reloadPlayers() {
+  const { data } = await window.sb.from('players')
+    .select('id,first_name,last_name,number,position,nationality,dob,height_cm,weight_kg,dominant_foot,status')
+    .eq('club_id', _currentClubId)
+    .neq('status', 'inactive')
+    .order('number', { ascending: true });
+
+  _allPlayers = data || [];
+  const total = _allPlayers.length;
+  const headP  = document.getElementById('sqHeadP');
+  const listCt = document.getElementById('sqListCt');
+  if (headP)  headP.textContent = `${total} players · First team`;
+  if (listCt) listCt.textContent = total;
+
+  const posCounts = {};
+  _allPlayers.forEach(p => {
+    const cfg = POS_CFG[(p.position || '').toUpperCase()];
+    if (cfg) posCounts[cfg.pill] = (posCounts[cfg.pill] || 0) + 1;
+  });
+  document.querySelectorAll('.sq-pill-filter').forEach(pill => {
+    const ct = pill.querySelector('.ct');
+    if (!ct) return;
+    const label = pill.textContent.replace(/\d+/, '').trim();
+    if (label === 'All') { ct.textContent = total; return; }
+    ct.textContent = posCounts[label] || 0;
+  });
+
+  renderTable();
+}
+
 (async () => {
   const ok = await window.requireAuth();
   if (!ok) return;
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
+  _currentClubId = clubId;
 
   // Sidebar
   if (profile) {
@@ -856,37 +1057,7 @@ function renderTable() {
     window.applyClubTheme();
   }
 
-  // Load players
-  const { data } = await window.sb.from('players')
-    .select('id,first_name,last_name,number,position,nationality,dob,height_cm,weight_kg,dominant_foot,status')
-    .eq('club_id', clubId)
-    .neq('status', 'inactive')
-    .order('number', { ascending: true });
-
-  _allPlayers = data || [];
-  const total = _allPlayers.length;
-
-  // Update header counts
-  const headP  = document.getElementById('sqHeadP');
-  const listCt = document.getElementById('sqListCt');
-  if (headP)  headP.textContent = `${total} players · First team`;
-  if (listCt) listCt.textContent = total;
-
-  // Update filter pill counts
-  const posCounts = {};
-  _allPlayers.forEach(p => {
-    const cfg = POS_CFG[(p.position || '').toUpperCase()];
-    if (cfg) posCounts[cfg.pill] = (posCounts[cfg.pill] || 0) + 1;
-  });
-  document.querySelectorAll('.sq-pill-filter').forEach(pill => {
-    const ct = pill.querySelector('.ct');
-    if (!ct) return;
-    const label = pill.textContent.replace(/\d+/, '').trim();
-    if (label === 'All') { ct.textContent = total; return; }
-    ct.textContent = posCounts[label] || 0;
-  });
-
-  renderTable();
+  await reloadPlayers();
 
   // Filter pills
   document.querySelectorAll('.sq-pill-filter').forEach(pill => {
@@ -915,23 +1086,116 @@ function renderTable() {
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-  // Checkbox toggle + row selection
-  document.querySelectorAll('[data-cb]').forEach(cb => {
-    cb.addEventListener('click', (e) => {
-      e.stopPropagation();
-      cb.classList.toggle('is-on');
-      const tr = cb.closest('tr');
-      if (tr) tr.classList.toggle('is-selected', cb.classList.contains('is-on'));
-    });
+  // ── Modal helpers ──────────────────────────────────────────────
+
+  function showToast(msg) {
+    const t = document.getElementById('sqToast');
+    t.textContent = msg;
+    t.classList.add('is-show');
+    setTimeout(() => t.classList.remove('is-show'), 2800);
+  }
+
+  function openModal(player) {
+    _editingId = player ? player.id : null;
+    const backdrop = document.getElementById('sqModalBackdrop');
+    document.getElementById('sqModalTitle').textContent = player ? 'Edit player' : 'Add player';
+    document.getElementById('sqModalId').value = player?.id || '';
+    document.getElementById('sqF_first_name').value  = player?.first_name    || '';
+    document.getElementById('sqF_last_name').value   = player?.last_name     || '';
+    document.getElementById('sqF_number').value      = player?.number        || '';
+    document.getElementById('sqF_position').value    = player?.position      || '';
+    document.getElementById('sqF_dob').value         = player?.dob           || '';
+    document.getElementById('sqF_nationality').value = player?.nationality   || '';
+    document.getElementById('sqF_height_cm').value   = player?.height_cm     || '';
+    document.getElementById('sqF_weight_kg').value   = player?.weight_kg     || '';
+    document.getElementById('sqF_dominant_foot').value = player?.dominant_foot || '';
+    document.getElementById('sqF_status').value      = player?.status        || 'active';
+    document.getElementById('sqModalDelete').style.display = player ? 'inline-flex' : 'none';
+    document.getElementById('sqModalSaving').style.display = 'none';
+    backdrop.classList.add('is-open');
+    document.getElementById('sqF_first_name').focus();
+  }
+
+  function closeModal() {
+    document.getElementById('sqModalBackdrop').classList.remove('is-open');
+    _editingId = null;
+  }
+
+  async function saveModal() {
+    const saving = document.getElementById('sqModalSaving');
+    const saveBtn = document.getElementById('sqModalSave');
+    saving.style.display = 'inline';
+    saveBtn.disabled = true;
+
+    const payload = {
+      first_name:    document.getElementById('sqF_first_name').value.trim(),
+      last_name:     document.getElementById('sqF_last_name').value.trim(),
+      number:        parseInt(document.getElementById('sqF_number').value) || null,
+      position:      document.getElementById('sqF_position').value || null,
+      dob:           document.getElementById('sqF_dob').value || null,
+      nationality:   document.getElementById('sqF_nationality').value.trim() || null,
+      height_cm:     parseFloat(document.getElementById('sqF_height_cm').value) || null,
+      weight_kg:     parseFloat(document.getElementById('sqF_weight_kg').value) || null,
+      dominant_foot: document.getElementById('sqF_dominant_foot').value || null,
+      status:        document.getElementById('sqF_status').value || 'active',
+    };
+
+    if (!payload.first_name && !payload.last_name) {
+      showToast('Name is required.');
+      saving.style.display = 'none';
+      saveBtn.disabled = false;
+      return;
+    }
+
+    let error;
+    if (_editingId) {
+      ({ error } = await window.sb.from('players').update(payload).eq('id', _editingId));
+    } else {
+      payload.club_id = _currentClubId;
+      ({ error } = await window.sb.from('players').insert(payload));
+    }
+
+    saving.style.display = 'none';
+    saveBtn.disabled = false;
+
+    if (error) {
+      showToast('Error: ' + error.message);
+      return;
+    }
+
+    closeModal();
+    showToast(_editingId ? 'Player updated.' : 'Player added.');
+    await reloadPlayers();
+  }
+
+  async function deletePlayer() {
+    if (!_editingId) return;
+    if (!confirm('Remove this player from the squad?')) return;
+    const { error } = await window.sb.from('players')
+      .update({ status: 'inactive' })
+      .eq('id', _editingId);
+    if (error) { showToast('Error: ' + error.message); return; }
+    closeModal();
+    showToast('Player removed.');
+    await reloadPlayers();
+  }
+
+  // Modal event wiring
+  document.getElementById('sqModalClose').addEventListener('click', closeModal);
+  document.getElementById('sqModalCancel').addEventListener('click', closeModal);
+  document.getElementById('sqModalSave').addEventListener('click', saveModal);
+  document.getElementById('sqModalDelete').addEventListener('click', deletePlayer);
+  document.getElementById('sqModalBackdrop').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
   });
-  // Filter pills
-  document.querySelectorAll('.sq-pill-filter').forEach(p => {
-    p.addEventListener('click', () => {
-      document.querySelectorAll('.sq-pill-filter').forEach(o => o.classList.remove('is-on'));
-      p.classList.add('is-on');
-    });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
   });
-  // Segment toggle
+
+  // Add player button
+  document.querySelector('.cm-btn.is-primary')?.addEventListener('click', () => openModal(null));
+
+  // Segment toggle (visual only for Cards/Depth chart - not yet implemented)
   document.querySelectorAll('.sq-segs').forEach(group => {
     group.querySelectorAll('.sq-seg').forEach(s => {
       s.addEventListener('click', () => {
