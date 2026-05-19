@@ -706,17 +706,17 @@ function renderTable() {
       const fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
       const initials = (((p.first_name||'')[0] || '') + ((p.last_name||'')[0] || '')).toUpperCase() || fullName.slice(0,2).toUpperCase();
       const num     = p.number || '—';
-      const age     = calcAge(p.dob || p.date_of_birth);
+      const age     = calcAge(p.date_of_birth);
       const foot    = p.dominant_foot || '—';
-      const h       = p.height_cm ? `${p.height_cm}<span class="u">cm</span><span class="sep">·</span>` : '';
-      const w       = p.weight_kg ? `${p.weight_kg}<span class="u">kg</span>` : '—';
+      const h       = p.height ? `${p.height}<span class="u">cm</span><span class="sep">·</span>` : '';
+      const w       = p.weight ? `${p.weight}<span class="u">kg</span>` : '—';
       html += `<tr data-pos="${pcfg.pill}" data-name="${fullName.toLowerCase()}" data-num="${num}">
         <td><span class="sq-cb" data-cb></span></td>
         <td><span class="sq-num">${num}</span></td>
         <td><div class="sq-player">
           <div class="sq-av">${initials}</div>
           <div><div class="sq-name-row"><span class="sq-name">${fullName || '—'}</span></div>
-          <div class="sq-sub">${fmtDob(p.dob || p.date_of_birth)}</div></div>
+          <div class="sq-sub">${fmtDob(p.date_of_birth)}</div></div>
         </div></td>
         <td><span class="sq-pos ${pcfg.css}">${p.position || '—'}</span></td>
         <td class="sq-mono">${age}</td>
@@ -769,9 +769,9 @@ function renderTable() {
 
 async function reloadPlayers() {
   const { data } = await window.sb.from('players')
-    .select('id,first_name,last_name,number,position,nationality,dob,height_cm,weight_kg,dominant_foot')
+    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status')
     .eq('club_id', _currentClubId)
-    .order('number', { ascending: true });
+    .order('number', { ascending: true, nullsFirst: false });
 
   _allPlayers = data || [];
   const total = _allPlayers.length;
@@ -870,14 +870,14 @@ async function reloadPlayers() {
     document.getElementById('sqModalId').value = player?.id || '';
     document.getElementById('sqF_first_name').value  = player?.first_name    || '';
     document.getElementById('sqF_last_name').value   = player?.last_name     || '';
-    document.getElementById('sqF_number').value      = player?.number        || '';
-    document.getElementById('sqF_position').value    = player?.position      || '';
-    document.getElementById('sqF_dob').value         = player?.dob           || '';
-    document.getElementById('sqF_nationality').value = player?.nationality   || '';
-    document.getElementById('sqF_height_cm').value   = player?.height_cm     || '';
-    document.getElementById('sqF_weight_kg').value   = player?.weight_kg     || '';
+    document.getElementById('sqF_number').value      = player?.number          || '';
+    document.getElementById('sqF_position').value    = player?.position        || '';
+    document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
+    document.getElementById('sqF_nationality').value = player?.nationality     || '';
+    document.getElementById('sqF_height_cm').value   = player?.height          || '';
+    document.getElementById('sqF_weight_kg').value   = player?.weight          || '';
     document.getElementById('sqF_dominant_foot').value = player?.dominant_foot || '';
-    document.getElementById('sqF_status').value      = player?.status        || 'active';
+    document.getElementById('sqF_status').value      = player?.status          || 'available';
     document.getElementById('sqModalDelete').style.display = player ? 'inline-flex' : 'none';
     document.getElementById('sqModalSaving').style.display = 'none';
     backdrop.classList.add('is-open');
@@ -900,10 +900,10 @@ async function reloadPlayers() {
       last_name:     document.getElementById('sqF_last_name').value.trim(),
       number:        parseInt(document.getElementById('sqF_number').value) || null,
       position:      document.getElementById('sqF_position').value || null,
-      dob:           document.getElementById('sqF_dob').value || null,
+      date_of_birth: document.getElementById('sqF_dob').value || null,
       nationality:   document.getElementById('sqF_nationality').value.trim() || null,
-      height_cm:     parseFloat(document.getElementById('sqF_height_cm').value) || null,
-      weight_kg:     parseFloat(document.getElementById('sqF_weight_kg').value) || null,
+      height:        parseFloat(document.getElementById('sqF_height_cm').value) || null,
+      weight:        parseFloat(document.getElementById('sqF_weight_kg').value) || null,
       dominant_foot: document.getElementById('sqF_dominant_foot').value || null,
     };
 
@@ -1001,7 +1001,7 @@ async function reloadPlayers() {
       const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
       const pos = (p.position||'').toUpperCase();
       const pcfg = POS_CFG[pos] || { css:'', pill: pos };
-      const age = calcAge(p.dob);
+      const age = calcAge(p.date_of_birth);
       return `<div class="sq-card" data-id="${p.id}">
         <div class="sq-card-av">${initials}<span class="sq-card-num">${p.number||'—'}</span></div>
         <div class="sq-card-name">${fullName||'—'}</div>
