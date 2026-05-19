@@ -18,12 +18,12 @@
     const { data: { session } } = await window.sb.auth.getSession();
     if (!session?.user) return null;
     const { data: profile } = await window.sb.from('profiles')
-      .select('club_id, role, full_name, avatar_url')
+      .select('club_id, role, name, club_role')
       .eq('id', session.user.id)
       .single();
     if (profile) {
       _clubId  = profile.club_id;
-      _profile = profile;
+      _profile = { ...profile, full_name: profile.name }; // alias for page compatibility
     }
     return _clubId;
   };
