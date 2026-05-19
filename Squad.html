@@ -1221,7 +1221,9 @@ async function reloadPlayers() {
     if (_editingId) {
       ({ error } = await window.sb.from('players').update(payload).eq('id', _editingId));
     } else {
-      payload.club_id = _currentClubId;
+      const clubId = _currentClubId || await window.getClubId();
+      if (!clubId) { showToast('Error: no club found for your account.'); saving.style.display = 'none'; saveBtn.disabled = false; return; }
+      payload.club_id = clubId;
       ({ error } = await window.sb.from('players').insert(payload));
     }
 
