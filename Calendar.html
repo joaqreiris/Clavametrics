@@ -597,18 +597,18 @@
       <!-- Current MC detail + side rails -->
       <div class="cal-grid">
 
-        <!-- LEFT: MC 14 daily strip -->
+        <!-- LEFT: MC daily strip -->
         <div class="cal-card">
           <div class="cal-card-h">
-            <h3>Microcycle 14 · daily plan</h3>
-            <span class="sub">Sun 11 May → Sat 24 May · 7 sessions, 2 matches</span>
+            <h3 id="calMcTitle">Microcycle · daily plan</h3>
+            <span class="sub" id="calMcSub">Loading…</span>
             <div class="right">
               <div class="cal-pager">
-                <button title="Previous MC"><i class="ti ti-chevron-left"></i></button>
-                <span class="label"><i class="ti ti-calendar-event"></i>Week 1 of 2</span>
-                <button title="Next MC"><i class="ti ti-chevron-right"></i></button>
+                <button id="calWeekPrev" title="Previous week"><i class="ti ti-chevron-left"></i></button>
+                <span class="label" id="calWeekLabel"><i class="ti ti-calendar-event"></i>Week 1</span>
+                <button id="calWeekNext" title="Next week"><i class="ti ti-chevron-right"></i></button>
               </div>
-              <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+              <button class="cm-icon-btn" id="calMcNav" title="Other microcycles"><i class="ti ti-dots"></i></button>
             </div>
           </div>
 
@@ -616,19 +616,19 @@
           <div class="mc-info-row">
             <div class="mc-info">
               <div class="ic"><i class="ti ti-target"></i></div>
-              <div><div class="l">Target match</div><div class="v">vs Atlético<small>home</small></div></div>
+              <div><div class="l">Target match</div><div class="v" id="calMcTarget">—</div></div>
             </div>
             <div class="mc-info">
               <div class="ic" style="color:var(--cm-info);background:var(--cm-info-bg);border-color:var(--cm-info-bd)"><i class="ti ti-soccer-field"></i></div>
-              <div><div class="l">Training sessions</div><div class="v">5<small>field + 2 gym</small></div></div>
+              <div><div class="l">Training sessions</div><div class="v" id="calMcSessions">—</div></div>
             </div>
             <div class="mc-info">
               <div class="ic" style="color:var(--cm-warning);background:var(--cm-warning-bg);border-color:var(--cm-warning-bd)"><i class="ti ti-flame"></i></div>
-              <div><div class="l">Peak day</div><div class="v">Wed MD−4<small>2 x 90′</small></div></div>
+              <div><div class="l">Total duration</div><div class="v" id="calMcDuration">—</div></div>
             </div>
             <div class="mc-info">
               <div class="ic" style="color:var(--cm-success);background:var(--cm-success-bg);border-color:var(--cm-success-bd)"><i class="ti ti-zzz"></i></div>
-              <div><div class="l">Rest days</div><div class="v">Sun + Mon<small>2 of 14</small></div></div>
+              <div><div class="l">MC length</div><div class="v" id="calMcLength">—</div></div>
             </div>
           </div>
 
@@ -644,176 +644,10 @@
           </div>
 
           <!-- Days grid: Sun 11 → Sat 17 (week 1, today is Fri 16) -->
-          <div class="mc-days">
-
-            <div class="mc-day is-off">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Sun</span>
-                <span class="mc-day-num">11</span>
-                <span class="mc-day-md">off</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt day-off">Recovery · day off</div>
-              </div>
-            </div>
-
-            <div class="mc-day is-off">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Mon</span>
-                <span class="mc-day-num">12</span>
-                <span class="mc-day-md">MD+1</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt recovery"><i class="ti ti-pool"></i><span class="time">10:00</span><span class="name">Pool recovery 30′</span></div>
-                <div class="mc-evt day-off">Optional · light</div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Tue</span>
-                <span class="mc-day-num">13</span>
-                <span class="mc-day-md">MD−5</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt gym"><i class="ti ti-barbell"></i><span class="time">09:00</span><span class="name">Strength upper</span></div>
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Activation 60′</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Wed</span>
-                <span class="mc-day-num">14</span>
-                <span class="mc-day-md" style="background:var(--cm-warning-bg);color:var(--cm-warning);border-color:var(--cm-warning-bd)">MD−4 · peak</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">10:00</span><span class="name">Tactical 90′</span></div>
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Possession 90′</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Thu</span>
-                <span class="mc-day-num">15</span>
-                <span class="mc-day-md">MD−3</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt gym"><i class="ti ti-barbell"></i><span class="time">09:30</span><span class="name">Strength lower</span></div>
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Set-pieces 70′</span></div>
-                <div class="mc-evt recovery"><i class="ti ti-massage"></i><span class="time">19:00</span><span class="name">Physio · 4 players</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day is-today">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Fri</span>
-                <span class="mc-day-num">16</span>
-                <span class="mc-day-md">MD−2 · today</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Speed · activation 50′</span></div>
-                <div class="mc-evt recovery"><i class="ti ti-zzz"></i><span class="time">21:00</span><span class="name">Sleep curfew</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Sat</span>
-                <span class="mc-day-num">17</span>
-                <span class="mc-day-md">MD−1</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">11:00</span><span class="name">Walkthrough 45′</span></div>
-                <div class="mc-evt travel"><i class="ti ti-bus"></i><span class="time">15:00</span><span class="name">Team hotel check-in</span></div>
-              </div>
-            </div>
-
-            <!-- Week 2 -->
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Sun</span>
-                <span class="mc-day-num">18</span>
-                <span class="mc-day-md" style="background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)">MATCH</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt match"><i class="ti ti-ball-football"></i><span class="time">17:00</span><span class="name">vs Atlético · home</span></div>
-                <div class="mc-evt recovery"><i class="ti ti-massage"></i><span class="time">20:30</span><span class="name">Cool-down · ice baths</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day is-off">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Mon</span>
-                <span class="mc-day-num">19</span>
-                <span class="mc-day-md">MD+1</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt recovery"><i class="ti ti-pool"></i><span class="time">10:00</span><span class="name">Pool 40′</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day is-off">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Tue</span>
-                <span class="mc-day-num">20</span>
-                <span class="mc-day-md">off</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt day-off">Day off</div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Wed</span>
-                <span class="mc-day-num">21</span>
-                <span class="mc-day-md">MD−3</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">10:00</span><span class="name">Tactical · 80′</span></div>
-                <div class="mc-evt gym"><i class="ti ti-barbell"></i><span class="time">16:00</span><span class="name">Strength full-body</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Thu</span>
-                <span class="mc-day-num">22</span>
-                <span class="mc-day-md">MD−2</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt travel"><i class="ti ti-plane"></i><span class="time">08:00</span><span class="name">Flight → Mendoza</span></div>
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">18:00</span><span class="name">Activation 60′</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Fri</span>
-                <span class="mc-day-num">23</span>
-                <span class="mc-day-md">MD−1</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">11:00</span><span class="name">Walkthrough · stadium</span></div>
-                <div class="mc-evt recovery"><i class="ti ti-zzz"></i><span class="time">21:00</span><span class="name">Sleep curfew</span></div>
-              </div>
-            </div>
-
-            <div class="mc-day">
-              <div class="mc-day-head">
-                <span class="mc-day-dow">Sat</span>
-                <span class="mc-day-num">24</span>
-                <span class="mc-day-md" style="background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)">MATCH</span>
-              </div>
-              <div class="mc-day-events">
-                <div class="mc-evt match"><i class="ti ti-ball-football"></i><span class="time">17:00</span><span class="name">vs Independiente · away</span></div>
-                <div class="mc-evt travel"><i class="ti ti-plane"></i><span class="time">22:00</span><span class="name">Return flight</span></div>
-              </div>
-            </div>
-
+                    <div class="mc-days" id="calDaysGrid">
+            <td colspan="7" style="padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading schedule…</td>
           </div>
+
         </div>
 
         <!-- RIGHT rail -->
@@ -968,46 +802,284 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
+<!-- New event modal -->
+<div class="sq-modal-backdrop" id="calEvtBackdrop">
+  <div class="sq-modal" role="dialog">
+    <div class="sq-modal-head">
+      <h2 id="calEvtTitle">New event</h2>
+      <button class="sq-modal-close" id="calEvtClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <input type="hidden" id="calEvtId">
+      <div class="sq-modal-row">
+        <div class="sq-modal-field" style="grid-column:1/-1">
+          <label>Title</label>
+          <input type="text" id="calEvtF_title" placeholder="e.g. Tactical 90′">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label>Type</label>
+          <select id="calEvtF_type">
+            <option value="training">Training</option>
+            <option value="gym">Gym</option>
+            <option value="match">Match</option>
+            <option value="recovery">Recovery</option>
+            <option value="travel">Travel</option>
+          </select>
+        </div>
+        <div class="sq-modal-field">
+          <label>Date</label>
+          <input type="date" id="calEvtF_date">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label>Duration (min)</label>
+          <input type="number" id="calEvtF_duration" placeholder="e.g. 90" min="5" max="300">
+        </div>
+        <div class="sq-modal-field">
+          <label>Notes</label>
+          <input type="text" id="calEvtF_notes" placeholder="Optional">
+        </div>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <button class="cm-btn is-danger is-sm" id="calEvtDelete" style="display:none"><i class="ti ti-trash" style="font-size:13px"></i>Delete</button>
+      <div class="grow"></div>
+      <span id="calEvtSaving" style="display:none;font:var(--cm-meta);color:var(--cm-fg-muted)">Saving…</span>
+      <button class="cm-btn is-ghost is-sm" id="calEvtCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="calEvtSave">Save</button>
+    </div>
+  </div>
+</div>
+<div class="sq-toast" id="calToast"></div>
+
 <script>
-(async () => {
-  const { user, profile, clubId } = await requireAuth();
-  const club = await getClub(clubId);
+// ── State ──────────────────────────────────────────────────────
+let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null;
+const TODAY = new Date().toISOString().split('T')[0];
 
-  applyClubTheme(club);
-  document.getElementById('sideClubName').textContent = club?.name || 'ClavaMetrics';
-  const initials = (profile?.full_name || user.email || 'U').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  document.getElementById('userInitials').textContent = initials;
-  document.getElementById('userName').textContent = profile?.full_name || user.email;
-  document.getElementById('userRole').textContent = [profile?.role, profile?.club_role].filter(Boolean).join(' · ') || 'Staff';
+const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor', travel:'ti-plane' };
+const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  const today = new Date().toISOString().split('T')[0];
+function fmtShort(d) { return `${DAYS_SHORT[d.getDay()]} ${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`; }
+function addDays(dateStr, n) { const d = new Date(dateStr); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; }
+function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
 
-  const [playersRes, injuriesRes, mcRes] = await Promise.all([
-    window.sb.from('players').select('id', { count: 'exact', head: true }).eq('club_id', clubId).neq('status', 'inactive'),
-    window.sb.from('injuries').select('id', { count: 'exact', head: true }).eq('club_id', clubId).eq('status', 'active'),
-    window.sb.from('microcycles').select('id,name,number,start_date,end_date,match_date,target_match').eq('club_id', clubId).lte('start_date', today).order('start_date', { ascending: false }).limit(1).catch(() => ({ data: [] }))
-  ]);
+function showCalToast(msg) {
+  const t = document.getElementById('calToast');
+  t.textContent = msg; t.classList.add('is-show');
+  setTimeout(() => t.classList.remove('is-show'), 2800);
+}
 
-  const squadCount = playersRes.count ?? 0;
-  const injCount = injuriesRes.count ?? 0;
+// ── Render grid ────────────────────────────────────────────────
+function renderGrid() {
+  const mc = _allMCs[_mcIdx];
+  const grid = document.getElementById('calDaysGrid');
+  if (!mc || !grid) return;
 
-  document.getElementById('sideInjCount').textContent = injCount || '';
-  document.getElementById('calSquadCt').textContent = `Players · ${squadCount}`;
+  const start = mc.start_date, end = mc.end_date;
+  const totalDays = daysBetween(start, end) + 1;
+  const totalWeeks = Math.ceil(totalDays / 7);
+  const weekStart = addDays(start, _weekOffset * 7);
+  const weekEnd   = addDays(weekStart, 6);
 
-  const mc = mcRes.data?.[0];
+  // Header
+  document.getElementById('calMcTitle').textContent = (mc.name || `Microcycle ${mc.number || ''}`) + ' · daily plan';
+  document.getElementById('calMcSub').textContent =
+    `${fmtShort(new Date(start))} → ${fmtShort(new Date(end))} · ${_sessions.length} sessions`;
+  document.getElementById('calWeekLabel').innerHTML =
+    `<i class="ti ti-calendar-event"></i>Week ${_weekOffset + 1} of ${totalWeeks}`;
+  document.getElementById('calWeekPrev').disabled = _weekOffset === 0;
+  document.getElementById('calWeekNext').disabled = _weekOffset >= totalWeeks - 1;
+
+  // Summary row
+  if (mc.target_match) document.getElementById('calMcTarget').innerHTML = `${mc.target_match}<small>${mc.match_home_away||''}</small>`;
+  const trainCt = _sessions.filter(s => s.session_type === 'training').length;
+  const gymCt   = _sessions.filter(s => s.session_type === 'gym').length;
+  document.getElementById('calMcSessions').innerHTML = `${trainCt}<small>field + ${gymCt} gym</small>`;
+  const totalMin = _sessions.reduce((a, s) => a + (s.duration || 0), 0);
+  document.getElementById('calMcDuration').innerHTML = totalMin ? `${Math.round(totalMin/60)}h <small>${totalMin % 60 ? (totalMin % 60) + 'min' : ''}</small>` : '—';
+  document.getElementById('calMcLength').innerHTML = `${totalDays}<small>days</small>`;
+
+  // Top bar MC heading
   if (mc) {
-    const mcName = mc.name || (mc.number != null ? `Microcycle ${mc.number}` : null);
-    if (mcName) {
-      let mdLabel = '';
-      if (mc.match_date) {
-        const diff = Math.round((new Date(mc.match_date) - new Date(today)) / (1000 * 60 * 60 * 24));
-        mdLabel = diff === 0 ? ' · MD' : diff > 0 ? ` · MD−${diff}` : ` · MD+${Math.abs(diff)}`;
-      }
-      const target = mc.target_match ? ` · next: <strong>${mc.target_match}</strong>` : '';
-      document.getElementById('calHeadCtx').innerHTML = `<strong>${mcName}</strong>${mdLabel}${target}`;
+    const mcName = mc.name || `Microcycle ${mc.number||''}`;
+    let mdLabel = '';
+    if (mc.match_date) {
+      const diff = daysBetween(TODAY, mc.match_date);
+      mdLabel = diff === 0 ? ' · MD' : diff > 0 ? ` · MD−${diff}` : ` · MD+${Math.abs(diff)}`;
     }
+    const target = mc.target_match ? ` · <strong>${mc.target_match}</strong>` : '';
+    const el = document.getElementById('calHeadCtx');
+    if (el) el.innerHTML = `<strong>${mcName}</strong>${mdLabel}${target}`;
   }
-})().catch(console.error);
+
+  // Build 7 day columns
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const dateStr = addDays(weekStart, i);
+    if (dateStr > end) { html += '<div class="mc-day" style="background:var(--cm-bg-sunk);opacity:0.4"></div>'; continue; }
+    const d = new Date(dateStr + 'T12:00:00');
+    const isToday = dateStr === TODAY;
+    const daySessions = _sessions.filter(s => s.session_date === dateStr);
+    const isOff = daySessions.length === 0;
+
+    let mdLabel = '';
+    if (mc.match_date) {
+      const diff = daysBetween(dateStr, mc.match_date);
+      if (diff === 0) mdLabel = 'MD';
+      else if (diff > 0 && diff <= 10) mdLabel = `MD−${diff}`;
+      else if (diff < 0 && diff >= -3) mdLabel = `MD+${Math.abs(diff)}`;
+    }
+
+    const mdStyle = mdLabel === 'MD' ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
+
+    const eventsHtml = isOff
+      ? '<div class="mc-evt day-off">Rest day</div>'
+      : daySessions.filter(s => _filterType === 'all' || s.session_type === _filterType).map(s => {
+          const icon = EVT_ICONS[s.session_type] || 'ti-calendar';
+          const dur = s.duration ? ` ${s.duration}′` : '';
+          return `<div class="mc-evt ${s.session_type||''}" data-id="${s.id}" style="cursor:pointer">
+            <i class="ti ${icon}"></i>
+            <span class="name">${s.title || s.session_type}${dur}</span>
+          </div>`;
+        }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
+
+    html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}">
+      <div class="mc-day-head">
+        <span class="mc-day-dow">${DAYS_SHORT[d.getDay()]}</span>
+        <span class="mc-day-num">${d.getDate()}</span>
+        ${mdLabel ? `<span class="mc-day-md" style="${mdStyle}">${mdLabel}</span>` : ''}
+      </div>
+      <div class="mc-day-events">
+        ${eventsHtml}
+        <button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">+ Add</button>
+      </div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+
+  // Wire event clicks
+  grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
+    el.addEventListener('click', () => {
+      const s = _sessions.find(x => x.id === el.dataset.id);
+      if (s) openEvtModal(s);
+    });
+  });
+  grid.querySelectorAll('[data-add-date]').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); openEvtModal(null, btn.dataset.addDate); });
+  });
+}
+
+// ── Load sessions for current MC ──────────────────────────────
+async function loadSessions() {
+  const mc = _allMCs[_mcIdx];
+  if (!mc) return;
+  const { data } = await window.sb.from('training_sessions')
+    .select('id,title,session_type,duration,session_date,notes')
+    .eq('club_id', _clubId)
+    .gte('session_date', mc.start_date)
+    .lte('session_date', mc.end_date)
+    .order('session_date');
+  _sessions = data || [];
+  _weekOffset = 0;
+  renderGrid();
+}
+
+// ── Event modal ───────────────────────────────────────────────
+function openEvtModal(session, defaultDate) {
+  _editEvtId = session?.id || null;
+  document.getElementById('calEvtTitle').textContent = session ? 'Edit event' : 'New event';
+  document.getElementById('calEvtId').value = session?.id || '';
+  document.getElementById('calEvtF_title').value = session?.title || '';
+  document.getElementById('calEvtF_type').value  = session?.session_type || 'training';
+  document.getElementById('calEvtF_date').value  = session?.session_date || defaultDate || TODAY;
+  document.getElementById('calEvtF_duration').value = session?.duration || '';
+  document.getElementById('calEvtF_notes').value = session?.notes || '';
+  document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
+  document.getElementById('calEvtSaving').style.display = 'none';
+  document.getElementById('calEvtBackdrop').classList.add('is-open');
+  document.getElementById('calEvtF_title').focus();
+}
+function closeEvtModal() { document.getElementById('calEvtBackdrop').classList.remove('is-open'); _editEvtId = null; }
+
+async function saveEvt() {
+  const saving = document.getElementById('calEvtSaving');
+  const saveBtn = document.getElementById('calEvtSave');
+  saving.style.display = 'inline'; saveBtn.disabled = true;
+
+  const payload = {
+    title:        document.getElementById('calEvtF_title').value.trim(),
+    session_type: document.getElementById('calEvtF_type').value,
+    session_date: document.getElementById('calEvtF_date').value,
+    duration:     parseInt(document.getElementById('calEvtF_duration').value) || null,
+    notes:        document.getElementById('calEvtF_notes').value.trim() || null,
+  };
+  if (!payload.title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
+
+  let error;
+  if (_editEvtId) {
+    ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
+  } else {
+    const clubId = _clubId || await window.getClubId();
+    payload.club_id = clubId;
+    ({ error } = await window.sb.from('training_sessions').insert(payload));
+  }
+
+  saving.style.display = 'none'; saveBtn.disabled = false;
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  closeEvtModal();
+  showCalToast(_editEvtId ? 'Session updated.' : 'Session added.');
+  await loadSessions();
+}
+
+async function deleteEvt() {
+  if (!_editEvtId || !confirm('Delete this session?')) return;
+  const { error } = await window.sb.from('training_sessions').delete().eq('id', _editEvtId);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  closeEvtModal(); showCalToast('Session deleted.');
+  await loadSessions();
+}
+
+document.getElementById('calEvtClose').addEventListener('click', closeEvtModal);
+document.getElementById('calEvtCancel').addEventListener('click', closeEvtModal);
+document.getElementById('calEvtSave').addEventListener('click', saveEvt);
+document.getElementById('calEvtDelete').addEventListener('click', deleteEvt);
+document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeEvtModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });
+
+// ── Week navigation ───────────────────────────────────────────
+document.getElementById('calWeekPrev').addEventListener('click', () => { _weekOffset--; renderGrid(); });
+document.getElementById('calWeekNext').addEventListener('click', () => { _weekOffset++; renderGrid(); });
+
+// ── Filter pills ──────────────────────────────────────────────
+document.querySelectorAll('.cal-filters').forEach(bar => {
+  bar.querySelectorAll('.cal-filter-pill').forEach(p => {
+    p.addEventListener('click', () => {
+      bar.querySelectorAll('.cal-filter-pill').forEach(o => o.classList.remove('is-on'));
+      p.classList.add('is-on');
+      const txt = p.textContent.trim().toLowerCase().split(' ')[0];
+      _filterType = txt === 'all' ? 'all' : txt;
+      renderGrid();
+    });
+  });
+});
+
+// ── Segment controls ──────────────────────────────────────────
+document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg').forEach(s => s.addEventListener('click', () => {
+  g.querySelectorAll('.cal-seg').forEach(o => o.classList.remove('is-on'));
+  s.classList.add('is-on');
+})));
+
+// ── New event button ─────────────────────────────────────────
+document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn => {
+  if (btn.textContent.includes('New event') || btn.textContent.includes('event')) {
+    btn.addEventListener('click', () => openEvtModal(null));
+  }
+});
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
@@ -1019,15 +1091,56 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-  // Segmented controls + filter pills
-  document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg').forEach(s => s.addEventListener('click', () => {
-    g.querySelectorAll('.cal-seg').forEach(o => o.classList.remove('is-on'));
-    s.classList.add('is-on');
-  })));
-  document.querySelectorAll('.cal-filters').forEach(bar => bar.querySelectorAll('.cal-filter-pill').forEach(p => p.addEventListener('click', () => {
-    bar.querySelectorAll('.cal-filter-pill').forEach(o => o.classList.remove('is-on'));
-    p.classList.add('is-on');
-  })));
+// ── Boot ──────────────────────────────────────────────────────
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  _clubId = await window.getClubId();
+  window.applyClubTheme();
+
+  // Sidebar
+  const sideClub = document.getElementById('sideClubName');
+  if (sideClub) sideClub.textContent = club?.name || 'ClavaMetrics';
+  const initials = (profile?.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const ui = document.getElementById('userInitials'); if (ui) ui.textContent = initials;
+  const un = document.getElementById('userName');     if (un) un.textContent = profile?.full_name || '';
+  const ur = document.getElementById('userRole');     if (ur) ur.textContent = profile?.role || 'Staff';
+
+  // Counts
+  const [playersRes, injRes] = await Promise.all([
+    window.sb.from('players').select('id', { count: 'exact', head: true }).eq('club_id', _clubId),
+    window.sb.from('injuries').select('id', { count: 'exact', head: true }).eq('club_id', _clubId),
+  ]);
+  const el1 = document.getElementById('sideInjCount'); if (el1) el1.textContent = injRes.count || '';
+  const el2 = document.getElementById('calSquadCt');   if (el2) el2.textContent = `Players · ${playersRes.count ?? 0}`;
+
+  // Load all MCs ordered by start_date desc
+  const { data: mcs } = await window.sb.from('microcycles')
+    .select('id,name,number,start_date,end_date,match_date,target_match')
+    .eq('club_id', _clubId)
+    .order('start_date', { ascending: false });
+
+  _allMCs = mcs || [];
+
+  // Default to current/most recent MC
+  _mcIdx = 0;
+  const todayMcIdx = _allMCs.findIndex(m => m.start_date <= TODAY && m.end_date >= TODAY);
+  if (todayMcIdx >= 0) _mcIdx = todayMcIdx;
+
+  if (_allMCs.length === 0) {
+    document.getElementById('calDaysGrid').innerHTML =
+      '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">No microcycles found. Create one to get started.</div>';
+    return;
+  }
+
+  await loadSessions();
+
+  // Wire "+ New event" topbar button
+  const newEvtBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
+  if (newEvtBtn) newEvtBtn.addEventListener('click', () => openEvtModal(null));
+})().catch(console.error);
 </script>
 
 </body>
