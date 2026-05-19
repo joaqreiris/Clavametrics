@@ -395,6 +395,26 @@
   .mc-info .v small { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* Modal */
+  .sq-modal-backdrop { position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 160ms ease; }
+  .sq-modal-backdrop.is-open { opacity:1;pointer-events:auto; }
+  .sq-modal { background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-5);box-shadow:0 24px 48px rgba(0,0,0,.18);width:520px;max-width:calc(100vw - 32px);max-height:calc(100vh - 64px);overflow-y:auto;display:flex;flex-direction:column;transform:translateY(8px);transition:transform 160ms ease; }
+  .sq-modal-backdrop.is-open .sq-modal { transform:translateY(0); }
+  .sq-modal-head { display:flex;align-items:center;gap:12px;padding:18px 20px 16px;border-bottom:1px solid var(--cm-border); }
+  .sq-modal-head h2 { font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1; }
+  .sq-modal-close { width:28px;height:28px;border-radius:6px;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:flex;align-items:center;justify-content:center; }
+  .sq-modal-close:hover { background:var(--cm-bg-soft);color:var(--cm-fg); }
+  .sq-modal-body { padding:20px;display:flex;flex-direction:column;gap:14px; }
+  .sq-modal-row { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+  .sq-modal-field { display:flex;flex-direction:column;gap:5px; }
+  .sq-modal-field label { font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted); }
+  .sq-modal-field input,.sq-modal-field select { height:36px;padding:0 10px;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none; }
+  .sq-modal-field input:focus,.sq-modal-field select:focus { border-color:var(--cm-accent); }
+  .sq-modal-foot { display:flex;align-items:center;gap:8px;padding:14px 20px 18px;border-top:1px solid var(--cm-border); }
+  .sq-modal-foot .grow { flex:1; }
+  .sq-toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:var(--cm-r-3);padding:8px 16px;font:500 13px/1 var(--cm-font-sans);z-index:500;opacity:0;pointer-events:none;transition:opacity 200ms,transform 200ms; }
+  .sq-toast.is-show { opacity:1;transform:translateX(-50%) translateY(0); }
 </style>
 </head>
 <body class="cm">
