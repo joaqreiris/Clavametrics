@@ -6,32 +6,9 @@
 <link rel="stylesheet" href="clavametrics.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
 <style>
   body.cm{background:var(--cm-bg)}
-  .hub-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
-  .hub-side{background:var(--cm-side-bg);color:var(--cm-side-fg);border-right:1px solid var(--cm-side-border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
-  .hub-main{display:flex;flex-direction:column;min-width:0;background:var(--cm-bg)}
-  .hub-brand{display:flex;align-items:center;gap:10px;padding:16px 16px 14px;border-bottom:1px solid var(--cm-side-border)}
-  .hub-brand .mark{width:30px;height:30px;border-radius:7px;background:var(--cm-side-accent);color:var(--cm-side-bg);display:flex;align-items:center;justify-content:center}
-  .hub-brand .mark svg{width:18px;height:18px}
-  .hub-brand .body{flex:1}
-  .hub-brand .name{font:600 14px/1.1 var(--cm-font-sans);letter-spacing:-0.01em;color:var(--cm-side-fg)}
-  .hub-brand .club{font:500 11.5px/1.2 var(--cm-font-mono);color:var(--cm-side-fg-muted);margin-top:2px}
-  .hub-brand .switch{width:24px;height:24px;border-radius:6px;border:1px solid var(--cm-side-border);background:transparent;color:var(--cm-side-fg-muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
-  .hub-brand .switch .ti{font-size:14px}
-  .hub-nav{padding:8px 10px;flex:1}
-  .hub-nav-group+.hub-nav-group{margin-top:6px}
-  .hub-nav-label{font:500 10.5px/1 var(--cm-font-sans);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-side-fg-muted);padding:10px 10px 6px}
-  .hub-nav-item{display:flex;align-items:center;gap:10px;padding:6.5px 10px;border-radius:var(--cm-r-3);color:var(--cm-side-fg-muted);text-decoration:none;font:500 13.5px/1 var(--cm-font-sans)}
-  .hub-nav-item:hover{background:var(--cm-side-item-active-bg);color:var(--cm-side-fg)}
-  .hub-nav-item .ti{font-size:17px;opacity:0.95}
-  .hub-nav-item .count{margin-left:auto;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-side-fg-muted)}
-  .hub-nav-item.is-active{background:var(--cm-side-item-active-bg);color:var(--cm-side-item-active-fg)}
-  .hub-side-foot{border-top:1px solid var(--cm-side-border);padding:10px}
-  .hub-user{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--cm-r-3)}
-  .hub-user .av{width:28px;height:28px;border-radius:50%;background:var(--cm-side-accent);color:var(--cm-side-bg);display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--cm-font-sans)}
-  .hub-user .who .name{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-side-fg)}
-  .hub-user .who .role{font:500 11px/1.2 var(--cm-font-mono);color:var(--cm-side-fg-muted);margin-top:2px}
 
   .hub-topbar{display:flex;align-items:center;gap:14px;height:56px;padding:0 24px;border-bottom:1px solid var(--cm-border);background:var(--cm-bg);position:sticky;top:0;z-index:50}
   .hub-crumb{display:flex;align-items:center;gap:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
@@ -169,9 +146,6 @@
     @page { size: A4; margin: 14mm 12mm; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     body.cm{ background:#fff }
-    .hub-side, .hub-topbar, .dp-pager, .dp-head .meta, .dp-card-h .right, .dp-act-add, .dp-ex-add, #tweaks-root, #settings-host, .cm-btn { display:none !important }
-    .hub-shell{ display:block }
-    .hub-main{ display:block }
     .dp-doc{ max-width:100%; padding:0; margin:0 }
     .dp-head{ padding-bottom:8px; margin-bottom:10px; border-bottom:1px solid #333 }
     .dp-head h1{ font-size:18px; color:#000 }
@@ -249,50 +223,7 @@
 <body class="cm">
 
 <div class="hub-shell" data-screen-label="20 Daily Planning">
-  <aside class="hub-side">
-    <div class="hub-brand">
-      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
-      <div class="body"><div class="name" id="sideClubName">Clava FC</div><div class="club">First team · 2025/26</div></div>
-      <button class="switch"><i class="ti ti-selector"></i></button>
-    </div>
-    <nav class="hub-nav">
-      <div class="hub-nav-group"><div class="hub-nav-label">Overview</div>
-        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
-        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
-        <a class="hub-nav-item" href="Chat &amp; Tasks.html"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
-      </div>
-      <div class="hub-nav-group"><div class="hub-nav-label">Technical</div>
-        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
-        <a class="hub-nav-item" href="Daily%20Planning.html"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
-        <a class="hub-nav-item" href="Sessions%20History.html"><i class="ti ti-history"></i><span>Sessions history</span></a>
-        <a class="hub-nav-item is-active" href="Daily%20Planning.html"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
-        <a class="hub-nav-item" href="Sessions%20Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
-        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
-        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
-        <a class="hub-nav-item" href="Evaluations.html"><i class="ti ti-star"></i><span>Evaluations</span></a>
-        <a class="hub-nav-item" href="Match%20Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
-      </div>
-      <div class="hub-nav-group"><div class="hub-nav-label">Performance</div>
-        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
-        <a class="hub-nav-item" href="Load%20Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
-        <a class="hub-nav-item" href="GPS%20Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
-        <a class="hub-nav-item" href="Gym%20Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
-        <a class="hub-nav-item" href="Gym%20Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
-      </div>
-      <div class="hub-nav-group"><div class="hub-nav-label">Medical</div>
-        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
-        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
-        <a class="hub-nav-item" href="Nutrition.html"><i class="ti ti-apple"></i><span>Nutrition</span></a>
-      </div>
-      <div class="hub-nav-group"><div class="hub-nav-label">Workspace</div>
-        <a class="hub-nav-item" href="Admin.html"><i class="ti ti-shield-lock"></i><span>Admin</span></a>
-        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
-      </div>
-    </nav>
-    <div class="hub-side-foot">
-      <div class="hub-user"><div class="av" id="userInitials">JR</div><div class="who"><div class="name" id="userName">Joaquín Reiris</div><div class="role" id="userRole">Performance · Admin</div></div></div>
-    </div>
-  </aside>
+  <div id="hub-side-root"></div>
 
   <main class="hub-main">
     <div class="hub-topbar">
@@ -601,15 +532,12 @@
 
 <script>
 (async () => {
-  const { user, profile, clubId } = await requireAuth();
-  const club = await getClub(clubId);
+  if (!await requireAuth()) return;
+  const clubId = await getClubId();
+  const [profile, club] = await Promise.all([getProfile(), getClub()]);
+  const userEmail = (await window.sb.auth.getSession()).data.session?.user?.email || '';
 
-  applyClubTheme(club);
-  document.getElementById('sideClubName').textContent = club?.name || 'ClavaMetrics';
-  const initials = (profile?.full_name || user.email || 'U').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  document.getElementById('userInitials').textContent = initials;
-  document.getElementById('userName').textContent = profile?.full_name || user.email;
-  document.getElementById('userRole').textContent = [profile?.role, profile?.club_role].filter(Boolean).join(' · ') || 'Staff';
+  if (club) await applyClubTheme();
 
   const today = new Date().toISOString().split('T')[0];
   const todayFmt = new Date(today + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
@@ -618,7 +546,7 @@
   document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${todayFmt}<span class="sub">today</span>`;
 
   const [playersRes, availRes, injuriesRes] = await Promise.all([
-    window.sb.from('players').select('id,full_name,jersey_number,position').eq('club_id', clubId).neq('status','inactive').order('jersey_number'),
+    window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', clubId).eq('date', today).catch(() => ({ data: [] })),
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active')
   ]);
@@ -641,8 +569,8 @@
     const av = avMap[p.id], inj = injMap[p.id];
     const pos = (p.position || '').toUpperCase();
     const posD = POS_DISP[pos] || pos;
-    const lastName = (p.full_name || '').split(' ').pop();
-    const num = p.jersey_number ?? '—';
+    const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
+    const num = p.number ?? '—';
     let cls = '', reason = '';
     if (inj) { cls = 'partial'; reason = inj.body_area || inj.injury_type || 'inj'; }
     if (av?.status === 'un' || av?.status === 'unavailable') { cls = 'unavailable'; reason = av.notes || 'out'; }
@@ -687,7 +615,7 @@
   // Physio adaptations — graceful fallback
   const { data: adaptTx } = await window.sb
     .from('treatments')
-    .select('*, players(full_name,jersey_number,position)')
+    .select('id,player_id,date,type,notes,adaptation,zones, players(first_name,last_name,number,position)')
     .eq('club_id', clubId)
     .eq('date', today)
     .catch(() => ({ data: null }));
@@ -697,13 +625,13 @@
     document.getElementById('dpPhysioCt').textContent = withAdapt.length;
     document.getElementById('dpPhysioList').innerHTML = withAdapt.map(t => {
       const pl = t.players || {};
-      const av2 = (pl.full_name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      const av2 = (`${pl.first_name} ${pl.last_name}`.trim()).split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
       const zones = Array.isArray(t.zones) ? t.zones : (t.zones ? t.zones.split(',').map(z=>z.trim()) : []);
       const adaptText = t.adaptation || t.coach_adaptation || '';
       return `<div class="dp-physio-alert">
         <div class="av">${av2}</div>
         <div class="body">
-          <div class="name">${pl.full_name||'Unknown'} · #${pl.jersey_number??'—'} · ${pl.position||''}</div>
+          <div class="name">${((pl.first_name||'')+' '+(pl.last_name||'')).trim()||'Unknown'} · #${pl.number??'—'} · ${pl.position||''}</div>
           <div class="note">${adaptText}</div>
           ${zones.length ? `<div class="zones">${zones.map(z=>`<span class="z">${z}</span>`).join('')}</div>` : ''}
         </div>

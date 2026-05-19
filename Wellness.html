@@ -542,7 +542,7 @@
   window.__WELLNESS_CTX = { playerName: null, dateLabel: null, history: [] };
 
   (async () => {
-    await window.requireAuth();
+    if (!await window.requireAuth()) return;
 
     const urlParams = new URLSearchParams(window.location.search);
     const playerId  = urlParams.get('player');

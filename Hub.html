@@ -7,115 +7,15 @@
 <link rel="stylesheet" href="clavametrics.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
   /* ───── Shell ───── */
-  .hub-shell {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    min-height: 100vh;
-  }
-  .hub-side {
-    background: var(--cm-side-bg);
-    color: var(--cm-side-fg);
-    border-right: 1px solid var(--cm-side-border);
-    display: flex; flex-direction: column;
-    position: sticky; top: 0; height: 100vh;
-    overflow-y: auto;
-  }
-  .hub-main {
-    display: flex; flex-direction: column;
-    min-width: 0;
-    background: var(--cm-bg);
-  }
 
   /* ── Sidebar bits ── */
-  .hub-brand {
-    display: flex; align-items: center; gap: 10px;
-    padding: 16px 16px 14px;
-    border-bottom: 1px solid var(--cm-side-border);
-  }
-  .hub-brand .mark {
-    width: 30px; height: 30px;
-    border-radius: 7px;
-    background: var(--cm-side-accent);
-    color: var(--cm-side-bg);
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-  }
-  .hub-brand .mark svg { width: 18px; height: 18px; }
-  .hub-brand .body  { flex: 1; min-width: 0; }
-  .hub-brand .name  { font: 600 14px/1.1 var(--cm-font-sans); letter-spacing: -0.01em; color: var(--cm-side-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hub-brand .club  { font: 500 11.5px/1.2 var(--cm-font-mono); color: var(--cm-side-fg-muted); margin-top: 2px; }
-  .hub-brand .switch {
-    width: 24px; height: 24px;
-    border-radius: 6px;
-    border: 1px solid var(--cm-side-border);
-    background: transparent;
-    color: var(--cm-side-fg-muted);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-  }
-  .hub-brand .switch:hover { background: var(--cm-side-item-active-bg); color: var(--cm-side-fg); }
-  .hub-brand .switch .ti { font-size: 14px; }
 
-  .hub-nav { padding: 8px 10px; flex: 1; }
-  .hub-nav-group + .hub-nav-group { margin-top: 6px; }
-  .hub-nav-label {
-    font: 500 10.5px/1 var(--cm-font-sans);
-    letter-spacing: var(--cm-tr-eyebrow);
-    text-transform: uppercase;
-    color: var(--cm-side-fg-muted);
-    padding: 10px 10px 6px;
-  }
-  .hub-nav-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 6.5px 10px;
-    border-radius: var(--cm-r-3);
-    color: var(--cm-side-fg-muted);
-    text-decoration: none;
-    font: 500 13.5px/1 var(--cm-font-sans);
-    cursor: pointer;
-    transition: background var(--cm-dur-1), color var(--cm-dur-1);
-    position: relative;
-  }
-  .hub-nav-item:hover { background: var(--cm-side-item-active-bg); color: var(--cm-side-fg); }
-  .hub-nav-item .ti { font-size: 17px; flex-shrink: 0; opacity: 0.95; }
-  .hub-nav-item .count {
-    margin-left: auto;
-    font: 500 11.5px/1 var(--cm-font-mono);
-    color: var(--cm-side-fg-muted);
-  }
-  .hub-nav-item.is-active {
-    background: var(--cm-side-item-active-bg);
-    color: var(--cm-side-item-active-fg);
-  }
-  .hub-nav-item.is-active .count { color: var(--cm-side-item-active-fg); opacity: 0.8; }
 
-  .hub-side-foot {
-    border-top: 1px solid var(--cm-side-border);
-    padding: 10px;
-  }
-  .hub-user {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--cm-r-3);
-    cursor: pointer;
-  }
-  .hub-user:hover { background: var(--cm-side-item-active-bg); }
-  .hub-user .av {
-    width: 28px; height: 28px; border-radius: 50%;
-    background: var(--cm-side-accent);
-    color: var(--cm-side-bg);
-    display: flex; align-items: center; justify-content: center;
-    font: 600 11px/1 var(--cm-font-sans);
-    flex-shrink: 0;
-  }
-  .hub-user .who { flex: 1; min-width: 0; }
-  .hub-user .who .name { font: 600 13px/1.2 var(--cm-font-sans); color: var(--cm-side-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hub-user .who .role { font: 500 11px/1.2 var(--cm-font-mono); color: var(--cm-side-fg-muted); margin-top: 2px; }
-  .hub-user .ti { font-size: 14px; color: var(--cm-side-fg-muted); }
 
   /* ───── Topbar ───── */
   .hub-topbar {
@@ -439,6 +339,39 @@
   .task .meta .ti { font-size: 13px; }
   .task .when { font: var(--cm-mono); color: var(--cm-fg-faint); white-space: nowrap; }
 
+  /* Search dropdown */
+  .hub-search { position: relative; }
+  .hub-search-results {
+    position: absolute;
+    top: calc(100% + 6px); left: 0; right: 0;
+    background: var(--cm-surface);
+    border: 1px solid var(--cm-border-strong);
+    border-radius: var(--cm-r-4);
+    box-shadow: var(--cm-shadow-3, 0 8px 24px rgba(0,0,0,.14));
+    z-index: 100;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+  .hub-search-group-label {
+    font: 500 10.5px/1 var(--cm-font-sans);
+    letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase;
+    color: var(--cm-fg-muted);
+    padding: 10px 12px 6px;
+  }
+  .hub-search-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    color: var(--cm-fg);
+    text-decoration: none;
+    font: 500 13px/1.2 var(--cm-font-sans);
+    transition: background var(--cm-dur-1);
+  }
+  .hub-search-item:hover, .hub-search-item.is-focused { background: var(--cm-bg-soft); }
+  .hub-search-item .ti { font-size: 15px; color: var(--cm-fg-muted); flex-shrink: 0; }
+  .hub-search-meta { margin-left: auto; font: var(--cm-meta); color: var(--cm-fg-faint); }
+  .hub-search-empty { padding: 24px 12px; text-align: center; color: var(--cm-fg-muted); font: var(--cm-body-sm); }
+
   /* Tweaks mount */
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
@@ -446,8 +379,6 @@
   .hub-toast.is-show { opacity:1;transform:translateX(-50%) translateY(0); }
 
   @media (max-width: 880px) {
-    .hub-shell { grid-template-columns: 64px 1fr; }
-    .hub-brand .body, .hub-brand .switch, .hub-nav-item span:not(.ti):not(.count), .hub-user .who, .hub-nav-label { display: none; }
     .hub-search { width: auto; }
   }
 </style>
@@ -457,81 +388,7 @@
 <div class="hub-shell" data-screen-label="03 Hub">
 
   <!-- ─────────── SIDEBAR ─────────── -->
-  <aside class="hub-side">
-    <div class="hub-brand">
-      <div class="mark">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/>
-        </svg>
-      </div>
-      <div class="body">
-        <div class="name" id="sideClubName">Clava FC</div>
-        <div class="club">First team · 2025/26</div>
-      </div>
-      <button class="switch" title="Switch club" aria-label="Switch club"><i class="ti ti-selector"></i></button>
-    </div>
-
-    <nav class="hub-nav">
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Overview</div>
-        <a class="hub-nav-item is-active" href="Hub.html" aria-current="page">
-          <i class="ti ti-home"></i><span>Staff Hub</span>
-        </a>
-        <a class="hub-nav-item" href="Calendar.html">
-          <i class="ti ti-calendar-stats"></i><span>Calendar</span>
-          <span class="count">⌘ K</span>
-        </a>
-        <a class="hub-nav-item" href="Chat%20%26%20Tasks.html">
-          <i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span>
-          <span class="count">12</span>
-        </a>
-      </div>
-
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Technical</div>
-        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
-        <a class="hub-nav-item" href="Sessions%20Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
-        <a class="hub-nav-item" href="Daily%20Planning.html"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
-        <a class="hub-nav-item" href="Sessions%20History.html"><i class="ti ti-history"></i><span>Sessions history</span></a>
-        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
-        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
-        <a class="hub-nav-item" href="Match%20Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
-      </div>
-
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Performance</div>
-        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
-        <a class="hub-nav-item" href="RPE.html"><i class="ti ti-activity"></i><span>RPE</span></a>
-        <a class="hub-nav-item" href="Load%20Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span><span class="count">⚠</span></a>
-        <a class="hub-nav-item" href="GPS%20Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
-        <a class="hub-nav-item" href="Gym%20Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
-        <a class="hub-nav-item" href="Gym%20Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
-        <a class="hub-nav-item" href="Nutrition.html"><i class="ti ti-apple"></i><span>Nutrition</span></a>
-      </div>
-
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Medical</div>
-        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
-        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
-      </div>
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Workspace</div>
-        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
-        <a class="hub-nav-item" href="Admin.html"><i class="ti ti-user-shield"></i><span>Admin</span></a>
-      </div>
-    </nav>
-
-    <div class="hub-side-foot">
-      <div class="hub-user" role="button" tabindex="0" aria-label="User menu">
-        <div class="av" id="userInitials">JR</div>
-        <div class="who">
-          <div class="name" id="userName">Joaquín Reiris</div>
-          <div class="role" id="userRole">Performance · Admin</div>
-        </div>
-        <i class="ti ti-dots"></i>
-      </div>
-    </div>
-  </aside>
+  <div id="hub-side-root"></div>
 
   <!-- ─────────── MAIN ─────────── -->
   <main class="hub-main">
@@ -567,7 +424,7 @@
       <header class="hub-greet">
         <div>
           <h1 id="greetMsg">Good morning, Joaquín <span class="accent">— here's what needs you today.</span></h1>
-          <p>Microcycle 14 · MD-3 · Training session today @ 17:00 at Centro de Entrenamiento.</p>
+          <p id="greetSub">Microcycle 14 · MD-3 · Training session today @ 17:00 at Centro de Entrenamiento.</p>
         </div>
         <div class="meta">
           <span class="cm-pill is-success"><span class="cm-dot"></span>22 available</span>
@@ -582,7 +439,7 @@
           <div class="kpi-label"><i class="ti ti-users"></i>Squad size</div>
           <div class="kpi-value" id="kpiSquad">— <sub>players</sub></div>
           <div class="kpi-trend">
-            <span class="delta up"><i class="ti ti-arrow-up-right"></i>+2</span>
+            <span id="kpiSquadDelta" class="delta up"></span>
             <span>vs last microcycle</span>
           </div>
           <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
@@ -591,7 +448,7 @@
         </div>
         <div class="kpi">
           <div class="kpi-label"><i class="ti ti-chart-line"></i>Avg ACWR</div>
-          <div class="kpi-value">1.18</div>
+          <div class="kpi-value" id="kpiAcwr">—</div>
           <div class="kpi-trend">
             <span class="delta down"><i class="ti ti-arrow-up-right"></i>+0.06</span>
             <span style="color:var(--cm-warning)">Approaching sweet-spot</span>
@@ -604,7 +461,7 @@
           <div class="kpi-label"><i class="ti ti-heartbeat"></i>Wellness avg</div>
           <div class="kpi-value" id="kpiWellness">—<sub>/10</sub></div>
           <div class="kpi-trend">
-            <span class="delta up"><i class="ti ti-arrow-up-right"></i>+0.3</span>
+            <span id="kpiWellnessDelta" class="delta up"></span>
             <span id="wellnessSub">Checking…</span>
           </div>
           <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
@@ -615,8 +472,8 @@
           <div class="kpi-label"><i class="ti ti-bandage"></i>Active injuries</div>
           <div class="kpi-value" id="kpiInjuries">—</div>
           <div class="kpi-trend">
-            <span class="delta up" style="color:var(--cm-success)"><i class="ti ti-arrow-down-right"></i>−1</span>
-            <span>Bocanegra returning Fri</span>
+            <span id="kpiInjuriesDelta" class="delta up" style="color:var(--cm-success)"></span>
+            <span id="kpiInjuriesSub"></span>
           </div>
           <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,10 12,8 24,14 36,12 48,18 60,16 76,22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -629,7 +486,7 @@
         <h2>Modules</h2>
         <span class="count">14</span>
         <div class="right">
-          <button class="cm-btn is-ghost is-sm"><i class="ti ti-grid-dots" style="font-size:14px"></i> Customize</button>
+          <button id="btnCustomizeModules" class="cm-btn is-ghost is-sm"><i class="ti ti-grid-dots" style="font-size:14px"></i> Customize</button>
         </div>
       </div>
 
@@ -672,7 +529,7 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-clock"></i> 17:00 today
+            <i class="ti ti-clock"></i> <span id="modFootDailyPlanning">17:00 today</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -714,7 +571,7 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-users"></i> 27 players
+            <span id="modFootSquad"><i class="ti ti-users"></i> 27 players</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -742,7 +599,7 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-circle-check"></i> 24 / 27 today
+            <span id="modFootWellness"><i class="ti ti-circle-check"></i> 24 / 27 today</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -770,7 +627,7 @@
             </div>
           </div>
           <div class="module-foot">
-            <span class="alert"><i class="ti ti-flame"></i> 4 in red zone</span>
+            <span id="modFootLoad" class="alert"><i class="ti ti-flame"></i> 4 in red zone</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -798,7 +655,7 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-activity-heartbeat"></i> 2 active · 1 returning
+            <span id="modFootInjuries"><i class="ti ti-activity-heartbeat"></i> 2 active · 1 returning</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -840,7 +697,7 @@
           <div class="section-header">
             <h2>Recent activity</h2>
             <div class="right">
-              <button class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
+              <button id="btnViewAllActivity" class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
             </div>
           </div>
 
@@ -902,7 +759,7 @@
             <h2>Your tasks</h2>
             <span class="count">5</span>
             <div class="right">
-              <button class="cm-btn is-ghost is-sm"><i class="ti ti-plus" style="font-size:14px"></i> Add</button>
+              <button id="btnAddTask" class="cm-btn is-ghost is-sm"><i class="ti ti-plus" style="font-size:14px"></i> Add</button>
             </div>
           </div>
 
@@ -993,27 +850,291 @@ document.querySelectorAll('.task').forEach(el => {
 });
 
 // ── Dead button stubs ─────────────────────────────────────────────────────────
-document.querySelector('.hub-brand .switch')
-  ?.addEventListener('click', () => showHubToast('Switch club — coming soon'));
+document.querySelector(') {
+  const navInj   = document.getElementById('navInjuriesCount');
+  const navLoad  = document.getElementById('navLoadCount');
+  const navAvail = document.getElementById('navAvailCount');
+  if (navInj)   navInj.textContent   = injuryCount > 0        ? injuryCount        : '';
+  if (navLoad)  navLoad.textContent  = acwrWarningCount > 0   ? '⚠'               : '';
+  if (navAvail) navAvail.textContent = notAvailableCount > 0  ? notAvailableCount  : '';
 
-document.querySelector('.hub-user')
-  ?.addEventListener('click', () => window.location.href = 'Admin.html');
+  const modSquad = document.getElementById('modFootSquad');
+  const modWell  = document.getElementById('modFootWellness');
+  const modInj   = document.getElementById('modFootInjuries');
+  const modLoad  = document.getElementById('modFootLoad');
+  const modDP    = document.getElementById('modFootDailyPlanning');
 
-document.querySelector('.cm-icon-btn[title="Notifications"]')
-  ?.addEventListener('click', () => showHubToast('No new notifications'));
+  if (modSquad && squadCount !== null)
+    modSquad.innerHTML = `<i class="ti ti-users"></i> ${squadCount} players`;
+  if (modWell && wellnessCount !== null && squadCount !== null)
+    modWell.innerHTML = `<i class="ti ti-circle-check"></i> ${wellnessCount} / ${squadCount} today`;
+  if (modInj)
+    modInj.innerHTML = `<i class="ti ti-activity-heartbeat"></i> ${injuryCount} active`;
+  if (modLoad)
+    modLoad.innerHTML = acwrWarningCount > 0
+      ? `<i class="ti ti-flame"></i> ${acwrWarningCount} in red zone`
+      : `<i class="ti ti-check"></i> All clear`;
+  if (modDP && todaySession?.session_time)
+    modDP.textContent = todaySession.session_time.slice(0, 5) + ' today';
+}
 
-document.querySelector('.cm-icon-btn[title="Help"]')
-  ?.addEventListener('click', () => showHubToast('Help center — coming soon'));
+function renderGreetSub(microcycle, session, today) {
+  const el = document.getElementById('greetSub');
+  if (!el) return;
+  const parts = [];
+  if (microcycle) {
+    parts.push(microcycle.name);
+    if (microcycle.match_date) {
+      const diff = Math.round((new Date(microcycle.match_date) - new Date(today)) / 86400000);
+      parts.push(diff === 0 ? 'MD' : diff > 0 ? `MD-${diff}` : `MD+${Math.abs(diff)}`);
+    }
+  }
+  if (session) {
+    const time = session.session_time?.slice(0, 5);
+    let txt = 'Training session today';
+    if (time) txt += ` @ ${time}`;
+    if (session.location) txt += ` at ${session.location}`;
+    parts.push(txt);
+  }
+  el.textContent = parts.length ? parts.join(' · ') + '.' : 'No sessions scheduled today.';
+}
 
-document.querySelector('.cm-btn.is-ghost.is-sm')
-  ?.addEventListener('click', () => showHubToast('Customize modules — coming soon'));
+function formatAgo(dateStr) {
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (diff < 2)  return 'just now';
+  if (diff < 60) return `${diff} min ago`;
+  const h = Math.floor(diff / 60);
+  if (h < 24) return h === 1 ? '1 h ago' : `${h} h ago`;
+  const d = Math.floor(h / 24);
+  if (d === 1) return 'yesterday';
+  if (d <= 6)  return `${d} days ago`;
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
-document.querySelector('.section-header .right .cm-btn.is-ghost.is-sm')
-  ?.addEventListener('click', () => window.location.href = 'Chat%20%26%20Tasks.html');
+function renderActivity(sessions, injuries, gps, wellnessCount, squadCount) {
+  const feed = document.querySelector('.activity');
+  if (!feed) return;
+  feed.querySelectorAll('.activity-row:not(.is-header)').forEach(el => el.remove());
 
-// "Add" task button (second ghost button in section headers)
-document.querySelectorAll('.section-header .right .cm-btn.is-ghost.is-sm')[1]
-  ?.addEventListener('click', () => showHubToast('Task creation — coming soon'));
+  const items = [];
+
+  (sessions || []).forEach(s => {
+    const who  = s.profiles?.full_name || 'Coach';
+    const role = s.profiles?.role      || 'Staff';
+    items.push({ icon: 'ti-soccer-field', color: '', who, role,
+      what: `Published <span class="target">${s.title}</span> session`,
+      ts: new Date(s.created_at || s.session_date).getTime() });
+  });
+
+  (injuries || []).forEach(i => {
+    const player = i.players ? `${i.players.first_name} ${i.players.last_name}` : 'Player';
+    items.push({ icon: 'ti-bandage', color: 'var(--cm-danger)',
+      who: 'Medical staff', role: 'Medical',
+      what: `Logged injury · <span class="target">${player} · ${i.body_area}</span>`,
+      ts: new Date(i.created_at || i.start_date).getTime() });
+  });
+
+  if (gps?.length) {
+    const bySess = {};
+    gps.forEach(g => {
+      if (!bySess[g.session_id]) bySess[g.session_id] = { count: 0, ts: new Date(g.created_at).getTime(), session: g.training_sessions };
+      bySess[g.session_id].count++;
+    });
+    Object.values(bySess).forEach(({ count, ts, session }) => {
+      items.push({ icon: 'ti-radar-2', color: '',
+        who: 'GPS sync', role: 'Integration',
+        what: `Imported <span class="target">${count} player files</span>${session ? ` from ${session.title}` : ''}`,
+        ts });
+    });
+  }
+
+  if (wellnessCount > 0) {
+    items.push({ icon: 'ti-heartbeat', color: 'var(--cm-success)',
+      who: `${wellnessCount} of ${squadCount ?? '?'} players`, role: 'First team',
+      what: `Submitted <span class="target">today's wellness check-in</span>`,
+      ts: Date.now() - 3600000 });
+  }
+
+  if (!items.length) return;
+  items.sort((a, b) => b.ts - a.ts);
+
+  items.slice(0, 6).forEach(item => {
+    const initials = item.who.trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+    const row = document.createElement('div');
+    row.className = 'activity-row'; row.setAttribute('role', 'row');
+    row.innerHTML =
+      `<div class="ind" role="cell"><i class="ti ${item.icon}"${item.color ? ` style="color:${item.color}"` : ''} aria-hidden="true"></i></div>` +
+      `<div class="who" role="cell"><div class="av" aria-hidden="true">${initials}</div><div><div class="name">${item.who}</div><div class="cm-meta">${item.role}</div></div></div>` +
+      `<div class="what" role="cell">${item.what}</div>` +
+      `<div class="when" role="cell" style="text-align:right">${formatAgo(new Date(item.ts).toISOString())}</div>`;
+    feed.appendChild(row);
+  });
+}
+
+(function initSearch() {
+  const wrapper = document.querySelector('.hub-search');
+  const input   = wrapper.querySelector('input');
+  const drop    = document.createElement('div');
+  drop.className = 'hub-search-results';
+  drop.hidden = true;
+  wrapper.appendChild(drop);
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  let timer, clubId;
+
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); input.focus(); input.select(); }
+    if (e.key === 'Escape') { drop.hidden = true; input.blur(); }
+  });
+  document.addEventListener('click', e => { if (!wrapper.contains(e.target)) drop.hidden = true; });
+  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) drop.hidden = false; });
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { drop.hidden = true; return; }
+    timer = setTimeout(() => runSearch(q), 280);
+  });
+
+  async function runSearch(q) {
+    if (!clubId) clubId = await window.getClubId();
+    if (!clubId) return;
+
+    drop.innerHTML = '<div class="hub-search-empty">Searching…</div>';
+    drop.hidden = false;
+
+    const like = `%${q}%`;
+    const [pRes, sRes, mRes] = await Promise.all([
+      window.sb.from('players')
+        .select('first_name, last_name, position')
+        .eq('club_id', clubId)
+        .or(`first_name.ilike.${like},last_name.ilike.${like}`)
+        .limit(5),
+      window.sb.from('training_sessions')
+        .select('title, session_date')
+        .eq('club_id', clubId)
+        .ilike('title', like)
+        .order('session_date', { ascending: false })
+        .limit(4),
+      window.sb.from('microcycles')
+        .select('name, rival')
+        .eq('club_id', clubId)
+        .or(`name.ilike.${like},rival.ilike.${like}`)
+        .limit(3)
+    ]);
+
+    const players  = pRes.data || [];
+    const sessions = sRes.data || [];
+    const mcs      = mRes.data || [];
+
+    if (!players.length && !sessions.length && !mcs.length) {
+      drop.innerHTML = `<div class="hub-search-empty">No results for "${esc(q)}"</div>`;
+      return;
+    }
+
+    let html = '';
+    if (players.length) {
+      html += '<div class="hub-search-group-label">Players</div>';
+      players.forEach(p => {
+        html += `<a class="hub-search-item" href="Squad.html"><i class="ti ti-user"></i><span>${esc(p.first_name)} ${esc(p.last_name)}</span><span class="hub-search-meta">${esc(p.position || '—')}</span></a>`;
+      });
+    }
+    if (sessions.length) {
+      html += '<div class="hub-search-group-label">Sessions</div>';
+      sessions.forEach(s => {
+        html += `<a class="hub-search-item" href="Sessions%20History.html"><i class="ti ti-soccer-field"></i><span>${esc(s.title)}</span><span class="hub-search-meta">${esc(s.session_date)}</span></a>`;
+      });
+    }
+    if (mcs.length) {
+      html += '<div class="hub-search-group-label">Microcycles</div>';
+      mcs.forEach(mc => {
+        html += `<a class="hub-search-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>${esc(mc.name)}</span><span class="hub-search-meta">${esc(mc.rival || '')}</span></a>`;
+      });
+    }
+    drop.innerHTML = html;
+  }
+})();
+
+function renderAvailabilityPills(records) {
+  const meta = document.querySelector('.hub-greet .meta');
+  if (!meta || !records.length) return;
+  let avail = 0, partial = 0, out = 0;
+  records.forEach(({ status }) => {
+    const s = (status || '').toLowerCase();
+    if (s === 'available' || s === 'fit')                             avail++;
+    else if (s === 'modified' || s === 'partial' || s === 'limited') partial++;
+    else                                                              out++;
+  });
+  meta.innerHTML =
+    `<span class="cm-pill is-success"><span class="cm-dot"></span>${avail} available</span>` +
+    `<span class="cm-pill is-warning"><span class="cm-dot"></span>${partial} partial</span>` +
+    `<span class="cm-pill is-danger"><span class="cm-dot"></span>${out} out</span>`;
+}
+
+function renderTasks(tasks) {
+  const container = document.querySelector('.tasks');
+  if (!container) return;
+
+  container.querySelectorAll('.task').forEach(el => el.remove());
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  function formatDue(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr + 'T00:00:00');
+    const diff = Math.round((d - today) / 86400000);
+    if (diff < 0)   return 'Overdue';
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Tomorrow';
+    if (diff <= 6)  return d.toLocaleDateString('en-US', { weekday: 'short' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  const priorityColor = { urgent: 'var(--cm-danger)', high: 'var(--cm-danger)', medium: 'var(--cm-warning)', low: 'var(--cm-fg-muted)' };
+  const priorityLabel = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' };
+
+  const pending = tasks.filter(t => t.status !== 'done').length;
+  const countEl = document.getElementById('btnAddTask').closest('.section-header')?.querySelector('.count');
+  if (countEl) countEl.textContent = pending;
+
+  if (!tasks.length) {
+    const empty = document.createElement('div');
+    empty.className = 'task';
+    empty.style.cssText = 'justify-content:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)';
+    empty.textContent = 'No pending tasks';
+    container.appendChild(empty);
+    return;
+  }
+
+  tasks.forEach(task => {
+    const isDone = task.status === 'done';
+    const color = priorityColor[task.priority] || 'var(--cm-fg-muted)';
+    const label = priorityLabel[task.priority] || task.priority || '';
+    const from  = task.created_by_name ? ` · from ${task.created_by_name}` : '';
+    const el = document.createElement('div');
+    el.className = 'task' + (isDone ? ' is-done' : '');
+    el.dataset.taskId = task.id;
+    el.innerHTML = `
+      <div class="check" role="checkbox" tabindex="0" aria-checked="${isDone}"></div>
+      <div class="body">
+        <div class="title">${task.title}</div>
+        <div class="meta"><i class="ti ti-flag-2" style="color:${color}"></i> ${label}${from}</div>
+      </div>
+      <div class="when">${formatDue(task.due_date)}</div>`;
+    const check = el.querySelector('.check');
+    function toggle() {
+      el.classList.toggle('is-done');
+      check.setAttribute('aria-checked', el.classList.contains('is-done') ? 'true' : 'false');
+    }
+    check.addEventListener('click', toggle);
+    check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
+    container.appendChild(el);
+  });
+}
 </script>
 
 <script>
@@ -1027,39 +1148,88 @@ document.querySelectorAll('.section-header .right .cm-btn.is-ghost.is-sm')[1]
   if (profile) {
     const name = profile.full_name || 'User';
     const parts = name.trim().split(/\s+/);
-    const initials = parts.length >= 2
-      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-      : name.slice(0, 2).toUpperCase();
-    document.getElementById('userInitials').textContent = initials;
-    document.getElementById('userName').textContent = name;
-    document.getElementById('userRole').textContent = profile.role || '';
-
-    // Greeting
     const h = new Date().getHours();
     const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
     document.getElementById('greetMsg').innerHTML =
       `${g}, ${parts[0]} <span class="accent">— here's what needs you today.</span>`;
   }
 
-  // Populate club name
-  if (club) {
-    document.getElementById('sideClubName').textContent = club.name;
-    window.applyClubTheme();
-  }
+  if (club) await window.applyClubTheme();
 
   // KPIs
   const clubId = await window.getClubId();
   if (!clubId) return;
 
-  const today = new Date().toISOString().split('T')[0];
+  const { data: { session: _s } } = await window.sb.auth.getSession();
+  const userId = _s?.user?.id ?? null;
 
-  const [squadRes, injuriesRes, wellnessRes] = await Promise.all([
-    window.sb.from('players').select('*', { count: 'exact', head: true })
+  const today = new Date().toISOString().split('T')[0];
+  const _todayMidnight = new Date(); _todayMidnight.setHours(0, 0, 0, 0);
+  const todayStartISO = _todayMidnight.toISOString();
+  const d28 = new Date(); d28.setDate(d28.getDate() - 28);
+  const d14 = new Date(); d14.setDate(d14.getDate() - 14);
+  const d7  = new Date(); d7.setDate(d7.getDate() - 7);
+  const date28 = d28.toISOString().split('T')[0];
+  const date14 = d14.toISOString().split('T')[0];
+  const date7  = d7.toISOString().split('T')[0];
+
+  const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, sessActRes, injActRes, gpsActRes, mcRes, todaySessionRes] = await Promise.all([
+    window.sb.from('players').select('id', { count: 'exact', head: true })
       .eq('club_id', clubId),
     window.sb.from('injuries').select('status')
       .eq('club_id', clubId).eq('status', 'active'),
     window.sb.from('wellness').select('readiness')
-      .eq('club_id', clubId).gte('submitted_at', today)
+      .eq('club_id', clubId).gte('submitted_at', todayStartISO),
+    userId
+      ? window.sb.from('tasks')
+          .select('id, title, priority, status, due_date, created_by_name')
+          .eq('club_id', clubId)
+          .eq('assigned_to', userId)
+          .neq('status', 'cancelled')
+          .order('due_date', { ascending: true })
+          .limit(10)
+      : Promise.resolve({ data: [], error: null }),
+    window.sb.from('availability').select('status')
+      .eq('club_id', clubId).eq('date', today),
+    window.sb.from('players').select('status')
+      .eq('club_id', clubId),
+    window.sb.from('training_sessions')
+      .select('session_date, rpe(player_id, load)')
+      .eq('club_id', clubId)
+      .gte('session_date', date28)
+      .lte('session_date', today),
+    window.sb.from('training_sessions')
+      .select('title, session_date, created_at, profiles(full_name, role)')
+      .eq('club_id', clubId)
+      .gte('session_date', date7)
+      .order('created_at', { ascending: false })
+      .limit(3),
+    window.sb.from('injuries')
+      .select('body_area, injury_type, start_date, created_at, players!inner(first_name, last_name)')
+      .eq('club_id', clubId)
+      .gte('start_date', date14)
+      .order('start_date', { ascending: false })
+      .limit(3),
+    window.sb.from('gps_reports')
+      .select('session_id, created_at, training_sessions!inner(title, session_date)')
+      .eq('club_id', clubId)
+      .gte('training_sessions.session_date', date7)
+      .order('created_at', { ascending: false })
+      .limit(10),
+    window.sb.from('microcycles')
+      .select('name, match_date, rival')
+      .eq('club_id', clubId)
+      .lte('start_date', today)
+      .gte('end_date', today)
+      .limit(1)
+      .maybeSingle(),
+    window.sb.from('training_sessions')
+      .select('session_time, location, session_type')
+      .eq('club_id', clubId)
+      .eq('session_date', today)
+      .order('session_time', { ascending: true })
+      .limit(1)
+      .maybeSingle()
   ]);
 
   if (!squadRes.error && squadRes.count !== null) {
@@ -1083,6 +1253,58 @@ document.querySelectorAll('.section-header .right .cm-btn.is-ghost.is-sm')[1]
     document.getElementById('kpiWellness').innerHTML = `—<sub>/10</sub>`;
     document.getElementById('wellnessSub').textContent = 'Could not load';
   }
+
+  if (!tasksRes.error) renderTasks(tasksRes.data ?? []);
+
+  let acwrWarningCount = 0;
+  if (!rpeRes.error && rpeRes.data?.length) {
+    const loads = {};
+    rpeRes.data.forEach(session => {
+      const isAcute = session.session_date >= date7;
+      (session.rpe || []).forEach(r => {
+        if (!loads[r.player_id]) loads[r.player_id] = { acute: 0, chronic: 0 };
+        loads[r.player_id].chronic += r.load || 0;
+        if (isAcute) loads[r.player_id].acute += r.load || 0;
+      });
+    });
+    const acwrs = Object.values(loads)
+      .map(({ acute, chronic }) => chronic > 0 ? acute / (chronic / 4) : null)
+      .filter(v => v !== null);
+    acwrWarningCount = acwrs.filter(v => v > 1.5).length;
+    if (acwrs.length) {
+      const avg = acwrs.reduce((a, b) => a + b, 0) / acwrs.length;
+      document.getElementById('kpiAcwr').textContent = avg.toFixed(2);
+    }
+  }
+
+  const pillSource = availRes.data?.length
+    ? availRes.data
+    : (playersStatusRes.data ?? []).map(p => ({ status: p.status }));
+  if (!availRes.error || !playersStatusRes.error) renderAvailabilityPills(pillSource);
+
+  const notAvailableCount = pillSource.filter(({ status = '' }) => {
+    const s = status.toLowerCase();
+    return s !== 'available' && s !== 'fit';
+  }).length;
+
+  renderBadgesAndStats({
+    injuryCount:       injuriesRes.data?.length ?? 0,
+    acwrWarningCount,
+    notAvailableCount,
+    squadCount:        squadRes.count ?? null,
+    wellnessCount:     wellnessRes.data?.length ?? 0,
+    todaySession:      todaySessionRes.data
+  });
+
+  renderActivity(
+    sessActRes.data,
+    injActRes.data,
+    gpsActRes.data,
+    wellnessRes.data?.length ?? 0,
+    squadRes.count ?? null
+  );
+
+  renderGreetSub(mcRes.data, todaySessionRes.data, today);
 })();
 </script>
 </body>

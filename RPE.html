@@ -262,7 +262,7 @@
 <div class="canvas" data-screen-label="15 RPE">
 
   <aside class="ctx">
-    <a class="ctx-link" href="Wellness.html"><i class="ti ti-arrow-left"></i>Sister surface · Wellness</a>
+    <a class="ctx-link" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to Staff Hub</a>
     <h1>Session RPE</h1>
     <p>Posted to each player ~30 min after the final whistle. CR-10 Borg scale. Combined with session duration gives us <strong>sRPE = RPE × min</strong> — the daily load proxy that feeds the Load Monitor and ACWR.</p>
 
@@ -463,7 +463,7 @@ let players = [];
 
 // ── BOOT ──
 async function boot() {
-  await window.requireAuth();
+  if (!await window.requireAuth()) return;
   const clubId = await window.getClubId();
   await window.applyClubTheme();
 

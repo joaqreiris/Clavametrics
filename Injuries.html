@@ -7,36 +7,11 @@
 <link rel="stylesheet" href="clavametrics.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
   /* Shared shell */
-  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
-  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
-  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
-  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
-  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .hub-brand .mark svg { width:18px; height:18px; }
-  .hub-brand .body { flex:1; min-width:0; }
-  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
-  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
-  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
-  .hub-brand .switch:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
-  .hub-brand .switch .ti { font-size:14px; }
-  .hub-nav { padding:8px 10px; flex:1; }
-  .hub-nav-group + .hub-nav-group { margin-top:6px; }
-  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
-  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
-  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
-  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
-  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
-  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
-  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
-  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
-  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
-  .hub-user .who { flex:1; min-width:0; }
-  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
-  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
 
   /* Topbar */
   .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
@@ -296,54 +271,7 @@
 <div class="hub-shell" data-screen-label="08 Injuries">
 
   <!-- Sidebar -->
-  <aside class="hub-side">
-    <div class="hub-brand">
-      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
-      <div class="body"><div class="name">Clava FC</div><div class="club">First team · 2025/26</div></div>
-      <button class="switch"><i class="ti ti-selector"></i></button>
-    </div>
-    <nav class="hub-nav">
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Overview</div>
-        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
-        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
-        <a class="hub-nav-item" href="Chat%20%26%20Tasks.html"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
-      </div>
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Technical</div>
-        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
-        <a class="hub-nav-item" href="Sessions%20Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
-        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
-        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
-        <a class="hub-nav-item" href="Match%20Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
-      </div>
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Performance</div>
-        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
-        <a class="hub-nav-item" href="Load%20Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
-        <a class="hub-nav-item" href="GPS%20Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
-        <a class="hub-nav-item" href="Gym%20Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
-        <a class="hub-nav-item" href="Gym%20Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
-        <a class="hub-nav-item is-active" href="#"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
-      </div>
-            <div class="hub-nav-group">
-        <div class="hub-nav-label">Medical</div>
-        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
-        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
-      </div>
-      <div class="hub-nav-group">
-        <div class="hub-nav-label">Workspace</div>
-        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
-      </div>
-    </nav>
-    <div class="hub-side-foot">
-      <div class="hub-user">
-        <div class="av">JR</div>
-        <div class="who"><div class="name">Joaquín Reiris</div><div class="role">Performance · Admin</div></div>
-        <i class="ti ti-dots"></i>
-      </div>
-    </div>
-  </aside>
+  <div id="hub-side-root"></div>
 
   <main class="hub-main">
 
@@ -820,24 +748,12 @@
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
 
-  // Sidebar user
-  if (profile) {
-    const initials = (profile.full_name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
-    const el = id => document.getElementById(id);
-    if (el('userInitials')) el('userInitials').textContent = initials;
-    if (el('userName')) el('userName').textContent = profile.full_name || '';
-    if (el('userRole')) el('userRole').textContent = profile.role || '';
-  }
-  if (club) {
-    const el = document.getElementById('sideClubName');
-    if (el) el.textContent = club.name;
-    window.applyClubTheme();
-  }
+  if (club) window.applyClubTheme();
 
   // Load data
   const [injRes, playersRes] = await Promise.all([
-    window.sb.from('injuries').select('*').eq('club_id', clubId).order('start_date', { ascending: false }),
-    window.sb.from('players').select('id,full_name,position,jersey_number').eq('club_id', clubId).neq('status','inactive')
+    window.sb.from('injuries').select('id,player_id,injury_type,body_area,severity,status,start_date,expected_return,notes').eq('club_id', clubId).order('start_date', { ascending: false }),
+    window.sb.from('players').select('id,first_name,last_name,position,number').eq('club_id', clubId).neq('status','inactive')
   ]);
 
   const injuries = injRes.data || [];
@@ -850,7 +766,7 @@
     players.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = `${p.full_name}${p.jersey_number ? ' · #' + p.jersey_number : ''}`;
+      opt.textContent = `${`${p.first_name} ${p.last_name}`.trim()}${p.number ? ' · #' + p.number : ''}`;
       logPlayer.appendChild(opt);
     });
   }
@@ -904,9 +820,9 @@
 // ── Card renderer ────────────────────────────────────────────────────────────
 
 function injCard(inj, player) {
-  const name     = player ? player.full_name : 'Unknown Player';
+  const name     = player ? `${player.first_name} ${player.last_name}`.trim() : 'Unknown Player';
   const pos      = player ? player.position  : '';
-  const jersey   = player ? (player.jersey_number ? ' · #' + player.jersey_number : '') : '';
+  const jersey   = player ? (player.number ? ' · #' + player.number : '') : '';
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   const start    = inj.start_date    ? new Date(inj.start_date)    : new Date();

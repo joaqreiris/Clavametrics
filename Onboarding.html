@@ -268,6 +268,7 @@
 
   <!-- ─── Rail ─── -->
   <aside class="ob-rail">
+    <a href="Login.html" style="display:inline-flex;align-items:center;gap:6px;color:var(--cm-side-fg-muted);text-decoration:none;font:500 12px/1 var(--cm-font-sans);padding:12px 16px 0;opacity:0.7"><i class="ti ti-arrow-left" style="font-size:14px"></i>Back to login</a>
     <div class="ob-rail-brand">
       <div class="mark">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
@@ -465,7 +466,7 @@
 
 <script>
   async function boot() {
-    await window.requireAuth();
+    if (!await window.requireAuth()) return;
     const club = await window.getClub();
     if (club?.name) document.getElementById('club-name').value = club.name;
     window.applyClubTheme();

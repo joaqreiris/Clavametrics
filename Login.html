@@ -399,15 +399,17 @@
   async function oauthLogin(provider) {
     const btn = document.getElementById(provider + 'Btn');
     btn.disabled = true;
+    btn.style.opacity = '0.6';
     const { error } = await window.sb.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin + '/Hub.html' }
+      options: { redirectTo: window.location.protocol.startsWith('http') ? window.location.origin + '/Hub.html' : undefined }
     });
     if (error) {
       const err = document.getElementById('errorMsg');
       err.textContent = error.message;
       err.classList.add('show');
       btn.disabled = false;
+      btn.style.opacity = '';
     }
   }
 
