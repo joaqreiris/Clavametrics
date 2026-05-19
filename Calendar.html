@@ -908,7 +908,7 @@ function renderGrid() {
   const weekEnd   = addDays(weekStart, 6);
 
   // Header
-  document.getElementById('calMcTitle').textContent = (mc.name || `Microcycle ${mc.number || ''}`) + ' · daily plan';
+  document.getElementById('calMcTitle').textContent = (mc.name || 'Microcycle') + ' · daily plan';
   document.getElementById('calMcSub').textContent =
     `${fmtShort(new Date(start))} → ${fmtShort(new Date(end))} · ${_sessions.length} sessions`;
   document.getElementById('calWeekLabel').innerHTML =
@@ -917,7 +917,7 @@ function renderGrid() {
   document.getElementById('calWeekNext').disabled = _weekOffset >= totalWeeks - 1;
 
   // Summary row
-  if (mc.target_match) document.getElementById('calMcTarget').innerHTML = `${mc.target_match}<small>${mc.match_home_away||''}</small>`;
+  if (mc.rival) document.getElementById('calMcTarget').innerHTML = `${mc.rival}<small>${mc.home_away ? ' · '+mc.home_away : ''}</small>`;
   const trainCt = _sessions.filter(s => s.session_type === 'training').length;
   const gymCt   = _sessions.filter(s => s.session_type === 'gym').length;
   document.getElementById('calMcSessions').innerHTML = `${trainCt}<small>field + ${gymCt} gym</small>`;
@@ -927,13 +927,13 @@ function renderGrid() {
 
   // Top bar MC heading
   if (mc) {
-    const mcName = mc.name || `Microcycle ${mc.number||''}`;
+    const mcName = mc.name || 'Microcycle';
     let mdLabel = '';
     if (mc.match_date) {
       const diff = daysBetween(TODAY, mc.match_date);
       mdLabel = diff === 0 ? ' · MD' : diff > 0 ? ` · MD−${diff}` : ` · MD+${Math.abs(diff)}`;
     }
-    const target = mc.target_match ? ` · <strong>${mc.target_match}</strong>` : '';
+    const target = mc.rival ? ` · <strong>${mc.rival}</strong>` : '';
     const el = document.getElementById('calHeadCtx');
     if (el) el.innerHTML = `<strong>${mcName}</strong>${mdLabel}${target}`;
   }
@@ -1181,7 +1181,7 @@ document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn =>
 
   // Load all MCs ordered by start_date desc
   const { data: mcs } = await window.sb.from('microcycles')
-    .select('id,name,number,start_date,end_date,match_date,target_match')
+    .select('id,name,start_date,end_date,match_date,rival,home_away,color')
     .eq('club_id', _clubId)
     .order('start_date', { ascending: false });
 
