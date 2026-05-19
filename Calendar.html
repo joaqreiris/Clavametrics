@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendar — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* Shared shell ------------------------------------------- */
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  /* Topbar */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* Page */
+  .cal-page { padding:24px 28px 64px; max-width:1600px; width:100%; }
+
+  .cal-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .cal-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .cal-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .cal-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .cal-head .meta { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Period pager */
+  .cal-pager { display:inline-flex; align-items:center; gap:0; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); overflow:hidden; }
+  .cal-pager button { border:0; background:transparent; padding:0 10px; height:32px; color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; }
+  .cal-pager button:hover { color:var(--cm-fg); }
+  .cal-pager .label { padding:0 14px; height:32px; display:inline-flex; align-items:center; gap:6px; border-left:1px solid var(--cm-border); border-right:1px solid var(--cm-border); font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .cal-pager .label .yr { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
+  .cal-pager .ti { font-size:14px; }
+
+  .cal-segs { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); gap:2px; }
+  .cal-seg { padding:0 12px; height:30px; display:inline-flex; align-items:center; gap:6px; border-radius:5px; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; border:0; background:transparent; }
+  .cal-seg:hover { color:var(--cm-fg); }
+  .cal-seg.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  .cal-seg .ti { font-size:14px; }
+
+  /* === KPI strip === */
+  .cal-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .cal-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 16px 16px; box-shadow:var(--cm-shadow-1); position:relative; }
+  .cal-kpi-l { display:flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .cal-kpi-l .ti { font-size:14px; }
+  .cal-kpi-v { font:600 28px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .cal-kpi-v sub { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .cal-kpi-t { margin-top:10px; display:flex; align-items:center; gap:6px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+
+  /* === Microcycle ribbon (horizontal Gantt) === */
+  .cal-ribbon-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); margin-bottom:14px; overflow:hidden; }
+  .cal-ribbon-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .cal-ribbon-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .cal-ribbon-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
+  .cal-ribbon-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  .cal-ribbon-body { padding:16px; overflow-x:auto; }
+  .cal-ribbon {
+    position:relative;
+    display:grid;
+    grid-template-rows: auto 38px 30px 24px;
+    min-width:1200px;
+    gap:8px;
+  }
+
+  /* Date rail (months / weeks) */
+  .cal-row-months { display:grid; grid-template-columns:repeat(8, 1fr); position:relative; }
+  .cal-row-months .month {
+    font:500 10.5px/1 var(--cm-font-mono);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--cm-fg-muted);
+    padding:0 4px;
+    border-left:1px solid var(--cm-border-soft);
+  }
+  .cal-row-months .month:first-child { border-left:0; }
+  .cal-row-months .month strong { color:var(--cm-fg); font-weight:600; margin-right:6px; }
+
+  /* MC bars row */
+  .cal-row-mcs {
+    position:relative;
+    background:var(--cm-bg-soft);
+    border-radius:8px;
+    border:1px solid var(--cm-border-soft);
+  }
+  .mc-bar {
+    position:absolute;
+    top:5px; bottom:5px;
+    border-radius:6px;
+    padding:4px 9px;
+    background:var(--cm-accent-soft);
+    border:1px solid var(--cm-border);
+    color:var(--cm-fg-strong);
+    display:flex; align-items:center; gap:6px;
+    font:500 12px/1 var(--cm-font-sans);
+    cursor:pointer;
+    overflow:hidden;
+    transition:transform 120ms, box-shadow 120ms;
+  }
+  .mc-bar:hover { box-shadow:var(--cm-shadow-2); transform:translateY(-1px); }
+  .mc-bar .num { font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-accent); }
+  .mc-bar .name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mc-bar.is-current {
+    background:var(--cm-accent);
+    color:var(--cm-fg-on-accent);
+    border-color:var(--cm-accent);
+  }
+  .mc-bar.is-current .num { color:var(--cm-fg-on-accent); opacity:0.85; }
+  .mc-bar.is-past { background:var(--cm-bg-sunk); border-color:var(--cm-border-soft); color:var(--cm-fg-muted); }
+  .mc-bar.is-past .num { color:var(--cm-fg-faint); }
+
+  /* Match markers row */
+  .cal-row-matches {
+    position:relative;
+    border-top:1px dashed var(--cm-border);
+  }
+  .match-marker {
+    position:absolute;
+    top:6px;
+    transform:translateX(-50%);
+    display:flex; align-items:center; gap:5px;
+    padding:3px 8px;
+    background:var(--cm-surface);
+    border:1px solid var(--cm-border-strong);
+    border-radius:999px;
+    font:600 10.5px/1 var(--cm-font-mono);
+    letter-spacing:0.04em;
+    color:var(--cm-fg-strong);
+    white-space:nowrap;
+    cursor:pointer;
+  }
+  .match-marker.is-home { color:var(--cm-success); border-color:var(--cm-success-bd); background:var(--cm-success-bg); }
+  .match-marker.is-away { color:var(--cm-info);    border-color:var(--cm-info-bd);    background:var(--cm-info-bg); }
+  .match-marker.is-key  { color:var(--cm-danger);  border-color:var(--cm-danger-bd);  background:var(--cm-danger-bg); }
+  .match-marker .ti { font-size:11px; }
+
+  /* Today line */
+  .today-line {
+    position:absolute;
+    top:-6px; bottom:-6px;
+    width:0;
+    border-left:2px solid var(--cm-fg-strong);
+    z-index:5;
+    pointer-events:none;
+  }
+  .today-line::after {
+    content:"TODAY";
+    position:absolute;
+    top:-18px; left:-22px;
+    width:44px;
+    background:var(--cm-fg-strong);
+    color:var(--cm-bg);
+    font:600 9px/1 var(--cm-font-mono);
+    letter-spacing:0.08em;
+    padding:4px 0;
+    border-radius:4px;
+    text-align:center;
+  }
+
+  /* Week ticks */
+  .cal-row-weeks {
+    position:relative;
+    font:500 10px/1 var(--cm-font-mono);
+    color:var(--cm-fg-faint);
+  }
+  .cal-row-weeks .wk {
+    position:absolute;
+    transform:translateX(-50%);
+    padding-top:6px;
+    border-top:1px solid var(--cm-border-soft);
+    width:auto;
+    white-space:nowrap;
+  }
+
+  /* === Main grid: current MC detail (left) + side rails === */
+  .cal-grid { display:grid; grid-template-columns:1.55fr 1fr; gap:14px; }
+  @media (max-width:1200px){ .cal-grid { grid-template-columns:1fr; } .cal-kpis { grid-template-columns:repeat(2,1fr); } }
+
+  .cal-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
+  .cal-card-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .cal-card-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .cal-card-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
+  .cal-card-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* === MC daily strip (7-14 day grid) === */
+  .mc-days {
+    display:grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap:0;
+    padding:0;
+  }
+  .mc-day {
+    border-right:1px solid var(--cm-border-soft);
+    border-top:1px solid var(--cm-border-soft);
+    padding:10px 12px 12px;
+    min-height:170px;
+    background:var(--cm-surface);
+    display:flex; flex-direction:column;
+    position:relative;
+  }
+  .mc-day:nth-child(7n) { border-right:0; }
+  .mc-day-head {
+    display:flex; align-items:baseline; gap:6px; margin-bottom:8px;
+  }
+  .mc-day-dow {
+    font:500 10.5px/1 var(--cm-font-mono);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--cm-fg-muted);
+  }
+  .mc-day-num {
+    font:600 17px/1 var(--cm-font-sans);
+    letter-spacing:-0.02em;
+    color:var(--cm-fg-strong);
+  }
+  .mc-day-md {
+    margin-left:auto;
+    font:600 10px/1 var(--cm-font-mono);
+    letter-spacing:0.04em;
+    color:var(--cm-fg-faint);
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+    border-radius:4px;
+    padding:3px 5px;
+  }
+  .mc-day.is-today {
+    background:color-mix(in srgb, var(--cm-accent) 4%, var(--cm-surface));
+  }
+  .mc-day.is-today .mc-day-num { color:var(--cm-accent); }
+  .mc-day.is-today .mc-day-md  { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:var(--cm-border-soft); }
+  .mc-day.is-today::before {
+    content:"";
+    position:absolute;
+    top:0; left:0; right:0;
+    height:2px;
+    background:var(--cm-accent);
+  }
+  .mc-day.is-off { background:var(--cm-bg-sunk); }
+  .mc-day.is-off .mc-day-num { color:var(--cm-fg-faint); }
+
+  .mc-day-events { display:flex; flex-direction:column; gap:4px; }
+  .mc-evt {
+    display:flex; align-items:flex-start; gap:6px;
+    padding:5px 7px;
+    border-radius:5px;
+    border:1px solid var(--cm-border-soft);
+    background:var(--cm-bg-soft);
+    font:500 11.5px/1.2 var(--cm-font-sans);
+    color:var(--cm-fg);
+    cursor:pointer;
+    transition:border-color 120ms, background 120ms;
+  }
+  .mc-evt:hover { border-color:var(--cm-border-strong); }
+  .mc-evt .time { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); flex-shrink:0; }
+  .mc-evt .ti { font-size:12px; color:var(--cm-fg-muted); flex-shrink:0; margin-top:0.5px; }
+  .mc-evt .name { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .mc-evt.training  { background:var(--cm-info-bg);   border-color:var(--cm-info-bd);   color:#1E40AF; }
+  .mc-evt.training .ti { color:var(--cm-info); }
+  .mc-evt.training .time { color:#1E3A8A; }
+  .mc-evt.gym       { background:var(--cm-violet-bg); border-color:var(--cm-violet-bd); color:#5B21B6; }
+  .mc-evt.gym .ti { color:var(--cm-violet); }
+  .mc-evt.match     { background:var(--cm-danger-bg); border-color:var(--cm-danger-bd); color:#991B1B; }
+  .mc-evt.match .ti { color:var(--cm-danger); }
+  .mc-evt.recovery  { background:var(--cm-success-bg);border-color:var(--cm-success-bd); color:#14532D; }
+  .mc-evt.recovery .ti { color:var(--cm-success); }
+  .mc-evt.travel    { background:var(--cm-warning-bg);border-color:var(--cm-warning-bd); color:#7C2D12; }
+  .mc-evt.travel .ti { color:var(--cm-warning); }
+  .mc-evt.day-off { font-style:italic; color:var(--cm-fg-faint); border:1px dashed var(--cm-border); background:transparent; }
+
+  /* === Right rail cards === */
+  .cal-rail { display:flex; flex-direction:column; gap:14px; }
+
+  /* Upcoming events list */
+  .upcoming-row { display:grid; grid-template-columns:36px 1fr auto; gap:10px; padding:11px 16px; border-bottom:1px solid var(--cm-border-soft); align-items:center; cursor:pointer; }
+  .upcoming-row:last-child { border-bottom:0; }
+  .upcoming-row:hover { background:var(--cm-bg-soft); }
+  .upcoming-date {
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+    border-radius:7px;
+    text-align:center;
+    padding:5px 0;
+    width:36px;
+  }
+  .upcoming-date .m { font:500 8.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .upcoming-date .d { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:3px; }
+  .upcoming-body { min-width:0; }
+  .upcoming-title { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .upcoming-meta  { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .upcoming-meta .badge {
+    display:inline-flex; align-items:center; gap:4px;
+    height:16px; padding:0 5px; border-radius:3px;
+    font:600 9.5px/1 var(--cm-font-mono); letter-spacing:0.04em;
+    margin-right:6px;
+  }
+  .upcoming-meta .badge.t-match { background:var(--cm-danger-bg); color:var(--cm-danger); }
+  .upcoming-meta .badge.t-training { background:var(--cm-info-bg); color:var(--cm-info); }
+  .upcoming-meta .badge.t-travel { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .upcoming-meta .badge.t-recovery { background:var(--cm-success-bg); color:var(--cm-success); }
+  .upcoming-meta .badge.t-gym { background:var(--cm-violet-bg); color:var(--cm-violet); }
+  .upcoming-when {
+    font:500 11.5px/1 var(--cm-font-mono);
+    color:var(--cm-fg-muted);
+    white-space:nowrap;
+  }
+  .upcoming-time { font:600 13px/1 var(--cm-font-mono); color:var(--cm-fg); }
+
+  /* Workload chart */
+  .wk-chart { padding:14px 16px 18px; }
+  .wk-rows { display:flex; gap:5px; align-items:end; height:130px; margin-bottom:12px; }
+  .wk-bar-grp { flex:1; display:flex; gap:2px; align-items:end; height:100%; }
+  .wk-bar { flex:1; background:var(--cm-bg-sunk); border-radius:3px 3px 0 0; position:relative; transition:opacity 120ms; }
+  .wk-bar.tr { background:var(--cm-info); }
+  .wk-bar.gym { background:var(--cm-violet); }
+  .wk-bar.mt { background:var(--cm-danger); }
+  .wk-bar:hover { opacity:0.85; }
+  .wk-labels { display:flex; gap:5px; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .wk-labels span { flex:1; text-align:center; }
+  .wk-labels span.is-current { color:var(--cm-accent); font-weight:700; }
+  .wk-legend { display:flex; gap:14px; margin-top:10px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .wk-legend .it { display:flex; align-items:center; gap:5px; }
+  .wk-legend .sw { width:10px; height:10px; border-radius:3px; }
+
+  /* Filter pills */
+  .cal-filters { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
+  .cal-filter-pill {
+    display:inline-flex; align-items:center; gap:5px;
+    height:24px; padding:0 9px; border-radius:999px;
+    border:1px solid var(--cm-border); background:var(--cm-surface);
+    color:var(--cm-fg-muted); font:500 11.5px/1 var(--cm-font-sans);
+    cursor:pointer;
+  }
+  .cal-filter-pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .cal-filter-pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .cal-filter-pill .dot { width:6px; height:6px; border-radius:50%; }
+
+  /* MC summary row */
+  .mc-info-row {
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap:10px;
+    padding:14px 16px;
+    background:var(--cm-bg-soft);
+    border-bottom:1px solid var(--cm-border-soft);
+  }
+  .mc-info {
+    display:flex; align-items:center; gap:10px;
+  }
+  .mc-info .ic {
+    width:30px; height:30px;
+    border-radius:8px;
+    background:var(--cm-surface);
+    border:1px solid var(--cm-border);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--cm-fg-muted);
+    flex-shrink:0;
+  }
+  .mc-info .ic .ti { font-size:14px; }
+  .mc-info .l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .mc-info .v { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:2px; }
+  .mc-info .v small { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="09 Calendar">
+
+  <!-- Sidebar -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name" id="sideClubName">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item is-active" href="#"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+            <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count" id="sideInjCount">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av" id="userInitials">JR</div>
+        <div class="who"><div class="name" id="userName">Joaquín Reiris</div><div class="role" id="userRole">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Clava FC</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Calendar</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, sessions, microcycles…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="cal-page">
+
+      <header class="cal-head">
+        <div>
+          <h1>Calendar</h1>
+          <div class="ctx" id="calHeadCtx"><strong>Microcycle 14</strong> · MD-2 · 32 microcycles planned · season ends <strong>Jun 28</strong></div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-calendar-plus" style="font-size:14px"></i>New microcycle</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import fixtures</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New event</button>
+        </div>
+      </header>
+
+      <!-- KPIs -->
+      <div class="cal-kpis">
+        <div class="cal-kpi">
+          <div class="cal-kpi-l"><i class="ti ti-target-arrow"></i>Next match</div>
+          <div class="cal-kpi-v">Sun May 18</div>
+          <div class="cal-kpi-t">vs Atlético · home · 17:00 · in 2 days</div>
+        </div>
+        <div class="cal-kpi">
+          <div class="cal-kpi-l"><i class="ti ti-route"></i>Match density</div>
+          <div class="cal-kpi-v">5 <sub>in 21d</sub></div>
+          <div class="cal-kpi-t" style="color:var(--cm-warning)">2 mid-week — load alert window</div>
+        </div>
+        <div class="cal-kpi">
+          <div class="cal-kpi-l"><i class="ti ti-plane"></i>Travel days</div>
+          <div class="cal-kpi-v">4 <sub>this MC</sub></div>
+          <div class="cal-kpi-t">Mendoza away · 2-day trip</div>
+        </div>
+        <div class="cal-kpi">
+          <div class="cal-kpi-l"><i class="ti ti-activity"></i>Planned load</div>
+          <div class="cal-kpi-v">3,420 <sub>AU</sub></div>
+          <div class="cal-kpi-t"><span style="color:var(--cm-success);font:600 12px/1 var(--cm-font-mono)">−6% vs prev MC</span></div>
+        </div>
+      </div>
+
+      <!-- Season ribbon (Gantt of microcycles + matches) -->
+      <div class="cal-ribbon-card">
+        <div class="cal-ribbon-h">
+          <h3>Season ribbon</h3>
+          <span class="sub">Aug 2025 → Jun 2026 · 32 microcycles</span>
+          <div class="right">
+            <div class="cal-pager">
+              <button title="Previous"><i class="ti ti-chevron-left"></i></button>
+              <span class="label">2025/26 · 2nd half<span class="yr">Jan → Jun</span></span>
+              <button title="Next"><i class="ti ti-chevron-right"></i></button>
+            </div>
+            <div class="cal-segs">
+              <button class="cal-seg"><i class="ti ti-calendar-month"></i>Month</button>
+              <button class="cal-seg is-on"><i class="ti ti-calendar-stats"></i>Microcycle</button>
+              <button class="cal-seg"><i class="ti ti-list"></i>List</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="cal-ribbon-body">
+          <div class="cal-ribbon" style="position:relative">
+            <!-- Months: Jan / Feb / Mar / Apr / May / Jun — 6 months across full width -->
+            <div class="cal-row-months" style="grid-template-columns: repeat(6,1fr)">
+              <span class="month"><strong>Jan</strong>'26</span>
+              <span class="month"><strong>Feb</strong>'26</span>
+              <span class="month"><strong>Mar</strong>'26</span>
+              <span class="month"><strong>Apr</strong>'26</span>
+              <span class="month"><strong>May</strong>'26</span>
+              <span class="month"><strong>Jun</strong>'26</span>
+            </div>
+
+            <!-- MC bars row (today is May 16, around 71% across the timeline) -->
+            <div class="cal-row-mcs" style="position:relative; height:38px">
+              <!-- MC 9 → 22 spread across the half-season -->
+              <div class="mc-bar is-past" style="left:0.5%;  width:6%;"><span class="num">MC 9</span><span class="name">Pre-season II</span></div>
+              <div class="mc-bar is-past" style="left:7%;    width:6%;"><span class="num">MC 10</span><span class="name">Apertura</span></div>
+              <div class="mc-bar is-past" style="left:13.5%; width:7%;"><span class="num">MC 11</span><span class="name">Atlético + Boca</span></div>
+              <div class="mc-bar is-past" style="left:21%;   width:6%;"><span class="num">MC 12</span><span class="name">Recovery week</span></div>
+              <div class="mc-bar is-past" style="left:27.5%; width:7%;"><span class="num">MC 13</span><span class="name">Triple match</span></div>
+              <div class="mc-bar is-current" style="left:35%; width:8.5%;"><span class="num">MC 14</span><span class="name">Atlético + Independiente</span></div>
+              <div class="mc-bar" style="left:44%; width:6.5%;"><span class="num">MC 15</span><span class="name">Mendoza away</span></div>
+              <div class="mc-bar" style="left:51%; width:6%;"><span class="num">MC 16</span><span class="name">Rest + Racing</span></div>
+              <div class="mc-bar" style="left:57.5%; width:8%;"><span class="num">MC 17</span><span class="name">Cup quarter-final</span></div>
+              <div class="mc-bar" style="left:66%; width:6.5%;"><span class="num">MC 18</span><span class="name">River + Banfield</span></div>
+              <div class="mc-bar" style="left:73%; width:7%;"><span class="num">MC 19</span><span class="name">Cup semi-final</span></div>
+              <div class="mc-bar" style="left:80.5%; width:6.5%;"><span class="num">MC 20</span><span class="name">Recovery</span></div>
+              <div class="mc-bar" style="left:87.5%; width:6%;"><span class="num">MC 21</span><span class="name">Final stretch</span></div>
+              <div class="mc-bar" style="left:94%; width:5.5%;"><span class="num">MC 22</span><span class="name">Cup final</span></div>
+
+              <!-- Today line -->
+              <div class="today-line" style="left:38.2%"></div>
+            </div>
+
+            <!-- Match markers row -->
+            <div class="cal-row-matches" style="position:relative; height:30px">
+              <span class="match-marker is-away" style="left:2.5%"><i class="ti ti-soccer-field"></i>R. Plate</span>
+              <span class="match-marker is-home" style="left:9.5%"><i class="ti ti-home"></i>Boca</span>
+              <span class="match-marker is-home" style="left:16.5%"><i class="ti ti-home"></i>Atlético</span>
+              <span class="match-marker is-away" style="left:24.5%"><i class="ti ti-plane"></i>San Lorenzo</span>
+              <span class="match-marker is-home" style="left:30%"><i class="ti ti-home"></i>Vélez</span>
+              <span class="match-marker is-key" style="left:38%"><i class="ti ti-trophy"></i>Atlético · MC 14</span>
+              <span class="match-marker is-away" style="left:46%"><i class="ti ti-plane"></i>Mendoza</span>
+              <span class="match-marker is-home" style="left:55%"><i class="ti ti-home"></i>Racing</span>
+              <span class="match-marker is-key" style="left:62%"><i class="ti ti-trophy"></i>Cup QF</span>
+              <span class="match-marker is-away" style="left:69%"><i class="ti ti-plane"></i>River</span>
+              <span class="match-marker is-home" style="left:75%"><i class="ti ti-home"></i>Banfield</span>
+              <span class="match-marker is-key" style="left:82%"><i class="ti ti-trophy"></i>Cup SF</span>
+              <span class="match-marker is-home" style="left:91%"><i class="ti ti-home"></i>Lanús</span>
+              <span class="match-marker is-key" style="left:97%"><i class="ti ti-trophy"></i>Cup Final</span>
+            </div>
+
+            <!-- Week ticks -->
+            <div class="cal-row-weeks">
+              <span class="wk" style="left:0.5%">W1</span>
+              <span class="wk" style="left:9%">W3</span>
+              <span class="wk" style="left:18%">W5</span>
+              <span class="wk" style="left:27%">W7</span>
+              <span class="wk" style="left:38%">W10</span>
+              <span class="wk" style="left:50%">W13</span>
+              <span class="wk" style="left:62%">W16</span>
+              <span class="wk" style="left:74%">W19</span>
+              <span class="wk" style="left:86%">W22</span>
+              <span class="wk" style="left:98%">W26</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current MC detail + side rails -->
+      <div class="cal-grid">
+
+        <!-- LEFT: MC 14 daily strip -->
+        <div class="cal-card">
+          <div class="cal-card-h">
+            <h3>Microcycle 14 · daily plan</h3>
+            <span class="sub">Sun 11 May → Sat 24 May · 7 sessions, 2 matches</span>
+            <div class="right">
+              <div class="cal-pager">
+                <button title="Previous MC"><i class="ti ti-chevron-left"></i></button>
+                <span class="label"><i class="ti ti-calendar-event"></i>Week 1 of 2</span>
+                <button title="Next MC"><i class="ti ti-chevron-right"></i></button>
+              </div>
+              <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+            </div>
+          </div>
+
+          <!-- MC summary row -->
+          <div class="mc-info-row">
+            <div class="mc-info">
+              <div class="ic"><i class="ti ti-target"></i></div>
+              <div><div class="l">Target match</div><div class="v">vs Atlético<small>home</small></div></div>
+            </div>
+            <div class="mc-info">
+              <div class="ic" style="color:var(--cm-info);background:var(--cm-info-bg);border-color:var(--cm-info-bd)"><i class="ti ti-soccer-field"></i></div>
+              <div><div class="l">Training sessions</div><div class="v">5<small>field + 2 gym</small></div></div>
+            </div>
+            <div class="mc-info">
+              <div class="ic" style="color:var(--cm-warning);background:var(--cm-warning-bg);border-color:var(--cm-warning-bd)"><i class="ti ti-flame"></i></div>
+              <div><div class="l">Peak day</div><div class="v">Wed MD−4<small>2 x 90′</small></div></div>
+            </div>
+            <div class="mc-info">
+              <div class="ic" style="color:var(--cm-success);background:var(--cm-success-bg);border-color:var(--cm-success-bd)"><i class="ti ti-zzz"></i></div>
+              <div><div class="l">Rest days</div><div class="v">Sun + Mon<small>2 of 14</small></div></div>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div class="cal-filters">
+            <span style="font:500 11px/1 var(--cm-font-mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-fg-muted);margin-right:4px">Show</span>
+            <button class="cal-filter-pill is-on">All <span class="dot" style="background:var(--cm-fg-faint)"></span></button>
+            <button class="cal-filter-pill"><span class="dot" style="background:var(--cm-info)"></span>Training</button>
+            <button class="cal-filter-pill"><span class="dot" style="background:var(--cm-violet)"></span>Gym</button>
+            <button class="cal-filter-pill"><span class="dot" style="background:var(--cm-danger)"></span>Match</button>
+            <button class="cal-filter-pill"><span class="dot" style="background:var(--cm-success)"></span>Recovery</button>
+            <button class="cal-filter-pill"><span class="dot" style="background:var(--cm-warning)"></span>Travel</button>
+          </div>
+
+          <!-- Days grid: Sun 11 → Sat 17 (week 1, today is Fri 16) -->
+          <div class="mc-days">
+
+            <div class="mc-day is-off">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Sun</span>
+                <span class="mc-day-num">11</span>
+                <span class="mc-day-md">off</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt day-off">Recovery · day off</div>
+              </div>
+            </div>
+
+            <div class="mc-day is-off">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Mon</span>
+                <span class="mc-day-num">12</span>
+                <span class="mc-day-md">MD+1</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt recovery"><i class="ti ti-pool"></i><span class="time">10:00</span><span class="name">Pool recovery 30′</span></div>
+                <div class="mc-evt day-off">Optional · light</div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Tue</span>
+                <span class="mc-day-num">13</span>
+                <span class="mc-day-md">MD−5</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt gym"><i class="ti ti-barbell"></i><span class="time">09:00</span><span class="name">Strength upper</span></div>
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Activation 60′</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Wed</span>
+                <span class="mc-day-num">14</span>
+                <span class="mc-day-md" style="background:var(--cm-warning-bg);color:var(--cm-warning);border-color:var(--cm-warning-bd)">MD−4 · peak</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">10:00</span><span class="name">Tactical 90′</span></div>
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Possession 90′</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Thu</span>
+                <span class="mc-day-num">15</span>
+                <span class="mc-day-md">MD−3</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt gym"><i class="ti ti-barbell"></i><span class="time">09:30</span><span class="name">Strength lower</span></div>
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Set-pieces 70′</span></div>
+                <div class="mc-evt recovery"><i class="ti ti-massage"></i><span class="time">19:00</span><span class="name">Physio · 4 players</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day is-today">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Fri</span>
+                <span class="mc-day-num">16</span>
+                <span class="mc-day-md">MD−2 · today</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">17:00</span><span class="name">Speed · activation 50′</span></div>
+                <div class="mc-evt recovery"><i class="ti ti-zzz"></i><span class="time">21:00</span><span class="name">Sleep curfew</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Sat</span>
+                <span class="mc-day-num">17</span>
+                <span class="mc-day-md">MD−1</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">11:00</span><span class="name">Walkthrough 45′</span></div>
+                <div class="mc-evt travel"><i class="ti ti-bus"></i><span class="time">15:00</span><span class="name">Team hotel check-in</span></div>
+              </div>
+            </div>
+
+            <!-- Week 2 -->
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Sun</span>
+                <span class="mc-day-num">18</span>
+                <span class="mc-day-md" style="background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)">MATCH</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt match"><i class="ti ti-ball-football"></i><span class="time">17:00</span><span class="name">vs Atlético · home</span></div>
+                <div class="mc-evt recovery"><i class="ti ti-massage"></i><span class="time">20:30</span><span class="name">Cool-down · ice baths</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day is-off">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Mon</span>
+                <span class="mc-day-num">19</span>
+                <span class="mc-day-md">MD+1</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt recovery"><i class="ti ti-pool"></i><span class="time">10:00</span><span class="name">Pool 40′</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day is-off">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Tue</span>
+                <span class="mc-day-num">20</span>
+                <span class="mc-day-md">off</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt day-off">Day off</div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Wed</span>
+                <span class="mc-day-num">21</span>
+                <span class="mc-day-md">MD−3</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">10:00</span><span class="name">Tactical · 80′</span></div>
+                <div class="mc-evt gym"><i class="ti ti-barbell"></i><span class="time">16:00</span><span class="name">Strength full-body</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Thu</span>
+                <span class="mc-day-num">22</span>
+                <span class="mc-day-md">MD−2</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt travel"><i class="ti ti-plane"></i><span class="time">08:00</span><span class="name">Flight → Mendoza</span></div>
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">18:00</span><span class="name">Activation 60′</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Fri</span>
+                <span class="mc-day-num">23</span>
+                <span class="mc-day-md">MD−1</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt training"><i class="ti ti-soccer-field"></i><span class="time">11:00</span><span class="name">Walkthrough · stadium</span></div>
+                <div class="mc-evt recovery"><i class="ti ti-zzz"></i><span class="time">21:00</span><span class="name">Sleep curfew</span></div>
+              </div>
+            </div>
+
+            <div class="mc-day">
+              <div class="mc-day-head">
+                <span class="mc-day-dow">Sat</span>
+                <span class="mc-day-num">24</span>
+                <span class="mc-day-md" style="background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)">MATCH</span>
+              </div>
+              <div class="mc-day-events">
+                <div class="mc-evt match"><i class="ti ti-ball-football"></i><span class="time">17:00</span><span class="name">vs Independiente · away</span></div>
+                <div class="mc-evt travel"><i class="ti ti-plane"></i><span class="time">22:00</span><span class="name">Return flight</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- RIGHT rail -->
+        <div class="cal-rail">
+
+          <!-- Upcoming events -->
+          <div class="cal-card">
+            <div class="cal-card-h">
+              <h3>Upcoming</h3>
+              <span class="sub">next 14 days</span>
+              <div class="right">
+                <button class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
+              </div>
+            </div>
+            <div>
+              <div class="upcoming-row">
+                <div class="upcoming-date"><div class="m">May</div><div class="d">16</div></div>
+                <div class="upcoming-body">
+                  <div class="upcoming-title">Speed · activation 50′</div>
+                  <div class="upcoming-meta"><span class="badge t-training">TRAINING</span>Today · CT field 2</div>
+                </div>
+                <div>
+                  <div class="upcoming-time">17:00</div>
+                </div>
+              </div>
+              <div class="upcoming-row">
+                <div class="upcoming-date"><div class="m">May</div><div class="d">17</div></div>
+                <div class="upcoming-body">
+                  <div class="upcoming-title">Walkthrough · 45′</div>
+                  <div class="upcoming-meta"><span class="badge t-training">TRAINING</span>Sat MD−1</div>
+                </div>
+                <div><div class="upcoming-time">11:00</div></div>
+              </div>
+              <div class="upcoming-row">
+                <div class="upcoming-date" style="background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)"><div class="m" style="color:var(--cm-danger)">May</div><div class="d" style="color:var(--cm-danger)">18</div></div>
+                <div class="upcoming-body">
+                  <div class="upcoming-title">vs Atlético · home</div>
+                  <div class="upcoming-meta"><span class="badge t-match">MATCH</span>Estadio Clava · 27,000 capacity</div>
+                </div>
+                <div><div class="upcoming-time">17:00</div></div>
+              </div>
+              <div class="upcoming-row">
+                <div class="upcoming-date"><div class="m">May</div><div class="d">22</div></div>
+                <div class="upcoming-body">
+                  <div class="upcoming-title">Flight → Mendoza</div>
+                  <div class="upcoming-meta"><span class="badge t-travel">TRAVEL</span>AR1432 · 2-day trip</div>
+                </div>
+                <div><div class="upcoming-time">08:00</div></div>
+              </div>
+              <div class="upcoming-row">
+                <div class="upcoming-date" style="background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)"><div class="m" style="color:var(--cm-danger)">May</div><div class="d" style="color:var(--cm-danger)">24</div></div>
+                <div class="upcoming-body">
+                  <div class="upcoming-title">vs Independiente · away</div>
+                  <div class="upcoming-meta"><span class="badge t-match">MATCH</span>Mendoza · Mario Kempes</div>
+                </div>
+                <div><div class="upcoming-time">17:00</div></div>
+              </div>
+              <div class="upcoming-row">
+                <div class="upcoming-date"><div class="m">May</div><div class="d">26</div></div>
+                <div class="upcoming-body">
+                  <div class="upcoming-title">Recovery week starts</div>
+                  <div class="upcoming-meta"><span class="badge t-recovery">RECOVERY</span>MC 15 begins · pool + light</div>
+                </div>
+                <div><div class="upcoming-when">all day</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Planned workload by MC -->
+          <div class="cal-card">
+            <div class="cal-card-h">
+              <h3>Planned workload</h3>
+              <span class="sub">last 5 · next 3 microcycles</span>
+              <div class="right">
+                <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+              </div>
+            </div>
+            <div class="wk-chart">
+              <div class="wk-rows">
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:42%"></div><div class="wk-bar gym" style="height:18%"></div><div class="wk-bar mt" style="height:20%"></div></div>
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:58%"></div><div class="wk-bar gym" style="height:22%"></div><div class="wk-bar mt" style="height:20%"></div></div>
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:48%"></div><div class="wk-bar gym" style="height:20%"></div><div class="wk-bar mt" style="height:30%"></div></div>
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:28%"></div><div class="wk-bar gym" style="height:12%"></div><div class="wk-bar mt" style="height:10%"></div></div>
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:72%"></div><div class="wk-bar gym" style="height:30%"></div><div class="wk-bar mt" style="height:50%"></div></div>
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:65%"></div><div class="wk-bar gym" style="height:25%"></div><div class="wk-bar mt" style="height:45%"></div></div>
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:40%"></div><div class="wk-bar gym" style="height:18%"></div><div class="wk-bar mt" style="height:25%"></div></div>
+                <div class="wk-bar-grp"><div class="wk-bar tr" style="height:54%"></div><div class="wk-bar gym" style="height:22%"></div><div class="wk-bar mt" style="height:35%"></div></div>
+              </div>
+              <div class="wk-labels">
+                <span>MC 10</span>
+                <span>MC 11</span>
+                <span>MC 12</span>
+                <span>MC 13</span>
+                <span class="is-current">MC 14</span>
+                <span>MC 15</span>
+                <span>MC 16</span>
+                <span>MC 17</span>
+              </div>
+              <div class="wk-legend">
+                <span class="it"><span class="sw" style="background:var(--cm-info)"></span>Training</span>
+                <span class="it"><span class="sw" style="background:var(--cm-violet)"></span>Gym</span>
+                <span class="it"><span class="sw" style="background:var(--cm-danger)"></span>Match</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Subscriptions / publish state -->
+          <div class="cal-card">
+            <div class="cal-card-h">
+              <h3>Publish state</h3>
+              <span class="sub">who sees this MC</span>
+              <div class="right">
+                <button class="cm-btn is-ghost is-sm">Manage <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
+              </div>
+            </div>
+            <div style="padding:12px 16px 16px">
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+                <div style="width:28px;height:28px;border-radius:7px;background:var(--cm-success-bg);color:var(--cm-success);display:flex;align-items:center;justify-content:center;border:1px solid var(--cm-success-bd)"><i class="ti ti-users" style="font-size:14px"></i></div>
+                <div style="flex:1">
+                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="calSquadCt">Players · 27</div>
+                  <div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">Visible via mobile</div>
+                </div>
+                <span class="cm-pill is-success"><span class="cm-dot"></span>Published</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--cm-border-soft)">
+                <div style="width:28px;height:28px;border-radius:7px;background:var(--cm-success-bg);color:var(--cm-success);display:flex;align-items:center;justify-content:center;border:1px solid var(--cm-success-bd)"><i class="ti ti-stethoscope" style="font-size:14px"></i></div>
+                <div style="flex:1">
+                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">Medical · 4</div>
+                  <div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">Full access</div>
+                </div>
+                <span class="cm-pill is-success"><span class="cm-dot"></span>Published</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--cm-border-soft)">
+                <div style="width:28px;height:28px;border-radius:7px;background:var(--cm-warning-bg);color:var(--cm-warning);display:flex;align-items:center;justify-content:center;border:1px solid var(--cm-warning-bd)"><i class="ti ti-eye" style="font-size:14px"></i></div>
+                <div style="flex:1">
+                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">Club board · 6</div>
+                  <div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">Read-only summary</div>
+                </div>
+                <span class="cm-pill is-warning"><span class="cm-dot"></span>Draft</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<!-- Tweaks + Settings -->
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script>
+(async () => {
+  const { user, profile, clubId } = await requireAuth();
+  const club = await getClub(clubId);
+
+  applyClubTheme(club);
+  document.getElementById('sideClubName').textContent = club?.name || 'ClavaMetrics';
+  const initials = (profile?.full_name || user.email || 'U').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  document.getElementById('userInitials').textContent = initials;
+  document.getElementById('userName').textContent = profile?.full_name || user.email;
+  document.getElementById('userRole').textContent = [profile?.role, profile?.club_role].filter(Boolean).join(' · ') || 'Staff';
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const [playersRes, injuriesRes, mcRes] = await Promise.all([
+    window.sb.from('players').select('id', { count: 'exact', head: true }).eq('club_id', clubId).neq('status', 'inactive'),
+    window.sb.from('injuries').select('id', { count: 'exact', head: true }).eq('club_id', clubId).eq('status', 'active'),
+    window.sb.from('microcycles').select('id,name,number,start_date,end_date,match_date,target_match').eq('club_id', clubId).lte('start_date', today).order('start_date', { ascending: false }).limit(1).catch(() => ({ data: [] }))
+  ]);
+
+  const squadCount = playersRes.count ?? 0;
+  const injCount = injuriesRes.count ?? 0;
+
+  document.getElementById('sideInjCount').textContent = injCount || '';
+  document.getElementById('calSquadCt').textContent = `Players · ${squadCount}`;
+
+  const mc = mcRes.data?.[0];
+  if (mc) {
+    const mcName = mc.name || (mc.number != null ? `Microcycle ${mc.number}` : null);
+    if (mcName) {
+      let mdLabel = '';
+      if (mc.match_date) {
+        const diff = Math.round((new Date(mc.match_date) - new Date(today)) / (1000 * 60 * 60 * 24));
+        mdLabel = diff === 0 ? ' · MD' : diff > 0 ? ` · MD−${diff}` : ` · MD+${Math.abs(diff)}`;
+      }
+      const target = mc.target_match ? ` · next: <strong>${mc.target_match}</strong>` : '';
+      document.getElementById('calHeadCtx').innerHTML = `<strong>${mcName}</strong>${mdLabel}${target}`;
+    }
+  }
+})().catch(console.error);
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+  // Segmented controls + filter pills
+  document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg').forEach(s => s.addEventListener('click', () => {
+    g.querySelectorAll('.cal-seg').forEach(o => o.classList.remove('is-on'));
+    s.classList.add('is-on');
+  })));
+  document.querySelectorAll('.cal-filters').forEach(bar => bar.querySelectorAll('.cal-filter-pill').forEach(p => p.addEventListener('click', () => {
+    bar.querySelectorAll('.cal-filter-pill').forEach(o => o.classList.remove('is-on'));
+    p.classList.add('is-on');
+  })));
+</script>
+
+</body>
+</html>

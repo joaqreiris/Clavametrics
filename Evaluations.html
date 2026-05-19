@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evaluations — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm { background: var(--cm-bg); }
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:var(--cm-bg); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Page */
+  .ev-page { padding:24px 28px 64px; max-width:1600px; width:100%; }
+  .ev-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .ev-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ev-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .ev-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .ev-head .meta { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* KPIs */
+  .ev-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .ev-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 16px 16px; box-shadow:var(--cm-shadow-1); }
+  .ev-kpi-l { display:flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .ev-kpi-l .ti { font-size:14px; }
+  .ev-kpi-v { font:600 28px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ev-kpi-v sub { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .ev-kpi-t { margin-top:10px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ev-kpi-d { display:inline-flex; align-items:center; gap:3px; font:600 12px/1 var(--cm-font-mono); }
+  .ev-kpi-d.up { color:var(--cm-success); }
+  .ev-kpi-d.warn { color:var(--cm-warning); }
+
+  /* Tabs */
+  .ev-tabs { display:flex; gap:0; padding:0 14px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4) var(--cm-r-4) 0 0; border-bottom:0; overflow-x:auto; box-shadow:var(--cm-shadow-1); }
+  .ev-tab { padding:0 16px; height:44px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13px/1 var(--cm-font-sans); cursor:pointer; display:inline-flex; align-items:center; gap:7px; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+  .ev-tab:hover { color:var(--cm-fg); }
+  .ev-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
+  .ev-tab .ti { font-size:14px; }
+
+  /* Two-col layout: roster + detail */
+  .ev-grid { display:grid; grid-template-columns: 360px 1fr; background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0; border-radius:0 0 var(--cm-r-4) var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; min-height:780px; }
+  @media (max-width:1100px) { .ev-grid { grid-template-columns:1fr; } }
+
+  /* Roster column */
+  .ev-roster { border-right:1px solid var(--cm-border); display:flex; flex-direction:column; min-width:0; }
+  .ev-roster-h { padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; gap:8px; }
+  .ev-roster-h h3 { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-strong); }
+  .ev-roster-h .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-left:4px; }
+  .ev-roster-h .right { margin-left:auto; display:flex; gap:4px; }
+  .ev-roster-h .right button { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .ev-roster-h .right button .ti { font-size:13px; }
+  .ev-roster-search { padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .ev-roster-search input { width:100%; height:32px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; }
+
+  .ev-list { flex:1; overflow-y:auto; padding:6px; }
+  .ev-list-grp { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); padding:10px 8px 5px; }
+
+  .ev-row {
+    display:grid; grid-template-columns: 36px 1fr 56px; gap:10px;
+    padding:8px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    align-items:center;
+    margin-bottom:2px;
+  }
+  .ev-row:hover { background:var(--cm-bg-soft); }
+  .ev-row.is-on { background:var(--cm-accent-soft); }
+  .ev-row .av { width:34px; height:34px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg); display:flex; align-items:center; justify-content:center; font:600 11.5px/1 var(--cm-font-sans); flex-shrink:0; position:relative; }
+  .ev-row .av.tn { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .ev-row .av .dorsal { position:absolute; bottom:-3px; right:-3px; min-width:16px; height:14px; padding:0 3px; border-radius:4px; background:var(--cm-surface); color:var(--cm-fg-strong); border:1.5px solid var(--cm-surface); font:700 9px/1 var(--cm-font-mono); display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 1px var(--cm-border); }
+  .ev-row .info { min-width:0; }
+  .ev-row .name { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ev-row .meta { display:flex; align-items:center; gap:5px; margin-top:3px; }
+  .ev-row .pos { display:inline-flex; align-items:center; height:16px; padding:0 5px; border-radius:3px; font:600 9.5px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .ev-row .pos.gk { background:rgba(220,38,38,0.10); color:#B91C1C; }
+  .ev-row .pos.cb { background:rgba(37,99,235,0.10); color:#1D4ED8; }
+  .ev-row .pos.fb { background:rgba(96,165,250,0.14); color:#1D4ED8; }
+  .ev-row .pos.mf { background:rgba(22,163,74,0.12); color:#15803D; }
+  .ev-row .pos.wg { background:rgba(217,119,6,0.12); color:#B45309; }
+  .ev-row .pos.st { background:rgba(220,38,38,0.10); color:#B91C1C; }
+  .ev-row .sub  { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ev-row .score-box {
+    width:50px; height:38px;
+    border-radius:8px;
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    flex-shrink:0;
+    position:relative;
+  }
+  .ev-row .score-v { font:700 15px/1 var(--cm-font-mono); color:var(--cm-fg-strong); letter-spacing:-0.02em; }
+  .ev-row .score-d { font:600 9px/1 var(--cm-font-mono); margin-top:2px; }
+  .ev-row .score-d.up { color:var(--cm-success); }
+  .ev-row .score-d.down { color:var(--cm-danger); }
+  .ev-row .score-d.flat { color:var(--cm-fg-faint); }
+  .ev-row .score-box.high { background:rgba(34,197,94,0.10); border-color:rgba(34,197,94,0.25); }
+  .ev-row .score-box.high .score-v { color:#15803D; }
+  .ev-row .score-box.warn { background:rgba(217,119,6,0.10); border-color:rgba(217,119,6,0.25); }
+  .ev-row .score-box.warn .score-v { color:#B45309; }
+  .ev-row .score-box.low  { background:rgba(220,38,38,0.10); border-color:rgba(220,38,38,0.25); }
+  .ev-row .score-box.low .score-v  { color:#B91C1C; }
+
+  /* Detail */
+  .ev-detail { display:flex; flex-direction:column; min-width:0; }
+
+  .ev-d-head {
+    padding:18px 24px 16px;
+    border-bottom:1px solid var(--cm-border-soft);
+    display:grid; grid-template-columns:1fr auto; gap:16px;
+    background:linear-gradient(135deg, color-mix(in srgb, var(--cm-accent) 4%, var(--cm-surface)) 0%, var(--cm-surface) 100%);
+  }
+  .ev-d-head .left { display:flex; align-items:center; gap:14px; }
+  .ev-d-head .av { width:56px; height:56px; border-radius:50%; background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; font:700 18px/1 var(--cm-font-sans); flex-shrink:0; }
+  .ev-d-head h2 { font:600 22px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ev-d-head .h-meta { display:flex; align-items:center; gap:8px; margin-top:6px; font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ev-d-head .h-meta .badge { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:4px; background:var(--cm-accent-soft); color:var(--cm-accent); font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .ev-d-head .h-actions { display:flex; gap:8px; align-items:flex-start; }
+
+  /* Overall score block */
+  .ev-overall {
+    display:grid; grid-template-columns:auto 1fr auto; gap:24px;
+    align-items:center;
+    padding:20px 24px;
+    border-bottom:1px solid var(--cm-border-soft);
+  }
+  .ev-overall-score {
+    width:100px; height:100px; border-radius:50%;
+    background:conic-gradient(var(--cm-success) 0% 78%, var(--cm-bg-sunk) 78% 100%);
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+    flex-shrink:0;
+  }
+  .ev-overall-score::before { content:""; position:absolute; inset:9px; background:var(--cm-surface); border-radius:50%; }
+  .ev-overall-score .inner { position:relative; z-index:1; text-align:center; }
+  .ev-overall-score .v { font:700 28px/1 var(--cm-font-sans); letter-spacing:-0.03em; color:var(--cm-fg-strong); }
+  .ev-overall-score .s { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-top:4px; }
+  .ev-overall-body h3 { font:600 15px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:6px; }
+  .ev-overall-body p { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .ev-overall-body .tags { display:flex; gap:5px; margin-top:8px; flex-wrap:wrap; }
+  .ev-overall-body .tag { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:4px; font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .ev-overall-body .tag.good { background:var(--cm-success-bg); color:var(--cm-success); }
+  .ev-overall-body .tag.warn { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .ev-overall-body .tag.info { background:var(--cm-info-bg); color:var(--cm-info); }
+
+  .ev-overall-trend { display:flex; flex-direction:column; gap:6px; min-width:160px; }
+  .ev-overall-trend .l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .ev-overall-trend svg { width:100%; height:48px; }
+
+  /* Period switcher */
+  .ev-period { padding:14px 24px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-bottom:1px solid var(--cm-border-soft); }
+  .ev-period .l { font:500 11px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-right:4px; }
+  .ev-pchip { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px; border-radius:6px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .ev-pchip:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .ev-pchip.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .ev-period .grow { flex:1; }
+
+  /* Competencies */
+  .ev-comp-wrap { padding:20px 24px; display:grid; grid-template-columns: 1.05fr 1fr; gap:24px; }
+  @media (max-width:1300px) { .ev-comp-wrap { grid-template-columns:1fr; } }
+
+  .ev-comp-group { margin-bottom:18px; }
+  .ev-comp-group:last-child { margin-bottom:0; }
+  .ev-comp-group h4 { display:flex; align-items:center; gap:8px; font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:10px; }
+  .ev-comp-group h4 .ic { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; }
+  .ev-comp-group h4 .ic .ti { font-size:12px; }
+  .ev-comp-group h4 .ic.tac { background:rgba(74,144,217,0.12); color:#4A90D9; }
+  .ev-comp-group h4 .ic.tec { background:rgba(155,89,182,0.12); color:#9B59B6; }
+  .ev-comp-group h4 .ic.fis { background:rgba(224,123,57,0.12); color:#E07B39; }
+  .ev-comp-group h4 .ic.psi { background:rgba(29,158,117,0.12); color:#1D9E75; }
+  .ev-comp-group h4 .avg { margin-left:auto; font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-strong); text-transform:none; letter-spacing:0; }
+
+  .ev-comp-row { display:grid; grid-template-columns: 130px 1fr 48px 36px; gap:10px; align-items:center; padding:7px 0; }
+  .ev-comp-l { font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
+  .ev-comp-bar {
+    height:8px; border-radius:4px;
+    background:var(--cm-bg-sunk);
+    position:relative; overflow:hidden;
+  }
+  .ev-comp-fill { position:absolute; left:0; top:0; bottom:0; border-radius:4px; }
+  .ev-comp-fill.peer { background:rgba(0,0,0,0.18); height:3px; top:50%; transform:translateY(-50%); border-radius:2px; }
+  .ev-comp-fill.player {
+    background:linear-gradient(90deg, var(--cm-accent) 0%, var(--cm-accent) 100%);
+  }
+  .ev-comp-fill.player.warn { background:var(--cm-warning); }
+  .ev-comp-fill.player.low { background:var(--cm-danger); }
+  .ev-comp-bar-tick { position:absolute; top:-2px; bottom:-2px; width:1.5px; background:rgba(0,0,0,0.25); }
+  .ev-comp-v { font:700 14px/1 var(--cm-font-mono); color:var(--cm-fg-strong); text-align:right; letter-spacing:-0.02em; }
+  .ev-comp-v small { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:1px; }
+  .ev-comp-delta { font:600 11px/1 var(--cm-font-mono); display:inline-flex; align-items:center; gap:2px; justify-content:flex-end; }
+  .ev-comp-delta.up { color:var(--cm-success); }
+  .ev-comp-delta.down { color:var(--cm-danger); }
+  .ev-comp-delta.flat { color:var(--cm-fg-faint); }
+  .ev-comp-delta .ti { font-size:11px; }
+
+  /* Radar card */
+  .ev-radar-card { background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:10px; padding:14px; }
+  .ev-radar-card .head { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+  .ev-radar-card h4 { font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ev-radar-card .sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ev-radar-card svg { width:100%; height:auto; max-height:300px; display:block; }
+  .ev-radar-legend { display:flex; gap:14px; margin-top:8px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); flex-wrap:wrap; }
+  .ev-radar-legend .it { display:flex; align-items:center; gap:5px; }
+  .ev-radar-legend .sw { width:11px; height:11px; border-radius:3px; }
+
+  /* Evaluator panel */
+  .ev-evaluators { background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:10px; padding:12px 14px; margin-top:14px; }
+  .ev-evaluators h4 { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:8px; }
+  .ev-evaluator { display:grid; grid-template-columns:32px 1fr 40px 28px; gap:9px; align-items:center; padding:7px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .ev-evaluator:last-child { border-bottom:0; }
+  .ev-evaluator .av { width:28px; height:28px; border-radius:50%; background:var(--cm-surface); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .ev-evaluator .who .n { font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ev-evaluator .who .r { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .ev-evaluator .score { font:700 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); text-align:right; letter-spacing:-0.02em; }
+  .ev-evaluator .when { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); text-align:right; }
+
+  /* Timeline (recent evaluations) */
+  .ev-timeline {
+    margin-top:18px;
+    padding:16px 24px 0;
+    border-top:1px solid var(--cm-border-soft);
+  }
+  .ev-timeline h3 { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:14px; }
+  .ev-tl-row { display:grid; grid-template-columns:80px 1fr 100px 60px; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .ev-tl-row:last-child { border-bottom:0; }
+  .ev-tl-date { text-align:center; padding:6px 0; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:7px; }
+  .ev-tl-date .m { font:500 9.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .ev-tl-date .d { font:600 16px/1 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:4px; }
+  .ev-tl-info .title { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ev-tl-info .meta { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .ev-tl-score { font:700 22px/1 var(--cm-font-mono); letter-spacing:-0.02em; color:var(--cm-fg-strong); text-align:center; }
+  .ev-tl-score sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+  .ev-tl-delta { font:600 12px/1 var(--cm-font-mono); display:inline-flex; align-items:center; gap:3px; justify-content:flex-end; }
+  .ev-tl-delta.up { color:var(--cm-success); }
+  .ev-tl-delta.down { color:var(--cm-danger); }
+  .ev-tl-delta.flat { color:var(--cm-fg-faint); }
+
+
+  /* === Physical tests — simplified === */
+  .pt-wrap { background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0; border-radius:0 0 var(--cm-r-4) var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
+  .pt-bar { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--cm-border-soft); flex-wrap:wrap; }
+  .pt-segs { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); gap:2px; }
+  .pt-seg { padding:0 14px; height:32px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer; display:inline-flex; align-items:center; gap:6px; border-radius:5px; }
+  .pt-seg:hover { color:var(--cm-fg); }
+  .pt-seg.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); font-weight:600; }
+  .pt-seg .ti { font-size:14px; }
+  .pt-bar-r { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .pt-pill { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .pt-pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .pt-pill .ti { font-size:13px; }
+
+  .pt-view { display:none; padding:18px 20px 28px; }
+  .pt-view.is-on { display:block; }
+
+  /* Catalog groups */
+  .pt-cat-group { margin-bottom:22px; }
+  .pt-cat-group:last-child { margin-bottom:0; }
+  .pt-cat-group h4 { display:flex; align-items:center; gap:8px; font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:10px; }
+  .pt-cat-group h4 .ic { width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; }
+  .pt-cat-group h4 .ic .ti { font-size:12px; }
+  .pt-cat-group h4 .ic.jump { background:rgba(168,85,247,0.14); color:#7C3AED; }
+  .pt-cat-group h4 .ic.speed { background:rgba(245,158,11,0.14); color:#B45309; }
+  .pt-cat-group h4 .ic.end { background:rgba(34,197,94,0.14); color:#15803D; }
+  .pt-cat-group h4 .ic.str { background:rgba(220,38,38,0.14); color:#B91C1C; }
+  .pt-cat-group h4 .ic.mob { background:rgba(59,130,246,0.14); color:#1D4ED8; }
+  .pt-cat-group h4 .ic.ant { background:rgba(17,94,89,0.14); color:#0F766E; }
+  .pt-cat-group h4 .ct { margin-left:auto; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); text-transform:none; letter-spacing:0; }
+
+  .pt-buttons { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
+  @media (max-width:1200px) { .pt-buttons { grid-template-columns:repeat(3, 1fr); } }
+  @media (max-width:800px)  { .pt-buttons { grid-template-columns:repeat(2, 1fr); } }
+  @media (max-width:520px)  { .pt-buttons { grid-template-columns:1fr; } }
+
+  .pt-btn { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:6px; cursor:pointer; text-align:left; transition:border-color 120ms, box-shadow 120ms, transform 120ms; }
+  .pt-btn:hover { border-color:var(--cm-accent); box-shadow:var(--cm-shadow-2); transform:translateY(-1px); }
+  .pt-btn.pt-btn-add { border-style:dashed; }
+  .pt-btn .b-ic { width:36px; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center; margin-bottom:4px; }
+  .pt-btn .b-ic .ti { font-size:18px; }
+  .pt-btn .b-l { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.01em; }
+  .pt-btn .b-s { font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .pt-btn .b-last { margin-top:4px; padding-top:8px; border-top:1px solid var(--cm-border-soft); font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg); display:flex; justify-content:space-between; align-items:center; }
+  .pt-btn .b-last .up { color:var(--cm-success); font-weight:700; }
+  .pt-btn .b-last .down { color:var(--cm-danger); font-weight:700; }
+  .pt-btn .b-last .flat { color:var(--cm-fg-faint); }
+
+  /* Individual profile */
+  .pt-prof-head { display:flex; align-items:center; gap:14px; padding:14px 14px 16px; border-bottom:1px solid var(--cm-border-soft); margin-bottom:18px; }
+  .pt-attentions { display:flex; gap:6px; flex-wrap:wrap; }
+  .pt-att { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px; border-radius:5px; font:600 11px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .pt-att .ti { font-size:12px; }
+  .pt-att.warn { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .pt-att.info { background:var(--cm-info-bg); color:var(--cm-info); }
+  .pt-att.good { background:var(--cm-success-bg); color:var(--cm-success); }
+
+  .pt-prof-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  @media (max-width:900px) { .pt-prof-grid { grid-template-columns:repeat(2,1fr); } }
+  .pt-prof-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:12px 14px; }
+  .pt-prof-kpi .l { font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:8px; }
+  .pt-prof-kpi .v { font:700 22px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); display:flex; align-items:baseline; gap:3px; }
+  .pt-prof-kpi .v.high { color:var(--cm-success); }
+  .pt-prof-kpi .v small { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-prof-kpi .d { font:600 11.5px/1 var(--cm-font-mono); margin-top:6px; }
+  .pt-prof-kpi .d.up { color:var(--cm-success); }
+  .pt-prof-kpi .d.down { color:var(--cm-danger); }
+
+  .pt-prof-charts { display:grid; grid-template-columns:1.5fr 1fr; gap:12px; margin-bottom:14px; }
+  @media (max-width:1100px) { .pt-prof-charts { grid-template-columns:1fr; } }
+  .pt-chart-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px; }
+  .pt-chart-h { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .pt-chart-h h4 { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pt-chart-h .sub { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-chart-h .right { margin-left:auto; display:flex; gap:4px; }
+  .pt-mini-pill { padding:0 9px; height:22px; border-radius:5px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-muted); font:500 11px/1 var(--cm-font-sans); cursor:pointer; }
+  .pt-mini-pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+
+  .pt-prof-table-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 14px 4px; margin-bottom:14px; }
+  .pt-prof-table { width:100%; border-collapse:collapse; margin-top:6px; }
+  .pt-prof-table th { text-align:left; padding:9px 8px; font:500 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); border-bottom:1px solid var(--cm-border-soft); }
+  .pt-prof-table th.num { text-align:right; }
+  .pt-prof-table td { padding:10px 8px; border-bottom:1px solid var(--cm-border-soft); font:var(--cm-body-sm); color:var(--cm-fg); }
+  .pt-prof-table tr:last-child td { border-bottom:0; }
+  .pt-prof-table td.num { text-align:right; font:500 13px/1 var(--cm-font-mono); }
+  .pt-prof-table td.num.good { color:var(--cm-success); }
+  .pt-prof-table td.num.warn { color:var(--cm-warning); }
+  .pt-prof-table td.num.flat { color:var(--cm-fg-faint); }
+  .zbar { width:100px; height:6px; border-radius:3px; background:linear-gradient(90deg, rgba(220,38,38,0.30) 0%, rgba(245,158,11,0.30) 50%, rgba(34,197,94,0.50) 100%); position:relative; }
+  .zpin { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--cm-fg-strong); border-radius:1px; }
+  .zpin.warn { background:var(--cm-warning); }
+  .zt { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:4px; font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border-soft); }
+  .zt.good { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+  .zt.warn { background:var(--cm-warning-bg); color:var(--cm-warning); border-color:var(--cm-warning-bd); }
+  .zt.info { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd); }
+
+  /* Attention cards */
+  .pt-prof-attentions { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  @media (max-width:1100px) { .pt-prof-attentions { grid-template-columns:1fr; } }
+  .pt-att-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px; border-left:3px solid var(--cm-border); }
+  .pt-att-card.warn { border-left-color:var(--cm-warning); }
+  .pt-att-card.info { border-left-color:var(--cm-info); }
+  .pt-att-card.good { border-left-color:var(--cm-success); }
+  .pt-att-h { display:flex; align-items:center; gap:6px; margin-bottom:8px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .pt-att-h .ti { font-size:14px; }
+  .pt-att-card.warn .pt-att-h .ti { color:var(--cm-warning); }
+  .pt-att-card.info .pt-att-h .ti { color:var(--cm-info); }
+  .pt-att-card.good .pt-att-h .ti { color:var(--cm-success); }
+  .pt-att-b { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .pt-att-actions { display:flex; gap:6px; }
+
+  /* Group view */
+  .pt-grp-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:12px; }
+  @media (max-width:1100px) { .pt-grp-grid { grid-template-columns:1fr; } }
+  .pt-grp-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px; }
+  .pt-grp-full { grid-column:1 / -1; }
+  .pt-rank { display:flex; flex-direction:column; gap:7px; padding-top:6px; }
+  .pt-rank-row { display:grid; grid-template-columns: 24px 1fr 60px; align-items:center; gap:10px; }
+  .pt-rank-row .ax { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); text-align:center; }
+  .pt-rank-bar { height:24px; background:var(--cm-bg-soft); border-radius:5px; position:relative; overflow:hidden; }
+  .pt-rank-fill { position:absolute; left:0; top:0; bottom:0; background:var(--cm-accent); border-radius:5px; display:flex; align-items:center; padding-left:8px; color:var(--cm-fg-on-accent); font:600 11.5px/1 var(--cm-font-sans); }
+  .pt-rank-fill.med { background:rgba(34,197,94,0.55); color:var(--cm-fg); }
+  .pt-rank-fill.low { background:rgba(34,197,94,0.25); color:var(--cm-fg); }
+  .pt-rank-v { text-align:right; font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-fg); }
+
+  .pt-heatmap { width:100%; border-collapse:separate; border-spacing:0; margin-top:6px; }
+  .pt-heatmap th { padding:8px 6px; font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; text-align:center; }
+  .pt-heatmap th.pl, .pt-heatmap td.pl { text-align:left; padding-left:14px; font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; }
+  .pt-heatmap td { padding:0; border-bottom:1px solid var(--cm-border-soft); text-align:center; }
+  .pt-heatmap tbody tr:hover td { background:var(--cm-bg-soft); }
+  .hc { display:inline-flex; align-items:center; justify-content:center; width:48px; height:24px; margin:2px; border-radius:5px; font:700 11.5px/1 var(--cm-font-mono); }
+  .hc.high   { background:rgba(220,38,38,0.18); color:#B91C1C; }
+  .hc.mhigh  { background:rgba(248,113,113,0.18); color:#9F1239; }
+  .hc.warn   { background:rgba(217,119,6,0.16); color:#B45309; }
+  .hc.neu    { background:var(--cm-bg-soft); color:var(--cm-fg-muted); }
+  .hc.low    { background:rgba(59,130,246,0.14); color:#1D4ED8; }
+  .hc.mlow   { background:rgba(96,165,250,0.16); color:#1E40AF; }
+  .hc.vlow   { background:rgba(29,78,216,0.18); color:#1E3A8A; }
+
+  /* Collapsible groups */
+  .pt-cat-group.is-collapsed .pt-buttons { display:none; }
+  .pt-cat-group h4 .toggle-btn { margin-left:auto; width:24px; height:24px; border:0; background:var(--cm-bg-soft); border-radius:6px; cursor:pointer; color:var(--cm-fg-muted); display:inline-flex; align-items:center; justify-content:center; transition:transform 200ms; }
+  .pt-cat-group h4 .toggle-btn:hover { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .pt-cat-group h4 .toggle-btn .ti { font-size:14px; transition:transform 200ms; }
+  .pt-cat-group.is-collapsed h4 .toggle-btn .ti { transform:rotate(-90deg); }
+  .pt-cat-group h4 .ct { margin-left:0; margin-right:auto; padding-left:6px; }
+
+  /* Import drawer */
+  .pt-imp-btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-border-strong); color:var(--cm-fg-strong); font:600 12.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .pt-imp-btn:hover { background:color-mix(in srgb, var(--cm-accent) 18%, transparent); }
+  .pt-imp-btn .ti { font-size:14px; color:var(--cm-accent); }
+
+  .pt-imp-overlay { position:fixed; inset:0; background:rgba(8,10,12,0.45); backdrop-filter:blur(4px); opacity:0; pointer-events:none; transition:opacity 200ms; z-index:800; }
+  .pt-imp-overlay.is-open { opacity:1; pointer-events:auto; }
+  .pt-imp-drawer { position:fixed; top:0; right:0; bottom:0; width:540px; max-width:96vw; background:var(--cm-bg); border-left:1px solid var(--cm-border); box-shadow:-12px 0 40px rgba(0,0,0,0.2); transform:translateX(100%); transition:transform 280ms cubic-bezier(.2,.7,.2,1); z-index:810; display:flex; flex-direction:column; }
+  .pt-imp-drawer.is-open { transform:translateX(0); }
+  .pt-imp-h { display:flex; align-items:center; gap:12px; padding:18px 20px; border-bottom:1px solid var(--cm-border); }
+  .pt-imp-h h3 { font:600 16px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
+  .pt-imp-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .pt-imp-x { width:32px; height:32px; border-radius:8px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .pt-imp-x .ti { font-size:16px; }
+  .pt-imp-body { flex:1; overflow-y:auto; padding:16px 20px 24px; }
+  .pt-drop { border:1.5px dashed var(--cm-border-strong); border-radius:10px; padding:18px; background:var(--cm-bg-soft); display:flex; flex-direction:column; gap:10px; cursor:pointer; margin-bottom:18px; }
+  .pt-drop:hover { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .pt-drop .top { display:flex; align-items:center; gap:10px; }
+  .pt-drop .ic { width:36px; height:36px; border-radius:9px; background:var(--cm-surface); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); flex-shrink:0; }
+  .pt-drop .ic .ti { font-size:18px; }
+  .pt-drop h4 { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pt-drop p { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .pt-drop .formats { display:flex; gap:5px; flex-wrap:wrap; }
+  .pt-drop .fmt { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:4px; background:var(--cm-surface); border:1px solid var(--cm-border-soft); font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-providers { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .pt-provider { border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:10px; padding:12px; display:flex; gap:10px; cursor:pointer; }
+  .pt-provider:hover { border-color:var(--cm-border-strong); }
+  .pt-provider.is-active { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+  .pt-provider .logo { width:32px; height:32px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#fff; font:700 12px/1 var(--cm-font-sans); flex-shrink:0; }
+  .pt-provider .logo.vald { background:#0066FF; }
+  .pt-provider .logo.adr { background:#16A34A; }
+  .pt-provider .logo.vitr { background:#FB923C; }
+  .pt-provider .logo.gym { background:#7C3AED; }
+  .pt-provider .logo.opto { background:#DC2626; }
+  .pt-provider .logo.csv { background:var(--cm-neutral); }
+  .pt-provider .info h5 { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pt-provider .info .desc { font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:2px; }
+  .pt-provider-status { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 6px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); margin-top:8px; }
+  .pt-provider-status .d { width:6px; height:6px; border-radius:50%; }
+  .pt-provider-status.ok { background:var(--cm-success-bg); color:var(--cm-success); }
+  .pt-provider-status.ok .d { background:var(--cm-success); }
+  .pt-provider-status.av { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border-soft); }
+  .pt-imp-section-l { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin:18px 0 10px; }
+
+  /* Trends view */
+  .tr-wrap { background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0; border-radius:0 0 var(--cm-r-4) var(--cm-r-4); box-shadow:var(--cm-shadow-1); padding:18px 20px 28px; }
+  .tr-builder { display:grid; grid-template-columns:280px 1fr; gap:14px; }
+  @media (max-width:1100px) { .tr-builder { grid-template-columns:1fr; } }
+  .tr-controls { background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-4); padding:14px; height:fit-content; }
+  .tr-controls h5 { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin:14px 0 8px; }
+  .tr-controls h5:first-child { margin-top:0; }
+  .tr-pick { display:flex; flex-direction:column; gap:4px; }
+  .tr-pick .opt { display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:5px; cursor:pointer; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .tr-pick .opt:hover { background:var(--cm-surface); }
+  .tr-pick .opt.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); }
+  .tr-pick .opt .cb { width:14px; height:14px; border-radius:4px; border:1.5px solid var(--cm-border-strong); background:var(--cm-surface); flex-shrink:0; display:flex; align-items:center; justify-content:center; color:transparent; }
+  .tr-pick .opt.is-on .cb { background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
+  .tr-pick .opt.is-on .cb::after { content:""; width:7px; height:3px; border-left:1.5px solid var(--cm-fg-on-accent); border-bottom:1.5px solid var(--cm-fg-on-accent); transform:rotate(-45deg); }
+  .tr-chips { display:flex; gap:5px; flex-wrap:wrap; }
+  .tr-chip { display:inline-flex; align-items:center; gap:4px; height:24px; padding:0 9px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:500 11.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .tr-chip.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .tr-chip .ti { font-size:11px; }
+  .tr-chart-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px; }
+  .tr-chart-card svg { display:block; width:100%; height:320px; }
+  .tr-chart-h { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .tr-chart-h h4 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .tr-chart-h .sub { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .tr-chart-h .right { margin-left:auto; display:flex; gap:6px; }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+
+  /* === PHYSICAL TESTS view === */
+  .pt-layout { display:grid; grid-template-columns: 320px 1fr; background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0; border-radius:0 0 var(--cm-r-4) var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; min-height:820px; }
+  @media (max-width:1100px) { .pt-layout { grid-template-columns:1fr; } }
+
+  /* Test catalog (left) */
+  .pt-catalog { border-right:1px solid var(--cm-border); display:flex; flex-direction:column; background:var(--cm-bg-soft); }
+  .pt-cat-h { padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; gap:8px; background:var(--cm-surface); }
+  .pt-cat-h h3 { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-strong); }
+  .pt-cat-h .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-left:4px; }
+  .pt-cat-h .right { margin-left:auto; }
+  .pt-cat-h .right button { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .pt-cat-h .right button .ti { font-size:13px; }
+
+  .pt-cat-search { padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .pt-cat-search input { width:100%; height:32px; padding:0 10px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:7px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; }
+
+  .pt-cat-list { flex:1; overflow-y:auto; padding:8px; }
+  .pt-cat-grp { padding:10px 8px 4px; display:flex; align-items:center; gap:6px; }
+  .pt-cat-grp .l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); flex:1; }
+  .pt-cat-grp .ic { width:18px; height:18px; border-radius:5px; display:flex; align-items:center; justify-content:center; }
+  .pt-cat-grp .ic .ti { font-size:11px; }
+  .pt-cat-grp .ic.jump { background:rgba(168,85,247,0.14); color:#7C3AED; }
+  .pt-cat-grp .ic.speed { background:rgba(245,158,11,0.14); color:#B45309; }
+  .pt-cat-grp .ic.end { background:rgba(34,197,94,0.14); color:#15803D; }
+  .pt-cat-grp .ic.str { background:rgba(220,38,38,0.14); color:#B91C1C; }
+  .pt-cat-grp .ic.mob { background:rgba(59,130,246,0.14); color:#1D4ED8; }
+  .pt-cat-grp .ic.ant { background:rgba(17,94,89,0.14); color:#0F766E; }
+
+  .pt-test {
+    display:grid; grid-template-columns:1fr 56px; gap:6px;
+    padding:8px 10px;
+    border-radius:7px;
+    cursor:pointer;
+    margin-bottom:2px;
+    align-items:center;
+  }
+  .pt-test:hover { background:var(--cm-surface); }
+  .pt-test.is-on { background:var(--cm-accent-soft); }
+  .pt-test .name { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pt-test .meta { font:500 10.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pt-test .meta strong { color:var(--cm-fg); }
+  .pt-test .last { text-align:right; }
+  .pt-test .last .v { font:700 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); letter-spacing:-0.01em; }
+  .pt-test .last .u { font:500 9.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .pt-test .last.up .v { color:var(--cm-success); }
+  .pt-test .last.down .v { color:var(--cm-danger); }
+  .pt-test .badge-fmt { display:inline-flex; align-items:center; height:14px; padding:0 4px; border-radius:3px; background:var(--cm-accent-soft); color:var(--cm-accent); font:700 8.5px/1 var(--cm-font-mono); letter-spacing:0.04em; margin-right:4px; vertical-align:1px; }
+
+  /* Main test detail */
+  .pt-detail { display:flex; flex-direction:column; min-width:0; }
+
+  .pt-d-head { padding:16px 22px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:flex-start; gap:14px; background:linear-gradient(135deg, color-mix(in srgb, var(--cm-accent) 4%, var(--cm-surface)) 0%, var(--cm-surface) 100%); }
+  .pt-d-head .ic { width:46px; height:46px; border-radius:12px; background:rgba(245,158,11,0.14); color:#B45309; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .pt-d-head .ic .ti { font-size:22px; }
+  .pt-d-head h2 { font:600 20px/1.15 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .pt-d-head .meta { font:500 11.5px/1.4 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px; }
+  .pt-d-head .meta .badge { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:4px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; color:var(--cm-fg); margin-right:5px; }
+  .pt-d-head .meta .badge.formula { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .pt-d-head .h-actions { margin-left:auto; display:flex; gap:8px; flex-shrink:0; }
+
+  /* Form area + reference / interpretation */
+  .pt-body { display:grid; grid-template-columns: 1.1fr 1fr; gap:0; flex:1; min-height:0; }
+  @media (max-width:1300px) { .pt-body { grid-template-columns:1fr; } }
+
+  /* Player + form */
+  .pt-form { padding:18px 22px; border-right:1px solid var(--cm-border-soft); }
+  @media (max-width:1300px) { .pt-form { border-right:0; border-bottom:1px solid var(--cm-border-soft); } }
+
+  .pt-section-l { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin:18px 0 10px; }
+  .pt-section-l:first-child { margin-top:0; }
+
+  .pt-player-row { display:flex; align-items:center; gap:12px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:10px; }
+  .pt-pav { width:34px; height:34px; border-radius:50%; background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; font:700 12px/1 var(--cm-font-sans); flex-shrink:0; }
+  .pt-player-row .who { flex:1; min-width:0; }
+  .pt-player-row .name { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pt-player-row .meta { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .pt-player-row .change { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); cursor:pointer; }
+  .pt-player-row .change:hover { color:var(--cm-fg); }
+
+  /* Fields grid */
+  .pt-fields { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .pt-fields.cols-2 { grid-template-columns:repeat(2, 1fr); }
+  .pt-fields.cols-4 { grid-template-columns:repeat(4, 1fr); }
+  .pt-field { display:flex; flex-direction:column; gap:4px; }
+  .pt-field label { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); display:flex; align-items:center; gap:5px; }
+  .pt-field label .tag { font:600 9px/1 var(--cm-font-mono); letter-spacing:0.04em; padding:2px 5px; border-radius:3px; }
+  .pt-field label .tag.calc { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .pt-field label .tag.req { background:var(--cm-danger-bg); color:var(--cm-danger); }
+  .pt-field .input-wrap { position:relative; }
+  .pt-field input, .pt-field select { width:100%; height:36px; padding:0 12px; padding-right:42px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; font:var(--cm-body-sm); color:var(--cm-fg-strong); outline:none; }
+  .pt-field input.is-calc { background:var(--cm-accent-soft); border-color:transparent; color:var(--cm-fg-strong); font-weight:600; }
+  .pt-field input:focus { border-color:var(--cm-accent); }
+  .pt-field .unit { position:absolute; right:10px; top:50%; transform:translateY(-50%); font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); pointer-events:none; }
+  .pt-field input.is-calc + .unit { color:var(--cm-accent); }
+
+  /* Sprint rows */
+  .pt-sprint-rows { display:flex; flex-direction:column; gap:5px; }
+  .pt-sprint-row { display:grid; grid-template-columns: 70px 1fr 90px 36px; gap:8px; align-items:center; }
+  .pt-sprint-row .lbl { font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-sprint-row input { width:100%; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:6px; font:var(--cm-body-sm); color:var(--cm-fg-strong); outline:none; }
+  .pt-sprint-row .diff { font:500 11px/1 var(--cm-font-mono); text-align:right; }
+  .pt-sprint-row .diff.warn { color:var(--cm-warning); }
+  .pt-sprint-row .diff.danger { color:var(--cm-danger); }
+  .pt-sprint-row .diff.good { color:var(--cm-success); }
+  .pt-sprint-row button { width:28px; height:28px; border:0; background:transparent; color:var(--cm-fg-faint); cursor:pointer; border-radius:5px; }
+  .pt-sprint-row button:hover { background:var(--cm-bg-soft); color:var(--cm-danger); }
+  .pt-add-sprint { margin-top:6px; padding:6px 12px; background:transparent; border:1px dashed var(--cm-border-strong); color:var(--cm-fg-muted); border-radius:7px; font:500 11.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .pt-add-sprint:hover { border-color:var(--cm-accent); color:var(--cm-fg); }
+
+  /* Computed result panel */
+  .pt-results { margin-top:14px; padding:14px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:10px; }
+  .pt-results-h { display:flex; align-items:center; gap:6px; font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:12px; }
+  .pt-results-h .ti { font-size:12px; color:var(--cm-accent); }
+  .pt-results-h .formula { margin-left:auto; font:500 10.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-faint); text-transform:none; letter-spacing:0; }
+  .pt-results-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
+  @media (max-width:680px) { .pt-results-grid { grid-template-columns:repeat(2, 1fr); } }
+  .pt-result {
+    background:var(--cm-surface); border:1px solid var(--cm-border-soft); border-radius:8px;
+    padding:10px 12px;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .pt-result .l { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .pt-result .v { font:700 19px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); display:flex; align-items:baseline; gap:3px; }
+  .pt-result .v small { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-result .v.high { color:var(--cm-success); }
+  .pt-result .v.warn { color:var(--cm-warning); }
+  .pt-result .v.low  { color:var(--cm-danger); }
+  .pt-result .delta { font:600 10.5px/1 var(--cm-font-mono); }
+  .pt-result .delta.up { color:var(--cm-success); }
+  .pt-result .delta.down { color:var(--cm-danger); }
+
+  /* Reference / interpretation panel */
+  .pt-ref { padding:18px 22px; overflow-y:auto; background:var(--cm-bg-soft); }
+
+  .pt-ref-card { background:var(--cm-surface); border:1px solid var(--cm-border-soft); border-radius:10px; padding:14px; margin-bottom:12px; }
+  .pt-ref-card h4 { display:flex; align-items:center; gap:6px; font:600 12px/1 var(--cm-font-sans); letter-spacing:0.04em; text-transform:uppercase; color:var(--cm-fg-strong); margin-bottom:10px; }
+  .pt-ref-card h4 .ti { font-size:13px; color:var(--cm-fg-muted); }
+
+  /* Reference bar */
+  .pt-band-wrap { padding:8px 0; }
+  .pt-band-row { display:grid; grid-template-columns: 100px 1fr 60px; gap:10px; align-items:center; padding:6px 0; }
+  .pt-band-l { font:500 12px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
+  .pt-band {
+    height:22px;
+    border-radius:6px;
+    background:linear-gradient(90deg, rgba(220,38,38,0.30) 0%, rgba(245,158,11,0.30) 33%, rgba(34,197,94,0.30) 60%, rgba(34,197,94,0.55) 100%);
+    position:relative;
+  }
+  .pt-band.flip { background:linear-gradient(90deg, rgba(34,197,94,0.55) 0%, rgba(34,197,94,0.30) 40%, rgba(245,158,11,0.30) 67%, rgba(220,38,38,0.30) 100%); }
+  .pt-band .pin { position:absolute; top:-3px; bottom:-3px; width:3px; border-radius:1.5px; background:var(--cm-fg-strong); }
+  .pt-band .pin::after { content:attr(data-v); position:absolute; top:-18px; left:50%; transform:translateX(-50%); font:700 10px/1 var(--cm-font-mono); color:var(--cm-fg-strong); white-space:nowrap; background:var(--cm-surface); padding:2px 5px; border-radius:3px; border:1px solid var(--cm-border-soft); }
+  .pt-band-v { text-align:right; font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-fg-strong); letter-spacing:-0.01em; }
+
+  .pt-ref-legend { display:flex; gap:14px; padding:8px 0 0; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); letter-spacing:0.04em; }
+  .pt-ref-legend .it { display:flex; align-items:center; gap:5px; }
+  .pt-ref-legend .sw { width:10px; height:10px; border-radius:2px; }
+
+  /* Formula explanation */
+  .pt-formula {
+    padding:10px 12px;
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+    border-radius:8px;
+    font:500 12px/1.5 var(--cm-font-mono);
+    color:var(--cm-fg);
+  }
+  .pt-formula code { background:var(--cm-surface); padding:2px 6px; border-radius:4px; color:var(--cm-accent); border:1px solid var(--cm-border-soft); font:600 11.5px/1.4 var(--cm-font-mono); }
+  .pt-formula .cit { display:block; margin-top:6px; font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+
+  /* History sparkline + table */
+  .pt-history { padding:6px 0; }
+  .pt-history-chart { height:80px; margin:6px 0 10px; }
+  .pt-history-chart svg { display:block; width:100%; height:100%; }
+  .pt-history-rows { display:flex; flex-direction:column; gap:0; }
+  .pt-history-row { display:grid; grid-template-columns: 70px 1fr 70px 50px; gap:10px; align-items:center; padding:7px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .pt-history-row:last-child { border-bottom:0; }
+  .pt-history-row .when { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-history-row .who { font:500 11.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
+  .pt-history-row .who .ev { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .pt-history-row .v { font:700 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); text-align:right; letter-spacing:-0.01em; }
+  .pt-history-row .v small { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-history-row .d { font:600 11px/1 var(--cm-font-mono); text-align:right; display:inline-flex; align-items:center; gap:2px; justify-content:flex-end; }
+  .pt-history-row .d.up { color:var(--cm-success); }
+  .pt-history-row .d.down { color:var(--cm-danger); }
+  .pt-history-row .d.flat { color:var(--cm-fg-faint); }
+  .pt-history-row .d .ti { font-size:11px; }
+
+  /* Foot */
+  .pt-foot {
+    padding:12px 22px;
+    border-top:1px solid var(--cm-border);
+    background:var(--cm-bg-soft);
+    display:flex; align-items:center; gap:10px;
+  }
+  .pt-foot .l { font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); flex:1; }
+  .pt-foot .l strong { color:var(--cm-fg); font-weight:600; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="17 Evaluations">
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name" id="sideClubName">Clava FC</div><div class="club" id="sideClubMeta">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="Chat &amp; Tasks.html"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Daily Planning.html"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
+        <a class="hub-nav-item" href="Sessions History.html"><i class="ti ti-history"></i><span>Sessions history</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item is-active" href="#"><i class="ti ti-star"></i><span>Evaluations</span><span class="count">⚐</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+            <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="Admin.html"><i class="ti ti-shield-lock"></i><span>Admin</span></a>
+        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av" id="sideUserAv">JR</div>
+        <div class="who"><div class="name" id="sideUserName">Joaquín Reiris</div><div class="role" id="sideUserRole">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Evaluations</span><span class="sep">/</span><span>F. Domínguez</span></div>
+      <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
+    </div>
+
+    <section class="ev-page">
+
+      <header class="ev-head">
+        <div>
+          <h1>Player evaluations</h1>
+          <div class="ctx"><strong>27 players</strong> · 24 evaluated this quarter · avg score <strong>7.2 / 10</strong> · next round opens <strong>Jun 1</strong></div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export report</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>Templates</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New evaluation</button>
+        </div>
+      </header>
+
+      <div class="ev-kpis">
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-clipboard-check"></i>This quarter</div>
+          <div class="ev-kpi-v" id="kpiEvQuarter">— <sub>/ —</sub></div>
+          <div class="ev-kpi-t"><span class="ev-kpi-d up"><i class="ti ti-arrow-up-right"></i>89%</span> coverage</div>
+        </div>
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-star"></i>Squad average</div>
+          <div class="ev-kpi-v">7.2 <sub>/ 10</sub></div>
+          <div class="ev-kpi-t"><span class="ev-kpi-d up"><i class="ti ti-arrow-up-right"></i>+0.3</span> vs Q3</div>
+        </div>
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-arrow-up-right"></i>Top growers</div>
+          <div class="ev-kpi-v">5</div>
+          <div class="ev-kpi-t">N. Ferreyra +1.4 · I. Cardozo +1.1</div>
+        </div>
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-trending-down"></i>Needs attention</div>
+          <div class="ev-kpi-v">3</div>
+          <div class="ev-kpi-t"><span class="ev-kpi-d warn"><i class="ti ti-flag-2"></i>−0.8 avg</span> vs Q3</div>
+        </div>
+      </div>
+
+      <div class="ev-tabs" id="evTabs">
+        <button class="ev-tab" data-view="subj"><i class="ti ti-user"></i>Subjective · technical</button>
+        <button class="ev-tab is-on" data-view="phys"><i class="ti ti-bolt"></i>Physical tests<span class="ct" style="font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:2px 5px; background:var(--cm-bg-soft); border-radius:3px; margin-left:2px;">28 tests · auto formulas</span></button>
+        <button class="ev-tab" data-view="squad"><i class="ti ti-users-group"></i>Squad overview</button>
+        <button class="ev-tab" data-view="trends"><i class="ti ti-trending-up"></i>Trends</button>
+        <button class="ev-tab" data-view="templates"><i class="ti ti-template"></i>Templates</button>
+        <button class="ev-tab" data-view="history"><i class="ti ti-history"></i>Round history</button>
+      </div>
+
+      <!-- ============== PHYSICAL TESTS VIEW ============== -->
+      <div class="pt-wrap">
+
+        <!-- Toolbar -->
+        <div class="pt-bar">
+          <div class="pt-segs">
+            <button class="pt-seg is-on"><i class="ti ti-grid-dots"></i>Test catalog</button>
+            <button class="pt-seg"><i class="ti ti-user"></i>Individual profile</button>
+            <button class="pt-seg"><i class="ti ti-users-group"></i>Squad comparison</button>
+          </div>
+          <div class="pt-bar-r">
+            <button class="pt-pill"><i class="ti ti-user"></i>F. Domínguez</button>
+            <button class="pt-pill"><i class="ti ti-clock"></i>Last 6 months</button>
+            <button class="pt-imp-btn" id="ptImpOpen"><i class="ti ti-cloud-upload"></i>Import CSV · devices</button>
+          </div>
+        </div>
+
+        <!-- ============ CATALOG (big buttons) ============ -->
+        <div class="pt-view is-on" data-view="cat">
+          <div class="pt-cat-group">
+            <h4><span class="ic jump"><i class="ti ti-rocket"></i></span>Jumps &amp; power<span class="ct">5 tests</span><button class="toggle-btn" onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><i class="ti ti-chevron-down"></i></button></h4>
+            <div class="pt-buttons">
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(168,85,247,0.12);color:#7C3AED"><i class="ti ti-arrow-up"></i></div><div class="b-l">CMJ</div><div class="b-s">Counter-movement</div><div class="b-last">42.1 cm <span class="up">+1.6</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(168,85,247,0.12);color:#7C3AED"><i class="ti ti-stairs-up"></i></div><div class="b-l">Squat jump</div><div class="b-s">90° · no arm swing</div><div class="b-last">38.4 cm <span class="flat">±0</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(168,85,247,0.12);color:#7C3AED"><i class="ti ti-arrows-vertical"></i></div><div class="b-l">Drop jump</div><div class="b-s">30 cm box · RSI</div><div class="b-last">2.14 <span class="up">+0.18</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(168,85,247,0.12);color:#7C3AED"><i class="ti ti-arrows-horizontal"></i></div><div class="b-l">Broad jump</div><div class="b-s">Horizontal standing</div><div class="b-last">248 cm <span class="up">+4</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(168,85,247,0.12);color:#7C3AED"><i class="ti ti-shoe"></i></div><div class="b-l">SL-CMJ + LSI</div><div class="b-s">L vs R asymmetry</div><div class="b-last">11% <span class="down">⚠ asym</span></div></button>
+            </div>
+          </div>
+
+          <div class="pt-cat-group">
+            <h4><span class="ic speed"><i class="ti ti-bolt"></i></span>Speed &amp; agility<span class="ct">4 tests</span><button class="toggle-btn" onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><i class="ti ti-chevron-down"></i></button></h4>
+            <div class="pt-buttons">
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(245,158,11,0.12);color:#B45309"><i class="ti ti-run"></i></div><div class="b-l">Sprint splits</div><div class="b-s">10 · 20 · 30 · 40 m</div><div class="b-last">4.21 s · 30m <span class="up">−0.05</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(245,158,11,0.12);color:#B45309"><i class="ti ti-arrow-back"></i></div><div class="b-l">505 COD</div><div class="b-s">Change of direction</div><div class="b-last">2.32 s <span class="up">−0.06</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(245,158,11,0.12);color:#B45309"><i class="ti ti-route-square"></i></div><div class="b-l">Illinois agility</div><div class="b-s">40 m · 4 cones</div><div class="b-last">15.8 s <span class="flat">±0</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(245,158,11,0.12);color:#B45309"><i class="ti ti-history-toggle"></i></div><div class="b-l">RSA · 6×30m</div><div class="b-s">Fatigue index</div><div class="b-last">4.6% FI <span class="up">−0.8</span></div></button>
+            </div>
+          </div>
+
+          <div class="pt-cat-group">
+            <h4><span class="ic end"><i class="ti ti-heart"></i></span>Endurance / VO₂max<span class="ct">6 tests</span><button class="toggle-btn" onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><i class="ti ti-chevron-down"></i></button></h4>
+            <div class="pt-buttons">
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(34,197,94,0.12);color:#15803D"><i class="ti ti-activity-heartbeat"></i></div><div class="b-l">30-15 IFT</div><div class="b-s">VIFT → MAS, VO₂max</div><div class="b-last">19.0 km/h <span class="up">+0.5</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(34,197,94,0.12);color:#15803D"><i class="ti ti-refresh"></i></div><div class="b-l">Yo-Yo IR1</div><div class="b-s">Bangsbo intermittent</div><div class="b-last">2,160 m <span class="up">+200</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(34,197,94,0.12);color:#15803D"><i class="ti ti-refresh"></i></div><div class="b-l">Yo-Yo IR2</div><div class="b-s">High-level</div><div class="b-last">880 m <span class="flat">±0</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(34,197,94,0.12);color:#15803D"><i class="ti ti-clock-12"></i></div><div class="b-l">Cooper 12-min</div><div class="b-s">VO₂ = (d−504.9)/44.73</div><div class="b-last">3,180 m <span class="up">+90</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(34,197,94,0.12);color:#15803D"><i class="ti ti-stopwatch"></i></div><div class="b-l">1,600 m TT</div><div class="b-s">ACSM pace formula</div><div class="b-last">5:38 <span class="up">−12s</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(34,197,94,0.12);color:#15803D"><i class="ti ti-arrows-shuffle"></i></div><div class="b-l">Léger shuttle</div><div class="b-s">20 m · stage</div><div class="b-last">12.3 <span class="up">+0.5</span></div></button>
+            </div>
+          </div>
+
+          <div class="pt-cat-group">
+            <h4><span class="ic str"><i class="ti ti-barbell"></i></span>Strength / VBT<span class="ct">6 tests</span><button class="toggle-btn" onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><i class="ti ti-chevron-down"></i></button></h4>
+            <div class="pt-buttons">
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-barbell"></i></div><div class="b-l">VBT · back squat</div><div class="b-s">Velocity → %1RM</div><div class="b-last">0.78 m/s <span class="up">+0.04</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-barbell"></i></div><div class="b-l">VBT · bench press</div><div class="b-s">Pérez-Castilla</div><div class="b-last">0.62 m/s <span class="flat">±0</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-barbell"></i></div><div class="b-l">VBT · hip thrust</div><div class="b-s">Posterior chain</div><div class="b-last">0.55 m/s <span class="up">+0.03</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-weight"></i></div><div class="b-l">1RM bench</div><div class="b-s">Direct · Brzycki</div><div class="b-last">92 kg <span class="up">+4</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-stretching-2"></i></div><div class="b-l">Nordic hamstring</div><div class="b-s">Reps · Bahr</div><div class="b-last">8 reps <span class="flat">±0</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-scale-outline"></i></div><div class="b-l">Isokinetic H:Q</div><div class="b-s">Knee balance</div><div class="b-last">0.54 <span class="down">−0.06</span></div></button>
+            </div>
+          </div>
+
+          <div class="pt-cat-group">
+            <h4><span class="ic mob"><i class="ti ti-stretching"></i></span>Mobility &amp; screening<span class="ct">3 tests</span><button class="toggle-btn" onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><i class="ti ti-chevron-down"></i></button></h4>
+            <div class="pt-buttons">
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(59,130,246,0.12);color:#1D4ED8"><i class="ti ti-checkbox"></i></div><div class="b-l">FMS</div><div class="b-s">7 items · /21</div><div class="b-last">16/21 <span class="flat">±0</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(59,130,246,0.12);color:#1D4ED8"><i class="ti ti-angle"></i></div><div class="b-l">Ankle dorsiflexion</div><div class="b-s">Knee-to-wall</div><div class="b-last">11.5 cm <span class="up">+0.4</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(59,130,246,0.12);color:#1D4ED8"><i class="ti ti-yoga"></i></div><div class="b-l">Sit &amp; reach</div><div class="b-s">Posterior chain</div><div class="b-last">+9 cm <span class="up">+1</span></div></button>
+            </div>
+          </div>
+
+          <div class="pt-cat-group">
+            <h4><span class="ic ant"><i class="ti ti-ruler"></i></span>Anthropometrics<span class="ct">3 tests</span><button class="toggle-btn" onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><i class="ti ti-chevron-down"></i></button></h4>
+            <div class="pt-buttons">
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(17,94,89,0.12);color:#0F766E"><i class="ti ti-body-scan"></i></div><div class="b-l">Body composition</div><div class="b-s">7-fold → % fat</div><div class="b-last">74.5 kg · 9.4% <span class="up">−0.4kg</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(17,94,89,0.12);color:#0F766E"><i class="ti ti-categories"></i></div><div class="b-l">Somatotype</div><div class="b-s">Heath-Carter</div><div class="b-last">2.4-4.8-2.1 <span class="flat">±0</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(17,94,89,0.12);color:#0F766E"><i class="ti ti-percentage"></i></div><div class="b-l">BMI / RFM</div><div class="b-s">Relative fat mass</div><div class="b-last">22.7 BMI <span class="flat">±0</span></div></button>
+              <button class="pt-btn pt-btn-add"><div class="b-ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-plus"></i></div><div class="b-l">New test</div><div class="b-s">Custom + formula</div><div class="b-last" style="color:var(--cm-fg-faint)">Build a new test</div></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ INDIVIDUAL PROFILE ============ -->
+        <div class="pt-view" data-view="ind">
+          <!-- shown when user clicks Individual profile -->
+          <div class="pt-prof">
+            <div class="pt-prof-head">
+              <div class="pt-pav" style="width:48px;height:48px;font-size:15px">FD</div>
+              <div style="flex:1">
+                <h2 style="font:600 20px/1.15 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong)">Felipe Domínguez · #10</h2>
+                <div style="font:500 12px/1.4 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px">MF · 26 y · 175 cm · 74.5 kg · 8 tests in last 6 months</div>
+              </div>
+              <div class="pt-attentions">
+                <span class="pt-att warn"><i class="ti ti-alert-triangle"></i>SL-CMJ asymmetry 11%</span>
+                <span class="pt-att info"><i class="ti ti-apple"></i>Nutrition referral</span>
+              </div>
+            </div>
+
+            <div class="pt-prof-grid">
+              <!-- KPIs strip -->
+              <div class="pt-prof-kpi"><div class="l">Lower-body power</div><div class="v high">52.0<small>W/kg</small></div><div class="d up">↑ +5%</div></div>
+              <div class="pt-prof-kpi"><div class="l">Top speed</div><div class="v">8.4<small>m/s</small></div><div class="d up">↑ +0.2</div></div>
+              <div class="pt-prof-kpi"><div class="l">VO₂max</div><div class="v high">58.1<small>ml/kg/min</small></div><div class="d up">↑ +1.4</div></div>
+              <div class="pt-prof-kpi"><div class="l">Body fat</div><div class="v">9.4<small>%</small></div><div class="d down">↓ −0.6</div></div>
+            </div>
+
+            <div class="pt-prof-charts">
+              <!-- Evolution chart -->
+              <div class="pt-chart-card">
+                <div class="pt-chart-h"><h4>CMJ height · 12-month evolution</h4><span class="sub">8 tests · trend ↗</span><div class="right"><button class="pt-mini-pill is-on">CMJ</button><button class="pt-mini-pill">VO₂</button><button class="pt-mini-pill">Sprint 30m</button></div></div>
+                <svg viewBox="0 0 600 200" font-family="Geist, ui-sans-serif" style="width:100%;height:200px;display:block">
+                  <g stroke="var(--cm-border-soft)" stroke-width="1">
+                    <line x1="40" y1="30" x2="580" y2="30"/>
+                    <line x1="40" y1="80" x2="580" y2="80"/>
+                    <line x1="40" y1="130" x2="580" y2="130"/>
+                    <line x1="40" y1="180" x2="580" y2="180"/>
+                  </g>
+                  <line x1="40" y1="80" x2="580" y2="80" stroke="var(--cm-success)" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
+                  <text x="44" y="76" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-success)">Elite · 45 cm</text>
+                  <g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">
+                    <text x="34" y="34" text-anchor="end">50</text>
+                    <text x="34" y="84" text-anchor="end">45</text>
+                    <text x="34" y="134" text-anchor="end">40</text>
+                    <text x="34" y="184" text-anchor="end">35</text>
+                  </g>
+                  <path d="M 40,160 L 110,154 L 180,150 L 250,140 L 320,138 L 390,126 L 460,120 L 530,108 L 580,98" fill="none" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M 40,160 L 110,154 L 180,150 L 250,140 L 320,138 L 390,126 L 460,120 L 530,108 L 580,98 L 580,200 L 40,200 Z" fill="var(--cm-accent)" opacity="0.10"/>
+                  <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
+                    <circle cx="40" cy="160" r="3.5"/><circle cx="180" cy="150" r="3.5"/><circle cx="320" cy="138" r="3.5"/><circle cx="460" cy="120" r="3.5"/><circle cx="580" cy="98" r="4.5"/>
+                  </g>
+                  <g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">
+                    <text x="40" y="196">Jun 25</text>
+                    <text x="180" y="196">Sep</text>
+                    <text x="320" y="196">Dec</text>
+                    <text x="460" y="196">Mar 26</text>
+                    <text x="580" y="196" text-anchor="end">May 26</text>
+                  </g>
+                </svg>
+              </div>
+
+              <!-- Radar -->
+              <div class="pt-chart-card">
+                <div class="pt-chart-h"><h4>Physical profile</h4><span class="sub">vs MF baseline</span></div>
+                <svg viewBox="0 0 280 240" font-family="Geist, ui-sans-serif" style="width:100%;height:240px;display:block">
+                  <g fill="none" stroke="var(--cm-border-soft)" stroke-width="1">
+                    <polygon points="140,30 230,80 230,180 140,230 50,180 50,80" opacity="0.9"/>
+                    <polygon points="140,65 200,100 200,160 140,195 80,160 80,100" opacity="0.7"/>
+                  </g>
+                  <g stroke="var(--cm-border)" stroke-width="1" opacity="0.5">
+                    <line x1="140" y1="130" x2="140" y2="30"/>
+                    <line x1="140" y1="130" x2="230" y2="80"/>
+                    <line x1="140" y1="130" x2="230" y2="180"/>
+                    <line x1="140" y1="130" x2="140" y2="230"/>
+                    <line x1="140" y1="130" x2="50" y2="180"/>
+                    <line x1="140" y1="130" x2="50" y2="80"/>
+                  </g>
+                  <polygon points="140,80 200,90 195,170 145,196 78,170 70,98" fill="var(--cm-neutral)" opacity="0.10" stroke="var(--cm-neutral)" stroke-width="1.5" stroke-dasharray="3 3"/>
+                  <polygon points="140,50 218,82 210,168 145,210 60,170 55,82" fill="var(--cm-accent)" opacity="0.18" stroke="var(--cm-accent)" stroke-width="2" stroke-linejoin="round"/>
+                  <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
+                    <circle cx="140" cy="50" r="4"/><circle cx="218" cy="82" r="4"/><circle cx="210" cy="168" r="4"/>
+                    <circle cx="145" cy="210" r="4"/><circle cx="60" cy="170" r="4"/><circle cx="55" cy="82" r="4"/>
+                  </g>
+                  <g font-size="11" font-weight="500" fill="var(--cm-fg)">
+                    <text x="140" y="22" text-anchor="middle">Power</text>
+                    <text x="240" y="80" text-anchor="start">Speed</text>
+                    <text x="240" y="184" text-anchor="start">VO₂</text>
+                    <text x="140" y="246" text-anchor="middle">Strength</text>
+                    <text x="40" y="184" text-anchor="end">Mobility</text>
+                    <text x="40" y="80" text-anchor="end">RSI</text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Latest test results table -->
+            <div class="pt-prof-table-card">
+              <div class="pt-chart-h"><h4>Latest results · last 6 months</h4><span class="sub">8 tests</span><div class="right"><button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button></div></div>
+              <table class="pt-prof-table">
+                <thead><tr><th>Test</th><th>Date</th><th class="num">Result</th><th class="num">Δ</th><th>vs MF</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><strong>CMJ height</strong></td><td>12 May</td><td class="num">42.1 cm</td><td class="num good">+1.6</td><td><div class="zbar"><span class="zpin" style="left:72%"></span></div></td><td><span class="zt good">Good</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                  <tr><td><strong>Sprint 30m</strong></td><td>10 May</td><td class="num">4.21 s</td><td class="num good">−0.05</td><td><div class="zbar"><span class="zpin" style="left:78%"></span></div></td><td><span class="zt good">Top 25%</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                  <tr><td><strong>30-15 IFT</strong></td><td>03 May</td><td class="num">19.0 km/h</td><td class="num good">+0.5</td><td><div class="zbar"><span class="zpin" style="left:80%"></span></div></td><td><span class="zt good">Excellent</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                  <tr><td><strong>VBT · back squat</strong></td><td>02 May</td><td class="num">0.78 m/s</td><td class="num good">+0.04</td><td><div class="zbar"><span class="zpin" style="left:70%"></span></div></td><td><span class="zt good">Good</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                  <tr><td><strong>SL-CMJ · LSI</strong></td><td>28 Apr</td><td class="num">11%</td><td class="num warn">+2</td><td><div class="zbar"><span class="zpin warn" style="left:28%"></span></div></td><td><span class="zt warn">Asymmetry · attention</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                  <tr><td><strong>Body composition</strong></td><td>20 Apr</td><td class="num">9.4% fat</td><td class="num good">−0.6</td><td><div class="zbar"><span class="zpin" style="left:60%"></span></div></td><td><span class="zt info">Referral to nutrition</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                  <tr><td><strong>FMS</strong></td><td>15 Apr</td><td class="num">16 /21</td><td class="num flat">±0</td><td><div class="zbar"><span class="zpin" style="left:55%"></span></div></td><td><span class="zt">Within range</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                  <tr><td><strong>Nordic hamstring</strong></td><td>10 Apr</td><td class="num">8 reps</td><td class="num flat">±0</td><td><div class="zbar"><span class="zpin" style="left:50%"></span></div></td><td><span class="zt">Monitoring</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Attentions & referrals -->
+            <div class="pt-prof-attentions">
+              <div class="pt-att-card warn">
+                <div class="pt-att-h"><i class="ti ti-alert-triangle"></i><strong>Attention</strong><span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">28 Apr</span></div>
+                <div class="pt-att-b">Single-leg CMJ LSI 11% — inter-limb asymmetry above 10% threshold. Recommend 4-week unilateral strength block + Nordic progression.</div>
+                <div class="pt-att-actions"><button class="cm-btn is-outline is-sm">Assign to Physio</button><button class="cm-btn is-ghost is-sm">Dismiss</button></div>
+              </div>
+              <div class="pt-att-card info">
+                <div class="pt-att-h"><i class="ti ti-apple"></i><strong>Referral · Nutrition</strong><span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">20 Apr</span></div>
+                <div class="pt-att-b">Body fat trending down (−1.2% in 12 weeks). Lean-mass maintenance check requested by F. Torres (nutritionist).</div>
+                <div class="pt-att-actions"><button class="cm-btn is-outline is-sm">Open in Nutrition</button><button class="cm-btn is-ghost is-sm">Mark reviewed</button></div>
+              </div>
+              <div class="pt-att-card good">
+                <div class="pt-att-h"><i class="ti ti-trending-up"></i><strong>Positive trend</strong><span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">12 May</span></div>
+                <div class="pt-att-b">CMJ height +3.3 cm over 6 months. Reactive strength index rose from 1.96 → 2.28. Continue current power block.</div>
+                <div class="pt-att-actions"><button class="cm-btn is-ghost is-sm">View block</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ SQUAD COMPARISON ============ -->
+        <div class="pt-view" data-view="grp">
+          <div class="pt-grp-grid">
+            <div class="pt-grp-card">
+              <div class="pt-chart-h"><h4>Squad ranking · CMJ</h4><span class="sub">8 starters · MF role baseline 40 cm</span><div class="right"><button class="pt-mini-pill is-on">CMJ</button><button class="pt-mini-pill">Sprint 30m</button><button class="pt-mini-pill">VO₂</button></div></div>
+              <div class="pt-rank">
+                <div class="pt-rank-row"><span class="ax">1</span><span class="pt-rank-bar"><span class="pt-rank-fill" style="width:96%">R. Vega · #7 · WG</span></span><span class="pt-rank-v">46.2</span></div>
+                <div class="pt-rank-row"><span class="ax">2</span><span class="pt-rank-bar"><span class="pt-rank-fill" style="width:88%">F. Domínguez · #10 · MF</span></span><span class="pt-rank-v">42.1</span></div>
+                <div class="pt-rank-row"><span class="ax">3</span><span class="pt-rank-bar"><span class="pt-rank-fill med" style="width:82%">S. Rivas · #9 · ST</span></span><span class="pt-rank-v">39.5</span></div>
+                <div class="pt-rank-row"><span class="ax">4</span><span class="pt-rank-bar"><span class="pt-rank-fill med" style="width:78%">M. Paredes · #8 · MF</span></span><span class="pt-rank-v">38.4</span></div>
+                <div class="pt-rank-row"><span class="ax">5</span><span class="pt-rank-bar"><span class="pt-rank-fill med" style="width:72%">T. López · #11 · WG</span></span><span class="pt-rank-v">36.2</span></div>
+                <div class="pt-rank-row"><span class="ax">6</span><span class="pt-rank-bar"><span class="pt-rank-fill low" style="width:62%">R. Sosa · #6 · CB</span></span><span class="pt-rank-v">33.1</span></div>
+                <div class="pt-rank-row"><span class="ax">7</span><span class="pt-rank-bar"><span class="pt-rank-fill low" style="width:58%">N. Ferreyra · #22 · CB</span></span><span class="pt-rank-v">31.4</span></div>
+                <div class="pt-rank-row"><span class="ax">8</span><span class="pt-rank-bar"><span class="pt-rank-fill low" style="width:54%">E. Galarza · #1 · GK</span></span><span class="pt-rank-v">29.8</span></div>
+              </div>
+            </div>
+            <div class="pt-grp-card">
+              <div class="pt-chart-h"><h4>Distribution by position</h4><span class="sub">CMJ · all squad</span></div>
+              <svg viewBox="0 0 280 220" font-family="Geist, ui-sans-serif" style="width:100%;height:220px;display:block">
+                <g stroke="var(--cm-border-soft)" stroke-width="1">
+                  <line x1="40" y1="30" x2="270" y2="30"/>
+                  <line x1="40" y1="90" x2="270" y2="90"/>
+                  <line x1="40" y1="150" x2="270" y2="150"/>
+                </g>
+                <line x1="40" y1="90" x2="270" y2="90" stroke="var(--cm-success)" stroke-width="1" stroke-dasharray="3 3"/>
+                <g>
+                  <rect x="50" y="135" width="30" height="35" fill="var(--cm-danger)" opacity="0.7" rx="2"/>
+                  <rect x="90" y="100" width="30" height="70" fill="var(--cm-info)" opacity="0.7" rx="2"/>
+                  <rect x="130" y="75" width="30" height="95" fill="var(--cm-success)" opacity="0.7" rx="2"/>
+                  <rect x="170" y="50" width="30" height="120" fill="var(--cm-warning)" opacity="0.85" rx="2"/>
+                  <rect x="210" y="65" width="30" height="105" fill="var(--cm-warning)" opacity="0.7" rx="2"/>
+                </g>
+                <g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)" text-anchor="middle">
+                  <text x="65" y="184">GK</text><text x="105" y="184">CB</text><text x="145" y="184">MF</text><text x="185" y="184">WG</text><text x="225" y="184">ST</text>
+                </g>
+                <g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">
+                  <text x="34" y="34" text-anchor="end">50</text>
+                  <text x="34" y="94" text-anchor="end">40</text>
+                  <text x="34" y="154" text-anchor="end">30</text>
+                </g>
+              </svg>
+            </div>
+            <div class="pt-grp-card pt-grp-full">
+              <div class="pt-chart-h"><h4>Squad heatmap · all physical tests</h4><span class="sub">Z-scores vs role baseline · 8 starters × 8 tests</span><div class="right"><button class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i>Sort</button></div></div>
+              <table class="pt-heatmap">
+                <thead><tr><th class="pl">Player</th><th>CMJ</th><th>Sprint 30m</th><th>VO₂</th><th>VBT squat</th><th>SL-CMJ</th><th>RSA</th><th>FMS</th><th>Nordic</th></tr></thead>
+                <tbody>
+                  <tr><td class="pl">R. Vega · #7</td><td><span class="hc high">+2.3</span></td><td><span class="hc mhigh">+1.7</span></td><td><span class="hc warn">+0.9</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc mhigh">+1.5</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+1.0</span></td></tr>
+                  <tr><td class="pl">F. Domínguez · #10</td><td><span class="hc warn">+1.2</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc mhigh">+1.4</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc low">−0.6</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc neu">+0.2</span></td><td><span class="hc neu">+0.4</span></td></tr>
+                  <tr><td class="pl">S. Rivas · #9</td><td><span class="hc warn">+0.7</span></td><td><span class="hc mhigh">+1.6</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc neu">+0.2</span></td></tr>
+                  <tr><td class="pl">M. Paredes · #8</td><td><span class="hc warn">+0.6</span></td><td><span class="hc neu">+0.2</span></td><td><span class="hc warn">+1.0</span></td><td><span class="hc neu">+0.6</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+0.9</span></td><td><span class="hc warn">+0.8</span></td></tr>
+                  <tr><td class="pl">T. López · #11</td><td><span class="hc neu">+0.5</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc neu">+0.6</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+1.0</span></td><td><span class="hc mhigh">+1.4</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.3</span></td></tr>
+                  <tr><td class="pl">R. Sosa · #6</td><td><span class="hc low">−0.5</span></td><td><span class="hc mlow">−0.8</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc low">−0.5</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc warn">+1.0</span></td></tr>
+                  <tr><td class="pl">N. Ferreyra · #22</td><td><span class="hc low">−0.3</span></td><td><span class="hc mlow">−0.6</span></td><td><span class="hc neu">+0.1</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc low">−0.3</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.6</span></td></tr>
+                  <tr><td class="pl">E. Galarza · #1</td><td><span class="hc vlow">−2.1</span></td><td><span class="hc vlow">−1.9</span></td><td><span class="hc mlow">−0.7</span></td><td><span class="hc vlow">−1.6</span></td><td><span class="hc mlow">−0.7</span></td><td><span class="hc vlow">−2.1</span></td><td><span class="hc neu">+0.6</span></td><td><span class="hc low">−0.5</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ============== TRENDS VIEW ============== -->
+      <div class="tr-wrap" id="trendsView" style="display:none">
+        <div class="tr-builder">
+          <aside class="tr-controls">
+            <h5>Tests</h5>
+            <div class="tr-pick">
+              <div class="opt is-on"><span class="cb"></span>CMJ height</div>
+              <div class="opt is-on"><span class="cb"></span>Sprint 30m</div>
+              <div class="opt"><span class="cb"></span>30-15 IFT (VIFT)</div>
+              <div class="opt"><span class="cb"></span>Yo-Yo IR1</div>
+              <div class="opt"><span class="cb"></span>VBT back squat</div>
+              <div class="opt"><span class="cb"></span>Nordic hamstring</div>
+              <div class="opt"><span class="cb"></span>FMS total</div>
+              <div class="opt"><span class="cb"></span>Body fat %</div>
+            </div>
+            <h5>Metric type</h5>
+            <div class="tr-chips">
+              <button class="tr-chip is-on">Absolute</button>
+              <button class="tr-chip">Z-score</button>
+              <button class="tr-chip">% PR</button>
+              <button class="tr-chip">vs role baseline</button>
+            </div>
+            <h5>Chart type</h5>
+            <div class="tr-chips">
+              <button class="tr-chip is-on"><i class="ti ti-chart-line"></i>Line</button>
+              <button class="tr-chip"><i class="ti ti-chart-bar"></i>Bars</button>
+              <button class="tr-chip"><i class="ti ti-chart-bubble"></i>Scatter</button>
+              <button class="tr-chip"><i class="ti ti-chart-radar"></i>Radar</button>
+            </div>
+            <h5>Time range</h5>
+            <div class="tr-chips">
+              <button class="tr-chip">30d</button>
+              <button class="tr-chip">3m</button>
+              <button class="tr-chip is-on">6m</button>
+              <button class="tr-chip">12m</button>
+              <button class="tr-chip">Season</button>
+            </div>
+            <h5>Players</h5>
+            <div class="tr-chips">
+              <button class="tr-chip is-on">F. Domínguez</button>
+              <button class="tr-chip">R. Vega</button>
+              <button class="tr-chip">M. Paredes</button>
+              <button class="tr-chip"><i class="ti ti-plus"></i>Add</button>
+            </div>
+            <h5>Compare with</h5>
+            <div class="tr-chips">
+              <button class="tr-chip is-on"><i class="ti ti-target"></i>MF role avg</button>
+              <button class="tr-chip"><i class="ti ti-users-group"></i>Squad avg</button>
+              <button class="tr-chip"><i class="ti ti-target-arrow"></i>PR</button>
+            </div>
+            <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--cm-border-soft); display:flex; gap:6px">
+              <button class="cm-btn is-outline is-sm" style="flex:1"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save view</button>
+              <button class="cm-btn is-outline is-sm" style="flex:1"><i class="ti ti-share-2" style="font-size:13px"></i>Share</button>
+            </div>
+          </aside>
+          <div class="tr-chart-card">
+            <div class="tr-chart-h">
+              <h4>CMJ height + Sprint 30m · 6 months</h4>
+              <span class="sub">F. Domínguez · vs MF role · 2 metrics</span>
+              <div class="right">
+                <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:13px"></i>Export</button>
+              </div>
+            </div>
+            <svg viewBox="0 0 800 320" font-family="Geist, ui-sans-serif">
+              <g stroke="var(--cm-border-soft)" stroke-width="1">
+                <line x1="50" y1="40" x2="780" y2="40"/>
+                <line x1="50" y1="110" x2="780" y2="110"/>
+                <line x1="50" y1="180" x2="780" y2="180"/>
+                <line x1="50" y1="250" x2="780" y2="250"/>
+              </g>
+              <text x="44" y="44" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">50</text>
+              <text x="44" y="114" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">45</text>
+              <text x="44" y="184" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">40</text>
+              <text x="44" y="254" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">35</text>
+              <line x1="50" y1="110" x2="780" y2="110" stroke="var(--cm-success)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+              <text x="55" y="106" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-success)">Elite · 45 cm</text>
+              <path d="M 50,240 L 170,222 L 290,210 L 410,196 L 530,168 L 650,140 L 780,118" fill="none" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M 50,240 L 170,222 L 290,210 L 410,196 L 530,168 L 650,140 L 780,118 L 780,290 L 50,290 Z" fill="var(--cm-accent)" opacity="0.10"/>
+              <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
+                <circle cx="50" cy="240" r="3.5"/><circle cx="170" cy="222" r="3.5"/><circle cx="290" cy="210" r="3.5"/>
+                <circle cx="410" cy="196" r="3.5"/><circle cx="530" cy="168" r="3.5"/><circle cx="650" cy="140" r="3.5"/><circle cx="780" cy="118" r="4.5"/>
+              </g>
+              <path d="M 50,200 L 170,196 L 290,190 L 410,186 L 530,178 L 650,170 L 780,160" fill="none" stroke="#A78BFA" stroke-width="2" stroke-dasharray="6 3" stroke-linecap="round"/>
+              <g fill="#A78BFA" stroke="var(--cm-surface)" stroke-width="2">
+                <circle cx="50" cy="200" r="3"/><circle cx="290" cy="190" r="3"/><circle cx="530" cy="178" r="3"/><circle cx="780" cy="160" r="3"/>
+              </g>
+              <line x1="50" y1="180" x2="780" y2="180" stroke="var(--cm-neutral)" stroke-width="1" stroke-dasharray="2 4" opacity="0.4"/>
+              <text x="775" y="176" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">MF role baseline · 40 cm</text>
+              <g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">
+                <text x="50" y="282" text-anchor="middle">Dec 25</text>
+                <text x="170" y="282" text-anchor="middle">Jan</text>
+                <text x="290" y="282" text-anchor="middle">Feb</text>
+                <text x="410" y="282" text-anchor="middle">Mar</text>
+                <text x="530" y="282" text-anchor="middle">Apr</text>
+                <text x="650" y="282" text-anchor="middle">May</text>
+                <text x="780" y="282" text-anchor="end">Today</text>
+              </g>
+              <g transform="translate(50, 304)" font-size="11" font-family="Geist, sans-serif" fill="var(--cm-fg-muted)">
+                <rect x="0" y="-8" width="11" height="11" fill="var(--cm-accent)" rx="2"/>
+                <text x="17" y="2">CMJ height (cm) · +5.4 cm</text>
+                <rect x="180" y="-8" width="11" height="11" fill="#A78BFA" rx="2"/>
+                <text x="197" y="2">Sprint 30m (s) · −0.18</text>
+                <line x1="380" y1="-3" x2="395" y2="-3" stroke="var(--cm-neutral)" stroke-width="1" stroke-dasharray="2 3"/>
+                <text x="400" y="2">Role baseline</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========== 
+      <div class="ev-grid" id="subjView" style="display:none">
+
+        <!-- Roster -->
+        <aside class="ev-roster">
+          <div class="ev-roster-h">
+            <h3>Players <span class="ct">27</span></h3>
+            <div class="right"><button title="Group"><i class="ti ti-layout-rows"></i></button><button title="Sort"><i class="ti ti-arrows-sort"></i></button></div>
+          </div>
+          <div class="ev-roster-search"><input placeholder="Search players, position…"></div>
+          <div class="ev-list" id="evRosterList">
+
+            <div class="ev-list-grp">Top — Q4 2025/26</div>
+            <div class="ev-row is-on">
+              <div class="av tn">FD<span class="dorsal">10</span></div>
+              <div class="info"><div class="name">Felipe Domínguez</div><div class="meta"><span class="pos mf">MF</span><span class="sub">26y · Q4: 4 evals</span></div></div>
+              <div class="score-box high"><div class="score-v">8.4</div><div class="score-d up">+0.6</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av tn">SR<span class="dorsal">9</span></div>
+              <div class="info"><div class="name">Santiago Rivas</div><div class="meta"><span class="pos st">ST</span><span class="sub">31y · captain</span></div></div>
+              <div class="score-box high"><div class="score-v">8.2</div><div class="score-d up">+0.2</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av tn">EG<span class="dorsal">1</span></div>
+              <div class="info"><div class="name">Esteban Galarza</div><div class="meta"><span class="pos gk">GK</span><span class="sub">34y · captain</span></div></div>
+              <div class="score-box high"><div class="score-v">8.0</div><div class="score-d flat">±0</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">MP<span class="dorsal">8</span></div>
+              <div class="info"><div class="name">Mateo Paredes</div><div class="meta"><span class="pos mf">MF</span><span class="sub">30y</span></div></div>
+              <div class="score-box high"><div class="score-v">7.9</div><div class="score-d up">+0.4</div></div>
+            </div>
+
+            <div class="ev-list-grp">Growth — biggest jumps</div>
+            <div class="ev-row">
+              <div class="av">NF<span class="dorsal">22</span></div>
+              <div class="info"><div class="name">Nicolás Ferreyra</div><div class="meta"><span class="pos cb">CB</span><span class="sub">22y · academy</span></div></div>
+              <div class="score-box"><div class="score-v">7.4</div><div class="score-d up">+1.4</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">IC<span class="dorsal">19</span></div>
+              <div class="info"><div class="name">Ignacio Cardozo</div><div class="meta"><span class="pos st">ST</span><span class="sub">23y · academy</span></div></div>
+              <div class="score-box"><div class="score-v">7.1</div><div class="score-d up">+1.1</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">PG<span class="dorsal">17</span></div>
+              <div class="info"><div class="name">Pedro Gimenez</div><div class="meta"><span class="pos mf">MF</span><span class="sub">24y · academy</span></div></div>
+              <div class="score-box"><div class="score-v">7.0</div><div class="score-d up">+0.8</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">RS<span class="dorsal">6</span></div>
+              <div class="info"><div class="name">Rodrigo Sosa</div><div class="meta"><span class="pos cb">CB</span><span class="sub">28y</span></div></div>
+              <div class="score-box"><div class="score-v">7.3</div><div class="score-d up">+0.3</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">RV<span class="dorsal">7</span></div>
+              <div class="info"><div class="name">Ramiro Vega</div><div class="meta"><span class="pos wg">WG</span><span class="sub">27y</span></div></div>
+              <div class="score-box"><div class="score-v">7.6</div><div class="score-d up">+0.5</div></div>
+            </div>
+
+            <div class="ev-list-grp">Needs attention</div>
+            <div class="ev-row">
+              <div class="av">LC<span class="dorsal">15</span></div>
+              <div class="info"><div class="name">Lucas Carrasco</div><div class="meta"><span class="pos cb">CB</span><span class="sub">27y · on loan</span></div></div>
+              <div class="score-box low"><div class="score-v">5.8</div><div class="score-d down">−0.9</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">DV<span class="dorsal">14</span></div>
+              <div class="info"><div class="name">Diego Villalba</div><div class="meta"><span class="pos mf">MF</span><span class="sub">29y</span></div></div>
+              <div class="score-box warn"><div class="score-v">6.1</div><div class="score-d down">−0.7</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">TL<span class="dorsal">11</span></div>
+              <div class="info"><div class="name">Tomás López</div><div class="meta"><span class="pos wg">WG</span><span class="sub">25y</span></div></div>
+              <div class="score-box warn"><div class="score-v">6.4</div><div class="score-d down">−0.8</div></div>
+            </div>
+            <div class="ev-row">
+              <div class="av">AT<span class="dorsal">25</span></div>
+              <div class="info"><div class="name">Agustín Tévez</div><div class="meta"><span class="pos gk">GK</span><span class="sub">20y · academy</span></div></div>
+              <div class="score-box"><div class="score-v">6.8</div><div class="score-d flat">±0</div></div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Detail -->
+        <section class="ev-detail">
+
+          <header class="ev-d-head" id="evDetailHead">
+            <div class="left">
+              <div class="av" id="evDetailAv">FD</div>
+              <div>
+                <h2 id="evDetailName">Felipe Domínguez</h2>
+                <div class="h-meta" id="evDetailMeta">
+                  <span class="badge">#10</span>
+                  <span>Midfielder · #10 role</span>
+                  <span style="color:var(--cm-border-strong)">·</span>
+                  <span>26 y · 7 years at club</span>
+                  <span style="color:var(--cm-border-strong)">·</span>
+                  <span><i class="ti ti-flag" style="font-size:12px;vertical-align:-1px"></i>Colombia</span>
+                </div>
+              </div>
+            </div>
+            <div class="h-actions">
+              <button class="cm-btn is-outline is-sm"><i class="ti ti-clock" style="font-size:14px"></i>History (12)</button>
+              <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Share with player</button>
+              <button class="cm-btn is-primary is-sm"><i class="ti ti-edit" style="font-size:14px"></i>Open evaluation</button>
+            </div>
+          </header>
+
+          <!-- Overall -->
+          <div class="ev-overall">
+            <div class="ev-overall-score">
+              <div class="inner"><div class="v">8.4</div><div class="s">/ 10 · Q4</div></div>
+            </div>
+            <div class="ev-overall-body">
+              <h3>Composite score · Q4 2025/26</h3>
+              <p>Weighted average across 18 competencies from 4 dimensions. Score derived from 4 evaluator inputs across the quarter.</p>
+              <div class="tags">
+                <span class="tag good"><i class="ti ti-arrow-up-right" style="font-size:11px"></i>+0.6 vs Q3</span>
+                <span class="tag info"><i class="ti ti-bookmark" style="font-size:11px"></i>Top 3 in squad</span>
+                <span class="tag good"><i class="ti ti-target" style="font-size:11px"></i>3 of 4 goals met</span>
+                <span class="tag warn"><i class="ti ti-eye" style="font-size:11px"></i>1 development area</span>
+              </div>
+            </div>
+            <div class="ev-overall-trend">
+              <div class="l">8-quarter trend</div>
+              <svg viewBox="0 0 200 48" preserveAspectRatio="none" font-family="Geist Mono, monospace">
+                <line x1="0" y1="36" x2="200" y2="36" stroke="var(--cm-border-soft)" stroke-width="1"/>
+                <polyline points="0,28 28,32 56,24 84,22 112,20 140,18 168,14 200,8" fill="none" stroke="var(--cm-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="0,28 28,32 56,24 84,22 112,20 140,18 168,14 200,8 200,48 0,48" fill="var(--cm-accent)" opacity="0.10"/>
+                <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="1.5">
+                  <circle cx="0" cy="28" r="2.5"/><circle cx="56" cy="24" r="2.5"/><circle cx="112" cy="20" r="2.5"/><circle cx="168" cy="14" r="2.5"/><circle cx="200" cy="8" r="3.5"/>
+                </g>
+              </svg>
+              <div style="display:flex;justify-content:space-between;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">
+                <span>Q1 24/25</span><span>Q3</span><span style="color:var(--cm-accent);font-weight:600">Q4 26</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Period -->
+          <div class="ev-period">
+            <span class="l">Period</span>
+            <button class="ev-pchip">Q1 24/25</button>
+            <button class="ev-pchip">Q2</button>
+            <button class="ev-pchip">Q3 25/26</button>
+            <button class="ev-pchip is-on">Q4 25/26 · current</button>
+            <span style="width:1px;height:18px;background:var(--cm-border);margin:0 4px"></span>
+            <span class="l">Compare with</span>
+            <button class="ev-pchip is-on"><i class="ti ti-target"></i>MF role avg</button>
+            <button class="ev-pchip"><i class="ti ti-users-group"></i>Squad avg</button>
+            <button class="ev-pchip"><i class="ti ti-clock-hour-3"></i>Q3 self</button>
+            <div class="grow"></div>
+            <button class="cm-btn is-outline is-sm"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
+          </div>
+
+          <!-- Competencies + radar -->
+          <div class="ev-comp-wrap">
+
+            <div>
+              <!-- TACTICAL -->
+              <div class="ev-comp-group">
+                <h4><span class="ic tac"><i class="ti ti-binary-tree-2"></i></span>Tactical<span class="avg">8.7</span></h4>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Game reading</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:72%"></span><span class="ev-comp-fill player" style="width:92%"></span><span class="ev-comp-bar-tick" style="left:72%"></span></span>
+                  <span class="ev-comp-v">9.2<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.4</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Positional awareness</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:74%"></span><span class="ev-comp-fill player" style="width:89%"></span><span class="ev-comp-bar-tick" style="left:74%"></span></span>
+                  <span class="ev-comp-v">8.9<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.7</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Decision making</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:70%"></span><span class="ev-comp-fill player" style="width:85%"></span><span class="ev-comp-bar-tick" style="left:70%"></span></span>
+                  <span class="ev-comp-v">8.5<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.6</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Off-the-ball runs</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:68%"></span><span class="ev-comp-fill player" style="width:81%"></span><span class="ev-comp-bar-tick" style="left:68%"></span></span>
+                  <span class="ev-comp-v">8.1<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.3</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Defensive shape</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:71%"></span><span class="ev-comp-fill player warn" style="width:74%"></span><span class="ev-comp-bar-tick" style="left:71%"></span></span>
+                  <span class="ev-comp-v">7.4<small>/10</small></span>
+                  <span class="ev-comp-delta flat">±0</span>
+                </div>
+              </div>
+
+              <!-- TECHNICAL -->
+              <div class="ev-comp-group">
+                <h4><span class="ic tec"><i class="ti ti-ball-football"></i></span>Technical<span class="avg">8.5</span></h4>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">First touch</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:75%"></span><span class="ev-comp-fill player" style="width:91%"></span><span class="ev-comp-bar-tick" style="left:75%"></span></span>
+                  <span class="ev-comp-v">9.1<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.4</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Passing accuracy</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:76%"></span><span class="ev-comp-fill player" style="width:88%"></span><span class="ev-comp-bar-tick" style="left:76%"></span></span>
+                  <span class="ev-comp-v">8.8<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.2</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Long-range passing</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:64%"></span><span class="ev-comp-fill player" style="width:82%"></span><span class="ev-comp-bar-tick" style="left:64%"></span></span>
+                  <span class="ev-comp-v">8.2<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+1.1</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Set-pieces</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:62%"></span><span class="ev-comp-fill player" style="width:84%"></span><span class="ev-comp-bar-tick" style="left:62%"></span></span>
+                  <span class="ev-comp-v">8.4<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.8</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Finishing</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:60%"></span><span class="ev-comp-fill player warn" style="width:78%"></span><span class="ev-comp-bar-tick" style="left:60%"></span></span>
+                  <span class="ev-comp-v">7.8<small>/10</small></span>
+                  <span class="ev-comp-delta flat">±0</span>
+                </div>
+              </div>
+
+              <!-- PHYSICAL -->
+              <div class="ev-comp-group">
+                <h4><span class="ic fis"><i class="ti ti-bolt"></i></span>Physical<span class="avg">8.0</span></h4>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Endurance</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:72%"></span><span class="ev-comp-fill player" style="width:86%"></span><span class="ev-comp-bar-tick" style="left:72%"></span></span>
+                  <span class="ev-comp-v">8.6<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.5</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Acceleration</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:68%"></span><span class="ev-comp-fill player warn" style="width:74%"></span><span class="ev-comp-bar-tick" style="left:68%"></span></span>
+                  <span class="ev-comp-v">7.4<small>/10</small></span>
+                  <span class="ev-comp-delta flat">±0</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Top speed</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:67%"></span><span class="ev-comp-fill player low" style="width:71%"></span><span class="ev-comp-bar-tick" style="left:67%"></span></span>
+                  <span class="ev-comp-v">7.1<small>/10</small></span>
+                  <span class="ev-comp-delta down"><i class="ti ti-arrow-down-right"></i>−0.2</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Strength &amp; duels</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:69%"></span><span class="ev-comp-fill player" style="width:80%"></span><span class="ev-comp-bar-tick" style="left:69%"></span></span>
+                  <span class="ev-comp-v">8.0<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.4</span>
+                </div>
+              </div>
+
+              <!-- PSYCHOLOGICAL -->
+              <div class="ev-comp-group">
+                <h4><span class="ic psi"><i class="ti ti-brain"></i></span>Psychological &amp; behavioural<span class="avg">8.4</span></h4>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Leadership</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:65%"></span><span class="ev-comp-fill player" style="width:88%"></span><span class="ev-comp-bar-tick" style="left:65%"></span></span>
+                  <span class="ev-comp-v">8.8<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.9</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Composure under pressure</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:70%"></span><span class="ev-comp-fill player" style="width:84%"></span><span class="ev-comp-bar-tick" style="left:70%"></span></span>
+                  <span class="ev-comp-v">8.4<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.3</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Communication on field</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:72%"></span><span class="ev-comp-fill player" style="width:86%"></span><span class="ev-comp-bar-tick" style="left:72%"></span></span>
+                  <span class="ev-comp-v">8.6<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.5</span>
+                </div>
+                <div class="ev-comp-row">
+                  <span class="ev-comp-l">Coachability / attitude</span>
+                  <span class="ev-comp-bar"><span class="ev-comp-fill peer" style="width:74%"></span><span class="ev-comp-fill player" style="width:80%"></span><span class="ev-comp-bar-tick" style="left:74%"></span></span>
+                  <span class="ev-comp-v">8.0<small>/10</small></span>
+                  <span class="ev-comp-delta up"><i class="ti ti-arrow-up-right"></i>+0.2</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right column: radar + evaluator panel -->
+            <div>
+              <div class="ev-radar-card">
+                <div class="head"><h4>Profile radar</h4><span class="sub">vs MF role avg</span></div>
+                <svg viewBox="0 0 320 320" font-family="Geist, ui-sans-serif">
+                  <g fill="none" stroke="var(--cm-border-soft)" stroke-width="1">
+                    <polygon points="160,30 270,90 270,230 160,290 50,230 50,90" opacity="0.9"/>
+                    <polygon points="160,65 240,110 240,210 160,255 80,210 80,110" opacity="0.7"/>
+                    <polygon points="160,100 210,130 210,190 160,220 110,190 110,130" opacity="0.55"/>
+                  </g>
+                  <g stroke="var(--cm-border)" stroke-width="1" opacity="0.5">
+                    <line x1="160" y1="160" x2="160" y2="30"/>
+                    <line x1="160" y1="160" x2="270" y2="90"/>
+                    <line x1="160" y1="160" x2="270" y2="230"/>
+                    <line x1="160" y1="160" x2="160" y2="290"/>
+                    <line x1="160" y1="160" x2="50" y2="230"/>
+                    <line x1="160" y1="160" x2="50" y2="90"/>
+                  </g>
+                  <!-- Peer baseline (MF avg ~7.0) -->
+                  <polygon points="160,82 232,118 232,202 160,238 88,202 88,118"
+                           fill="var(--cm-neutral)" opacity="0.10" stroke="var(--cm-neutral)" stroke-width="1.5" stroke-dasharray="3 3"/>
+                  <!-- Player (tact 8.7, tech 8.5, phys 8.0, psy 8.4 + 2 extra dims overall) -->
+                  <polygon points="160,46 252,98 244,206 160,256 78,210 60,108"
+                           fill="var(--cm-accent)" opacity="0.18"
+                           stroke="var(--cm-accent)" stroke-width="2" stroke-linejoin="round"/>
+                  <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
+                    <circle cx="160" cy="46" r="4"/><circle cx="252" cy="98" r="4"/><circle cx="244" cy="206" r="4"/>
+                    <circle cx="160" cy="256" r="4"/><circle cx="78" cy="210" r="4"/><circle cx="60" cy="108" r="4"/>
+                  </g>
+                  <!-- Labels -->
+                  <g font-size="11.5" font-weight="500" fill="var(--cm-fg)">
+                    <text x="160" y="20" text-anchor="middle">Tactical</text>
+                    <text x="282" y="92" text-anchor="start">Technical</text>
+                    <text x="282" y="234" text-anchor="start">Physical</text>
+                    <text x="160" y="306" text-anchor="middle">Psych.</text>
+                    <text x="38" y="234" text-anchor="end">Set-pieces</text>
+                    <text x="38" y="92" text-anchor="end">Leadership</text>
+                  </g>
+                  <!-- Score values -->
+                  <g font-family="Geist Mono, ui-monospace, monospace" font-size="10.5" font-weight="600" fill="var(--cm-accent)">
+                    <text x="160" y="34" text-anchor="middle">8.7</text>
+                    <text x="282" y="106" text-anchor="start">8.5</text>
+                    <text x="282" y="248" text-anchor="start">8.0</text>
+                    <text x="160" y="276" text-anchor="middle">8.4</text>
+                    <text x="38" y="248" text-anchor="end">8.4</text>
+                    <text x="38" y="106" text-anchor="end">8.8</text>
+                  </g>
+                </svg>
+                <div class="ev-radar-legend">
+                  <span class="it"><span class="sw" style="background:var(--cm-accent)"></span>F. Domínguez</span>
+                  <span class="it"><span class="sw" style="background:var(--cm-neutral);opacity:0.55"></span>MF role avg</span>
+                </div>
+              </div>
+
+              <div class="ev-evaluators">
+                <h4>Q4 evaluators · 4</h4>
+                <div class="ev-evaluator">
+                  <div class="av">PF</div>
+                  <div class="who"><div class="n">Pablo Fierro</div><div class="r">Head coach</div></div>
+                  <div class="score">8.6</div>
+                  <div class="when">Apr 28</div>
+                </div>
+                <div class="ev-evaluator">
+                  <div class="av">LG</div>
+                  <div class="who"><div class="n">Luis González</div><div class="r">Assistant coach</div></div>
+                  <div class="score">8.4</div>
+                  <div class="when">Apr 26</div>
+                </div>
+                <div class="ev-evaluator">
+                  <div class="av">JR</div>
+                  <div class="who"><div class="n">Joaquín Reiris</div><div class="r">Performance</div></div>
+                  <div class="score">8.2</div>
+                  <div class="when">Apr 22</div>
+                </div>
+                <div class="ev-evaluator">
+                  <div class="av">JC</div>
+                  <div class="who"><div class="n">Joaquín Cabral</div><div class="r">Analyst</div></div>
+                  <div class="score">8.3</div>
+                  <div class="when">Apr 20</div>
+                </div>
+                <div style="margin-top:8px; padding-top:10px; border-top:1px solid var(--cm-border-soft); display:flex; justify-content:space-between; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted)">
+                  <span>Inter-rater agreement</span>
+                  <strong style="color:var(--cm-success);font-weight:600">κ = 0.82 high</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Timeline -->
+          <div class="ev-timeline" id="evTimeline">
+            <h3>Physical test history</h3>
+            <div style="padding:24px 0;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Select a player to load their evaluation history</div>
+          </div>
+
+        </section>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+
+<!-- Physical tests · Import drawer -->
+<div class="pt-imp-overlay" id="ptImpOverlay"></div>
+<aside class="pt-imp-drawer" id="ptImpDrawer">
+  <header class="pt-imp-h">
+    <i class="ti ti-cloud-upload" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3>Import test data</h3><div class="sub">Upload CSV from device or connect a provider</div></div>
+    <button class="pt-imp-x" id="ptImpClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="pt-imp-body">
+    <div class="pt-drop">
+      <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop CSV/XLSX here</h4><p>Auto-detected columns map to player + test type. Headers follow VALD/VITRUVE/ADR templates by default.</p></div></div>
+      <div class="formats"><span class="fmt">.csv</span><span class="fmt">.xlsx</span><span class="fmt">.tsv</span><span class="fmt">VALD</span><span class="fmt">VITRUVE</span><span class="fmt">ADR</span></div>
+      <div style="display:flex;gap:8px"><button class="cm-btn is-outline is-sm"><i class="ti ti-upload" style="font-size:14px"></i>Browse files</button><button class="cm-btn is-ghost is-sm"><i class="ti ti-template" style="font-size:14px"></i>Download templates</button></div>
+    </div>
+    <div class="pt-imp-section-l">Device providers</div>
+    <div class="pt-providers">
+      <div class="pt-provider is-active"><span class="logo vald">V</span><div class="info"><h5>VALD ForceDecks / Smartspeed</h5><div class="desc">Cloud sync · jumps, sprints, isometrics</div><span class="pt-provider-status ok"><span class="d"></span>Connected · 14 sessions</span></div></div>
+      <div class="pt-provider"><span class="logo adr">A</span><div class="info"><h5>ADR Encoder</h5><div class="desc">VBT linear encoder · CSV export</div><span class="pt-provider-status ok"><span class="d"></span>Connected</span></div></div>
+      <div class="pt-provider"><span class="logo vitr">V</span><div class="info"><h5>VITRUVE</h5><div class="desc">VBT encoder · velocity/load curves</div><span class="pt-provider-status ok"><span class="d"></span>Connected · 8 sessions</span></div></div>
+      <div class="pt-provider"><span class="logo gym">G</span><div class="info"><h5>GymAware / FLEX</h5><div class="desc">Kinetic Performance · linear position</div><span class="pt-provider-status av"><span class="d" style="background:var(--cm-fg-muted)"></span>Available</span></div></div>
+      <div class="pt-provider"><span class="logo opto">O</span><div class="info"><h5>OptoJump / Microgate</h5><div class="desc">Optical timing · jumps + agility</div><span class="pt-provider-status av"><span class="d" style="background:var(--cm-fg-muted)"></span>Available</span></div></div>
+      <div class="pt-provider"><span class="logo csv">CSV</span><div class="info"><h5>Generic CSV mapping</h5><div class="desc">Any file · column mapping wizard</div><span class="pt-provider-status av"><span class="d" style="background:var(--cm-fg-muted)"></span>Always available</span></div></div>
+    </div>
+    <div class="pt-imp-section-l">Recent imports</div>
+    <div style="padding-top:4px">
+      <div style="display:grid;grid-template-columns:32px 1fr auto;gap:10px;padding:10px 0;border-bottom:1px solid var(--cm-border-soft);align-items:center">
+        <span style="width:28px;height:28px;border-radius:7px;background:#0066FF;color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-sans)">V</span>
+        <div><div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">VALD · CMJ session</div><div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">14 players · 42 jumps · auto-mapped</div></div>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">2 h ago</span>
+      </div>
+      <div style="display:grid;grid-template-columns:32px 1fr auto;gap:10px;padding:10px 0;border-bottom:1px solid var(--cm-border-soft);align-items:center">
+        <span style="width:28px;height:28px;border-radius:7px;background:#FB923C;color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-sans)">V</span>
+        <div><div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">VITRUVE · back squat profile</div><div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">8 players · velocity-load curves</div></div>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">Yesterday</span>
+      </div>
+      <div style="display:grid;grid-template-columns:32px 1fr auto;gap:10px;padding:10px 0;align-items:center">
+        <span style="width:28px;height:28px;border-radius:7px;background:#16A34A;color:#fff;display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-sans)">A</span>
+        <div><div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">ADR Encoder · bench press</div><div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">6 players · 1RM estimation</div></div>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">Wed</span>
+      </div>
+    </div>
+  </div>
+</aside>
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+<script>
+  // ===== Supabase data layer =====
+  const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const POS_MAP = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', LW:'wg', RW:'wg', MF:'mf', CM:'mf', DM:'mf', AM:'mf', ST:'st', CF:'st' };
+  const POS_LABEL = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', LW:'LW', RW:'RW', MF:'MF', CM:'CM', DM:'DM', AM:'AM', ST:'ST', CF:'CF' };
+
+  let allPlayers = [], selectedPlayerId = null, clubId = null;
+
+  async function boot() {
+    await window.requireAuth();
+    const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+    if (club) {
+      document.getElementById('sideClubName').textContent = club.name || '—';
+      document.getElementById('sideClubMeta').textContent = 'First team';
+    }
+    if (profile) {
+      const init = (profile.full_name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+      document.getElementById('sideUserAv').textContent = init;
+      document.getElementById('sideUserName').textContent = profile.full_name || '—';
+      document.getElementById('sideUserRole').textContent = profile.role || '—';
+    }
+    window.applyClubTheme();
+    clubId = await window.getClubId();
+    if (!clubId) return;
+    await Promise.all([loadRoster(), loadKPIs()]);
+  }
+
+  async function loadRoster() {
+    const { data } = await window.sb.from('players')
+      .select('id, first_name, last_name, position')
+      .eq('club_id', clubId)
+      .order('last_name');
+    allPlayers = data || [];
+    renderRoster();
+    document.getElementById('kpiEvQuarter').innerHTML = `— <sub>/ ${allPlayers.length}</sub>`;
+  }
+
+  async function loadKPIs() {
+    const cutoff = new Date(Date.now() - 90 * 864e5).toISOString().split('T')[0];
+    const { data } = await window.sb.from('evaluations')
+      .select('player_id')
+      .eq('club_id', clubId)
+      .gte('test_date', cutoff);
+    const unique = new Set((data || []).map(e => e.player_id)).size;
+    document.getElementById('kpiEvQuarter').innerHTML = `${unique} <sub>/ ${allPlayers.length || '—'}</sub>`;
+  }
+
+  function renderRoster() {
+    const list = document.getElementById('evRosterList');
+    if (!allPlayers.length) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players found</div>';
+      return;
+    }
+    list.innerHTML = '<div class="ev-list-grp">All players</div>' +
+      allPlayers.map(p => {
+        const name = `${p.first_name} ${p.last_name}`;
+        const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
+        const pos = p.position || '';
+        const posCls = POS_MAP[pos] || 'mf';
+        const posLabel = POS_LABEL[pos] || pos;
+        return `<div class="ev-row" data-pid="${p.id}" onclick="selectPlayer('${p.id}')">
+          <div class="av tn">${init}</div>
+          <div class="info"><div class="name">${name}</div><div class="meta"><span class="pos ${posCls}">${posLabel}</span></div></div>
+          <div class="score-box"><div class="score-v">—</div></div>
+        </div>`;
+      }).join('');
+  }
+
+  async function selectPlayer(pid) {
+    selectedPlayerId = pid;
+    document.querySelectorAll('#evRosterList .ev-row').forEach(r => r.classList.toggle('is-on', r.dataset.pid === pid));
+    const p = allPlayers.find(x => x.id === pid);
+    if (p) {
+      const name = `${p.first_name} ${p.last_name}`;
+      const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
+      document.getElementById('evDetailAv').textContent = init;
+      document.getElementById('evDetailName').textContent = name;
+      document.getElementById('evDetailMeta').innerHTML = `<span>${p.position || '—'}</span>`;
+    }
+    const { data } = await window.sb.from('evaluations')
+      .select('evaluation_type, test_date, value, unit, notes')
+      .eq('player_id', pid)
+      .eq('club_id', clubId)
+      .order('test_date', { ascending: false })
+      .limit(10);
+    renderTimeline(data || []);
+  }
+
+  function renderTimeline(evals) {
+    const tl = document.getElementById('evTimeline');
+    if (!evals.length) {
+      tl.innerHTML = '<h3>Physical test history</h3><div style="padding:24px 0;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No evaluations recorded yet</div>';
+      return;
+    }
+    const rows = evals.map((e, i) => {
+      const dt = new Date(e.test_date);
+      const mon = MONTHS_SHORT[dt.getMonth()];
+      const day = dt.getDate();
+      const prev = evals[i + 1];
+      let deltaHTML = '<div class="ev-tl-delta flat">±0</div>';
+      if (prev && prev.evaluation_type === e.evaluation_type) {
+        const diff = +(e.value - prev.value).toFixed(2);
+        if (diff > 0) deltaHTML = `<div class="ev-tl-delta up"><i class="ti ti-arrow-up-right"></i>+${diff}</div>`;
+        else if (diff < 0) deltaHTML = `<div class="ev-tl-delta down"><i class="ti ti-arrow-down-right"></i>${diff}</div>`;
+      }
+      return `<div class="ev-tl-row">
+        <div class="ev-tl-date"><div class="m">${mon}</div><div class="d">${day}</div></div>
+        <div class="ev-tl-info"><div class="title">${e.evaluation_type}</div><div class="meta">${e.notes || 'Physical test'}</div></div>
+        <div class="ev-tl-score">${e.value} <sub>${e.unit || ''}</sub></div>
+        ${deltaHTML}
+      </div>`;
+    }).join('');
+    tl.innerHTML = '<h3>Physical test history</h3>' + rows;
+  }
+
+  boot();
+
+  // ===== UI interactions (original) =====
+  // Tab switching: physical (default) <-> subjective competencies view
+  document.querySelectorAll('#evTabs .ev-tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#evTabs .ev-tab').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+    const v = b.dataset.view;
+    const phys = document.querySelector('.pt-wrap');
+    const subj = document.getElementById('subjView');
+    if (phys) phys.style.display = (v === 'phys') ? '' : 'none';
+    if (subj) subj.style.display = (v === 'subj') ? '' : 'none';
+  }));
+  document.querySelectorAll('.pt-segs .pt-seg').forEach((b, i) => b.addEventListener('click', () => {
+    document.querySelectorAll('.pt-segs .pt-seg').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+    const views = ['cat','ind','grp'];
+    document.querySelectorAll('.pt-view').forEach(v => v.classList.toggle('is-on', v.dataset.view === views[i]));
+  }));
+  document.querySelectorAll('.pt-cat-list .pt-test').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.pt-cat-list .pt-test').forEach(o => o.classList.remove('is-on'));
+    t.classList.add('is-on');
+  }));
+  document.querySelectorAll('.ev-tabs .ev-tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.ev-tabs .ev-tab').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+  }));
+  document.querySelectorAll('.ev-list .ev-row').forEach(r => r.addEventListener('click', () => {
+    document.querySelectorAll('.ev-list .ev-row').forEach(o => o.classList.remove('is-on'));
+    r.classList.add('is-on');
+  }));
+  document.querySelectorAll('.ev-period .ev-pchip').forEach(p => p.addEventListener('click', () => p.classList.toggle('is-on')));
+
+  // Trends view toggle
+  document.querySelectorAll('#evTabs .ev-tab').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.view;
+    const tr = document.getElementById('trendsView');
+    if (tr) tr.style.display = (v === 'trends') ? '' : 'none';
+  }));
+  // Trends pick toggles
+  document.querySelectorAll('.tr-pick .opt, .tr-chips .tr-chip').forEach(el => el.addEventListener('click', () => el.classList.toggle('is-on')));
+  // Import drawer
+  const ptImpDrawer = document.getElementById('ptImpDrawer');
+  const ptImpOverlay = document.getElementById('ptImpOverlay');
+  const openImp = () => { ptImpDrawer.classList.add('is-open'); ptImpOverlay.classList.add('is-open'); };
+  const closeImp = () => { ptImpDrawer.classList.remove('is-open'); ptImpOverlay.classList.remove('is-open'); };
+  document.getElementById('ptImpOpen').addEventListener('click', openImp);
+  document.getElementById('ptImpClose').addEventListener('click', closeImp);
+  ptImpOverlay.addEventListener('click', closeImp);
+  document.querySelectorAll('.pt-provider').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('.pt-provider').forEach(o => o.classList.remove('is-active'));
+    p.classList.add('is-active');
+  }));
+
+</script>
+</body>
+</html>

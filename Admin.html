@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:var(--cm-bg); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Tabs */
+  .ad-tabs { display:flex; gap:0; padding:0 24px; background:var(--cm-bg); border-bottom:1px solid var(--cm-border); overflow-x:auto; }
+  .ad-tab { padding:0 18px; height:46px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; display:inline-flex; align-items:center; gap:7px; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+  .ad-tab:hover { color:var(--cm-fg); }
+  .ad-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
+  .ad-tab .ti { font-size:16px; }
+  .ad-tab .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:2px 5px; background:var(--cm-bg-soft); border-radius:3px; margin-left:2px; }
+
+  /* Page */
+  .ad-page { padding:24px 28px 64px; max-width:1500px; width:100%; }
+
+  /* Header */
+  .ad-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .ad-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ad-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .ad-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .ad-head .meta { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* KPI strip */
+  .ad-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .ad-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 16px 16px; box-shadow:var(--cm-shadow-1); }
+  .ad-kpi-l { display:flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .ad-kpi-l .ti { font-size:14px; }
+  .ad-kpi-v { font:600 26px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ad-kpi-v sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .ad-kpi-t { margin-top:10px; font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ad-kpi-d { display:inline-flex; align-items:center; gap:3px; font:600 11.5px/1 var(--cm-font-mono); }
+  .ad-kpi-d.up { color:var(--cm-success); }
+  .ad-kpi-d.warn { color:var(--cm-warning); }
+
+  /* Toolbar */
+  .ad-toolbar {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); padding:10px 12px; box-shadow:var(--cm-shadow-1);
+    margin-bottom:14px;
+  }
+  .ad-search { display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); min-width:240px; flex:1; max-width:340px; }
+  .ad-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .ad-search .ti { font-size:16px; color:var(--cm-fg-muted); }
+  .ad-pill { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .ad-pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .ad-pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .ad-pill .dot { width:6px; height:6px; border-radius:50%; }
+  .ad-pill .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .ad-pill.is-on .ct { color:var(--cm-accent); font-weight:600; }
+  .ad-toolbar .grow { flex:1; }
+
+  /* Card */
+  .ad-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); margin-bottom:14px; overflow:hidden; }
+  .ad-card-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .ad-card-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ad-card-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
+  .ad-card-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Member table */
+  .ad-table { width:100%; border-collapse:collapse; }
+  .ad-table thead th { text-align:left; padding:9px 14px; font:500 11px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; }
+  .ad-table tbody td { padding:11px 14px; border-bottom:1px solid var(--cm-border-soft); font:var(--cm-body-sm); color:var(--cm-fg); vertical-align:middle; }
+  .ad-table tbody tr:last-child td { border-bottom:0; }
+  .ad-table tbody tr:hover td { background:var(--cm-bg-soft); cursor:pointer; }
+  .ad-table .col-cb { width:32px; }
+  .ad-table .col-role { width:160px; }
+  .ad-table .col-sections { width:200px; }
+  .ad-table .col-last { width:140px; }
+  .ad-table .col-status { width:120px; }
+  .ad-table .col-actions { width:60px; text-align:right; }
+
+  .ad-pl { display:flex; align-items:center; gap:10px; }
+  .ad-av { width:30px; height:30px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg); display:flex; align-items:center; justify-content:center; font:600 11.5px/1 var(--cm-font-sans); flex-shrink:0; position:relative; }
+  .ad-av.tn { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .ad-av.online::after { content:""; position:absolute; bottom:-1px; right:-1px; width:8px; height:8px; border-radius:50%; background:var(--cm-success); border:2px solid var(--cm-surface); }
+  .ad-pl .name { font:500 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ad-pl .email { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+
+  .ad-role { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:5px; font:600 11px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .ad-role .dot { width:6px; height:6px; border-radius:50%; }
+  .ad-role.owner   { background:rgba(245,158,11,0.12); color:#B45309; }
+  .ad-role.owner .dot { background:#F59E0B; }
+  .ad-role.admin   { background:rgba(220,38,38,0.10); color:#B91C1C; }
+  .ad-role.admin .dot { background:#DC2626; }
+  .ad-role.coach   { background:rgba(37,99,235,0.10); color:#1D4ED8; }
+  .ad-role.coach .dot { background:#2563EB; }
+  .ad-role.perf    { background:rgba(22,163,74,0.12); color:#15803D; }
+  .ad-role.perf .dot { background:#16A34A; }
+  .ad-role.medical { background:rgba(124,58,237,0.10); color:#5B21B6; }
+  .ad-role.medical .dot { background:#7C3AED; }
+  .ad-role.viewer  { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border-soft); }
+  .ad-role.player  { background:rgba(96,165,250,0.16); color:#1E40AF; }
+  .ad-role.player .dot { background:#60A5FA; }
+
+  .ad-sections-cell { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .ad-sec-chip {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:5px;
+    background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft);
+    color:var(--cm-fg-muted);
+  }
+  .ad-sec-chip .ti { font-size:12px; }
+  .ad-sec-chip.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .ad-sections-cell .count { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+
+  .ad-status { display:inline-flex; align-items:center; gap:5px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ad-status .d { width:7px; height:7px; border-radius:50%; }
+  .ad-status.ok   { color:var(--cm-success); }     .ad-status.ok .d { background:var(--cm-success); }
+  .ad-status.pen  { color:var(--cm-warning); }     .ad-status.pen .d { background:var(--cm-warning); }
+  .ad-status.off  { color:var(--cm-fg-faint); }    .ad-status.off .d { background:var(--cm-fg-faint); }
+  .ad-status.susp { color:var(--cm-danger); }      .ad-status.susp .d { background:var(--cm-danger); }
+
+  .ad-last { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+  .ad-row-act { display:inline-flex; gap:2px; justify-content:flex-end; width:100%; }
+  .ad-row-act button { width:28px; height:28px; border-radius:6px; border:0; background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .ad-row-act button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .ad-row-act button .ti { font-size:14px; }
+
+  .ad-cb { width:14px; height:14px; border-radius:4px; border:1.5px solid var(--cm-border-strong); background:var(--cm-surface); cursor:pointer; display:inline-block; vertical-align:middle; }
+  .ad-cb.is-on { background:var(--cm-accent); border-color:var(--cm-accent); position:relative; }
+  .ad-cb.is-on::after { content:""; position:absolute; left:2px; top:1px; width:7px; height:3px; border-left:1.5px solid var(--cm-fg-on-accent); border-bottom:1.5px solid var(--cm-fg-on-accent); transform:rotate(-45deg); }
+
+  /* Pending invites mini */
+  .ad-pending { padding:14px 16px; }
+  .ad-pending-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .ad-pending-row:last-child { border-bottom:0; }
+  .ad-pending-row .info { flex:1; min-width:0; }
+  .ad-pending-row .em { font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
+  .ad-pending-row .meta { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .ad-pending-row .when { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-right:4px; }
+
+  /* Foot pagination */
+  .ad-foot { display:flex; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--cm-border); background:var(--cm-bg-soft); font:var(--cm-meta); color:var(--cm-fg-muted); }
+  .ad-foot .grow { flex:1; }
+
+  /* Secondary: Activity / sections quick view */
+  .ad-grid2 { display:grid; grid-template-columns:1.4fr 1fr; gap:14px; }
+  @media (max-width:1100px) { .ad-grid2 { grid-template-columns:1fr; } }
+
+  /* Activity log */
+  .ad-log { padding:0; }
+  .ad-log-row { display:grid; grid-template-columns:30px 1fr auto; gap:10px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .ad-log-row:last-child { border-bottom:0; }
+  .ad-log-row .ic { width:26px; height:26px; border-radius:7px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); }
+  .ad-log-row .ic .ti { font-size:13px; }
+  .ad-log-row .body { min-width:0; }
+  .ad-log-row .what { font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); }
+  .ad-log-row .what strong { color:var(--cm-fg-strong); font-weight:600; }
+  .ad-log-row .who { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .ad-log-row .when { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); white-space:nowrap; }
+
+  /* Module status (small grid of toggled modules) */
+  .ad-modules { padding:14px 16px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .ad-module-row { display:flex; align-items:center; gap:10px; padding:9px 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:7px; }
+  .ad-module-row .ic { width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .ad-module-row .ic .ti { font-size:14px; }
+  .ad-module-row .info { flex:1; min-width:0; }
+  .ad-module-row .name { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ad-module-row .meta { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .ad-toggle { width:32px; height:18px; background:var(--cm-bg-sunk); border-radius:999px; border:1px solid var(--cm-border-soft); position:relative; cursor:pointer; flex-shrink:0; }
+  .ad-toggle::after { content:""; position:absolute; top:1px; left:1px; width:14px; height:14px; border-radius:50%; background:var(--cm-fg-muted); transition:transform 120ms, background 120ms; }
+  .ad-toggle.is-on { background:var(--cm-accent); border-color:var(--cm-accent); }
+  .ad-toggle.is-on::after { background:#fff; transform:translateX(14px); }
+
+  /* Subscription card */
+  .ad-sub { padding:16px; display:grid; grid-template-columns:1.4fr 1fr; gap:14px; }
+  @media (max-width:900px) { .ad-sub { grid-template-columns:1fr; } }
+  .ad-sub-l h2 { font:600 22px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ad-sub-l h2 small { font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-left:6px; }
+  .ad-sub-l p { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin-top:6px; max-width:50ch; }
+  .ad-sub-l .features { margin-top:12px; display:flex; flex-direction:column; gap:5px; }
+  .ad-sub-l .features li { list-style:none; display:flex; align-items:center; gap:6px; font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
+  .ad-sub-l .features li .ti { font-size:14px; color:var(--cm-success); }
+  .ad-sub-r { background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:10px; padding:14px; }
+  .ad-sub-r .billed { font:500 11px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:6px; }
+  .ad-sub-r .amount { font:600 32px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ad-sub-r .amount small { font:500 14px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .ad-sub-r .next { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:6px; }
+  .ad-sub-r .actions { display:flex; gap:6px; margin-top:14px; }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* === Organization (Owner) view === */
+  .org-bar {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:linear-gradient(135deg, color-mix(in srgb, var(--cm-accent) 8%, var(--cm-surface)) 0%, var(--cm-surface) 100%);
+    border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); padding:14px 16px; box-shadow:var(--cm-shadow-1);
+    margin-bottom:14px;
+  }
+  .org-bar .org-ic {
+    width:42px; height:42px; border-radius:11px;
+    background:var(--cm-accent); color:var(--cm-fg-on-accent);
+    display:flex; align-items:center; justify-content:center;
+    font:700 16px/1 var(--cm-font-sans); letter-spacing:-0.02em;
+    flex-shrink:0;
+  }
+  .org-bar .info { flex:1; min-width:0; }
+  .org-bar .org-name { font:600 16px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
+  .org-bar .org-meta { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px; }
+  .org-bar .org-meta strong { color:var(--cm-fg); font-weight:600; }
+  .org-bar .role-pill { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 10px; border-radius:999px; background:rgba(245,158,11,0.14); color:#B45309; font:600 11px/1 var(--cm-font-mono); letter-spacing:0.04em; border:1px solid rgba(245,158,11,0.30); }
+  .org-bar .role-pill .dot { width:6px; height:6px; border-radius:50%; background:#F59E0B; }
+  .org-bar .right { margin-left:auto; display:flex; gap:8px; }
+
+  /* Clubs / categories grid */
+  .clubs-card { margin-bottom:14px; }
+  .clubs-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; padding:14px; }
+  @media (max-width:1100px) { .clubs-grid { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:680px)  { .clubs-grid { grid-template-columns:1fr; } }
+
+  .club {
+    border:1px solid var(--cm-border); background:var(--cm-surface);
+    border-radius:var(--cm-r-4); padding:14px;
+    cursor:pointer; transition:border-color 120ms, box-shadow 120ms;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .club:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); }
+  .club.is-on { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+
+  .club-top { display:flex; align-items:center; gap:10px; }
+  .club-crest {
+    width:38px; height:38px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font:700 13px/1 var(--cm-font-sans); letter-spacing:-0.02em;
+    flex-shrink:0;
+  }
+  .club-crest.c1 { background:linear-gradient(135deg, #15803D, #166534); }
+  .club-crest.c2 { background:linear-gradient(135deg, #2563EB, #1D4ED8); }
+  .club-crest.c3 { background:linear-gradient(135deg, #7C3AED, #5B21B6); }
+  .club-crest.c4 { background:linear-gradient(135deg, #F59E0B, #B45309); }
+  .club-crest.c5 { background:linear-gradient(135deg, #DC2626, #B91C1C); }
+  .club-crest.c6 { background:linear-gradient(135deg, #0E7C66, #064E3B); }
+
+  .club .h { flex:1; min-width:0; }
+  .club .name { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .club .sub { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .club-current {
+    display:inline-flex; align-items:center; gap:4px;
+    height:18px; padding:0 6px; border-radius:4px;
+    background:var(--cm-accent-soft); color:var(--cm-accent);
+    font:600 10px/1 var(--cm-font-mono); letter-spacing:0.04em;
+  }
+  .club-current .dot { width:5px; height:5px; border-radius:50%; background:var(--cm-accent); box-shadow:0 0 6px var(--cm-accent); }
+
+  .club .stats { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding-top:6px; border-top:1px solid var(--cm-border-soft); }
+  .club .stat-l { font:500 9.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .club .stat-v { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:3px; }
+  .club .stat-v small { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+  .club .plan-row { display:flex; align-items:center; gap:6px; }
+  .club .plan-pill { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 7px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .club .plan-pill.free  { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border-soft); }
+  .club .plan-pill.basic { background:var(--cm-info-bg); color:var(--cm-info); border:1px solid var(--cm-info-bd); }
+  .club .plan-pill.pro   { background:var(--cm-success-bg); color:var(--cm-success); border:1px solid var(--cm-success-bd); }
+  .club .plan-pill.ent   { background:rgba(124,58,237,0.10); color:#5B21B6; border:1px solid rgba(124,58,237,0.25); }
+  .club .plan-price { font:600 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:auto; }
+  .club .limit-bar { height:4px; background:var(--cm-bg-sunk); border-radius:2px; overflow:hidden; }
+  .club .limit-fill { height:100%; background:var(--cm-accent); border-radius:2px; }
+  .club .limit-fill.warn { background:var(--cm-warning); }
+  .club .limit-fill.danger { background:var(--cm-danger); }
+  .club .limit-row { display:flex; align-items:baseline; justify-content:space-between; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:6px; }
+  .club .limit-row strong { color:var(--cm-fg); font-weight:600; }
+
+  /* Add-new card */
+  .club.is-add {
+    border-style:dashed; background:transparent;
+    align-items:center; justify-content:center; gap:8px;
+    color:var(--cm-fg-muted);
+  }
+  .club.is-add:hover { border-color:var(--cm-accent); color:var(--cm-fg); background:var(--cm-accent-soft); }
+  .club.is-add .ic-big { width:36px; height:36px; border-radius:10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; }
+  .club.is-add .ic-big .ti { font-size:18px; }
+  .club.is-add .l { font:500 13px/1.3 var(--cm-font-sans); }
+  .club.is-add small { font:500 11px/1.3 var(--cm-font-mono); color:var(--cm-fg-faint); display:block; text-align:center; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="16 Admin">
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name" id="sideClubName">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="Chat &amp; Tasks.html"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Daily Planning.html"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
+        <a class="hub-nav-item" href="Sessions History.html"><i class="ti ti-history"></i><span>Sessions history</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+            <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item is-active" href="#"><i class="ti ti-shield-lock"></i><span>Admin</span></a>
+        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av" id="userInitials">JR</div>
+        <div class="who"><div class="name" id="userName">Joaquín Reiris</div><div class="role" id="userRole">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Workspace</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Admin</span></div>
+      <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
+    </div>
+
+    <div class="ad-tabs">
+      <button class="ad-tab is-on"><i class="ti ti-users"></i>Members<span class="ct" id="adTabMembers">14</span></button>
+      <button class="ad-tab"><i class="ti ti-shield-check"></i>Roles<span class="ct">7</span></button>
+      <button class="ad-tab"><i class="ti ti-layout-grid"></i>Sections<span class="ct">14</span></button>
+      <button class="ad-tab"><i class="ti ti-credit-card"></i>Subscription</button>
+      <button class="ad-tab"><i class="ti ti-plug"></i>Integrations<span class="ct">4</span></button>
+      <button class="ad-tab"><i class="ti ti-key"></i>Security &amp; SSO</button>
+      <button class="ad-tab"><i class="ti ti-history"></i>Audit log</button>
+    </div>
+
+    <section class="ad-page">
+
+      <!-- ORG-LEVEL BAR (Owner only) -->
+      <div class="org-bar">
+        <div class="org-ic">CG</div>
+        <div class="info">
+          <div class="org-name">Clava Group <span style="color:var(--cm-fg-muted);font-weight:500;font-size:13px">· organization</span></div>
+          <div class="org-meta">5 clubs / categories · <strong>148</strong> total members · <strong>$485</strong>/mo combined billing · owner: <strong>you</strong></div>
+        </div>
+        <span class="role-pill"><span class="dot"></span>OWNER</span>
+        <div class="right">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-invoice" style="font-size:14px"></i>Org invoice</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>Add club / category</button>
+        </div>
+      </div>
+
+      <!-- Clubs grid -->
+      <div class="ad-card clubs-card">
+        <div class="ad-card-h">
+          <h3>Clubs &amp; categories</h3>
+          <span class="sub">5 active · limited per subscription tier</span>
+          <div class="right">
+            <button class="cm-icon-btn"><i class="ti ti-arrows-sort"></i></button>
+            <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+          </div>
+        </div>
+        <div class="clubs-grid">
+
+          <!-- Active club -->
+          <div class="club is-on">
+            <div class="club-top">
+              <div class="club-crest c1">CF</div>
+              <div class="h"><div class="name">Clava FC · First team</div><div class="sub">2025/26 season · Buenos Aires</div></div>
+              <span class="club-current"><span class="dot"></span>Current</span>
+            </div>
+            <div class="plan-row">
+              <span class="plan-pill pro">PRO</span>
+              <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">GPS · analytics · 50 GB</span>
+              <span class="plan-price">$120/mo</span>
+            </div>
+            <div class="limit-row"><span>Players</span><span><strong>27</strong> / 80</span></div>
+            <div class="limit-bar"><span class="limit-fill" style="width:34%"></span></div>
+            <div class="stats">
+              <div><div class="stat-l">Staff</div><div class="stat-v">14<small>/30</small></div></div>
+              <div><div class="stat-l">Modules</div><div class="stat-v">14<small>/14</small></div></div>
+              <div><div class="stat-l">Storage</div><div class="stat-v">8.4<small>GB</small></div></div>
+            </div>
+          </div>
+
+          <!-- Reserves -->
+          <div class="club">
+            <div class="club-top">
+              <div class="club-crest c2">CR</div>
+              <div class="h"><div class="name">Clava FC · Reserves</div><div class="sub">U-23 / B team</div></div>
+            </div>
+            <div class="plan-row">
+              <span class="plan-pill pro">PRO</span>
+              <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">GPS · analytics</span>
+              <span class="plan-price">$100/mo</span>
+            </div>
+            <div class="limit-row"><span>Players</span><span><strong>22</strong> / 80</span></div>
+            <div class="limit-bar"><span class="limit-fill" style="width:28%"></span></div>
+            <div class="stats">
+              <div><div class="stat-l">Staff</div><div class="stat-v">9<small>/30</small></div></div>
+              <div><div class="stat-l">Modules</div><div class="stat-v">14<small>/14</small></div></div>
+              <div><div class="stat-l">Storage</div><div class="stat-v">3.1<small>GB</small></div></div>
+            </div>
+          </div>
+
+          <!-- U-19 -->
+          <div class="club">
+            <div class="club-top">
+              <div class="club-crest c3">U19</div>
+              <div class="h"><div class="name">Clava FC · U-19</div><div class="sub">Youth competitive</div></div>
+            </div>
+            <div class="plan-row">
+              <span class="plan-pill basic">BASIC</span>
+              <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">CSV · reports · 10 GB</span>
+              <span class="plan-price">$60/mo</span>
+            </div>
+            <div class="limit-row"><span>Players</span><span><strong>28</strong> / 40</span></div>
+            <div class="limit-bar"><span class="limit-fill warn" style="width:70%"></span></div>
+            <div class="stats">
+              <div><div class="stat-l">Staff</div><div class="stat-v">6<small>/10</small></div></div>
+              <div><div class="stat-l">Modules</div><div class="stat-v">8<small>/14</small></div></div>
+              <div><div class="stat-l">Storage</div><div class="stat-v">1.4<small>GB</small></div></div>
+            </div>
+          </div>
+
+          <!-- U-17 -->
+          <div class="club">
+            <div class="club-top">
+              <div class="club-crest c4">U17</div>
+              <div class="h"><div class="name">Clava FC · U-17</div><div class="sub">Youth competitive</div></div>
+            </div>
+            <div class="plan-row">
+              <span class="plan-pill basic">BASIC</span>
+              <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">CSV · reports</span>
+              <span class="plan-price">$60/mo</span>
+            </div>
+            <div class="limit-row"><span>Players</span><span><strong>38</strong> / 40 · <span style="color:var(--cm-warning)">near limit</span></span></div>
+            <div class="limit-bar"><span class="limit-fill danger" style="width:95%"></span></div>
+            <div class="stats">
+              <div><div class="stat-l">Staff</div><div class="stat-v">5<small>/10</small></div></div>
+              <div><div class="stat-l">Modules</div><div class="stat-v">8<small>/14</small></div></div>
+              <div><div class="stat-l">Storage</div><div class="stat-v">0.9<small>GB</small></div></div>
+            </div>
+          </div>
+
+          <!-- Women's first team -->
+          <div class="club">
+            <div class="club-top">
+              <div class="club-crest c5">CW</div>
+              <div class="h"><div class="name">Clava FC · Women</div><div class="sub">First team · senior</div></div>
+            </div>
+            <div class="plan-row">
+              <span class="plan-pill pro">PRO</span>
+              <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">GPS · analytics</span>
+              <span class="plan-price">$120/mo</span>
+            </div>
+            <div class="limit-row"><span>Players</span><span><strong>24</strong> / 80</span></div>
+            <div class="limit-bar"><span class="limit-fill" style="width:30%"></span></div>
+            <div class="stats">
+              <div><div class="stat-l">Staff</div><div class="stat-v">11<small>/30</small></div></div>
+              <div><div class="stat-l">Modules</div><div class="stat-v">14<small>/14</small></div></div>
+              <div><div class="stat-l">Storage</div><div class="stat-v">5.2<small>GB</small></div></div>
+            </div>
+          </div>
+
+          <!-- Academy -->
+          <div class="club">
+            <div class="club-top">
+              <div class="club-crest c6">AC</div>
+              <div class="h"><div class="name">Clava FC · Academy</div><div class="sub">U-11 to U-15 · development</div></div>
+            </div>
+            <div class="plan-row">
+              <span class="plan-pill free">FREE</span>
+              <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">RPE · wellness · mobile only</span>
+              <span class="plan-price">$0/mo</span>
+            </div>
+            <div class="limit-row"><span>Players</span><span><strong>14</strong> / 15 · <span style="color:var(--cm-danger)">over soon</span></span></div>
+            <div class="limit-bar"><span class="limit-fill danger" style="width:93%"></span></div>
+            <div class="stats">
+              <div><div class="stat-l">Staff</div><div class="stat-v">4<small>/5</small></div></div>
+              <div><div class="stat-l">Modules</div><div class="stat-v">4<small>/14</small></div></div>
+              <div><div class="stat-l">Storage</div><div class="stat-v">0.2<small>GB</small></div></div>
+            </div>
+          </div>
+
+          <!-- Add new -->
+          <div class="club is-add">
+            <div class="ic-big"><i class="ti ti-plus"></i></div>
+            <div class="l">Add a club or category</div>
+            <small>Add another team or age group<br>— billed separately per category</small>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted)">
+          <i class="ti ti-info-circle" style="font-size:14px"></i>
+          <span>Limits (players, staff, modules, storage) auto-enforced per category subscription. U-17 and Academy are nearing their cap — upgrade to allow growth.</span>
+          <div style="flex:1"></div>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-arrow-up" style="font-size:14px"></i>Upgrade U-17 → Pro</button>
+        </div>
+      </div>
+
+      <header class="ad-head">
+        <div>
+          <h1>Workspace admin <span style="color:var(--cm-fg-muted);font-weight:500;font-size:18px">· Clava FC · First team</span></h1>
+          <div class="ctx" id="adHeadCtx">14 staff · 2 pending invites · created Aug 2024 · <strong>Pro</strong> plan</div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export members</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-mail-plus" style="font-size:14px"></i>Invite staff</button>
+        </div>
+      </header>
+
+      <div class="ad-kpis">
+        <div class="ad-kpi">
+          <div class="ad-kpi-l"><i class="ti ti-users"></i>Total members</div>
+          <div class="ad-kpi-v" id="adKpiMembers">14 <sub>active</sub></div>
+          <div class="ad-kpi-t"><span class="ad-kpi-d up"><i class="ti ti-arrow-up-right"></i>+2</span> last 30d</div>
+        </div>
+        <div class="ad-kpi">
+          <div class="ad-kpi-l"><i class="ti ti-mail"></i>Pending invites</div>
+          <div class="ad-kpi-v">2</div>
+          <div class="ad-kpi-t"><span class="ad-kpi-d warn"><i class="ti ti-clock"></i>4d</span> avg time to accept</div>
+        </div>
+        <div class="ad-kpi">
+          <div class="ad-kpi-l"><i class="ti ti-credit-card"></i>Plan</div>
+          <div class="ad-kpi-v">Pro</div>
+          <div class="ad-kpi-t">$120/mo · next bill May 28</div>
+        </div>
+        <div class="ad-kpi">
+          <div class="ad-kpi-l"><i class="ti ti-database"></i>Storage</div>
+          <div class="ad-kpi-v">8.4 <sub>/ 50 GB</sub></div>
+          <div class="ad-kpi-t">17% used · session videos &amp; reports</div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="ad-toolbar">
+        <div class="ad-search">
+          <i class="ti ti-search"></i>
+          <input placeholder="Search members by name, email, role…">
+        </div>
+        <div style="width:1px;height:24px;background:var(--cm-border)"></div>
+        <button class="ad-pill is-on">All<span class="ct">14</span></button>
+        <button class="ad-pill"><span class="dot" style="background:#F59E0B"></span>Owner<span class="ct">1</span></button>
+        <button class="ad-pill"><span class="dot" style="background:#DC2626"></span>Admin<span class="ct">2</span></button>
+        <button class="ad-pill"><span class="dot" style="background:#2563EB"></span>Coach<span class="ct">3</span></button>
+        <button class="ad-pill"><span class="dot" style="background:#16A34A"></span>Performance<span class="ct">2</span></button>
+        <button class="ad-pill"><span class="dot" style="background:#7C3AED"></span>Medical<span class="ct">3</span></button>
+        <button class="ad-pill"><span class="dot" style="background:#60A5FA"></span>Player<span class="ct">3</span></button>
+        <div class="grow"></div>
+        <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i>Filter</button>
+        <button class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i>Sort</button>
+      </div>
+
+      <!-- Members table -->
+      <div class="ad-card">
+        <div class="ad-card-h">
+          <h3>Staff &amp; players</h3>
+          <span class="sub" id="adMembersSub">14 active · 2 pending</span>
+          <div class="right">
+            <button class="cm-icon-btn"><i class="ti ti-columns-3"></i></button>
+            <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+          </div>
+        </div>
+        <table class="ad-table">
+          <thead>
+            <tr>
+              <th class="col-cb"><span class="ad-cb"></span></th>
+              <th>Member</th>
+              <th class="col-role">Role</th>
+              <th class="col-sections">Sections</th>
+              <th class="col-last">Last active</th>
+              <th class="col-status">Status</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="adTbody">
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av tn online">JR</div><div><div class="name">Joaquín Reiris <span style="color:var(--cm-fg-muted);font-weight:500">(you)</span></div><div class="email">joaquin@clavafc.com</div></div></div></td>
+              <td><span class="ad-role owner"><span class="dot"></span>Owner</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on" title="All"><i class="ti ti-asterisk"></i></span><span class="count">all 14</span></div></td>
+              <td><span class="ad-last">Just now</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb is-on"></span></td>
+              <td><div class="ad-pl"><div class="ad-av online">PF</div><div><div class="name">Pablo Fierro</div><div class="email">pablo.fierro@clavafc.com</div></div></div></td>
+              <td><span class="ad-role admin"><span class="dot"></span>Admin · Coach</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-clipboard-list"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-users-group"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-calendar-stats"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-report-analytics"></i></span><span class="count">+ 6</span></div></td>
+              <td><span class="ad-last">5 min ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av online">MA</div><div><div class="name">Dr. Mariana Acosta</div><div class="email">m.acosta@clavafc.com</div></div></div></td>
+              <td><span class="ad-role medical"><span class="dot"></span>Medical lead</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-bandage"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-heartbeat"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-activity"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-user-check"></i></span><span class="count">+ 2</span></div></td>
+              <td><span class="ad-last">12 min ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">LG</div><div><div class="name">Luis González</div><div class="email">l.gonzalez@clavafc.com</div></div></div></td>
+              <td><span class="ad-role coach"><span class="dot"></span>Assistant coach</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-clipboard-list"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-list-tree"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-soccer-field"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-users-group"></i></span><span class="count">4</span></div></td>
+              <td><span class="ad-last">1 h ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">JC</div><div><div class="name">Joaquín Cabral</div><div class="email">j.cabral@clavafc.com</div></div></div></td>
+              <td><span class="ad-role perf"><span class="dot"></span>Analyst</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-radar-2"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-chart-line"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-report-analytics"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-video"></i></span><span class="count">4</span></div></td>
+              <td><span class="ad-last">Yesterday</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">DM</div><div><div class="name">Dr. Diego Müller</div><div class="email">d.muller@clavafc.com</div></div></div></td>
+              <td><span class="ad-role medical"><span class="dot"></span>Physio</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-bandage"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-heartbeat"></i></span><span class="count">2</span></div></td>
+              <td><span class="ad-last">2d ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">VR</div><div><div class="name">Valentina Reyes</div><div class="email">v.reyes@clavafc.com</div></div></div></td>
+              <td><span class="ad-role admin"><span class="dot"></span>Admin · Ops</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on" title="All"><i class="ti ti-asterisk"></i></span><span class="count">all 14</span></div></td>
+              <td><span class="ad-last">3d ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">FT</div><div><div class="name">Fernanda Torres</div><div class="email">f.torres@clavafc.com</div></div></div></td>
+              <td><span class="ad-role medical"><span class="dot"></span>Nutritionist</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-apple"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-heartbeat"></i></span><span class="count">2</span></div></td>
+              <td><span class="ad-last">3d ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">EG</div><div><div class="name">Esteban Galarza</div><div class="email">capitan@clavafc.com</div></div></div></td>
+              <td><span class="ad-role player"><span class="dot"></span>Player · Captain</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-heartbeat"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-activity"></i></span><span class="count">2</span></div></td>
+              <td><span class="ad-last">2 h ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">RB</div><div><div class="name">Rafael Bertolini</div><div class="email">r.bertolini@clavafc.com</div></div></div></td>
+              <td><span class="ad-role coach"><span class="dot"></span>Goalkeeper coach</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-list-tree"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-clipboard-list"></i></span><span class="count">2</span></div></td>
+              <td><span class="ad-last">5d ago</span></td>
+              <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="ad-cb"></span></td>
+              <td><div class="ad-pl"><div class="ad-av">CR</div><div><div class="name">Carolina Ramírez</div><div class="email">c.ramirez@clavafc.com</div></div></div></td>
+              <td><span class="ad-role viewer"><span class="dot" style="background:var(--cm-fg-muted)"></span>Board · Viewer</span></td>
+              <td><div class="ad-sections-cell"><span class="ad-sec-chip is-on"><i class="ti ti-report-analytics"></i></span><span class="ad-sec-chip is-on"><i class="ti ti-chart-line"></i></span><span class="count">read-only · 2</span></div></td>
+              <td><span class="ad-last">2w ago</span></td>
+              <td><span class="ad-status off"><span class="d"></span>Idle</span></td>
+              <td><div class="ad-row-act"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="ad-foot">
+          <span id="adMemberFoot">Showing <strong style="color:var(--cm-fg)">11</strong> of 14 members</span>
+          <div class="grow"></div>
+          <button class="cm-btn is-ghost is-sm">Load remaining 3<i class="ti ti-arrow-down" style="font-size:14px"></i></button>
+        </div>
+      </div>
+
+      <!-- Two columns: pending invites + audit log preview -->
+      <div class="ad-grid2">
+
+        <!-- Pending invites + module gates -->
+        <div>
+          <div class="ad-card">
+            <div class="ad-card-h">
+              <h3>Pending invites</h3>
+              <span class="sub">2 sent · awaiting accept</span>
+              <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="ad-pending">
+              <div class="ad-pending-row">
+                <div class="ad-av" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-mail"></i></div>
+                <div class="info">
+                  <div class="em">santiago.parra@clavafc.com</div>
+                  <div class="meta"><span class="ad-role perf" style="height:18px;padding:0 6px;font-size:9.5px"><span class="dot"></span>Performance</span> · invited by JR · 4 sections</div>
+                </div>
+                <div>
+                  <span class="when">2d ago</span>
+                  <button class="cm-btn is-ghost is-sm"><i class="ti ti-refresh" style="font-size:13px"></i>Resend</button>
+                  <button class="cm-btn is-ghost is-sm" style="color:var(--cm-danger)"><i class="ti ti-x" style="font-size:13px"></i></button>
+                </div>
+              </div>
+              <div class="ad-pending-row">
+                <div class="ad-av" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-mail"></i></div>
+                <div class="info">
+                  <div class="em">d.lopez@clavafc.com</div>
+                  <div class="meta"><span class="ad-role medical" style="height:18px;padding:0 6px;font-size:9.5px"><span class="dot"></span>Medical</span> · invited by MA · 2 sections</div>
+                </div>
+                <div>
+                  <span class="when">6d ago</span>
+                  <button class="cm-btn is-ghost is-sm"><i class="ti ti-refresh" style="font-size:13px"></i>Resend</button>
+                  <button class="cm-btn is-ghost is-sm" style="color:var(--cm-danger)"><i class="ti ti-x" style="font-size:13px"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Subscription summary card -->
+          <div class="ad-card">
+            <div class="ad-card-h">
+              <h3>Subscription &amp; billing</h3>
+              <span class="sub">First team category · Pro plan</span>
+              <div class="right">
+                <button class="cm-btn is-outline is-sm"><i class="ti ti-arrow-up" style="font-size:14px"></i>Upgrade</button>
+              </div>
+            </div>
+            <div class="ad-sub">
+              <div class="ad-sub-l">
+                <h2>Professional <small>· $120/mo</small></h2>
+                <p>Category-level billing. Per-category, GPS &amp; analytics, predictive injury alerts. 25% below ClubMetrics equivalent.</p>
+                <ul class="features">
+                  <li><i class="ti ti-check"></i>Up to 80 players · GPS live (Catapult, StatSports)</li>
+                  <li><i class="ti ti-check"></i>Predictive injury alerts &amp; custom reports</li>
+                  <li><i class="ti ti-check"></i>14 modules · unlimited microcycles · history</li>
+                  <li><i class="ti ti-check"></i>Mobile player surfaces (Wellness · RPE)</li>
+                  <li><i class="ti ti-check"></i>50 GB storage · email support</li>
+                </ul>
+              </div>
+              <div class="ad-sub-r">
+                <div class="billed">Next bill</div>
+                <div class="amount">$120<small>.00 USD</small></div>
+                <div class="next">May 28, 2026 · Visa ·· 4827 · auto-renew</div>
+                <div class="actions">
+                  <button class="cm-btn is-outline is-sm"><i class="ti ti-credit-card" style="font-size:14px"></i>Card</button>
+                  <button class="cm-btn is-outline is-sm"><i class="ti ti-file-invoice" style="font-size:14px"></i>Invoices</button>
+                </div>
+                <div style="margin-top:12px;font:500 11.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">+ 3 more categories billed separately ($45–120 each)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: module gates + recent audit -->
+        <div>
+          <div class="ad-card">
+            <div class="ad-card-h">
+              <h3>Module toggles</h3>
+              <span class="sub">enable per workspace</span>
+              <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="ad-modules">
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-info-bg);color:var(--cm-info)"><i class="ti ti-clipboard-list"></i></div><div class="info"><div class="name">Planner</div><div class="meta">14 / 14 staff</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-success-bg);color:var(--cm-success)"><i class="ti ti-list-tree"></i></div><div class="info"><div class="name">Sessions lib</div><div class="meta">14 / 14</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-violet-bg);color:var(--cm-violet)"><i class="ti ti-users-group"></i></div><div class="info"><div class="name">Squad</div><div class="meta">14 / 14</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-warning-bg);color:var(--cm-warning)"><i class="ti ti-user-check"></i></div><div class="info"><div class="name">Availability</div><div class="meta">12 / 14</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-success-bg);color:var(--cm-success)"><i class="ti ti-heartbeat"></i></div><div class="info"><div class="name">Wellness</div><div class="meta">14 + 27 players</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-warning-bg);color:var(--cm-warning)"><i class="ti ti-chart-line"></i></div><div class="info"><div class="name">Load monitor</div><div class="meta">7 / 14</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-info-bg);color:var(--cm-info)"><i class="ti ti-radar-2"></i></div><div class="info"><div class="name">GPS analysis</div><div class="meta">6 / 14 · Pro only</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-danger-bg);color:var(--cm-danger)"><i class="ti ti-bandage"></i></div><div class="info"><div class="name">Injuries</div><div class="meta">5 / 14</div></div><div class="ad-toggle is-on"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-success-bg);color:var(--cm-success)"><i class="ti ti-apple"></i></div><div class="info"><div class="name">Nutrition</div><div class="meta">4 / 14</div></div><div class="ad-toggle"></div></div>
+              <div class="ad-module-row"><div class="ic" style="background:var(--cm-violet-bg);color:var(--cm-violet)"><i class="ti ti-video"></i></div><div class="info"><div class="name">Video room</div><div class="meta">Soon · Q3</div></div><div class="ad-toggle"></div></div>
+            </div>
+          </div>
+
+          <div class="ad-card">
+            <div class="ad-card-h">
+              <h3>Recent activity</h3>
+              <span class="sub">audit log · last 24 h</span>
+              <div class="right"><button class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button></div>
+            </div>
+            <div class="ad-log">
+              <div class="ad-log-row">
+                <div class="ic" style="color:var(--cm-accent)"><i class="ti ti-user-plus"></i></div>
+                <div class="body">
+                  <div class="what"><strong>Joaquín Reiris</strong> invited <strong>santiago.parra@clavafc.com</strong> as Performance</div>
+                  <div class="who">4 sections granted · invite delivered</div>
+                </div>
+                <span class="when">2 h ago</span>
+              </div>
+              <div class="ad-log-row">
+                <div class="ic" style="color:var(--cm-warning)"><i class="ti ti-shield-half"></i></div>
+                <div class="body">
+                  <div class="what"><strong>Valentina Reyes</strong> changed role of <strong>Diego Müller</strong> to Physio</div>
+                  <div class="who">was: Medical lead</div>
+                </div>
+                <span class="when">5 h ago</span>
+              </div>
+              <div class="ad-log-row">
+                <div class="ic" style="color:var(--cm-info)"><i class="ti ti-plug-connected"></i></div>
+                <div class="body">
+                  <div class="what"><strong>Joaquín Reiris</strong> connected <strong>StatSports Sonra</strong></div>
+                  <div class="who">OAuth · API key rotated</div>
+                </div>
+                <span class="when">Yesterday</span>
+              </div>
+              <div class="ad-log-row">
+                <div class="ic" style="color:var(--cm-danger)"><i class="ti ti-shield-x"></i></div>
+                <div class="body">
+                  <div class="what">Catapult Vector OAuth <strong>token expired</strong></div>
+                  <div class="who">auto-disabled · GPS Analysis affected</div>
+                </div>
+                <span class="when">Wed</span>
+              </div>
+              <div class="ad-log-row">
+                <div class="ic" style="color:var(--cm-success)"><i class="ti ti-credit-card"></i></div>
+                <div class="body">
+                  <div class="what"><strong>Professional</strong> subscription renewed</div>
+                  <div class="who">$120.00 · Visa ·· 4827</div>
+                </div>
+                <span class="when">Apr 28</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+
+  window.applyClubTheme();
+  document.getElementById('sideClubName').textContent = club?.name || 'ClavaMetrics';
+  const myInitials = (profile?.full_name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  document.getElementById('userInitials').textContent = myInitials;
+  document.getElementById('userName').textContent = profile?.full_name || '';
+  document.getElementById('userRole').textContent = profile?.role || 'Staff';
+
+  const { data: members } = await window.sb
+    .from('profiles')
+    .select('*')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: true });
+
+  if (!members?.length) return;
+
+  const count = members.length;
+  document.getElementById('adKpiMembers').innerHTML = `${count} <sub>active</sub>`;
+  document.getElementById('adTabMembers').textContent = count;
+  document.getElementById('adMembersSub').textContent = `${count} active`;
+  document.getElementById('adHeadCtx').innerHTML = `${count} members · created ${club?.created_at ? new Date(club.created_at).getFullYear() : '—'} · <strong>${club?.plan || 'Pro'}</strong> plan`;
+  document.getElementById('adMemberFoot').innerHTML = `Showing <strong style="color:var(--cm-fg)">${count}</strong> of ${count} members`;
+
+  const ROLE_CSS = {
+    owner:'owner', admin:'admin', coach:'coach', head_coach:'coach', assistant_coach:'coach',
+    performance:'perf', analyst:'perf', strength:'perf',
+    medical:'medical', physio:'medical', doctor:'medical', nutritionist:'medical',
+    player:'player'
+  };
+
+  function roleClass(r) { return ROLE_CSS[(r || '').toLowerCase()] || 'viewer'; }
+  function roleLabel(p) {
+    const parts = [p.role, p.club_role].filter(Boolean);
+    return parts.length ? parts.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' · ') : 'Member';
+  }
+
+  function relTime(iso) {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso);
+    const mins = Math.floor(diff / 60000);
+    if (mins < 2) return 'Just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+  }
+
+  document.getElementById('adTbody').innerHTML = members.map(m => {
+    const isMe = m.id === profile?.id;
+    const name = m.full_name || m.email || 'Member';
+    const email = m.email || '';
+    const av = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const rc = roleClass(m.role || m.club_role);
+    const rl = roleLabel(m);
+    const last = relTime(m.last_seen_at || m.updated_at || m.created_at);
+
+    return `<tr>
+      <td><span class="ad-cb"></span></td>
+      <td><div class="ad-pl">
+        <div class="ad-av${isMe ? ' tn' : ''}">${av}</div>
+        <div>
+          <div class="name">${name}${isMe ? ' <span style="color:var(--cm-fg-muted);font-weight:500">(you)</span>' : ''}</div>
+          ${email ? `<div class="email">${email}</div>` : ''}
+        </div>
+      </div></td>
+      <td><span class="ad-role ${rc}"><span class="dot"></span>${rl}</span></td>
+      <td><div class="ad-sections-cell"><span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">—</span></div></td>
+      <td><span class="ad-last">${last}</span></td>
+      <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+      <td><div class="ad-row-act">${isMe ? '' : '<button><i class="ti ti-edit"></i></button>'}<button><i class="ti ti-dots"></i></button></div></td>
+    </tr>`;
+  }).join('');
+})().catch(console.error);
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+<script>
+  document.querySelectorAll('.club:not(.is-add)').forEach(c => c.addEventListener('click', () => {
+    document.querySelectorAll('.club').forEach(o => o.classList.remove('is-on'));
+    c.classList.add('is-on');
+  }));
+  document.querySelectorAll('.ad-tabs .ad-tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.ad-tabs .ad-tab').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+  }));
+  document.querySelectorAll('.ad-toolbar .ad-pill').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('.ad-toolbar .ad-pill').forEach(o => o.classList.remove('is-on'));
+    p.classList.add('is-on');
+  }));
+  document.querySelectorAll('.ad-cb').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
+  document.querySelectorAll('.ad-toggle').forEach(t => t.addEventListener('click', () => t.classList.toggle('is-on')));
+</script>
+</body>
+</html>

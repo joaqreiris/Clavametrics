@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squad — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* Shell (same as Hub) ----------------------------------- */
+  .hub-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+  .hub-side {
+    background: var(--cm-side-bg); color: var(--cm-side-fg);
+    border-right: 1px solid var(--cm-side-border);
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .hub-main { display: flex; flex-direction: column; min-width: 0; background: var(--cm-bg); }
+
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-brand .switch .ti { font-size:14px; }
+
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; transition:background var(--cm-dur-1), color var(--cm-dur-1); }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-nav-item.is-active .count { color:var(--cm-side-item-active-fg); opacity:0.8; }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); cursor:pointer; }
+  .hub-user:hover { background:var(--cm-side-item-active-bg); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-user .ti { font-size:14px; color:var(--cm-side-fg-muted); }
+
+  /* Topbar -------------------------------------------------- */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search:hover { border-color:var(--cm-border-strong); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search input::placeholder { color:var(--cm-fg-faint); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* Page --------------------------------------------------- */
+  .sq-page { padding:24px 28px 64px; max-width:1400px; width:100%; }
+  .sq-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+  .sq-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .sq-head p { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .sq-head .meta { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Toolbar ----------------------------------------------- */
+  .sq-toolbar {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); padding:10px 12px; box-shadow:var(--cm-shadow-1);
+    margin-bottom:14px;
+  }
+  .sq-search { display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); min-width:240px; flex:1; max-width:340px; }
+  .sq-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .sq-search input::placeholder { color:var(--cm-fg-faint); }
+  .sq-search .ti { font-size:16px; color:var(--cm-fg-muted); }
+
+  .sq-segs { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); gap:2px; }
+  .sq-seg { padding:0 12px; height:28px; display:inline-flex; align-items:center; gap:6px; border-radius:5px; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; border:0; background:transparent; }
+  .sq-seg:hover { color:var(--cm-fg); }
+  .sq-seg.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  .sq-seg .ti { font-size:14px; }
+  .sq-seg .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+
+  .sq-filters { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .sq-pill-filter {
+    display:inline-flex; align-items:center; gap:5px;
+    height:28px; padding:0 10px; border-radius:999px;
+    border:1px solid var(--cm-border); background:var(--cm-surface);
+    color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans);
+    cursor:pointer;
+  }
+  .sq-pill-filter:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .sq-pill-filter.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .sq-pill-filter .ti { font-size:13px; }
+  .sq-pill-filter .dot { width:7px; height:7px; border-radius:50%; }
+  .sq-pill-filter.is-on .ct { color:var(--cm-accent); font-weight:600; }
+  .sq-pill-filter .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+
+  .sq-toolbar .grow { flex:1; }
+  .sq-actions { display:flex; gap:6px; align-items:center; }
+
+  /* Table ---------------------------------------------- */
+  .sq-table-wrap {
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); overflow:hidden; box-shadow:var(--cm-shadow-1);
+  }
+  .sq-table { width:100%; border-collapse:collapse; }
+  .sq-table thead th {
+    text-align:left; padding:9px 12px;
+    font:500 11px/1 var(--cm-font-sans);
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--cm-fg-muted);
+    background:var(--cm-bg-soft);
+    border-bottom:1px solid var(--cm-border);
+    position:sticky; top:56px; z-index:1;
+    white-space:nowrap;
+  }
+  .sq-table th.sortable { cursor:pointer; user-select:none; }
+  .sq-table th.sortable:hover { color:var(--cm-fg); }
+  .sq-table th .ti { font-size:12px; vertical-align:-1px; margin-left:2px; opacity:0.6; }
+  .sq-table tbody td {
+    padding:10px 12px;
+    border-bottom:1px solid var(--cm-border-soft);
+    font:var(--cm-body-sm);
+    color:var(--cm-fg);
+    vertical-align:middle;
+  }
+  .sq-table tbody tr:last-child td { border-bottom:0; }
+  .sq-table tbody tr { cursor:pointer; transition:background var(--cm-dur-1); }
+  .sq-table tbody tr:hover { background:var(--cm-bg-soft); }
+  .sq-table tbody tr.is-selected { background:var(--cm-accent-soft); }
+  .sq-table .col-cb { width:30px; }
+  .sq-table .col-num { width:54px; }
+  .sq-table .col-pos { width:90px; }
+  .sq-table .col-age { width:60px; }
+  .sq-table .col-foot { width:80px; }
+  .sq-table .col-anthro { width:120px; }
+  .sq-table .col-role { width:130px; }
+  .sq-table .col-joined { width:110px; }
+  .sq-table .col-actions { width:56px; text-align:right; }
+
+  /* Cell internals */
+  .sq-num {
+    width:30px; height:30px; border-radius:7px;
+    background:var(--cm-bg-sunk); border:1px solid var(--cm-border);
+    display:inline-flex; align-items:center; justify-content:center;
+    font:600 14px/1 var(--cm-font-mono); color:var(--cm-fg-strong);
+    letter-spacing:-0.01em;
+  }
+  .sq-player { display:flex; align-items:center; gap:10px; min-width:0; }
+  .sq-av { width:30px; height:30px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .sq-av.is-tinted { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .sq-name { font:500 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sq-name-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .sq-sub { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .sq-flag { width:16px; height:11px; border-radius:2px; background:linear-gradient(180deg, #74acdf 33%, #fff 33% 66%, #74acdf 66%); border:1px solid rgba(0,0,0,0.08); flex-shrink:0; box-shadow:inset 0 -3px 0 transparent; }
+  .sq-flag.ar { background:linear-gradient(180deg,#74acdf 33%,#fff 33% 66%,#74acdf 66%); }
+  .sq-flag.br { background:#22A040; position:relative; }
+  .sq-flag.uy { background:linear-gradient(180deg,#fff 50%, #0038A8 50%); }
+  .sq-flag.cl { background:linear-gradient(180deg,#fff 50%, #D52B1E 50%); }
+  .sq-flag.es { background:linear-gradient(180deg,#AA151B 25%, #F1BF00 25% 75%, #AA151B 75%); }
+  .sq-flag.fr { background:linear-gradient(90deg,#002395 33%, #fff 33% 66%, #ED2939 66%); }
+  .sq-flag.co { background:linear-gradient(180deg,#FCD116 50%,#003893 50% 75%,#CE1126 75%); }
+  .sq-flag.pe { background:linear-gradient(90deg,#D91023 33%, #fff 33% 66%, #D91023 66%); }
+
+  .sq-pos {
+    display:inline-flex; align-items:center; gap:5px;
+    height:22px; padding:0 8px; border-radius:5px;
+    font:600 11px/1 var(--cm-font-mono);
+    letter-spacing:0.04em;
+  }
+  .sq-pos.gk { background:rgba(220,38,38,0.10); color:#B91C1C; }
+  .sq-pos.cb { background:rgba(37,99,235,0.10); color:#1D4ED8; }
+  .sq-pos.fb { background:rgba(96,165,250,0.14); color:#1D4ED8; }
+  .sq-pos.mf { background:rgba(22,163,74,0.12); color:#15803D; }
+  .sq-pos.wg { background:rgba(217,119,6,0.12); color:#B45309; }
+  .sq-pos.st { background:rgba(220,38,38,0.10); color:#B91C1C; }
+
+  .sq-anthro { display:flex; align-items:baseline; gap:6px; font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg); }
+  .sq-anthro .u { color:var(--cm-fg-faint); font-size:11px; }
+  .sq-anthro .sep { color:var(--cm-border-strong); }
+
+  .sq-role-pill {
+    display:inline-flex; align-items:center; gap:4px;
+    height:20px; padding:0 7px; border-radius:4px;
+    font:600 10.5px/1 var(--cm-font-mono);
+    letter-spacing:0.04em; text-transform:uppercase;
+    background:var(--cm-neutral-bg); color:var(--cm-neutral);
+    border:1px solid var(--cm-neutral-bd);
+  }
+  .sq-role-pill.is-captain { background:var(--cm-warning-bg); color:var(--cm-warning); border-color:var(--cm-warning-bd); }
+  .sq-role-pill.is-vice    { background:var(--cm-info-bg);    color:var(--cm-info);    border-color:var(--cm-info-bd); }
+  .sq-role-pill.is-academy { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+  .sq-role-pill.is-loan    { background:var(--cm-violet-bg);  color:var(--cm-violet);  border-color:var(--cm-violet-bd); }
+  .sq-role-pill .ti { font-size:11px; }
+
+  .sq-num-cell, .sq-mono { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg); text-align:right; }
+  .sq-num-cell.is-warn { color:var(--cm-warning); }
+  .sq-num-cell.is-danger { color:var(--cm-danger); }
+  .sq-num-cell.is-good { color:var(--cm-success); }
+
+  .sq-meter { display:inline-flex; align-items:center; gap:6px; }
+  .sq-meter-bar { width:48px; height:4px; border-radius:2px; background:var(--cm-bg-sunk); overflow:hidden; }
+  .sq-meter-fill { height:100%; border-radius:2px; }
+
+  .sq-cb { width:14px; height:14px; border-radius:4px; border:1.5px solid var(--cm-border-strong); cursor:pointer; background:var(--cm-surface); display:inline-block; vertical-align:middle; }
+  .sq-cb.is-on { background:var(--cm-accent); border-color:var(--cm-accent); position:relative; }
+  .sq-cb.is-on::after { content:""; position:absolute; left:2px; top:1px; width:7px; height:3px; border-left:1.5px solid var(--cm-fg-on-accent); border-bottom:1.5px solid var(--cm-fg-on-accent); transform:rotate(-45deg); }
+
+  .sq-row-actions { display:inline-flex; gap:2px; }
+  .sq-row-actions button { width:28px; height:28px; border-radius:6px; border:0; background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .sq-row-actions button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .sq-row-actions button .ti { font-size:15px; }
+
+  /* Group header row */
+  .sq-table tbody tr.is-group td {
+    background:var(--cm-bg-soft);
+    border-top:1px solid var(--cm-border);
+    padding:8px 12px;
+    font:500 11px/1 var(--cm-font-sans);
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--cm-fg-muted);
+  }
+  .sq-table tbody tr.is-group td .sq-group-count {
+    font:500 11.5px/1 var(--cm-font-mono);
+    color:var(--cm-fg-faint);
+    margin-left:6px;
+    text-transform:none; letter-spacing:0;
+  }
+
+  /* Footer */
+  .sq-table-foot {
+    display:flex; align-items:center; gap:12px;
+    padding:10px 12px;
+    border-top:1px solid var(--cm-border);
+    background:var(--cm-bg-soft);
+    font:var(--cm-meta); color:var(--cm-fg-muted);
+  }
+  .sq-table-foot .grow { flex:1; }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="04 Squad">
+
+  <!-- Sidebar (same as Hub) -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/>
+        </svg>
+      </div>
+      <div class="body">
+        <div class="name" id="sideClubName">Clava FC</div>
+        <div class="club">First team · 2025/26</div>
+      </div>
+      <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
+    </div>
+
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-history"></i><span>Sessions history</span></a>
+        <a class="hub-nav-item is-active" href="#"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+            <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av" id="userInitials">JR</div>
+        <div class="who">
+          <div class="name" id="userName">Joaquín Reiris</div>
+          <div class="role" id="userRole">Performance · Admin</div>
+        </div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i>
+        <span>Clava FC</span>
+        <span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Squad</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, sessions, microcycles…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="sq-page">
+
+      <header class="sq-head">
+        <div>
+          <h1>Squad</h1>
+          <p id="sqHeadP">27 players · First team 2025/26</p>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>Add player</button>
+        </div>
+      </header>
+
+      <!-- Toolbar -->
+      <div class="sq-toolbar">
+        <div class="sq-search">
+          <i class="ti ti-search"></i>
+          <input placeholder="Filter by name, dorsal or nationality…">
+        </div>
+
+        <div class="sq-segs">
+          <button class="sq-seg is-on"><i class="ti ti-list-details"></i>List <span class="ct" id="sqListCt">27</span></button>
+          <button class="sq-seg"><i class="ti ti-layout-grid"></i>Cards</button>
+          <button class="sq-seg"><i class="ti ti-binary-tree-2"></i>Depth chart</button>
+        </div>
+
+        <div class="grow"></div>
+
+        <div class="sq-filters">
+          <button class="sq-pill-filter is-on">All<span class="ct">27</span></button>
+          <button class="sq-pill-filter"><span class="dot" style="background:var(--cm-pos-gk)"></span>GK<span class="ct">3</span></button>
+          <button class="sq-pill-filter"><span class="dot" style="background:var(--cm-pos-cb)"></span>CB<span class="ct">4</span></button>
+          <button class="sq-pill-filter"><span class="dot" style="background:var(--cm-pos-fb)"></span>FB<span class="ct">4</span></button>
+          <button class="sq-pill-filter"><span class="dot" style="background:var(--cm-pos-mf)"></span>MF<span class="ct">7</span></button>
+          <button class="sq-pill-filter"><span class="dot" style="background:var(--cm-pos-wg)"></span>WG<span class="ct">4</span></button>
+          <button class="sq-pill-filter"><span class="dot" style="background:var(--cm-pos-st)"></span>ST<span class="ct">5</span></button>
+        </div>
+
+        <div class="sq-actions">
+          <button class="cm-icon-btn" title="Group by"><i class="ti ti-layout-rows"></i></button>
+          <button class="cm-icon-btn" title="Columns"><i class="ti ti-columns-3"></i></button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="sq-table-wrap">
+        <table class="sq-table">
+          <thead>
+            <tr>
+              <th class="col-cb"><span class="sq-cb" data-cb></span></th>
+              <th class="col-num">#</th>
+              <th class="sortable">Player <i class="ti ti-arrows-up-down"></i></th>
+              <th class="col-pos">Pos</th>
+              <th class="col-age sortable">Age</th>
+              <th class="col-foot">Foot</th>
+              <th class="col-anthro">H / W</th>
+              <th class="col-role">Role</th>
+              <th class="col-joined sortable">Joined</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+
+          <tbody id="sqTbody">
+            <tr class="is-group"><td colspan="10"><i class="ti ti-shield" style="vertical-align:-2px;font-size:13px"></i> Goalkeepers <span class="sq-group-count">3 players</span></td></tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">1</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av is-tinted">EG</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Esteban Galarza</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">12.05.1991</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos gk">GK</span></td>
+              <td class="sq-mono">34</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">189<span class="u">cm</span><span class="sep">·</span>84<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-captain"><i class="ti ti-armchair"></i>Captain</span></td>
+              <td class="sq-mono">Jul 2018</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">12</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">SM</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Sebastián Mora</span><span class="sq-flag uy"></span></div>
+                    <div class="sq-sub">23.09.1996</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos gk">GK</span></td>
+              <td class="sq-mono">29</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">186<span class="u">cm</span><span class="sep">·</span>81<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill ">First team</span></td>
+              <td class="sq-mono">Jan 2022</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">25</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">AT</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Agustín Tévez</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">04.02.2005</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos gk">GK</span></td>
+              <td class="sq-mono">20</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">191<span class="u">cm</span><span class="sep">·</span>78<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-academy"><i class="ti ti-school"></i>Academy</span></td>
+              <td class="sq-mono">Aug 2024</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr class="is-group"><td colspan="10"><i class="ti ti-wall" style="vertical-align:-2px;font-size:13px"></i> Centre backs <span class="sq-group-count">4 players</span></td></tr>
+            <tr class="is-selected">
+              <td><span class="sq-cb is-on" data-cb></span></td>
+              <td><span class="sq-num">4</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av is-tinted">JB</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Juan Bocanegra</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">17.11.1993</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos cb">CB</span></td>
+              <td class="sq-mono">32</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">188<span class="u">cm</span><span class="sep">·</span>82<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-vice"><i class="ti ti-shield-half"></i>Vice-captain</span></td>
+              <td class="sq-mono">Aug 2019</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">6</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">RS</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Rodrigo Sosa</span><span class="sq-flag br"></span></div>
+                    <div class="sq-sub">28.06.1997</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos cb">CB</span></td>
+              <td class="sq-mono">28</td>
+              <td class="sq-mono">Left</td>
+              <td><span class="sq-anthro">184<span class="u">cm</span><span class="sep">·</span>80<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill ">First team</span></td>
+              <td class="sq-mono">Jul 2021</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">15</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">LC</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Lucas Carrasco</span><span class="sq-flag cl"></span></div>
+                    <div class="sq-sub">03.04.1998</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos cb">CB</span></td>
+              <td class="sq-mono">27</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">186<span class="u">cm</span><span class="sep">·</span>79<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-loan"><i class="ti ti-arrows-exchange"></i>On loan</span></td>
+              <td class="sq-mono">Jul 2025</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">22</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">NF</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Nicolás Ferreyra</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">19.08.2003</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos cb">CB</span></td>
+              <td class="sq-mono">22</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">189<span class="u">cm</span><span class="sep">·</span>77<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-academy"><i class="ti ti-school"></i>Academy</span></td>
+              <td class="sq-mono">Mar 2023</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr class="is-group"><td colspan="10"><i class="ti ti-circles-relation" style="vertical-align:-2px;font-size:13px"></i> Midfielders <span class="sq-group-count">7 players</span></td></tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">8</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av is-tinted">MP</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Mateo Paredes</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">01.03.1995</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos mf">MF</span></td>
+              <td class="sq-mono">30</td>
+              <td class="sq-mono">Both</td>
+              <td><span class="sq-anthro">178<span class="u">cm</span><span class="sep">·</span>74<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill ">First team</span></td>
+              <td class="sq-mono">Feb 2020</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">10</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">FD</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Felipe Domínguez</span><span class="sq-flag co"></span></div>
+                    <div class="sq-sub">07.10.1999</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos mf">MF</span></td>
+              <td class="sq-mono">26</td>
+              <td class="sq-mono">Left</td>
+              <td><span class="sq-anthro">175<span class="u">cm</span><span class="sep">·</span>69<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill ">First team</span></td>
+              <td class="sq-mono">Jul 2023</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">14</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">DV</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Diego Villalba</span><span class="sq-flag pe"></span></div>
+                    <div class="sq-sub">22.12.1996</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos mf">MF</span></td>
+              <td class="sq-mono">29</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">180<span class="u">cm</span><span class="sep">·</span>75<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill ">First team</span></td>
+              <td class="sq-mono">Jul 2024</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">17</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">PG</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Pedro Gimenez</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">11.06.2001</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos mf">MF</span></td>
+              <td class="sq-mono">24</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">181<span class="u">cm</span><span class="sep">·</span>72<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-academy"><i class="ti ti-school"></i>Academy</span></td>
+              <td class="sq-mono">Aug 2022</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr class="is-group"><td colspan="10"><i class="ti ti-flame" style="vertical-align:-2px;font-size:13px"></i> Wingers & Forwards <span class="sq-group-count">9 players</span></td></tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">7</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av is-tinted">RV</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Ramiro Vega</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">14.09.1998</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos wg">WG</span></td>
+              <td class="sq-mono">27</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">177<span class="u">cm</span><span class="sep">·</span>71<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill ">First team</span></td>
+              <td class="sq-mono">Jan 2021</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">9</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">SR</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Santiago Rivas</span><span class="sq-flag es"></span></div>
+                    <div class="sq-sub">18.07.1994</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos st">ST</span></td>
+              <td class="sq-mono">31</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">183<span class="u">cm</span><span class="sep">·</span>78<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-captain"><i class="ti ti-star"></i>Top scorer</span></td>
+              <td class="sq-mono">Aug 2019</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">11</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">TL</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Tomás López</span><span class="sq-flag fr"></span></div>
+                    <div class="sq-sub">25.02.2000</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos wg">WG</span></td>
+              <td class="sq-mono">25</td>
+              <td class="sq-mono">Left</td>
+              <td><span class="sq-anthro">174<span class="u">cm</span><span class="sep">·</span>68<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill ">First team</span></td>
+              <td class="sq-mono">Jul 2024</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+            <tr>
+              <td><span class="sq-cb" data-cb></span></td>
+              <td><span class="sq-num">19</span></td>
+              <td>
+                <div class="sq-player">
+                  <div class="sq-av">IC</div>
+                  <div>
+                    <div class="sq-name-row"><span class="sq-name">Ignacio Cardozo</span><span class="sq-flag ar"></span></div>
+                    <div class="sq-sub">06.05.2002</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="sq-pos st">ST</span></td>
+              <td class="sq-mono">23</td>
+              <td class="sq-mono">Right</td>
+              <td><span class="sq-anthro">185<span class="u">cm</span><span class="sep">·</span>76<span class="u">kg</span></span></td>
+              <td><span class="sq-role-pill is-academy"><i class="ti ti-school"></i>Academy</span></td>
+              <td class="sq-mono">Jul 2023</td>
+              <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="sq-table-foot">
+          <span id="sqTableFoot">Showing <strong style="color:var(--cm-fg)">14</strong> of 27 players</span>
+          <div class="grow"></div>
+          <button class="cm-btn is-ghost is-sm">Load remaining 13<i class="ti ti-arrow-down" style="font-size:14px"></i></button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<!-- Tweaks + Settings -->
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script>
+// Position → display config
+const POS_CFG = {
+  GK: { group:'Goalkeepers',        icon:'ti-shield',            css:'gk', pill:'GK', order:0 },
+  CB: { group:'Defenders',          icon:'ti-wall',              css:'cb', pill:'CB', order:1 },
+  LB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  RB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  FB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  MF: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  DM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  CM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  WG: { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  ST: { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
+  CF: { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
+};
+const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers & Forwards'];
+
+function calcAge(dob) {
+  if (!dob) return '—';
+  const d = new Date(dob), now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  if (now < new Date(now.getFullYear(), d.getMonth(), d.getDate())) age--;
+  return age;
+}
+function fmtDob(dob) {
+  if (!dob) return '—';
+  return new Date(dob).toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+let _allPlayers = [];
+let _activeFilter = 'All';
+let _searchQ = '';
+
+function renderTable() {
+  const tbody = document.getElementById('sqTbody');
+  const foot  = document.getElementById('sqTableFoot');
+  if (!tbody) return;
+
+  const posUpper = _activeFilter.toUpperCase();
+  const filtered = _allPlayers.filter(p => {
+    const pos = (p.position || '').toUpperCase();
+    const cfg = POS_CFG[pos];
+    if (_activeFilter !== 'All' && cfg?.pill !== posUpper) return false;
+    if (_searchQ) {
+      const q = _searchQ.toLowerCase();
+      const name = ((p.first_name || '') + ' ' + (p.last_name || '')).toLowerCase();
+      const num  = String(p.number || '');
+      if (!name.includes(q) && !num.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Group
+  const byGroup = {};
+  GROUPS_ORDER.forEach(g => byGroup[g] = []);
+  filtered.forEach(p => {
+    const cfg = POS_CFG[(p.position || '').toUpperCase()];
+    const grp = cfg?.group || 'Other';
+    byGroup[grp] = byGroup[grp] || [];
+    byGroup[grp].push(p);
+  });
+
+  let html = '';
+  GROUPS_ORDER.forEach(grp => {
+    const list = byGroup[grp] || [];
+    if (!list.length) return;
+    const cfg = Object.values(POS_CFG).find(c => c.group === grp);
+    html += `<tr class="is-group"><td colspan="10"><i class="ti ${cfg?.icon || 'ti-users'}" style="vertical-align:-2px;font-size:13px"></i> ${grp} <span class="sq-group-count">${list.length} player${list.length !== 1 ? 's' : ''}</span></td></tr>`;
+    list.forEach(p => {
+      const pos     = (p.position || '').toUpperCase();
+      const pcfg    = POS_CFG[pos] || { css:'', pill:pos };
+      const fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+      const initials = (((p.first_name||'')[0] || '') + ((p.last_name||'')[0] || '')).toUpperCase() || fullName.slice(0,2).toUpperCase();
+      const num     = p.number || '—';
+      const age     = calcAge(p.dob || p.date_of_birth);
+      const foot    = p.dominant_foot || '—';
+      const h       = p.height_cm ? `${p.height_cm}<span class="u">cm</span><span class="sep">·</span>` : '';
+      const w       = p.weight_kg ? `${p.weight_kg}<span class="u">kg</span>` : '—';
+      html += `<tr data-pos="${pcfg.pill}" data-name="${fullName.toLowerCase()}" data-num="${num}">
+        <td><span class="sq-cb" data-cb></span></td>
+        <td><span class="sq-num">${num}</span></td>
+        <td><div class="sq-player">
+          <div class="sq-av">${initials}</div>
+          <div><div class="sq-name-row"><span class="sq-name">${fullName || '—'}</span></div>
+          <div class="sq-sub">${fmtDob(p.dob || p.date_of_birth)}</div></div>
+        </div></td>
+        <td><span class="sq-pos ${pcfg.css}">${p.position || '—'}</span></td>
+        <td class="sq-mono">${age}</td>
+        <td class="sq-mono">${foot}</td>
+        <td><span class="sq-anthro">${h}${w}</span></td>
+        <td><span class="sq-role-pill">First team</span></td>
+        <td class="sq-mono">—</td>
+        <td><div class="sq-row-actions"><button title="Edit profile"><i class="ti ti-edit"></i></button><button title="More"><i class="ti ti-dots"></i></button></div></td>
+      </tr>`;
+    });
+  });
+
+  tbody.innerHTML = html;
+
+  // Re-attach checkbox behaviour
+  tbody.querySelectorAll('[data-cb]').forEach(cb => {
+    cb.addEventListener('click', e => {
+      e.stopPropagation();
+      cb.classList.toggle('is-on');
+      const tr = cb.closest('tr');
+      if (tr) tr.classList.toggle('is-selected', cb.classList.contains('is-on'));
+    });
+  });
+
+  if (foot) {
+    const total = _allPlayers.length;
+    foot.innerHTML = `Showing <strong style="color:var(--cm-fg)">${filtered.length}</strong> of ${total} players`;
+  }
+}
+
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+
+  // Sidebar
+  if (profile) {
+    const initials = (profile.full_name || '').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
+    const el = id => document.getElementById(id);
+    if (el('userInitials')) el('userInitials').textContent = initials;
+    if (el('userName'))     el('userName').textContent     = profile.full_name || '';
+    if (el('userRole'))     el('userRole').textContent     = profile.role || '';
+  }
+  if (club) {
+    const el = document.getElementById('sideClubName');
+    if (el) el.textContent = club.name;
+    window.applyClubTheme();
+  }
+
+  // Load players
+  const { data } = await window.sb.from('players')
+    .select('id,first_name,last_name,number,position,nationality,dob,height_cm,weight_kg,dominant_foot,status')
+    .eq('club_id', clubId)
+    .neq('status', 'inactive')
+    .order('number', { ascending: true });
+
+  _allPlayers = data || [];
+  const total = _allPlayers.length;
+
+  // Update header counts
+  const headP  = document.getElementById('sqHeadP');
+  const listCt = document.getElementById('sqListCt');
+  if (headP)  headP.textContent = `${total} players · First team`;
+  if (listCt) listCt.textContent = total;
+
+  // Update filter pill counts
+  const posCounts = {};
+  _allPlayers.forEach(p => {
+    const cfg = POS_CFG[(p.position || '').toUpperCase()];
+    if (cfg) posCounts[cfg.pill] = (posCounts[cfg.pill] || 0) + 1;
+  });
+  document.querySelectorAll('.sq-pill-filter').forEach(pill => {
+    const ct = pill.querySelector('.ct');
+    if (!ct) return;
+    const label = pill.textContent.replace(/\d+/, '').trim();
+    if (label === 'All') { ct.textContent = total; return; }
+    ct.textContent = posCounts[label] || 0;
+  });
+
+  renderTable();
+
+  // Filter pills
+  document.querySelectorAll('.sq-pill-filter').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.sq-pill-filter').forEach(o => o.classList.remove('is-on'));
+      pill.classList.add('is-on');
+      const label = pill.textContent.replace(/\d+/g, '').replace('·', '').trim();
+      _activeFilter = label;
+      renderTable();
+    });
+  });
+
+  // Search
+  document.querySelectorAll('.sq-search input').forEach(inp => {
+    inp.addEventListener('input', () => { _searchQ = inp.value; renderTable(); });
+  });
+})();
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+  // Checkbox toggle + row selection
+  document.querySelectorAll('[data-cb]').forEach(cb => {
+    cb.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cb.classList.toggle('is-on');
+      const tr = cb.closest('tr');
+      if (tr) tr.classList.toggle('is-selected', cb.classList.contains('is-on'));
+    });
+  });
+  // Filter pills
+  document.querySelectorAll('.sq-pill-filter').forEach(p => {
+    p.addEventListener('click', () => {
+      document.querySelectorAll('.sq-pill-filter').forEach(o => o.classList.remove('is-on'));
+      p.classList.add('is-on');
+    });
+  });
+  // Segment toggle
+  document.querySelectorAll('.sq-segs').forEach(group => {
+    group.querySelectorAll('.sq-seg').forEach(s => {
+      s.addEventListener('click', () => {
+        group.querySelectorAll('.sq-seg').forEach(o => o.classList.remove('is-on'));
+        s.classList.add('is-on');
+      });
+    });
+  });
+</script>
+</body>
+</html>

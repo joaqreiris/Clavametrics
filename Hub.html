@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Hub — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ───── Shell ───── */
+  .hub-shell {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: 100vh;
+  }
+  .hub-side {
+    background: var(--cm-side-bg);
+    color: var(--cm-side-fg);
+    border-right: 1px solid var(--cm-side-border);
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh;
+    overflow-y: auto;
+  }
+  .hub-main {
+    display: flex; flex-direction: column;
+    min-width: 0;
+    background: var(--cm-bg);
+  }
+
+  /* ── Sidebar bits ── */
+  .hub-brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 16px 14px;
+    border-bottom: 1px solid var(--cm-side-border);
+  }
+  .hub-brand .mark {
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    background: var(--cm-side-accent);
+    color: var(--cm-side-bg);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .hub-brand .mark svg { width: 18px; height: 18px; }
+  .hub-brand .body  { flex: 1; min-width: 0; }
+  .hub-brand .name  { font: 600 14px/1.1 var(--cm-font-sans); letter-spacing: -0.01em; color: var(--cm-side-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hub-brand .club  { font: 500 11.5px/1.2 var(--cm-font-mono); color: var(--cm-side-fg-muted); margin-top: 2px; }
+  .hub-brand .switch {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    border: 1px solid var(--cm-side-border);
+    background: transparent;
+    color: var(--cm-side-fg-muted);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .hub-brand .switch:hover { background: var(--cm-side-item-active-bg); color: var(--cm-side-fg); }
+  .hub-brand .switch .ti { font-size: 14px; }
+
+  .hub-nav { padding: 8px 10px; flex: 1; }
+  .hub-nav-group + .hub-nav-group { margin-top: 6px; }
+  .hub-nav-label {
+    font: 500 10.5px/1 var(--cm-font-sans);
+    letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase;
+    color: var(--cm-side-fg-muted);
+    padding: 10px 10px 6px;
+  }
+  .hub-nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6.5px 10px;
+    border-radius: var(--cm-r-3);
+    color: var(--cm-side-fg-muted);
+    text-decoration: none;
+    font: 500 13.5px/1 var(--cm-font-sans);
+    cursor: pointer;
+    transition: background var(--cm-dur-1), color var(--cm-dur-1);
+    position: relative;
+  }
+  .hub-nav-item:hover { background: var(--cm-side-item-active-bg); color: var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size: 17px; flex-shrink: 0; opacity: 0.95; }
+  .hub-nav-item .count {
+    margin-left: auto;
+    font: 500 11.5px/1 var(--cm-font-mono);
+    color: var(--cm-side-fg-muted);
+  }
+  .hub-nav-item.is-active {
+    background: var(--cm-side-item-active-bg);
+    color: var(--cm-side-item-active-fg);
+  }
+  .hub-nav-item.is-active .count { color: var(--cm-side-item-active-fg); opacity: 0.8; }
+
+  .hub-side-foot {
+    border-top: 1px solid var(--cm-side-border);
+    padding: 10px;
+  }
+  .hub-user {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--cm-r-3);
+    cursor: pointer;
+  }
+  .hub-user:hover { background: var(--cm-side-item-active-bg); }
+  .hub-user .av {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--cm-side-accent);
+    color: var(--cm-side-bg);
+    display: flex; align-items: center; justify-content: center;
+    font: 600 11px/1 var(--cm-font-sans);
+    flex-shrink: 0;
+  }
+  .hub-user .who { flex: 1; min-width: 0; }
+  .hub-user .who .name { font: 600 13px/1.2 var(--cm-font-sans); color: var(--cm-side-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hub-user .who .role { font: 500 11px/1.2 var(--cm-font-mono); color: var(--cm-side-fg-muted); margin-top: 2px; }
+  .hub-user .ti { font-size: 14px; color: var(--cm-side-fg-muted); }
+
+  /* ───── Topbar ───── */
+  .hub-topbar {
+    display: flex; align-items: center; gap: 14px;
+    height: 56px; padding: 0 24px;
+    border-bottom: 1px solid var(--cm-border);
+    background: color-mix(in srgb, var(--cm-bg) 92%, transparent);
+    backdrop-filter: saturate(160%) blur(10px);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .hub-topbar h1 {
+    font: 600 16px/1 var(--cm-font-sans);
+    letter-spacing: -0.01em;
+    color: var(--cm-fg-strong);
+  }
+  .hub-crumb {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--cm-fg-muted);
+    font: var(--cm-body-sm);
+  }
+  .hub-crumb .ti { font-size: 14px; }
+  .hub-crumb .sep { color: var(--cm-fg-faint); }
+  .hub-search {
+    margin-left: auto;
+    width: 320px;
+    display: flex; align-items: center; gap: 8px;
+    height: 34px;
+    padding: 0 10px;
+    background: var(--cm-bg-soft);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-3);
+    color: var(--cm-fg-muted);
+    cursor: text;
+    transition: border-color var(--cm-dur-1);
+  }
+  .hub-search:hover { border-color: var(--cm-border-strong); }
+  .hub-search input {
+    flex: 1; min-width: 0;
+    border: 0; outline: none; background: transparent;
+    font: var(--cm-body-sm); color: var(--cm-fg);
+  }
+  .hub-search input::placeholder { color: var(--cm-fg-faint); }
+  .hub-search .ti { font-size: 16px; }
+  .hub-search .cm-kbd { font-size: 10.5px; }
+  .hub-topbar .actions { display: flex; align-items: center; gap: 8px; }
+
+  /* ───── Page content ───── */
+  .hub-page {
+    padding: 28px 32px 64px;
+    max-width: 1280px;
+    width: 100%;
+  }
+
+  .hub-greet { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .hub-greet h1 {
+    font: 600 26px/1.1 var(--cm-font-sans);
+    letter-spacing: -0.02em;
+    color: var(--cm-fg-strong);
+  }
+  .hub-greet h1 .accent { color: var(--cm-fg-muted); font-weight: 500; }
+  .hub-greet p { color: var(--cm-fg-muted); font: var(--cm-body); margin-top: 6px; }
+  .hub-greet .meta {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  /* KPI strip */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .kpi {
+    background: var(--cm-surface);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    padding: 16px 16px 18px;
+    box-shadow: var(--cm-shadow-1);
+    position: relative;
+  }
+  .kpi-label {
+    display: flex; align-items: center; gap: 6px;
+    font: 500 12px/1 var(--cm-font-sans);
+    color: var(--cm-fg-muted);
+    margin-bottom: 12px;
+  }
+  .kpi-label .ti { font-size: 14px; }
+  .kpi-value {
+    font: 600 28px/1 var(--cm-font-sans);
+    letter-spacing: -0.02em;
+    color: var(--cm-fg-strong);
+  }
+  .kpi-value sub {
+    font: 500 13px/1 var(--cm-font-mono);
+    color: var(--cm-fg-muted);
+    margin-left: 4px;
+  }
+  .kpi-trend {
+    margin-top: 10px;
+    display: flex; align-items: center; gap: 6px;
+    font: 500 12px/1 var(--cm-font-sans);
+    color: var(--cm-fg-muted);
+  }
+  .kpi-trend .delta {
+    display: inline-flex; align-items: center; gap: 3px;
+    font: 600 12px/1 var(--cm-font-mono);
+  }
+  .kpi-trend .delta.up   { color: var(--cm-success); }
+  .kpi-trend .delta.down { color: var(--cm-danger); }
+  .kpi-trend .delta .ti  { font-size: 12px; }
+  .kpi-spark {
+    position: absolute;
+    right: 14px;
+    top: 14px;
+    width: 76px;
+    height: 32px;
+    color: var(--cm-fg-faint);
+  }
+
+  /* Section title */
+  .section-header {
+    display: flex; align-items: center; gap: 12px;
+    margin: 8px 0 14px;
+  }
+  .section-header h2 {
+    font: 600 14px/1 var(--cm-font-sans);
+    letter-spacing: -0.005em;
+    color: var(--cm-fg-strong);
+  }
+  .section-header .count {
+    font: 500 12px/1 var(--cm-font-mono);
+    color: var(--cm-fg-faint);
+  }
+  .section-header .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+  /* Modules grid */
+  .modules {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 36px;
+  }
+  .module {
+    background: var(--cm-surface);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    padding: 16px 16px 18px;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color var(--cm-dur-1), background var(--cm-dur-1), transform var(--cm-dur-1), box-shadow var(--cm-dur-1);
+    display: flex; flex-direction: column; gap: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .module:hover {
+    border-color: var(--cm-border-strong);
+    background: var(--cm-surface-2);
+    transform: translateY(-1px);
+    box-shadow: var(--cm-shadow-2);
+  }
+  .module-top {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .module-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--cm-accent-soft);
+    color: var(--cm-accent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .module-icon.is-success { background: var(--cm-success-bg); color: var(--cm-success); }
+  .module-icon.is-warning { background: var(--cm-warning-bg); color: var(--cm-warning); }
+  .module-icon.is-danger  { background: var(--cm-danger-bg);  color: var(--cm-danger); }
+  .module-icon.is-info    { background: var(--cm-info-bg);    color: var(--cm-info); }
+  .module-icon.is-violet  { background: var(--cm-violet-bg);  color: var(--cm-violet); }
+  .module-icon.is-neutral { background: var(--cm-neutral-bg); color: var(--cm-neutral); }
+  .module-icon .ti { font-size: 18px; }
+  .module-title { font: 600 14px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .module-desc {
+    font: var(--cm-body-sm);
+    color: var(--cm-fg-muted);
+    margin-top: -2px;
+  }
+  .module-foot {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: auto;
+    font: 500 12px/1 var(--cm-font-mono);
+    color: var(--cm-fg-muted);
+  }
+  .module-foot .ti { font-size: 14px; }
+  .module-foot .alert {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--cm-warning);
+  }
+  .module-arrow {
+    position: absolute; right: 14px; bottom: 14px;
+    color: var(--cm-fg-faint);
+    transition: color var(--cm-dur-1), transform var(--cm-dur-1);
+  }
+  .module-arrow .ti { font-size: 16px; }
+  .module:hover .module-arrow { color: var(--cm-fg); transform: translateX(2px); }
+
+  .module.is-soon {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .module .soon-tag {
+    position: absolute;
+    top: 14px; right: 14px;
+    font: 500 10px/1 var(--cm-font-mono);
+    letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase;
+    color: var(--cm-fg-muted);
+    background: var(--cm-bg-sunk);
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--cm-border);
+  }
+
+  /* Two-column lower row */
+  .lower {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 1100px) { .lower { grid-template-columns: 1fr; } .modules { grid-template-columns: repeat(2, 1fr); } .kpis { grid-template-columns: repeat(2, 1fr); } }
+
+  /* Activity table */
+  .activity {
+    background: var(--cm-surface);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    overflow: hidden;
+    box-shadow: var(--cm-shadow-1);
+  }
+  .activity-row {
+    display: grid;
+    grid-template-columns: 32px 1fr 1fr 100px;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--cm-border-soft);
+    font: 500 13px/1.3 var(--cm-font-sans);
+  }
+  .activity-row:last-child { border-bottom: 0; }
+  .activity-row.is-header {
+    background: var(--cm-bg-soft);
+    font: 500 11px/1 var(--cm-font-sans);
+    letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase;
+    color: var(--cm-fg-muted);
+    padding: 10px 16px;
+  }
+  .activity-row .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .activity-row .who .av { width: 24px; height: 24px; border-radius: 50%; background: var(--cm-bg-sunk); color: var(--cm-fg); display: flex; align-items: center; justify-content: center; font: 600 10.5px/1 var(--cm-font-sans); border: 1px solid var(--cm-border); flex-shrink: 0; }
+  .activity-row .who .name { color: var(--cm-fg-strong); font-weight: 600; }
+  .activity-row .when { color: var(--cm-fg-muted); font: var(--cm-mono); }
+  .activity-row .what { color: var(--cm-fg); }
+  .activity-row .what .target { color: var(--cm-fg-muted); }
+  .activity-row .ind { display: flex; align-items: center; justify-content: center; color: var(--cm-fg-faint); }
+  .activity-row .ind .ti { font-size: 16px; }
+
+  /* Tasks panel */
+  .tasks {
+    background: var(--cm-surface);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    box-shadow: var(--cm-shadow-1);
+    display: flex; flex-direction: column;
+  }
+  .tasks-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--cm-border-soft);
+  }
+  .tasks-header h3 { font: 600 14px/1 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .tasks-header .count { font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .tasks-header .right { margin-left: auto; }
+
+  .task {
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--cm-border-soft);
+  }
+  .task:last-child { border-bottom: 0; }
+  .task .check {
+    width: 16px; height: 16px;
+    border-radius: 5px;
+    border: 1.5px solid var(--cm-border-strong);
+    background: var(--cm-surface);
+    margin-top: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color var(--cm-dur-1), background var(--cm-dur-1);
+  }
+  .task .check:hover { border-color: var(--cm-fg-muted); }
+  .task.is-done .check {
+    background: var(--cm-accent);
+    border-color: var(--cm-accent);
+    position: relative;
+  }
+  .task.is-done .check::after {
+    content: "";
+    position: absolute;
+    left: 3px; top: 1px;
+    width: 7px; height: 4px;
+    border-left: 1.5px solid var(--cm-fg-on-accent);
+    border-bottom: 1.5px solid var(--cm-fg-on-accent);
+    transform: rotate(-45deg);
+  }
+  .task .body { min-width: 0; }
+  .task .title { font: 500 13px/1.35 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .task.is-done .title { color: var(--cm-fg-muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .task .meta { margin-top: 4px; display: flex; align-items: center; gap: 6px; font: var(--cm-meta); color: var(--cm-fg-muted); }
+  .task .meta .ti { font-size: 13px; }
+  .task .when { font: var(--cm-mono); color: var(--cm-fg-faint); white-space: nowrap; }
+
+  /* Tweaks mount */
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  @media (max-width: 880px) {
+    .hub-shell { grid-template-columns: 64px 1fr; }
+    .hub-brand .body, .hub-brand .switch, .hub-nav-item span:not(.ti):not(.count), .hub-user .who, .hub-nav-label { display: none; }
+    .hub-search { width: auto; }
+  }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="03 Hub">
+
+  <!-- ─────────── SIDEBAR ─────────── -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/>
+        </svg>
+      </div>
+      <div class="body">
+        <div class="name" id="sideClubName">Clava FC</div>
+        <div class="club">First team · 2025/26</div>
+      </div>
+      <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
+    </div>
+
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item is-active" href="#">
+          <i class="ti ti-home"></i><span>Staff Hub</span>
+        </a>
+        <a class="hub-nav-item" href="#">
+          <i class="ti ti-calendar-stats"></i><span>Calendar</span>
+          <span class="count">⌘ K</span>
+        </a>
+        <a class="hub-nav-item" href="#">
+          <i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span>
+          <span class="count">12</span>
+        </a>
+      </div>
+
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-history"></i><span>Sessions history</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-activity"></i><span>RPE</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span><span class="count">⚠</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-apple"></i><span>Nutrition</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+
+            <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-user-shield"></i><span>Admin</span></a>
+      </div>
+    </nav>
+
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av" id="userInitials">JR</div>
+        <div class="who">
+          <div class="name" id="userName">Joaquín Reiris</div>
+          <div class="role" id="userRole">Performance · Admin</div>
+        </div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─────────── MAIN ─────────── -->
+  <main class="hub-main">
+
+    <!-- Topbar -->
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i>
+        <span>Staff Hub</span>
+        <span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Overview</span>
+      </div>
+
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, sessions, microcycles…">
+        <span class="cm-kbd">⌘</span><span class="cm-kbd">K</span>
+      </div>
+
+      <div class="actions">
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-btn is-primary is-sm">
+          <i class="ti ti-plus" style="font-size:14px"></i> New session
+        </button>
+      </div>
+    </div>
+
+    <!-- Page -->
+    <section class="hub-page">
+
+      <header class="hub-greet">
+        <div>
+          <h1 id="greetMsg">Good morning, Joaquín <span class="accent">— here's what needs you today.</span></h1>
+          <p>Microcycle 14 · MD-3 · Training session today @ 17:00 at Centro de Entrenamiento.</p>
+        </div>
+        <div class="meta">
+          <span class="cm-pill is-success"><span class="cm-dot"></span>22 available</span>
+          <span class="cm-pill is-warning"><span class="cm-dot"></span>3 partial</span>
+          <span class="cm-pill is-danger"><span class="cm-dot"></span>2 out</span>
+        </div>
+      </header>
+
+      <!-- KPI strip -->
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-label"><i class="ti ti-users"></i>Squad size</div>
+          <div class="kpi-value" id="kpiSquad">27 <sub>players</sub></div>
+          <div class="kpi-trend">
+            <span class="delta up"><i class="ti ti-arrow-up-right"></i>+2</span>
+            <span>vs last microcycle</span>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,24 12,22 24,18 36,20 48,12 60,14 76,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label"><i class="ti ti-chart-line"></i>Avg ACWR</div>
+          <div class="kpi-value">1.18</div>
+          <div class="kpi-trend">
+            <span class="delta down"><i class="ti ti-arrow-up-right"></i>+0.06</span>
+            <span style="color:var(--cm-warning)">Approaching sweet-spot</span>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,22 12,18 24,20 36,14 48,16 60,10 76,12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label"><i class="ti ti-heartbeat"></i>Wellness avg</div>
+          <div class="kpi-value" id="kpiWellness">7.4<sub>/10</sub></div>
+          <div class="kpi-trend">
+            <span class="delta up"><i class="ti ti-arrow-up-right"></i>+0.3</span>
+            <span id="wellnessSub">24 of 27 submitted</span>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,18 12,20 24,12 36,16 48,10 60,12 76,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label"><i class="ti ti-bandage"></i>Active injuries</div>
+          <div class="kpi-value" id="kpiInjuries">2</div>
+          <div class="kpi-trend">
+            <span class="delta up" style="color:var(--cm-success)"><i class="ti ti-arrow-down-right"></i>−1</span>
+            <span>Bocanegra returning Fri</span>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,10 12,8 24,14 36,12 48,18 60,16 76,22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Modules -->
+      <div class="section-header">
+        <h2>Modules</h2>
+        <span class="count">14</span>
+        <div class="right">
+          <button class="cm-btn is-ghost is-sm"><i class="ti ti-grid-dots" style="font-size:14px"></i> Customize</button>
+        </div>
+      </div>
+
+      <div class="modules">
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-info"><i class="ti ti-clipboard-list"></i></div>
+            <div>
+              <div class="module-title">Planner</div>
+              <div class="module-desc">Weekly design · tasks · pitch</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-calendar"></i> MD-3 ready
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-success"><i class="ti ti-list-tree"></i></div>
+            <div>
+              <div class="module-title">Sessions library</div>
+              <div class="module-desc">126 exercises · filter &amp; reuse</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-plus"></i> 4 new this week
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-success"><i class="ti ti-soccer-field"></i></div>
+            <div>
+              <div class="module-title">Daily planning</div>
+              <div class="module-desc">Today's sheet · drills · PDF</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-clock"></i> 17:00 today
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-violet"><i class="ti ti-calendar-stats"></i></div>
+            <div>
+              <div class="module-title">Microcycles</div>
+              <div class="module-desc">MC 14 · 6 sessions, 1 match</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-target-arrow"></i> vs Atlético · Sun
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-warning"><i class="ti ti-user-check"></i></div>
+            <div>
+              <div class="module-title">Availability</div>
+              <div class="module-desc">Daily presence · session min.</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <span class="alert"><i class="ti ti-alert-triangle"></i> 3 need status</span>
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-violet"><i class="ti ti-users-group"></i></div>
+            <div>
+              <div class="module-title">Squad</div>
+              <div class="module-desc">Registry · positions · profiles</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-users"></i> 27 players
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-warning"><i class="ti ti-report-analytics"></i></div>
+            <div>
+              <div class="module-title">Match reports</div>
+              <div class="module-desc">Per-player KPIs · trends</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-clock"></i> Last: 3 days ago
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-success"><i class="ti ti-heartbeat"></i></div>
+            <div>
+              <div class="module-title">Wellness</div>
+              <div class="module-desc">Daily check-in · sleep, mood</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-circle-check"></i> 24 / 27 today
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-danger"><i class="ti ti-activity"></i></div>
+            <div>
+              <div class="module-title">RPE</div>
+              <div class="module-desc">Session RPE · load proxies</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-link"></i> Share link
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-warning"><i class="ti ti-chart-line"></i></div>
+            <div>
+              <div class="module-title">Load monitor</div>
+              <div class="module-desc">ACWR · fatigue alerts</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <span class="alert"><i class="ti ti-flame"></i> 4 in red zone</span>
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-info"><i class="ti ti-radar-2"></i></div>
+            <div>
+              <div class="module-title">GPS analysis</div>
+              <div class="module-desc">Catapult · StatSports · CSV</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-upload"></i> 2 sessions pending
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-danger"><i class="ti ti-bandage"></i></div>
+            <div>
+              <div class="module-title">Injuries</div>
+              <div class="module-desc">Active cases · return-to-play</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-activity-heartbeat"></i> 2 active · 1 returning
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module" href="#">
+          <div class="module-top">
+            <div class="module-icon is-success"><i class="ti ti-apple"></i></div>
+            <div>
+              <div class="module-title">Nutrition</div>
+              <div class="module-desc">Plans · anthropometrics</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-scale"></i> Weigh-in Mon
+          </div>
+          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+        </a>
+
+        <a class="module is-soon">
+          <span class="soon-tag">Soon</span>
+          <div class="module-top">
+            <div class="module-icon is-neutral"><i class="ti ti-video"></i></div>
+            <div>
+              <div class="module-title">Video room</div>
+              <div class="module-desc">Clips · tagging · share</div>
+            </div>
+          </div>
+          <div class="module-foot">
+            <i class="ti ti-sparkles"></i> Beta in Q3
+          </div>
+        </a>
+
+      </div>
+
+      <!-- Lower row: activity + tasks -->
+      <div class="lower">
+
+        <div>
+          <div class="section-header">
+            <h2>Recent activity</h2>
+            <div class="right">
+              <button class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
+            </div>
+          </div>
+
+          <div class="activity">
+            <div class="activity-row is-header">
+              <span></span>
+              <span>Who</span>
+              <span>Activity</span>
+              <span style="text-align:right">When</span>
+            </div>
+
+            <div class="activity-row">
+              <div class="ind"><i class="ti ti-soccer-field"></i></div>
+              <div class="who"><div class="av">PF</div><div><div class="name">Pablo Fierro</div><div class="cm-meta">Head coach</div></div></div>
+              <div class="what">Published <span class="target">MC&nbsp;14 — Day&nbsp;3</span> session</div>
+              <div class="when" style="text-align:right">12 min ago</div>
+            </div>
+
+            <div class="activity-row">
+              <div class="ind"><i class="ti ti-bandage" style="color:var(--cm-danger)"></i></div>
+              <div class="who"><div class="av">MA</div><div><div class="name">Dr. Mariana Acosta</div><div class="cm-meta">Physio</div></div></div>
+              <div class="what">Logged injury · <span class="target">Bocanegra · hamstring</span></div>
+              <div class="when" style="text-align:right">1 h ago</div>
+            </div>
+
+            <div class="activity-row">
+              <div class="ind"><i class="ti ti-radar-2"></i></div>
+              <div class="who"><div class="av">SS</div><div><div class="name">StatSports sync</div><div class="cm-meta">Integration</div></div></div>
+              <div class="what">Imported <span class="target">22 player files</span> from MD-4</div>
+              <div class="when" style="text-align:right">3 h ago</div>
+            </div>
+
+            <div class="activity-row">
+              <div class="ind"><i class="ti ti-heartbeat" style="color:var(--cm-success)"></i></div>
+              <div class="who"><div class="av">SQ</div><div><div class="name">22 of 27 players</div><div class="cm-meta">First team</div></div></div>
+              <div class="what">Submitted <span class="target">today's wellness check-in</span></div>
+              <div class="when" style="text-align:right">today</div>
+            </div>
+
+            <div class="activity-row">
+              <div class="ind"><i class="ti ti-user-plus"></i></div>
+              <div class="who"><div class="av">JC</div><div><div class="name">Joaquín Cabral</div><div class="cm-meta">Analyst</div></div></div>
+              <div class="what">Joined the staff workspace</div>
+              <div class="when" style="text-align:right">yesterday</div>
+            </div>
+
+            <div class="activity-row">
+              <div class="ind"><i class="ti ti-trending-up" style="color:var(--cm-warning)"></i></div>
+              <div class="who"><div class="av">SY</div><div><div class="name">System alert</div><div class="cm-meta">Load monitor</div></div></div>
+              <div class="what">ACWR for <span class="target">4 players</span> crossed 1.5</div>
+              <div class="when" style="text-align:right">yesterday</div>
+            </div>
+
+          </div>
+        </div>
+
+        <div>
+          <div class="section-header">
+            <h2>Your tasks</h2>
+            <span class="count">5</span>
+            <div class="right">
+              <button class="cm-btn is-ghost is-sm"><i class="ti ti-plus" style="font-size:14px"></i> Add</button>
+            </div>
+          </div>
+
+          <div class="tasks">
+            <div class="task">
+              <div class="check"></div>
+              <div class="body">
+                <div class="title">Approve MC&nbsp;14 — Day 3 session before 16:00</div>
+                <div class="meta"><i class="ti ti-flag-2" style="color:var(--cm-danger)"></i> High · from Pablo Fierro</div>
+              </div>
+              <div class="when">Today</div>
+            </div>
+            <div class="task">
+              <div class="check"></div>
+              <div class="body">
+                <div class="title">Review Bocanegra return-to-play protocol</div>
+                <div class="meta"><i class="ti ti-stethoscope"></i> Medical · from Dr. Acosta</div>
+              </div>
+              <div class="when">Today</div>
+            </div>
+            <div class="task is-done">
+              <div class="check"></div>
+              <div class="body">
+                <div class="title">Confirm wellness reminders sent</div>
+                <div class="meta"><i class="ti ti-bell"></i> Routine</div>
+              </div>
+              <div class="when">Mon</div>
+            </div>
+            <div class="task">
+              <div class="check"></div>
+              <div class="body">
+                <div class="title">Export squad list to PDF for Atlético match</div>
+                <div class="meta"><i class="ti ti-file-export"></i> Match-day prep</div>
+              </div>
+              <div class="when">Fri</div>
+            </div>
+            <div class="task">
+              <div class="check"></div>
+              <div class="body">
+                <div class="title">Onboard Joaquín Cabral to GPS analysis</div>
+                <div class="meta"><i class="ti ti-user-plus"></i> Setup</div>
+              </div>
+              <div class="when">Next wk</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<!-- Tweaks (designer-side floating panel) + in-app Settings drawer -->
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+  // Task toggle
+  document.querySelectorAll('.task').forEach(el => {
+    el.querySelector('.check').addEventListener('click', () => el.classList.toggle('is-done'));
+  });
+  // Nav active state
+  document.querySelectorAll('.hub-nav-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.hub-nav-item').forEach(n => n.classList.remove('is-active'));
+      el.classList.add('is-active');
+    });
+  });
+</script>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+
+  // Populate sidebar user
+  if (profile) {
+    const name = profile.full_name || 'User';
+    const parts = name.trim().split(/\s+/);
+    const initials = parts.length >= 2
+      ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+      : name.slice(0, 2).toUpperCase();
+    document.getElementById('userInitials').textContent = initials;
+    document.getElementById('userName').textContent = name;
+    document.getElementById('userRole').textContent = profile.role || '';
+
+    // Greeting
+    const h = new Date().getHours();
+    const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    document.getElementById('greetMsg').innerHTML =
+      `${g}, ${parts[0]} <span class="accent">— here's what needs you today.</span>`;
+  }
+
+  // Populate club name
+  if (club) {
+    document.getElementById('sideClubName').textContent = club.name;
+    window.applyClubTheme();
+  }
+
+  // KPIs
+  const clubId = await window.getClubId();
+  if (!clubId) return;
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const [squadRes, injuriesRes, wellnessRes] = await Promise.all([
+    window.sb.from('players').select('*', { count: 'exact', head: true })
+      .eq('club_id', clubId).neq('status', 'inactive'),
+    window.sb.from('injuries').select('status')
+      .eq('club_id', clubId).eq('status', 'active'),
+    window.sb.from('wellness').select('readiness')
+      .eq('club_id', clubId).gte('submitted_at', today)
+  ]);
+
+  if (squadRes.count !== null) {
+    document.getElementById('kpiSquad').innerHTML = `${squadRes.count} <sub>players</sub>`;
+  }
+
+  const activeInjuries = injuriesRes.data?.length ?? 0;
+  document.getElementById('kpiInjuries').textContent = activeInjuries;
+
+  if (wellnessRes.data?.length) {
+    const avg = wellnessRes.data.reduce((s, r) => s + (r.readiness || 0), 0) / wellnessRes.data.length;
+    document.getElementById('kpiWellness').innerHTML = `${avg.toFixed(1)}<sub>/10</sub>`;
+    document.getElementById('wellnessSub').textContent =
+      `${wellnessRes.data.length} of ${squadRes.count ?? '?'} submitted`;
+  }
+})();
+</script>
+</body>
+</html>

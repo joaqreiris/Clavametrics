@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planner — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* Shared shell */
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  /* Topbar */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* === Planner layout: 2 columns === */
+  .pl-page {
+    display:grid;
+    grid-template-columns: 320px 1fr;
+    height: calc(100vh - 56px);
+    overflow:hidden;
+  }
+  @media (max-width:1100px) { .pl-page { grid-template-columns: 1fr; height:auto; } }
+
+  /* LEFT PANEL */
+  .pl-panel {
+    background:var(--cm-surface);
+    border-right:1px solid var(--cm-border);
+    overflow-y:auto;
+    display:flex; flex-direction:column;
+  }
+  .pl-section { padding:16px 18px; border-bottom:1px solid var(--cm-border-soft); }
+  .pl-section:last-child { border-bottom:0; }
+  .pl-section h3 { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .pl-section h3 .ti { font-size:13px; }
+
+  .pl-session-row {
+    display:flex; align-items:center; gap:10px;
+    padding:8px;
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border);
+    border-radius:8px;
+    margin-bottom:14px;
+  }
+  .pl-session-ic {
+    width:34px; height:34px;
+    border-radius:8px;
+    background:var(--cm-accent);
+    color:var(--cm-fg-on-accent);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .pl-session-ic .ti { font-size:17px; }
+  .pl-session-info { flex:1; min-width:0; }
+  .pl-session-info h4 { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pl-session-info p  { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+
+  .pl-grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:14px; }
+  .pl-stat {
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+    border-radius:7px;
+    padding:8px 10px;
+  }
+  .pl-stat-l { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:4px; }
+  .pl-stat-v { font:600 16px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
+  .pl-stat-v sub { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:3px; }
+
+  /* m² calculator */
+  .pl-m2 {
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+    border-radius:8px;
+    padding:12px;
+    margin-bottom:12px;
+  }
+  .pl-m2-row { display:flex; align-items:baseline; justify-content:space-between; }
+  .pl-m2-l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .pl-m2-v { font:600 22px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .pl-m2-v small { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:3px; }
+  .pl-m2-orient {
+    margin-top:10px;
+    display:flex; align-items:center; gap:6px;
+    padding:6px 10px;
+    border-radius:6px;
+    font:600 11.5px/1 var(--cm-font-mono);
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    background:var(--cm-warning-bg);
+    color:var(--cm-warning);
+    border:1px solid var(--cm-warning-bd);
+  }
+  .pl-m2-orient .ti { font-size:13px; }
+  .pl-m2-ref { display:grid; grid-template-columns: repeat(4,1fr); gap:3px; margin-top:8px; }
+  .pl-m2-ref div { padding:4px 5px; border-radius:4px; font:600 9.5px/1 var(--cm-font-mono); text-align:center; letter-spacing:0.04em; }
+  .pl-m2-ref .r-act { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .pl-m2-ref .r-str { background:var(--cm-danger-bg);  color:var(--cm-danger); }
+  .pl-m2-ref .r-vel { background:var(--cm-info-bg);    color:var(--cm-info); }
+  .pl-m2-ref .r-end { background:var(--cm-success-bg); color:var(--cm-success); }
+
+  /* Exercises list */
+  .pl-ex {
+    display:flex; align-items:center; gap:10px;
+    padding:9px 10px;
+    border:1px solid var(--cm-border-soft);
+    border-radius:7px;
+    margin-bottom:5px;
+    cursor:pointer;
+    background:var(--cm-surface);
+  }
+  .pl-ex:hover { border-color:var(--cm-border-strong); background:var(--cm-bg-soft); }
+  .pl-ex.is-active { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .pl-ex-n {
+    width:22px; height:22px;
+    border-radius:6px;
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border);
+    display:flex; align-items:center; justify-content:center;
+    font:600 11px/1 var(--cm-font-mono);
+    color:var(--cm-fg-strong);
+    flex-shrink:0;
+  }
+  .pl-ex.is-active .pl-ex-n { background:var(--cm-accent); color:var(--cm-fg-on-accent); border-color:var(--cm-accent); }
+  .pl-ex-body { flex:1; min-width:0; }
+  .pl-ex-title { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pl-ex-meta  { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .pl-ex-d { display:flex; align-items:center; gap:3px; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pl-ex-d .ti { font-size:11px; }
+
+  .pl-add-btn {
+    width:100%;
+    margin-top:8px;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    padding:9px;
+    border:1px dashed var(--cm-border-strong);
+    border-radius:7px;
+    background:transparent;
+    color:var(--cm-fg-muted);
+    font:500 12.5px/1 var(--cm-font-sans);
+    cursor:pointer;
+  }
+  .pl-add-btn:hover { border-color:var(--cm-accent); color:var(--cm-fg); }
+  .pl-add-btn .ti { font-size:14px; }
+
+  /* === FIELD CANVAS === */
+  .pl-canvas-wrap {
+    position:relative;
+    overflow:hidden;
+    background:var(--cm-bg-sunk);
+    display:flex; flex-direction:column;
+  }
+
+  .pl-canvas-bar {
+    display:flex; align-items:center; gap:8px;
+    padding:10px 14px;
+    background:var(--cm-surface);
+    border-bottom:1px solid var(--cm-border);
+    flex-wrap:wrap;
+  }
+  .pl-canvas-bar .group { display:flex; gap:2px; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; }
+  .pl-canvas-bar .group button { border:0; background:transparent; padding:0 8px; height:26px; border-radius:4px; color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; gap:5px; font:500 12px/1 var(--cm-font-sans); }
+  .pl-canvas-bar .group button:hover { color:var(--cm-fg); }
+  .pl-canvas-bar .group button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  .pl-canvas-bar .group button .ti { font-size:14px; }
+  .pl-canvas-bar .sep { width:1px; height:22px; background:var(--cm-border); }
+  .pl-canvas-bar .stat { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pl-canvas-bar .stat strong { color:var(--cm-fg); font-weight:600; }
+
+  /* The field */
+  .pl-field {
+    position:relative;
+    flex:1;
+    margin:18px;
+    border-radius:14px;
+    overflow:hidden;
+    background-image:url('assets/field.jpg');
+    background-size:cover;
+    background-position:center;
+    box-shadow:var(--cm-shadow-2);
+    border:1px solid rgba(0,0,0,0.2);
+    min-height:520px;
+  }
+  /* Subtle vignette */
+  .pl-field::after {
+    content:"";
+    position:absolute; inset:0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.18) 100%);
+    pointer-events:none;
+  }
+
+  /* Tactical objects */
+  .obj {
+    position:absolute;
+    transform: translate(-50%, -50%);
+    cursor:grab;
+    user-select:none;
+    transition: box-shadow 120ms, transform 0ms;
+  }
+  .obj.selected { box-shadow:0 0 0 2px var(--cm-accent), 0 0 18px rgba(34,197,94,0.5); border-radius:50%; }
+
+  /* Players — with club crest watermark backdrop */
+  .player {
+    width:40px; height:40px;
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff;
+    font:700 13px/1 var(--cm-font-mono);
+    border:2.5px solid rgba(255,255,255,0.9);
+    box-shadow:0 3px 10px rgba(0,0,0,0.45);
+    text-shadow:0 1px 2px rgba(0,0,0,0.6);
+    position:relative;
+    overflow:hidden;
+    isolation:isolate;
+  }
+  /* Color base */
+  .player.t1 { background-color:#15803D; }    /* home green */
+  .player.t2 { background-color:#1D4ED8; }    /* opponent blue */
+  .player.t3 { background-color:#FACC15; color:#0A0A0A; text-shadow:none; }
+  .player.t4 { background-color:#E5E7EB; color:#0A0A0A; border-color:rgba(0,0,0,0.2); text-shadow:none; }
+  /* Crest watermark inside the chip */
+  .player::before {
+    content:"";
+    position:absolute;
+    inset:0;
+    background-image: var(--player-crest, none);
+    background-size: 84% 84%;
+    background-repeat:no-repeat;
+    background-position:center;
+    opacity:0.55;
+    mix-blend-mode: screen;
+    z-index:-1;
+  }
+  /* Home (t1) shows OUR club crest */
+  .player.t1 { --player-crest: url('assets/sample-club-crest.png'); }
+  /* Opponent (t2) shows the rival crest (set via JS data-opponent on .pl-field) */
+  .pl-field .player.t2 { --player-crest: var(--opponent-crest, none); }
+  /* Player number on top of crest */
+  .player > span { position:relative; z-index:1; }
+
+  /* Ball */
+  .ball {
+    width:18px; height:18px;
+    border-radius:50%;
+    background:radial-gradient(circle at 30% 30%, #fff, #d4d4d4 70%, #777);
+    border:1px solid rgba(0,0,0,0.5);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  }
+  .ball::after {
+    content:""; position:absolute; inset:3px;
+    border-radius:50%;
+    background:
+      radial-gradient(circle at 50% 50%, transparent 60%, rgba(0,0,0,0.25) 70%);
+  }
+
+  /* Cone */
+  .cone {
+    width:0; height:0;
+    border-left:9px solid transparent;
+    border-right:9px solid transparent;
+    border-bottom:22px solid #f97316;
+    filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));
+  }
+  .cone::after {
+    content:""; position:absolute;
+    width:18px; height:3px; background:#FACC15;
+    border-radius:1px;
+    top:15px; left:-9px;
+  }
+
+  /* Pole */
+  .pole {
+    width:4px; height:50px;
+    background: linear-gradient(180deg, #DC2626 0%, #DC2626 50%, #fff 50%, #fff 100%);
+    border-radius:2px;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.4);
+  }
+  .pole::before {
+    content:""; position:absolute;
+    width:14px; height:14px;
+    border-radius:50%;
+    background:rgba(0,0,0,0.35);
+    bottom:-5px; left:-5px;
+    filter:blur(3px);
+  }
+
+  /* Goal */
+  .goal {
+    width:80px; height:32px;
+    border:2.5px solid #fff;
+    border-top:0;
+    box-shadow:0 4px 12px rgba(0,0,0,0.4);
+  }
+  .goal::before {
+    content:""; position:absolute;
+    inset:0;
+    background:
+      repeating-linear-gradient(0deg, transparent 0, transparent 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 6px),
+      repeating-linear-gradient(90deg, transparent 0, transparent 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 6px);
+  }
+
+  /* Zone box */
+  .zone {
+    border:2.5px dashed #FBBF24;
+    background:rgba(251,191,36,0.10);
+    border-radius:6px;
+  }
+  .zone .lbl {
+    position:absolute;
+    top:-22px; left:6px;
+    font:700 10px/1 var(--cm-font-mono);
+    letter-spacing:0.06em;
+    color:#FBBF24;
+    background:rgba(0,0,0,0.7);
+    padding:4px 7px;
+    border-radius:4px;
+  }
+
+  /* Arrows for passing lines */
+  .arrows-svg {
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    pointer-events:none;
+  }
+
+  /* Bottom dock — object palette */
+  .pl-dock {
+    background:var(--cm-surface);
+    border-top:1px solid var(--cm-border);
+    display:flex; align-items:center; gap:8px;
+    padding:10px 14px;
+    overflow-x:auto;
+  }
+  .pl-dock-grp { display:flex; gap:6px; align-items:center; padding:4px 8px; border-right:1px solid var(--cm-border-soft); }
+  .pl-dock-grp:last-child { border-right:0; }
+  .pl-dock-grp .lbl { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); margin-right:4px; }
+  .pl-dock-btn {
+    width:36px; height:36px;
+    border-radius:7px;
+    border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft);
+    color:var(--cm-fg);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    position:relative;
+  }
+  .pl-dock-btn:hover { border-color:var(--cm-border-strong); background:var(--cm-surface); }
+  .pl-dock-btn.is-on { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .pl-dock-btn .ti { font-size:18px; color:var(--cm-fg-muted); }
+  .pl-dock-btn.is-on .ti { color:var(--cm-accent); }
+  .pl-dock-btn .p { width:18px; height:18px; border-radius:50%; }
+  .pl-dock-btn .p.t1 { background:#15803D; }
+  .pl-dock-btn .p.t2 { background:#1D4ED8; }
+  .pl-dock-btn .p.t3 { background:#FACC15; }
+  .pl-dock-btn .p.t4 { background:#E5E7EB; border:1px solid rgba(0,0,0,0.2); }
+
+  /* Color FAB on field */
+  .pl-field-fab {
+    position:absolute;
+    bottom:14px; right:14px;
+    display:flex; gap:8px;
+    z-index:10;
+  }
+  .pl-field-fab button {
+    width:38px; height:38px;
+    border-radius:50%;
+    border:0;
+    background:rgba(0,0,0,0.55);
+    color:#fff;
+    backdrop-filter:blur(6px);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pl-field-fab button:hover { background:rgba(0,0,0,0.75); }
+  .pl-field-fab button .ti { font-size:16px; }
+
+  .pl-field-tag {
+    position:absolute;
+    top:14px; left:14px;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    padding:6px 12px;
+    border-radius:7px;
+    backdrop-filter:blur(6px);
+    z-index:10;
+    font:500 12px/1 var(--cm-font-mono);
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:8px;
+  }
+  .pl-field-tag .dot { width:7px; height:7px; border-radius:50%; background:var(--cm-success); box-shadow:0 0 8px var(--cm-success); }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="10 Planner">
+
+  <!-- Sidebar -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name" id="sideClubName">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item is-active" href="#"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+            <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av" id="userInitials">JR</div>
+        <div class="who"><div class="name" id="userName">Joaquín Reiris</div><div class="role" id="userRole">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Planner</span>
+        <span class="sep">/</span>
+        <span>MC 14 · Thu MD−3 · Set-pieces 70′</span>
+      </div>
+      <div class="right">
+        <button class="cm-btn is-outline is-sm"><i class="ti ti-history" style="font-size:14px"></i>Versions</button>
+        <button class="cm-btn is-outline is-sm"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
+        <button class="cm-btn is-outline is-sm"><i class="ti ti-link" style="font-size:14px"></i>Share</button>
+        <button class="cm-btn is-primary is-sm"><i class="ti ti-circle-check" style="font-size:14px"></i>Publish</button>
+        <div class="actions" style="margin-left:8px">
+          <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+          <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <section class="pl-page">
+
+      <!-- LEFT PANEL -->
+      <aside class="pl-panel">
+
+        <div class="pl-section">
+          <h3><i class="ti ti-clipboard-list"></i>Session</h3>
+          <div class="pl-session-row">
+            <div class="pl-session-ic"><i class="ti ti-soccer-field"></i></div>
+            <div class="pl-session-info">
+              <h4>Set-pieces &amp; switching</h4>
+              <p>MC 14 · Thu 15 May · MD−3 · 17:00</p>
+            </div>
+          </div>
+          <div class="pl-grid">
+            <div class="pl-stat"><div class="pl-stat-l">Duration</div><div class="pl-stat-v">70<sub>min</sub></div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Players</div><div class="pl-stat-v">22<sub>/27</sub></div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Drills</div><div class="pl-stat-v">4</div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Field</div><div class="pl-stat-v">CT&nbsp;2</div></div>
+          </div>
+        </div>
+
+        <div class="pl-section">
+          <h3><i class="ti ti-ruler-measure"></i>Space &amp; orientation</h3>
+          <div class="pl-m2">
+            <div class="pl-m2-row">
+              <span class="pl-m2-l">m² per player</span>
+              <span class="pl-m2-v">142<small>m²</small></span>
+            </div>
+            <div class="pl-m2-orient">
+              <i class="ti ti-target-arrow"></i>Velocity / counter
+            </div>
+            <div class="pl-m2-ref">
+              <div class="r-act">Act &lt;40</div>
+              <div class="r-str">Str 40–80</div>
+              <div class="r-vel">Vel 80–160</div>
+              <div class="r-end">End &gt;160</div>
+            </div>
+          </div>
+          <div class="pl-grid">
+            <div class="pl-stat"><div class="pl-stat-l">Field used</div><div class="pl-stat-v">42×54<sub>m</sub></div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Total area</div><div class="pl-stat-v">2,268<sub>m²</sub></div></div>
+          </div>
+        </div>
+
+        <div class="pl-section">
+          <h3><i class="ti ti-list-numbers"></i>Drills</h3>
+
+          <div class="pl-ex">
+            <div class="pl-ex-n">1</div>
+            <div class="pl-ex-body">
+              <div class="pl-ex-title">Activation · passing rondo</div>
+              <div class="pl-ex-meta">10′ · 8v2 · all field</div>
+            </div>
+            <div class="pl-ex-d"><i class="ti ti-clock"></i>10′</div>
+          </div>
+
+          <div class="pl-ex is-active">
+            <div class="pl-ex-n">2</div>
+            <div class="pl-ex-body">
+              <div class="pl-ex-title">Defending set-pieces</div>
+              <div class="pl-ex-meta">25′ · 11v11 · half field</div>
+            </div>
+            <div class="pl-ex-d" style="color:var(--cm-accent);font-weight:600"><i class="ti ti-clock"></i>25′</div>
+          </div>
+
+          <div class="pl-ex">
+            <div class="pl-ex-n">3</div>
+            <div class="pl-ex-body">
+              <div class="pl-ex-title">Wide switching · build-up</div>
+              <div class="pl-ex-meta">20′ · 4v4+3 · 42×54m</div>
+            </div>
+            <div class="pl-ex-d"><i class="ti ti-clock"></i>20′</div>
+          </div>
+
+          <div class="pl-ex">
+            <div class="pl-ex-n">4</div>
+            <div class="pl-ex-body">
+              <div class="pl-ex-title">Free play · finalization</div>
+              <div class="pl-ex-meta">15′ · 11v11 · full</div>
+            </div>
+            <div class="pl-ex-d"><i class="ti ti-clock"></i>15′</div>
+          </div>
+
+          <button class="pl-add-btn"><i class="ti ti-plus"></i>Add drill</button>
+        </div>
+
+        <div class="pl-section">
+          <h3 id="plAvailHead"><i class="ti ti-users"></i>Available · —</h3>
+          <div id="plAvailPills" style="display:flex;flex-wrap:wrap;gap:5px">
+            <span class="cm-pill is-success"><span class="cm-dot"></span>1 Galarza</span>
+            <span class="cm-pill is-success"><span class="cm-dot"></span>6 Sosa</span>
+            <span class="cm-pill is-warning"><span class="cm-dot"></span>15 Carrasco</span>
+            <span class="cm-pill is-success"><span class="cm-dot"></span>22 Ferreyra</span>
+            <span class="cm-pill is-success"><span class="cm-dot"></span>8 Paredes</span>
+            <span class="cm-pill is-success"><span class="cm-dot"></span>10 Domínguez</span>
+            <span class="cm-pill is-success"><span class="cm-dot"></span>17 Gimenez</span>
+            <span class="cm-pill is-success"><span class="cm-dot"></span>9 Rivas</span>
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);padding:3px 6px">+14 more</span>
+          </div>
+        </div>
+
+      </aside>
+
+      <!-- CANVAS -->
+      <section class="pl-canvas-wrap">
+
+        <!-- Canvas top bar -->
+        <div class="pl-canvas-bar">
+          <div class="group">
+            <button title="Select"><i class="ti ti-pointer"></i></button>
+            <button class="is-on" title="Move"><i class="ti ti-hand-grab"></i>Move</button>
+            <button title="Draw"><i class="ti ti-pencil"></i></button>
+            <button title="Lasso"><i class="ti ti-lasso"></i></button>
+          </div>
+          <div class="sep"></div>
+          <div class="group">
+            <button title="Undo"><i class="ti ti-arrow-back-up"></i></button>
+            <button title="Redo"><i class="ti ti-arrow-forward-up"></i></button>
+          </div>
+          <div class="sep"></div>
+          <span class="stat">Drill <strong>2 of 4</strong> · Defending set-pieces</span>
+          <div style="flex:1"></div>
+          <div class="group">
+            <button title="Zoom out"><i class="ti ti-zoom-out"></i></button>
+            <button class="is-on">100%</button>
+            <button title="Zoom in"><i class="ti ti-zoom-in"></i></button>
+            <button title="Fit"><i class="ti ti-arrows-maximize"></i></button>
+          </div>
+          <div class="sep"></div>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-eye" style="font-size:14px"></i>Preview</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Export</button>
+        </div>
+
+        <!-- Field -->
+        <div class="pl-field" id="plField" style="--opponent-crest: url('assets/sample-club-crest.png');">
+
+          <div class="pl-field-tag">
+            <span class="dot"></span>Drill 2 · Defending set-pieces · 25′
+            <span style="margin-left:14px;display:inline-flex;align-items:center;gap:6px;padding-left:14px;border-left:1px solid rgba(255,255,255,0.18)">
+              <img src="assets/sample-club-crest.png" style="width:18px;height:18px;object-fit:contain;filter:brightness(0) invert(1) opacity(0.92)">Clava FC
+              <span style="opacity:0.5;margin:0 4px">vs</span>
+              <img id="oppCrest" src="assets/sample-club-crest.png" style="width:18px;height:18px;object-fit:contain;filter:brightness(0) invert(1) opacity(0.7)">
+              <span style="opacity:0.85">Atlético</span>
+              <button id="oppPick" title="Change opponent crest" style="border:0;background:rgba(255,255,255,0.12);color:#fff;width:22px;height:22px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:4px"><i class="ti ti-pencil" style="font-size:11px"></i></button>
+            </span>
+          </div>
+
+          <!-- Zone (corner area) -->
+          <div class="zone" style="left:46%; top:8%; width:50%; height:38%;">
+            <div class="lbl">DEFENSIVE BLOCK · 18-yd box</div>
+          </div>
+
+          <!-- Goal at top -->
+          <div class="obj" style="left:50%; top:6%;">
+            <div class="goal"></div>
+          </div>
+
+          <!-- Cones marking the zone -->
+          <div class="obj" style="left:45%; top:7%;"><div class="cone"></div></div>
+          <div class="obj" style="left:96%; top:7%;"><div class="cone"></div></div>
+          <div class="obj" style="left:45%; top:46%;"><div class="cone"></div></div>
+          <div class="obj" style="left:96%; top:46%;"><div class="cone"></div></div>
+
+          <!-- Defenders (green — home, crest watermark) -->
+          <div class="obj" style="left:50%; top:14%;"><div class="player t1"><span>GK</span></div></div>
+          <div class="obj" style="left:62%; top:18%;"><div class="player t1"><span>3</span></div></div>
+          <div class="obj" style="left:75%; top:20%;"><div class="player t1"><span>4</span></div></div>
+          <div class="obj selected" style="left:55%; top:24%;"><div class="player t1"><span>5</span></div></div>
+          <div class="obj" style="left:82%; top:26%;"><div class="player t1"><span>2</span></div></div>
+          <div class="obj" style="left:68%; top:28%;"><div class="player t1"><span>6</span></div></div>
+          <div class="obj" style="left:88%; top:32%;"><div class="player t1"><span>8</span></div></div>
+
+          <!-- Attackers (blue — opponent, rival crest watermark) -->
+          <div class="obj" style="left:50%; top:8%;"><div class="player t2"><span>9</span></div></div>
+          <div class="obj" style="left:60%; top:10%;"><div class="player t2"><span>11</span></div></div>
+          <div class="obj" style="left:70%; top:9%;"><div class="player t2"><span>7</span></div></div>
+          <div class="obj" style="left:80%; top:14%;"><div class="player t2"><span>10</span></div></div>
+          <div class="obj" style="left:90%; top:12%;"><div class="player t2"><span>14</span></div></div>
+          <div class="obj" style="left:54%; top:18%;"><div class="player t2"><span>17</span></div></div>
+
+          <!-- Corner-kicker -->
+          <div class="obj" style="left:96%; top:6%;"><div class="player t3"><span>19</span></div></div>
+
+          <!-- Ball near corner -->
+          <div class="obj" style="left:97%; top:8%;"><div class="ball"></div></div>
+
+          <!-- Free zone (counter-attack target) -->
+          <div class="zone" style="left:8%; top:62%; width:30%; height:30%; border-color:#22D3EE; background:rgba(34,211,238,0.08);">
+            <div class="lbl" style="color:#22D3EE">COUNTER TARGET</div>
+          </div>
+
+          <!-- Pole markers for outlet -->
+          <div class="obj" style="left:30%; top:50%;"><div class="pole"></div></div>
+          <div class="obj" style="left:18%; top:62%;"><div class="pole"></div></div>
+
+          <!-- Arrows -->
+          <svg class="arrows-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <marker id="arrowAcc" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#FBBF24"/>
+              </marker>
+              <marker id="arrowDef" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#22D3EE"/>
+              </marker>
+            </defs>
+            <!-- corner cross to box -->
+            <path d="M 96 8 Q 80 22 56 24" fill="none" stroke="#FBBF24" stroke-width="0.55" stroke-dasharray="0.8 0.8" marker-end="url(#arrowAcc)" vector-effect="non-scaling-stroke"/>
+            <!-- counter-attack run -->
+            <path d="M 50 22 Q 35 45 22 65" fill="none" stroke="#22D3EE" stroke-width="0.55" marker-end="url(#arrowDef)" vector-effect="non-scaling-stroke"/>
+            <path d="M 56 24 Q 40 52 30 78" fill="none" stroke="#22D3EE" stroke-width="0.55" marker-end="url(#arrowDef)" vector-effect="non-scaling-stroke"/>
+          </svg>
+
+          <!-- Color FAB -->
+          <div class="pl-field-fab">
+            <button title="Annotation"><i class="ti ti-edit"></i></button>
+            <button title="Color"><i class="ti ti-palette"></i></button>
+            <button title="Background"><i class="ti ti-photo"></i></button>
+            <button title="Fullscreen"><i class="ti ti-maximize"></i></button>
+          </div>
+        </div>
+
+        <!-- Bottom dock -->
+        <div class="pl-dock">
+          <div class="pl-dock-grp">
+            <span class="lbl">Teams</span>
+            <button class="pl-dock-btn"><span class="p t1"></span></button>
+            <button class="pl-dock-btn"><span class="p t2"></span></button>
+            <button class="pl-dock-btn"><span class="p t3"></span></button>
+            <button class="pl-dock-btn"><span class="p t4"></span></button>
+          </div>
+          <div class="pl-dock-grp">
+            <span class="lbl">Objects</span>
+            <button class="pl-dock-btn" title="Ball"><i class="ti ti-ball-football"></i></button>
+            <button class="pl-dock-btn" title="Cone"><i class="ti ti-triangle"></i></button>
+            <button class="pl-dock-btn" title="Pole"><i class="ti ti-bookmark"></i></button>
+            <button class="pl-dock-btn" title="Gate"><i class="ti ti-rectangle"></i></button>
+            <button class="pl-dock-btn" title="Goal"><i class="ti ti-target"></i></button>
+            <button class="pl-dock-btn" title="Mannequin"><i class="ti ti-walk"></i></button>
+          </div>
+          <div class="pl-dock-grp">
+            <span class="lbl">Lines</span>
+            <button class="pl-dock-btn" title="Pass"><i class="ti ti-arrow-right"></i></button>
+            <button class="pl-dock-btn is-on" title="Run"><i class="ti ti-arrow-bear-right"></i></button>
+            <button class="pl-dock-btn" title="Dribble"><i class="ti ti-line-dashed"></i></button>
+            <button class="pl-dock-btn" title="Curve"><i class="ti ti-arrow-curve-right"></i></button>
+          </div>
+          <div class="pl-dock-grp">
+            <span class="lbl">Zones</span>
+            <button class="pl-dock-btn" title="Rectangle"><i class="ti ti-rectangle"></i></button>
+            <button class="pl-dock-btn" title="Circle"><i class="ti ti-circle"></i></button>
+            <button class="pl-dock-btn" title="Polygon"><i class="ti ti-polygon"></i></button>
+          </div>
+          <div class="pl-dock-grp">
+            <span class="lbl">Text</span>
+            <button class="pl-dock-btn" title="Label"><i class="ti ti-typography"></i></button>
+            <button class="pl-dock-btn" title="Number"><i class="ti ti-123"></i></button>
+          </div>
+
+          <div style="flex:1"></div>
+
+          <span class="stat" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
+            <strong style="color:var(--cm-fg);font-weight:600">14</strong> objects ·
+            <strong style="color:var(--cm-fg);font-weight:600">2</strong> zones ·
+            <strong style="color:var(--cm-fg);font-weight:600">3</strong> arrows
+          </span>
+        </div>
+
+      </section>
+    </section>
+  </main>
+</div>
+
+<!-- Tweaks + Settings -->
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+
+  // Sidebar
+  if (profile) {
+    const initials = (profile.full_name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+    const el = id => document.getElementById(id);
+    if (el('userInitials')) el('userInitials').textContent = initials;
+    if (el('userName'))     el('userName').textContent     = profile.full_name || '';
+    if (el('userRole'))     el('userRole').textContent     = profile.role || '';
+  }
+  if (club) {
+    const el = document.getElementById('sideClubName');
+    if (el) el.textContent = club.name;
+    window.applyClubTheme();
+  }
+
+  // Available players for today
+  const today = new Date().toISOString().split('T')[0];
+
+  // Load players and availability in parallel
+  const [playersRes, availRes] = await Promise.all([
+    window.sb.from('players')
+      .select('id,first_name,last_name,number,position')
+      .eq('club_id', clubId)
+      .neq('status', 'inactive'),
+    window.sb.from('availability')
+      .select('player_id,status')
+      .eq('club_id', clubId)
+      .eq('date', today)
+      .catch(() => ({ data: [] }))
+  ]);
+
+  const players    = playersRes.data || [];
+  const availMap   = Object.fromEntries((availRes.data || []).map(a => [a.player_id, a.status]));
+  const hasAvail   = (availRes.data || []).length > 0;
+
+  // Status → pill class mapping
+  const statusClass = {
+    av: 'is-success',
+    pa: 'is-warning',
+    in: 'is-danger',
+    si: 'is-danger',
+    na: '',
+    ab: '',
+  };
+
+  // If no availability data for today, show all active players as available
+  let pillData;
+  if (hasAvail) {
+    pillData = players
+      .filter(p => {
+        const s = availMap[p.id];
+        return !s || s === 'av' || s === 'pa'; // show av + partial
+      })
+      .map(p => ({
+        label: `${p.number ? p.number + ' ' : ''}${p.last_name || p.first_name || '?'}`,
+        cls: statusClass[availMap[p.id]] || 'is-success'
+      }));
+  } else {
+    pillData = players.map(p => ({
+      label: `${p.number ? p.number + ' ' : ''}${p.last_name || p.first_name || '?'}`,
+      cls: 'is-success'
+    }));
+  }
+
+  const head  = document.getElementById('plAvailHead');
+  const pills = document.getElementById('plAvailPills');
+
+  if (head)  head.innerHTML  = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
+  if (pills) {
+    pills.innerHTML = pillData.map(p =>
+      `<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`
+    ).join('');
+  }
+})();
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+  // Click drill in left panel to highlight it
+  document.querySelectorAll('.pl-ex').forEach(el => el.addEventListener('click', () => {
+    document.querySelectorAll('.pl-ex').forEach(o => o.classList.remove('is-active'));
+    el.classList.add('is-active');
+  }));
+  // Dock single-select per group
+  document.querySelectorAll('.pl-dock-grp').forEach(g => g.querySelectorAll('.pl-dock-btn').forEach(b => b.addEventListener('click', () => {
+    g.querySelectorAll('.pl-dock-btn').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+  })));
+  // Top toolbar groups
+  document.querySelectorAll('.pl-canvas-bar .group').forEach(g => g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+  })));
+  // Object selection on the field
+  document.querySelectorAll('.pl-field .obj').forEach(el => el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.pl-field .obj').forEach(o => o.classList.remove('selected'));
+    el.classList.add('selected');
+  }));
+
+  // Opponent crest picker — cycles through a few sample rivals for demo
+  const rivals = [
+    { name:'Atlético',    crest:'assets/sample-club-crest.png' },
+    { name:'Boca',         crest:'assets/sample-club-crest.png' },
+    { name:'River Plate',  crest:'assets/sample-club-crest.png' },
+    { name:'Independiente',crest:'assets/sample-club-crest.png' },
+    { name:'San Lorenzo',  crest:'assets/sample-club-crest.png' },
+  ];
+  let ri = 0;
+  const oppPick = document.getElementById('oppPick');
+  const field = document.getElementById('plField');
+  const oppCrestImg = document.getElementById('oppCrest');
+  const oppLbl = oppPick && oppPick.previousElementSibling;
+  if (oppPick) {
+    oppPick.addEventListener('click', () => {
+      ri = (ri + 1) % rivals.length;
+      const r = rivals[ri];
+      // Demo: rotate hue per rival so the crest is visually distinct even with the same asset
+      const hue = ri * 70;
+      field.style.setProperty('--opponent-crest', `url('${r.crest}')`);
+      oppCrestImg.src = r.crest;
+      oppCrestImg.style.filter = `brightness(0) invert(1) opacity(0.75) hue-rotate(${hue}deg)`;
+      if (oppLbl) oppLbl.textContent = r.name;
+      // Tint the t2 players overlay to match
+      document.querySelectorAll('.pl-field .player.t2').forEach(p => p.style.filter = `hue-rotate(${hue}deg)`);
+    });
+  }
+</script>
+
+</body>
+</html>

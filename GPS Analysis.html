@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Analysis — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  .gp-page { padding:20px 28px 64px; max-width:1600px; width:100%; }
+  .gp-bar { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .gp-bar h1 { font:600 24px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .gp-bar .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
+  .gp-bar .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  .gp-src-btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--cm-r-3); background:var(--cm-bg-soft); border:1px solid var(--cm-border); color:var(--cm-fg); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .gp-src-btn:hover { border-color:var(--cm-border-strong); }
+  .gp-src-btn .ti { font-size:14px; color:var(--cm-fg-muted); }
+  .gp-src-btn .dot { width:6px; height:6px; border-radius:50%; background:var(--cm-success); box-shadow:0 0 8px var(--cm-success); }
+  .gp-src-btn .ct { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .gp-src-btn.is-open { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+
+  .gp-src-overlay { position:fixed; inset:0; background:rgba(8,10,12,0.45); backdrop-filter:blur(4px); opacity:0; pointer-events:none; transition:opacity 200ms; z-index:800; }
+  .gp-src-overlay.is-open { opacity:1; pointer-events:auto; }
+  .gp-src-drawer { position:fixed; top:0; right:0; bottom:0; width:560px; max-width:96vw; background:var(--cm-bg); border-left:1px solid var(--cm-border); box-shadow:-12px 0 40px rgba(0,0,0,0.2); transform:translateX(100%); transition:transform 280ms cubic-bezier(.2,.7,.2,1); z-index:810; display:flex; flex-direction:column; }
+  .gp-src-drawer.is-open { transform:translateX(0); }
+  .gp-src-h { display:flex; align-items:center; gap:12px; padding:18px 20px; border-bottom:1px solid var(--cm-border); }
+  .gp-src-h h3 { font:600 16px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
+  .gp-src-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .gp-src-x { width:32px; height:32px; border-radius:8px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .gp-src-x .ti { font-size:16px; }
+  .gp-src-x:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .gp-src-body { flex:1; overflow-y:auto; padding:16px 20px 24px; }
+
+  .gp-drop { border:1.5px dashed var(--cm-border-strong); border-radius:10px; padding:18px; background:var(--cm-bg-soft); display:flex; flex-direction:column; gap:10px; cursor:pointer; margin-bottom:14px; }
+  .gp-drop:hover { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .gp-drop .top { display:flex; align-items:center; gap:10px; }
+  .gp-drop .ic { width:36px; height:36px; border-radius:9px; background:var(--cm-surface); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); flex-shrink:0; }
+  .gp-drop .ic .ti { font-size:18px; }
+  .gp-drop h4 { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .gp-drop p { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .gp-drop .formats { display:flex; gap:5px; flex-wrap:wrap; }
+  .gp-drop .fmt { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:4px; background:var(--cm-surface); border:1px solid var(--cm-border-soft); font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+  .gp-src-sect-l { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin:18px 0 10px; }
+  .gp-conns { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .gp-conn { border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:10px; padding:12px; display:flex; gap:10px; cursor:pointer; }
+  .gp-conn:hover { border-color:var(--cm-border-strong); }
+  .gp-conn .logo { width:32px; height:32px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#fff; font:700 12px/1 var(--cm-font-sans); flex-shrink:0; }
+  .gp-conn .logo.ss { background:#F47C0A; }
+  .gp-conn .logo.cp { background:#E11E26; }
+  .gp-conn .logo.po { background:#0F62FE; }
+  .gp-conn .logo.wm { background:#7C3AED; }
+  .gp-conn .logo.gw { background:#1FA463; }
+  .gp-conn .logo.csv { background:var(--cm-neutral); }
+  .gp-conn .info { flex:1; min-width:0; }
+  .gp-conn h5 { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .gp-conn .desc { font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:2px; }
+  .gp-conn-status { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 6px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); margin-top:8px; }
+  .gp-conn-status .d { width:6px; height:6px; border-radius:50%; }
+  .gp-conn-status.ok { background:var(--cm-success-bg); color:var(--cm-success); }
+  .gp-conn-status.ok .d { background:var(--cm-success); }
+  .gp-conn-status.err { background:var(--cm-danger-bg); color:var(--cm-danger); }
+  .gp-conn-status.err .d { background:var(--cm-danger); }
+  .gp-conn-status.av { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border-soft); }
+
+  .gp-sections { display:flex; gap:4px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:6px; box-shadow:var(--cm-shadow-1); margin-bottom:14px; flex-wrap:wrap; }
+  .gp-sec { padding:6px 14px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13px/1 var(--cm-font-sans); cursor:pointer; border-radius:7px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; }
+  .gp-sec:hover { color:var(--cm-fg); background:var(--cm-bg-soft); }
+  .gp-sec.is-on { color:var(--cm-fg-strong); background:var(--cm-accent-soft); font-weight:600; }
+  .gp-sec .row { display:flex; align-items:center; gap:6px; }
+  .gp-sec .row .ti { font-size:14px; }
+  .gp-sec .sub { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); padding-left:20px; }
+  .gp-sec.is-on .sub { color:var(--cm-accent); }
+
+  .gp-dash-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:10px 14px; box-shadow:var(--cm-shadow-1); margin-bottom:14px; }
+  .gp-dash-bar .h { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .gp-dash-bar .h-sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .gp-dash-bar .right { margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .gp-dash-bar .pill { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-muted); font:500 11.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .gp-dash-bar .pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .gp-dash-bar .pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .gp-dash-bar .pill .ti { font-size:13px; }
+
+  .gp-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:14px; }
+  .gp-grid.is-edit .gp-c { outline:1.5px dashed var(--cm-border-strong); outline-offset:-2px; }
+  .gp-grid.is-edit .gp-c:hover { outline-color:var(--cm-accent); }
+
+  .gp-c { grid-column: span 6; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; position:relative; overflow:hidden; }
+  .gp-c[data-size="sm"]   { grid-column: span 4; }
+  .gp-c[data-size="md"]   { grid-column: span 6; }
+  .gp-c[data-size="lg"]   { grid-column: span 8; }
+  .gp-c[data-size="full"] { grid-column: span 12; }
+  @media (max-width:1000px) { .gp-c, .gp-c[data-size] { grid-column: span 12; } }
+
+  .gp-c-h { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .gp-c-h .ttl { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .gp-c-h .sub { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .gp-c-h .right { margin-left:auto; display:flex; align-items:center; gap:4px; }
+  .gp-c-h .right > button { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .gp-c-h .right > button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); border-color:var(--cm-border); }
+  .gp-c-h .right > button .ti { font-size:13px; }
+  .size-toggle { display:inline-flex; gap:1px; padding:2px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); }
+  .size-toggle button { width:22px; height:22px; border:0; background:transparent; color:var(--cm-fg-muted); font:600 9.5px/1 var(--cm-font-mono); cursor:pointer; border-radius:3px; }
+  .size-toggle button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+
+  .gp-c-b { padding:14px; flex:1; display:flex; flex-direction:column; }
+  .gp-c-picks { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .gp-c-pick { display:inline-flex; align-items:center; gap:4px; height:22px; padding:0 8px; border-radius:5px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg); font:500 11px/1 var(--cm-font-sans); cursor:pointer; }
+  .gp-c-pick:hover { border-color:var(--cm-border-strong); }
+  .gp-c-pick .ti { font-size:11px; color:var(--cm-fg-muted); }
+  .gp-c-pick.is-accent { background:var(--cm-accent-soft); border-color:var(--cm-border-strong); color:var(--cm-fg-strong); }
+
+  .gp-add { grid-column: span 4; border:2px dashed var(--cm-border-strong); border-radius:var(--cm-r-4); background:transparent; color:var(--cm-fg-muted); font:500 13.5px/1.4 var(--cm-font-sans); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer; min-height:220px; text-align:center; padding:20px; }
+  .gp-add:hover { border-color:var(--cm-accent); color:var(--cm-fg); background:var(--cm-accent-soft); }
+  .gp-add .ic { width:42px; height:42px; border-radius:11px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); }
+  .gp-add .ic .ti { font-size:20px; }
+  .gp-add small { font:500 11px/1.4 var(--cm-font-mono); color:var(--cm-fg-faint); display:block; margin-top:4px; }
+
+  .gp-view { display:none; }
+  .gp-view.is-on { display:block; }
+
+  .gp-kpi { padding:14px 16px; }
+  .gp-kpi .l { display:flex; align-items:center; gap:6px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .gp-kpi .l .ti { font-size:13px; }
+  .gp-kpi .v { font:600 24px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .gp-kpi .v sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .gp-kpi .t { margin-top:10px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .gp-kpi .d { display:inline-flex; align-items:center; gap:3px; font:600 12px/1 var(--cm-font-mono); }
+  .gp-kpi .d.up { color:var(--cm-success); }
+  .gp-kpi .d.warn { color:var(--cm-warning); }
+  .gp-kpi .d.down { color:var(--cm-danger); }
+
+  .gp-zwrap { overflow-x:auto; }
+  .gp-zt { width:100%; border-collapse:separate; border-spacing:0; }
+  .gp-zt th { padding:8px 6px; font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; text-align:center; }
+  .gp-zt th.pc, .gp-zt td.pc { text-align:left; position:sticky; left:0; background:var(--cm-surface); border-right:1px solid var(--cm-border-soft); min-width:140px; padding-left:14px; z-index:2; }
+  .gp-zt thead th.pc { background:var(--cm-bg-soft); z-index:3; }
+  .gp-zt td { padding:0; border-bottom:1px solid var(--cm-border-soft); text-align:center; }
+  .gp-zc { display:inline-flex; align-items:center; justify-content:center; width:48px; height:26px; margin:2px; border-radius:5px; font:600 11.5px/1 var(--cm-font-mono); border:1px solid transparent; }
+  .gp-zc.high   { background:rgba(220,38,38,0.18); color:#B91C1C; }
+  .gp-zc.mhigh  { background:rgba(248,113,113,0.18); color:#9F1239; }
+  .gp-zc.warn   { background:rgba(217,119,6,0.16); color:#B45309; }
+  .gp-zc.neu    { background:var(--cm-bg-soft); color:var(--cm-fg-muted); }
+  .gp-zc.low    { background:rgba(59,130,246,0.14); color:#1D4ED8; }
+  .gp-zc.mlow   { background:rgba(96,165,250,0.16); color:#1E40AF; }
+  .gp-zc.vlow   { background:rgba(29,78,216,0.18); color:#1E3A8A; }
+  .gp-mini-pl { display:flex; align-items:center; gap:8px; padding:6px 0; }
+  .gp-mav { width:24px; height:24px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg); display:flex; align-items:center; justify-content:center; font:600 10px/1 var(--cm-font-sans); flex-shrink:0; }
+  .gp-mav.tn { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .gp-mn { font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .gp-md { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+
+  .gp-pitch { position:relative; aspect-ratio:105/68; background-image:url('assets/field.jpg'); background-size:cover; background-position:center; border-radius:10px; overflow:hidden; border:1px solid var(--cm-border); margin-top:6px; }
+  .gp-pitch::after { content:""; position:absolute; inset:0; background:radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.2) 100%); pointer-events:none; }
+  .gp-pitch .blob { position:absolute; border-radius:50%; filter:blur(24px); mix-blend-mode:screen; }
+  .gp-pitch .traj { position:absolute; inset:0; pointer-events:none; }
+
+  .gp-bars { display:flex; gap:5px; align-items:end; height:140px; padding-top:8px; }
+  .gp-bars .gr { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .gp-bars .gr .stack { display:flex; gap:2px; height:100%; width:100%; align-items:end; padding:0 6px; }
+  .gp-bars .gr .b { flex:1; border-radius:2px 2px 0 0; min-height:3px; }
+  .gp-bars .gr .b.prev { background:var(--cm-bg-sunk); border:1px solid var(--cm-border-soft); }
+  .gp-bars .gr .b.curr { background:var(--cm-accent); }
+  .gp-bars .gr .b.mt { background:var(--cm-danger); }
+  .gp-bars .gr .lbl { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+  .gp-radar svg { width:100%; height:auto; max-height:320px; display:block; }
+
+  .gp-xm { display:flex; flex-direction:column; gap:6px; }
+  .gp-xm-row { display:grid; grid-template-columns: 80px 1fr 60px; align-items:center; gap:8px; }
+  .gp-xm-l { font:500 11.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); display:flex; align-items:center; gap:5px; }
+  .gp-xm-l .ti { font-size:12px; color:var(--cm-fg-muted); }
+  .gp-xm-t { position:relative; height:20px; }
+  .gp-xm-t::before { content:""; position:absolute; left:0; right:0; top:8px; bottom:8px; background:linear-gradient(90deg, rgba(34,197,94,0.18) 0%, rgba(34,197,94,0.18) 50%, rgba(245,158,11,0.18) 70%, rgba(239,68,68,0.22) 95%); border-radius:2px; }
+  .gp-xm-t .th { position:absolute; top:4px; bottom:4px; width:1px; background:rgba(0,0,0,0.18); }
+  .gp-xm-t .pin { position:absolute; top:0; bottom:0; transform:translateX(-50%); display:flex; align-items:center; }
+  .gp-xm-t .pin .pd { width:9px; height:9px; border-radius:50%; background:var(--cm-fg-strong); border:2px solid var(--cm-surface); box-shadow:0 0 0 1px var(--cm-fg-strong); }
+  .gp-xm-v { text-align:right; font:600 12px/1 var(--cm-font-mono); }
+  .gp-xm-v.warn { color:var(--cm-warning); }
+  .gp-xm-v.danger { color:var(--cm-danger); }
+
+  .gp-rank { display:flex; flex-direction:column; gap:8px; }
+  .gp-rank-row { display:grid; grid-template-columns: 24px 1fr 60px; align-items:center; gap:10px; }
+  .gp-rank-row .ax { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); text-align:center; }
+  .gp-rank-bar { height:24px; background:var(--cm-bg-soft); border-radius:5px; position:relative; overflow:hidden; }
+  .gp-rank-fill { position:absolute; left:0; top:0; bottom:0; background:var(--cm-accent); border-radius:5px; display:flex; align-items:center; padding-left:8px; color:var(--cm-fg-on-accent); font:600 11.5px/1 var(--cm-font-sans); }
+  .gp-rank-fill.med { background:rgba(34,197,94,0.55); color:var(--cm-fg); }
+  .gp-rank-fill.low { background:rgba(34,197,94,0.25); color:var(--cm-fg); }
+  .gp-rank-v { text-align:right; font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg); }
+
+  .gp-ts svg { display:block; width:100%; height:200px; }
+  .gp-scatter svg { display:block; width:100%; height:240px; }
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="13 GPS Analysis">
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name" id="sideClubName">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item is-active" href="#"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+      </div>
+            <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="#" data-open-settings><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av" id="userInitials">JR</div>
+        <div class="who"><div class="name" id="userName">Joaquín Reiris</div><div class="role" id="userRole">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">GPS analysis</span>
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="gp-page">
+      <div class="gp-bar">
+        <h1>GPS analysis</h1>
+        <span class="sub" id="gpSub">MC 14 · 22 players · last sync 8 min ago</span>
+        <div class="right">
+          <button class="gp-src-btn" id="srcBtn">
+            <span class="dot"></span><i class="ti ti-cloud-download"></i>Data sources<span class="ct">4 connected</span><i class="ti ti-chevron-down"></i>
+          </button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
+        </div>
+      </div>
+
+      <div class="gp-sections" id="sections">
+        <button class="gp-sec is-on" data-view="ind"><div class="row"><i class="ti ti-user"></i>Individual</div><div class="sub">vs role / position</div></button>
+        <button class="gp-sec" data-view="grp"><div class="row"><i class="ti ti-users-group"></i>Group</div><div class="sub">squad-wide</div></button>
+        <button class="gp-sec" data-view="mind"><div class="row"><i class="ti ti-ball-football"></i>Match · individual</div><div class="sub">per-player performance</div></button>
+        <button class="gp-sec" data-view="mgrp"><div class="row"><i class="ti ti-trophy"></i>Match · group</div><div class="sub">team KPIs</div></button>
+      </div>
+
+      <div class="gp-dash-bar">
+        <span class="h">Dashboard <span id="secTitle">· Individual</span></span>
+        <span class="h-sub" id="secSub">F. Domínguez · #10 · MF · vs role baseline</span>
+        <div class="right">
+          <button class="pill"><i class="ti ti-clock"></i>MC 14</button>
+          <button class="pill"><i class="ti ti-user"></i>F. Domínguez</button>
+          <button class="pill"><i class="ti ti-target"></i>vs Role</button>
+          <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
+          <button class="pill is-on" id="editToggle"><i class="ti ti-pencil"></i>Edit layout</button>
+          <button class="pill"><i class="ti ti-bookmark"></i>Saved views</button>
+          <button class="pill"><i class="ti ti-plus"></i>Add card</button>
+        </div>
+      </div>
+
+      <!-- INDIVIDUAL -->
+      <div class="gp-view is-on" data-view="ind">
+        <div class="gp-grid is-edit">
+
+          <div class="gp-c" data-size="sm">
+            <div class="gp-c-h"><span class="ttl">Distance</span><span class="sub">90′</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-route"></i>vs MF baseline</div><div class="v">11.4 <sub>km</sub></div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+12%</span> · z = +1.2</div></div>
+          </div>
+          <div class="gp-c" data-size="sm">
+            <div class="gp-c-h"><span class="ttl">HSR</span><span class="sub">&gt;19.8 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-bolt"></i>vs MF baseline</div><div class="v" style="color:var(--cm-danger)">624 <sub>m</sub></div><div class="t"><span class="d warn"><i class="ti ti-arrow-up-right"></i>+34%</span> · z = +1.8 <span style="color:var(--cm-danger);font-weight:600">flag</span></div></div>
+          </div>
+          <div class="gp-c" data-size="sm">
+            <div class="gp-c-h"><span class="ttl">Sprints</span><span class="sub">&gt;25.2 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-flame"></i>count</div><div class="v">19</div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+5</span> · z = +0.8</div></div>
+          </div>
+
+          <div class="gp-c" data-size="lg">
+            <div class="gp-c-h">
+              <span class="ttl">Radar profile</span>
+              <span class="sub">vs MF baseline · z-normalized</span>
+              <div class="gp-c-picks" style="margin-left:auto">
+                <span class="gp-c-pick is-accent"><i class="ti ti-target"></i>Role <i class="ti ti-chevron-down"></i></span>
+                <span class="gp-c-pick"><i class="ti ti-clock"></i>Match <i class="ti ti-chevron-down"></i></span>
+              </div>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b gp-radar">
+              <svg viewBox="0 0 380 340" font-family="Geist, ui-sans-serif">
+                <g fill="none" stroke="var(--cm-border-soft)" stroke-width="1">
+                  <polygon points="190,30 320,105 320,235 190,310 60,235 60,105" opacity="0.9"/>
+                  <polygon points="190,65 290,120 290,220 190,275 90,220 90,120" opacity="0.7"/>
+                  <polygon points="190,100 260,140 260,200 190,240 120,200 120,140" opacity="0.55"/>
+                </g>
+                <g stroke="var(--cm-border)" stroke-width="1" opacity="0.5">
+                  <line x1="190" y1="170" x2="190" y2="30"/>
+                  <line x1="190" y1="170" x2="320" y2="105"/>
+                  <line x1="190" y1="170" x2="320" y2="235"/>
+                  <line x1="190" y1="170" x2="190" y2="310"/>
+                  <line x1="190" y1="170" x2="60" y2="235"/>
+                  <line x1="190" y1="170" x2="60" y2="105"/>
+                </g>
+                <polygon points="190,100 260,140 260,200 190,240 120,200 120,140" fill="var(--cm-neutral)" opacity="0.10" stroke="var(--cm-neutral)" stroke-width="1" stroke-dasharray="3 3"/>
+                <polygon points="190,72 296,128 256,214 190,224 130,202 100,128" fill="var(--cm-accent)" opacity="0.18" stroke="var(--cm-accent)" stroke-width="2" stroke-linejoin="round"/>
+                <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
+                  <circle cx="190" cy="72" r="4"/><circle cx="296" cy="128" r="4"/><circle cx="256" cy="214" r="4"/>
+                  <circle cx="190" cy="224" r="4"/><circle cx="130" cy="202" r="4"/><circle cx="100" cy="128" r="4"/>
+                </g>
+                <g font-size="12" font-weight="500" fill="var(--cm-fg)">
+                  <text x="190" y="20" text-anchor="middle">Distance</text>
+                  <text x="190" y="60" text-anchor="middle" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-accent)">z = +1.2</text>
+                  <text x="332" y="102" text-anchor="start">HSR</text>
+                  <text x="332" y="116" text-anchor="start" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-danger)">z = +1.8</text>
+                  <text x="332" y="242" text-anchor="start">Sprints</text>
+                  <text x="332" y="256" text-anchor="start" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-accent)">z = +0.8</text>
+                  <text x="190" y="328" text-anchor="middle">Top speed</text>
+                  <text x="50" y="242" text-anchor="end">Accel</text>
+                  <text x="50" y="256" text-anchor="end" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-accent)">z = +1.1</text>
+                  <text x="50" y="102" text-anchor="end">Load</text>
+                  <text x="50" y="116" text-anchor="end" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-danger)">z = +1.4</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h"><span class="ttl">× match max</span><span class="sub">this week vs match peak</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-c-b">
+              <div class="gp-xm">
+                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-route"></i>Dist</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:64%"><span class="pd"></span></span></span><span class="gp-xm-v">0.86×</span></div>
+                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-bolt"></i>HSR</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:80%"><span class="pd"></span></span></span><span class="gp-xm-v warn">1.07×</span></div>
+                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-flame"></i>Sprints</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:74%"><span class="pd"></span></span></span><span class="gp-xm-v">0.98×</span></div>
+                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-gauge"></i>Top sp</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:60%"><span class="pd"></span></span></span><span class="gp-xm-v">0.81×</span></div>
+                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-arrow-up-right"></i>Accel</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:88%"><span class="pd"></span></span></span><span class="gp-xm-v danger">1.18×</span></div>
+                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-activity"></i>Load</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:71%"><span class="pd"></span></span></span><span class="gp-xm-v">0.94×</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gp-c" data-size="full">
+            <div class="gp-c-h">
+              <span class="ttl">Weekly volume · wk-on-wk</span>
+              <div class="gp-c-picks" style="margin-left:6px">
+                <span class="gp-c-pick is-accent">Player load <i class="ti ti-chevron-down"></i></span>
+                <span class="gp-c-pick">MC 14 vs MC 13 <i class="ti ti-chevron-down"></i></span>
+                <span class="gp-c-pick">Bars <i class="ti ti-chevron-down"></i></span>
+              </div>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b">
+              <div class="gp-bars">
+                <div class="gr"><div class="stack"><div class="b prev" style="height:8%"></div><div class="b curr" style="height:0%"></div></div><span class="lbl">Sun 11</span></div>
+                <div class="gr"><div class="stack"><div class="b prev" style="height:18%"></div><div class="b curr" style="height:22%"></div></div><span class="lbl">Mon 12</span></div>
+                <div class="gr"><div class="stack"><div class="b prev" style="height:60%"></div><div class="b curr" style="height:54%"></div></div><span class="lbl">Tue 13</span></div>
+                <div class="gr"><div class="stack"><div class="b prev" style="height:80%"></div><div class="b curr" style="height:92%"></div></div><span class="lbl">Wed 14</span></div>
+                <div class="gr"><div class="stack"><div class="b prev" style="height:52%"></div><div class="b curr" style="height:62%"></div></div><span class="lbl">Thu 15</span></div>
+                <div class="gr"><div class="stack"><div class="b prev" style="height:40%"></div><div class="b curr" style="height:32%"></div></div><span class="lbl">Fri 16</span></div>
+                <div class="gr"><div class="stack"><div class="b prev" style="height:96%"></div><div class="b mt" style="height:24%"></div></div><span class="lbl">Sat 17</span></div>
+              </div>
+              <div style="display:flex; gap:14px; margin-top:10px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted)">
+                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-bg-sunk);border:1px solid var(--cm-border-soft)"></span>Prev MC 13</span>
+                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-accent)"></span>Current MC 14</span>
+                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-danger)"></span>Match</span>
+                <div style="flex:1"></div>
+                <span>Cumulative <strong style="color:var(--cm-fg)">1,478 AU</strong> · <span style="color:var(--cm-warning)">+6%</span></span>
+              </div>
+            </div>
+          </div>
+
+          <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>chart · KPI · table · custom</small></button>
+        </div>
+      </div>
+
+      <!-- GROUP -->
+      <div class="gp-view" data-view="grp">
+        <div class="gp-grid is-edit">
+
+          <div class="gp-c" data-size="full">
+            <div class="gp-c-h">
+              <span class="ttl">Z-score matrix</span>
+              <span class="sub">8 starters · 6 metrics · vs role baseline</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-arrows-sort"></i></button><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-zwrap">
+              <table class="gp-zt">
+                <thead><tr><th class="pc">Player</th><th>Distance</th><th>HSR</th><th>Sprints</th><th>Top spd</th><th>Accel</th><th>Load</th></tr></thead>
+                <tbody>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav tn">FD</div><div><div class="gp-mn">F. Domínguez</div><div class="gp-md">#10 · MF</div></div></div></td><td><span class="gp-zc warn">+1.2</span></td><td><span class="gp-zc mhigh">+1.8</span></td><td><span class="gp-zc warn">+0.8</span></td><td><span class="gp-zc neu">+0.6</span></td><td><span class="gp-zc warn">+1.1</span></td><td><span class="gp-zc mhigh">+1.4</span></td></tr>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav">MP</div><div><div class="gp-mn">M. Paredes</div><div class="gp-md">#8 · MF</div></div></div></td><td><span class="gp-zc mhigh">+1.6</span></td><td><span class="gp-zc warn">+0.9</span></td><td><span class="gp-zc neu">+0.2</span></td><td><span class="gp-zc low">−0.4</span></td><td><span class="gp-zc warn">+1.0</span></td><td><span class="gp-zc warn">+1.2</span></td></tr>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav tn">RV</div><div><div class="gp-mn">R. Vega</div><div class="gp-md">#7 · WG</div></div></div></td><td><span class="gp-zc warn">+0.9</span></td><td><span class="gp-zc high">+2.3</span></td><td><span class="gp-zc mhigh">+1.7</span></td><td><span class="gp-zc high">+2.6</span></td><td><span class="gp-zc warn">+1.0</span></td><td><span class="gp-zc mhigh">+1.5</span></td></tr>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav tn">SR</div><div><div class="gp-mn">S. Rivas</div><div class="gp-md">#9 · ST</div></div></div></td><td><span class="gp-zc warn">+0.7</span></td><td><span class="gp-zc mhigh">+1.6</span></td><td><span class="gp-zc warn">+1.1</span></td><td><span class="gp-zc mhigh">+1.9</span></td><td><span class="gp-zc neu">+0.4</span></td><td><span class="gp-zc warn">+0.8</span></td></tr>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav">TL</div><div><div class="gp-mn">T. López</div><div class="gp-md">#11 · WG</div></div></div></td><td><span class="gp-zc warn">+0.6</span></td><td><span class="gp-zc mhigh">+1.5</span></td><td><span class="gp-zc mhigh">+1.4</span></td><td><span class="gp-zc warn">+1.1</span></td><td><span class="gp-zc neu">+0.3</span></td><td><span class="gp-zc warn">+0.9</span></td></tr>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav">NF</div><div><div class="gp-mn">N. Ferreyra</div><div class="gp-md">#22 · CB</div></div></div></td><td><span class="gp-zc warn">+0.7</span></td><td><span class="gp-zc neu">+0.1</span></td><td><span class="gp-zc low">−0.3</span></td><td><span class="gp-zc mlow">−0.6</span></td><td><span class="gp-zc neu">+0.5</span></td><td><span class="gp-zc neu">+0.4</span></td></tr>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav">RS</div><div><div class="gp-mn">R. Sosa</div><div class="gp-md">#6 · CB</div></div></div></td><td><span class="gp-zc warn">+0.8</span></td><td><span class="gp-zc neu">+0.3</span></td><td><span class="gp-zc low">−0.5</span></td><td><span class="gp-zc mlow">−0.8</span></td><td><span class="gp-zc neu">+0.4</span></td><td><span class="gp-zc neu">+0.6</span></td></tr>
+                  <tr><td class="pc"><div class="gp-mini-pl"><div class="gp-mav">EG</div><div><div class="gp-mn">E. Galarza</div><div class="gp-md">#1 · GK</div></div></div></td><td><span class="gp-zc vlow">−1.8</span></td><td><span class="gp-zc vlow">−2.4</span></td><td><span class="gp-zc vlow">−2.1</span></td><td><span class="gp-zc vlow">−1.9</span></td><td><span class="gp-zc mlow">−0.7</span></td><td><span class="gp-zc vlow">−1.6</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h">
+              <span class="ttl">Squad ranking</span>
+              <div class="gp-c-picks" style="margin-left:6px">
+                <span class="gp-c-pick is-accent">HSR <i class="ti ti-chevron-down"></i></span>
+                <span class="gp-c-pick">MC 14 <i class="ti ti-chevron-down"></i></span>
+              </div>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b">
+              <div class="gp-rank">
+                <div class="gp-rank-row"><span class="ax">1</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:96%">R. Vega · #7</span></span><span class="gp-rank-v">812 m</span></div>
+                <div class="gp-rank-row"><span class="ax">2</span><span class="gp-rank-bar"><span class="gp-rank-fill med" style="width:80%">T. López · #11</span></span><span class="gp-rank-v">694 m</span></div>
+                <div class="gp-rank-row"><span class="ax">3</span><span class="gp-rank-bar"><span class="gp-rank-fill med" style="width:72%">F. Domínguez · #10</span></span><span class="gp-rank-v">624 m</span></div>
+                <div class="gp-rank-row"><span class="ax">4</span><span class="gp-rank-bar"><span class="gp-rank-fill med" style="width:68%">S. Rivas · #9</span></span><span class="gp-rank-v">588 m</span></div>
+                <div class="gp-rank-row"><span class="ax">5</span><span class="gp-rank-bar"><span class="gp-rank-fill low" style="width:62%">M. Paredes · #8</span></span><span class="gp-rank-v">528 m</span></div>
+                <div class="gp-rank-row"><span class="ax">6</span><span class="gp-rank-bar"><span class="gp-rank-fill low" style="width:50%">R. Sosa · #6</span></span><span class="gp-rank-v">412 m</span></div>
+                <div class="gp-rank-row"><span class="ax">7</span><span class="gp-rank-bar"><span class="gp-rank-fill low" style="width:46%">N. Ferreyra · #22</span></span><span class="gp-rank-v">388 m</span></div>
+                <div class="gp-rank-row"><span class="ax">8</span><span class="gp-rank-bar"><span class="gp-rank-fill low" style="width:14%">E. Galarza · #1</span></span><span class="gp-rank-v">82 m</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h">
+              <span class="ttl">Load vs HSR · scatter</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b gp-scatter">
+              <svg viewBox="0 0 480 240" font-family="Geist, ui-sans-serif">
+                <g stroke="var(--cm-border-soft)" stroke-width="1">
+                  <line x1="40" y1="30"  x2="460" y2="30"/>
+                  <line x1="40" y1="120" x2="460" y2="120"/>
+                  <line x1="40" y1="210" x2="460" y2="210"/>
+                  <line x1="40" y1="30"  x2="40"  y2="210"/>
+                </g>
+                <line x1="250" y1="30" x2="250" y2="210" stroke="var(--cm-border)" stroke-width="1" stroke-dasharray="3 3"/>
+                <line x1="40" y1="120" x2="460" y2="120" stroke="var(--cm-border)" stroke-width="1" stroke-dasharray="3 3"/>
+                <g>
+                  <circle cx="370" cy="42" r="8" fill="var(--cm-accent)"/><text x="370" y="46" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">RV</text>
+                  <circle cx="330" cy="76" r="8" fill="var(--cm-accent)"/><text x="330" y="80" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">FD</text>
+                  <circle cx="310" cy="90" r="8" fill="var(--cm-accent)"/><text x="310" y="94" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">SR</text>
+                  <circle cx="290" cy="86" r="8" fill="var(--cm-accent)" opacity="0.7"/><text x="290" y="90" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">TL</text>
+                  <circle cx="250" cy="110" r="8" fill="var(--cm-info)"/><text x="250" y="114" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">MP</text>
+                  <circle cx="190" cy="148" r="8" fill="var(--cm-info)" opacity="0.7"/><text x="190" y="152" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">RS</text>
+                  <circle cx="180" cy="158" r="8" fill="var(--cm-info)" opacity="0.7"/><text x="180" y="162" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">NF</text>
+                  <circle cx="80"  cy="200" r="8" fill="var(--cm-warning)"/><text x="80" y="204" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">EG</text>
+                </g>
+                <g font-size="10" font-family="Geist Mono, ui-monospace, monospace" fill="var(--cm-fg-muted)">
+                  <text x="40" y="226">300</text>
+                  <text x="250" y="226" text-anchor="middle">450</text>
+                  <text x="460" y="226" text-anchor="end">600 AU</text>
+                </g>
+                <text x="240" y="14" text-anchor="middle" font-size="10" fill="var(--cm-fg-muted)">HSR (m) ↑ · Player load →</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h"><span class="ttl">Team heatmap</span><span class="sub">avg position</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-c-b">
+              <div class="gp-pitch">
+                <div class="blob" style="left:36%; top:50%; width:120px; height:120px; background:rgba(74,222,128,0.55)"></div>
+                <div class="blob" style="left:48%; top:38%; width:160px; height:160px; background:rgba(74,222,128,0.55)"></div>
+                <div class="blob" style="left:55%; top:62%; width:170px; height:170px; background:rgba(74,222,128,0.6)"></div>
+                <div class="blob" style="left:68%; top:48%; width:190px; height:190px; background:rgba(252,211,77,0.65)"></div>
+                <div class="blob" style="left:78%; top:42%; width:130px; height:130px; background:rgba(248,113,113,0.55)"></div>
+              </div>
+            </div>
+          </div>
+
+          <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>group metric · comparison</small></button>
+        </div>
+      </div>
+
+      <!-- MATCH · INDIVIDUAL -->
+      <div class="gp-view" data-view="mind">
+        <div class="gp-grid is-edit">
+          <div class="gp-c" data-size="lg">
+            <div class="gp-c-h"><span class="ttl">Match heatmap + sprint tracks</span><span class="sub">F. Domínguez · 90′ · vs Vélez</span><div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-c-b">
+              <div class="gp-pitch" style="aspect-ratio:105/55">
+                <div class="blob" style="left:35%; top:50%; width:120px; height:120px; background:rgba(74,222,128,0.55)"></div>
+                <div class="blob" style="left:55%; top:60%; width:170px; height:170px; background:rgba(252,211,77,0.6)"></div>
+                <div class="blob" style="left:68%; top:48%; width:180px; height:180px; background:rgba(248,113,113,0.55)"></div>
+                <svg class="traj" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <path d="M 30 50 Q 40 35 55 38 Q 70 42 78 50 Q 85 60 75 65" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="0.45" vector-effect="non-scaling-stroke"/>
+                  <path d="M 50 65 Q 60 55 72 52" fill="none" stroke="#FBBF24" stroke-width="0.6" vector-effect="non-scaling-stroke"/>
+                  <circle cx="72" cy="52" r="0.9" fill="#FB923C" stroke="#fff" stroke-width="0.3"/>
+                  <circle cx="85" cy="42" r="0.9" fill="#FB923C" stroke="#fff" stroke-width="0.3"/>
+                  <circle cx="78" cy="62" r="1.0" fill="#EF4444" stroke="#fff" stroke-width="0.3"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h"><span class="ttl">Distance per minute</span><div class="gp-c-picks" style="margin-left:6px"><span class="gp-c-pick is-accent">Distance/min <i class="ti ti-chevron-down"></i></span></div><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-c-b gp-ts">
+              <svg viewBox="0 0 800 200" preserveAspectRatio="none" font-family="Geist, ui-sans-serif">
+                <g stroke="var(--cm-border-soft)" stroke-width="1">
+                  <line x1="40" y1="20" x2="780" y2="20"/>
+                  <line x1="40" y1="80" x2="780" y2="80"/>
+                  <line x1="40" y1="140" x2="780" y2="140"/>
+                </g>
+                <line x1="410" y1="20" x2="410" y2="180" stroke="var(--cm-border-strong)" stroke-width="1" stroke-dasharray="3 3"/>
+                <text x="410" y="14" text-anchor="middle" font-size="10" font-family="Geist Mono, ui-monospace, monospace" fill="var(--cm-fg-muted)">HT</text>
+                <g fill="var(--cm-accent)">
+                  <rect x="50" y="80" width="22" height="100" rx="2"/><rect x="78" y="70" width="22" height="110" rx="2"/>
+                  <rect x="106" y="60" width="22" height="120" rx="2"/><rect x="134" y="55" width="22" height="125" rx="2"/>
+                  <rect x="162" y="40" width="22" height="140" rx="2" fill="var(--cm-warning)"/><rect x="190" y="65" width="22" height="115" rx="2"/>
+                  <rect x="218" y="72" width="22" height="108" rx="2"/><rect x="246" y="50" width="22" height="130" rx="2" fill="var(--cm-warning)"/>
+                  <rect x="274" y="68" width="22" height="112" rx="2"/><rect x="302" y="82" width="22" height="98" rx="2"/>
+                  <rect x="330" y="74" width="22" height="106" rx="2"/><rect x="358" y="90" width="22" height="90" rx="2"/>
+                  <rect x="386" y="100" width="22" height="80" rx="2"/>
+                  <rect x="420" y="72" width="22" height="108" rx="2"/><rect x="448" y="60" width="22" height="120" rx="2"/>
+                  <rect x="476" y="50" width="22" height="130" rx="2" fill="var(--cm-warning)"/><rect x="504" y="46" width="22" height="134" rx="2" fill="var(--cm-warning)"/>
+                  <rect x="532" y="36" width="22" height="144" rx="2" fill="var(--cm-danger)"/><rect x="560" y="58" width="22" height="122" rx="2"/>
+                  <rect x="588" y="48" width="22" height="132" rx="2" fill="var(--cm-warning)"/><rect x="616" y="70" width="22" height="110" rx="2"/>
+                  <rect x="644" y="82" width="22" height="98" rx="2"/><rect x="672" y="88" width="22" height="92" rx="2"/>
+                  <rect x="700" y="40" width="22" height="140" rx="2" fill="var(--cm-danger)"/><rect x="728" y="64" width="22" height="116" rx="2"/>
+                  <rect x="756" y="85" width="22" height="95" rx="2"/>
+                </g>
+                <g font-size="10" font-family="Geist Mono, ui-monospace, monospace" fill="var(--cm-fg-muted)">
+                  <text x="50" y="196">0′</text><text x="270" y="196">30′</text>
+                  <text x="410" y="196" text-anchor="middle">45′</text><text x="640" y="196">75′</text>
+                  <text x="772" y="196" text-anchor="end">90′</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+
+          <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>shot map · speed zones</small></button>
+        </div>
+      </div>
+
+      <!-- MATCH · GROUP -->
+      <div class="gp-view" data-view="mgrp">
+        <div class="gp-grid is-edit">
+          <div class="gp-c" data-size="sm"><div class="gp-c-h"><span class="ttl">Total distance</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-route"></i>squad · 90′</div><div class="v">112.4 <sub>km</sub></div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+4%</span> vs 28d</div></div>
+          </div>
+          <div class="gp-c" data-size="sm"><div class="gp-c-h"><span class="ttl">HSR squad</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-bolt"></i>&gt;19.8 km/h</div><div class="v">5,184 <sub>m</sub></div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+8%</span></div></div>
+          </div>
+          <div class="gp-c" data-size="sm"><div class="gp-c-h"><span class="ttl">Sprints</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-flame"></i>squad count</div><div class="v">174</div><div class="t"><span class="d warn"><i class="ti ti-arrow-up-right"></i>+12%</span></div></div>
+          </div>
+
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h"><span class="ttl">Us vs opponent</span><span class="sub">match-day GPS</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-c-b">
+              <div class="gp-rank">
+                <div class="gp-rank-row"><span class="ax">D</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:90%">Clava · 112 km</span></span><span class="gp-rank-v">+4 km</span></div>
+                <div class="gp-rank-row"><span class="ax"></span><span class="gp-rank-bar"><span class="gp-rank-fill low" style="width:86%">Vélez · 108 km</span></span><span class="gp-rank-v"></span></div>
+                <div class="gp-rank-row"><span class="ax">H</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:80%">Clava · 5184 m</span></span><span class="gp-rank-v">+612</span></div>
+                <div class="gp-rank-row"><span class="ax"></span><span class="gp-rank-bar"><span class="gp-rank-fill low" style="width:70%">Vélez · 4572 m</span></span><span class="gp-rank-v"></span></div>
+                <div class="gp-rank-row"><span class="ax">S</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:84%">Clava · 174</span></span><span class="gp-rank-v">+33</span></div>
+                <div class="gp-rank-row"><span class="ax"></span><span class="gp-rank-bar"><span class="gp-rank-fill low" style="width:68%">Vélez · 141</span></span><span class="gp-rank-v"></span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gp-c" data-size="md"><div class="gp-c-h"><span class="ttl">Team heatmap</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-c-b">
+              <div class="gp-pitch">
+                <div class="blob" style="left:36%; top:50%; width:120px; height:120px; background:rgba(74,222,128,0.55)"></div>
+                <div class="blob" style="left:48%; top:38%; width:160px; height:160px; background:rgba(74,222,128,0.55)"></div>
+                <div class="blob" style="left:55%; top:62%; width:170px; height:170px; background:rgba(74,222,128,0.6)"></div>
+                <div class="blob" style="left:68%; top:48%; width:190px; height:190px; background:rgba(252,211,77,0.65)"></div>
+                <div class="blob" style="left:78%; top:42%; width:130px; height:130px; background:rgba(248,113,113,0.55)"></div>
+              </div>
+            </div>
+          </div>
+
+          <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>team comparison · period</small></button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<div class="gp-src-overlay" id="srcOverlay"></div>
+<aside class="gp-src-drawer" id="srcDrawer">
+  <header class="gp-src-h">
+    <i class="ti ti-cloud-download" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3>Data sources</h3><div class="sub">Upload Excel/CSV or connect a provider</div></div>
+    <button class="gp-src-x" id="srcClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="gp-src-body">
+    <div class="gp-drop">
+      <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop Excel / CSV here</h4><p>One file per session or season-long export. Auto-detect columns and map to players.</p></div></div>
+      <div class="formats"><span class="fmt">.xlsx</span><span class="fmt">.csv</span><span class="fmt">.tsv</span><span class="fmt">.xml (F24)</span><span class="fmt">.json</span></div>
+      <div style="display:flex; gap:8px"><button class="cm-btn is-outline is-sm"><i class="ti ti-upload" style="font-size:14px"></i>Browse files</button><button class="cm-btn is-ghost is-sm"><i class="ti ti-template" style="font-size:14px"></i>Download template</button></div>
+    </div>
+    <div class="gp-drop" style="background:var(--cm-bg-soft); border-style:solid">
+      <div class="top"><div class="ic" style="color:var(--cm-success);background:var(--cm-success-bg);border-color:var(--cm-success-bd)"><i class="ti ti-cloud-check"></i></div><div><h4>Auto-import · 2 sessions pending</h4><p>StatSports auto-pulls after every session via webhook. Next pull in 22 min.</p></div></div>
+      <div style="display:flex; gap:8px"><button class="cm-btn is-outline is-sm"><i class="ti ti-refresh" style="font-size:14px"></i>Sync now</button><button class="cm-btn is-ghost is-sm"><i class="ti ti-settings" style="font-size:14px"></i>Webhook settings</button></div>
+    </div>
+    <div class="gp-src-sect-l">Provider connectors</div>
+    <div class="gp-conns">
+      <div class="gp-conn"><span class="logo ss">S</span><div class="info"><h5>StatSports Sonra</h5><div class="desc">REST API · Apex CSV · webhooks</div><span class="gp-conn-status ok"><span class="d"></span>Connected · 22 files today</span></div></div>
+      <div class="gp-conn"><span class="logo cp">C</span><div class="info"><h5>Catapult Vector OpenField</h5><div class="desc">OAuth · sessions, periods, video</div><span class="gp-conn-status err"><span class="d"></span>Token expired</span></div></div>
+      <div class="gp-conn"><span class="logo po">P</span><div class="info"><h5>Polar Team Pro</h5><div class="desc">Team Pro API · HR + GPS</div><span class="gp-conn-status ok"><span class="d"></span>Connected</span></div></div>
+      <div class="gp-conn"><span class="logo wm">W</span><div class="info"><h5>WIMU PRO (RealTrack)</h5><div class="desc">CSV export · webhook push</div><span class="gp-conn-status av"><span class="d" style="background:var(--cm-fg-muted)"></span>Available</span></div></div>
+      <div class="gp-conn"><span class="logo gw">G</span><div class="info"><h5>GPSports / Garmin Catalyst</h5><div class="desc">Match Tracker XML · CSV</div><span class="gp-conn-status av"><span class="d" style="background:var(--cm-fg-muted)"></span>Available</span></div></div>
+      <div class="gp-conn"><span class="logo csv">CSV</span><div class="info"><h5>Generic CSV mapping</h5><div class="desc">Bring any file · map fields manually</div><span class="gp-conn-status av"><span class="d" style="background:var(--cm-fg-muted)"></span>Always available</span></div></div>
+    </div>
+  </div>
+</aside>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+
+  if (profile) {
+    const initials = (profile.full_name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?';
+    const el = id => document.getElementById(id);
+    if (el('userInitials')) el('userInitials').textContent = initials;
+    if (el('userName'))     el('userName').textContent     = profile.full_name || '';
+    if (el('userRole'))     el('userRole').textContent     = profile.role || '';
+  }
+  if (club) {
+    const el = document.getElementById('sideClubName');
+    if (el) el.textContent = club.name;
+    window.applyClubTheme();
+  }
+
+  // Player count for subtitle
+  const { count } = await window.sb.from('players')
+    .select('*', { count: 'exact', head: true })
+    .eq('club_id', clubId)
+    .neq('status', 'inactive');
+
+  const sub = document.getElementById('gpSub');
+
+  // Latest training session with GPS data
+  const { data: sessions } = await window.sb.from('training_sessions')
+    .select('id,title,session_date,session_type')
+    .eq('club_id', clubId)
+    .order('session_date', { ascending: false })
+    .limit(1);
+
+  const latestSession = sessions?.[0] || null;
+
+  if (!latestSession) {
+    if (sub) sub.textContent = `${count ?? 0} players · no sessions found`;
+    return;
+  }
+
+  if (sub) sub.textContent = `${count ?? 0} players · ${latestSession.title || latestSession.session_type} · ${latestSession.session_date}`;
+
+  // Load GPS reports for latest session with player info
+  const { data: reports } = await window.sb.from('gps_reports')
+    .select('player_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
+    .eq('session_id', latestSession.id)
+    .eq('club_id', clubId)
+    .order('total_distance', { ascending: false });
+
+  if (!reports || !reports.length) return;
+
+  // Update group view Z-score table with real players + raw metrics
+  const tbody = document.querySelector('.gp-zt tbody');
+  if (tbody) {
+    tbody.innerHTML = reports.map(r => {
+      const p = r.players;
+      const fn = p ? (((p.first_name||'')[0]||'') + '. ' + (p.last_name||'')) : '—';
+      const initials = p ? (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() : '?';
+      const num = p?.number ? `#${p.number}` : '';
+      const pos = p?.position || '—';
+      const dist = r.total_distance ? (r.total_distance / 1000).toFixed(1) + ' km' : '—';
+      const hsr  = r.high_speed_distance ? r.high_speed_distance + ' m' : '—';
+      const spr  = r.sprint_distance ? r.sprint_distance + ' m' : '—';
+      const spd  = r.max_speed ? r.max_speed + ' km/h' : '—';
+      const acc  = r.accelerations ?? '—';
+      const load = r.player_load ?? '—';
+      return `<tr>
+        <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
+          <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
+        <td><span class="gp-zc neu">${dist}</span></td>
+        <td><span class="gp-zc neu">${hsr}</span></td>
+        <td><span class="gp-zc neu">${spr}</span></td>
+        <td><span class="gp-zc neu">${spd}</span></td>
+        <td><span class="gp-zc neu">${acc}</span></td>
+        <td><span class="gp-zc neu">${load}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Update individual view KPIs with first player's data
+  const first = reports[0];
+  if (first) {
+    const p = first.players;
+    const fname = p ? ((p.first_name||'') + ' ' + (p.last_name||'')).trim() : '—';
+    const indSub = document.getElementById('secSub');
+    if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${latestSession.title || latestSession.session_type}`;
+
+    const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
+    if (kpiVals[0]) kpiVals[0].innerHTML = `${first.total_distance ? (first.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
+    if (kpiVals[1]) kpiVals[1].innerHTML = `${first.high_speed_distance ?? '—'} <sub>m</sub>`;
+    if (kpiVals[2]) kpiVals[2].innerHTML = `${first.sprint_distance ?? '—'}`;
+  }
+
+  // Group view totals
+  const totDist = reports.reduce((s, r) => s + (r.total_distance || 0), 0);
+  const totHsr  = reports.reduce((s, r) => s + (r.high_speed_distance || 0), 0);
+  const totSpr  = reports.reduce((s, r) => s + (r.sprint_distance || 0), 0);
+  const grpKpis = document.querySelectorAll('.gp-view[data-view="grp"] .gp-kpi .v');
+  if (grpKpis[0]) grpKpis[0].innerHTML = `${(totDist/1000).toFixed(1)} <sub>km</sub>`;
+  if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
+  if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
+})();
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+  const titles = {
+    ind: ['· Individual', 'F. Domínguez · #10 · MF · vs role baseline'],
+    grp: ['· Group', 'Squad-wide · 8 starters · vs role baselines'],
+    mind: ['· Match · individual', 'F. Domínguez · 90′ · vs Vélez · 14 May'],
+    mgrp: ['· Match · group', 'Clava FC vs Vélez · team KPIs'],
+  };
+  document.getElementById('sections').addEventListener('click', (e) => {
+    const b = e.target.closest('.gp-sec'); if (!b) return;
+    document.querySelectorAll('#sections .gp-sec').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+    const v = b.dataset.view;
+    document.querySelectorAll('.gp-view').forEach(x => x.classList.toggle('is-on', x.dataset.view === v));
+    document.getElementById('secTitle').textContent = titles[v][0];
+    document.getElementById('secSub').textContent = titles[v][1];
+  });
+  const editBtn = document.getElementById('editToggle');
+  editBtn.addEventListener('click', () => {
+    editBtn.classList.toggle('is-on');
+    const on = editBtn.classList.contains('is-on');
+    document.querySelectorAll('.gp-grid').forEach(g => g.classList.toggle('is-edit', on));
+  });
+  document.querySelectorAll('.size-toggle').forEach(g => g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+    const card = b.closest('.gp-c');
+    const map = { 'S':'sm', 'M':'md', 'L':'lg', 'FULL':'full' };
+    card.dataset.size = map[b.textContent.trim()];
+  })));
+  const srcDrawer = document.getElementById('srcDrawer');
+  const srcOverlay = document.getElementById('srcOverlay');
+  const srcBtn = document.getElementById('srcBtn');
+  const openSrc = () => { srcDrawer.classList.add('is-open'); srcOverlay.classList.add('is-open'); srcBtn.classList.add('is-open'); };
+  const closeSrc = () => { srcDrawer.classList.remove('is-open'); srcOverlay.classList.remove('is-open'); srcBtn.classList.remove('is-open'); };
+  srcBtn.addEventListener('click', openSrc);
+  document.getElementById('srcClose').addEventListener('click', closeSrc);
+  srcOverlay.addEventListener('click', closeSrc);
+</script>
+</body>
+</html>
