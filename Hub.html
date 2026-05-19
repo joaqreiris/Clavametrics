@@ -442,6 +442,9 @@
   /* Tweaks mount */
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
+  .hub-toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:var(--cm-r-3);padding:8px 16px;font:500 13px/1 var(--cm-font-sans);z-index:500;opacity:0;pointer-events:none;transition:opacity 200ms,transform 200ms; }
+  .hub-toast.is-show { opacity:1;transform:translateX(-50%) translateY(0); }
+
   @media (max-width: 880px) {
     .hub-shell { grid-template-columns: 64px 1fr; }
     .hub-brand .body, .hub-brand .switch, .hub-nav-item span:not(.ti):not(.count), .hub-user .who, .hub-nav-label { display: none; }
@@ -465,13 +468,13 @@
         <div class="name" id="sideClubName">Clava FC</div>
         <div class="club">First team · 2025/26</div>
       </div>
-      <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
+      <button class="switch" title="Switch club" aria-label="Switch club"><i class="ti ti-selector"></i></button>
     </div>
 
     <nav class="hub-nav">
       <div class="hub-nav-group">
         <div class="hub-nav-label">Overview</div>
-        <a class="hub-nav-item is-active" href="Hub.html">
+        <a class="hub-nav-item is-active" href="Hub.html" aria-current="page">
           <i class="ti ti-home"></i><span>Staff Hub</span>
         </a>
         <a class="hub-nav-item" href="Calendar.html">
@@ -519,7 +522,7 @@
     </nav>
 
     <div class="hub-side-foot">
-      <div class="hub-user">
+      <div class="hub-user" role="button" tabindex="0" aria-label="User menu">
         <div class="av" id="userInitials">JR</div>
         <div class="who">
           <div class="name" id="userName">Joaquín Reiris</div>
@@ -544,17 +547,17 @@
 
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search players, sessions, microcycles…">
+        <input placeholder="Search players, sessions, microcycles…" aria-label="Search players, sessions, microcycles">
         <span class="cm-kbd">⌘</span><span class="cm-kbd">K</span>
       </div>
 
       <div class="actions">
-        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
-        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
-        <button class="cm-btn is-primary is-sm">
+        <button class="cm-icon-btn" title="Notifications" aria-label="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help" aria-label="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" aria-label="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <a class="cm-btn is-primary is-sm" href="Planner.html">
           <i class="ti ti-plus" style="font-size:14px"></i> New session
-        </button>
+        </a>
       </div>
     </div>
 
@@ -577,7 +580,7 @@
       <div class="kpis">
         <div class="kpi">
           <div class="kpi-label"><i class="ti ti-users"></i>Squad size</div>
-          <div class="kpi-value" id="kpiSquad">27 <sub>players</sub></div>
+          <div class="kpi-value" id="kpiSquad">— <sub>players</sub></div>
           <div class="kpi-trend">
             <span class="delta up"><i class="ti ti-arrow-up-right"></i>+2</span>
             <span>vs last microcycle</span>
@@ -599,10 +602,10 @@
         </div>
         <div class="kpi">
           <div class="kpi-label"><i class="ti ti-heartbeat"></i>Wellness avg</div>
-          <div class="kpi-value" id="kpiWellness">7.4<sub>/10</sub></div>
+          <div class="kpi-value" id="kpiWellness">—<sub>/10</sub></div>
           <div class="kpi-trend">
             <span class="delta up"><i class="ti ti-arrow-up-right"></i>+0.3</span>
-            <span id="wellnessSub">24 of 27 submitted</span>
+            <span id="wellnessSub">Checking…</span>
           </div>
           <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,18 12,20 24,12 36,16 48,10 60,12 76,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -610,7 +613,7 @@
         </div>
         <div class="kpi">
           <div class="kpi-label"><i class="ti ti-bandage"></i>Active injuries</div>
-          <div class="kpi-value" id="kpiInjuries">2</div>
+          <div class="kpi-value" id="kpiInjuries">—</div>
           <div class="kpi-trend">
             <span class="delta up" style="color:var(--cm-success)"><i class="ti ti-arrow-down-right"></i>−1</span>
             <span>Bocanegra returning Fri</span>
@@ -632,7 +635,7 @@
 
       <div class="modules">
 
-        <a class="module" href="#">
+        <a class="module" href="Planner.html">
           <div class="module-top">
             <div class="module-icon is-info"><i class="ti ti-clipboard-list"></i></div>
             <div>
@@ -643,10 +646,10 @@
           <div class="module-foot">
             <i class="ti ti-calendar"></i> MD-3 ready
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Sessions%20Library.html">
           <div class="module-top">
             <div class="module-icon is-success"><i class="ti ti-list-tree"></i></div>
             <div>
@@ -657,10 +660,10 @@
           <div class="module-foot">
             <i class="ti ti-plus"></i> 4 new this week
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Daily%20Planning.html">
           <div class="module-top">
             <div class="module-icon is-success"><i class="ti ti-soccer-field"></i></div>
             <div>
@@ -671,10 +674,10 @@
           <div class="module-foot">
             <i class="ti ti-clock"></i> 17:00 today
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Calendar.html">
           <div class="module-top">
             <div class="module-icon is-violet"><i class="ti ti-calendar-stats"></i></div>
             <div>
@@ -685,10 +688,10 @@
           <div class="module-foot">
             <i class="ti ti-target-arrow"></i> vs Atlético · Sun
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Availability.html">
           <div class="module-top">
             <div class="module-icon is-warning"><i class="ti ti-user-check"></i></div>
             <div>
@@ -699,10 +702,10 @@
           <div class="module-foot">
             <span class="alert"><i class="ti ti-alert-triangle"></i> 3 need status</span>
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Squad.html">
           <div class="module-top">
             <div class="module-icon is-violet"><i class="ti ti-users-group"></i></div>
             <div>
@@ -713,10 +716,10 @@
           <div class="module-foot">
             <i class="ti ti-users"></i> 27 players
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Match%20Reports.html">
           <div class="module-top">
             <div class="module-icon is-warning"><i class="ti ti-report-analytics"></i></div>
             <div>
@@ -727,10 +730,10 @@
           <div class="module-foot">
             <i class="ti ti-clock"></i> Last: 3 days ago
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Wellness.html">
           <div class="module-top">
             <div class="module-icon is-success"><i class="ti ti-heartbeat"></i></div>
             <div>
@@ -741,10 +744,10 @@
           <div class="module-foot">
             <i class="ti ti-circle-check"></i> 24 / 27 today
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="RPE.html">
           <div class="module-top">
             <div class="module-icon is-danger"><i class="ti ti-activity"></i></div>
             <div>
@@ -755,10 +758,10 @@
           <div class="module-foot">
             <i class="ti ti-link"></i> Share link
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Load%20Monitor.html">
           <div class="module-top">
             <div class="module-icon is-warning"><i class="ti ti-chart-line"></i></div>
             <div>
@@ -769,10 +772,10 @@
           <div class="module-foot">
             <span class="alert"><i class="ti ti-flame"></i> 4 in red zone</span>
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="GPS%20Analysis.html">
           <div class="module-top">
             <div class="module-icon is-info"><i class="ti ti-radar-2"></i></div>
             <div>
@@ -783,10 +786,10 @@
           <div class="module-foot">
             <i class="ti ti-upload"></i> 2 sessions pending
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Injuries.html">
           <div class="module-top">
             <div class="module-icon is-danger"><i class="ti ti-bandage"></i></div>
             <div>
@@ -797,10 +800,10 @@
           <div class="module-foot">
             <i class="ti ti-activity-heartbeat"></i> 2 active · 1 returning
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module" href="#">
+        <a class="module" href="Nutrition.html">
           <div class="module-top">
             <div class="module-icon is-success"><i class="ti ti-apple"></i></div>
             <div>
@@ -811,10 +814,10 @@
           <div class="module-foot">
             <i class="ti ti-scale"></i> Weigh-in Mon
           </div>
-          <span class="module-arrow"><i class="ti ti-arrow-up-right"></i></span>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module is-soon">
+        <a class="module is-soon" aria-disabled="true" tabindex="-1">
           <span class="soon-tag">Soon</span>
           <div class="module-top">
             <div class="module-icon is-neutral"><i class="ti ti-video"></i></div>
@@ -841,54 +844,54 @@
             </div>
           </div>
 
-          <div class="activity">
-            <div class="activity-row is-header">
-              <span></span>
-              <span>Who</span>
-              <span>Activity</span>
-              <span style="text-align:right">When</span>
+          <div class="activity" role="table" aria-label="Recent activity">
+            <div class="activity-row is-header" role="row">
+              <span role="columnheader" aria-label="Type"></span>
+              <span role="columnheader">Who</span>
+              <span role="columnheader">Activity</span>
+              <span role="columnheader" style="text-align:right">When</span>
             </div>
 
-            <div class="activity-row">
-              <div class="ind"><i class="ti ti-soccer-field"></i></div>
-              <div class="who"><div class="av">PF</div><div><div class="name">Pablo Fierro</div><div class="cm-meta">Head coach</div></div></div>
-              <div class="what">Published <span class="target">MC&nbsp;14 — Day&nbsp;3</span> session</div>
-              <div class="when" style="text-align:right">12 min ago</div>
+            <div class="activity-row" role="row">
+              <div class="ind" role="cell"><i class="ti ti-soccer-field" aria-hidden="true"></i></div>
+              <div class="who" role="cell"><div class="av" aria-hidden="true">PF</div><div><div class="name">Pablo Fierro</div><div class="cm-meta">Head coach</div></div></div>
+              <div class="what" role="cell">Published <span class="target">MC&nbsp;14 — Day&nbsp;3</span> session</div>
+              <div class="when" role="cell" style="text-align:right">12 min ago</div>
             </div>
 
-            <div class="activity-row">
-              <div class="ind"><i class="ti ti-bandage" style="color:var(--cm-danger)"></i></div>
-              <div class="who"><div class="av">MA</div><div><div class="name">Dr. Mariana Acosta</div><div class="cm-meta">Physio</div></div></div>
-              <div class="what">Logged injury · <span class="target">Bocanegra · hamstring</span></div>
-              <div class="when" style="text-align:right">1 h ago</div>
+            <div class="activity-row" role="row">
+              <div class="ind" role="cell"><i class="ti ti-bandage" style="color:var(--cm-danger)" aria-hidden="true"></i></div>
+              <div class="who" role="cell"><div class="av" aria-hidden="true">MA</div><div><div class="name">Dr. Mariana Acosta</div><div class="cm-meta">Physio</div></div></div>
+              <div class="what" role="cell">Logged injury · <span class="target">Bocanegra · hamstring</span></div>
+              <div class="when" role="cell" style="text-align:right">1 h ago</div>
             </div>
 
-            <div class="activity-row">
-              <div class="ind"><i class="ti ti-radar-2"></i></div>
-              <div class="who"><div class="av">SS</div><div><div class="name">StatSports sync</div><div class="cm-meta">Integration</div></div></div>
-              <div class="what">Imported <span class="target">22 player files</span> from MD-4</div>
-              <div class="when" style="text-align:right">3 h ago</div>
+            <div class="activity-row" role="row">
+              <div class="ind" role="cell"><i class="ti ti-radar-2" aria-hidden="true"></i></div>
+              <div class="who" role="cell"><div class="av" aria-hidden="true">SS</div><div><div class="name">StatSports sync</div><div class="cm-meta">Integration</div></div></div>
+              <div class="what" role="cell">Imported <span class="target">22 player files</span> from MD-4</div>
+              <div class="when" role="cell" style="text-align:right">3 h ago</div>
             </div>
 
-            <div class="activity-row">
-              <div class="ind"><i class="ti ti-heartbeat" style="color:var(--cm-success)"></i></div>
-              <div class="who"><div class="av">SQ</div><div><div class="name">22 of 27 players</div><div class="cm-meta">First team</div></div></div>
-              <div class="what">Submitted <span class="target">today's wellness check-in</span></div>
-              <div class="when" style="text-align:right">today</div>
+            <div class="activity-row" role="row">
+              <div class="ind" role="cell"><i class="ti ti-heartbeat" style="color:var(--cm-success)" aria-hidden="true"></i></div>
+              <div class="who" role="cell"><div class="av" aria-hidden="true">SQ</div><div><div class="name">22 of 27 players</div><div class="cm-meta">First team</div></div></div>
+              <div class="what" role="cell">Submitted <span class="target">today's wellness check-in</span></div>
+              <div class="when" role="cell" style="text-align:right">today</div>
             </div>
 
-            <div class="activity-row">
-              <div class="ind"><i class="ti ti-user-plus"></i></div>
-              <div class="who"><div class="av">JC</div><div><div class="name">Joaquín Cabral</div><div class="cm-meta">Analyst</div></div></div>
-              <div class="what">Joined the staff workspace</div>
-              <div class="when" style="text-align:right">yesterday</div>
+            <div class="activity-row" role="row">
+              <div class="ind" role="cell"><i class="ti ti-user-plus" aria-hidden="true"></i></div>
+              <div class="who" role="cell"><div class="av" aria-hidden="true">JC</div><div><div class="name">Joaquín Cabral</div><div class="cm-meta">Analyst</div></div></div>
+              <div class="what" role="cell">Joined the staff workspace</div>
+              <div class="when" role="cell" style="text-align:right">yesterday</div>
             </div>
 
-            <div class="activity-row">
-              <div class="ind"><i class="ti ti-trending-up" style="color:var(--cm-warning)"></i></div>
-              <div class="who"><div class="av">SY</div><div><div class="name">System alert</div><div class="cm-meta">Load monitor</div></div></div>
-              <div class="what">ACWR for <span class="target">4 players</span> crossed 1.5</div>
-              <div class="when" style="text-align:right">yesterday</div>
+            <div class="activity-row" role="row">
+              <div class="ind" role="cell"><i class="ti ti-trending-up" style="color:var(--cm-warning)" aria-hidden="true"></i></div>
+              <div class="who" role="cell"><div class="av" aria-hidden="true">SY</div><div><div class="name">System alert</div><div class="cm-meta">Load monitor</div></div></div>
+              <div class="what" role="cell">ACWR for <span class="target">4 players</span> crossed 1.5</div>
+              <div class="when" role="cell" style="text-align:right">yesterday</div>
             </div>
 
           </div>
@@ -953,6 +956,8 @@
   </main>
 </div>
 
+<div class="hub-toast" id="hubToast"></div>
+
 <!-- Tweaks (designer-side floating panel) + in-app Settings drawer -->
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
@@ -966,10 +971,49 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-  // Task toggle
-  document.querySelectorAll('.task').forEach(el => {
-    el.querySelector('.check').addEventListener('click', () => el.classList.toggle('is-done'));
-  });
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showHubToast(msg) {
+  const t = document.getElementById('hubToast');
+  t.textContent = msg; t.classList.add('is-show');
+  setTimeout(() => t.classList.remove('is-show'), 2800);
+}
+
+// ── Task toggle (with accessibility) ─────────────────────────────────────────
+document.querySelectorAll('.task').forEach(el => {
+  const check = el.querySelector('.check');
+  check.setAttribute('role', 'checkbox');
+  check.setAttribute('tabindex', '0');
+  check.setAttribute('aria-checked', el.classList.contains('is-done') ? 'true' : 'false');
+  function toggle() {
+    el.classList.toggle('is-done');
+    check.setAttribute('aria-checked', el.classList.contains('is-done') ? 'true' : 'false');
+  }
+  check.addEventListener('click', toggle);
+  check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
+});
+
+// ── Dead button stubs ─────────────────────────────────────────────────────────
+document.querySelector('.hub-brand .switch')
+  ?.addEventListener('click', () => showHubToast('Switch club — coming soon'));
+
+document.querySelector('.hub-user')
+  ?.addEventListener('click', () => window.location.href = 'Admin.html');
+
+document.querySelector('.cm-icon-btn[title="Notifications"]')
+  ?.addEventListener('click', () => showHubToast('No new notifications'));
+
+document.querySelector('.cm-icon-btn[title="Help"]')
+  ?.addEventListener('click', () => showHubToast('Help center — coming soon'));
+
+document.querySelector('.cm-btn.is-ghost.is-sm')
+  ?.addEventListener('click', () => showHubToast('Customize modules — coming soon'));
+
+document.querySelector('.section-header .right .cm-btn.is-ghost.is-sm')
+  ?.addEventListener('click', () => window.location.href = 'Chat%20%26%20Tasks.html');
+
+// "Add" task button (second ghost button in section headers)
+document.querySelectorAll('.section-header .right .cm-btn.is-ghost.is-sm')[1]
+  ?.addEventListener('click', () => showHubToast('Task creation — coming soon'));
 </script>
 
 <script>
@@ -1011,25 +1055,33 @@
 
   const [squadRes, injuriesRes, wellnessRes] = await Promise.all([
     window.sb.from('players').select('*', { count: 'exact', head: true })
-      .eq('club_id', clubId).neq('status', 'inactive'),
+      .eq('club_id', clubId),
     window.sb.from('injuries').select('status')
       .eq('club_id', clubId).eq('status', 'active'),
     window.sb.from('wellness').select('readiness')
       .eq('club_id', clubId).gte('submitted_at', today)
   ]);
 
-  if (squadRes.count !== null) {
+  if (!squadRes.error && squadRes.count !== null) {
     document.getElementById('kpiSquad').innerHTML = `${squadRes.count} <sub>players</sub>`;
+  } else if (squadRes.error) {
+    document.getElementById('kpiSquad').innerHTML = `— <sub>players</sub>`;
   }
 
-  const activeInjuries = injuriesRes.data?.length ?? 0;
-  document.getElementById('kpiInjuries').textContent = activeInjuries;
+  if (!injuriesRes.error) {
+    document.getElementById('kpiInjuries').textContent = injuriesRes.data?.length ?? 0;
+  } else {
+    document.getElementById('kpiInjuries').textContent = '—';
+  }
 
-  if (wellnessRes.data?.length) {
+  if (!wellnessRes.error && wellnessRes.data?.length) {
     const avg = wellnessRes.data.reduce((s, r) => s + (r.readiness || 0), 0) / wellnessRes.data.length;
     document.getElementById('kpiWellness').innerHTML = `${avg.toFixed(1)}<sub>/10</sub>`;
     document.getElementById('wellnessSub').textContent =
       `${wellnessRes.data.length} of ${squadRes.count ?? '?'} submitted`;
+  } else if (wellnessRes.error) {
+    document.getElementById('kpiWellness').innerHTML = `—<sub>/10</sub>`;
+    document.getElementById('wellnessSub').textContent = 'Could not load';
   }
 })();
 </script>
