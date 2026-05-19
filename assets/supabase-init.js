@@ -18,12 +18,12 @@
     const { data: { session } } = await window.sb.auth.getSession();
     if (!session?.user) return null;
     const { data: profile } = await window.sb.from('profiles')
-      .select('club_id, role, name, club_role')
+      .select('club_id, role, full_name')
       .eq('id', session.user.id)
       .single();
     if (profile) {
       _clubId  = profile.club_id;
-      _profile = { ...profile, full_name: profile.name }; // alias for page compatibility
+      _profile = profile;
     }
     return _clubId;
   };
@@ -58,7 +58,7 @@
   // Applies club accent_color to --cm-accent CSS variable
   window.applyClubTheme = async function () {
     const club = await window.getClub();
-    const hex = club?.accent_color || club?.primary_color;
+    const hex = club?.primary_color || club?.accent_color;
     if (!hex) return;
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);

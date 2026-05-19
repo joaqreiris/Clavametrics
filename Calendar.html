@@ -842,11 +842,12 @@
         <div class="sq-modal-field">
           <label>Type</label>
           <select id="calEvtF_type">
-            <option value="training">Training</option>
+            <option value="tactical">Tactical</option>
+            <option value="conditioning">Conditioning</option>
             <option value="gym">Gym</option>
             <option value="match">Match</option>
             <option value="recovery">Recovery</option>
-            <option value="travel">Travel</option>
+            <option value="other">Other</option>
           </select>
         </div>
         <div class="sq-modal-field">
@@ -927,8 +928,8 @@ function renderGrid() {
 
   // Summary row
   if (mc.rival) document.getElementById('calMcTarget').innerHTML = `${mc.rival}<small>${mc.home_away ? ' · '+mc.home_away : ''}</small>`;
-  const trainCt = _sessions.filter(s => focusToClass(s.focus) === 'training').length;
-  const gymCt   = _sessions.filter(s => focusToClass(s.focus) === 'gym').length;
+  const trainCt = _sessions.filter(s => focusToClass(s.session_type) === 'training').length;
+  const gymCt   = _sessions.filter(s => focusToClass(s.session_type) === 'gym').length;
   document.getElementById('calMcSessions').innerHTML = `${trainCt}<small>field + ${gymCt} gym</small>`;
   const totalMin = _sessions.reduce((a, s) => a + (s.duration || 0), 0);
   document.getElementById('calMcDuration').innerHTML = totalMin ? `${Math.round(totalMin/60)}h <small>${totalMin % 60 ? (totalMin % 60) + 'min' : ''}</small>` : '—';
@@ -954,7 +955,7 @@ function renderGrid() {
     if (dateStr > end) { html += '<div class="mc-day" style="background:var(--cm-bg-sunk);opacity:0.4"></div>'; continue; }
     const d = new Date(dateStr + 'T12:00:00');
     const isToday = dateStr === TODAY;
-    const daySessions = _sessions.filter(s => s.date === dateStr);
+    const daySessions = _sessions.filter(s => s.session_date === dateStr);
     const isOff = daySessions.length === 0;
 
     let mdLabel = '';
@@ -969,13 +970,13 @@ function renderGrid() {
 
     const eventsHtml = isOff
       ? '<div class="mc-evt day-off">Rest day</div>'
-      : daySessions.filter(s => _filterType === 'all' || focusToClass(s.focus) === _filterType).map(s => {
-          const cat = focusToClass(s.focus);
+      : daySessions.filter(s => _filterType === 'all' || focusToClass(s.session_type) === _filterType).map(s => {
+          const cat = focusToClass(s.session_type);
           const icon = EVT_ICONS[cat] || 'ti-calendar';
           const dur = s.duration ? ` ${s.duration}′` : '';
           return `<div class="mc-evt ${cat}" data-id="${s.id}" style="cursor:pointer">
             <i class="ti ${icon}"></i>
-            <span class="name">${s.name || s.focus || cat}${dur}</span>
+            <span class="name">${s.title || s.session_type || cat}${dur}</span>
           </div>`;
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
 
@@ -1012,16 +1013,16 @@ async function loadSessions() {
   const grid = document.getElementById('calDaysGrid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
   const { data, error } = await window.sb.from('training_sessions')
-    .select('id,name,focus,duration,date,notes,microcycle')
+    .select('id,title,session_type,duration,session_date,notes')
     .eq('club_id', _clubId)
-    .gte('date', mc.start_date)
-    .lte('date', mc.end_date)
-    .order('date');
+    .gte('session_date', mc.start_date)
+    .lte('session_date', mc.end_date)
+    .order('session_date');
   if (error) {
     if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Error loading sessions: ${error.message}</div>`;
     return;
   }
-  _sessions = (data || []).map(s => ({ ...s, date: s.date ? s.date.split('T')[0] : s.date }));
+  _sessions = (data || []).map(s => ({ ...s, session_date: s.session_date ? s.session_date.split('T')[0] : s.session_date }));
   _weekOffset = 0;
   renderGrid();
 }
@@ -1031,9 +1032,9 @@ function openEvtModal(session, defaultDate) {
   _editEvtId = session?.id || null;
   document.getElementById('calEvtTitle').textContent = session ? 'Edit event' : 'New event';
   document.getElementById('calEvtId').value = session?.id || '';
-  document.getElementById('calEvtF_title').value = session?.name || '';
-  document.getElementById('calEvtF_type').value  = focusToClass(session?.focus) || 'training';
-  document.getElementById('calEvtF_date').value  = session?.date || defaultDate || TODAY;
+  document.getElementById('calEvtF_title').value = session?.title || '';
+  document.getElementById('calEvtF_type').value  = session?.session_type || 'tactical';
+  document.getElementById('calEvtF_date').value  = session?.session_date || defaultDate || TODAY;
   document.getElementById('calEvtF_duration').value = session?.duration || '';
   document.getElementById('calEvtF_notes').value = session?.notes || '';
   document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
@@ -1049,11 +1050,11 @@ async function saveEvt() {
   saving.style.display = 'inline'; saveBtn.disabled = true;
 
   const payload = {
-    name:     document.getElementById('calEvtF_title').value.trim(),
-    focus:    document.getElementById('calEvtF_type').value,
-    date:     document.getElementById('calEvtF_date').value,
-    duration: parseInt(document.getElementById('calEvtF_duration').value) || null,
-    notes:    document.getElementById('calEvtF_notes').value.trim() || null,
+    title:        document.getElementById('calEvtF_title').value.trim(),
+    session_type: document.getElementById('calEvtF_type').value,
+    session_date: document.getElementById('calEvtF_date').value,
+    duration:     parseInt(document.getElementById('calEvtF_duration').value) || null,
+    notes:        document.getElementById('calEvtF_notes').value.trim() || null,
   };
   if (!payload.title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
 
@@ -1063,7 +1064,6 @@ async function saveEvt() {
   } else {
     const clubId = _clubId || await window.getClubId();
     payload.club_id = clubId;
-    payload.microcycle = _allMCs[_mcIdx]?.name || null;
     ({ error } = await window.sb.from('training_sessions').insert(payload));
   }
 
@@ -1109,7 +1109,7 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
     item.setAttribute('style', `display:block;width:100%;padding:8px 12px;border:0;background:${idx===_mcIdx?'var(--cm-accent-soft)':'transparent'};cursor:pointer;border-radius:6px;text-align:left;transition:background 100ms`);
     item.onmouseenter = () => { if (idx !== _mcIdx) item.style.background = 'var(--cm-bg-soft)'; };
     item.onmouseleave = () => { item.style.background = idx===_mcIdx?'var(--cm-accent-soft)':'transparent'; };
-    const name = mc.name || `MC ${mc.number||idx+1}`;
+    const name = mc.name || `MC ${idx + 1}`;
     const dates = `${mc.start_date} → ${mc.end_date}`;
     item.innerHTML = `<div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}</div><div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${dates}</div>`;
     item.addEventListener('click', async () => {
