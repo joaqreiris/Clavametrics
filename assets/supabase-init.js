@@ -55,11 +55,11 @@
     return true;
   };
 
-  // Applies club primary_color to --cm-accent CSS variable
+  // Applies club accent_color to --cm-accent CSS variable
   window.applyClubTheme = async function () {
     const club = await window.getClub();
-    if (!club?.primary_color) return;
-    const hex = club.primary_color;
+    const hex = club?.accent_color || club?.primary_color;
+    if (!hex) return;
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
