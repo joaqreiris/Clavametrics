@@ -245,6 +245,61 @@
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
+  /* Cards view */
+  .sq-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 12px; padding: 4px 0 16px;
+  }
+  .sq-card {
+    background: var(--cm-surface); border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-4); padding: 16px 14px 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    cursor: pointer; transition: box-shadow var(--cm-dur-1), border-color var(--cm-dur-1);
+  }
+  .sq-card:hover { border-color: var(--cm-border-strong); box-shadow: var(--cm-shadow-2); }
+  .sq-card-av {
+    width: 54px; height: 54px; border-radius: 50%;
+    background: var(--cm-bg-sunk); border: 1px solid var(--cm-border);
+    display: flex; align-items: center; justify-content: center;
+    font: 700 18px/1 var(--cm-font-sans); color: var(--cm-fg-strong);
+    position: relative;
+  }
+  .sq-card-num {
+    position: absolute; bottom: -4px; right: -4px;
+    min-width: 20px; height: 20px; padding: 0 4px;
+    border-radius: 6px; background: var(--cm-accent); color: var(--cm-fg-on-accent);
+    font: 700 10px/20px var(--cm-font-mono); text-align: center;
+    border: 2px solid var(--cm-surface);
+  }
+  .sq-card-name { font: 600 13px/1.3 var(--cm-font-sans); color: var(--cm-fg-strong); text-align: center; }
+  .sq-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
+
+  /* Depth chart */
+  .sq-depth { display: flex; flex-direction: column; gap: 20px; padding: 4px 0 16px; }
+  .sq-depth-line { display: flex; flex-direction: column; gap: 8px; }
+  .sq-depth-label {
+    font: 500 10.5px/1 var(--cm-font-sans); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--cm-fg-muted); padding: 0 2px;
+  }
+  .sq-depth-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sq-depth-slot {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--cm-surface); border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-3); padding: 8px 12px; cursor: pointer; min-width: 160px;
+    transition: border-color var(--cm-dur-1);
+  }
+  .sq-depth-slot:hover { border-color: var(--cm-border-strong); }
+  .sq-depth-av {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--cm-bg-sunk); border: 1px solid var(--cm-border);
+    display: flex; align-items: center; justify-content: center;
+    font: 600 11px/1 var(--cm-font-sans); color: var(--cm-fg-strong); flex-shrink: 0;
+  }
+  .sq-depth-info { min-width: 0; }
+  .sq-depth-pname { font: 600 13px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .sq-depth-psub { font: 500 11px/1.2 var(--cm-font-mono); color: var(--cm-fg-muted); margin-top: 2px; }
+
   /* Modal */
   .sq-modal-backdrop {
     position:fixed; inset:0; background:rgba(8,10,12,0.5); backdrop-filter:blur(4px);
@@ -765,6 +820,16 @@
         </div>
       </div>
 
+      <!-- Cards view -->
+      <div id="sqCardsView" style="display:none">
+        <div class="sq-cards-grid" id="sqCardsGrid"></div>
+      </div>
+
+      <!-- Depth chart view -->
+      <div id="sqDepthView" style="display:none">
+        <div class="sq-depth" id="sqDepthChart"></div>
+      </div>
+
     </section>
   </main>
 </div>
@@ -1066,13 +1131,20 @@ async function reloadPlayers() {
       pill.classList.add('is-on');
       const label = pill.textContent.replace(/\d+/g, '').replace('·', '').trim();
       _activeFilter = label;
-      renderTable();
+      if (_activeView === 'list') renderTable();
+      else if (_activeView === 'cards') renderCards();
+      else if (_activeView === 'depth') renderDepthChart();
     });
   });
 
   // Search
   document.querySelectorAll('.sq-search input').forEach(inp => {
-    inp.addEventListener('input', () => { _searchQ = inp.value; renderTable(); });
+    inp.addEventListener('input', () => {
+      _searchQ = inp.value;
+      if (_activeView === 'list') renderTable();
+      else if (_activeView === 'cards') renderCards();
+      else if (_activeView === 'depth') renderDepthChart();
+    });
   });
 })();
 </script>
@@ -1195,12 +1267,118 @@ async function reloadPlayers() {
   // Add player button
   document.querySelector('.cm-btn.is-primary')?.addEventListener('click', () => openModal(null));
 
-  // Segment toggle (visual only for Cards/Depth chart - not yet implemented)
+  // ── Views ──────────────────────────────────────────────────────
+  let _activeView = 'list';
+
+  function setView(view) {
+    _activeView = view;
+    document.querySelector('.sq-table-wrap').style.display  = view === 'list'  ? '' : 'none';
+    document.getElementById('sqCardsView').style.display    = view === 'cards' ? '' : 'none';
+    document.getElementById('sqDepthView').style.display    = view === 'depth' ? '' : 'none';
+    if (view === 'cards') renderCards();
+    if (view === 'depth') renderDepthChart();
+  }
+
+  function getFiltered() {
+    const posUpper = _activeFilter.toUpperCase();
+    return _allPlayers.filter(p => {
+      const pos = (p.position || '').toUpperCase();
+      const cfg = POS_CFG[pos];
+      if (_activeFilter !== 'All' && cfg?.pill !== posUpper) return false;
+      if (_searchQ) {
+        const q = _searchQ.toLowerCase();
+        const name = ((p.first_name||'') + ' ' + (p.last_name||'')).toLowerCase();
+        if (!name.includes(q) && !String(p.number||'').includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderCards() {
+    const grid = document.getElementById('sqCardsGrid');
+    if (!grid) return;
+    const filtered = getFiltered();
+    if (!filtered.length) { grid.innerHTML = '<p style="color:var(--cm-fg-muted);padding:24px">No players found.</p>'; return; }
+    grid.innerHTML = filtered.map(p => {
+      const fullName = ((p.first_name||'') + ' ' + (p.last_name||'')).trim();
+      const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
+      const pos = (p.position||'').toUpperCase();
+      const pcfg = POS_CFG[pos] || { css:'', pill: pos };
+      const age = calcAge(p.dob);
+      return `<div class="sq-card" data-id="${p.id}">
+        <div class="sq-card-av">${initials}<span class="sq-card-num">${p.number||'—'}</span></div>
+        <div class="sq-card-name">${fullName||'—'}</div>
+        <div class="sq-card-meta">
+          <span class="sq-pos ${pcfg.css}">${p.position||'—'}</span>
+          ${age !== '—' ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${age}y</span>` : ''}
+          ${p.dominant_foot ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${p.dominant_foot[0]}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    grid.querySelectorAll('.sq-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const player = _allPlayers.find(p => p.id === card.dataset.id);
+        if (player) openModal(player);
+      });
+    });
+  }
+
+  function renderDepthChart() {
+    const container = document.getElementById('sqDepthChart');
+    if (!container) return;
+    const lines = [
+      { label: 'Goalkeepers',        groups: ['Goalkeepers'] },
+      { label: 'Defenders',          groups: ['Defenders'] },
+      { label: 'Midfielders',        groups: ['Midfielders'] },
+      { label: 'Wingers & Forwards', groups: ['Wingers & Forwards'] },
+    ];
+    const byGroup = {};
+    GROUPS_ORDER.forEach(g => byGroup[g] = []);
+    _allPlayers.forEach(p => {
+      const cfg = POS_CFG[(p.position||'').toUpperCase()];
+      const grp = cfg?.group || 'Other';
+      if (!byGroup[grp]) byGroup[grp] = [];
+      byGroup[grp].push(p);
+    });
+
+    container.innerHTML = lines.map(({ label, groups }) => {
+      const players = groups.flatMap(g => byGroup[g] || []);
+      if (!players.length) return '';
+      const slots = players.map(p => {
+        const fullName = ((p.first_name||'') + ' ' + (p.last_name||'')).trim();
+        const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
+        const pos = (p.position||'').toUpperCase();
+        const pcfg = POS_CFG[pos] || { css:'', pill: pos };
+        return `<div class="sq-depth-slot" data-id="${p.id}">
+          <div class="sq-depth-av">${initials}</div>
+          <div class="sq-depth-info">
+            <div class="sq-depth-pname">${fullName}</div>
+            <div class="sq-depth-psub"><span class="sq-pos ${pcfg.css}" style="height:16px;font-size:10px;padding:0 5px">${p.position||'—'}</span> · #${p.number||'—'}</div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="sq-depth-line">
+        <div class="sq-depth-label">${label}</div>
+        <div class="sq-depth-row">${slots}</div>
+      </div>`;
+    }).join('');
+
+    container.querySelectorAll('.sq-depth-slot').forEach(slot => {
+      slot.addEventListener('click', () => {
+        const player = _allPlayers.find(p => p.id === slot.dataset.id);
+        if (player) openModal(player);
+      });
+    });
+  }
+
+  // Segment toggle
   document.querySelectorAll('.sq-segs').forEach(group => {
-    group.querySelectorAll('.sq-seg').forEach(s => {
+    group.querySelectorAll('.sq-seg').forEach((s, i) => {
       s.addEventListener('click', () => {
         group.querySelectorAll('.sq-seg').forEach(o => o.classList.remove('is-on'));
         s.classList.add('is-on');
+        const views = ['list', 'cards', 'depth'];
+        setView(views[i] || 'list');
       });
     });
   });
