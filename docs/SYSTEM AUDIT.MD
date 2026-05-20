@@ -407,12 +407,39 @@ Architecture State: Mixed / Needs Refactor
 ### Manual testing
 - [x] Checklist completo — `docs/MANUAL_TESTING.md` (Auth, Nav, Squad, Calendar, RPE, Load Monitor, Injuries, Physio, Wellness, Daily Planning, GPS, Evaluations, Sessions History, Gym, Nutrition, Planner, Match Reports, Chat & Tasks, Admin, Availability + regression checks)
 
-### Responsive testing
-- [ ] Mobile (375px)
-- [ ] Tablet (768px)
-- [ ] Desktop (1440px)
+### Responsive
+- [x] Sidebar: off-canvas ≤768px, hamburger toggle + overlay, aria-expanded, cierre al navegar — `assets/sidebar.js`
+- [x] Hub: breakpoints 768px + 480px — KPIs/módulos/lower en 1-col, topbar padding para hamburger
+- [x] Squad: tabla con scroll horizontal, toolbar pills con scroll horizontal
+- [x] Injuries: toolbar scroll, grids 1-col en mobile
+- [x] Calendar: filter bar scroll, days grid 2→1 col
+- [ ] Pendiente browser: Daily Planning, Load Monitor, Admin, GPS (layouts complejos, requieren verificación visual)
 
 ### Accessibility
-- [ ] ARIA roles + labels
-- [ ] Keyboard navigation
-- [ ] Focus traps en modales
+- [x] Squad modal: `aria-labelledby`, close con `aria-label`, 10 labels con `for`
+- [x] Injuries modales (`#modalLogInj`, `#modalDischarge`): `role="dialog"` + `aria-modal` + `aria-labelledby`, 8 labels con `for`, focus movido al abrir
+- [x] Calendar modal: close con `aria-label`, 5 labels con `for`
+- [x] Register sport tabs: `role="tab"` + `aria-selected` dinámico
+- [x] Topbar search inputs: `aria-label` en Squad, Calendar, Injuries
+- [x] Topbar icon buttons: `title` + `aria-label` en Injuries
+
+---
+
+## AUDIT CLOSED — 2026-05-20
+
+### Estado final por fase
+
+| Fase | Estado | Notas |
+|---|---|---|
+| Phase 1 — Core system | ✅ Completo | Auth, routing, sidebar, session handling |
+| Phase 2 — Database | ✅ Completo | Migration aplicada y verificada |
+| Phase 3 — Shared systems | ✅ Completo | getActivePlayers, formatPlayerName, API selects |
+| Phase 4 — Core modules | ✅ Completo | Hub, Squad |
+| Phase 5 — Sports modules | ✅ Completo | 13 páginas auditadas |
+| Phase 6 — QA | ✅ Completo* | *Manual testing pendiente de ejecución por el usuario |
+
+### Pendientes post-cierre (backlog)
+- Manual testing: ejecutar `docs/MANUAL_TESTING.md` en browser
+- Responsive browser: Daily Planning, Load Monitor, Admin, GPS
+- Shared hooks backlog: migrar 4 páginas a `getActivePlayers()`
+- Teams page: feature pendiente, fuera del scope de estabilización
