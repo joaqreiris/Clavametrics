@@ -282,12 +282,12 @@
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search by player, body region, type…">
+        <input placeholder="Search by player, body region, type…" aria-label="Search by player, body region or injury type">
       </div>
       <div class="actions">
-        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn"><i class="ti ti-help"></i></button>
-        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" title="Notifications" aria-label="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help" aria-label="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" aria-label="Settings" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -694,17 +694,17 @@
 
 <!-- Tweaks + Settings -->
 <!-- Log Injury Modal -->
-<div id="modalLogInj" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto">
+<div id="modalLogInj" role="dialog" aria-modal="true" aria-labelledby="modalLogInjTitle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto">
   <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:16px;padding:28px;width:520px;max-width:96vw;margin-bottom:40px">
-    <h3 style="font:600 18px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:20px">Log injury</h3>
+    <h3 id="modalLogInjTitle" style="font:600 18px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:20px">Log injury</h3>
     <div style="display:flex;flex-direction:column;gap:14px">
-      <div class="cm-field"><label class="cm-label">Player</label><select id="logPlayer" class="cm-input"><option value="">Select player…</option></select></div>
+      <div class="cm-field"><label class="cm-label" for="logPlayer">Player</label><select id="logPlayer" class="cm-input"><option value="">Select player…</option></select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="cm-field"><label class="cm-label">Injury type</label><input id="logType" class="cm-input" placeholder="e.g. Hamstring strain"></div>
-        <div class="cm-field"><label class="cm-label">Body area</label><input id="logArea" class="cm-input" placeholder="e.g. Right thigh"></div>
+        <div class="cm-field"><label class="cm-label" for="logType">Injury type</label><input id="logType" class="cm-input" placeholder="e.g. Hamstring strain"></div>
+        <div class="cm-field"><label class="cm-label" for="logArea">Body area</label><input id="logArea" class="cm-input" placeholder="e.g. Right thigh"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="cm-field"><label class="cm-label">Severity</label>
+        <div class="cm-field"><label class="cm-label" for="logSev">Severity</label>
           <select id="logSev" class="cm-input">
             <option value="">Select…</option>
             <option value="minor">Minor</option>
@@ -712,10 +712,10 @@
             <option value="severe">Severe</option>
           </select>
         </div>
-        <div class="cm-field"><label class="cm-label">Start date</label><input id="logStart" type="date" class="cm-input"></div>
-        <div class="cm-field"><label class="cm-label">Est. return</label><input id="logReturn" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="logStart">Start date</label><input id="logStart" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="logReturn">Est. return</label><input id="logReturn" type="date" class="cm-input"></div>
       </div>
-      <div class="cm-field"><label class="cm-label">Notes</label><textarea id="logNotes" class="cm-input" rows="2" placeholder="Mechanism, context…"></textarea></div>
+      <div class="cm-field"><label class="cm-label" for="logNotes">Notes</label><textarea id="logNotes" class="cm-input" rows="2" placeholder="Mechanism, context…"></textarea></div>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
       <button class="cm-btn is-ghost" onclick="closeLogModal()">Cancel</button>
@@ -725,11 +725,11 @@
 </div>
 
 <!-- Discharge Modal -->
-<div id="modalDischarge" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center">
+<div id="modalDischarge" role="dialog" aria-modal="true" aria-labelledby="modalDischargeTitle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center">
   <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:16px;padding:28px;width:400px;max-width:96vw">
-    <h3 style="font:600 18px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">Discharge player</h3>
+    <h3 id="modalDischargeTitle" style="font:600 18px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">Discharge player</h3>
     <p id="disInfo" style="color:var(--cm-fg-muted);font:var(--cm-body-sm);margin-bottom:20px"></p>
-    <div class="cm-field" style="margin-bottom:20px"><label class="cm-label">Return date</label><input id="disDate" type="date" class="cm-input"></div>
+    <div class="cm-field" style="margin-bottom:20px"><label class="cm-label" for="disDate">Return date</label><input id="disDate" type="date" class="cm-input"></div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="cm-btn is-ghost" onclick="closeDischarge()">Cancel</button>
       <button class="cm-btn is-primary" onclick="confirmDischarge()"><i class="ti ti-check" style="font-size:14px"></i>Confirm</button>
@@ -953,7 +953,11 @@ function renderInjuries(list, playersMap) {
 
 function openLogModal() {
   const m = document.getElementById('modalLogInj');
-  if (m) { m.style.display = 'flex'; document.getElementById('logStart').value = new Date().toISOString().split('T')[0]; }
+  if (m) {
+    m.style.display = 'flex';
+    document.getElementById('logStart').value = new Date().toISOString().split('T')[0];
+    requestAnimationFrame(() => document.getElementById('logPlayer')?.focus());
+  }
 }
 function closeLogModal() {
   const m = document.getElementById('modalLogInj');

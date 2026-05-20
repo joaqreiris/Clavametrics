@@ -509,20 +509,20 @@
 
           <div class="cm-field">
             <label class="cm-label">Primary sport</label>
-            <div class="reg-sport-tabs" id="sport-tabs" role="tablist">
-              <button type="button" class="reg-sport-tab is-active" data-sport="football">
+            <div class="reg-sport-tabs" id="sport-tabs" role="tablist" aria-label="Primary sport">
+              <button type="button" class="reg-sport-tab is-active" data-sport="football" role="tab" aria-selected="true">
                 <i class="ti ti-ball-football"></i>Football
               </button>
-              <button type="button" class="reg-sport-tab" data-sport="basketball">
+              <button type="button" class="reg-sport-tab" data-sport="basketball" role="tab" aria-selected="false">
                 <i class="ti ti-ball-basketball"></i>Basketball
               </button>
-              <button type="button" class="reg-sport-tab" data-sport="volleyball">
+              <button type="button" class="reg-sport-tab" data-sport="volleyball" role="tab" aria-selected="false">
                 <i class="ti ti-ball-volleyball"></i>Volleyball
               </button>
-              <button type="button" class="reg-sport-tab" data-sport="rugby">
+              <button type="button" class="reg-sport-tab" data-sport="rugby" role="tab" aria-selected="false">
                 <i class="ti ti-ball-american-football"></i>Rugby
               </button>
-              <button type="button" class="reg-sport-tab" data-sport="other">
+              <button type="button" class="reg-sport-tab" data-sport="other" role="tab" aria-selected="false">
                 <i class="ti ti-dots"></i>Other
               </button>
             </div>
@@ -630,8 +630,12 @@
   // Sport tabs
   document.querySelectorAll('#sport-tabs .reg-sport-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#sport-tabs .reg-sport-tab').forEach(b => b.classList.remove('is-active'));
+      document.querySelectorAll('#sport-tabs .reg-sport-tab').forEach(b => {
+        b.classList.remove('is-active');
+        b.setAttribute('aria-selected', 'false');
+      });
       btn.classList.add('is-active');
+      btn.setAttribute('aria-selected', 'true');
     });
   });
 
