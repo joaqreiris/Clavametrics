@@ -51,6 +51,9 @@
 .hub-user .who .name{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-side-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hub-user .who .role{font:500 11px/1.2 var(--cm-font-mono);color:var(--cm-side-fg-muted);margin-top:2px}
 .hub-user .ti{font-size:14px;color:var(--cm-side-fg-muted)}
+.hub-logout-btn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border-radius:var(--cm-r-3);border:0;background:transparent;color:var(--cm-side-fg-muted);font:500 13px/1 var(--cm-font-sans);cursor:pointer;margin-top:2px}
+.hub-logout-btn:hover{background:var(--cm-side-item-active-bg);color:var(--cm-danger)}
+.hub-logout-btn .ti{font-size:15px}
     `;
     document.head.appendChild(s);
   }
@@ -132,14 +135,16 @@
       </div>
       <nav class="hub-nav">${renderNav()}</nav>
       <div class="hub-side-foot">
-        <div class="hub-user" id="sideUserBtn" role="button" tabindex="0" aria-label="User menu">
+        <div class="hub-user" id="sideUserBtn">
           <div class="av" id="userInitials">–</div>
           <div class="who">
             <div class="name" id="userName">Loading…</div>
             <div class="role" id="userRole"></div>
           </div>
-          <i class="ti ti-logout" id="sideLogoutIcon" title="Sign out"></i>
         </div>
+        <button class="hub-logout-btn" id="sideLogoutBtn" aria-label="Sign out">
+          <i class="ti ti-logout"></i><span>Sign out</span>
+        </button>
       </div>
     </aside>`;
   }
@@ -187,7 +192,7 @@
       if (e.target.closest('.hub-nav-item') && window.innerWidth <= 768) closeSidebar();
     });
 
-    document.getElementById('sideUserBtn')?.addEventListener('click', () => {
+    document.getElementById('sideLogoutBtn')?.addEventListener('click', () => {
       if (typeof window.logout === 'function') window.logout();
     });
   }
