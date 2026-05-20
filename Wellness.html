@@ -539,11 +539,12 @@
 <div id="settings-host"></div>
 
 <script>
-  window.__WELLNESS_CTX = { playerName: null, dateLabel: null, history: [] };
+  window.__WELLNESS_CTX = { playerName: null, dateLabel: null, history: [], lastEntry: null, streak: 0 };
 
   (async () => {
     if (!await window.requireAuth()) return;
 
+    const clubId    = await window.getClubId();
     const urlParams = new URLSearchParams(window.location.search);
     const playerId  = urlParams.get('player');
     const now       = new Date();
@@ -551,21 +552,33 @@
     const months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     window.__WELLNESS_CTX.dateLabel = `${days[now.getDay()]} · ${now.getDate()} ${months[now.getMonth()]}`;
 
-    if (playerId) {
+    if (playerId && clubId) {
       const { data: player } = await window.sb.from('players')
         .select('first_name,last_name')
         .eq('id', playerId)
         .single();
       if (player) window.__WELLNESS_CTX.playerName = player.first_name || player.last_name;
 
-      // Load last 7 days of wellness for this player
+      // Load last 7 days of wellness for this player (all fields needed for summary)
       const since = new Date(now); since.setDate(since.getDate() - 6);
       const { data: hist } = await window.sb.from('wellness')
-        .select('readiness,submitted_at')
+        .select('readiness,sleep_quality,mood,fatigue,stress,soreness,submitted_at')
         .eq('player_id', playerId)
-        .gte('submitted_at', since.toISOString())
+        .eq('club_id', clubId)
+        .gte('submitted_at', since.toISOString().slice(0, 10))
         .order('submitted_at', { ascending: true });
-      window.__WELLNESS_CTX.history = hist || [];
+      const entries = hist || [];
+      window.__WELLNESS_CTX.history   = entries;
+      window.__WELLNESS_CTX.lastEntry = entries.length ? entries[entries.length - 1] : null;
+      // Streak: consecutive days ending today that have an entry
+      let streak = 0;
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now); d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0, 10);
+        if (entries.find(e => e.submitted_at?.slice(0, 10) === key)) streak++;
+        else break;
+      }
+      window.__WELLNESS_CTX.streak = streak;
     }
   })();
 
@@ -692,7 +705,7 @@
             </div>
             <div className="ph-context">
               <div className="l">Streak</div>
-              <div className="v"><span className="accent">5</span> days</div>
+              <div className="v"><span className="accent">{ctx.streak || 0}</span> days</div>
             </div>
           </div>
 
@@ -829,7 +842,7 @@
           <div className="ph-streak">
             <div className="icon"><i className="ti ti-flame"></i></div>
             <div>
-              <div className="l">Day 6 streak — keep it going!</div>
+              <div className="l">{ctx.streak > 0 ? `Day ${ctx.streak} streak — keep it going!` : 'Start your streak today!'}</div>
               <div className="sub">Next: tomorrow at 8:00 am</div>
             </div>
           </div>
@@ -861,23 +874,23 @@
             <div className="ph-meta-list">
               <div className="ph-meta-row">
                 <span className="ic"><i className="ti ti-moon"></i></span>
-                <span className="l">Sleep</span>
-                <span className="v">7h 30m · 8/10</span>
+                <span className="l">Sleep quality</span>
+                <span className="v">{ctx.lastEntry?.sleep_quality != null ? `${ctx.lastEntry.sleep_quality} / 10` : '—'}</span>
               </div>
               <div className="ph-meta-row">
                 <span className="ic"><i className="ti ti-mood-smile"></i></span>
                 <span className="l">Mood</span>
-                <span className="v">8 / 10</span>
+                <span className="v">{ctx.lastEntry?.mood != null ? `${ctx.lastEntry.mood} / 10` : '—'}</span>
               </div>
               <div className="ph-meta-row">
                 <span className="ic"><i className="ti ti-battery-2"></i></span>
                 <span className="l">Fatigue</span>
-                <span className="v">6 / 10</span>
+                <span className="v">{ctx.lastEntry?.fatigue != null ? `${ctx.lastEntry.fatigue} / 10` : '—'}</span>
               </div>
               <div className="ph-meta-row">
                 <span className="ic" style={{ color:"#D97706", background:"#FFFBEB" }}><i className="ti ti-bandage"></i></span>
-                <span className="l">Soreness · calves</span>
-                <span className="v" style={{ color:"#D97706" }}>4 / 10</span>
+                <span className="l">Soreness</span>
+                <span className="v" style={{ color:"#D97706" }}>{ctx.lastEntry?.soreness != null ? `${ctx.lastEntry.soreness} / 10` : '—'}</span>
               </div>
             </div>
           </div>

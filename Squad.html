@@ -347,7 +347,7 @@
     <div class="hub-topbar">
       <div class="hub-crumb">
         <i class="ti ti-home"></i>
-        <span>Clava FC</span>
+        <span id="sqCrumbClub">…</span>
         <span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Squad</span>
       </div>
@@ -529,10 +529,10 @@
         <div class="sq-modal-field">
           <label for="sqF_status">Status</label>
           <select id="sqF_status" disabled style="opacity:0.5" aria-disabled="true">
-            <option value="active">Active</option>
+            <option value="available">Available</option>
             <option value="injured">Injured</option>
-            <option value="loan">On loan</option>
-            <option value="inactive">Inactive</option>
+            <option value="modified">Modified</option>
+            <option value="unavailable">Unavailable</option>
           </select>
         </div>
       </div>
@@ -631,6 +631,9 @@ function renderTable() {
       const pcfg    = POS_CFG[pos] || { css:'', pill:pos };
       const fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
       const initials = (((p.first_name||'')[0] || '') + ((p.last_name||'')[0] || '')).toUpperCase() || fullName.slice(0,2).toUpperCase();
+      const avInner = p.photo_url
+        ? `<img src="${p.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
+        : initials;
       const num     = p.number || '—';
       const age     = calcAge(p.date_of_birth);
       const foot    = p.dominant_foot || '—';
@@ -640,7 +643,7 @@ function renderTable() {
         <td><span class="sq-cb" data-cb></span></td>
         <td><span class="sq-num">${num}</span></td>
         <td><div class="sq-player">
-          <div class="sq-av">${initials}</div>
+          <div class="sq-av">${avInner}</div>
           <div><div class="sq-name-row"><span class="sq-name">${fullName || '—'}</span></div>
           <div class="sq-sub">${fmtDob(p.date_of_birth)}</div></div>
         </div></td>
@@ -695,7 +698,7 @@ function renderTable() {
 
 async function reloadPlayers() {
   const { data } = await window.sb.from('players')
-    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status')
+    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url')
     .eq('club_id', _currentClubId)
     .order('number', { ascending: true, nullsFirst: false });
 
@@ -730,7 +733,11 @@ async function reloadPlayers() {
   const clubId = await window.getClubId();
   _currentClubId = clubId;
 
-  if (club) window.applyClubTheme();
+  if (club) {
+    window.applyClubTheme();
+    const crumb = document.getElementById('sqCrumbClub');
+    if (crumb) crumb.textContent = club.name;
+  }
 
   await reloadPlayers();
 
@@ -913,11 +920,14 @@ async function reloadPlayers() {
     grid.innerHTML = filtered.map(p => {
       const fullName = ((p.first_name||'') + ' ' + (p.last_name||'')).trim();
       const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
+      const cardAvInner = p.photo_url
+        ? `<img src="${p.photo_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="">`
+        : initials;
       const pos = (p.position||'').toUpperCase();
       const pcfg = POS_CFG[pos] || { css:'', pill: pos };
       const age = calcAge(p.date_of_birth);
       return `<div class="sq-card" data-id="${p.id}">
-        <div class="sq-card-av">${initials}<span class="sq-card-num">${p.number||'—'}</span></div>
+        <div class="sq-card-av">${cardAvInner}<span class="sq-card-num">${p.number||'—'}</span></div>
         <div class="sq-card-name">${fullName||'—'}</div>
         <div class="sq-card-meta">
           <span class="sq-pos ${pcfg.css}">${p.position||'—'}</span>

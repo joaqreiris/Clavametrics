@@ -285,11 +285,11 @@
       </header>
 
       <!-- Alert banner -->
-      <div class="lm-alert">
+      <div class="lm-alert" id="lmAlertBanner">
         <div class="ic"><i class="ti ti-alert-triangle"></i></div>
         <div class="body">
-          <div class="h">4 players entered the danger zone (ACWR &gt; 1.5) in the last 48 h</div>
-          <div class="p">Ramiro Vega · Tomás López · Felipe Domínguez · Lucas Carrasco. Consider partial-load adaptations for tomorrow's session.</div>
+          <div class="h" id="lmAlertH">4 players entered the danger zone (ACWR &gt; 1.5) in the last 48 h</div>
+          <div class="p" id="lmAlertP">Ramiro Vega · Tomás López · Felipe Domínguez · Lucas Carrasco. Consider partial-load adaptations for tomorrow's session.</div>
         </div>
         <div class="actions">
           <button class="cm-btn is-sm">View players<i class="ti ti-arrow-right" style="font-size:14px"></i></button>
@@ -301,14 +301,14 @@
       <div class="lm-kpis">
         <div class="lm-kpi">
           <div class="lm-kpi-l"><i class="ti ti-chart-line"></i>Squad avg ACWR<span class="help"><i class="ti ti-info-circle"></i></span></div>
-          <div class="lm-kpi-v">1.18</div>
+          <div class="lm-kpi-v" id="lmKpiAcwr">—</div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d warn"><i class="ti ti-arrow-up-right"></i>+0.06</span>
             <span>sweet-spot 0.8–1.3</span>
           </div>
           <div class="lm-zonebar">
             <div class="z green"></div><div class="z amber"></div><div class="z red"></div>
-            <span class="pin" style="left:55%"></span>
+            <span class="pin" id="lmAcwrPin" style="left:55%"></span>
           </div>
           <svg class="lm-kpi-sp" viewBox="0 0 84 36" preserveAspectRatio="none">
             <polyline points="0,26 14,22 28,24 42,18 56,20 70,14 84,16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -316,7 +316,7 @@
         </div>
         <div class="lm-kpi">
           <div class="lm-kpi-l"><i class="ti ti-flame"></i>In danger zone</div>
-          <div class="lm-kpi-v">4 <sub>/ 27</sub></div>
+          <div class="lm-kpi-v" id="lmKpiDanger">4 <sub>/ 27</sub></div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d down"><i class="ti ti-arrow-up-right"></i>+2</span>
             <span>vs 48 h ago</span>
@@ -338,7 +338,7 @@
         </div>
         <div class="lm-kpi">
           <div class="lm-kpi-l"><i class="ti ti-activity"></i>Session RPE avg<span class="help"><i class="ti ti-info-circle"></i></span></div>
-          <div class="lm-kpi-v">6.8 <sub>/ 10</sub></div>
+          <div class="lm-kpi-v" id="lmKpiRpe">6.8 <sub>/ 10</sub></div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d warn"><i class="ti ti-arrow-up-right"></i>+0.4</span>
             <span>MD-3 session today</span>
@@ -371,7 +371,7 @@
             <span class="pill green"><span class="d"></span>0.8 – 1.3 sweet‑spot</span>
             <span class="pill warn"><span class="d"></span>1.3 – 1.5 overreach</span>
             <span class="pill red"><span class="d"></span>&gt; 1.5 danger</span>
-            <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Squad avg today · <strong style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
+            <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Squad avg today · <strong id="lmAcwrToday" style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
           </div>
           <div class="lm-card-b" style="padding-top:4px">
             <svg viewBox="0 0 880 360" preserveAspectRatio="none" style="width:100%;height:360px;display:block" font-family="Geist, ui-sans-serif, system-ui, sans-serif">
@@ -553,7 +553,7 @@
           <div class="lm-card">
             <div class="lm-card-h">
               <h3>ACWR distribution</h3>
-              <span class="sub">today, n=27</span>
+              <span class="sub" id="lmDistSub">today, n=27</span>
               <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="lm-card-b">
@@ -561,20 +561,20 @@
                 <svg class="lm-donut" viewBox="0 0 42 42">
                   <!-- ring: total 27 \u2014 segments: 13 sweet (48%), 10 over (37%), 4 danger (15%) -->
                   <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-bg-sunk)" stroke-width="4"/>
-                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-success)" stroke-width="4"
+                  <circle id="lmDonutSweet" cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-success)" stroke-width="4"
                           stroke-dasharray="48 52" stroke-dashoffset="25" transform="rotate(-90 21 21)"/>
-                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-warning)" stroke-width="4"
+                  <circle id="lmDonutOver" cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-warning)" stroke-width="4"
                           stroke-dasharray="37 63" stroke-dashoffset="-23" transform="rotate(-90 21 21)"/>
-                  <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-danger)" stroke-width="4"
+                  <circle id="lmDonutDanger" cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-danger)" stroke-width="4"
                           stroke-dasharray="15 85" stroke-dashoffset="-60" transform="rotate(-90 21 21)"/>
-                  <text x="21" y="20" text-anchor="middle" font-family="Geist, sans-serif" font-size="6" font-weight="600" fill="var(--cm-fg-strong)" letter-spacing="-0.04em">27</text>
+                  <text id="lmDonutTotal" x="21" y="20" text-anchor="middle" font-family="Geist, sans-serif" font-size="6" font-weight="600" fill="var(--cm-fg-strong)" letter-spacing="-0.04em">27</text>
                   <text x="21" y="26" text-anchor="middle" font-family="Geist Mono, ui-monospace, monospace" font-size="3" fill="var(--cm-fg-muted)">PLAYERS</text>
                 </svg>
                 <div class="lm-dist-legend">
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-success)"></span><span class="lbl">Sweet-spot</span><span class="ct">13</span></div>
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-warning)"></span><span class="lbl">Overreach</span><span class="ct">10</span></div>
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-danger)"></span><span class="lbl">Danger</span><span class="ct">4</span></div>
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-bg-sunk);border:1px solid var(--cm-border-strong)"></span><span class="lbl">No data</span><span class="ct">0</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-success)"></span><span class="lbl">Sweet-spot</span><span class="ct" id="lmDistSweet">13</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-warning)"></span><span class="lbl">Overreach</span><span class="ct" id="lmDistOver">10</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-danger)"></span><span class="lbl">Danger</span><span class="ct" id="lmDistDanger">4</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-bg-sunk);border:1px solid var(--cm-border-strong)"></span><span class="lbl">No data</span><span class="ct" id="lmDistNoData">0</span></div>
                 </div>
               </div>
             </div>
@@ -613,11 +613,11 @@
         </div>
 
         <div class="lm-tablebar">
-          <button class="lm-pill-filter is-on">All<span class="ct">27</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-danger)"></span>Danger<span class="ct">4</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-warning)"></span>Overreach<span class="ct">10</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-success)"></span>Sweet-spot<span class="ct">13</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-info)"></span>Underloaded<span class="ct">0</span></button>
+          <button class="lm-pill-filter is-on">All<span class="ct" id="lmPillAll">27</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-danger)"></span>Danger<span class="ct" id="lmPillDanger">4</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-warning)"></span>Overreach<span class="ct" id="lmPillOver">10</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-success)"></span>Sweet-spot<span class="ct" id="lmPillSweet">13</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-info)"></span>Underloaded<span class="ct" id="lmPillUnder">0</span></button>
           <div class="grow"></div>
           <span style="font:var(--cm-meta);color:var(--cm-fg-muted)">Group by</span>
           <button class="lm-pill-filter is-on">Position</button>
@@ -639,106 +639,7 @@
             </tr>
           </thead>
           <tbody id="lmTbody">
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">11</span></td>
-              <td><div class="lm-player"><div class="lm-av">TL</div><div><div class="lm-pname">Tomás López</div><div class="lm-pmeta">25 y · LW</div></div></div></td>
-              <td><span class="lm-pos wg">WG</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v danger">1.58</span><div class="lm-cell-bar"><span class="lm-cell-fill red" style="width:79%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v warn">7.6</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:76%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v warn">6.4</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:64%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">688 / 435</span></td>
-              <td><span class="lm-zone-pill red"><span class="d"></span>Danger</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">7</span></td>
-              <td><div class="lm-player"><div class="lm-av tinted">RV</div><div><div class="lm-pname">Ramiro Vega</div><div class="lm-pmeta">27 y · RW</div></div></div></td>
-              <td><span class="lm-pos wg">WG</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v warn">1.42</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:71%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">7.1</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:71%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">7.1</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:71%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">612 / 431</span></td>
-              <td><span class="lm-zone-pill over"><span class="d"></span>Overreach</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">15</span></td>
-              <td><div class="lm-player"><div class="lm-av">LC</div><div><div class="lm-pname">Lucas Carrasco</div><div class="lm-pmeta">27 y · CB</div></div></div></td>
-              <td><span class="lm-pos cb">CB</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v warn">1.34</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:67%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">6.9</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:69%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v warn">6.8</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:68%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">521 / 389</span></td>
-              <td><span class="lm-zone-pill over"><span class="d"></span>Overreach</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">10</span></td>
-              <td><div class="lm-player"><div class="lm-av">FD</div><div><div class="lm-pname">Felipe Domínguez</div><div class="lm-pmeta">26 y · CM</div></div></div></td>
-              <td><span class="lm-pos mf">MF</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">1.12</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:56%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">6.8</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:68%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">8.6</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:86%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">498 / 444</span></td>
-              <td><span class="lm-zone-pill opt"><span class="d"></span>Sweet-spot</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">9</span></td>
-              <td><div class="lm-player"><div class="lm-av">SR</div><div><div class="lm-pname">Santiago Rivas</div><div class="lm-pmeta">31 y · ST</div></div></div></td>
-              <td><span class="lm-pos st">ST</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">1.18</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:59%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">7.0</span><div class="lm-cell-bar"><span class="lm-cell-fill amber" style="width:70%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">7.9</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:79%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">541 / 458</span></td>
-              <td><span class="lm-zone-pill opt"><span class="d"></span>Sweet-spot</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">8</span></td>
-              <td><div class="lm-player"><div class="lm-av tinted">MP</div><div><div class="lm-pname">Mateo Paredes</div><div class="lm-pmeta">30 y · DM</div></div></div></td>
-              <td><span class="lm-pos mf">MF</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">1.04</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:52%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">6.4</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:64%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">7.7</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:77%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">472 / 454</span></td>
-              <td><span class="lm-zone-pill opt"><span class="d"></span>Sweet-spot</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">22</span></td>
-              <td><div class="lm-player"><div class="lm-av">NF</div><div><div class="lm-pname">Nicolás Ferreyra</div><div class="lm-pmeta">22 y · CB</div></div></div></td>
-              <td><span class="lm-pos cb">CB</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">1.08</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:54%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">6.6</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:66%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">8.4</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:84%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">459 / 425</span></td>
-              <td><span class="lm-zone-pill opt"><span class="d"></span>Sweet-spot</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">1</span></td>
-              <td><div class="lm-player"><div class="lm-av tinted">EG</div><div><div class="lm-pname">Esteban Galarza</div><div class="lm-pmeta">34 y · GK · Captain</div></div></div></td>
-              <td><span class="lm-pos gk">GK</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">0.94</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:47%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">5.8</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:58%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v good">8.1</span><div class="lm-cell-bar"><span class="lm-cell-fill green" style="width:81%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">384 / 408</span></td>
-              <td><span class="lm-zone-pill opt"><span class="d"></span>Sweet-spot</span></td>
-            </tr>
-
-            <tr>
-              <td><span style="font:600 13px/1 var(--cm-font-mono)">14</span></td>
-              <td><div class="lm-player"><div class="lm-av">DV</div><div><div class="lm-pname">Diego Villalba</div><div class="lm-pmeta">29 y · CM · ill</div></div></div></td>
-              <td><span class="lm-pos mf">MF</span></td>
-              <td><div class="lm-cell"><span class="lm-cell-v">0.79</span><div class="lm-cell-bar"><span class="lm-cell-fill violet" style="width:40%"></span></div></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>
-              <td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-violet)">5.2</span><div class="lm-cell-bar"><span class="lm-cell-fill violet" style="width:52%"></span></div></div></td>
-              <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">298 / 377</span></td>
-              <td><span class="lm-zone-pill under"><span class="d"></span>Under</span></td>
-            </tr>
-
+            <tr><td colspan="8" style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading player load data…</td></tr>
           </tbody>
         </table>
 

@@ -395,8 +395,8 @@
         </div>
         <div class="ph-body-inner">
           <div class="ph-header">
-            <span class="date">Wed · 14 May · 21:56</span>
-            <div class="avatar">FD</div>
+            <span class="date" id="confDate">—</span>
+            <div class="avatar" id="confAvatar">—</div>
           </div>
 
           <div class="ph-success" id="confScreen">
@@ -457,21 +457,24 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 <script>
 const RPE_LABELS = ['Rest','Very very easy','Easy','Moderate','Somewhat hard','Hard','Hard +','Very hard','Very hard +','Extremely hard','Maximal'];
-let selectedRPE  = null;
+let selectedRPE    = null;
 let currentSession = null;
-let players = [];
+let players        = [];
+let clubId         = null;
 
 // ── BOOT ──
 async function boot() {
   if (!await window.requireAuth()) return;
-  const clubId = await window.getClubId();
+  clubId = await window.getClubId();
   await window.applyClubTheme();
 
-  // Today in header
+  // Today in header (both phones)
   const now = new Date();
-  document.getElementById('ph1Date').textContent =
+  const dateStr =
     now.toLocaleDateString('en-US', { weekday:'short', day:'numeric', month:'short' }) + ' · ' +
     now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  document.getElementById('ph1Date').textContent  = dateStr;
+  document.getElementById('confDate').textContent = dateStr;
 
   await Promise.all([loadLastSession(clubId), loadPlayers(clubId)]);
   setupRPE();
@@ -489,7 +492,7 @@ async function loadLastSession(clubId) {
   if (!data) return;
   currentSession = data;
 
-  const typeIcon = { Match:'ti-ball-football', Gym:'ti-barbell', Recovery:'ti-activity', Tactical:'ti-clipboard-list', Conditioning:'ti-run' }[data.session_type] || 'ti-clipboard-list';
+  const typeIcon = { match:'ti-ball-football', gym:'ti-barbell', recovery:'ti-activity', tactical:'ti-clipboard-list', conditioning:'ti-run' }[data.session_type] || 'ti-clipboard-list';
   document.getElementById('sessionIcon').className = `ti ${typeIcon}`;
   document.getElementById('sessionTitle').textContent  = data.title || data.session_type || 'Training session';
   document.getElementById('sessionMeta').textContent   = data.session_date + (data.session_type ? ' · ' + data.session_type : '');
@@ -576,8 +579,11 @@ function checkSubmit() {
   if (playerId) {
     const p = players.find(x => x.id === playerId);
     if (p) {
-      document.getElementById('confPlayer').textContent = p.first_name + ' ' + p.last_name;
-      document.getElementById('confPlayerName').textContent = p.first_name + ' ' + p.last_name;
+      const fullName = p.first_name + ' ' + p.last_name;
+      const initials = (p.first_name[0] + p.last_name[0]).toUpperCase();
+      document.getElementById('confPlayer').textContent     = fullName;
+      document.getElementById('confPlayerName').textContent = fullName;
+      document.getElementById('confAvatar').textContent     = initials;
       document.getElementById('confSub').textContent = 'Your load is recorded — coaching staff can see it now.';
     }
   }
@@ -588,6 +594,7 @@ async function loadPlayerHistory(playerId) {
   const { data } = await window.sb.from('rpe')
     .select('rpe, duration, load, created_at')
     .eq('player_id', playerId)
+    .eq('club_id', clubId)
     .order('created_at', { ascending: false })
     .limit(7);
   if (!data || !data.length) return;
@@ -626,7 +633,6 @@ async function submitRPE() {
 
   const dur  = currentSession?.duration || null;
   const load = dur ? selectedRPE * dur : null;
-  const clubId = await window.getClubId();
 
   const { error } = await window.sb.from('rpe').insert({
     player_id:  playerId,

@@ -544,34 +544,65 @@
     if (h2) h2.textContent = `${p._name}${p.number ? ' · #' + p.number : ''}`;
     if (metaEl) metaEl.innerHTML = `<span class="badge">${p.position || '—'} · ${p.weight ? p.weight + ' kg' : '—'}</span>`;
 
-    // Load latest nutrition entry
+    // Today's date label
+    const today = new Date().toISOString().slice(0, 10);
+    const dateSubEl = document.querySelector('.nu-card-h .sub');
+    if (dateSubEl) dateSubEl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', day:'numeric', month:'short' });
+
+    // Today's nutrition entry for this player, filtered by club_id
     const { data: nu } = await window.sb.from('nutrition')
-      .select('calories,protein,carbs,fats,hydration,notes')
+      .select('calories,protein,carbs,fats,hydration')
       .eq('player_id', p.id)
-      .order('id', { ascending: false })
+      .eq('club_id', clubId)
+      .gte('created_at', today)
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    // Update donut + macros with real data (or "—" if none)
-    const donutV = document.querySelector('.nu-donut-v');
-    const donutL = document.querySelector('.nu-donut-l');
-    const donutPc = document.querySelector('.nu-donut-pc');
+    const CIRC = 264; // 2π × r42
+    const donutV   = document.querySelector('.nu-donut-v');
+    const donutL   = document.querySelector('.nu-donut-l');
+    const donutPc  = document.querySelector('.nu-donut-pc');
+    const ringFill = document.querySelector('.ring-fill');
+    const macroVals  = document.querySelectorAll('.nu-macro-v');
+    const macroFills = document.querySelectorAll('.nu-macro-fill');
+
     if (nu) {
-      if (donutV)  donutV.textContent  = nu.calories ? nu.calories.toLocaleString() : '—';
-      if (donutL)  donutL.textContent  = 'kcal logged';
-      if (donutPc) donutPc.textContent = '';
+      // Donut — calories as % of 2500 kcal reference
+      const kcal   = nu.calories || 0;
+      const kcalPct = Math.min(1, kcal / 2500);
+      if (donutV)   donutV.textContent  = kcal ? kcal.toLocaleString() : '—';
+      if (donutL)   donutL.textContent  = 'kcal today';
+      if (donutPc)  donutPc.textContent = kcal ? Math.round(kcalPct * 100) + '%' : '';
+      if (ringFill) ringFill.setAttribute('stroke-dasharray', `${Math.round(kcalPct * CIRC)} ${CIRC}`);
+
+      // Macro rows: [0]=Carbs, [1]=Protein, [2]=Fat, [3]=Fiber(N/A), [4]=Water
+      // Reference daily amounts for bar fill calculation
+      const DATA = [
+        { val: nu.carbs,     ref: 350, label: 'g carbs' },
+        { val: nu.protein,   ref: 150, label: 'g protein' },
+        { val: nu.fats,      ref: 80,  label: 'g fat' },
+        { val: null,         ref: null, label: null },       // Fiber — not in schema
+        { val: nu.hydration, ref: 3,   label: 'L water' },
+      ];
+      DATA.forEach(({ val, ref, label }, i) => {
+        if (!macroVals[i]) return;
+        if (val == null || ref == null) {
+          macroVals[i].innerHTML = '—';
+          if (macroFills[i]) macroFills[i].style.width = '0%';
+          return;
+        }
+        const pct = Math.min(100, Math.round((val / ref) * 100));
+        macroVals[i].innerHTML = `${val}<small>${label}</small>`;
+        if (macroFills[i]) macroFills[i].style.width = pct + '%';
+      });
     } else {
-      if (donutV)  donutV.textContent  = '—';
-      if (donutL)  donutL.textContent  = 'no data';
-      if (donutPc) donutPc.textContent = '';
-    }
-    // Macro rows
-    const macroVals = document.querySelectorAll('.nu-macro-v');
-    if (nu && macroVals.length >= 4) {
-      macroVals[0].innerHTML = `${nu.carbs ?? '—'}<small>g carbs</small>`;
-      macroVals[1].innerHTML = `${nu.protein ?? '—'}<small>g protein</small>`;
-      macroVals[2].innerHTML = `${nu.fats ?? '—'}<small>g fat</small>`;
-      macroVals[3].innerHTML = `${nu.hydration ?? '—'}<small>L water</small>`;
+      if (donutV)   donutV.textContent  = '—';
+      if (donutL)   donutL.textContent  = 'no data today';
+      if (donutPc)  donutPc.textContent = '';
+      if (ringFill) ringFill.setAttribute('stroke-dasharray', `0 ${CIRC}`);
+      macroVals.forEach(el  => { el.innerHTML = '—'; });
+      macroFills.forEach(el => { el.style.width = '0%'; });
     }
   }
 
@@ -616,10 +647,6 @@
   document.querySelectorAll('.nu-tab').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('.nu-tab').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
-  }));
-  document.querySelectorAll('.nu-row').forEach(r => r.addEventListener('click', () => {
-    document.querySelectorAll('.nu-row').forEach(o => o.classList.remove('is-on'));
-    r.classList.add('is-on');
   }));
 </script>
 </body>

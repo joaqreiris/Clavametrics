@@ -151,7 +151,7 @@
     <section class="sh-page">
 
       <header class="sh-head">
-        <div><h1>Sessions history</h1><div class="ctx"><strong>148 sessions logged</strong> · 2025/26 season · filtered by MC, MD, orientation, focus</div></div>
+        <div><h1>Sessions history</h1><div class="ctx"><strong id="shTotalCount">—</strong> sessions logged · filtered by date, type, search</div></div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-chart-bar" style="font-size:14px"></i>Compare sessions</button>
@@ -247,7 +247,7 @@
             <span class="sh-active-chip">MD−4 / MD−3 / MD−2 / MD−1 / MD+1 <i class="ti ti-x" style="font-size:11px"></i></span>
             <span class="sh-active-chip">Tactical · Physical · Technical <i class="ti ti-x" style="font-size:11px"></i></span>
             <span class="sh-active-chip">All orientations <i class="ti ti-x" style="font-size:11px"></i></span>
-            <span class="lbl" style="margin-left:auto"><strong style="color:var(--cm-fg-strong)">42 of 148</strong> match filters</span>
+            <span class="lbl" style="margin-left:auto"><strong id="shFilterCount" style="color:var(--cm-fg-strong)">—</strong> match filters</span>
           </div>
 
           <div style="max-height:760px;overflow-y:auto">
@@ -313,17 +313,6 @@
 
   async function boot() {
     if (!await window.requireAuth()) return;
-    const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
-    if (club) {
-      document.getElementById('sideClubName').textContent = club.name || '—';
-      document.getElementById('sideClubMeta').textContent = 'First team';
-    }
-    if (profile) {
-      const init = (profile.full_name || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-      document.getElementById('sideUserAv').textContent = init;
-      document.getElementById('sideUserName').textContent = profile.full_name || '—';
-      document.getElementById('sideUserRole').textContent = profile.role || '—';
-    }
     window.applyClubTheme();
     const clubId = await window.getClubId();
     if (!clubId) return;
@@ -338,6 +327,8 @@
       .order('session_date', { ascending: false });
     if (error) { console.error(error); return; }
     allSessions = data || [];
+    const tc = document.getElementById('shTotalCount');
+    if (tc) tc.textContent = allSessions.length;
     applyFilters();
   }
 
@@ -355,6 +346,8 @@
       return true;
     });
     currentPage = 0;
+    const fc = document.getElementById('shFilterCount');
+    if (fc) fc.textContent = filteredSessions.length;
     updateKPIs();
     renderTable();
     renderFooter();
