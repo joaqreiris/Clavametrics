@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  /* ───── Login-specific layout ───── */
+  .login-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 520px;
+    background: var(--cm-bg);
+  }
+  /* Hybrid + Dark show the brand panel; light hides it for a centered Stripe-feel */
+  [data-theme="light"] .login-brand { display: none; }
+  [data-theme="light"] .login-shell { grid-template-columns: 1fr; }
+
+  .login-brand {
+    position: relative;
+    background: var(--cm-side-bg);
+    color: var(--cm-side-fg);
+    overflow: hidden;
+    padding: 40px 48px;
+    display: flex;
+    flex-direction: column;
+  }
+  /* No decorative glow — minimalism with curated tone is the brief */
+  .login-brand-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+  }
+  .login-brand-mark {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    background: var(--cm-side-accent);
+    color: var(--cm-side-bg);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .login-brand-mark svg { width: 22px; height: 22px; }
+  .login-brand-name { font: 600 16px/1 var(--cm-font-sans); letter-spacing: -0.01em; }
+  .login-brand-meta { font: 500 12px/1.3 var(--cm-font-mono); color: var(--cm-side-fg-muted); margin-top: 2px; }
+
+  .login-brand-hero {
+    margin-top: auto;
+    position: relative;
+    z-index: 1;
+  }
+  .login-brand-hero-eyebrow {
+    font: 500 11px/1.2 var(--cm-font-mono);
+    letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase;
+    color: var(--cm-side-accent);
+    margin-bottom: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .login-brand-hero-eyebrow::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 12px currentColor;
+  }
+  .login-brand-hero h1 {
+    font: 600 36px/1.1 var(--cm-font-sans);
+    letter-spacing: -0.02em;
+    color: var(--cm-side-fg);
+    max-width: 24ch;
+  }
+  .login-brand-hero h1 em {
+    font-style: normal;
+    color: var(--cm-side-accent);
+  }
+  .login-brand-hero p {
+    margin-top: 14px;
+    font: var(--cm-body);
+    color: var(--cm-side-fg-muted);
+    max-width: 38ch;
+  }
+
+  /* Sport ticker — minimal list of supported disciplines */
+  .login-brand-sports {
+    margin-top: 32px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 480px;
+  }
+  .login-brand-sport {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--cm-side-border);
+    border-radius: 999px;
+    font: 500 12px/1 var(--cm-font-sans);
+    color: var(--cm-side-fg-muted);
+    background: transparent;
+  }
+  .login-brand-sport .ti { font-size: 14px; opacity: 0.85; }
+  .login-brand-sport.is-primary {
+    color: var(--cm-side-accent);
+    border-color: color-mix(in srgb, var(--cm-side-accent) 35%, transparent);
+    background: var(--cm-side-item-active-bg);
+  }
+
+  .login-brand-footer {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 28px;
+    font: var(--cm-meta); color: var(--cm-side-fg-muted);
+  }
+  .login-brand-footer span { display: inline-flex; align-items: center; gap: 6px; }
+  .login-brand-footer .ti { font-size: 14px; }
+
+  /* ───── Form panel ───── */
+  .login-form-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 32px;
+    background: var(--cm-bg);
+    position: relative;
+  }
+  [data-theme="dark"] .login-form-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--cm-atmo);
+    pointer-events: none;
+  }
+  .login-card {
+    width: 100%;
+    max-width: 380px;
+    position: relative;
+    z-index: 1;
+  }
+  /* Light theme = centered with logo on top */
+  [data-theme="light"] .login-card { max-width: 360px; }
+  .login-card .mark-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 24px;
+  }
+  [data-theme="hybrid"] .login-card .mark-row,
+  [data-theme="dark"] .login-card .mark-row { display: none; }
+
+  .login-card h2 {
+    font: 600 24px/1.15 var(--cm-font-sans);
+    letter-spacing: -0.02em;
+    color: var(--cm-fg-strong);
+  }
+  .login-card .sub {
+    margin-top: 6px;
+    color: var(--cm-fg-muted);
+    font: var(--cm-body);
+  }
+  .login-card .sub a { color: var(--cm-fg); border-bottom: 1px solid var(--cm-border-strong); text-decoration: none; }
+  .login-card .sub a:hover { color: var(--cm-fg-strong); }
+
+  .login-form { margin-top: 28px; display: flex; flex-direction: column; gap: 16px; }
+  .login-form .password-label-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .login-form .password-label-row a {
+    font: 500 12.5px/1 var(--cm-font-sans);
+    color: var(--cm-fg-muted);
+    text-decoration: none;
+  }
+  .login-form .password-label-row a:hover { color: var(--cm-fg); }
+
+  .login-divider {
+    display: flex; align-items: center; gap: 10px;
+    margin: 8px 0 4px;
+    color: var(--cm-fg-faint);
+  }
+  .login-divider::before, .login-divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--cm-border);
+  }
+  .login-divider span {
+    font: 500 11px/1 var(--cm-font-sans);
+    letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase;
+  }
+
+  .oauth-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .oauth-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 40px;
+    border-radius: var(--cm-r-3);
+    border: 1px solid var(--cm-border);
+    background: var(--cm-surface);
+    color: var(--cm-fg);
+    font: 500 13.5px/1 var(--cm-font-sans);
+    cursor: pointer;
+    transition: background var(--cm-dur-1), border-color var(--cm-dur-1);
+  }
+  .oauth-btn:hover { background: var(--cm-bg-soft); border-color: var(--cm-border-strong); }
+  .oauth-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .login-footer {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--cm-border-soft);
+    font: var(--cm-meta);
+    color: var(--cm-fg-muted);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .login-footer a { color: var(--cm-fg); text-decoration: none; }
+  .login-footer a:hover { text-decoration: underline; }
+
+  /* Tweaks panel mount */
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* Responsive: collapse the split */
+  @media (max-width: 960px) {
+    .login-shell { grid-template-columns: 1fr; }
+    .login-brand { display: none; }
+  }
+
+  .login-alert {
+    display: none;
+    padding: 10px 14px;
+    border-radius: var(--cm-r-3);
+    font: var(--cm-body-sm);
+    border: 1px solid;
+  }
+  .login-alert.is-error {
+    background: var(--cm-danger-bg);
+    border-color: var(--cm-danger-bd);
+    color: var(--cm-danger);
+  }
+  .login-alert.is-success {
+    background: var(--cm-success-bg);
+    border-color: var(--cm-success-bd);
+    color: var(--cm-success);
+  }
+  .login-alert.show { display: block; }
+</style>
+</head>
+<body class="cm">
+
+<div class="login-shell" data-screen-label="01 Login">
+
+  <!-- ───── BRAND PANEL (hidden in light, shown in dark/hybrid) ───── -->
+  <aside class="login-brand">
+    <div class="login-brand-top">
+      <div class="login-brand-mark">
+        <!-- Bars logo -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 18V10"/>
+          <path d="M12 18V5"/>
+          <path d="M19 18v-9"/>
+        </svg>
+      </div>
+      <div>
+        <div class="login-brand-name">ClavaMetrics</div>
+        <div class="login-brand-meta">Performance OS for sport</div>
+      </div>
+    </div>
+
+    <div class="login-brand-hero">
+      <span class="login-brand-hero-eyebrow">Performance OS</span>
+      <h1>One platform. <em>Every sport.</em> Every category.</h1>
+      <p>Roster, planning, load and wellness in one place. Built for the staff that runs the team — in any discipline.</p>
+
+      <div class="login-brand-sports">
+        <span class="login-brand-sport is-primary"><i class="ti ti-ball-football"></i> Football</span>
+        <span class="login-brand-sport"><i class="ti ti-ball-basketball"></i> Basketball</span>
+        <span class="login-brand-sport"><i class="ti ti-ball-volleyball"></i> Volleyball</span>
+        <span class="login-brand-sport"><i class="ti ti-pool"></i> Swimming</span>
+        <span class="login-brand-sport"><i class="ti ti-run"></i> Athletics</span>
+        <span class="login-brand-sport"><i class="ti ti-racquet"></i> Tennis</span>
+        <span class="login-brand-sport"><i class="ti ti-ball-american-football"></i> Rugby</span>
+        <span class="login-brand-sport"><i class="ti ti-plus"></i> 12 more</span>
+      </div>
+
+      <div class="login-brand-footer">
+        <span><i class="ti ti-shield-check"></i> SOC&nbsp;2 Type&nbsp;II</span>
+        <span><i class="ti ti-lock"></i> SSO / SAML</span>
+        <span><i class="ti ti-world"></i> EU&nbsp;+&nbsp;LATAM regions</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───── FORM PANEL ───── -->
+  <main class="login-form-panel">
+    <div class="login-card">
+
+      <!-- Light theme keeps the brand mark in-card -->
+      <div class="mark-row">
+        <span class="cm-logo-mark"></span>
+        <div>
+          <div style="font:600 14px/1 var(--cm-font-sans);letter-spacing:-0.01em;color:var(--cm-fg-strong)">ClavaMetrics</div>
+          <div style="font:500 11.5px/1.2 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">Performance OS for sport</div>
+        </div>
+      </div>
+
+      <h2>Sign in to your team</h2>
+      <p class="sub">New here? <a href="Register.html">Create your organization</a></p>
+
+      <form class="login-form" id="loginForm" onsubmit="handleLogin(event)" autocomplete="on">
+        <div class="cm-field">
+          <label class="cm-label" for="emailInput">Work email</label>
+          <div class="cm-input-affix">
+            <i class="ti ti-mail"></i>
+            <input id="emailInput" type="email" placeholder="you@yourteam.com" autocomplete="email" required>
+          </div>
+        </div>
+
+        <div class="cm-field">
+          <div class="password-label-row">
+            <label class="cm-label" for="passInput">Password</label>
+            <a onclick="handleForgot()" style="cursor:pointer">Forgot?</a>
+          </div>
+          <div class="cm-input-affix">
+            <i class="ti ti-lock"></i>
+            <input id="passInput" type="password" placeholder="••••••••" autocomplete="current-password" required>
+          </div>
+        </div>
+
+        <div class="login-alert is-error" id="errorMsg"></div>
+        <div class="login-alert is-success" id="resetMsg">Password reset email sent. Check your inbox.</div>
+
+        <button type="submit" class="cm-btn is-primary is-lg is-block" id="loginBtn">
+          Sign in
+          <i class="ti ti-arrow-right" style="font-size:16px"></i>
+        </button>
+
+        <div class="login-divider"><span>or continue with</span></div>
+
+        <div class="oauth-row">
+          <button type="button" class="oauth-btn" id="googleBtn" onclick="oauthLogin('google')">
+            <svg viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+              <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+              <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+            </svg>
+            Google
+          </button>
+          <button type="button" class="oauth-btn" id="appleBtn" onclick="oauthLogin('apple')">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.08zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+            </svg>
+            Apple
+          </button>
+        </div>
+      </form>
+
+      <div class="login-footer">
+        <span>© ClavaMetrics, Inc.</span>
+        <div style="display:flex;gap:14px">
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+          <a href="#">Status</a>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ─────────── Tweaks panel ─────────── -->
+<div id="tweaks-root"></div>
+
+<script>
+  window.sb.auth.getSession().then(({ data }) => {
+    if (data.session) window.location.replace('Hub.html');
+  });
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    const email = document.getElementById('emailInput').value.trim();
+    const pass  = document.getElementById('passInput').value;
+    const btn   = document.getElementById('loginBtn');
+    const err   = document.getElementById('errorMsg');
+    err.classList.remove('show');
+    btn.disabled = true;
+    btn.innerHTML = 'Signing in…';
+
+    const { error } = await window.sb.auth.signInWithPassword({ email, password: pass });
+    if (error) {
+      err.textContent = error.message === 'Invalid login credentials'
+        ? 'Invalid email or password.'
+        : error.message;
+      err.classList.add('show');
+      btn.disabled = false;
+      btn.innerHTML = 'Sign in <i class="ti ti-arrow-right" style="font-size:16px"></i>';
+    } else {
+      window.location.replace('Hub.html');
+    }
+  }
+
+  async function oauthLogin(provider) {
+    const btn = document.getElementById(provider + 'Btn');
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    const { error } = await window.sb.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.protocol.startsWith('http') ? window.location.origin + '/auth-callback.html' : undefined }
+    });
+    if (error) {
+      const err = document.getElementById('errorMsg');
+      err.textContent = error.message;
+      err.classList.add('show');
+      btn.disabled = false;
+      btn.style.opacity = '';
+    }
+  }
+
+  async function handleForgot() {
+    const email = document.getElementById('emailInput').value.trim();
+    const err   = document.getElementById('errorMsg');
+    const ok    = document.getElementById('resetMsg');
+    err.classList.remove('show');
+    ok.classList.remove('show');
+    if (!email) {
+      err.textContent = 'Enter your email address first.';
+      err.classList.add('show');
+      return;
+    }
+    const { error } = await window.sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/Login.html'
+    });
+    if (error) {
+      err.textContent = error.message;
+      err.classList.add('show');
+    } else {
+      ok.classList.add('show');
+    }
+  }
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>
+  // Login starts in hybrid+green — dark sidebar, light form, pitch-green accent.
+  // The user can change direction via Tweaks; the choice persists.
+  window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };
+</script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+</body>
+</html>

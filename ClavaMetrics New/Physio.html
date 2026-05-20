@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Physio — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:var(--cm-bg); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .actions { margin-left:auto; display:flex; gap:8px; }
+
+  /* Page */
+  .ph-page { padding:20px 26px 56px; max-width:1600px; }
+  .ph-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
+  .ph-head h1 { font:600 24px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ph-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .ph-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .ph-head .meta { margin-left:auto; display:flex; gap:8px; }
+
+  /* Two-col: form + list */
+  .ph-layout { display:grid; grid-template-columns:480px 1fr; gap:14px; align-items:start; }
+  @media (max-width:1100px) { .ph-layout { grid-template-columns:1fr; } }
+
+  /* Form card */
+  .ph-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
+  .ph-card-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .ph-card-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ph-card-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ph-card-h .right { margin-left:auto; display:flex; gap:6px; }
+
+  /* Form body */
+  .ph-form-b { padding:14px 16px; display:flex; flex-direction:column; gap:14px; }
+  .ph-f { display:flex; flex-direction:column; gap:5px; }
+  .ph-f-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .ph-f label { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .ph-f input, .ph-f select, .ph-f textarea { width:100%; padding:9px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; }
+  .ph-f input:focus, .ph-f select:focus, .ph-f textarea:focus { border-color:var(--cm-accent); }
+  .ph-f textarea { resize:vertical; min-height:64px; }
+
+  /* Body chart */
+  .ph-chart-area { display:grid; grid-template-columns:auto 1fr; gap:14px; padding:14px 16px; border-top:1px solid var(--cm-border-soft); }
+  .ph-view-tog { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; gap:2px; margin-bottom:10px; }
+  .ph-view-tog button { padding:0 12px; height:28px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; border-radius:5px; }
+  .ph-view-tog button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); font-weight:600; }
+
+  .ph-body-svg { width:240px; height:480px; border-radius:10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); overflow:hidden; position:relative; }
+  .ph-body-svg .body-img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; }
+  [data-theme="dark"] .ph-body-svg .body-img,
+  [data-theme="hybrid"] .ph-body-svg .body-img { filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92); }
+  .ph-body-svg .body-overlay { position:absolute; inset:0; width:100%; height:100%; }
+  .body-sil { fill:var(--cm-bg-sunk); }
+  .mzone { cursor:pointer; fill:transparent; stroke:transparent; stroke-width:0; transition:fill 120ms, stroke 120ms, stroke-width 120ms; }
+  .mzone:hover { fill:var(--cm-accent); fill-opacity:0.22; stroke:var(--cm-accent); stroke-width:1.2; stroke-opacity:0.9; }
+  .mzone.on { fill:var(--cm-accent); fill-opacity:0.42; stroke:var(--cm-accent); stroke-width:1.4; stroke-opacity:1; }
+
+  /* Selected zones */
+  .ph-zones-display { padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:8px; min-height:56px; margin-bottom:10px; }
+  .ph-zones-lbl { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:6px; }
+  .ph-zone-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:5px; background:var(--cm-accent-soft); border:1px solid var(--cm-border-strong); color:var(--cm-fg-strong); font:600 11px/1 var(--cm-font-mono); margin:2px; cursor:pointer; }
+  .ph-zone-chip:hover { background:var(--cm-danger-bg); border-color:var(--cm-danger-bd); color:var(--cm-danger); }
+  .ph-zone-empty { color:var(--cm-fg-muted); font:500 12px/1.4 var(--cm-font-sans); font-style:italic; }
+
+  /* Type grid */
+  .ph-type-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+  .ph-type-btn { padding:9px 6px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; color:var(--cm-fg-muted); font:500 11.5px/1.1 var(--cm-font-sans); cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .ph-type-btn:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .ph-type-btn.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .ph-type-btn .ti { font-size:14px; }
+
+  /* Notify */
+  .ph-notify { display:flex; align-items:center; gap:9px; padding:10px 12px; border:1px solid var(--cm-border-soft); border-radius:8px; }
+  .ph-notify input { accent-color:var(--cm-accent); width:16px; height:16px; cursor:pointer; }
+  .ph-notify label { font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; flex:1; }
+
+  /* Actions */
+  .ph-actions { display:flex; gap:8px; padding:14px 16px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
+  .ph-actions .grow { flex:1; }
+
+  /* List */
+  .ph-list-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .ph-list-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ph-list-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
+  .ph-list-h .right { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .ph-filter { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border-radius:6px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-muted); font:500 11.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .ph-filter.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .ph-filter .ct { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-left:2px; }
+  .ph-filter.is-on .ct { color:var(--cm-accent); font-weight:600; }
+
+  /* Treatment rows */
+  .ph-list-body { padding:8px 16px 16px; }
+  .ph-list-date { padding:14px 0 10px; display:flex; align-items:center; gap:10px; }
+  .ph-list-date .l { font:600 11px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .ph-list-date .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .ph-list-date::after { content:""; flex:1; height:1px; background:var(--cm-border-soft); margin-left:6px; }
+
+  .ph-tcard { background:var(--cm-surface); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-4); padding:14px; margin-bottom:8px; display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:flex-start; cursor:pointer; transition:border-color 120ms; }
+  .ph-tcard:hover { border-color:var(--cm-border-strong); }
+  .ph-tcard.is-notify { border-left:3px solid var(--cm-warning); }
+  .ph-tcard .av { width:36px; height:36px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg); display:flex; align-items:center; justify-content:center; font:600 12px/1 var(--cm-font-sans); flex-shrink:0; }
+  .ph-tcard .av.tn { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .ph-tcard .body { min-width:0; }
+  .ph-tcard .top-row { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; flex-wrap:wrap; }
+  .ph-tcard .name { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ph-tcard .meta { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ph-tcard .meta .badge { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .ph-tcard .meta .badge.manual { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .ph-tcard .meta .badge.invasive { background:var(--cm-danger-bg); color:var(--cm-danger); }
+  .ph-tcard .meta .badge.recovery { background:var(--cm-success-bg); color:var(--cm-success); }
+  .ph-tcard .meta .badge.stretch { background:var(--cm-info-bg); color:var(--cm-info); }
+  .ph-tcard .meta .badge.elec { background:var(--cm-violet-bg); color:var(--cm-violet); }
+  .ph-tcard .meta .duration { color:var(--cm-fg); font-weight:600; }
+  .ph-tcard .zone-tags { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; }
+  .ph-tcard .zt { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:4px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .ph-tcard .notes { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin-top:4px; }
+  .ph-tcard .adapt { margin-top:7px; padding:6px 9px; background:var(--cm-warning-bg); border:1px solid var(--cm-warning-bd); border-radius:6px; font:500 12px/1.3 var(--cm-font-sans); color:#7C2D12; display:flex; gap:6px; align-items:flex-start; }
+  .ph-tcard .adapt .ti { color:var(--cm-warning); font-size:13px; margin-top:1px; flex-shrink:0; }
+  .ph-tcard .adapt strong { color:#7C2D12; }
+  .ph-tcard .actions { display:flex; gap:4px; }
+  .ph-tcard .actions button { width:28px; height:28px; border-radius:6px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .ph-tcard .actions button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .ph-tcard .actions button .ti { font-size:13px; }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="19 Physio">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Medical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Physio · treatments</span></div>
+      <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
+    </div>
+
+    <section class="ph-page">
+
+      <header class="ph-head">
+        <div>
+          <h1>Physiotherapy · treatments</h1>
+          <div class="ctx" id="phHeadCtx"><strong>14 treatments this week</strong> · 6 today · 3 pending sign-off · 2 with coach adaptation</div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export week</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>Templates</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New treatment</button>
+        </div>
+      </header>
+
+      <div class="ph-layout">
+
+        <!-- ============== FORM ============== -->
+        <div class="ph-card">
+          <div class="ph-card-h">
+            <h3>Register treatment</h3>
+            <span class="sub">click body zones · select type · save</span>
+            <div class="right"><button class="cm-icon-btn"><i class="ti ti-history"></i></button></div>
+          </div>
+
+          <div class="ph-form-b">
+            <div class="ph-f-row">
+              <div class="ph-f">
+                <label>Player</label>
+                <select id="phPlayerSelect">
+                  <option value="">Loading players…</option>
+                </select>
+              </div>
+              <div class="ph-f">
+                <label>Date &amp; duration</label>
+                <div style="display:grid;grid-template-columns:1fr 80px;gap:6px">
+                  <input type="date" id="phDateInput">
+                  <input type="text" value="30 min" placeholder="min">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Body chart -->
+          <div class="ph-chart-area">
+            <div>
+              <div class="ph-view-tog">
+                <button class="is-on" data-view="front"><i class="ti ti-user" style="font-size:13px"></i> Anterior</button>
+                <button data-view="back"><i class="ti ti-user-bolt" style="font-size:13px"></i> Posterior</button>
+              </div>
+              <div class="ph-body-svg">
+                <!-- ANTERIOR -->
+                <div id="viewFront">
+                  <img class="body-img" src="assets/body-male-front.png" alt="Anterior view">
+                  <svg class="body-overlay" id="svgFront" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
+                    <ellipse class="mzone" data-z="Neck"        cx="50" cy="19" rx="5"   ry="4"/>
+                    <ellipse class="mzone" data-z="L Shoulder"  cx="30" cy="34" rx="6.5" ry="6"/>
+                    <ellipse class="mzone" data-z="R Shoulder"  cx="70" cy="34" rx="6.5" ry="6"/>
+                    <ellipse class="mzone" data-z="L Pec"       cx="40" cy="44" rx="7"   ry="6"/>
+                    <ellipse class="mzone" data-z="R Pec"       cx="60" cy="44" rx="7"   ry="6"/>
+                    <ellipse class="mzone" data-z="L Bicep"     cx="23" cy="58" rx="4.5" ry="9"/>
+                    <ellipse class="mzone" data-z="R Bicep"     cx="77" cy="58" rx="4.5" ry="9"/>
+                    <ellipse class="mzone" data-z="L Forearm"   cx="19" cy="82" rx="4"   ry="10"/>
+                    <ellipse class="mzone" data-z="R Forearm"   cx="81" cy="82" rx="4"   ry="10"/>
+                    <ellipse class="mzone" data-z="Abs"         cx="50" cy="70" rx="8"   ry="12"/>
+                    <ellipse class="mzone" data-z="L Oblique"   cx="40" cy="74" rx="4"   ry="10"/>
+                    <ellipse class="mzone" data-z="R Oblique"   cx="60" cy="74" rx="4"   ry="10"/>
+                    <ellipse class="mzone on" data-z="L Quad"   cx="42" cy="118" rx="6"  ry="18"/>
+                    <ellipse class="mzone" data-z="R Quad"      cx="58" cy="118" rx="6"  ry="18"/>
+                    <ellipse class="mzone" data-z="L Adductor"  cx="47" cy="118" rx="3"  ry="16"/>
+                    <ellipse class="mzone" data-z="R Adductor"  cx="53" cy="118" rx="3"  ry="16"/>
+                    <ellipse class="mzone" data-z="L Knee"      cx="42" cy="144" rx="4"  ry="3"/>
+                    <ellipse class="mzone" data-z="R Knee"      cx="58" cy="144" rx="4"  ry="3"/>
+                    <ellipse class="mzone" data-z="L Tibialis"  cx="41" cy="170" rx="4.5" ry="14"/>
+                    <ellipse class="mzone" data-z="R Tibialis"  cx="59" cy="170" rx="4.5" ry="14"/>
+                    <ellipse class="mzone" data-z="L Ankle"     cx="40" cy="190" rx="3.5" ry="3"/>
+                    <ellipse class="mzone" data-z="R Ankle"     cx="60" cy="190" rx="3.5" ry="3"/>
+                  </svg>
+                </div>
+                <!-- POSTERIOR -->
+                <div id="viewBack" style="display:none">
+                  <img class="body-img" src="assets/body-male-back.png" alt="Posterior view">
+                  <svg class="body-overlay" id="svgBack" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
+                    <ellipse class="mzone" data-z="Neck"            cx="50" cy="20"  rx="5"   ry="4"/>
+                    <ellipse class="mzone" data-z="Trapezius"       cx="50" cy="32"  rx="13"  ry="7"/>
+                    <ellipse class="mzone" data-z="L Rear Delt"     cx="30" cy="38"  rx="6"   ry="6"/>
+                    <ellipse class="mzone" data-z="R Rear Delt"     cx="70" cy="38"  rx="6"   ry="6"/>
+                    <ellipse class="mzone" data-z="Rhomboids"       cx="50" cy="50"  rx="10"  ry="7"/>
+                    <ellipse class="mzone" data-z="L Lat"           cx="38" cy="60"  rx="7"   ry="13"/>
+                    <ellipse class="mzone" data-z="R Lat"           cx="62" cy="60"  rx="7"   ry="13"/>
+                    <ellipse class="mzone" data-z="L Tricep"        cx="23" cy="58"  rx="4.5" ry="10"/>
+                    <ellipse class="mzone" data-z="R Tricep"        cx="77" cy="58"  rx="4.5" ry="10"/>
+                    <ellipse class="mzone" data-z="L Forearm"       cx="19" cy="82"  rx="4"   ry="10"/>
+                    <ellipse class="mzone" data-z="R Forearm"       cx="81" cy="82"  rx="4"   ry="10"/>
+                    <ellipse class="mzone" data-z="Lower Back"      cx="50" cy="80"  rx="10"  ry="7"/>
+                    <ellipse class="mzone" data-z="L Glute"         cx="42" cy="102" rx="7"   ry="7"/>
+                    <ellipse class="mzone" data-z="R Glute"         cx="58" cy="102" rx="7"   ry="7"/>
+                    <ellipse class="mzone" data-z="L Hamstring"     cx="42" cy="122" rx="6"   ry="18"/>
+                    <ellipse class="mzone" data-z="R Hamstring"     cx="58" cy="122" rx="6"   ry="18"/>
+                    <ellipse class="mzone" data-z="L Calf"          cx="42" cy="168" rx="5"   ry="14"/>
+                    <ellipse class="mzone" data-z="R Calf"          cx="58" cy="168" rx="5"   ry="14"/>
+                    <ellipse class="mzone" data-z="L Achilles"      cx="42" cy="188" rx="3.5" ry="4"/>
+                    <ellipse class="mzone" data-z="R Achilles"      cx="58" cy="188" rx="3.5" ry="4"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="ph-zones-display" id="zonesDisplay">
+                <div class="ph-zones-lbl">Selected zones</div>
+                <span class="ph-zone-chip">L Quad ×</span>
+              </div>
+              <div class="ph-f">
+                <label>Treatment type</label>
+                <div class="ph-type-grid">
+                  <button class="ph-type-btn is-on" data-tt="Manual"><i class="ti ti-hand-finger"></i>Manual</button>
+                  <button class="ph-type-btn" data-tt="Invasive"><i class="ti ti-needle"></i>Invasive</button>
+                  <button class="ph-type-btn" data-tt="Recovery"><i class="ti ti-massage"></i>Recovery</button>
+                  <button class="ph-type-btn" data-tt="Stretching"><i class="ti ti-stretching"></i>Stretching</button>
+                  <button class="ph-type-btn" data-tt="Electrotherapy"><i class="ti ti-bolt"></i>Electro</button>
+                  <button class="ph-type-btn" data-tt="Other"><i class="ti ti-dots"></i>Other</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ph-form-b" style="padding-top:0">
+            <div class="ph-f">
+              <label>Notes · observations</label>
+              <textarea placeholder="Observation, evolution, context…">Tight L quad post Wed session. 2x trigger point release + foam roll. No DOMS reported.</textarea>
+            </div>
+            <div class="ph-notify">
+              <input type="checkbox" id="notify" checked>
+              <label for="notify"><strong>Notify coaches</strong> with adaptation recommendation</label>
+            </div>
+            <div class="ph-f">
+              <label>Adaptation for next session</label>
+              <textarea placeholder="Field: avoid max-velocity runs. Gym: reduce squat load 20%.">Avoid maximal sprints tomorrow. Reduce squat load 15%. Reassess Sat AM.</textarea>
+            </div>
+          </div>
+
+          <div class="ph-actions">
+            <button class="cm-btn is-outline is-sm"><i class="ti ti-refresh" style="font-size:14px"></i>Reset</button>
+            <div class="grow"></div>
+            <button class="cm-btn is-outline is-sm">Save &amp; new</button>
+            <button class="cm-btn is-primary is-sm"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save treatment</button>
+          </div>
+        </div>
+
+        <!-- ============== LIST ============== -->
+        <div class="ph-card">
+          <div class="ph-list-h">
+            <h3>Treatment history</h3>
+            <span class="sub" id="phListHead">14 this week · 3 with adaptation</span>
+            <div class="right">
+              <button class="ph-filter is-on">All <span class="ct" id="pfCtAll">—</span></button>
+              <button class="ph-filter">Today <span class="ct" id="pfCtToday">—</span></button>
+              <button class="ph-filter">w/ adaptation <span class="ct" id="pfCtAdapt">—</span></button>
+              <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
+            </div>
+          </div>
+          <div class="ph-list-body" id="phListBody" style="padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading treatments…</div>
+        </div>
+
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+
+  if (club) window.applyClubTheme();
+
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('phDateInput').value = today;
+
+  // Load real players into form select
+  const { data: players } = await window.sb
+    .from('players')
+    .select('id,first_name,last_name,number,position,status')
+    .eq('club_id', clubId)
+    .neq('status', 'inactive')
+    .order('number');
+
+  if (players?.length) {
+    const { data: injuries } = await window.sb
+      .from('injuries')
+      .select('player_id')
+      .eq('club_id', clubId)
+      .eq('status', 'active')
+      .catch(() => ({ data: [] }));
+    const injuredSet = new Set((injuries || []).map(i => i.player_id));
+    document.getElementById('phPlayerSelect').innerHTML = players.map(p => {
+      const fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+      return `<option value="${p.id}">${fullName} · #${p.number ?? '—'} · ${p.position || ''}${injuredSet.has(p.id) ? ' (injured)' : ''}</option>`;
+    }).join('');
+  }
+
+  // Load treatments — graceful fallback if table doesn't exist
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { data: treatments } = await window.sb
+    .from('treatments')
+    .select('id,player_id,injury_id,date,type,notes,duration_min,time,adaptation,zones, players(first_name,last_name,number,position)')
+    .eq('club_id', clubId)
+    .gte('date', weekAgo)
+    .order('date', { ascending: false })
+    .catch(() => ({ data: null }));
+
+  const list = treatments || [];
+  const todayCount = list.filter(t => t.date === today).length;
+  const withAdapt  = list.filter(t => t.adaptation || t.has_adaptation || t.coach_adaptation).length;
+
+  document.getElementById('phListHead').textContent =
+    `${list.length} this week · ${withAdapt} with adaptation`;
+  document.getElementById('phHeadCtx').innerHTML =
+    `<strong>${list.length} treatments this week</strong> · ${todayCount} today · ${withAdapt} with adaptation`;
+
+  const pfAll   = document.getElementById('pfCtAll');
+  const pfToday = document.getElementById('pfCtToday');
+  const pfAdapt = document.getElementById('pfCtAdapt');
+  if (pfAll)   pfAll.textContent   = list.length;
+  if (pfToday) pfToday.textContent = todayCount;
+  if (pfAdapt) pfAdapt.textContent = withAdapt;
+
+  // treatment type → badge CSS class (case-insensitive)
+  const BADGE = { manual:'manual', invasive:'invasive', recovery:'recovery', stretching:'stretch', electrotherapy:'elec', electro:'elec', other:'manual' };
+  function badgeHtml(type) {
+    if (!type) return '';
+    const types = Array.isArray(type) ? type : [type];
+    return types.map(t => `<span class="badge ${BADGE[t.toLowerCase()] || 'manual'}">${t}</span>`).join('');
+  }
+
+  if (!list.length) {
+    const body = document.getElementById('phListBody');
+    if (body) body.textContent = 'No treatments this week.';
+    return;
+  }
+
+  function formatDate(d) {
+    const dt = new Date(d + 'T12:00:00');
+    const isToday = d === today;
+    const label = dt.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+    return isToday ? `Today · ${label}` : label;
+  }
+
+  const grouped = {};
+  list.forEach(t => { if (!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
+
+  const bodyEl = document.getElementById('phListBody');
+  bodyEl.style.cssText = '';
+  bodyEl.innerHTML = Object.entries(grouped).map(([date, dayList]) => {
+    const rows = dayList.map(t => {
+      const pl   = t.players || {};
+      const name = ((pl.first_name || '') + ' ' + (pl.last_name || '')).trim() || 'Unknown';
+      const num  = pl.number ?? '—';
+      const av   = (((pl.first_name||'')[0]||'') + ((pl.last_name||'')[0]||'')).toUpperCase() || '?';
+      const zones     = Array.isArray(t.zones) ? t.zones : (t.zones ? t.zones.split(',').map(z => z.trim()) : []);
+      const adaptText = t.adaptation || t.coach_adaptation || '';
+      const hasAdapt  = !!(adaptText || t.has_adaptation);
+      const durLabel  = t.duration_min ? `${t.duration_min} min` : '—';
+
+      return `<div class="ph-tcard${hasAdapt ? ' is-notify' : ''}">
+        <div class="av">${av}</div>
+        <div class="body">
+          <div class="top-row">
+            <span class="name">${name} · #${num}</span>
+            <span class="meta">${badgeHtml(t.type)} · <span class="duration">${durLabel}</span></span>
+          </div>
+          ${zones.length ? `<div class="zone-tags">${zones.map(z => `<span class="zt">${z}</span>`).join('')}</div>` : ''}
+          ${t.notes ? `<div class="notes">${t.notes}</div>` : ''}
+          ${hasAdapt && adaptText ? `<div class="adapt"><i class="ti ti-flag-2"></i><span><strong>Adaptation</strong> · ${adaptText}</span></div>` : ''}
+        </div>
+        <div class="actions"><button><i class="ti ti-edit"></i></button><button><i class="ti ti-dots"></i></button></div>
+      </div>`;
+    }).join('');
+
+    return `<div class="ph-list-date"><span class="l">${formatDate(date)}</span><span class="ct">${dayList.length} treatment${dayList.length !== 1 ? 's' : ''}</span></div>${rows}`;
+  }).join('');
+})().catch(console.error);
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+<script>
+  // Body chart view toggle
+  document.querySelectorAll('.ph-view-tog button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.ph-view-tog button').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+    const view = b.dataset.view;
+    document.getElementById('viewFront').style.display = view === 'front' ? 'block' : 'none';
+    document.getElementById('viewBack').style.display  = view === 'back'  ? 'block' : 'none';
+  }));
+  // Zone selection
+  const selected = new Set(['L Quad']);
+  function renderZones() {
+    const el = document.getElementById('zonesDisplay');
+    const lbl = '<div class="ph-zones-lbl">Selected zones</div>';
+    if (selected.size === 0) { el.innerHTML = lbl + '<span class="ph-zone-empty">None — click figure</span>'; return; }
+    el.innerHTML = lbl + [...selected].map(z => `<span class="ph-zone-chip" data-z="${z}">${z} ×</span>`).join('');
+    document.querySelectorAll('.ph-zone-chip').forEach(c => c.addEventListener('click', () => { selected.delete(c.dataset.z); syncSvg(); renderZones(); }));
+  }
+  function syncSvg() {
+    document.querySelectorAll('.mzone').forEach(z => z.classList.toggle('on', selected.has(z.dataset.z)));
+  }
+  document.querySelectorAll('.mzone').forEach(z => z.addEventListener('click', e => {
+    const k = e.target.dataset.z;
+    if (selected.has(k)) selected.delete(k); else selected.add(k);
+    syncSvg(); renderZones();
+  }));
+  syncSvg(); renderZones();
+  // Treatment type
+  document.querySelectorAll('.ph-type-btn').forEach(b => b.addEventListener('click', () => {
+    b.classList.toggle('is-on');
+  }));
+  // Filter pills
+  document.querySelectorAll('.ph-filter').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('.ph-filter').forEach(o => o.classList.remove('is-on'));
+    p.classList.add('is-on');
+  }));
+</script>
+</body>
+</html>

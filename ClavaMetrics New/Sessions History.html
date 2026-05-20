@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sessions History — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm{background:var(--cm-bg)}
+  .hub-topbar{display:flex;align-items:center;gap:14px;height:56px;padding:0 24px;border-bottom:1px solid var(--cm-border);background:var(--cm-bg);position:sticky;top:0;z-index:50}
+  .hub-crumb{display:flex;align-items:center;gap:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .hub-crumb .ti{font-size:14px}.hub-crumb .sep{color:var(--cm-fg-faint)}
+  .hub-topbar .actions{margin-left:auto;display:flex;gap:8px}
+
+  .sh-page{padding:20px 26px 56px;max-width:1600px}
+  .sh-head{display:flex;align-items:flex-end;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+  .sh-head h1{font:600 24px/1.1 var(--cm-font-sans);letter-spacing:-0.02em;color:var(--cm-fg-strong)}
+  .sh-head .ctx{font:var(--cm-body);color:var(--cm-fg-muted);margin-top:4px}
+  .sh-head .ctx strong{color:var(--cm-fg);font-weight:600}
+  .sh-head .meta{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+  .sh-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+  .sh-kpi{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:12px 14px;box-shadow:var(--cm-shadow-1)}
+  .sh-kpi .l{font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px;display:flex;align-items:center;gap:4px}
+  .sh-kpi .l .ti{font-size:13px}
+  .sh-kpi .v{font:600 22px/1 var(--cm-font-sans);letter-spacing:-0.02em;color:var(--cm-fg-strong)}
+  .sh-kpi .v sub{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:3px}
+  .sh-kpi .t{margin-top:6px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)}
+
+  /* Layout */
+  .sh-layout{display:grid;grid-template-columns:240px 1fr;gap:14px;align-items:start}
+  @media(max-width:1100px){.sh-layout{grid-template-columns:1fr}}
+
+  /* Filter rail */
+  .sh-filter{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);padding:14px;position:sticky;top:74px}
+  .sh-filter h4{font:500 10.5px/1 var(--cm-font-sans);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:14px 0 7px}
+  .sh-filter h4:first-child{margin-top:0}
+  .sh-filter h4 .clear{float:right;font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-accent);cursor:pointer;text-transform:none;letter-spacing:0}
+  .sh-opt{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:5px;cursor:pointer;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg)}
+  .sh-opt:hover{background:var(--cm-bg-soft)}
+  .sh-opt.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong)}
+  .sh-opt .cb{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--cm-border-strong);background:var(--cm-surface);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:transparent}
+  .sh-opt.is-on .cb{background:var(--cm-accent);border-color:var(--cm-accent);color:#fff}
+  .sh-opt.is-on .cb::after{content:"";width:7px;height:3px;border-left:1.5px solid var(--cm-fg-on-accent);border-bottom:1.5px solid var(--cm-fg-on-accent);transform:rotate(-45deg)}
+  .sh-opt .ct{margin-left:auto;font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)}
+  .sh-chips{display:flex;flex-wrap:wrap;gap:5px}
+  .sh-chip{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans);cursor:pointer}
+  .sh-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong);border-color:var(--cm-border-strong)}
+
+  /* List card */
+  .sh-list{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);overflow:hidden}
+  .sh-toolbar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--cm-border-soft);background:var(--cm-bg-soft)}
+  .sh-search{flex:1;display:flex;align-items:center;gap:7px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:7px;padding:0 11px;height:32px}
+  .sh-search input{flex:1;border:0;background:transparent;outline:none;font:var(--cm-body-sm);color:var(--cm-fg)}
+  .sh-search .ti{font-size:14px;color:var(--cm-fg-muted)}
+  .sh-seg{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;padding:3px;gap:2px}
+  .sh-seg button{border:0;background:transparent;padding:0 11px;height:24px;border-radius:5px;color:var(--cm-fg-muted);cursor:pointer;font:500 12px/1 var(--cm-font-sans);display:inline-flex;align-items:center;gap:4px}
+  .sh-seg button.is-on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1);font-weight:600}
+  .sh-seg .ti{font-size:13px}
+
+  /* Active filters */
+  .sh-active{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;border-bottom:1px solid var(--cm-border-soft)}
+  .sh-active .lbl{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);display:flex;align-items:center;padding:2px 4px 2px 0}
+  .sh-active-chip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:5px;background:var(--cm-accent-soft);border:1px solid var(--cm-border-strong);color:var(--cm-fg-strong);font:600 11px/1 var(--cm-font-mono);cursor:pointer}
+  .sh-active-chip:hover{background:color-mix(in srgb,var(--cm-danger) 14%,transparent);color:var(--cm-danger);border-color:var(--cm-danger-bd)}
+
+  /* Table */
+  .sh-tbl{width:100%;border-collapse:collapse}
+  .sh-tbl th{font:600 10.5px/1 var(--cm-font-sans);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--cm-border-soft);background:var(--cm-bg-soft);position:sticky;top:0;cursor:pointer}
+  .sh-tbl th:hover{color:var(--cm-fg)}
+  .sh-tbl th .ti{font-size:11px;margin-left:3px;color:var(--cm-fg-faint)}
+  .sh-tbl th.sorted{color:var(--cm-fg-strong)}
+  .sh-tbl th.sorted .ti{color:var(--cm-accent)}
+  .sh-tbl td{padding:12px 12px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg);vertical-align:middle}
+  .sh-tbl tbody tr{cursor:pointer;transition:background 120ms}
+  .sh-tbl tbody tr:hover{background:var(--cm-bg-soft)}
+  .sh-tbl tbody tr:last-child td{border-bottom:0}
+
+  .sh-date{display:flex;flex-direction:column;gap:2px}
+  .sh-date .d{font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
+  .sh-date .day{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .sh-md{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;font:600 11px/1 var(--cm-font-mono);letter-spacing:0.04em;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);color:var(--cm-fg)}
+  .sh-md.md0{background:var(--cm-accent);color:var(--cm-fg-on-accent);border-color:transparent}
+  .sh-md.recovery{background:var(--cm-success-bg);color:var(--cm-success);border-color:var(--cm-success-bd)}
+  .sh-md.peak{background:var(--cm-warning-bg);color:#B45309;border-color:var(--cm-warning-bd)}
+  .sh-title{font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .sh-sub{font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px;display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+  .sh-tag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:0.04em}
+  .sh-tag.tactical{background:rgba(59,130,246,0.13);color:#1D4ED8}
+  .sh-tag.physical{background:rgba(245,158,11,0.14);color:#B45309}
+  .sh-tag.technical{background:rgba(155,89,182,0.14);color:#5B21B6}
+  .sh-tag.individual{background:rgba(29,158,117,0.14);color:#15803D}
+  .sh-tag.positional{background:rgba(20,184,166,0.14);color:#0F766E}
+  .sh-orient{display:inline-flex;align-items:center;gap:4px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .sh-orient .d{width:7px;height:7px;border-radius:50%}
+  .sh-orient .d.act{background:#FCD34D}
+  .sh-orient .d.ten{background:#F87171}
+  .sh-orient .d.spd{background:#F59E0B}
+  .sh-orient .d.dur{background:#3B82F6}
+  .sh-orient .d.rec{background:#10B981}
+  .sh-orient .d.intro{background:#A78BFA}
+
+  .sh-load{display:flex;align-items:center;gap:6px}
+  .sh-load .bar{width:60px;height:5px;background:var(--cm-bg-sunk);border-radius:3px;overflow:hidden;position:relative}
+  .sh-load .bar .f{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+  .sh-load .bar .f.low{background:var(--cm-success)}
+  .sh-load .bar .f.med{background:var(--cm-warning)}
+  .sh-load .bar .f.high{background:var(--cm-danger)}
+  .sh-load .v{font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg)}
+
+  .sh-att{display:inline-flex;align-items:center;gap:4px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg)}
+  .sh-att .ti{font-size:12px;color:var(--cm-fg-muted)}
+  .sh-att.full{color:var(--cm-success)}
+  .sh-att.full .ti{color:var(--cm-success)}
+  .sh-att.partial{color:var(--cm-warning)}
+  .sh-att.partial .ti{color:var(--cm-warning)}
+
+  .sh-actions{display:flex;gap:3px}
+  .sh-actions button{width:26px;height:26px;border-radius:5px;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .sh-actions button:hover{background:var(--cm-bg-soft);color:var(--cm-fg)}
+  .sh-actions button .ti{font-size:13px}
+
+  /* Date separator row */
+  .sh-tbl tr.sep td{background:var(--cm-bg-soft);padding:6px 12px;font:500 11px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border-soft)}
+
+  .sh-foot{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--cm-border-soft);background:var(--cm-bg-soft);font:var(--cm-meta);color:var(--cm-fg-muted)}
+  .sh-foot strong{color:var(--cm-fg-strong);font-weight:600}
+  .sh-foot .grow{flex:1}
+  .sh-pgr{display:inline-flex;align-items:center;gap:2px}
+  .sh-pgr button{width:26px;height:26px;border-radius:5px;border:1px solid var(--cm-border);background:var(--cm-surface);color:var(--cm-fg-muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .sh-pgr button.is-on{background:var(--cm-accent);color:var(--cm-fg-on-accent);border-color:transparent;font-weight:600}
+  .sh-pgr button:hover:not(.is-on){background:var(--cm-bg-soft);color:var(--cm-fg)}
+  .sh-pgr button .ti{font-size:13px}
+
+  #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="21 Sessions History">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Sessions history</span></div>
+      <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
+    </div>
+
+    <section class="sh-page">
+
+      <header class="sh-head">
+        <div><h1>Sessions history</h1><div class="ctx"><strong id="shTotalCount">—</strong> sessions logged · filtered by date, type, search</div></div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-chart-bar" style="font-size:14px"></i>Compare sessions</button>
+          <button class="cm-btn is-primary is-sm" href="Daily%20Planning.html"><i class="ti ti-plus" style="font-size:14px"></i>New session</button>
+        </div>
+      </header>
+
+      <div class="sh-kpis">
+        <div class="sh-kpi"><div class="l"><i class="ti ti-clipboard-list"></i>Sessions YTD</div><div class="v" id="kpiSessions">—</div><div class="t" id="kpiSessionsTrend">Loading…</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-clock"></i>Hours on pitch</div><div class="v" id="kpiHours">—</div><div class="t" id="kpiHoursTrend">—</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-activity"></i>Avg session load</div><div class="v" id="kpiAvgLoad">—</div><div class="t" id="kpiLoadTrend">—</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-target-arrow"></i>Compliance</div><div class="v">—<sub>%</sub></div><div class="t">planned ↔ delivered</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-users"></i>Avg attendance</div><div class="v" id="kpiAttendance">—</div><div class="t">squad participation</div></div>
+      </div>
+
+      <div class="sh-layout">
+
+        <!-- ===== FILTER RAIL ===== -->
+        <aside class="sh-filter">
+          <h4>Date range <span class="clear">Clear</span></h4>
+          <div class="sh-chips" id="dateChips">
+            <button class="sh-chip" data-days="7">7d</button>
+            <button class="sh-chip is-on" data-days="30">30d</button>
+            <button class="sh-chip" data-days="90">3m</button>
+            <button class="sh-chip" data-days="0">Season</button>
+          </div>
+
+          <h4>Microcycle</h4>
+          <div class="sh-opt is-on"><span class="cb"></span>MC 14 · vs Atlético <span class="ct">6</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span>MC 13 · vs River <span class="ct">14</span></div>
+          <div class="sh-opt"><span class="cb"></span>MC 12 · vs Boca <span class="ct">10</span></div>
+          <div class="sh-opt"><span class="cb"></span>MC 11 · vs Racing <span class="ct">11</span></div>
+
+          <h4>MD position</h4>
+          <div class="sh-chips">
+            <button class="sh-chip">MD−5</button>
+            <button class="sh-chip is-on">MD−4</button>
+            <button class="sh-chip is-on">MD−3</button>
+            <button class="sh-chip is-on">MD−2</button>
+            <button class="sh-chip is-on">MD−1</button>
+            <button class="sh-chip">MD</button>
+            <button class="sh-chip is-on">MD+1</button>
+            <button class="sh-chip">MD+2</button>
+          </div>
+
+          <h4>Orientation</h4>
+          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d intro"></span></span>Introductory <span class="ct">12</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d act"></span></span>Activation <span class="ct">28</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d ten"></span></span>Muscle tension <span class="ct">16</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d spd"></span></span>Speed <span class="ct">22</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d dur"></span></span>Duration <span class="ct">34</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d rec"></span></span>Recovery <span class="ct">36</span></div>
+
+          <h4>Focus</h4>
+          <div class="sh-chips">
+            <button class="sh-chip is-on">Tactical</button>
+            <button class="sh-chip is-on">Physical</button>
+            <button class="sh-chip is-on">Technical</button>
+            <button class="sh-chip">Individual</button>
+            <button class="sh-chip">Positional</button>
+          </div>
+
+          <h4>Type</h4>
+          <div class="sh-opt is-on"><span class="cb"></span>SSG <span class="ct">42</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span>MSG <span class="ct">38</span></div>
+          <div class="sh-opt is-on"><span class="cb"></span>LSG <span class="ct">68</span></div>
+
+          <h4>Load band</h4>
+          <div class="sh-chips">
+            <button class="sh-chip is-on">Low</button>
+            <button class="sh-chip is-on">Moderate</button>
+            <button class="sh-chip is-on">High</button>
+            <button class="sh-chip">Peak</button>
+          </div>
+        </aside>
+
+        <!-- ===== TABLE ===== -->
+        <div class="sh-list">
+
+          <div class="sh-toolbar">
+            <div class="sh-search"><i class="ti ti-search"></i><input id="searchInput" placeholder="Search session name, type, notes…"></div>
+            <div class="sh-seg">
+              <button class="is-on"><i class="ti ti-list"></i>List</button>
+              <button><i class="ti ti-grid-dots"></i>Grid</button>
+              <button><i class="ti ti-calendar-stats"></i>Calendar</button>
+            </div>
+          </div>
+
+          <div class="sh-active">
+            <span class="lbl">Active filters:</span>
+            <span class="sh-active-chip">30d <i class="ti ti-x" style="font-size:11px"></i></span>
+            <span class="sh-active-chip">MC 14 · MC 13 <i class="ti ti-x" style="font-size:11px"></i></span>
+            <span class="sh-active-chip">MD−4 / MD−3 / MD−2 / MD−1 / MD+1 <i class="ti ti-x" style="font-size:11px"></i></span>
+            <span class="sh-active-chip">Tactical · Physical · Technical <i class="ti ti-x" style="font-size:11px"></i></span>
+            <span class="sh-active-chip">All orientations <i class="ti ti-x" style="font-size:11px"></i></span>
+            <span class="lbl" style="margin-left:auto"><strong id="shFilterCount" style="color:var(--cm-fg-strong)">—</strong> match filters</span>
+          </div>
+
+          <div style="max-height:760px;overflow-y:auto">
+          <table class="sh-tbl">
+            <thead>
+              <tr>
+                <th class="sorted" style="width:80px">Date <i class="ti ti-arrow-down"></i></th>
+                <th style="width:70px">MD</th>
+                <th>Session</th>
+                <th style="width:130px">Focus</th>
+                <th style="width:120px">Orientation</th>
+                <th style="width:60px">Dur</th>
+                <th style="width:120px">Load</th>
+                <th style="width:80px">Attend</th>
+                <th style="width:90px"></th>
+              </tr>
+            </thead>
+            <tbody id="sessionsBody"></tbody>
+          </table>
+          </div>
+
+          <div class="sh-foot">
+            <span id="footCount">Loading…</span>
+            <span class="grow"></span>
+            <span class="sh-pgr" id="paginationRoot"></span>
+            <span style="margin-left:12px">Per page: <strong>15</strong></span>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+<script>
+  const PAGE_SIZE = 15;
+  let allSessions = [], filteredSessions = [], currentPage = 0;
+  let activeDays = 30, searchText = '';
+
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const FOCUS_MAP = { Tactical:'tactical', Physical:'physical', Technical:'technical', Match:'tactical', Recovery:'individual', Conditioning:'physical', Gym:'physical' };
+  const ORIENT_MAP = {
+    Tactical:    { cls:'dur',   label:'Duration'       },
+    Physical:    { cls:'spd',   label:'Speed'          },
+    Match:       { cls:'ten',   label:'Match'          },
+    Recovery:    { cls:'rec',   label:'Recovery'       },
+    Gym:         { cls:'ten',   label:'Muscle tension' },
+    Conditioning:{ cls:'act',   label:'Activation'     },
+    Technical:   { cls:'intro', label:'Introductory'   }
+  };
+
+  async function boot() {
+    if (!await window.requireAuth()) return;
+    window.applyClubTheme();
+    const clubId = await window.getClubId();
+    if (!clubId) return;
+    await loadSessions(clubId);
+  }
+
+  async function loadSessions(clubId) {
+    const { data, error } = await window.sb
+      .from('training_sessions')
+      .select('id,club_id,session_date,title,notes,session_type,duration, rpe(rpe, duration, load)')
+      .eq('club_id', clubId)
+      .order('session_date', { ascending: false });
+    if (error) { console.error(error); return; }
+    allSessions = data || [];
+    const tc = document.getElementById('shTotalCount');
+    if (tc) tc.textContent = allSessions.length;
+    applyFilters();
+  }
+
+  function avgLoad(s) {
+    if (!s.rpe?.length) return 0;
+    return Math.round(s.rpe.reduce((t, r) => t + (r.load || 0), 0) / s.rpe.length);
+  }
+
+  function applyFilters() {
+    const q = searchText.toLowerCase().trim();
+    const cutoff = activeDays ? new Date(Date.now() - activeDays * 864e5) : null;
+    filteredSessions = allSessions.filter(s => {
+      if (cutoff && new Date(s.session_date) < cutoff) return false;
+      if (q && !`${s.title || ''} ${s.notes || ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    currentPage = 0;
+    const fc = document.getElementById('shFilterCount');
+    if (fc) fc.textContent = filteredSessions.length;
+    updateKPIs();
+    renderTable();
+    renderFooter();
+  }
+
+  function updateKPIs() {
+    const n = filteredSessions.length;
+    const hrs = +(filteredSessions.reduce((s, x) => s + (x.duration || 0), 0) / 60).toFixed(1);
+    const loads = filteredSessions.map(s => avgLoad(s)).filter(Boolean);
+    const avgLd = loads.length ? Math.round(loads.reduce((s, l) => s + l, 0) / loads.length) : null;
+    document.getElementById('kpiSessions').textContent = n;
+    document.getElementById('kpiHours').innerHTML = `${hrs}<sub>h</sub>`;
+    document.getElementById('kpiAvgLoad').innerHTML = avgLd != null ? `${avgLd}<sub>AU</sub>` : '—';
+    document.getElementById('kpiSessionsTrend').textContent = n ? `${n} sessions in range` : 'No sessions';
+    document.getElementById('kpiHoursTrend').textContent = n ? `avg ${hrs ? Math.round(hrs / n * 60) : 0} min/session` : '—';
+    document.getElementById('kpiLoadTrend').textContent = avgLd != null ? 'avg across players' : 'No RPE data';
+  }
+
+  function rowHTML(s) {
+    const dt = new Date(s.session_date);
+    const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
+    const dayStr = DAYS_SHORT[dt.getDay()];
+    const type = s.session_type || 'Other';
+    const focusCls = FOCUS_MAP[type] || 'tactical';
+    const orient = ORIENT_MAP[type] || { cls:'act', label: type };
+    const load = avgLoad(s);
+    const pct = load ? Math.min(100, Math.round(load / 9)) : 0;
+    const band = load >= 600 ? 'high' : load >= 300 ? 'med' : 'low';
+    const durHTML = s.duration != null ? `${s.duration}<span style="color:var(--cm-fg-muted)">′</span>` : '—';
+    const loadHTML = load
+      ? `<span class="sh-load"><span class="bar"><span class="f ${band}" style="width:${pct}%"></span></span><span class="v">${load}</span></span>`
+      : `<span style="color:var(--cm-fg-muted)">—</span>`;
+    return `<tr data-id="${s.id}">
+      <td><div class="sh-date"><span class="d">${dateStr}</span><span class="day">${dayStr}</span></div></td>
+      <td><span class="sh-md">—</span></td>
+      <td>
+        <div class="sh-title">${s.title || '(untitled)'}</div>
+        ${s.notes ? `<div class="sh-sub">${s.notes}</div>` : ''}
+      </td>
+      <td><span class="sh-tag ${focusCls}">${type}</span></td>
+      <td><span class="sh-orient"><span class="d ${orient.cls}"></span>${orient.label}</span></td>
+      <td>${durHTML}</td>
+      <td>${loadHTML}</td>
+      <td><span class="sh-att"><i class="ti ti-users"></i>—</span></td>
+      <td><div class="sh-actions">
+        <button title="Open" onclick="openSess(event)"><i class="ti ti-external-link"></i></button>
+        <button title="Copy" onclick="dupSess(event)"><i class="ti ti-copy"></i></button>
+      </div></td>
+    </tr>`;
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('sessionsBody');
+    const slice = filteredSessions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+    if (!slice.length) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--cm-fg-muted)">No sessions match the current filters</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = slice.map(rowHTML).join('');
+    tbody.querySelectorAll('tr[data-id]').forEach(row => row.addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      window.location.href = 'Daily Planning.html';
+    }));
+  }
+
+  function renderFooter() {
+    const total = filteredSessions.length;
+    const start = currentPage * PAGE_SIZE;
+    const shown = Math.min(PAGE_SIZE, total - start);
+    const pages = Math.ceil(total / PAGE_SIZE) || 1;
+    document.getElementById('footCount').innerHTML =
+      `Showing <strong>${shown}</strong> of <strong>${total}</strong> filtered sessions · ${allSessions.length} total`;
+    const pgr = document.getElementById('paginationRoot');
+    let h = `<button ${currentPage === 0 ? 'disabled' : ''} onclick="goPage(${currentPage-1})"><i class="ti ti-chevron-left"></i></button>`;
+    const rs = Math.max(0, Math.min(currentPage - 2, pages - 5));
+    for (let i = rs; i < Math.min(rs + 5, pages); i++) {
+      h += `<button class="${i === currentPage ? 'is-on' : ''}" onclick="goPage(${i})">${i+1}</button>`;
+    }
+    h += `<button ${currentPage >= pages - 1 ? 'disabled' : ''} onclick="goPage(${currentPage+1})"><i class="ti ti-chevron-right"></i></button>`;
+    pgr.innerHTML = h;
+  }
+
+  function goPage(p) {
+    const pages = Math.ceil(filteredSessions.length / PAGE_SIZE);
+    if (p < 0 || p >= pages) return;
+    currentPage = p;
+    renderTable();
+    renderFooter();
+  }
+
+  function openSess(e) { e.stopPropagation(); window.location.href = 'Daily Planning.html'; }
+  function dupSess(e) { e.stopPropagation(); }
+
+  // Date chips — exclusive selection
+  document.querySelectorAll('#dateChips .sh-chip[data-days]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#dateChips .sh-chip[data-days]').forEach(c => c.classList.remove('is-on'));
+      chip.classList.add('is-on');
+      activeDays = parseInt(chip.dataset.days, 10);
+      applyFilters();
+    });
+  });
+
+  // Visual-only toggles for filter rail + view seg
+  document.querySelectorAll('.sh-opt').forEach(el => el.addEventListener('click', () => el.classList.toggle('is-on')));
+  document.querySelectorAll('.sh-seg button').forEach(b => b.addEventListener('click', () => {
+    b.parentElement.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+  }));
+
+  document.getElementById('searchInput').addEventListener('input', e => {
+    searchText = e.target.value;
+    applyFilters();
+  });
+
+  boot();
+</script>
+</body>
+</html>

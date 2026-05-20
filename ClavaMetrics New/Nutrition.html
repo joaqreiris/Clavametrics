@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nutrition — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:var(--cm-bg); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .actions { margin-left:auto; display:flex; gap:8px; }
+
+  /* Page */
+  .nu-page { padding:24px 28px 64px; max-width:1600px; }
+  .nu-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .nu-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .nu-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .nu-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .nu-head .meta { margin-left:auto; display:flex; gap:8px; }
+
+  .nu-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .nu-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 16px 16px; box-shadow:var(--cm-shadow-1); }
+  .nu-kpi-l { display:flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .nu-kpi-l .ti { font-size:14px; }
+  .nu-kpi-v { font:600 26px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .nu-kpi-v sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .nu-kpi-t { margin-top:10px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .nu-kpi-d { display:inline-flex; align-items:center; gap:3px; font:600 12px/1 var(--cm-font-mono); }
+  .nu-kpi-d.up { color:var(--cm-success); }
+  .nu-kpi-d.warn { color:var(--cm-warning); }
+  .nu-kpi-d.down { color:var(--cm-danger); }
+
+  .nu-tabs { display:flex; gap:0; padding:0 14px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4) var(--cm-r-4) 0 0; border-bottom:0; box-shadow:var(--cm-shadow-1); }
+  .nu-tab { padding:0 16px; height:44px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13px/1 var(--cm-font-sans); cursor:pointer; display:inline-flex; align-items:center; gap:7px; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .nu-tab:hover { color:var(--cm-fg); }
+  .nu-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
+  .nu-tab .ti { font-size:14px; }
+
+  /* Layout: roster + detail */
+  .nu-layout { display:grid; grid-template-columns:300px 1fr; background:var(--cm-surface); border:1px solid var(--cm-border); border-top:0; border-radius:0 0 var(--cm-r-4) var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; min-height:820px; }
+  @media (max-width:1100px) { .nu-layout { grid-template-columns:1fr; } }
+
+  /* Roster */
+  .nu-roster { border-right:1px solid var(--cm-border); display:flex; flex-direction:column; }
+  .nu-rh { padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; gap:8px; }
+  .nu-rh h3 { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-strong); }
+  .nu-rh .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .nu-rh .right { margin-left:auto; }
+  .nu-rh .right button { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .nu-rh .right button .ti { font-size:13px; }
+  .nu-rs { padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .nu-rs input { width:100%; height:32px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; font:var(--cm-body-sm); color:var(--cm-fg); outline:none; }
+  .nu-list { flex:1; overflow-y:auto; padding:8px; }
+  .nu-list-grp { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); padding:10px 8px 5px; }
+  .nu-row { display:grid; grid-template-columns:36px 1fr 60px; gap:10px; padding:8px 10px; border-radius:8px; cursor:pointer; align-items:center; margin-bottom:2px; }
+  .nu-row:hover { background:var(--cm-bg-soft); }
+  .nu-row.is-on { background:var(--cm-accent-soft); }
+  .nu-av { width:34px; height:34px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg); display:flex; align-items:center; justify-content:center; font:600 11.5px/1 var(--cm-font-sans); }
+  .nu-av.tn { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
+  .nu-row .name { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nu-row .meta { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .nu-row .stat { text-align:right; }
+  .nu-row .stat .v { font:700 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .nu-row .stat .u { font:500 9.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .nu-row .stat.warn .v { color:var(--cm-warning); }
+  .nu-row .stat.danger .v { color:var(--cm-danger); }
+  .nu-row .stat.good .v { color:var(--cm-success); }
+
+  /* Detail */
+  .nu-detail { display:flex; flex-direction:column; min-width:0; }
+  .nu-d-head { padding:18px 22px; border-bottom:1px solid var(--cm-border-soft); display:flex; gap:14px; align-items:center; background:linear-gradient(135deg, color-mix(in srgb, var(--cm-accent) 4%, var(--cm-surface)) 0%, var(--cm-surface) 100%); }
+  .nu-d-head .av { width:54px; height:54px; border-radius:50%; background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; font:700 18px/1 var(--cm-font-sans); }
+  .nu-d-head h2 { font:600 20px/1.15 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .nu-d-head .meta { display:flex; gap:8px; align-items:center; margin-top:5px; font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .nu-d-head .meta .badge { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:4px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg); }
+  .nu-d-head .meta .badge.phase { background:rgba(245,158,11,0.14); color:#B45309; border-color:rgba(245,158,11,0.30); }
+  .nu-d-head .right { margin-left:auto; display:flex; gap:8px; }
+
+  /* Targets vs intake */
+  .nu-body { padding:18px 22px; display:flex; flex-direction:column; gap:18px; }
+  .nu-section-l { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:10px; }
+
+  .nu-targets { display:grid; grid-template-columns: 1.3fr 1fr; gap:14px; }
+  @media (max-width:1300px) { .nu-targets { grid-template-columns:1fr; } }
+
+  /* Today's intake card */
+  .nu-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:16px; }
+  .nu-card-h { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .nu-card-h h4 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .nu-card-h .sub { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .nu-card-h .right { margin-left:auto; display:flex; gap:6px; }
+  .nu-card-h .right button { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .nu-card-h .right button .ti { font-size:13px; }
+
+  /* Donut ring + macros */
+  .nu-intake { display:grid; grid-template-columns:auto 1fr; gap:18px; align-items:center; }
+  @media (max-width:640px) { .nu-intake { grid-template-columns:1fr; } }
+  .nu-donut { width:140px; height:140px; }
+  .nu-donut svg { width:100%; height:100%; transform:rotate(-90deg); }
+  .nu-donut .ring-bg { fill:none; stroke:var(--cm-bg-sunk); stroke-width:8; }
+  .nu-donut .ring-fill { fill:none; stroke:var(--cm-accent); stroke-width:8; stroke-linecap:round; }
+  .nu-donut-wrap { position:relative; display:flex; align-items:center; justify-content:center; }
+  .nu-donut-inner { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  .nu-donut-v { font:700 26px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .nu-donut-l { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px; letter-spacing:0.06em; text-transform:uppercase; }
+  .nu-donut-pc { font:600 12px/1 var(--cm-font-mono); color:var(--cm-accent); margin-top:6px; }
+
+  .nu-macros { display:flex; flex-direction:column; gap:10px; }
+  .nu-macro-row { display:grid; grid-template-columns: 80px 1fr 100px; align-items:center; gap:10px; }
+  .nu-macro-l { display:flex; align-items:center; gap:6px; font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .nu-macro-l .dot { width:9px; height:9px; border-radius:50%; }
+  .nu-macro-bar { height:8px; background:var(--cm-bg-sunk); border-radius:4px; overflow:hidden; position:relative; }
+  .nu-macro-fill { position:absolute; left:0; top:0; bottom:0; border-radius:4px; }
+  .nu-macro-tick { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--cm-fg-strong); }
+  .nu-macro-v { font:600 12.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-strong); text-align:right; letter-spacing:-0.01em; }
+  .nu-macro-v small { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:1px; }
+  .nu-macro-v.warn { color:var(--cm-warning); }
+  .nu-macro-v.danger { color:var(--cm-danger); }
+  .nu-macro-v.good { color:var(--cm-success); }
+
+  /* Phase / context card */
+  .nu-phase { background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-4); padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .nu-phase h4 { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:4px; }
+  .nu-phase .pill { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:4px; background:var(--cm-accent-soft); color:var(--cm-accent); font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; align-self:flex-start; }
+  .nu-phase .item { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--cm-border-soft); font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg); }
+  .nu-phase .item:last-child { border-bottom:0; }
+  .nu-phase .item .ti { font-size:14px; color:var(--cm-fg-muted); flex-shrink:0; }
+  .nu-phase .item strong { color:var(--cm-fg-strong); font-weight:600; margin-left:auto; }
+
+  /* Meal plan */
+  .nu-meals { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  @media (max-width:1100px) { .nu-meals { grid-template-columns:repeat(2,1fr); } }
+  .nu-meal { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:12px; display:flex; flex-direction:column; gap:6px; }
+  .nu-meal-h { display:flex; align-items:center; gap:6px; }
+  .nu-meal-ic { width:24px; height:24px; border-radius:6px; background:var(--cm-bg-soft); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); }
+  .nu-meal-ic .ti { font-size:13px; }
+  .nu-meal-name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .nu-meal-time { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:auto; }
+  .nu-meal-kcal { font:700 16px/1 var(--cm-font-mono); color:var(--cm-fg-strong); letter-spacing:-0.02em; margin:4px 0 2px; }
+  .nu-meal-kcal small { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+  .nu-meal-mac { display:flex; gap:4px; font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .nu-meal-mac span { background:var(--cm-bg-soft); padding:2px 5px; border-radius:3px; }
+  .nu-meal-items { font:500 11px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:4px; }
+  .nu-meal.done { border-color:var(--cm-success-bd); background:var(--cm-success-bg); }
+  .nu-meal.upcoming { border-style:dashed; }
+
+  /* Anthropometric chart */
+  .nu-chart-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:16px; }
+  .nu-chart-card svg { display:block; width:100%; height:200px; }
+
+  /* Attentions / referrals */
+  .nu-att-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  @media (max-width:1100px) { .nu-att-grid { grid-template-columns:1fr; } }
+  .nu-att { background:var(--cm-surface); border:1px solid var(--cm-border); border-left:3px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px; }
+  .nu-att.warn { border-left-color:var(--cm-warning); }
+  .nu-att.info { border-left-color:var(--cm-info); }
+  .nu-att.good { border-left-color:var(--cm-success); }
+  .nu-att-h { display:flex; align-items:center; gap:6px; margin-bottom:8px; font:600 12px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .nu-att-h .ti { font-size:14px; }
+  .nu-att.warn .nu-att-h .ti { color:var(--cm-warning); }
+  .nu-att.info .nu-att-h .ti { color:var(--cm-info); }
+  .nu-att.good .nu-att-h .ti { color:var(--cm-success); }
+  .nu-att-b { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .nu-att-actions { display:flex; gap:6px; }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="18 Nutrition">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Nutrition</span><span class="sep">/</span><span>F. Domínguez</span></div>
+      <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
+    </div>
+
+    <section class="nu-page">
+
+      <header class="nu-head">
+        <div>
+          <h1>Nutrition</h1>
+          <div class="ctx" id="nuCtx"><strong>27 players</strong> · 4 active plans · 6 weigh-ins this week · MD-2 carb-loading window opens <strong>tomorrow</strong></div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>Plan templates</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import body comp</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New plan</button>
+        </div>
+      </header>
+
+      <div class="nu-kpis">
+        <div class="nu-kpi"><div class="nu-kpi-l"><i class="ti ti-clipboard-check"></i>Active plans</div><div class="nu-kpi-v">14 <sub>/27</sub></div><div class="nu-kpi-t"><span class="nu-kpi-d up"><i class="ti ti-arrow-up-right"></i>52%</span> coverage</div></div>
+        <div class="nu-kpi"><div class="nu-kpi-l"><i class="ti ti-droplet"></i>Hydration today</div><div class="nu-kpi-v">87<sub>%</sub></div><div class="nu-kpi-t">22 of 27 hit 35 ml/kg</div></div>
+        <div class="nu-kpi"><div class="nu-kpi-l"><i class="ti ti-weight"></i>Body comp · MTD</div><div class="nu-kpi-v">−0.4 <sub>%fat</sub></div><div class="nu-kpi-t"><span class="nu-kpi-d up"><i class="ti ti-arrow-down-right"></i>−0.4</span> squad avg</div></div>
+        <div class="nu-kpi"><div class="nu-kpi-l"><i class="ti ti-flag-2"></i>Flags</div><div class="nu-kpi-v">3</div><div class="nu-kpi-t"><span class="nu-kpi-d warn"><i class="ti ti-alert-triangle"></i>1 high</span> · 2 watch</div></div>
+      </div>
+
+      <div class="nu-tabs">
+        <button class="nu-tab is-on"><i class="ti ti-user"></i>Individual plan</button>
+        <button class="nu-tab"><i class="ti ti-ruler"></i>Anthropometrics</button>
+        <button class="nu-tab"><i class="ti ti-droplet"></i>Hydration</button>
+        <button class="nu-tab"><i class="ti ti-pill"></i>Supplements</button>
+        <button class="nu-tab"><i class="ti ti-template"></i>Plan templates</button>
+        <button class="nu-tab"><i class="ti ti-users-group"></i>Squad overview</button>
+      </div>
+
+      <div class="nu-layout">
+
+        <!-- Roster -->
+        <aside class="nu-roster">
+          <div class="nu-rh">
+            <h3>Players</h3><span class="ct" id="nuSquadCt">27</span>
+            <div class="right"><button title="Sort"><i class="ti ti-arrows-sort"></i></button></div>
+          </div>
+          <div class="nu-rs"><input placeholder="Search players, plan…"></div>
+          <div class="nu-list" id="nuList">
+            <div class="nu-list-grp">Phase · cutting block</div>
+            <div class="nu-row is-on">
+              <div class="nu-av tn">FD</div>
+              <div><div class="name">Felipe Domínguez</div><div class="meta">#10 · MF · 74.5 kg</div></div>
+              <div class="stat good"><div class="v">9.4</div><div class="u">% fat</div></div>
+            </div>
+            <div class="nu-row">
+              <div class="nu-av">RV</div>
+              <div><div class="name">Ramiro Vega</div><div class="meta">#7 · WG · 71.2 kg</div></div>
+              <div class="stat good"><div class="v">8.8</div><div class="u">% fat</div></div>
+            </div>
+            <div class="nu-row">
+              <div class="nu-av">TL</div>
+              <div><div class="name">Tomás López</div><div class="meta">#11 · WG · 68.4 kg</div></div>
+              <div class="stat"><div class="v">10.2</div><div class="u">% fat</div></div>
+            </div>
+
+            <div class="nu-list-grp">Phase · maintain</div>
+            <div class="nu-row">
+              <div class="nu-av">SR</div>
+              <div><div class="name">Santiago Rivas</div><div class="meta">#9 · ST · 78.1 kg</div></div>
+              <div class="stat"><div class="v">10.6</div><div class="u">% fat</div></div>
+            </div>
+            <div class="nu-row">
+              <div class="nu-av">MP</div>
+              <div><div class="name">Mateo Paredes</div><div class="meta">#8 · MF · 74.0 kg</div></div>
+              <div class="stat"><div class="v">11.1</div><div class="u">% fat</div></div>
+            </div>
+            <div class="nu-row">
+              <div class="nu-av">EG</div>
+              <div><div class="name">Esteban Galarza</div><div class="meta">#1 · GK · 84.2 kg</div></div>
+              <div class="stat"><div class="v">12.4</div><div class="u">% fat</div></div>
+            </div>
+
+            <div class="nu-list-grp">Phase · gain mass</div>
+            <div class="nu-row">
+              <div class="nu-av">NF</div>
+              <div><div class="name">Nicolás Ferreyra</div><div class="meta">#22 · CB · 77.0 kg</div></div>
+              <div class="stat warn"><div class="v">+0.8</div><div class="u">kg target</div></div>
+            </div>
+            <div class="nu-row">
+              <div class="nu-av">IC</div>
+              <div><div class="name">Ignacio Cardozo</div><div class="meta">#19 · ST · 76.3 kg</div></div>
+              <div class="stat warn"><div class="v">+1.2</div><div class="u">kg target</div></div>
+            </div>
+
+            <div class="nu-list-grp">Attention</div>
+            <div class="nu-row">
+              <div class="nu-av">JB</div>
+              <div><div class="name">Juan Bocanegra</div><div class="meta">#4 · CB · 82.0 kg · injured</div></div>
+              <div class="stat danger"><div class="v">+0.4</div><div class="u">kg MTD</div></div>
+            </div>
+            <div class="nu-row">
+              <div class="nu-av">DV</div>
+              <div><div class="name">Diego Villalba</div><div class="meta">#14 · MF · 75.6 kg · ill</div></div>
+              <div class="stat danger"><div class="v">−1.1</div><div class="u">kg MTD</div></div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Detail -->
+        <section class="nu-detail">
+
+          <header class="nu-d-head">
+            <div class="av">FD</div>
+            <div>
+              <h2>Felipe Domínguez · #10</h2>
+              <div class="meta">
+                <span class="badge phase"><i class="ti ti-flame" style="font-size:11px;vertical-align:-1px"></i> Cutting block</span>
+                <span class="badge">MF · 26y · 175 cm · 74.5 kg</span>
+                <span style="color:var(--cm-fg-faint)">·</span>
+                <span>Plan started 8 Apr · last review 12 May</span>
+              </div>
+            </div>
+            <div class="right">
+              <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Share with player</button>
+              <button class="cm-btn is-outline is-sm"><i class="ti ti-history" style="font-size:14px"></i>History</button>
+              <button class="cm-btn is-primary is-sm"><i class="ti ti-edit" style="font-size:14px"></i>Edit plan</button>
+            </div>
+          </header>
+
+          <div class="nu-body">
+
+            <!-- TARGETS vs INTAKE -->
+            <div class="nu-targets">
+              <div class="nu-card">
+                <div class="nu-card-h">
+                  <h4>Today · intake vs target</h4>
+                  <span class="sub">Friday 16 May · MD−2</span>
+                  <div class="right"><button><i class="ti ti-dots"></i></button></div>
+                </div>
+                <div class="nu-intake">
+                  <div class="nu-donut-wrap" style="width:140px;height:140px">
+                    <div class="nu-donut">
+                      <svg viewBox="0 0 100 100"><circle class="ring-bg" cx="50" cy="50" r="42"/><circle class="ring-fill" cx="50" cy="50" r="42" stroke-dasharray="207 264" stroke-dashoffset="0"/></svg>
+                    </div>
+                    <div class="nu-donut-inner">
+                      <div class="nu-donut-v">2,180</div>
+                      <div class="nu-donut-l">kcal of 2,780</div>
+                      <div class="nu-donut-pc">78%</div>
+                    </div>
+                  </div>
+                  <div class="nu-macros">
+                    <div class="nu-macro-row">
+                      <span class="nu-macro-l"><span class="dot" style="background:#16A34A"></span>Carbs</span>
+                      <span class="nu-macro-bar"><span class="nu-macro-fill" style="width:74%;background:#16A34A"></span><span class="nu-macro-tick" style="left:88%"></span></span>
+                      <span class="nu-macro-v">258<small>g · 74%</small></span>
+                    </div>
+                    <div class="nu-macro-row">
+                      <span class="nu-macro-l"><span class="dot" style="background:#DC2626"></span>Protein</span>
+                      <span class="nu-macro-bar"><span class="nu-macro-fill" style="width:90%;background:#DC2626"></span><span class="nu-macro-tick" style="left:88%"></span></span>
+                      <span class="nu-macro-v good">138<small>g · 102%</small></span>
+                    </div>
+                    <div class="nu-macro-row">
+                      <span class="nu-macro-l"><span class="dot" style="background:#F59E0B"></span>Fat</span>
+                      <span class="nu-macro-bar"><span class="nu-macro-fill" style="width:68%;background:#F59E0B"></span><span class="nu-macro-tick" style="left:88%"></span></span>
+                      <span class="nu-macro-v">62<small>g · 77%</small></span>
+                    </div>
+                    <div class="nu-macro-row">
+                      <span class="nu-macro-l"><span class="dot" style="background:#3B82F6"></span>Fiber</span>
+                      <span class="nu-macro-bar"><span class="nu-macro-fill" style="width:65%;background:#3B82F6"></span><span class="nu-macro-tick" style="left:88%"></span></span>
+                      <span class="nu-macro-v">26<small>g · 74%</small></span>
+                    </div>
+                    <div class="nu-macro-row">
+                      <span class="nu-macro-l"><span class="dot" style="background:#0EA5E9"></span>Water</span>
+                      <span class="nu-macro-bar"><span class="nu-macro-fill" style="width:82%;background:#0EA5E9"></span><span class="nu-macro-tick" style="left:88%"></span></span>
+                      <span class="nu-macro-v good">2.6<small>L · 93%</small></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="nu-phase">
+                <h4>Plan · cutting block</h4>
+                <span class="pill"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>WEEK 6 OF 12</span>
+                <div class="item"><i class="ti ti-flame"></i>Daily kcal target<strong>2,780 kcal</strong></div>
+                <div class="item"><i class="ti ti-bread"></i>Carbs <span style="color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-mono);margin-left:auto;margin-right:6px">4.7 g/kg</span><strong>350 g</strong></div>
+                <div class="item"><i class="ti ti-meat"></i>Protein <span style="color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-mono);margin-left:auto;margin-right:6px">1.8 g/kg</span><strong>135 g</strong></div>
+                <div class="item"><i class="ti ti-egg"></i>Fat <span style="color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-mono);margin-left:auto;margin-right:6px">1.1 g/kg</span><strong>80 g</strong></div>
+                <div class="item"><i class="ti ti-droplet"></i>Water<strong>2.8 L · 38 ml/kg</strong></div>
+                <div class="item"><i class="ti ti-target"></i>Body fat target<strong>8.5% by Jul 1</strong></div>
+              </div>
+            </div>
+
+            <!-- MEAL PLAN -->
+            <div>
+              <div class="nu-section-l">Today's meal plan · 5 meals</div>
+              <div class="nu-meals">
+                <div class="nu-meal done">
+                  <div class="nu-meal-h"><div class="nu-meal-ic" style="background:var(--cm-success-bg);color:var(--cm-success)"><i class="ti ti-coffee"></i></div><div class="nu-meal-name">Breakfast</div><div class="nu-meal-time">07:30</div></div>
+                  <div class="nu-meal-kcal">580 <small>kcal</small></div>
+                  <div class="nu-meal-mac"><span>C 78g</span><span>P 32g</span><span>F 14g</span></div>
+                  <div class="nu-meal-items">Oats · whey · banana · almonds · berries</div>
+                </div>
+                <div class="nu-meal done">
+                  <div class="nu-meal-h"><div class="nu-meal-ic" style="background:var(--cm-success-bg);color:var(--cm-success)"><i class="ti ti-apple"></i></div><div class="nu-meal-name">Snack</div><div class="nu-meal-time">10:30</div></div>
+                  <div class="nu-meal-kcal">220 <small>kcal</small></div>
+                  <div class="nu-meal-mac"><span>C 28g</span><span>P 18g</span><span>F 4g</span></div>
+                  <div class="nu-meal-items">Greek yogurt · honey · walnuts</div>
+                </div>
+                <div class="nu-meal done">
+                  <div class="nu-meal-h"><div class="nu-meal-ic" style="background:var(--cm-success-bg);color:var(--cm-success)"><i class="ti ti-bowl"></i></div><div class="nu-meal-name">Lunch</div><div class="nu-meal-time">13:30</div></div>
+                  <div class="nu-meal-kcal">780 <small>kcal</small></div>
+                  <div class="nu-meal-mac"><span>C 92g</span><span>P 52g</span><span>F 22g</span></div>
+                  <div class="nu-meal-items">Chicken breast · brown rice · roasted veg · olive oil</div>
+                </div>
+                <div class="nu-meal">
+                  <div class="nu-meal-h"><div class="nu-meal-ic" style="background:var(--cm-warning-bg);color:var(--cm-warning)"><i class="ti ti-bolt"></i></div><div class="nu-meal-name">Pre-training</div><div class="nu-meal-time">16:00</div></div>
+                  <div class="nu-meal-kcal">320 <small>kcal</small></div>
+                  <div class="nu-meal-mac"><span>C 56g</span><span>P 14g</span><span>F 6g</span></div>
+                  <div class="nu-meal-items">Toast · banana · jam · espresso</div>
+                </div>
+                <div class="nu-meal upcoming">
+                  <div class="nu-meal-h"><div class="nu-meal-ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-moon"></i></div><div class="nu-meal-name">Dinner</div><div class="nu-meal-time">21:00</div></div>
+                  <div class="nu-meal-kcal">880 <small>kcal</small></div>
+                  <div class="nu-meal-mac"><span>C 96g</span><span>P 60g</span><span>F 28g</span></div>
+                  <div class="nu-meal-items">Salmon · sweet potato · spinach salad · avocado</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- BODY COMP TREND -->
+            <div class="nu-chart-card">
+              <div class="nu-card-h">
+                <h4>Body composition · last 12 weeks</h4>
+                <span class="sub">Weight + body fat % · DEXA + 7-fold</span>
+                <div class="right">
+                  <div style="display:inline-flex;padding:3px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;gap:2px">
+                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1);font:500 12px/1 var(--cm-font-sans)">Both</button>
+                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans)">Weight</button>
+                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans)">% fat</button>
+                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans)">Lean mass</button>
+                  </div>
+                  <button><i class="ti ti-dots"></i></button>
+                </div>
+              </div>
+              <svg viewBox="0 0 800 200" font-family="Geist, ui-sans-serif">
+                <g stroke="var(--cm-border-soft)" stroke-width="1">
+                  <line x1="40" y1="30" x2="780" y2="30"/>
+                  <line x1="40" y1="85" x2="780" y2="85"/>
+                  <line x1="40" y1="140" x2="780" y2="140"/>
+                </g>
+                <text x="34" y="34" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">76 / 12</text>
+                <text x="34" y="88" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">75 / 10</text>
+                <text x="34" y="144" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">74 / 8</text>
+                <line x1="40" y1="65" x2="780" y2="65" stroke="var(--cm-success)" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
+                <text x="44" y="61" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-success)">Target · 8.5% fat</text>
+                <!-- Weight line (green) -->
+                <path d="M 40,40 L 124,46 L 208,52 L 292,58 L 376,68 L 460,78 L 544,88 L 628,98 L 712,108 L 780,118" fill="none" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
+                  <circle cx="40" cy="40" r="3"/><circle cx="208" cy="52" r="3"/><circle cx="376" cy="68" r="3"/><circle cx="544" cy="88" r="3"/><circle cx="712" cy="108" r="3"/><circle cx="780" cy="118" r="4"/>
+                </g>
+                <!-- Body fat line (orange) -->
+                <path d="M 40,50 L 124,60 L 208,70 L 292,80 L 376,90 L 460,98 L 544,108 L 628,118 L 712,128 L 780,135" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-dasharray="6 3" stroke-linecap="round"/>
+                <g fill="#F59E0B" stroke="var(--cm-surface)" stroke-width="2">
+                  <circle cx="40" cy="50" r="3"/><circle cx="376" cy="90" r="3"/><circle cx="712" cy="128" r="3"/><circle cx="780" cy="135" r="4"/>
+                </g>
+                <g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">
+                  <text x="40" y="180" text-anchor="middle">W1</text>
+                  <text x="208" y="180" text-anchor="middle">W3</text>
+                  <text x="376" y="180" text-anchor="middle">W6</text>
+                  <text x="544" y="180" text-anchor="middle">W9</text>
+                  <text x="780" y="180" text-anchor="end">Today</text>
+                </g>
+                <g transform="translate(40, 198)" font-size="11" font-family="Geist, sans-serif" fill="var(--cm-fg-muted)">
+                  <rect x="0" y="-8" width="11" height="11" fill="var(--cm-accent)" rx="2"/>
+                  <text x="17" y="2">Weight (kg) · 75.6 → 74.5 (−1.1)</text>
+                  <rect x="220" y="-8" width="11" height="11" fill="#F59E0B" rx="2"/>
+                  <text x="237" y="2">Body fat (%) · 10.6 → 9.4 (−1.2)</text>
+                  <text x="500" y="2" fill="var(--cm-success)" font-weight="600">↗ on track</text>
+                </g>
+              </svg>
+            </div>
+
+            <!-- ATTENTIONS & REFERRALS -->
+            <div>
+              <div class="nu-section-l">Flags &amp; referrals</div>
+              <div class="nu-att-grid">
+                <div class="nu-att good">
+                  <div class="nu-att-h"><i class="ti ti-trending-down"></i>Body fat trending down</div>
+                  <div class="nu-att-b">−1.2% over 6 weeks while maintaining lean mass (+0.3 kg). Cutting block working as designed. Continue 4 more weeks.</div>
+                  <div class="nu-att-actions"><button class="cm-btn is-ghost is-sm">View trend</button></div>
+                </div>
+                <div class="nu-att warn">
+                  <div class="nu-att-h"><i class="ti ti-alert-triangle"></i>MD−2 carb-loading</div>
+                  <div class="nu-att-b">Match Sunday vs Atlético. Bump carbs to 8 g/kg (600 g) from tomorrow. Move pre-training meal earlier.</div>
+                  <div class="nu-att-actions"><button class="cm-btn is-outline is-sm">Apply MD−2 preset</button><button class="cm-btn is-ghost is-sm">Dismiss</button></div>
+                </div>
+                <div class="nu-att info">
+                  <div class="nu-att-h"><i class="ti ti-link"></i>Linked from Evaluations</div>
+                  <div class="nu-att-b">SL-CMJ asymmetry 11% (28 Apr). J. Reiris flagged for lean-mass check on dominant side. No nutrition action — monitoring only.</div>
+                  <div class="nu-att-actions"><button class="cm-btn is-ghost is-sm">Open evaluation</button></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </section>
+
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+
+  if (club) window.applyClubTheme();
+
+  const { data: players } = await window.sb.from('players')
+    .select('id,first_name,last_name,number,position,weight')
+    .eq('club_id', clubId)
+    .neq('status', 'inactive')
+    .order('last_name');
+
+  const list = players || [];
+  list.forEach(p => { p._name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
+
+  const ctEl  = document.getElementById('nuSquadCt');
+  const ctxEl = document.getElementById('nuCtx');
+  if (ctEl)  ctEl.textContent = list.length;
+  if (ctxEl) ctxEl.innerHTML  = `<strong>${list.length} players</strong> · select a player to view nutrition data`;
+
+  const POS_GROUPS = {
+    'Goalkeepers': ['GK'],
+    'Defenders':   ['CB', 'LB', 'RB', 'FB'],
+    'Midfielders': ['MF', 'DM', 'CM'],
+    'Forwards':    ['WG', 'ST', 'CF', 'SS'],
+  };
+  const grouped = {};
+  list.forEach(p => {
+    const pos = (p.position || '').toUpperCase();
+    const grp = Object.keys(POS_GROUPS).find(g => POS_GROUPS[g].includes(pos)) || 'Other';
+    grouped[grp] = grouped[grp] || [];
+    grouped[grp].push(p);
+  });
+
+  const nuList = document.getElementById('nuList');
+  if (!nuList) return;
+
+  async function loadPlayerDetail(p) {
+    // Header
+    const av = document.querySelector('.nu-d-head .av');
+    const h2 = document.querySelector('.nu-d-head h2');
+    const metaEl = document.querySelector('.nu-d-head .meta');
+    const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
+    if (av) av.textContent = initials;
+    if (h2) h2.textContent = `${p._name}${p.number ? ' · #' + p.number : ''}`;
+    if (metaEl) metaEl.innerHTML = `<span class="badge">${p.position || '—'} · ${p.weight ? p.weight + ' kg' : '—'}</span>`;
+
+    // Today's date label
+    const today = new Date().toISOString().slice(0, 10);
+    const dateSubEl = document.querySelector('.nu-card-h .sub');
+    if (dateSubEl) dateSubEl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', day:'numeric', month:'short' });
+
+    // Today's nutrition entry for this player, filtered by club_id
+    const { data: nu } = await window.sb.from('nutrition')
+      .select('calories,protein,carbs,fats,hydration')
+      .eq('player_id', p.id)
+      .eq('club_id', clubId)
+      .gte('created_at', today)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const CIRC = 264; // 2π × r42
+    const donutV   = document.querySelector('.nu-donut-v');
+    const donutL   = document.querySelector('.nu-donut-l');
+    const donutPc  = document.querySelector('.nu-donut-pc');
+    const ringFill = document.querySelector('.ring-fill');
+    const macroVals  = document.querySelectorAll('.nu-macro-v');
+    const macroFills = document.querySelectorAll('.nu-macro-fill');
+
+    if (nu) {
+      // Donut — calories as % of 2500 kcal reference
+      const kcal   = nu.calories || 0;
+      const kcalPct = Math.min(1, kcal / 2500);
+      if (donutV)   donutV.textContent  = kcal ? kcal.toLocaleString() : '—';
+      if (donutL)   donutL.textContent  = 'kcal today';
+      if (donutPc)  donutPc.textContent = kcal ? Math.round(kcalPct * 100) + '%' : '';
+      if (ringFill) ringFill.setAttribute('stroke-dasharray', `${Math.round(kcalPct * CIRC)} ${CIRC}`);
+
+      // Macro rows: [0]=Carbs, [1]=Protein, [2]=Fat, [3]=Fiber(N/A), [4]=Water
+      // Reference daily amounts for bar fill calculation
+      const DATA = [
+        { val: nu.carbs,     ref: 350, label: 'g carbs' },
+        { val: nu.protein,   ref: 150, label: 'g protein' },
+        { val: nu.fats,      ref: 80,  label: 'g fat' },
+        { val: null,         ref: null, label: null },       // Fiber — not in schema
+        { val: nu.hydration, ref: 3,   label: 'L water' },
+      ];
+      DATA.forEach(({ val, ref, label }, i) => {
+        if (!macroVals[i]) return;
+        if (val == null || ref == null) {
+          macroVals[i].innerHTML = '—';
+          if (macroFills[i]) macroFills[i].style.width = '0%';
+          return;
+        }
+        const pct = Math.min(100, Math.round((val / ref) * 100));
+        macroVals[i].innerHTML = `${val}<small>${label}</small>`;
+        if (macroFills[i]) macroFills[i].style.width = pct + '%';
+      });
+    } else {
+      if (donutV)   donutV.textContent  = '—';
+      if (donutL)   donutL.textContent  = 'no data today';
+      if (donutPc)  donutPc.textContent = '';
+      if (ringFill) ringFill.setAttribute('stroke-dasharray', `0 ${CIRC}`);
+      macroVals.forEach(el  => { el.innerHTML = '—'; });
+      macroFills.forEach(el => { el.style.width = '0%'; });
+    }
+  }
+
+  nuList.innerHTML = '';
+  let first = true;
+  Object.entries(grouped).forEach(([grpName, grpPlayers]) => {
+    if (!grpPlayers.length) return;
+    const grpEl = document.createElement('div');
+    grpEl.className = 'nu-list-grp';
+    grpEl.textContent = grpName;
+    nuList.appendChild(grpEl);
+
+    grpPlayers.forEach(p => {
+      const initials = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase();
+      const num      = p.number ? `#${p.number} · ` : '';
+      const row = document.createElement('div');
+      row.className = 'nu-row' + (first ? ' is-on' : '');
+      if (first) { first = false; loadPlayerDetail(p); }
+      row.innerHTML = `
+        <div class="nu-av">${initials}</div>
+        <div><div class="name">${p._name || '—'}</div><div class="meta">${num}${p.position || ''}</div></div>
+        <div class="stat"><div class="v">—</div><div class="u">no plan</div></div>`;
+      row.addEventListener('click', () => {
+        nuList.querySelectorAll('.nu-row').forEach(o => o.classList.remove('is-on'));
+        row.classList.add('is-on');
+        loadPlayerDetail(p);
+      });
+      nuList.appendChild(row);
+    });
+  });
+})();
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+<script>
+  document.querySelectorAll('.nu-tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.nu-tab').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+  }));
+</script>
+</body>
+</html>

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sessions Library — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm { background: var(--cm-bg); }
+
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:300px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* Page */
+  .sl-page { padding:24px 28px 64px; max-width:1600px; width:100%; }
+  .sl-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .sl-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .sl-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .sl-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .sl-head .meta { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Toolbar */
+  .sl-toolbar {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); padding:10px 12px; box-shadow:var(--cm-shadow-1);
+    margin-bottom:14px;
+  }
+  .sl-search { display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); min-width:240px; flex:1; max-width:360px; }
+  .sl-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .sl-search .ti { font-size:16px; color:var(--cm-fg-muted); }
+  .sl-segs { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); gap:2px; }
+  .sl-seg { padding:0 10px; height:28px; display:inline-flex; align-items:center; gap:5px; border-radius:5px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; border:0; background:transparent; }
+  .sl-seg:hover { color:var(--cm-fg); }
+  .sl-seg.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  .sl-seg .ti { font-size:14px; }
+  .sl-pill { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .sl-pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .sl-pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
+  .sl-pill .dot { width:6px; height:6px; border-radius:50%; }
+  .sl-pill .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .sl-pill.is-on .ct { color:var(--cm-accent); font-weight:600; }
+  .sl-toolbar .grow { flex:1; }
+
+  /* Layout */
+  .sl-grid { display:grid; grid-template-columns: 1fr 360px; gap:14px; align-items:start; }
+  @media (max-width:1200px) { .sl-grid { grid-template-columns:1fr; } }
+
+  /* Card grid */
+  .sl-cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; }
+  @media (max-width:1300px) { .sl-cards { grid-template-columns:repeat(2, 1fr); } }
+  @media (max-width:700px) { .sl-cards { grid-template-columns:1fr; } }
+
+  .sl-card {
+    background:var(--cm-surface);
+    border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4);
+    box-shadow:var(--cm-shadow-1);
+    overflow:hidden;
+    display:flex; flex-direction:column;
+    cursor:pointer;
+    transition:border-color 120ms, box-shadow 120ms, transform 120ms;
+  }
+  .sl-card:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); transform:translateY(-1px); }
+  .sl-card.is-active { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+
+  /* Pitch thumbnail */
+  .sl-thumb {
+    position:relative;
+    aspect-ratio: 1.6;
+    background-image:url('assets/field.jpg');
+    background-size:cover; background-position:center;
+    border-bottom:1px solid var(--cm-border);
+  }
+  .sl-thumb::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.30) 100%); pointer-events:none; }
+  .sl-thumb .focus {
+    position:absolute; top:10px; left:10px;
+    display:inline-flex; align-items:center; gap:5px;
+    height:22px; padding:0 8px;
+    border-radius:5px;
+    font:600 10.5px/1 var(--cm-font-mono);
+    letter-spacing:0.04em; text-transform:uppercase;
+    color:#fff;
+    z-index:2;
+  }
+  .sl-thumb .focus.tac { background:#4A90D9; }
+  .sl-thumb .focus.fis { background:#E07B39; }
+  .sl-thumb .focus.con { background:#1D9E75; }
+  .sl-thumb .focus.tec { background:#9B59B6; }
+
+  .sl-thumb .dur {
+    position:absolute; top:10px; right:10px;
+    display:inline-flex; align-items:center; gap:4px;
+    height:22px; padding:0 8px;
+    border-radius:5px;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    font:600 11px/1 var(--cm-font-mono);
+    backdrop-filter:blur(6px);
+    z-index:2;
+  }
+  .sl-thumb .dur .ti { font-size:12px; }
+
+  /* Mini tactical objects in thumb */
+  .sl-thumb .p {
+    position:absolute;
+    width:16px; height:16px;
+    border-radius:50%;
+    border:1.5px solid rgba(255,255,255,0.85);
+    color:#fff;
+    font:700 9px/1 var(--cm-font-mono);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 1px 4px rgba(0,0,0,0.5);
+    transform:translate(-50%,-50%);
+  }
+  .sl-thumb .p.t1 { background:#15803D; }
+  .sl-thumb .p.t2 { background:#1D4ED8; }
+  .sl-thumb .p.t3 { background:#FACC15; color:#0A0A0A; }
+  .sl-thumb .b {
+    position:absolute;
+    width:9px; height:9px; border-radius:50%;
+    background:radial-gradient(circle at 30% 30%, #fff, #d4d4d4 70%, #777);
+    border:1px solid rgba(0,0,0,0.4);
+    box-shadow:0 1px 3px rgba(0,0,0,0.45);
+    transform:translate(-50%,-50%);
+  }
+  .sl-thumb .c {
+    position:absolute;
+    width:0; height:0;
+    border-left:5px solid transparent; border-right:5px solid transparent;
+    border-bottom:10px solid #f97316;
+    transform:translate(-50%,-50%);
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,0.4));
+  }
+  .sl-thumb .arrow {
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+  }
+
+  /* Card body */
+  .sl-body { padding:13px 14px 14px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .sl-card .title { font:600 14.5px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sl-card .desc  { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .sl-card .meta  {
+    display:flex; align-items:center; gap:10px;
+    margin-top:auto; padding-top:8px;
+    border-top:1px solid var(--cm-border-soft);
+    font:500 11px/1 var(--cm-font-mono);
+    color:var(--cm-fg-muted);
+  }
+  .sl-card .meta .it { display:inline-flex; align-items:center; gap:4px; }
+  .sl-card .meta .it .ti { font-size:13px; }
+
+  /* Intensity stars/bars */
+  .sl-int { display:inline-flex; gap:2px; align-items:center; }
+  .sl-int .s { width:9px; height:9px; border-radius:2px; background:var(--cm-bg-sunk); }
+  .sl-int .s.on { background:var(--cm-warning); }
+  .sl-int .s.on.high { background:var(--cm-danger); }
+
+  /* Tags row */
+  .sl-tags { display:flex; gap:5px; flex-wrap:wrap; padding:0 14px 12px; }
+  .sl-tag {
+    display:inline-flex; align-items:center; gap:4px;
+    height:20px; padding:0 7px; border-radius:4px;
+    font:500 11px/1 var(--cm-font-sans);
+    color:var(--cm-fg-muted);
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+  }
+
+  /* RIGHT rail: filter accordions */
+  .sl-rail {
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
+    position:sticky; top:80px;
+    max-height:calc(100vh - 100px);
+    overflow-y:auto;
+  }
+  .sl-rail-h { padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; }
+  .sl-rail-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sl-rail-h .right { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .sl-rail-h .clear { background:none; border:0; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .sl-rail-h .clear:hover { color:var(--cm-fg); }
+
+  .sl-acc { border-bottom:1px solid var(--cm-border-soft); }
+  .sl-acc:last-child { border-bottom:0; }
+  .sl-acc-h { display:flex; align-items:center; gap:8px; padding:11px 16px; cursor:pointer; }
+  .sl-acc-h .l { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.04em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .sl-acc-h .ct { margin-left:auto; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .sl-acc-h .ti { font-size:14px; color:var(--cm-fg-muted); margin-left:6px; }
+  .sl-acc-b { padding:0 16px 14px; display:flex; flex-direction:column; gap:6px; }
+
+  .sl-opt { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; }
+  .sl-opt:hover { background:var(--cm-bg-soft); }
+  .sl-opt .cb {
+    width:14px; height:14px;
+    border-radius:4px;
+    border:1.5px solid var(--cm-border-strong);
+    background:var(--cm-surface);
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    color:transparent;
+  }
+  .sl-opt.is-on .cb {
+    background:var(--cm-accent);
+    border-color:var(--cm-accent);
+    color:#fff;
+  }
+  .sl-opt.is-on .cb::after {
+    content:""; width:7px; height:3px;
+    border-left:1.5px solid var(--cm-fg-on-accent);
+    border-bottom:1.5px solid var(--cm-fg-on-accent);
+    transform:rotate(-45deg);
+  }
+  .sl-opt .lbl { flex:1; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .sl-opt .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+
+  /* Range slider */
+  .sl-range {
+    -webkit-appearance:none; width:100%; height:4px;
+    background:var(--cm-bg-sunk); border-radius:2px; outline:none;
+  }
+  .sl-range::-webkit-slider-thumb {
+    -webkit-appearance:none; width:14px; height:14px;
+    border-radius:50%; background:var(--cm-accent);
+    cursor:pointer;
+  }
+  .sl-range-row { display:flex; align-items:center; justify-content:space-between; padding:4px 8px; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .sl-range-row strong { color:var(--cm-fg-strong); font:600 12.5px/1 var(--cm-font-mono); }
+
+  /* Foot CTA */
+  .sl-rail-foot { padding:12px 16px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="12 Sessions Library">
+
+  <!-- Sidebar -->
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Sessions library</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search drills, focus, equipment…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="sl-page">
+
+      <header class="sl-head">
+        <div>
+          <h1>Sessions library</h1>
+          <div class="ctx"><strong id="slSessionCount">—</strong> sessions · this club</div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>From template</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New drill</button>
+        </div>
+      </header>
+
+      <!-- Toolbar -->
+      <div class="sl-toolbar">
+        <div class="sl-search">
+          <i class="ti ti-search"></i>
+          <input placeholder="Filter drills by name, tag, equipment…">
+        </div>
+        <div class="sl-segs">
+          <button class="sl-seg is-on"><i class="ti ti-layout-grid"></i>Grid</button>
+          <button class="sl-seg"><i class="ti ti-list"></i>List</button>
+          <button class="sl-seg"><i class="ti ti-binary-tree-2"></i>By focus</button>
+        </div>
+        <div style="width:1px;height:24px;background:var(--cm-border)"></div>
+        <button class="sl-pill is-on">All<span class="ct">126</span></button>
+        <button class="sl-pill"><span class="dot" style="background:#4A90D9"></span>Tactical<span class="ct">42</span></button>
+        <button class="sl-pill"><span class="dot" style="background:#E07B39"></span>Physical<span class="ct">28</span></button>
+        <button class="sl-pill"><span class="dot" style="background:#1D9E75"></span>Conditional<span class="ct">31</span></button>
+        <button class="sl-pill"><span class="dot" style="background:#9B59B6"></span>Technical<span class="ct">25</span></button>
+        <div class="grow"></div>
+        <button class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i>Recent</button>
+      </div>
+
+      <div class="sl-grid">
+
+        <!-- LEFT: drill cards — populated by boot() -->
+        <div class="sl-cards" id="slCardsGrid">
+          <div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading sessions…</div>
+        </div>
+
+        <!-- RIGHT rail: filters -->
+        <aside class="sl-rail">
+          <div class="sl-rail-h">
+            <h3>Filters</h3>
+            <button class="clear">Clear all</button>
+          </div>
+
+          <div class="sl-acc">
+            <div class="sl-acc-h">
+              <span class="l">Focus</span>
+              <span class="ct">4 / 4</span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b">
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4A90D9;margin-right:6px;vertical-align:0"></span>Tactical</span><span class="ct">42</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#E07B39;margin-right:6px;vertical-align:0"></span>Physical</span><span class="ct">28</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1D9E75;margin-right:6px;vertical-align:0"></span>Conditional</span><span class="ct">31</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#9B59B6;margin-right:6px;vertical-align:0"></span>Technical</span><span class="ct">25</span></div>
+            </div>
+          </div>
+
+          <div class="sl-acc">
+            <div class="sl-acc-h">
+              <span class="l">MD position</span>
+              <span class="ct">3 of 7</span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b">
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">MD−5 · activation</span><span class="ct">14</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">MD−4 · peak</span><span class="ct">21</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">MD−3</span><span class="ct">28</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">MD−2</span><span class="ct">18</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">MD−1 · walkthrough</span><span class="ct">9</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">MD+1 · recovery</span><span class="ct">8</span></div>
+            </div>
+          </div>
+
+          <div class="sl-acc">
+            <div class="sl-acc-h">
+              <span class="l">Players</span>
+              <span class="ct">1 of 4</span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b">
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">2–6 (small group)</span><span class="ct">31</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">7–10</span><span class="ct">38</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">11–14 (full squad)</span><span class="ct">42</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">15+</span><span class="ct">15</span></div>
+            </div>
+          </div>
+
+          <div class="sl-acc">
+            <div class="sl-acc-h">
+              <span class="l">Duration</span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b">
+              <input type="range" class="sl-range" min="5" max="60" value="35">
+              <div class="sl-range-row">
+                <span>5′</span>
+                <span><strong>5 → 35′</strong></span>
+                <span>60′</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="sl-acc">
+            <div class="sl-acc-h">
+              <span class="l">Intensity</span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b">
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">Low (1–2)</span><span class="ct">22</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">Moderate (3)</span><span class="ct">44</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">High (4)</span><span class="ct">38</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">Peak (5)</span><span class="ct">22</span></div>
+            </div>
+          </div>
+
+          <div class="sl-acc">
+            <div class="sl-acc-h">
+              <span class="l">Equipment</span>
+              <span class="ct">2 of 9</span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b">
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">Cones</span><span class="ct">81</span></div>
+              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">Ball</span><span class="ct">119</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">Poles</span><span class="ct">36</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">Mini-goals</span><span class="ct">42</span></div>
+              <div class="sl-opt"><span class="cb"></span><span class="lbl">Mannequins</span><span class="ct">18</span></div>
+            </div>
+          </div>
+
+          <div class="sl-rail-foot">
+            <button class="cm-btn is-primary is-block"><i class="ti ti-plus" style="font-size:14px"></i>Add 4 selected to MC 14</button>
+          </div>
+        </aside>
+
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+  // Maps DB session_type (lowercase) to .focus CSS modifier
+  const TYPE_CSS = {
+    tactical:     'tac',
+    conditioning: 'con',
+    gym:          'fis',
+    match:        'tac',
+    recovery:     'con',
+    other:        'tac'
+  };
+
+  async function boot() {
+    if (!await window.requireAuth()) return;
+    window.applyClubTheme();
+    const clubId = await window.getClubId();
+    if (!clubId) return;
+
+    const { data, error } = await window.sb.from('training_sessions')
+      .select('id,title,session_type,duration,session_date,notes')
+      .eq('club_id', clubId)
+      .order('session_date', { ascending: false });
+
+    if (error) console.error(error);
+
+    const sessions = data || [];
+    const ct = document.getElementById('slSessionCount');
+    if (ct) ct.textContent = sessions.length;
+
+    const grid = document.getElementById('slCardsGrid');
+    if (!grid) return;
+
+    if (!sessions.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No sessions yet.</div>';
+      return;
+    }
+
+    grid.innerHTML = sessions.map((s, i) => {
+      const typeCss = TYPE_CSS[s.session_type] || 'tac';
+      const dur  = s.duration    ? `${s.duration}′` : '—';
+      const date = s.session_date
+        ? new Date(s.session_date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
+        : '—';
+      return `<div class="sl-card${i === 0 ? ' is-active' : ''}">
+        <div class="sl-thumb">
+          <span class="focus ${typeCss}">${s.session_type || '—'}</span>
+          <span class="dur"><i class="ti ti-clock"></i>${dur}</span>
+        </div>
+        <div class="sl-body">
+          <div class="title">${s.title || 'Untitled session'}</div>
+          <div class="desc">${s.notes || ''}</div>
+          <div class="meta"><span>${date}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    grid.querySelectorAll('.sl-card').forEach(c => c.addEventListener('click', () => {
+      grid.querySelectorAll('.sl-card').forEach(o => o.classList.remove('is-active'));
+      c.classList.add('is-active');
+    }));
+  }
+  boot();
+
+  document.querySelectorAll('.sl-pill').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('.sl-toolbar .sl-pill').forEach(o => o.classList.remove('is-on'));
+    p.classList.add('is-on');
+  }));
+  document.querySelectorAll('.sl-segs').forEach(g => g.querySelectorAll('.sl-seg').forEach(s => s.addEventListener('click', () => {
+    g.querySelectorAll('.sl-seg').forEach(o => o.classList.remove('is-on'));
+    s.classList.add('is-on');
+  })));
+  document.querySelectorAll('.sl-opt').forEach(o => o.addEventListener('click', () => o.classList.toggle('is-on')));
+</script>
+</body>
+</html>

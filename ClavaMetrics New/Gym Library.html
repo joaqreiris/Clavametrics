@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gym Library — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm{background:var(--cm-bg)}
+  .hub-topbar{display:flex;align-items:center;gap:14px;height:56px;padding:0 24px;border-bottom:1px solid var(--cm-border);background:var(--cm-bg);position:sticky;top:0;z-index:50}
+  .hub-crumb{display:flex;align-items:center;gap:8px;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+  .hub-crumb .ti{font-size:14px}.hub-crumb .sep{color:var(--cm-fg-faint)}
+  .hub-topbar .actions{margin-left:auto;display:flex;gap:8px}
+
+  .gl-page{padding:20px 26px 56px;max-width:1600px}
+  .gl-head{display:flex;align-items:flex-end;gap:16px;margin-bottom:14px;flex-wrap:wrap}
+  .gl-head h1{font:600 24px/1.1 var(--cm-font-sans);letter-spacing:-0.02em;color:var(--cm-fg-strong)}
+  .gl-head .ctx{font:var(--cm-body);color:var(--cm-fg-muted);margin-top:4px}
+  .gl-head .ctx strong{color:var(--cm-fg);font-weight:600}
+  .gl-head .meta{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+  /* Toolbar */
+  .gl-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:10px 12px;box-shadow:var(--cm-shadow-1);margin-bottom:14px}
+  .gl-search{flex:1;min-width:240px;max-width:360px;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3)}
+  .gl-search input{flex:1;border:0;background:transparent;outline:none;font:var(--cm-body-sm);color:var(--cm-fg)}
+  .gl-search .ti{font-size:16px;color:var(--cm-fg-muted)}
+  .gl-sel{height:32px;padding:0 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);color:var(--cm-fg);font:500 12.5px/1 var(--cm-font-sans);cursor:pointer;outline:none}
+  .gl-sel:hover{border-color:var(--cm-border-strong)}
+  .gl-toolbar .grow{flex:1}
+  .gl-segs{display:inline-flex;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:3px;gap:2px}
+  .gl-segs button{border:0;background:transparent;padding:0 11px;height:26px;border-radius:5px;color:var(--cm-fg-muted);cursor:pointer;font:500 12px/1 var(--cm-font-sans);display:inline-flex;align-items:center;gap:5px}
+  .gl-segs button.is-on{background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1);font-weight:600}
+  .gl-segs .ti{font-size:13px}
+
+  /* Muscle chips strip */
+  .gl-muscles{display:flex;flex-wrap:wrap;gap:5px;padding:0 0 14px}
+  .gl-m-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:999px;background:var(--cm-surface);border:1px solid var(--cm-border);color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans);cursor:pointer}
+  .gl-m-chip:hover{color:var(--cm-fg);border-color:var(--cm-border-strong)}
+  .gl-m-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong);border-color:var(--cm-border-strong)}
+  .gl-m-chip .ct{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)}
+  .gl-m-chip.is-on .ct{color:var(--cm-accent);font-weight:600}
+
+  /* Count badge */
+  .gl-count{font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .gl-count strong{color:var(--cm-fg-strong);font-weight:600}
+  .gl-count .clear{margin-left:auto;font:500 12px/1 var(--cm-font-sans);color:var(--cm-accent);cursor:pointer}
+
+  /* Exercise grid */
+  .gl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+  .gl-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);overflow:hidden;display:flex;flex-direction:column;transition:border-color 120ms,box-shadow 120ms,transform 120ms;cursor:pointer}
+  .gl-card:hover{border-color:var(--cm-border-strong);box-shadow:var(--cm-shadow-2);transform:translateY(-1px)}
+  .gl-thumb{position:relative;width:100%;aspect-ratio:16/10;background:var(--cm-bg-soft);overflow:hidden}
+  .gl-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .gl-thumb-ph{width:100%;height:100%;background:linear-gradient(135deg,var(--cm-bg-soft) 0%,var(--cm-bg-sunk) 100%);display:flex;align-items:center;justify-content:center}
+  .gl-thumb-ph span{font:700 36px/1 var(--cm-font-sans);letter-spacing:-0.02em;color:var(--cm-fg-faint)}
+  .gl-thumb-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);opacity:0;transition:opacity 120ms}
+  .gl-card:hover .gl-thumb-play{opacity:1}
+  .gl-thumb-play .ti{font-size:18px;margin-left:2px}
+  .gl-cplx-badge{position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:4px;font:700 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;backdrop-filter:blur(6px)}
+  .gl-cplx-badge.low{background:rgba(34,197,94,0.85);color:#fff}
+  .gl-cplx-badge.med{background:rgba(245,158,11,0.85);color:#fff}
+  .gl-cplx-badge.high{background:rgba(220,38,38,0.85);color:#fff}
+  .gl-video-tag{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 7px;border-radius:4px;background:rgba(0,0,0,0.55);color:#fff;font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;backdrop-filter:blur(6px)}
+  .gl-video-tag .ti{font-size:12px}
+
+  .gl-body{padding:12px 14px;display:flex;flex-direction:column;gap:8px;flex:1}
+  .gl-name{font:600 14px/1.25 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .gl-muscles-row{display:flex;flex-wrap:wrap;gap:4px}
+  .gl-muscle{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:4px;background:var(--cm-success-bg);color:var(--cm-success);font:600 10.5px/1 var(--cm-font-mono);letter-spacing:0.04em}
+  .gl-muscle.sec{background:var(--cm-bg-soft);color:var(--cm-fg-muted);border:1px solid var(--cm-border-soft)}
+  .gl-desc{font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .gl-foot{display:flex;align-items:center;gap:6px;padding-top:8px;border-top:1px solid var(--cm-border-soft);margin-top:auto}
+  .gl-foot .gl-tag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);letter-spacing:0.04em}
+  .gl-foot .grow{flex:1}
+  .gl-foot button{width:26px;height:26px;border-radius:5px;border:0;background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+  .gl-foot button:hover{background:var(--cm-bg-soft);color:var(--cm-fg)}
+  .gl-foot button .ti{font-size:13px}
+
+  /* Add card */
+  .gl-add{border:1.5px dashed var(--cm-border-strong);border-radius:var(--cm-r-4);background:transparent;color:var(--cm-fg-muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px}
+  .gl-add:hover{border-color:var(--cm-accent);color:var(--cm-fg);background:var(--cm-accent-soft)}
+  .gl-add .ic{width:40px;height:40px;border-radius:10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);display:flex;align-items:center;justify-content:center}
+  .gl-add .ic .ti{font-size:18px}
+  .gl-add .l{font:500 13px/1.4 var(--cm-font-sans)}
+  .gl-add small{font:500 10.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)}
+
+  #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="23 Gym Library">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Gym library</span></div>
+      <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
+    </div>
+
+    <section class="gl-page">
+
+      <header class="gl-head">
+        <div><h1>Gym library</h1><div class="ctx"><strong>148 exercises</strong> · indexed by muscle group &amp; complexity · 92 with video</div></div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>Templates</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New exercise</button>
+        </div>
+      </header>
+
+      <div class="gl-toolbar">
+        <div class="gl-search"><i class="ti ti-search"></i><input placeholder="Search exercise name, cues, equipment…"></div>
+        <select class="gl-sel">
+          <option>All muscles · 15</option>
+          <option>Quadriceps</option><option>Hamstrings</option><option>Glutes</option>
+          <option>Adductors</option><option>Calves</option><option>Lower Back</option>
+          <option>Core / Abs</option><option>Upper Back</option><option>Pectorals</option>
+          <option>Shoulders</option><option>Biceps</option><option>Triceps</option>
+          <option>Hip Flexors</option><option>Trapezius</option><option>Forearms</option>
+        </select>
+        <select class="gl-sel">
+          <option>All complexity</option>
+          <option>Low</option><option>Medium</option><option>High</option>
+        </select>
+        <select class="gl-sel">
+          <option>All equipment</option>
+          <option>Barbell</option><option>Dumbbell</option><option>Kettlebell</option>
+          <option>Cable</option><option>Machine</option><option>Bodyweight</option>
+          <option>Bands</option><option>Sled</option><option>Plyo box</option>
+        </select>
+        <div class="grow"></div>
+        <div class="gl-segs">
+          <button class="is-on"><i class="ti ti-grid-dots"></i>Grid</button>
+          <button><i class="ti ti-list"></i>List</button>
+          <button><i class="ti ti-layout-rows"></i>By muscle</button>
+        </div>
+      </div>
+
+      <div class="gl-muscles">
+        <button class="gl-m-chip is-on">All <span class="ct">148</span></button>
+        <button class="gl-m-chip">Quadriceps <span class="ct">18</span></button>
+        <button class="gl-m-chip">Hamstrings <span class="ct">14</span></button>
+        <button class="gl-m-chip">Glutes <span class="ct">16</span></button>
+        <button class="gl-m-chip">Adductors <span class="ct">7</span></button>
+        <button class="gl-m-chip">Calves <span class="ct">8</span></button>
+        <button class="gl-m-chip">Lower Back <span class="ct">9</span></button>
+        <button class="gl-m-chip">Core / Abs <span class="ct">14</span></button>
+        <button class="gl-m-chip">Upper Back <span class="ct">11</span></button>
+        <button class="gl-m-chip">Pectorals <span class="ct">9</span></button>
+        <button class="gl-m-chip">Shoulders <span class="ct">12</span></button>
+        <button class="gl-m-chip">Biceps <span class="ct">6</span></button>
+        <button class="gl-m-chip">Triceps <span class="ct">6</span></button>
+        <button class="gl-m-chip">Hip Flexors <span class="ct">5</span></button>
+        <button class="gl-m-chip">Trapezius <span class="ct">7</span></button>
+        <button class="gl-m-chip">Forearms <span class="ct">3</span></button>
+      </div>
+
+      <div class="gl-count">
+        Showing <strong>12</strong> of <strong>148</strong> exercises
+        <span class="clear">Clear filters</span>
+      </div>
+
+      <div class="gl-grid">
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>BS</span></div>
+            <span class="gl-cplx-badge med">Medium</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Back squat</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Quadriceps</span><span class="gl-muscle sec">Glutes</span><span class="gl-muscle sec">Lower Back</span></div>
+            <div class="gl-desc">Bilateral compound lift. Bar across the upper traps, descend to parallel with neutral spine, drive through mid-foot.</div>
+            <div class="gl-foot"><span class="gl-tag">BARBELL</span><span class="grow"></span><button title="Add to plan"><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>HD</span></div>
+            <span class="gl-cplx-badge high">High</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Hex-bar deadlift</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Hamstrings</span><span class="gl-muscle sec">Glutes</span><span class="gl-muscle sec">Quadriceps</span></div>
+            <div class="gl-desc">Hip hinge from inside the hex bar. Maintain flat back and tight lats throughout the lift.</div>
+            <div class="gl-foot"><span class="gl-tag">HEX BAR</span><span class="grow"></span><button title="Add to plan"><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>BP</span></div>
+            <span class="gl-cplx-badge med">Medium</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Bench press</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Pectorals</span><span class="gl-muscle sec">Triceps</span><span class="gl-muscle sec">Shoulders</span></div>
+            <div class="gl-desc">Horizontal press with arch and retracted scaps. Touch chest at lower sternum, drive through palms.</div>
+            <div class="gl-foot"><span class="gl-tag">BARBELL</span><span class="grow"></span><button title="Add to plan"><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>BS</span></div>
+            <span class="gl-cplx-badge high">High</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Bulgarian split squat</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Quadriceps</span><span class="gl-muscle sec">Glutes</span><span class="gl-muscle sec">Adductors</span></div>
+            <div class="gl-desc">Rear-foot elevated unilateral squat. Long step out, vertical front shin, descend until back knee taps floor.</div>
+            <div class="gl-foot"><span class="gl-tag">DUMBBELL</span><span class="grow"></span><button title="Add to plan"><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>NH</span></div>
+            <span class="gl-cplx-badge high">High</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Nordic hamstring curl</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Hamstrings</span></div>
+            <div class="gl-desc">Eccentric-only knee flexor exercise. Anchor feet, lower slowly resisting gravity, accept fall with hands.</div>
+            <div class="gl-foot"><span class="gl-tag">BODYWEIGHT</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>RD</span></div>
+            <span class="gl-cplx-badge med">Medium</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Romanian deadlift</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Hamstrings</span><span class="gl-muscle sec">Glutes</span><span class="gl-muscle sec">Lower Back</span></div>
+            <div class="gl-desc">Hip-dominant pull with soft knees and neutral spine. Slide bar down thigh to mid-shin, hinge from the hips.</div>
+            <div class="gl-foot"><span class="gl-tag">BARBELL</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>PU</span></div>
+            <span class="gl-cplx-badge med">Medium</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Weighted pull-up</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Upper Back</span><span class="gl-muscle sec">Biceps</span><span class="gl-muscle sec">Forearms</span></div>
+            <div class="gl-desc">Vertical pull from a dead hang with belt or vest. Chin clears the bar, controlled descent to full extension.</div>
+            <div class="gl-foot"><span class="gl-tag">BODYWEIGHT</span><span class="gl-tag">BELT</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>HT</span></div>
+            <span class="gl-cplx-badge low">Low</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Hip thrust</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Glutes</span><span class="gl-muscle sec">Hamstrings</span></div>
+            <div class="gl-desc">Hip extension with shoulders on bench, bar across hips. Drive to full extension, squeeze glutes at top.</div>
+            <div class="gl-foot"><span class="gl-tag">BARBELL</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>CP</span></div>
+            <span class="gl-cplx-badge low">Low</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Copenhagen plank</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Adductors</span><span class="gl-muscle sec">Core / Abs</span></div>
+            <div class="gl-desc">Side plank with top leg resting on bench. Isometric hold for prescribed time. Hip caution for tight groins.</div>
+            <div class="gl-foot"><span class="gl-tag">BODYWEIGHT</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>BJ</span></div>
+            <span class="gl-cplx-badge med">Medium</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Box jump · max effort</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Quadriceps</span><span class="gl-muscle sec">Glutes</span><span class="gl-muscle sec">Calves</span></div>
+            <div class="gl-desc">Concentric-only vertical jump onto 50-70cm box. Full reset between reps. Track contact-to-takeoff time.</div>
+            <div class="gl-foot"><span class="gl-tag">PLYO BOX</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>DJ</span></div>
+            <span class="gl-cplx-badge high">High</span>
+            <span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Drop jump · RSI</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Calves</span><span class="gl-muscle sec">Quadriceps</span><span class="gl-muscle sec">Hamstrings</span></div>
+            <div class="gl-desc">Step off 30cm box, minimize ground contact time on landing, jump as high as possible. Target RSI &gt; 2.0.</div>
+            <div class="gl-foot"><span class="gl-tag">PLYO BOX</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>FW</span></div>
+            <span class="gl-cplx-badge low">Low</span>
+            <div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">Farmer carry</div>
+            <div class="gl-muscles-row"><span class="gl-muscle">Forearms</span><span class="gl-muscle sec">Core / Abs</span><span class="gl-muscle sec">Trapezius</span></div>
+            <div class="gl-desc">Heavy bilateral carry over set distance. Tall posture, ribs down, no rotation. Time or distance metric.</div>
+            <div class="gl-foot"><span class="gl-tag">DUMBBELL</span><span class="gl-tag">KETTLEBELL</span><span class="grow"></span><button><i class="ti ti-plus"></i></button><button><i class="ti ti-edit"></i></button><button><i class="ti ti-trash"></i></button></div>
+          </div>
+        </div>
+
+        <button class="gl-add">
+          <div class="ic"><i class="ti ti-plus"></i></div>
+          <div class="l">Add a new exercise</div>
+          <small>Name · target muscles · complexity · video URL</small>
+        </button>
+
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+<script>
+  const CPLX_CSS = { Low:'low', Medium:'med', High:'high' };
+
+  async function boot() {
+    const ok = await window.requireAuth();
+    if (!ok) return;
+
+    const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+    const clubId = await window.getClubId();
+
+    if (club) window.applyClubTheme();
+
+    const { data: exercises } = await window.sb.from('gym_exercises')
+      .select('id,name,description,muscle_group,category,video_url')
+      .eq('club_id', clubId)
+      .order('name');
+
+    if (!exercises?.length) return;
+
+    const grid = document.querySelector('.gl-grid');
+    const countEl = document.querySelector('.gl-count strong:first-child');
+    const totalEl = document.querySelector('.gl-count strong:last-child');
+    if (countEl) countEl.textContent = exercises.length;
+    if (totalEl) totalEl.textContent = exercises.length;
+
+    if (grid) {
+      grid.innerHTML = exercises.map(e => {
+        const muscleGroup = e.muscle_group || '';
+        const initials = (e.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        const cplxCss = CPLX_CSS[e.category] || 'med';
+        const hasVideo = !!e.video_url;
+        const primary = muscleGroup;
+        const secondary = [];
+        return `<div class="gl-card">
+          <div class="gl-thumb">
+            <div class="gl-thumb-ph"><span>${initials}</span></div>
+            <span class="gl-cplx-badge ${cplxCss}">${e.category || '—'}</span>
+            ${hasVideo ? `<span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span><div class="gl-thumb-play"><i class="ti ti-player-play"></i></div>` : ''}
+          </div>
+          <div class="gl-body">
+            <div class="gl-name">${e.name || 'Unnamed'}</div>
+            <div class="gl-muscles-row">
+              ${primary ? `<span class="gl-muscle">${primary}</span>` : ''}
+              ${secondary.map(m => `<span class="gl-muscle sec">${m}</span>`).join('')}
+              ${e.category ? `<span class="gl-muscle sec">${e.category}</span>` : ''}
+            </div>
+            <div class="gl-desc">${e.description || ''}</div>
+            <div class="gl-foot"><span class="grow"></span>
+              <button title="Add to plan"><i class="ti ti-plus"></i></button>
+              <button><i class="ti ti-edit"></i></button>
+              <button><i class="ti ti-trash"></i></button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+  boot();
+
+  document.querySelectorAll('.gl-m-chip').forEach(c => c.addEventListener('click', () => {
+    document.querySelectorAll('.gl-m-chip').forEach(o => o.classList.remove('is-on'));
+    c.classList.add('is-on');
+  }));
+  document.querySelectorAll('.gl-segs button').forEach(b => b.addEventListener('click', () => {
+    b.parentElement.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+  }));
+</script>
+</body>
+</html>
