@@ -9,7 +9,8 @@
 --
 -- FK insert order:
 --   clubs → profiles → players → training_sessions
---   → injuries → wellness → rpe → gps_reports → evaluations → nutrition
+--   → injuries → wellness → rpe → gps_reports
+--   → match_reports → match_shots → evaluations → nutrition
 --
 -- To tear down: DELETE FROM clubs WHERE id = 'c3740000-0000-0000-0000-000000000001';
 -- (CASCADE will remove all dependent rows.)
@@ -32,30 +33,9 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── 2. PROFILES ─────────────────────────────────────────────────────────────
--- profiles.id must match an auth.users entry when RLS is active.
--- With service-role key these rows insert without an auth user (useful for testing).
-
-INSERT INTO profiles (id, club_id, email, full_name, role, club_role, last_seen_at)
-VALUES
-  (
-    'a1110000-0000-0000-0000-000000000001',
-    'c3740000-0000-0000-0000-000000000001',
-    'marcos.alonso@celta-test.es',
-    'Marcos Alonso García',
-    'coach',
-    'Head Coach',
-    NOW() - INTERVAL '1 hour'
-  ),
-  (
-    'a1110000-0000-0000-0000-000000000002',
-    'c3740000-0000-0000-0000-000000000001',
-    'laura.rodriguez@celta-test.es',
-    'Laura Rodríguez Pena',
-    'physio',
-    'Head Physiotherapist',
-    NOW() - INTERVAL '2 hours'
-  )
-ON CONFLICT (id) DO NOTHING;
+-- Skipped: profiles.id is a FK to auth.users — cannot insert fake UUIDs.
+-- To test with real profiles, register users via the app and update coach_id
+-- in training_sessions to match a real profile UUID.
 
 -- ─── 3. PLAYERS ──────────────────────────────────────────────────────────────
 -- Statuses: available (6), modified (2), injured (2)
@@ -63,65 +43,67 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO players (id, club_id, first_name, last_name, position, date_of_birth, nationality, height, weight, dominant_foot, status)
 VALUES
-  ('p1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 'Óscar',  'Iglesias Rodríguez', 'GK',  '1994-03-15', 'Spanish',  188, 82, 'right', 'available'),
-  ('p1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 'Adrián', 'Mosquera López',     'CB',  '2002-05-20', 'Spanish',  185, 80, 'right', 'available'),
-  ('p1110000-0000-0000-0000-000000000003', 'c3740000-0000-0000-0000-000000000001', 'Hugo',   'Álvarez García',     'RB',  '1999-11-08', 'Spanish',  179, 74, 'right', 'modified'),
-  ('p1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 'Javier', 'Mínguez Fernández',  'LB',  '1997-07-22', 'Spanish',  176, 73, 'left',  'available'),
-  ('p1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 'Miguel', 'Torres Vega',        'CDM', '1998-09-04', 'Spanish',  181, 78, 'right', 'available'),
-  ('p1110000-0000-0000-0000-000000000006', 'c3740000-0000-0000-0000-000000000001', 'Sergio', 'Carballo Paz',       'CM',  '2001-02-14', 'Spanish',  177, 72, 'right', 'available'),
-  ('p1110000-0000-0000-0000-000000000007', 'c3740000-0000-0000-0000-000000000001', 'Brais',  'Cernadas Núñez',     'CAM', '2000-06-30', 'Spanish',  175, 71, 'right', 'injured'),
-  ('p1110000-0000-0000-0000-000000000008', 'c3740000-0000-0000-0000-000000000001', 'Lucas',  'Buydens Alonso',     'ST',  '2003-01-17', 'Belgian',  186, 82, 'right', 'available'),
-  ('p1110000-0000-0000-0000-000000000009', 'c3740000-0000-0000-0000-000000000001', 'Iker',   'Beltrán González',   'ST',  '1996-10-11', 'Spanish',  183, 79, 'right', 'modified'),
-  ('p1110000-0000-0000-0000-000000000010', 'c3740000-0000-0000-0000-000000000001', 'Diego',  'Domínguez Soto',     'LW',  '2004-08-25', 'Spanish',  174, 69, 'left',  'injured')
+  ('b1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 'Óscar',  'Iglesias Rodríguez', 'GK',  '1994-03-15', 'Spanish',  188, 82, 'right', 'available'),
+  ('b1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 'Adrián', 'Mosquera López',     'CB',  '2002-05-20', 'Spanish',  185, 80, 'right', 'available'),
+  ('b1110000-0000-0000-0000-000000000003', 'c3740000-0000-0000-0000-000000000001', 'Hugo',   'Álvarez García',     'RB',  '1999-11-08', 'Spanish',  179, 74, 'right', 'modified'),
+  ('b1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 'Javier', 'Mínguez Fernández',  'LB',  '1997-07-22', 'Spanish',  176, 73, 'left',  'available'),
+  ('b1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 'Miguel', 'Torres Vega',        'CDM', '1998-09-04', 'Spanish',  181, 78, 'right', 'available'),
+  ('b1110000-0000-0000-0000-000000000006', 'c3740000-0000-0000-0000-000000000001', 'Sergio', 'Carballo Paz',       'CM',  '2001-02-14', 'Spanish',  177, 72, 'right', 'available'),
+  ('b1110000-0000-0000-0000-000000000007', 'c3740000-0000-0000-0000-000000000001', 'Brais',  'Cernadas Núñez',     'CAM', '2000-06-30', 'Spanish',  175, 71, 'right', 'injured'),
+  ('b1110000-0000-0000-0000-000000000008', 'c3740000-0000-0000-0000-000000000001', 'Lucas',  'Buydens Alonso',     'ST',  '2003-01-17', 'Belgian',  186, 82, 'right', 'available'),
+  ('b1110000-0000-0000-0000-000000000009', 'c3740000-0000-0000-0000-000000000001', 'Iker',   'Beltrán González',   'ST',  '1996-10-11', 'Spanish',  183, 79, 'right', 'modified'),
+  ('b1110000-0000-0000-0000-000000000010', 'c3740000-0000-0000-0000-000000000001', 'Diego',  'Domínguez Soto',     'LW',  '2004-08-25', 'Spanish',  174, 69, 'left',  'injured')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── 4. TRAINING SESSIONS ────────────────────────────────────────────────────
 -- Types: tactical / gym / recovery / conditioning / match
+-- Spread across last 5 days so weekly bars span current + previous week.
+-- s1–s3 land in the previous calendar week; s4–s5 in the current week.
 
 INSERT INTO training_sessions (id, club_id, title, session_date, session_time, duration, session_type, coach_id, location, notes)
 VALUES
   (
-    's1110000-0000-0000-0000-000000000001',
+    'e1110000-0000-0000-0000-000000000001',
     'c3740000-0000-0000-0000-000000000001',
     'Trabajo táctico defensivo',
     CURRENT_DATE - 5, '10:00', 90, 'tactical',
-    'a1110000-0000-0000-0000-000000000001',
+    NULL,
     'Ciudad Deportiva A Madroa',
     'Presión alta y salida de balón desde portería. Bloques de 4v4+2 y 8v8 posicional.'
   ),
   (
-    's1110000-0000-0000-0000-000000000002',
+    'e1110000-0000-0000-0000-000000000002',
     'c3740000-0000-0000-0000-000000000001',
     'Fuerza y potencia en sala',
     CURRENT_DATE - 4, '09:00', 60, 'gym',
-    'a1110000-0000-0000-0000-000000000001',
+    NULL,
     'Gimnasio A Madroa',
     'Fuerza máxima: sentadilla trasera y peso muerto. Series 4x4 al 85% 1RM.'
   ),
   (
-    's1110000-0000-0000-0000-000000000003',
+    'e1110000-0000-0000-0000-000000000003',
     'c3740000-0000-0000-0000-000000000001',
     'Recuperación activa post-partido',
     CURRENT_DATE - 3, '11:00', 45, 'recovery',
-    'a1110000-0000-0000-0000-000000000001',
+    NULL,
     'Piscina A Madroa',
     'Regeneración en piscina, movilidad articular y estiramientos asistidos.'
   ),
   (
-    's1110000-0000-0000-0000-000000000004',
+    'e1110000-0000-0000-0000-000000000004',
     'c3740000-0000-0000-0000-000000000001',
     'Resistencia aeróbica MD-3',
     CURRENT_DATE - 2, '10:00', 75, 'conditioning',
-    'a1110000-0000-0000-0000-000000000001',
+    NULL,
     'Campo de Balaídos',
     'Bloque aeróbico: rondos de posesión y carrera continua por encima del umbral aeróbico.'
   ),
   (
-    's1110000-0000-0000-0000-000000000005',
+    'e1110000-0000-0000-0000-000000000005',
     'c3740000-0000-0000-0000-000000000001',
     'Partido de entrenamiento 11v11',
     CURRENT_DATE - 1, '11:00', 120, 'match',
-    'a1110000-0000-0000-0000-000000000001',
+    NULL,
     'Campo de Balaídos',
     'Amistoso interno para evaluar automatismos ofensivos y presión en bloque alto.'
   )
@@ -135,8 +117,8 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO injuries (id, player_id, club_id, injury_type, body_area, severity, status, start_date, expected_return, returned_date, treatment, notes)
 VALUES
   (
-    'i1110000-0000-0000-0000-000000000001',
-    'p1110000-0000-0000-0000-000000000007',
+    'd1110000-0000-0000-0000-000000000001',
+    'b1110000-0000-0000-0000-000000000007',
     'c3740000-0000-0000-0000-000000000001',
     'muscle', 'Isquiotibial derecho', 'severe', 'active',
     CURRENT_DATE - 14, CURRENT_DATE + 10, NULL,
@@ -144,8 +126,8 @@ VALUES
     'Rotura de grado II confirmada por ecografía. Sin participación en sesiones grupales.'
   ),
   (
-    'i1110000-0000-0000-0000-000000000002',
-    'p1110000-0000-0000-0000-000000000010',
+    'd1110000-0000-0000-0000-000000000002',
+    'b1110000-0000-0000-0000-000000000010',
     'c3740000-0000-0000-0000-000000000001',
     'joint', 'Tobillo izquierdo', 'moderate', 'active',
     CURRENT_DATE - 7, CURRENT_DATE + 5, NULL,
@@ -153,8 +135,8 @@ VALUES
     'Esguince grado I tras contacto en entrenamiento. Carga progresiva en piscina.'
   ),
   (
-    'i1110000-0000-0000-0000-000000000003',
-    'p1110000-0000-0000-0000-000000000003',
+    'd1110000-0000-0000-0000-000000000003',
+    'b1110000-0000-0000-0000-000000000003',
     'c3740000-0000-0000-0000-000000000001',
     'muscle', 'Cuádriceps izquierdo', 'minor', 'recovery',
     CURRENT_DATE - 10, CURRENT_DATE + 2, NULL,
@@ -162,8 +144,8 @@ VALUES
     'Sobrecarga muscular sin rotura confirmada. Entrenamiento adaptado sin carrera.'
   ),
   (
-    'i1110000-0000-0000-0000-000000000004',
-    'p1110000-0000-0000-0000-000000000009',
+    'd1110000-0000-0000-0000-000000000004',
+    'b1110000-0000-0000-0000-000000000009',
     'c3740000-0000-0000-0000-000000000001',
     'muscle', 'Gemelo derecho', 'minor', 'recovery',
     CURRENT_DATE - 6, CURRENT_DATE + 1, NULL,
@@ -171,8 +153,8 @@ VALUES
     'Distensión de bajo grado. Participa en sesiones modificadas sin sprint.'
   ),
   (
-    'i1110000-0000-0000-0000-000000000005',
-    'p1110000-0000-0000-0000-000000000002',
+    'd1110000-0000-0000-0000-000000000005',
+    'b1110000-0000-0000-0000-000000000002',
     'c3740000-0000-0000-0000-000000000001',
     'bone', 'Quinto metatarsiano derecho', 'moderate', 'cleared',
     CURRENT_DATE - 45, CURRENT_DATE - 5, CURRENT_DATE - 5,
@@ -187,79 +169,185 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO wellness (id, player_id, club_id, sleep_quality, fatigue, soreness, stress, mood, readiness, notes, submitted_at)
 VALUES
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 8, 2, 2, 2, 9, 9, NULL,                                           CURRENT_DATE - 6),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 7, 3, 3, 3, 7, 7, 'Algo de cansancio acumulado de la semana',    CURRENT_DATE - 5),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 9, 1, 1, 1, 10, 10, NULL,                                          CURRENT_DATE - 5),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000006', 'c3740000-0000-0000-0000-000000000001', 6, 5, 4, 4, 6, 6, 'Piernas cargadas tras el bloque de fuerza',    CURRENT_DATE - 4),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000008', 'c3740000-0000-0000-0000-000000000001', 8, 3, 3, 2, 8, 8, NULL,                                           CURRENT_DATE - 4),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 7, 4, 4, 3, 7, 7, NULL,                                           CURRENT_DATE - 3),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 9, 2, 1, 1, 9, 9, NULL,                                           CURRENT_DATE - 2),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 8, 3, 3, 2, 8, 8, NULL,                                           CURRENT_DATE - 2),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000006', 'c3740000-0000-0000-0000-000000000001', 7, 4, 5, 3, 7, 7, 'Sensación de piernas pesadas, algo de agujetas', CURRENT_DATE - 1),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000008', 'c3740000-0000-0000-0000-000000000001', 8, 2, 2, 2, 9, 9, NULL,                                           CURRENT_DATE - 1);
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 8, 2, 2, 2, 9, 9,  NULL,                                              CURRENT_DATE - 6),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 7, 3, 3, 3, 7, 7,  'Algo de cansancio acumulado de la semana',        CURRENT_DATE - 5),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 9, 1, 1, 1, 9, 9, NULL,                                               CURRENT_DATE - 5),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000006', 'c3740000-0000-0000-0000-000000000001', 6, 5, 4, 4, 6, 6,  'Piernas cargadas tras el bloque de fuerza',      CURRENT_DATE - 4),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'c3740000-0000-0000-0000-000000000001', 8, 3, 3, 2, 8, 8,  NULL,                                              CURRENT_DATE - 4),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 7, 4, 4, 3, 7, 7,  NULL,                                              CURRENT_DATE - 3),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 9, 2, 1, 1, 9, 9,  NULL,                                              CURRENT_DATE - 2),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 8, 3, 3, 2, 8, 8,  NULL,                                              CURRENT_DATE - 2),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000006', 'c3740000-0000-0000-0000-000000000001', 7, 4, 5, 3, 7, 7,  'Sensación de piernas pesadas, algo de agujetas', CURRENT_DATE - 1),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'c3740000-0000-0000-0000-000000000001', 8, 2, 2, 2, 9, 9,  NULL,                                              CURRENT_DATE - 1);
 
 -- ─── 7. RPE ──────────────────────────────────────────────────────────────────
 -- 10 entries across all 5 sessions, various players
--- load = rpe * duration (trigger may recompute this in production)
+-- load = rpe * duration (trigger recomputes in production; value provided as fallback)
 
 INSERT INTO rpe (id, player_id, session_id, club_id, rpe, duration, load, notes)
 VALUES
   -- Tactical session (s1) — 2 entries
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000001', 's1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 7, 90,  630,  NULL),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000002', 's1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 6, 90,  540,  NULL),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000001', 'e1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 7, 90,  630,  NULL),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000002', 'e1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001', 6, 90,  540,  NULL),
   -- Gym session (s2) — 2 entries
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000005', 's1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 8, 60,  480,  'Trabajo intenso de fuerza máxima'),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000006', 's1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 7, 60,  420,  NULL),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000005', 'e1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 8, 60,  480,  'Trabajo intenso de fuerza máxima'),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000006', 'e1110000-0000-0000-0000-000000000002', 'c3740000-0000-0000-0000-000000000001', 7, 60,  420,  NULL),
   -- Recovery session (s3) — 2 entries
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000004', 's1110000-0000-0000-0000-000000000003', 'c3740000-0000-0000-0000-000000000001', 3, 45,  135,  NULL),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000008', 's1110000-0000-0000-0000-000000000003', 'c3740000-0000-0000-0000-000000000001', 3, 45,  135,  NULL),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000004', 'e1110000-0000-0000-0000-000000000003', 'c3740000-0000-0000-0000-000000000001', 3, 45,  135,  NULL),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'e1110000-0000-0000-0000-000000000003', 'c3740000-0000-0000-0000-000000000001', 3, 45,  135,  NULL),
   -- Conditioning session (s4) — 2 entries
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000001', 's1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 6, 75,  450,  NULL),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000005', 's1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 7, 75,  525,  NULL),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000001', 'e1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 6, 75,  450,  NULL),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000005', 'e1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 7, 75,  525,  NULL),
   -- Match session (s5) — 2 entries
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000006', 's1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 8, 120, 960,  'Buen ritmo durante todo el partido'),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000008', 's1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 9, 120, 1080, 'Participación completa; presión alta sostenida');
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000006', 'e1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 8, 120, 960,  'Buen ritmo durante todo el partido'),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'e1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 9, 120, 1080, 'Participación completa; presión alta sostenida');
 
 -- ─── 8. GPS REPORTS ──────────────────────────────────────────────────────────
--- 5 entries, all linked to the 11v11 match session (s5)
--- Distances in metres, speeds in km/h, player_load arbitrary units
+-- 8 entries total:
+--   5 in the match session (s5) → populates GPS Analysis Group view and scatter
+--   3 cross-session for Lucas Buydens (highest total_distance in s5, so he is
+--     the "top player" shown in Individual view and Weekly bars)
+--
+-- Sessions s1–s3 are 5–3 days ago (likely previous calendar week).
+-- Sessions s4–s5 are 2–1 days ago (current calendar week).
+-- Weekly bars will therefore show current vs prev week comparison for Lucas.
 
 INSERT INTO gps_reports (id, player_id, session_id, club_id, total_distance, high_speed_distance, sprint_distance, accelerations, decelerations, max_speed, player_load, avg_speed)
 VALUES
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000001', 's1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001',  6820,  380, 145, 28, 31, 24.1,  810, 10.2),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000002', 's1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 10450, 1120, 430, 42, 38, 30.8, 1240, 14.6),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000005', 's1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 11230,  980, 360, 51, 47, 29.3, 1350, 15.2),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000006', 's1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 10870, 1050, 395, 48, 44, 30.2, 1290, 14.9),
-  (gen_random_uuid(), 'p1110000-0000-0000-0000-000000000008', 's1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 11640, 1380, 510, 55, 49, 33.4, 1420, 15.8);
+  -- ── Match session (s5): 5 players ────────────────────────────────────────
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000001', 'e1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001',  6820,  380, 145, 28, 31, 24.1,  810, 10.2),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000002', 'e1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 10450, 1120, 430, 42, 38, 30.8, 1240, 14.6),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000005', 'e1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 11230,  980, 360, 51, 47, 29.3, 1350, 15.2),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000006', 'e1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 10870, 1050, 395, 48, 44, 30.2, 1290, 14.9),
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'e1110000-0000-0000-0000-000000000005', 'c3740000-0000-0000-0000-000000000001', 11640, 1380, 510, 55, 49, 33.4, 1420, 15.8),
+  -- ── Cross-session: Lucas Buydens (p8) ────────────────────────────────────
+  -- Tactical s1 (CURRENT_DATE-5, previous week) — hard training day
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'e1110000-0000-0000-0000-000000000001', 'c3740000-0000-0000-0000-000000000001',  9200,  540, 180, 24, 22, 28.4,  410, 6.8),
+  -- Recovery s3 (CURRENT_DATE-3, previous week) — low-load session
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'e1110000-0000-0000-0000-000000000003', 'c3740000-0000-0000-0000-000000000001',  2800,   40,   0,  5,  5, 14.6,  180, 3.2),
+  -- Conditioning s4 (CURRENT_DATE-2, current week) — high-load MD-3 session
+  (gen_random_uuid(), 'b1110000-0000-0000-0000-000000000008', 'e1110000-0000-0000-0000-000000000004', 'c3740000-0000-0000-0000-000000000001', 11400,  680, 220, 28, 25, 30.1,  520, 8.2);
 
--- ─── 9. EVALUATIONS ──────────────────────────────────────────────────────────
+-- ─── 9. MATCH REPORTS ────────────────────────────────────────────────────────
+-- Linked to match session s5. Covers Match Reports.html hero, scoreline,
+-- scorers, KPIs, shot map, heatmap, match stats, timeline and GPS table.
+--
+-- goals / cards / subs: JSONB arrays sorted by minute
+-- positions: JSONB heatmap blobs (avg_x, avg_y on 0-100 pitch scale, left = our goal)
+-- ratings: JSONB object keyed by player UUID string → numeric 0-10
+
+INSERT INTO match_reports (
+  id, club_id, session_id, match_date, competition, opponent,
+  venue, score_us, score_them, score_ht_us, score_ht_them,
+  formation_us, formation_them,
+  possession_us, shots_on, shots_off, shots_blocked, xg,
+  corners, fouls, offsides, tackles,
+  pass_accuracy_us, pass_accuracy_them,
+  goals, cards, subs, positions, ratings,
+  weather, added_time, coach_notes, source
+)
+VALUES (
+  'fa110000-0000-0000-0000-000000000001',
+  'c3740000-0000-0000-0000-000000000001',
+  'e1110000-0000-0000-0000-000000000005',
+  CURRENT_DATE - 1,
+  'Liga Autonómica Galicia',
+  'Sporting de Gijón B',
+  'home',
+  2, 1,
+  1, 1,
+  '4-3-3',
+  '4-4-2',
+  58, 5, 3, 2, 2.34,
+  6, 11, 2, 18,
+  84, 71,
+  -- goals
+  '[
+    {"minute": 23, "team": "us",   "player_name": "Lucas Buydens",    "player_id": "b1110000-0000-0000-0000-000000000008", "type": "open_play",  "assist_name": "Sergio Carballo", "is_own_goal": false},
+    {"minute": 41, "team": "them", "player_name": "Raúl Coto",        "player_id": null,                                   "type": "set_piece",  "assist_name": null,             "is_own_goal": false},
+    {"minute": 67, "team": "us",   "player_name": "Iker Beltrán",     "player_id": "b1110000-0000-0000-0000-000000000009", "type": "open_play",  "assist_name": "Lucas Buydens",  "is_own_goal": false}
+  ]'::jsonb,
+  -- cards
+  '[
+    {"minute": 55, "team": "us",   "player_name": "Miguel Torres",  "player_id": "b1110000-0000-0000-0000-000000000005", "type": "yellow", "reason": "Falta táctica sobre contraataque"},
+    {"minute": 78, "team": "them", "player_name": "Borja Herrero",  "player_id": null,                                   "type": "yellow", "reason": "Protesta al colegiado"}
+  ]'::jsonb,
+  -- subs
+  '[
+    {"minute": 60, "out_name": "Iker Beltrán",   "out_id": "b1110000-0000-0000-0000-000000000009", "in_name": "Diego Domínguez", "in_id": "b1110000-0000-0000-0000-000000000010", "reason": "Cansancio muscular"},
+    {"minute": 75, "out_name": "Adrián Mosquera", "out_id": "b1110000-0000-0000-0000-000000000002", "in_name": "Hugo Álvarez",    "in_id": "b1110000-0000-0000-0000-000000000003", "reason": "Rotación táctica"}
+  ]'::jsonb,
+  -- positions (avg_x/avg_y: 0=our goal, 100=opponent goal; y: 0=top, 100=bottom)
+  '[
+    {"player_id": "b1110000-0000-0000-0000-000000000001", "name": "Óscar Iglesias",  "avg_x": 8,  "avg_y": 50},
+    {"player_id": "b1110000-0000-0000-0000-000000000002", "name": "Adrián Mosquera", "avg_x": 28, "avg_y": 35},
+    {"player_id": "b1110000-0000-0000-0000-000000000004", "name": "Javier Mínguez",  "avg_x": 30, "avg_y": 65},
+    {"player_id": "b1110000-0000-0000-0000-000000000005", "name": "Miguel Torres",   "avg_x": 44, "avg_y": 50},
+    {"player_id": "b1110000-0000-0000-0000-000000000006", "name": "Sergio Carballo", "avg_x": 58, "avg_y": 42},
+    {"player_id": "b1110000-0000-0000-0000-000000000008", "name": "Lucas Buydens",   "avg_x": 78, "avg_y": 48}
+  ]'::jsonb,
+  -- ratings keyed by player UUID
+  '{
+    "b1110000-0000-0000-0000-000000000001": 7.2,
+    "b1110000-0000-0000-0000-000000000002": 6.8,
+    "b1110000-0000-0000-0000-000000000004": 7.0,
+    "b1110000-0000-0000-0000-000000000005": 6.5,
+    "b1110000-0000-0000-0000-000000000006": 7.8,
+    "b1110000-0000-0000-0000-000000000008": 8.5,
+    "b1110000-0000-0000-0000-000000000009": 7.4
+  }'::jsonb,
+  'Soleado, 18°C, viento moderado',
+  3,
+  'Partido sólido en defensa. Mejorar circulación en zona media y aprovechar las segundas jugadas en área rival.',
+  'manual'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- ─── 10. MATCH SHOTS ──────────────────────────────────────────────────────────
+-- Linked to match report mr1. x_pct/y_pct are 0–100, origin = bottom-left corner.
+-- Covers the shot map and xG sub-header in Match Reports.html.
+
+INSERT INTO match_shots (id, club_id, match_id, player_id, team, minute, outcome, x_pct, y_pct, xg, notes)
+VALUES
+  -- Our shots (us)
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', 'b1110000-0000-0000-0000-000000000008', 'us',   23, 'goal',       82.0, 48.0, 0.48, 'Remate de primera tras pase al hueco de Carballo'),
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', 'b1110000-0000-0000-0000-000000000009', 'us',   67, 'goal',       75.0, 52.0, 0.38, 'Pase al vacío de Buydens, definición cruzada'),
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', 'b1110000-0000-0000-0000-000000000006', 'us',   34, 'on_target',  74.0, 46.0, 0.22, 'Disparo raso al palo largo, bien detenido'),
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', 'b1110000-0000-0000-0000-000000000008', 'us',   58, 'off_target', 80.0, 38.0, 0.09, 'Cabezazo desviado en córner'),
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', 'b1110000-0000-0000-0000-000000000005', 'us',   72, 'blocked',    70.0, 54.0, 0.12, 'Disparo de media distancia bloqueado por defensor'),
+  -- Opponent shots (them)
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', NULL,                                    'them', 41, 'goal',       18.0, 48.0, 0.31, 'Centro al área mal rechazado, remate en boca de gol'),
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', NULL,                                    'them', 55, 'on_target',  22.0, 44.0, 0.18, 'Vaselina lejana bien parada por Iglesias'),
+  (gen_random_uuid(), 'c3740000-0000-0000-0000-000000000001', 'fa110000-0000-0000-0000-000000000001', NULL,                                    'them', 83, 'off_target', 24.0, 52.0, 0.06, 'Disparo precipitado en contraataque');
+
+-- ─── 11. EVALUATIONS ──────────────────────────────────────────────────────────
 -- CMJ (cm), sprint 30m (s), VO2max (ml/kg/min)
 
 INSERT INTO evaluations (id, player_id, club_id, evaluation_type, test_date, value, unit, notes)
 VALUES
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000005',
+    'b1110000-0000-0000-0000-000000000005',
     'c3740000-0000-0000-0000-000000000001',
     'CMJ', CURRENT_DATE - 3, 42.8, 'cm',
     'Plataforma de fuerza Kistler. Mejor de 3 intentos con 3 min de recuperación.'
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000008',
+    'b1110000-0000-0000-0000-000000000008',
     'c3740000-0000-0000-0000-000000000001',
     'sprint', CURRENT_DATE - 3, 4.18, 's',
     'Sprint 30m con fotocélulas Smartspeed. Mejor marca de 3 intentos.'
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000006',
+    'b1110000-0000-0000-0000-000000000006',
     'c3740000-0000-0000-0000-000000000001',
     'vo2', CURRENT_DATE - 10, 59.2, 'ml/kg/min',
     'Test Vam-Eval en campo. Estimación indirecta a partir de velocidad aeróbica máxima.'
   );
 
--- ─── 10. NUTRITION ───────────────────────────────────────────────────────────
+-- ─── 12. NUTRITION ───────────────────────────────────────────────────────────
 -- 7 entries, 5 players, last 4 days
 -- calories kcal · protein/carbs/fats in grams · hydration in litres
 
@@ -267,49 +355,49 @@ INSERT INTO nutrition (id, player_id, club_id, log_date, calories, protein, carb
 VALUES
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000001',
+    'b1110000-0000-0000-0000-000000000001',
     'c3740000-0000-0000-0000-000000000001',
     CURRENT_DATE - 4, 2850, 185, 310, 78, 3.2,
     'Carga de hidratos previa a la sesión táctica del día siguiente.'
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000002',
+    'b1110000-0000-0000-0000-000000000002',
     'c3740000-0000-0000-0000-000000000001',
     CURRENT_DATE - 4, 3100, 200, 340, 85, 3.5,
     NULL
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000005',
+    'b1110000-0000-0000-0000-000000000005',
     'c3740000-0000-0000-0000-000000000001',
     CURRENT_DATE - 3, 3200, 210, 360, 88, 3.8,
     'Post sesión de fuerza. Énfasis en proteínas y ventana anabólica de 30 min.'
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000006',
+    'b1110000-0000-0000-0000-000000000006',
     'c3740000-0000-0000-0000-000000000001',
     CURRENT_DATE - 3, 2950, 190, 320, 80, 3.3,
     NULL
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000008',
+    'b1110000-0000-0000-0000-000000000008',
     'c3740000-0000-0000-0000-000000000001',
     CURRENT_DATE - 2, 3350, 220, 375, 90, 4.0,
     'Carga máxima 24h antes del partido de entrenamiento.'
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000004',
+    'b1110000-0000-0000-0000-000000000004',
     'c3740000-0000-0000-0000-000000000001',
     CURRENT_DATE - 2, 2700, 175, 295, 72, 3.0,
     NULL
   ),
   (
     gen_random_uuid(),
-    'p1110000-0000-0000-0000-000000000001',
+    'b1110000-0000-0000-0000-000000000001',
     'c3740000-0000-0000-0000-000000000001',
     CURRENT_DATE - 1, 2600, 170, 275, 68, 2.8,
     'Día de recuperación. Ingesta reducida; sin entrenamiento de fuerza.'

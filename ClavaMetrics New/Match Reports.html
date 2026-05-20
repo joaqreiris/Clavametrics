@@ -461,15 +461,15 @@
       <!-- Hero scoreboard -->
       <header class="mr-hero">
         <div class="mr-hero-top">
-          <span class="league">Liga Profesional · Round 13</span>
+          <span id="mrLeague" class="league">—</span>
           <span class="sep">·</span>
-          <span class="date" id="mrDate">Wed 14 May 2026</span>
+          <span class="date" id="mrDate">—</span>
           <span class="sep">·</span>
-          <span class="venue" id="mrVenue">Estadio Clava · home · 27,460</span>
+          <span class="venue" id="mrVenue">—</span>
           <div class="right">
-            <span class="pill"><i class="ti ti-thermometer" style="font-size:13px"></i>16°C · clear</span>
-            <span class="pill"><i class="ti ti-clock-play" style="font-size:13px"></i>21:00 KO</span>
-            <span class="pill"><i class="ti ti-circle-check" style="font-size:13px;color:#86EFAC"></i>Final · Win</span>
+            <span id="mrWeatherPill" class="pill"><i class="ti ti-thermometer" style="font-size:13px"></i>—</span>
+            <span id="mrKoPill" class="pill"><i class="ti ti-clock-play" style="font-size:13px"></i>—</span>
+            <span id="mrResultPill" class="pill"><i class="ti ti-circle-check" style="font-size:13px"></i>—</span>
             <button id="impOpen" style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 12px; border-radius:7px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.12); color:#fff; font:600 12px/1 var(--cm-font-sans); cursor:pointer">
               <i class="ti ti-cloud-download" style="font-size:14px"></i>Import data
             </button>
@@ -478,30 +478,30 @@
 
         <div class="mr-scoreline">
           <div class="mr-team is-home">
-            <div class="crest is-home">CF</div>
+            <div id="mrHomeCrest" class="crest is-home">—</div>
             <div>
-              <h2>Clava FC</h2>
-              <div class="sub">Home · 4-3-3 · 67% possession</div>
+              <h2 id="mrHomeName">—</h2>
+              <div id="mrHomeSub" class="sub">Home</div>
             </div>
           </div>
           <div style="text-align:center">
             <div class="mr-score">
-              <span>2</span>
+              <span id="mrScoreUs">—</span>
               <span class="dash"></span>
-              <span>1</span>
+              <span id="mrScoreThem">—</span>
             </div>
-            <div class="mr-score-meta"><strong>FT</strong> · 90+4′</div>
+            <div id="mrScoreMeta" class="mr-score-meta"><strong>FT</strong></div>
           </div>
           <div class="mr-team is-away">
-            <div class="crest" style="background:#3B82F6">VL</div>
+            <div id="mrAwayCrest" class="crest" style="background:#3B82F6">—</div>
             <div>
-              <h2>Vélez Sarsfield</h2>
-              <div class="sub">Away · 4-2-3-1 · 33%</div>
+              <h2 id="mrAwayName">—</h2>
+              <div id="mrAwaySub" class="sub">Away</div>
             </div>
           </div>
         </div>
 
-        <div class="mr-scorers">
+        <div id="mrScorers" class="mr-scorers">
           <div>
             <div class="mr-scorer"><i class="ti ti-ball-football"></i><strong>S. Rivas</strong><span class="min">23′</span></div>
             <div class="mr-scorer"><i class="ti ti-ball-football"></i><strong>F. Domínguez</strong><span class="min">81′ (pen)</span></div>
@@ -516,7 +516,8 @@
       </header>
 
       <!-- KPI strip -->
-      <div class="mr-kpis">
+      <div id="mrKpis" class="mr-kpis">
+        <!-- TODO: no table — possession % (home vs away) -->
         <div class="mr-kpi">
           <div class="mr-kpi-l"><i class="ti ti-circle-percentage"></i>Possession</div>
           <div class="mr-kpi-cmp">
@@ -526,6 +527,7 @@
           </div>
           <div class="mr-kpi-bar"><span class="us" style="width:67%"></span><span class="them" style="width:33%"></span></div>
         </div>
+        <!-- TODO: no table — total shots and shots on target (home vs away) -->
         <div class="mr-kpi">
           <div class="mr-kpi-l"><i class="ti ti-target"></i>Shots (on)</div>
           <div class="mr-kpi-cmp">
@@ -535,6 +537,7 @@
           </div>
           <div class="mr-kpi-bar"><span class="us" style="width:67%"></span><span class="them" style="width:33%"></span></div>
         </div>
+        <!-- TODO: no table — expected goals (xG) -->
         <div class="mr-kpi">
           <div class="mr-kpi-l"><i class="ti ti-chart-bubble"></i>xG</div>
           <div class="mr-kpi-cmp">
@@ -544,6 +547,7 @@
           </div>
           <div class="mr-kpi-bar"><span class="us" style="width:75%"></span><span class="them" style="width:25%"></span></div>
         </div>
+        <!-- TODO: gps_reports.total_distance + sprint_distance could aggregate this, but not yet fetched for KPI strip -->
         <div class="mr-kpi">
           <div class="mr-kpi-l"><i class="ti ti-run"></i>Distance · sprints</div>
           <div class="mr-kpi-cmp">
@@ -551,6 +555,7 @@
           </div>
           <div class="mr-kpi-bar"><span class="us" style="width:100%"></span></div>
         </div>
+        <!-- TODO: no table — pass accuracy % (home vs away) -->
         <div class="mr-kpi">
           <div class="mr-kpi-l"><i class="ti ti-arrows-shuffle"></i>Pass acc.</div>
           <div class="mr-kpi-cmp">
@@ -609,7 +614,7 @@
           <div class="mr-card">
             <div class="mr-card-h">
               <h3>Shot map</h3>
-              <span class="sub">24 shots · xG 3.12</span>
+                  <span id="mrShotSub" class="sub">24 shots · xG 3.12</span>
               <div class="right">
                 <div style="display:inline-flex;padding:3px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;gap:2px">
                   <button class="cm-btn is-sm" style="height:24px;padding:0 8px;border:0;background:transparent;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1);background:var(--cm-surface)">Both</button>
@@ -618,7 +623,7 @@
                 </div>
               </div>
             </div>
-            <div class="mr-shotmap">
+            <div id="mrShotmap" class="mr-shotmap">
               <!-- Our shots (right half attack) -->
               <span class="shot goal"      style="left:80%; top:48%" title="Rivas 23' goal"></span>
               <span class="shot goal"      style="left:73%; top:55%" title="Domínguez 81' pen"></span>
@@ -664,7 +669,7 @@
                 <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
               </div>
             </div>
-            <div class="mr-heatmap">
+            <div id="mrHeatmap" class="mr-heatmap">
               <div class="blob" style="left:36%; top:50%; width:140px; height:140px; background:rgba(74,222,128,0.7)"></div>
               <div class="blob" style="left:48%; top:35%; width:170px; height:170px; background:rgba(74,222,128,0.6)"></div>
               <div class="blob" style="left:55%; top:60%; width:180px; height:180px; background:rgba(74,222,128,0.65)"></div>
@@ -682,7 +687,7 @@
               <h3>Match stats</h3>
               <span class="sub">us · them</span>
             </div>
-            <div class="mr-cmp">
+            <div id="mrMatchStats" class="mr-cmp">
               <div class="mr-cmp-row">
                 <span class="mr-cmp-l">18</span>
                 <div class="mr-cmp-mid">
@@ -733,13 +738,13 @@
       <div class="mr-card" style="margin-top:14px">
         <div class="mr-card-h">
           <h3>Match timeline</h3>
-          <span class="sub">90+4′ · 6 events</span>
+          <span id="mrTlSub" class="sub">—</span>
           <div class="right">
             <button class="cm-btn is-outline is-sm"><i class="ti ti-video" style="font-size:14px"></i>Open in video room</button>
           </div>
         </div>
         <div class="mr-timeline">
-          <div class="tl-track">
+          <div id="mrTlTrack" class="tl-track">
             <span class="tl-half-label l">1st half</span>
             <span class="tl-half-label m">HT</span>
             <span class="tl-half-label r">2nd half</span>
@@ -952,65 +957,360 @@
 
   async function boot() {
     if (!await window.requireAuth()) return;
-    const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+    const [, club] = await Promise.all([window.getProfile(), window.getClub()]);
     if (club) window.applyClubTheme();
     const clubId = await window.getClubId();
     if (!clubId) return;
+    const clubName = club?.name || 'Our Team';
 
-    // Load most recent match session
-    const { data: matches } = await window.sb.from('training_sessions')
-      .select('id, title, session_date, duration, notes')
+    const { data: sessions } = await window.sb.from('training_sessions')
+      .select('id, title, session_date, session_time, duration')
       .eq('club_id', clubId)
-      .eq('session_type', 'Match')
+      .eq('session_type', 'match')
       .order('session_date', { ascending: false })
       .limit(1);
 
-    const match = matches?.[0];
-    if (match) {
-      const dt = new Date(match.session_date);
-      const dayStr = `${DAYS_LONG[dt.getDay()].slice(0,3)} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
-      document.getElementById('mrDate').textContent = dayStr;
-      if (match.title) document.getElementById('mrVenue').textContent = match.title;
-      await loadGPS(match.id, clubId);
-    } else {
+    const session = sessions?.[0];
+    if (!session) {
       document.getElementById('mrPlayerBody').innerHTML =
         '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">No match sessions found</td></tr>';
+      return;
+    }
+
+    const dt = new Date(session.session_date);
+    document.getElementById('mrDate').textContent =
+      `${DAYS_LONG[dt.getDay()].slice(0,3)} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
+
+    const [{ data: reports }, { data: gpsData }] = await Promise.all([
+      window.sb.from('match_reports')
+        .select('*')
+        .eq('club_id', clubId)
+        .eq('session_id', session.id)
+        .limit(1),
+      window.sb.from('gps_reports')
+        .select('player_id, total_distance, sprint_distance, max_speed, player_load, players(first_name, last_name, position)')
+        .eq('session_id', session.id)
+        .eq('club_id', clubId)
+        .order('total_distance', { ascending: false })
+    ]);
+
+    const report = reports?.[0] ?? null;
+    const gpsRows = gpsData || [];
+
+    populateHero(report, session, clubName);
+    populateKPIs(report, gpsRows);
+    populateMatchStats(report, gpsRows);
+    populateTimeline(report);
+    populateHeatmap(report);
+    renderGPS(gpsRows, report);
+
+    if (report) await loadShots(report.id, clubId);
+  }
+
+  function populateHero(report, session, clubName) {
+    if (report?.competition) document.getElementById('mrLeague').textContent = report.competition;
+    if (session?.title)      document.getElementById('mrVenue').textContent = session.title;
+
+    if (report?.weather) {
+      document.getElementById('mrWeatherPill').innerHTML =
+        `<i class="ti ti-thermometer" style="font-size:13px"></i>${report.weather}`;
+    }
+    if (session?.session_time) {
+      document.getElementById('mrKoPill').innerHTML =
+        `<i class="ti ti-clock-play" style="font-size:13px"></i>${session.session_time.slice(0,5)} KO`;
+    }
+
+    const us = report?.score_us ?? null, them = report?.score_them ?? null;
+    if (us !== null && them !== null) {
+      const win = us > them, loss = us < them;
+      const label = win ? 'Final · Win' : loss ? 'Final · Loss' : 'Final · Draw';
+      const iconCls = win ? 'ti-circle-check' : loss ? 'ti-circle-x' : 'ti-circle';
+      const iconColor = win ? 'color:#86EFAC' : loss ? 'color:#FCA5A5' : '';
+      document.getElementById('mrResultPill').innerHTML =
+        `<i class="ti ${iconCls}" style="font-size:13px;${iconColor}"></i>${label}`;
+    }
+
+    const homeInit = clubName.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('mrHomeCrest').textContent = homeInit;
+    document.getElementById('mrHomeName').textContent = clubName;
+    const venueLbl = report?.venue
+      ? report.venue.charAt(0).toUpperCase() + report.venue.slice(1)
+      : 'Home';
+    const homeForm = report?.formation_us ? ` · ${report.formation_us}` : '';
+    const homePoss = report?.possession_us != null ? ` · ${report.possession_us}% possession` : '';
+    document.getElementById('mrHomeSub').textContent = `${venueLbl}${homeForm}${homePoss}`;
+
+    if (report?.opponent) {
+      const awayInit = report.opponent.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+      document.getElementById('mrAwayCrest').textContent = awayInit;
+      document.getElementById('mrAwayName').textContent = report.opponent;
+      const awayForm = report.formation_them ? ` · ${report.formation_them}` : '';
+      const awayPoss = report.possession_us != null ? ` · ${100 - report.possession_us}%` : '';
+      document.getElementById('mrAwaySub').textContent = `Away${awayForm}${awayPoss}`;
+    }
+
+    document.getElementById('mrScoreUs').textContent   = us ?? '—';
+    document.getElementById('mrScoreThem').textContent = them ?? '—';
+    const addedStr = report?.added_time ? `+${report.added_time}` : '';
+    document.getElementById('mrScoreMeta').innerHTML = `<strong>FT</strong> · 90${addedStr}′`;
+
+    const goals = report?.goals || [];
+    const cards = report?.cards || [];
+    const usItems = [
+      ...goals.filter(g => g.team === 'us' && !g.is_own_goal).map(g => ({
+        name: g.player_name, min: g.minute, kind: 'goal', subtype: g.type
+      })),
+      ...cards.filter(c => c.team === 'us').map(c => ({
+        name: c.player_name, min: c.minute, kind: 'card', subtype: c.type
+      }))
+    ].sort((a, b) => (a.min||0) - (b.min||0));
+
+    const themItems = [
+      ...goals.filter(g => g.team === 'them' || g.is_own_goal).map(g => ({
+        name: g.player_name, min: g.minute, kind: 'goal', subtype: g.type
+      })),
+      ...cards.filter(c => c.team === 'them').map(c => ({
+        name: c.player_name, min: c.minute, kind: 'card', subtype: c.type
+      }))
+    ].sort((a, b) => (a.min||0) - (b.min||0));
+
+    const scorersEl = document.getElementById('mrScorers');
+    if (usItems.length || themItems.length) {
+      const renderItem = (e, reverse) => {
+        const icon = e.kind === 'goal'
+          ? '<i class="ti ti-ball-football"></i>'
+          : `<i class="ti ti-square-rotated-filled ti ${e.subtype === 'red' ? 'red' : 'yellow'}"></i>`;
+        const suffix = e.subtype === 'penalty' ? ' (pen)' : '';
+        return reverse
+          ? `<div class="mr-scorer"><strong>${e.name||'—'}</strong>${icon}<span class="min">${e.min??'?'}′${suffix}</span></div>`
+          : `<div class="mr-scorer">${icon}<strong>${e.name||'—'}</strong><span class="min">${e.min??'?'}′${suffix}</span></div>`;
+      };
+      scorersEl.innerHTML =
+        `<div>${usItems.map(e => renderItem(e, false)).join('')}</div>` +
+        `<div>${themItems.map(e => renderItem(e, true)).join('')}</div>`;
+    } else {
+      scorersEl.innerHTML = '';
     }
   }
 
-  async function loadGPS(sessionId, clubId) {
-    const { data } = await window.sb.from('gps_reports')
-      .select('player_id, total_distance, sprint_distance, max_speed, player_load, players(first_name, last_name, position)')
-      .eq('session_id', sessionId)
-      .eq('club_id', clubId)
-      .order('total_distance', { ascending: false });
+  function populateKPIs(report, gpsRows) {
+    const totalDist   = gpsRows.reduce((s, r) => s + (r.total_distance  || 0), 0);
+    const totalSprint = gpsRows.reduce((s, r) => s + (r.sprint_distance || 0), 0);
+    const distKm   = totalDist   > 0 ? +(totalDist   / 1000).toFixed(0) : null;
+    const sprintM  = totalSprint > 0 ? Math.round(totalSprint) : null;
 
-    const rows = data || [];
+    const poss        = report?.possession_us     ?? null;
+    const shotsOn     = report?.shots_on          ?? null;
+    const shotsOff    = report?.shots_off         ?? null;
+    const shotsBlock  = report?.shots_blocked     ?? null;
+    const shotsTotal  = shotsOn != null ? (shotsOn + (shotsOff||0) + (shotsBlock||0)) : null;
+    const xg          = report?.xg                ?? null;
+    const passUs      = report?.pass_accuracy_us  ?? null;
+    const passThem    = report?.pass_accuracy_them ?? null;
+
+    document.getElementById('mrKpis').innerHTML = `
+      <div class="mr-kpi">
+        <div class="mr-kpi-l"><i class="ti ti-circle-percentage"></i>Possession</div>
+        <div class="mr-kpi-cmp">
+          <span class="mr-kpi-us">${poss ?? '—'}${poss != null ? '<sub>%</sub>' : ''}</span>
+          ${poss != null ? `<span class="mr-kpi-vs">vs</span><span class="mr-kpi-them">${100 - poss}</span>` : ''}
+        </div>
+        <div class="mr-kpi-bar">${poss != null ? `<span class="us" style="width:${poss}%"></span><span class="them" style="width:${100-poss}%"></span>` : ''}</div>
+      </div>
+      <div class="mr-kpi">
+        <div class="mr-kpi-l"><i class="ti ti-target"></i>Shots (on)</div>
+        <div class="mr-kpi-cmp">
+          <span class="mr-kpi-us">${shotsTotal ?? '—'}${shotsOn != null ? ` <sub>· ${shotsOn}</sub>` : ''}</span>
+        </div>
+        <div class="mr-kpi-bar"><span class="us" style="width:100%"></span></div>
+      </div>
+      <div class="mr-kpi">
+        <div class="mr-kpi-l"><i class="ti ti-chart-bubble"></i>xG</div>
+        <div class="mr-kpi-cmp">
+          <span class="mr-kpi-us">${xg ?? '—'}</span>
+        </div>
+        <div class="mr-kpi-bar"><span class="us" style="width:${xg ? Math.min(100, xg * 30) : 0}%"></span></div>
+      </div>
+      <div class="mr-kpi">
+        <div class="mr-kpi-l"><i class="ti ti-run"></i>Distance · sprints</div>
+        <div class="mr-kpi-cmp">
+          <span class="mr-kpi-us">${distKm ?? '—'} <sub>km · ${sprintM ?? '?'}</sub></span>
+        </div>
+        <div class="mr-kpi-bar"><span class="us" style="width:100%"></span></div>
+      </div>
+      <div class="mr-kpi">
+        <div class="mr-kpi-l"><i class="ti ti-arrows-shuffle"></i>Pass acc.</div>
+        <div class="mr-kpi-cmp">
+          <span class="mr-kpi-us">${passUs ?? '—'}${passUs != null ? '<sub>%</sub>' : ''}</span>
+          ${passUs != null && passThem != null ? `<span class="mr-kpi-vs">vs</span><span class="mr-kpi-them">${passThem}</span>` : ''}
+        </div>
+        <div class="mr-kpi-bar">
+          ${passUs  != null ? `<span class="us"   style="width:${passUs}%"></span>`   : ''}
+          ${passThem != null ? `<span class="them" style="width:${passThem}%"></span>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function populateMatchStats(report, gpsRows) {
+    const totalDist = gpsRows.reduce((s, r) => s + (r.total_distance || 0), 0);
+    const distKm    = totalDist > 0 ? +(totalDist / 1000).toFixed(0) : null;
+
+    const stats = [
+      { name: 'Corners',       us: report?.corners  ?? null, them: null },
+      { name: 'Fouls',         us: report?.fouls    ?? null, them: null },
+      { name: 'Tackles',       us: report?.tackles  ?? null, them: null },
+      { name: 'Offsides',      us: report?.offsides ?? null, them: null },
+      { name: 'Distance (km)', us: distKm,                  them: null }
+    ];
+
+    document.getElementById('mrMatchStats').innerHTML = stats.map(s => {
+      const max  = Math.max(s.us ?? 0, s.them ?? 0, 1);
+      const usW  = s.us   != null ? Math.round((s.us   / max) * 100) : 0;
+      const themW= s.them != null ? Math.round((s.them / max) * 100) : 0;
+      return `<div class="mr-cmp-row">
+        <span class="mr-cmp-l">${s.us ?? '—'}</span>
+        <div class="mr-cmp-mid">
+          <span class="mr-cmp-name">${s.name}</span>
+          <div class="mr-cmp-bars">
+            <div class="b us"><div class="f" style="width:${usW}%"></div></div>
+            <div class="b them"><div class="f" style="width:${themW}%"></div></div>
+          </div>
+        </div>
+        <span class="mr-cmp-r">${s.them ?? '—'}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function populateTimeline(report) {
+    if (!report) return;
+    const addedTime = report.added_time || 0;
+    const totalMins = 90 + addedTime;
+    const goals = report.goals || [];
+    const cards = report.cards || [];
+    const subs  = report.subs  || [];
+
+    const events = [
+      ...goals.map(g => ({ min: g.minute, team: g.team, kind: 'goal', label: g.player_name || 'Goal', subtype: g.type })),
+      ...cards.map(c => ({ min: c.minute, team: c.team, kind: 'card', label: c.player_name || 'Card', subtype: c.type })),
+      ...subs.map(s  => ({ min: s.minute, team: 'us',   kind: 'sub',  label: s.in_name ? `${s.in_name} on` : 'Sub' }))
+    ].sort((a, b) => (a.min||0) - (b.min||0));
+
+    document.getElementById('mrTlSub').textContent = `90+${addedTime}′ · ${events.length} events`;
+
+    const evtHtml = events.map(e => {
+      const pct = Math.min(98, Math.round(((e.min||0) / totalMins) * 100));
+      let cls = 'tl-evt', icon, minLabel = `${e.min ?? '?'}′`, extraStyle = '';
+      if (e.kind === 'goal') {
+        cls += e.team === 'us' ? ' goal' : ' them';
+        icon = 'ti-ball-football';
+        minLabel += ` · ${e.label?.split(' ')[0] || '?'}`;
+      } else if (e.kind === 'card') {
+        cls += ' yc';
+        icon = 'ti-square';
+        if (e.subtype === 'red') extraStyle = ';background:#DC2626;border-color:#DC2626';
+        minLabel += ` · ${e.subtype === 'red' ? 'RC' : 'YC'}`;
+      } else {
+        cls += ' sub';
+        icon = 'ti-arrows-exchange';
+        minLabel += ' · Sub';
+      }
+      return `<span class="${cls}" style="left:${pct}%${extraStyle}" title="${e.label}"><i class="ti ${icon}"></i></span>
+              <span class="tl-min" style="left:${pct}%">${minLabel}</span>`;
+    }).join('');
+
+    document.getElementById('mrTlTrack').innerHTML = `
+      <span class="tl-half-label l">1st half</span>
+      <span class="tl-half-label m">HT</span>
+      <span class="tl-half-label r">2nd half</span>
+      <div class="tl-half"></div>
+      ${evtHtml}`;
+  }
+
+  function populateHeatmap(report) {
+    const positions = report?.positions;
+    if (!Array.isArray(positions) || !positions.length) return;
+    const palette = [
+      'rgba(74,222,128,0.70)', 'rgba(74,222,128,0.60)', 'rgba(74,222,128,0.65)',
+      'rgba(252,211,77,0.60)', 'rgba(252,211,77,0.55)'
+    ];
+    document.getElementById('mrHeatmap').innerHTML = positions.map((p, i) => {
+      const size  = 100 + (i % 3) * 30;
+      const color = palette[i % palette.length];
+      return `<div class="blob" style="left:${p.avg_x ?? 50}%; top:${p.avg_y ?? 50}%; width:${size}px; height:${size}px; background:${color}"></div>`;
+    }).join('');
+  }
+
+  async function loadShots(matchId, clubId) {
+    const { data } = await window.sb.from('match_shots')
+      .select('team, minute, outcome, x_pct, y_pct, xg, players(first_name, last_name)')
+      .eq('match_id', matchId)
+      .eq('club_id', clubId);
+
+    const shots = data || [];
+    if (!shots.length) return;
+
+    const outcomeMap = { goal: 'goal', on_target: 'on-target', off_target: 'off', blocked: 'block' };
+    const totalXg = shots.filter(s => s.team === 'us').reduce((sum, s) => sum + (s.xg || 0), 0);
+    document.getElementById('mrShotSub').textContent = `${shots.length} shots · xG ${totalXg.toFixed(2)}`;
+
+    document.getElementById('mrShotmap').innerHTML = shots.map(s => {
+      const cls = `shot ${outcomeMap[s.outcome] || 'off'}${s.team === 'them' ? ' them' : ''}`;
+      const p   = s.players;
+      const ttl = [p ? `${p.first_name} ${p.last_name}` : '', s.minute ? `${s.minute}′` : '', s.outcome].filter(Boolean).join(' ');
+      return `<span class="${cls}" style="left:${s.x_pct ?? 50}%; top:${s.y_pct ?? 50}%" title="${ttl}"></span>`;
+    }).join('');
+  }
+
+  function renderGPS(rows, report) {
     const tbody = document.getElementById('mrPlayerBody');
     if (!rows.length) {
       tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">No GPS data for this match</td></tr>';
       return;
     }
+    const goals   = report?.goals   || [];
+    const cards   = report?.cards   || [];
+    const ratings = report?.ratings || {};
+
+    const goalsByPlayer = {};
+    goals.filter(g => g.team === 'us' && !g.is_own_goal).forEach(g => {
+      if (g.player_id) goalsByPlayer[g.player_id] = (goalsByPlayer[g.player_id] || 0) + 1;
+    });
+    const cardsByPlayer = {};
+    cards.filter(c => c.team === 'us').forEach(c => {
+      if (!c.player_id) return;
+      if (!cardsByPlayer[c.player_id]) cardsByPlayer[c.player_id] = { y: 0, r: 0 };
+      if (c.type === 'yellow') cardsByPlayer[c.player_id].y++;
+      else                     cardsByPlayer[c.player_id].r++;
+    });
+
     tbody.innerHTML = rows.map(r => {
-      const p = r.players || {};
+      const p    = r.players || {};
       const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
       const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
-      const pos = p.position || '—';
-      const posCls = POS_MAP[pos] || 'mf';
-      const dist = r.total_distance != null ? +(r.total_distance / 1000).toFixed(1) : '—';
-      const sprint = r.sprint_distance != null ? Math.round(r.sprint_distance) : '—';
-      const spd = r.max_speed != null ? +r.max_speed.toFixed(1) : '—';
+      const pos  = p.position || '—';
+      const pCls = POS_MAP[pos] || 'mf';
+      const dist   = r.total_distance   != null ? +(r.total_distance / 1000).toFixed(1) : '—';
+      const sprint = r.sprint_distance  != null ? Math.round(r.sprint_distance) : '—';
+      const spd    = r.max_speed        != null ? +r.max_speed.toFixed(1) : '—';
+      const rating = ratings[r.player_id] ?? null;
+      const rCls   = rating == null ? 'neu' : rating >= 7.5 ? 'high' : rating >= 6 ? 'med' : 'low';
+      const gc     = goalsByPlayer[r.player_id] || 0;
+      const pc     = cardsByPlayer[r.player_id] || { y: 0, r: 0 };
+      const cardsHtml = [
+        ...Array(pc.y).fill('<div class="c y"></div>'),
+        ...Array(pc.r).fill('<div class="c r"></div>')
+      ].join('');
       return `<tr>
-        <td><div class="mr-player"><div class="mr-av">${init}</div><div><div class="mr-pname">${name}</div><div class="mr-pdorsal">${pos}</div></div></div></td>
-        <td><span class="mr-pos ${posCls}">${pos}</span></td>
-        <td><span class="mr-min">—</span></td>
-        <td><span class="mr-rating neu">—</span></td>
-        <td class="num">—</td>
+        <td><div class="mr-player"><div class="mr-av${rating != null ? ' tinted' : ''}">${init}</div><div><div class="mr-pname">${name}</div><div class="mr-pdorsal">${pos}</div></div></div></td>
+        <td><span class="mr-pos ${pCls}">${pos}</span></td>
+        <td><span class="mr-min">90′</span></td>
+        <td><span class="mr-rating ${rCls}">${rating != null ? rating.toFixed(1) : '—'}</span></td>
+        <td class="num">${gc > 0 ? `<div class="mr-goals"><i class="ti ti-ball-football"></i><span>${gc}</span></div>` : '—'}</td>
         <td class="num">—</td>
         <td class="num">${dist}</td>
         <td class="num">${sprint}</td>
         <td class="num">${spd}</td>
-        <td><div class="mr-cards"></div></td>
+        <td><div class="mr-cards">${cardsHtml}</div></td>
       </tr>`;
     }).join('');
   }

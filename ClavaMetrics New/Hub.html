@@ -447,22 +447,22 @@
       <!-- KPI strip -->
       <div class="kpis">
         <div class="kpi">
-          <div class="kpi-label"><i class="ti ti-users"></i>Squad size</div>
-          <div class="kpi-value" id="kpiSquad">— <sub>players</sub></div>
+          <div class="kpi-label"><i class="ti ti-users"></i>Available</div>
+          <div class="kpi-value" id="kpiSquad">— <sub>available</sub></div>
           <div class="kpi-trend">
             <span id="kpiSquadDelta" class="delta up"></span>
-            <span>vs last microcycle</span>
+            <span id="kpiSquadSub">fit to train</span>
           </div>
           <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,24 12,22 24,18 36,20 48,12 60,14 76,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
         <div class="kpi">
-          <div class="kpi-label"><i class="ti ti-chart-line"></i>Avg ACWR</div>
+          <div class="kpi-label"><i class="ti ti-calendar-week"></i>Sessions this week</div>
           <div class="kpi-value" id="kpiAcwr">—</div>
           <div class="kpi-trend">
-            <span class="delta down"><i class="ti ti-arrow-up-right"></i>+0.06</span>
-            <span style="color:var(--cm-warning)">Approaching sweet-spot</span>
+            <span id="kpiAcwrDelta" class="delta"></span>
+            <span id="kpiAcwrSub"></span>
           </div>
           <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,22 12,18 24,20 36,14 48,16 60,10 76,12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1193,6 +1193,48 @@ function renderTasks(tasks) {
   const date14 = d14.toISOString().split('T')[0];
   const date7  = d7.toISOString().split('T')[0];
 
+  // ── 4 KPI cards ────────────────────────────────────────────────────────────
+  const last24hISO    = new Date(Date.now() - 86400000).toISOString();
+  const _weekStart    = new Date(); _weekStart.setDate(_weekStart.getDate() - (_weekStart.getDay() || 7) + 1);
+  const weekStartDate = _weekStart.toISOString().split('T')[0];
+
+  const [kpiAvailRes, kpiInjRes, kpiWellRes, kpiSessRes] = await Promise.all([
+    window.sb.from('players').select('id', { count: 'exact', head: true })
+      .eq('club_id', clubId).eq('status', 'available'),
+    window.sb.from('injuries').select('id', { count: 'exact', head: true })
+      .eq('club_id', clubId).eq('status', 'active'),
+    window.sb.from('wellness').select('readiness')
+      .eq('club_id', clubId).gte('submitted_at', last24hISO),
+    window.sb.from('training_sessions').select('id', { count: 'exact', head: true })
+      .eq('club_id', clubId).gte('session_date', weekStartDate).lte('session_date', today)
+  ]);
+
+  // KPI 1 – Available players
+  document.getElementById('kpiSquad').innerHTML = !kpiAvailRes.error && kpiAvailRes.count !== null
+    ? `${kpiAvailRes.count} <sub>available</sub>`
+    : `— <sub>available</sub>`;
+
+  // KPI 2 – Active injuries
+  document.getElementById('kpiInjuries').textContent = !kpiInjRes.error && kpiInjRes.count !== null
+    ? kpiInjRes.count
+    : '—';
+
+  // KPI 3 – Wellness avg readiness (last 24 h)
+  if (!kpiWellRes.error && kpiWellRes.data?.length) {
+    const _wAvg = kpiWellRes.data.reduce((s, r) => s + (r.readiness || 0), 0) / kpiWellRes.data.length;
+    document.getElementById('kpiWellness').innerHTML = `${_wAvg.toFixed(1)}<sub>/10</sub>`;
+    document.getElementById('wellnessSub').textContent = `${kpiWellRes.data.length} submitted (24h)`;
+  } else {
+    document.getElementById('kpiWellness').innerHTML = `—<sub>/10</sub>`;
+    document.getElementById('wellnessSub').textContent = kpiWellRes.error ? 'Could not load' : 'No data';
+  }
+
+  // KPI 4 – Sessions this week
+  document.getElementById('kpiAcwr').textContent = !kpiSessRes.error && kpiSessRes.count !== null
+    ? kpiSessRes.count
+    : '—';
+  // ───────────────────────────────────────────────────────────────────────────
+
   const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, sessActRes, injActRes, gpsActRes, mcRes, todaySessionRes] = await Promise.all([
     window.sb.from('players').select('id', { count: 'exact', head: true })
       .eq('club_id', clubId),
@@ -1252,28 +1294,6 @@ function renderTasks(tasks) {
       .maybeSingle()
   ]);
 
-  if (!squadRes.error && squadRes.count !== null) {
-    document.getElementById('kpiSquad').innerHTML = `${squadRes.count} <sub>players</sub>`;
-  } else if (squadRes.error) {
-    document.getElementById('kpiSquad').innerHTML = `— <sub>players</sub>`;
-  }
-
-  if (!injuriesRes.error) {
-    document.getElementById('kpiInjuries').textContent = injuriesRes.data?.length ?? 0;
-  } else {
-    document.getElementById('kpiInjuries').textContent = '—';
-  }
-
-  if (!wellnessRes.error && wellnessRes.data?.length) {
-    const avg = wellnessRes.data.reduce((s, r) => s + (r.readiness || 0), 0) / wellnessRes.data.length;
-    document.getElementById('kpiWellness').innerHTML = `${avg.toFixed(1)}<sub>/10</sub>`;
-    document.getElementById('wellnessSub').textContent =
-      `${wellnessRes.data.length} of ${squadRes.count ?? '?'} submitted`;
-  } else if (wellnessRes.error) {
-    document.getElementById('kpiWellness').innerHTML = `—<sub>/10</sub>`;
-    document.getElementById('wellnessSub').textContent = 'Could not load';
-  }
-
   if (!tasksRes.error) renderTasks(tasksRes.data ?? []);
 
   let acwrWarningCount = 0;
@@ -1291,10 +1311,6 @@ function renderTasks(tasks) {
       .map(({ acute, chronic }) => chronic > 0 ? acute / (chronic / 4) : null)
       .filter(v => v !== null);
     acwrWarningCount = acwrs.filter(v => v > 1.5).length;
-    if (acwrs.length) {
-      const avg = acwrs.reduce((a, b) => a + b, 0) / acwrs.length;
-      document.getElementById('kpiAcwr').textContent = avg.toFixed(2);
-    }
   }
 
   const pillSource = availRes.data?.length

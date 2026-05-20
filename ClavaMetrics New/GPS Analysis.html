@@ -344,7 +344,7 @@
               <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b">
-              <div class="gp-bars">
+              <div class="gp-bars" id="weeklyBars">
                 <div class="gr"><div class="stack"><div class="b prev" style="height:8%"></div><div class="b curr" style="height:0%"></div></div><span class="lbl">Sun 11</span></div>
                 <div class="gr"><div class="stack"><div class="b prev" style="height:18%"></div><div class="b curr" style="height:22%"></div></div><span class="lbl">Mon 12</span></div>
                 <div class="gr"><div class="stack"><div class="b prev" style="height:60%"></div><div class="b curr" style="height:54%"></div></div><span class="lbl">Tue 13</span></div>
@@ -358,7 +358,7 @@
                 <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-accent)"></span>Current MC 14</span>
                 <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-danger)"></span>Match</span>
                 <div style="flex:1"></div>
-                <span>Cumulative <strong style="color:var(--cm-fg)">1,478 AU</strong> · <span style="color:var(--cm-warning)">+6%</span></span>
+                <span id="weeklyLegend">Cumulative <strong style="color:var(--cm-fg)">1,478 AU</strong> · <span style="color:var(--cm-warning)">+6%</span></span>
               </div>
             </div>
           </div>
@@ -432,7 +432,7 @@
                 </g>
                 <line x1="250" y1="30" x2="250" y2="210" stroke="var(--cm-border)" stroke-width="1" stroke-dasharray="3 3"/>
                 <line x1="40" y1="120" x2="460" y2="120" stroke="var(--cm-border)" stroke-width="1" stroke-dasharray="3 3"/>
-                <g>
+                <g id="gpScatterDots">
                   <circle cx="370" cy="42" r="8" fill="var(--cm-accent)"/><text x="370" y="46" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">RV</text>
                   <circle cx="330" cy="76" r="8" fill="var(--cm-accent)"/><text x="330" y="80" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">FD</text>
                   <circle cx="310" cy="90" r="8" fill="var(--cm-accent)"/><text x="310" y="94" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">SR</text>
@@ -614,12 +614,12 @@
   const ok = await window.requireAuth();
   if (!ok) return;
 
-  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const [, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
-
+  if (!clubId) return;
   if (club) window.applyClubTheme();
+  window.gpTitles = { ind: ['· Individual','—'], grp: ['· Group','—'], mind: ['· Match · individual','—'], mgrp: ['· Match · group','—'] };
 
-  // Player count for subtitle
   const { count } = await window.sb.from('players')
     .select('id', { count: 'exact', head: true })
     .eq('club_id', clubId)
@@ -627,81 +627,219 @@
 
   const sub = document.getElementById('gpSub');
 
-  // Latest training session with GPS data
-  const { data: sessions } = await window.sb.from('training_sessions')
-    .select('id,title,session_date,session_type')
-    .eq('club_id', clubId)
-    .order('session_date', { ascending: false })
-    .limit(1);
+  // Fetch latest session (any type) + latest match session in parallel
+  const [{ data: sessions }, { data: matchSessions }] = await Promise.all([
+    window.sb.from('training_sessions')
+      .select('id,title,session_date,session_type')
+      .eq('club_id', clubId)
+      .order('session_date', { ascending: false })
+      .limit(1),
+    window.sb.from('training_sessions')
+      .select('id,title,session_date')
+      .eq('club_id', clubId)
+      .eq('session_type', 'match')
+      .order('session_date', { ascending: false })
+      .limit(1)
+  ]);
 
   const latestSession = sessions?.[0] || null;
+  const matchSession  = matchSessions?.[0] || null;
 
   if (!latestSession) {
     if (sub) sub.textContent = `${count ?? 0} players · no sessions found`;
     return;
   }
 
-  if (sub) sub.textContent = `${count ?? 0} players · ${latestSession.title || latestSession.session_type} · ${latestSession.session_date}`;
+  const dt = new Date(latestSession.session_date);
+  const dateStr = `${dt.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()]}`;
+  if (sub) sub.textContent = `${count ?? 0} players · ${latestSession.title || latestSession.session_type} · ${dateStr}`;
 
-  // Load GPS reports for latest session with player info
-  const { data: reports } = await window.sb.from('gps_reports')
-    .select('player_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
-    .eq('session_id', latestSession.id)
-    .eq('club_id', clubId)
-    .order('total_distance', { ascending: false });
+  // Fetch GPS for latest session + match session in parallel
+  const [{ data: reports }, { data: matchGps }] = await Promise.all([
+    window.sb.from('gps_reports')
+      .select('player_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
+      .eq('session_id', latestSession.id)
+      .eq('club_id', clubId)
+      .order('total_distance', { ascending: false }),
+    matchSession
+      ? window.sb.from('gps_reports')
+          .select('total_distance,high_speed_distance,sprint_distance,player_load')
+          .eq('session_id', matchSession.id)
+          .eq('club_id', clubId)
+      : Promise.resolve({ data: [] })
+  ]);
 
-  if (!reports || !reports.length) return;
+  // ── Individual / Group views ──────────────────────────────────────
+  if (reports?.length) {
 
-  // Update group view Z-score table with real players + raw metrics
-  const tbody = document.querySelector('.gp-zt tbody');
-  if (tbody) {
-    tbody.innerHTML = reports.map(r => {
-      const p = r.players;
-      const fn = p ? (((p.first_name||'')[0]||'') + '. ' + (p.last_name||'')) : '—';
-      const initials = p ? (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() : '?';
-      const num = p?.number ? `#${p.number}` : '';
-      const pos = p?.position || '—';
-      const dist = r.total_distance ? (r.total_distance / 1000).toFixed(1) + ' km' : '—';
-      const hsr  = r.high_speed_distance ? r.high_speed_distance + ' m' : '—';
-      const spr  = r.sprint_distance ? r.sprint_distance + ' m' : '—';
-      const spd  = r.max_speed ? r.max_speed + ' km/h' : '—';
-      const acc  = r.accelerations ?? '—';
-      const load = r.player_load ?? '—';
-      return `<tr>
-        <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
-          <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
-        <td><span class="gp-zc neu">${dist}</span></td>
-        <td><span class="gp-zc neu">${hsr}</span></td>
-        <td><span class="gp-zc neu">${spr}</span></td>
-        <td><span class="gp-zc neu">${spd}</span></td>
-        <td><span class="gp-zc neu">${acc}</span></td>
-        <td><span class="gp-zc neu">${load}</span></td>
-      </tr>`;
+    // Z-score matrix (Group view)
+    const tbody = document.querySelector('.gp-zt tbody');
+    if (tbody) {
+      tbody.innerHTML = reports.map(r => {
+        const p        = r.players;
+        const fn       = p ? (((p.first_name||'')[0]||'') + '. ' + (p.last_name||'')) : '—';
+        const initials = p ? (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() : '?';
+        const num  = p?.number   ? `#${p.number}`                    : '';
+        const pos  = p?.position || '—';
+        const dist = r.total_distance      ? (r.total_distance / 1000).toFixed(1) + ' km' : '—';
+        const hsr  = r.high_speed_distance ? r.high_speed_distance + ' m'   : '—';
+        const spr  = r.sprint_distance     ? r.sprint_distance + ' m'        : '—';
+        const spd  = r.max_speed           ? r.max_speed + ' km/h'           : '—';
+        const acc  = r.accelerations ?? '—';
+        const load = r.player_load   ?? '—';
+        return `<tr>
+          <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
+            <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
+          <td><span class="gp-zc neu">${dist}</span></td>
+          <td><span class="gp-zc neu">${hsr}</span></td>
+          <td><span class="gp-zc neu">${spr}</span></td>
+          <td><span class="gp-zc neu">${spd}</span></td>
+          <td><span class="gp-zc neu">${acc}</span></td>
+          <td><span class="gp-zc neu">${load}</span></td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Individual KPIs (top player by distance)
+    const first = reports[0];
+    if (first) {
+      const p = first.players;
+      const fname = p ? ((p.first_name||'') + ' ' + (p.last_name||'')).trim() : '—';
+      const indSub = document.getElementById('secSub');
+      if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${latestSession.title || latestSession.session_type}`;
+      const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
+      if (kpiVals[0]) kpiVals[0].innerHTML = `${first.total_distance ? (first.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
+      if (kpiVals[1]) kpiVals[1].innerHTML = `${first.high_speed_distance ?? '—'} <sub>m</sub>`;
+      if (kpiVals[2]) kpiVals[2].innerHTML = `${first.sprint_distance ?? '—'}`;
+    }
+
+    // Squad ranking (Group view) — sorted by HSR
+    const rankEl = document.querySelector('.gp-view[data-view="grp"] .gp-rank');
+    if (rankEl) {
+      const sorted = [...reports].sort((a, b) => (b.high_speed_distance || 0) - (a.high_speed_distance || 0));
+      const maxHsr = sorted[0]?.high_speed_distance || 1;
+      rankEl.innerHTML = sorted.slice(0, 10).map((r, i) => {
+        const p     = r.players || {};
+        const label = p.first_name ? `${p.first_name[0]}. ${p.last_name || ''}`.trim() : '—';
+        const num   = p.number ? ` · #${p.number}` : '';
+        const hsr   = r.high_speed_distance ?? 0;
+        const pct   = Math.round((hsr / maxHsr) * 96);
+        const cls   = pct >= 80 ? '' : pct >= 55 ? 'med' : 'low';
+        return `<div class="gp-rank-row">
+          <span class="ax">${i + 1}</span>
+          <span class="gp-rank-bar"><span class="gp-rank-fill ${cls}" style="width:${pct}%">${label}${num}</span></span>
+          <span class="gp-rank-v">${hsr} m</span>
+        </div>`;
+      }).join('');
+    }
+
+    // Scatter — player load (x) vs HSR (y)
+    const scatterDots = document.getElementById('gpScatterDots');
+    if (scatterDots) {
+      const validLoads = reports.map(r => r.player_load).filter(v => v != null && v > 0);
+      const minL = validLoads.length ? Math.max(0, Math.min(...validLoads) - 20) : 200;
+      const maxL = validLoads.length ? Math.max(...validLoads) + 20 : 600;
+      const maxH = Math.max(...reports.map(r => r.high_speed_distance || 0), 1);
+      scatterDots.innerHTML = reports.map(r => {
+        const p    = r.players || {};
+        const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase() || '?';
+        const load = r.player_load ?? (minL + (maxL - minL) / 2);
+        const hsr  = r.high_speed_distance ?? 0;
+        const cx   = Math.round(40 + ((load - minL) / (maxL - minL || 1)) * 420);
+        const cy   = Math.round(210 - (hsr / maxH) * 180);
+        const fill = hsr >= maxH * 0.66 ? 'var(--cm-accent)' : hsr >= maxH * 0.33 ? 'var(--cm-info)' : 'var(--cm-warning)';
+        return `<circle cx="${cx}" cy="${cy}" r="8" fill="${fill}"/><text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">${init}</text>`;
+      }).join('');
+    }
+
+    const p0 = first?.players;
+    const fn0 = p0 ? `${p0.first_name||''} ${p0.last_name||''}`.trim() : '—';
+    window.gpTitles.ind = ['· Individual', `${fn0} · ${p0?.position||'—'} · ${latestSession.title||latestSession.session_type} · ${dateStr}`];
+    window.gpTitles.grp = ['· Group', `Squad-wide · ${reports.length} players · ${latestSession.title||latestSession.session_type} · ${dateStr}`];
+    await populateWeeklyBars(first?.player_id, clubId, latestSession);
+  }
+
+  // ── Match · group view ────────────────────────────────────────────
+  const mgGps = matchGps?.length ? matchGps : [];
+  if (mgGps.length) {
+    const mTotDist = mgGps.reduce((s, r) => s + (r.total_distance      || 0), 0);
+    const mTotHsr  = mgGps.reduce((s, r) => s + (r.high_speed_distance || 0), 0);
+    const mTotSpr  = mgGps.reduce((s, r) => s + (r.sprint_distance     || 0), 0);
+
+    const mgrpKpis = document.querySelectorAll('.gp-view[data-view="mgrp"] .gp-kpi .v');
+    if (mgrpKpis[0]) mgrpKpis[0].innerHTML = `${(mTotDist/1000).toFixed(1)} <sub>km</sub>`;
+    if (mgrpKpis[1]) mgrpKpis[1].innerHTML = `${mTotHsr.toLocaleString()} <sub>m</sub>`;
+    if (mgrpKpis[2]) mgrpKpis[2].innerHTML = `${mTotSpr.toLocaleString()}`;
+
+    // Us vs opponent — only our side has GPS data
+    const usVsEl = document.querySelector('.gp-view[data-view="mgrp"] .gp-rank');
+    if (usVsEl) {
+      const teamName = club?.name?.split(' ')[0] || 'Us';
+      const distKm   = (mTotDist / 1000).toFixed(0);
+      usVsEl.innerHTML = `
+        <div class="gp-rank-row"><span class="ax">D</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:90%">${teamName} · ${distKm} km</span></span><span class="gp-rank-v">—</span></div>
+        <div class="gp-rank-row"><span class="ax">H</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:90%">${teamName} · ${mTotHsr} m</span></span><span class="gp-rank-v">—</span></div>
+        <div class="gp-rank-row"><span class="ax">S</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:90%">${teamName} · ${mTotSpr} m</span></span><span class="gp-rank-v">—</span></div>`;
+    }
+  }
+
+  if (matchSession) {
+    const [my, mm, md] = matchSession.session_date.split('-').map(Number);
+    const mDateStr = `${md} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mm-1]}`;
+    window.gpTitles.mgrp = ['· Match · group', `Team KPIs · ${matchSession.title||'Match'} · ${mDateStr}`];
+  }
+
+  async function populateWeeklyBars(playerId, clubId, latestSession) {
+    const barsEl = document.getElementById('weeklyBars');
+    if (!barsEl || !playerId) return;
+    function parseLD(s) { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+    function toISO(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+    const sd = parseLD(latestSession.session_date);
+    const dow = sd.getDay();
+    const dfm = dow===0?6:dow-1;
+    const ws = new Date(sd); ws.setDate(sd.getDate()-dfm);
+    const we = new Date(ws); we.setDate(ws.getDate()+6);
+    const ps = new Date(ws); ps.setDate(ws.getDate()-7);
+    const pe = new Date(ws); pe.setDate(ws.getDate()-1);
+    const [{ data: cS }, { data: pS }] = await Promise.all([
+      window.sb.from('training_sessions').select('id,session_date,session_type').eq('club_id',clubId).gte('session_date',toISO(ws)).lte('session_date',toISO(we)),
+      window.sb.from('training_sessions').select('id,session_date,session_type').eq('club_id',clubId).gte('session_date',toISO(ps)).lte('session_date',toISO(pe))
+    ]);
+    const allIds = [...(cS||[]),...(pS||[])].map(s=>s.id);
+    if (!allIds.length) return;
+    const { data: gps } = await window.sb.from('gps_reports').select('session_id,player_load').eq('player_id',playerId).in('session_id',allIds);
+    const gmap = {};
+    (gps||[]).forEach(g=>{ gmap[g.session_id]=(gmap[g.session_id]||0)+(g.player_load||0); });
+    function bld(sessions) {
+      const m={};
+      (sessions||[]).forEach(s=>{
+        const d=parseLD(s.session_date), di=d.getDay()===0?6:d.getDay()-1;
+        if(!m[di]) m[di]={load:0,type:s.session_type};
+        m[di].load+=gmap[s.id]||0;
+        if(s.session_type==='match') m[di].type='match';
+      });
+      return m;
+    }
+    const cm=bld(cS), pm=bld(pS);
+    const maxL=Math.max(...[...Object.values(cm),...Object.values(pm)].map(v=>v.load),1);
+    const cTot=Object.values(cm).reduce((s,v)=>s+v.load,0);
+    const pTot=Object.values(pm).reduce((s,v)=>s+v.load,0);
+    const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    barsEl.innerHTML=DAYS.map((d,i)=>{
+      const c=cm[i],p=pm[i];
+      const ch=c?Math.max(4,Math.round((c.load/maxL)*95)):0;
+      const ph=p?Math.max(4,Math.round((p.load/maxL)*95)):0;
+      const dt=new Date(ws); dt.setDate(ws.getDate()+i);
+      return `<div class="gr"><div class="stack"><div class="b prev" style="height:${ph}%"></div><div class="b ${c?.type==='match'?'mt':'curr'}" style="height:${ch}%"></div></div><span class="lbl">${d} ${dt.getDate()}</span></div>`;
     }).join('');
+    const leg=document.getElementById('weeklyLegend');
+    if(leg){
+      const dp=pTot>0?Math.round((cTot/pTot-1)*100):null;
+      const sgn=dp!==null?(dp>0?`+${dp}%`:`${dp}%`):'—';
+      const col=dp>0?'var(--cm-warning)':dp<0?'var(--cm-success)':'var(--cm-fg-muted)';
+      leg.innerHTML=`Cumulative <strong style="color:var(--cm-fg)">${Math.round(cTot)} AU</strong> · <span style="color:${col}">${sgn}</span>`;
+    }
   }
-
-  // Update individual view KPIs with first player's data
-  const first = reports[0];
-  if (first) {
-    const p = first.players;
-    const fname = p ? ((p.first_name||'') + ' ' + (p.last_name||'')).trim() : '—';
-    const indSub = document.getElementById('secSub');
-    if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${latestSession.title || latestSession.session_type}`;
-
-    const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
-    if (kpiVals[0]) kpiVals[0].innerHTML = `${first.total_distance ? (first.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
-    if (kpiVals[1]) kpiVals[1].innerHTML = `${first.high_speed_distance ?? '—'} <sub>m</sub>`;
-    if (kpiVals[2]) kpiVals[2].innerHTML = `${first.sprint_distance ?? '—'}`;
-  }
-
-  // Group view totals
-  const totDist = reports.reduce((s, r) => s + (r.total_distance || 0), 0);
-  const totHsr  = reports.reduce((s, r) => s + (r.high_speed_distance || 0), 0);
-  const totSpr  = reports.reduce((s, r) => s + (r.sprint_distance || 0), 0);
-  const grpKpis = document.querySelectorAll('.gp-view[data-view="grp"] .gp-kpi .v');
-  if (grpKpis[0]) grpKpis[0].innerHTML = `${(totDist/1000).toFixed(1)} <sub>km</sub>`;
-  if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
-  if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
 })();
 </script>
 
@@ -714,20 +852,16 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-  const titles = {
-    ind: ['· Individual', 'F. Domínguez · #10 · MF · vs role baseline'],
-    grp: ['· Group', 'Squad-wide · 8 starters · vs role baselines'],
-    mind: ['· Match · individual', 'F. Domínguez · 90′ · vs Vélez · 14 May'],
-    mgrp: ['· Match · group', 'Clava FC vs Vélez · team KPIs'],
-  };
+  window.gpTitles = window.gpTitles || { ind: ['· Individual','—'], grp: ['· Group','—'], mind: ['· Match · individual','—'], mgrp: ['· Match · group','—'] };
   document.getElementById('sections').addEventListener('click', (e) => {
     const b = e.target.closest('.gp-sec'); if (!b) return;
     document.querySelectorAll('#sections .gp-sec').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
     const v = b.dataset.view;
     document.querySelectorAll('.gp-view').forEach(x => x.classList.toggle('is-on', x.dataset.view === v));
-    document.getElementById('secTitle').textContent = titles[v][0];
-    document.getElementById('secSub').textContent = titles[v][1];
+    const t = window.gpTitles[v] || ['—', '—'];
+    document.getElementById('secTitle').textContent = t[0];
+    document.getElementById('secSub').textContent = t[1];
   });
   const editBtn = document.getElementById('editToggle');
   editBtn.addEventListener('click', () => {
