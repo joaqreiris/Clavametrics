@@ -467,6 +467,42 @@
 <script>
   async function boot() {
     if (!await window.requireAuth()) return;
+
+    let clubId = await window.getClubId();
+
+    // New OAuth user: no profile/club in DB yet — create them now
+    if (!clubId) {
+      const { data: { session } } = await window.sb.auth.getSession();
+      const user = session?.user;
+      if (!user) return;
+
+      const meta      = user.user_metadata || {};
+      const fullName  = meta.full_name || meta.name || '';
+      const nameParts = fullName.trim().split(/\s+/);
+      const firstName = nameParts[0] || '';
+      const lastName  = nameParts.slice(1).join(' ') || '';
+      const clubName  = (firstName ? firstName + "'s Club" : user.email?.split('@')[0] + "'s Club");
+
+      const { data: club, error: clubErr } = await window.sb
+        .from('clubs')
+        .insert({ name: clubName, plan: 'free' })
+        .select('id')
+        .single();
+
+      if (clubErr) { alert('Setup failed: ' + clubErr.message); return; }
+
+      await window.sb.from('profiles').insert({
+        id:         user.id,
+        club_id:    club.id,
+        full_name:  fullName || user.email,
+        first_name: firstName,
+        last_name:  lastName,
+        role:       'admin',
+      });
+
+      window.resetSupabaseCache();
+    }
+
     const club = await window.getClub();
     if (club?.name) document.getElementById('club-name').value = club.name;
     window.applyClubTheme();

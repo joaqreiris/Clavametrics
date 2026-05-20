@@ -1153,6 +1153,9 @@ function renderTasks(tasks) {
   const ok = await window.requireAuth();
   if (!ok) return;
 
+  const clubId = await window.getClubId();
+  if (!clubId) { window.location.replace('Onboarding.html'); return; }
+
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
 
   // Populate sidebar user

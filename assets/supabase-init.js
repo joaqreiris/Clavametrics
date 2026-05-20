@@ -58,6 +58,11 @@
     return _profilePromise;
   };
 
+  window.resetSupabaseCache = function () {
+    _clubId = null; _profile = null; _club = null;
+    _clubIdPromise = null; _clubPromise = null; _profilePromise = null;
+  };
+
   window.requireAuth = async function (redirectTo = 'Login.html') {
     const { data: { session } } = await window.sb.auth.getSession();
     if (!session) {
