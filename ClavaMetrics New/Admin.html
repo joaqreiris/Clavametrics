@@ -681,14 +681,14 @@
           <div class="ad-card">
             <div class="ad-card-h">
               <h3>Subscription &amp; billing</h3>
-              <span class="sub">First team category · Pro plan</span>
+              <span class="sub" id="adSubCardSub">loading…</span>
               <div class="right">
                 <button class="cm-btn is-outline is-sm"><i class="ti ti-arrow-up" style="font-size:14px"></i>Upgrade</button>
               </div>
             </div>
             <div class="ad-sub">
               <div class="ad-sub-l">
-                <h2>Professional <small>· $120/mo</small></h2>
+                <h2 id="adSubTitle">Professional <small>· $120/mo</small></h2>
                 <p>Category-level billing. Per-category, GPS &amp; analytics, predictive injury alerts. 25% below ClubMetrics equivalent.</p>
                 <ul class="features">
                   <li><i class="ti ti-check"></i>Up to 80 players · GPS live (Catapult, StatSports)</li>
@@ -846,6 +846,11 @@
     document.getElementById('adKpiStorage').innerHTML = `${club.storage_used_gb} <sub>/ ${club.storage_limit_gb} GB</sub>`;
     document.getElementById('adKpiStorageSub').textContent = `${pct}% used`;
   }
+
+  // ── Subscription card
+  const planFull = { free:'Free', basic:'Basic', pro:'Professional', enterprise:'Enterprise' };
+  document.getElementById('adSubCardSub').textContent = `${club?.name || ''} · ${PLAN_LABEL[planKey] || planKey} plan`;
+  document.getElementById('adSubTitle').innerHTML = `${planFull[planKey] || planKey} <small>· ${PLAN_PRICE[planKey] || ''}</small>`;
 
   // ── Filter pill counts
   const roleBucket = r => {
