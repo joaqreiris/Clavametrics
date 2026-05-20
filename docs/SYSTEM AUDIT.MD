@@ -397,12 +397,12 @@ Architecture State: Mixed / Needs Refactor
 - [x] Register — OAuth buttons: Google + Apple llaman oauthRegister
 - [x] Cross-links: Login ↔ Register links visibles
 
-#### Módulos críticos
-- [ ] Hub.html
-- [ ] Squad.html
-- [ ] Injuries.html
-- [ ] Wellness.html
-- [ ] Daily Planning.html
+#### Módulos críticos — `tests/e2e/hub.spec.js` / `squad.spec.js` / `injuries.spec.js` / `daily-planning.spec.js`
+- [x] Hub.html — render (KPIs, sidebar, greeting, module stats), search bar (typing/Cmd+K/empty state), buttons, auth guard
+- [x] Squad.html — render (table/rows/empty), modal open/close/edit, form validation, save new, saving indicator, delete, auth guard
+- [x] Injuries.html — render (KPI count, cards, injury type), log modal (open/fields/player select/close), save, discharge modal, auth guard
+- [x] Daily Planning.html — render (squad body, physio list, date input, breadcrumb, pager), squad section (player name, count, summary), physio section (count, treatment, empty), date navigation, auth guard
+- [ ] Wellness.html — canvas/mockup page; render-only test pendiente
 
 ### Manual testing
 - [ ] Checklist por módulo
