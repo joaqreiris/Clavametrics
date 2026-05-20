@@ -402,10 +402,10 @@ Architecture State: Mixed / Needs Refactor
 - [x] Squad.html — render (table/rows/empty), modal open/close/edit, form validation, save new, saving indicator, delete, auth guard
 - [x] Injuries.html — render (KPI count, cards, injury type), log modal (open/fields/player select/close), save, discharge modal, auth guard
 - [x] Daily Planning.html — render (squad body, physio list, date input, breadcrumb, pager), squad section (player name, count, summary), physio section (count, treatment, empty), date navigation, auth guard
-- [ ] Wellness.html — canvas/mockup page; render-only test pendiente
+- [x] Wellness.html — canvas/mockup: render, phone frames, dark mode toggle — `tests/e2e/wellness.spec.js`
 
 ### Manual testing
-- [ ] Checklist por módulo
+- [x] Checklist completo — `docs/MANUAL_TESTING.md` (Auth, Nav, Squad, Calendar, RPE, Load Monitor, Injuries, Physio, Wellness, Daily Planning, GPS, Evaluations, Sessions History, Gym, Nutrition, Planner, Match Reports, Chat & Tasks, Admin, Availability + regression checks)
 
 ### Responsive testing
 - [ ] Mobile (375px)
