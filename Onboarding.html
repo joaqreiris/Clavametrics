@@ -470,6 +470,9 @@
 
     let clubId = await window.getClubId();
 
+    // Existing user (already has club) — skip onboarding, go straight to Hub
+    if (clubId) { window.location.replace('Hub.html'); return; }
+
     // New OAuth user: no profile/club in DB yet — create them now
     if (!clubId) {
       const { data: { session } } = await window.sb.auth.getSession();
