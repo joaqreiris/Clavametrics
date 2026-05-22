@@ -346,25 +346,25 @@
     <div class="ob-grid">
       <div class="cm-field ob-grid-full">
         <label class="cm-label" for="club-name">Club name</label>
-        <input id="club-name" class="cm-input" placeholder="Clava FC" value="Clava FC">
+        <input id="club-name" class="cm-input" placeholder="e.g. Clava FC">
       </div>
 
       <div class="cm-field">
         <label class="cm-label" for="club-short">Short name</label>
-        <input id="club-short" class="cm-input" placeholder="CLA" value="CLA" maxlength="6">
-        <span class="cm-hint">Up to 6 chars. Shown on jerseys & exports.</span>
+        <input id="club-short" class="cm-input" placeholder="e.g. CLA" maxlength="6">
+        <span class="cm-hint">Up to 6 chars. Shown on jerseys &amp; exports. (pending DB migration)</span>
       </div>
 
       <div class="cm-field">
         <label class="cm-label" for="club-country">Country</label>
         <select id="club-country" class="cm-select">
-          <option>Argentina</option>
-          <option>Brasil</option>
-          <option>Uruguay</option>
-          <option>Chile</option>
-          <option>Colombia</option>
-          <option>México</option>
-          <option>España</option>
+          <option value="Argentina">Argentina</option>
+          <option value="Brasil">Brasil</option>
+          <option value="Uruguay">Uruguay</option>
+          <option value="Chile">Chile</option>
+          <option value="Colombia">Colombia</option>
+          <option value="México">México</option>
+          <option value="España">España</option>
         </select>
       </div>
 
@@ -372,17 +372,18 @@
         <label class="cm-label" for="club-city">City</label>
         <div class="cm-input-affix">
           <i class="ti ti-map-pin"></i>
-          <input id="club-city" placeholder="Rosario" value="Rosario">
+          <input id="club-city" placeholder="e.g. Rosario">
         </div>
+        <span class="cm-hint" style="color:var(--cm-fg-muted);font-size:10px">Saved locally — pending DB migration to add city column.</span>
       </div>
 
       <div class="cm-field">
         <label class="cm-label" for="club-tz">Timezone</label>
         <select id="club-tz" class="cm-select">
-          <option>America/Argentina/Buenos_Aires (UTC-3)</option>
-          <option>America/Sao_Paulo (UTC-3)</option>
-          <option>America/Mexico_City (UTC-6)</option>
-          <option>Europe/Madrid (UTC+1)</option>
+          <option value="America/Argentina/Buenos_Aires">America/Argentina/Buenos_Aires (UTC-3)</option>
+          <option value="America/Sao_Paulo">America/Sao_Paulo (UTC-3)</option>
+          <option value="America/Mexico_City">America/Mexico_City (UTC-6)</option>
+          <option value="Europe/Madrid">Europe/Madrid (UTC+1)</option>
         </select>
       </div>
     </div>
@@ -396,17 +397,17 @@
     </div>
 
     <div class="ob-cats">
-      <div class="ob-cat is-selected">
+      <div class="ob-cat">
         <i class="ti ti-trophy"></i>
         <h5>First team</h5>
         <p>Senior · 25 players</p>
       </div>
-      <div class="ob-cat is-selected">
+      <div class="ob-cat">
         <i class="ti ti-users"></i>
         <h5>Reserves</h5>
         <p>Senior B / U23</p>
       </div>
-      <div class="ob-cat is-selected">
+      <div class="ob-cat">
         <i class="ti ti-ball-football"></i>
         <h5>U-19</h5>
         <p>Youth · competitive</p>
@@ -506,22 +507,65 @@
       window.resetSupabaseCache();
     }
 
-    const club = await window.getClub();
-    if (club?.name) document.getElementById('club-name').value = club.name;
+    // Load existing club data to pre-populate form
+    const clubId = await window.getClubId();
+    if (clubId) {
+      const { data: club } = await window.sb
+        .from('clubs')
+        .select('name, country')
+        .eq('id', clubId)
+        .single();
+      if (club?.name)    document.getElementById('club-name').value = club.name;
+      if (club?.country) document.getElementById('club-country').value = club.country;
+    }
     window.applyClubTheme();
   }
   boot();
 
   async function saveAndContinue() {
     const btn = document.getElementById('obContinue');
+
+    const name    = document.getElementById('club-name').value.trim();
+    const country = document.getElementById('club-country').value;
+    const categories = [...document.querySelectorAll('.ob-cat.is-selected')]
+      .map(el => el.querySelector('h5')?.textContent?.trim())
+      .filter(Boolean);
+
+    if (!name) {
+      alert('Club name is required.');
+      document.getElementById('club-name').focus();
+      return;
+    }
+    if (categories.length === 0) {
+      alert('Select at least one category.');
+      return;
+    }
+
     btn.disabled = true;
     btn.firstChild.textContent = 'Saving… ';
+
     try {
       const clubId = await window.getClubId();
-      if (!clubId) throw new Error('No club found');
-      const name = document.getElementById('club-name').value.trim();
-      const { error } = await window.sb.from('clubs').update({ name }).eq('id', clubId);
+      if (!clubId) throw new Error('No club found. Try signing out and back in.');
+
+      // Save confirmed-existing columns: name + country
+      const { error } = await window.sb
+        .from('clubs')
+        .update({ name, country })
+        .eq('id', clubId);
       if (error) throw error;
+
+      // Pending DB migration — columns not yet in schema:
+      //   short_name, city, timezone → ALTER TABLE clubs ADD COLUMN ...
+      //   categories → needs club_categories table
+      // When migration runs, uncomment:
+      // const short_name = document.getElementById('club-short').value.trim();
+      // const city       = document.getElementById('club-city').value.trim();
+      // const timezone   = document.getElementById('club-tz').value;
+      // await window.sb.from('clubs').update({ short_name, city, timezone }).eq('id', clubId);
+      // await window.sb.from('club_categories')
+      //   .upsert(categories.map(cat => ({ club_id: clubId, name: cat })), { onConflict: 'club_id,name' });
+
       window.location.href = 'Hub.html';
     } catch (err) {
       btn.disabled = false;

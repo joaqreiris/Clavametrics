@@ -5,15 +5,111 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ClavaMetrics — Signing in…</title>
   <style>
-    body { margin: 0; background: #0f1117; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #6b7280; font-size: 14px; }
+    body { margin:0; background:#0f1117; display:flex; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; }
+    .msg { text-align:center; }
+    .msg p { color:#6b7280; font-size:14px; margin:8px 0 0; line-height:1.5; }
+    .msg .err { color:#f87171; }
+    .msg a { color:#60a5fa; text-decoration:none; font-size:13px; display:inline-block; margin-top:12px; }
+    .spinner { width:24px; height:24px; border:2.5px solid rgba(255,255,255,.1); border-top-color:#6b7280; border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 12px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
   </style>
 </head>
 <body>
-  <span>Signing in…</span>
+  <div class="msg">
+    <div class="spinner" id="spinner"></div>
+    <p id="statusMsg">Signing in…</p>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/supabase-init.js"></script>
   <script>
   (async () => {
+    const msgEl   = document.getElementById('statusMsg');
+    const spinner = document.getElementById('spinner');
+
+    function showError(msg) {
+      spinner.style.display = 'none';
+      msgEl.className = 'err';
+      msgEl.innerHTML = msg + '<br><a href="Login.html">← Back to sign in</a>';
+    }
+
+    // 1. Supabase may forward OAuth errors in the query string
+    const params    = new URLSearchParams(location.search);
+    const oauthErr  = params.get('error');
+    const oauthDesc = params.get('error_description');
+    if (oauthErr) { showError(oauthDesc || oauthErr); return; }
+
+    // 2. PKCE code arrives for both OAuth and email-confirmation flows
+    const code = params.get('code');
+    if (code) {
+      const { data, error } = await window.sb.auth.exchangeCodeForSession(code);
+      if (error) { showError('Sign-in failed: ' + error.message); return; }
+
+      const userId = data.user.id;
+      const email  = data.user.email || '';
+
+      // 3. Email-confirmation path: pending registration data was saved in sessionStorage
+      //    by Register.html when Supabase required email confirmation before session creation.
+      const pendingRaw = sessionStorage.getItem('cm_pending_reg');
+      if (pendingRaw) {
+        sessionStorage.removeItem('cm_pending_reg');
+        msgEl.textContent = 'Setting up your workspace…';
+        try {
+          const pending = JSON.parse(pendingRaw);
+          const { data: club, error: clubErr } = await window.sb.from('clubs')
+            .insert({ name: pending.clubName, country: pending.country || null })
+            .select('id').single();
+          if (clubErr) throw clubErr;
+
+          const { error: profErr } = await window.sb.from('profiles').insert({
+            id:        userId,
+            club_id:   club.id,
+            full_name: pending.fullName || '',
+            role:      'admin',
+            email:     pending.email || email,
+          });
+          if (profErr) throw profErr;
+        } catch (err) {
+          showError('Workspace setup failed: ' + err.message);
+          return;
+        }
+        window.location.replace('Onboarding.html');
+        return;
+      }
+
+      // 4. Check for existing profile (returning user or OAuth login)
+      const { data: profile } = await window.sb.from('profiles')
+        .select('club_id').eq('id', userId).maybeSingle();
+
+      if (!profile) {
+        // New OAuth user — no profile yet. Create a stub club + profile so the app
+        // can boot, then let Onboarding collect the real club details.
+        msgEl.textContent = 'Creating your workspace…';
+        const meta     = data.user.user_metadata || {};
+        const fullName = meta.full_name || meta.name || '';
+        try {
+          const stubName = (email.split('@')[0] || 'My Club').replace(/[._-]/g, ' ');
+          const { data: club, error: clubErr } = await window.sb.from('clubs')
+            .insert({ name: stubName })
+            .select('id').single();
+          if (clubErr) throw clubErr;
+
+          const { error: profErr } = await window.sb.from('profiles').insert({
+            id: userId, club_id: club.id, full_name: fullName, role: 'admin', email,
+          });
+          if (profErr) throw profErr;
+        } catch (err) {
+          showError('Failed to create workspace: ' + err.message);
+          return;
+        }
+        window.location.replace('Onboarding.html');
+        return;
+      }
+
+      window.location.replace(profile.club_id ? 'Hub.html' : 'Onboarding.html');
+      return;
+    }
+
+    // 5. No code — existing session check (direct visit or stale redirect)
     const ok = await window.requireAuth('Login.html');
     if (!ok) return;
     const clubId = await window.getClubId();

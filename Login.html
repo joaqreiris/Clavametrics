@@ -400,9 +400,10 @@
     const btn = document.getElementById(provider + 'Btn');
     btn.disabled = true;
     btn.style.opacity = '0.6';
+    const callbackUrl = new URL('auth-callback.html', window.location.href).href;
     const { error } = await window.sb.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.protocol.startsWith('http') ? window.location.origin + '/auth-callback.html' : undefined }
+      options: { redirectTo: callbackUrl },
     });
     if (error) {
       const err = document.getElementById('errorMsg');

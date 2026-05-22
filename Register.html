@@ -680,19 +680,26 @@
       userId = authData.user?.id;
       if (!userId) throw new Error('No user ID returned');
 
-      // If email confirmation is required, session is null — defer club/profile setup
+      // If email confirmation is required, session is null — save pending data to
+      // sessionStorage so auth-callback.html can complete club + profile creation
+      // after the user clicks the confirmation link.
       if (!authData.session) {
+        sessionStorage.setItem('cm_pending_reg', JSON.stringify({
+          email,
+          fullName: `${firstName} ${lastName}`.trim(),
+          clubName,
+          country: document.getElementById('country')?.value || null,
+        }));
         btn.disabled = false;
         btn.innerHTML = '<i class="ti ti-building"></i> Create organization';
-        showRegError('✓ Check your email to confirm your account before continuing.');
+        showRegError('✓ Check your email and click the confirmation link. Your workspace will be created automatically.');
         return;
       }
 
       // 2. Create club (only if session is active)
       const country = document.getElementById('country')?.value || null;
-      const sport = document.querySelector('#sport-tabs .reg-sport-tab.is-active')?.dataset.sport || null;
       const { data: club, error: clubErr } = await window.sb.from('clubs')
-        .insert({ name: clubName, country, sport })
+        .insert({ name: clubName, country })
         .select('id')
         .single();
       if (clubErr) throw clubErr;
@@ -723,9 +730,10 @@
   async function oauthRegister(provider) {
     const btn = document.getElementById(provider + 'Btn');
     btn.disabled = true;
+    const callbackUrl = new URL('auth-callback.html', window.location.href).href;
     const { error } = await window.sb.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin + '/auth-callback.html' }
+      options: { redirectTo: callbackUrl },
     });
     if (error) {
       showRegError(error.message);

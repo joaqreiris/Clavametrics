@@ -378,6 +378,22 @@
   .hub-toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:var(--cm-r-3);padding:8px 16px;font:500 13px/1 var(--cm-font-sans);z-index:500;opacity:0;pointer-events:none;transition:opacity 200ms,transform 200ms; }
   .hub-toast.is-show { opacity:1;transform:translateX(-50%) translateY(0); }
 
+  /* Add-task modal */
+  .hub-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:800;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 180ms; }
+  .hub-modal-backdrop.is-open { opacity:1;pointer-events:auto; }
+  .hub-modal { background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:24px;width:min(420px,90vw);display:flex;flex-direction:column;gap:16px;box-shadow:0 8px 32px rgba(0,0,0,.18);transform:translateY(8px);transition:transform 180ms; }
+  .hub-modal-backdrop.is-open .hub-modal { transform:none; }
+  .hub-modal h3 { font:600 15px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0; }
+  .hub-modal label { font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;flex-direction:column;gap:6px; }
+  .hub-modal input,.hub-modal select { background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-2);padding:8px 10px;font:14px/1.4 var(--cm-font-sans);color:var(--cm-fg-strong);width:100%;box-sizing:border-box; }
+  .hub-modal input:focus,.hub-modal select:focus { outline:2px solid var(--cm-accent);outline-offset:1px; }
+  .hub-modal-row { display:flex;gap:12px; }
+  .hub-modal-row label { flex:1; }
+  .hub-modal-actions { display:flex;gap:8px;justify-content:flex-end; }
+  .hub-modal-actions button { padding:7px 16px;border-radius:var(--cm-r-2);font:500 13px/1 var(--cm-font-sans);cursor:pointer;border:none; }
+  .hub-modal-actions .btn-cancel { background:var(--cm-bg-soft);color:var(--cm-fg-muted); }
+  .hub-modal-actions .btn-save { background:var(--cm-accent);color:#fff; }
+
   @media (max-width: 880px) {
     .hub-search { width: auto; }
   }
@@ -720,47 +736,7 @@
               <span role="columnheader" style="text-align:right">When</span>
             </div>
 
-            <div class="activity-row" role="row">
-              <div class="ind" role="cell"><i class="ti ti-soccer-field" aria-hidden="true"></i></div>
-              <div class="who" role="cell"><div class="av" aria-hidden="true">PF</div><div><div class="name">Pablo Fierro</div><div class="cm-meta">Head coach</div></div></div>
-              <div class="what" role="cell">Published <span class="target">MC&nbsp;14 — Day&nbsp;3</span> session</div>
-              <div class="when" role="cell" style="text-align:right">12 min ago</div>
-            </div>
-
-            <div class="activity-row" role="row">
-              <div class="ind" role="cell"><i class="ti ti-bandage" style="color:var(--cm-danger)" aria-hidden="true"></i></div>
-              <div class="who" role="cell"><div class="av" aria-hidden="true">MA</div><div><div class="name">Dr. Mariana Acosta</div><div class="cm-meta">Physio</div></div></div>
-              <div class="what" role="cell">Logged injury · <span class="target">Bocanegra · hamstring</span></div>
-              <div class="when" role="cell" style="text-align:right">1 h ago</div>
-            </div>
-
-            <div class="activity-row" role="row">
-              <div class="ind" role="cell"><i class="ti ti-radar-2" aria-hidden="true"></i></div>
-              <div class="who" role="cell"><div class="av" aria-hidden="true">SS</div><div><div class="name">StatSports sync</div><div class="cm-meta">Integration</div></div></div>
-              <div class="what" role="cell">Imported <span class="target">22 player files</span> from MD-4</div>
-              <div class="when" role="cell" style="text-align:right">3 h ago</div>
-            </div>
-
-            <div class="activity-row" role="row">
-              <div class="ind" role="cell"><i class="ti ti-heartbeat" style="color:var(--cm-success)" aria-hidden="true"></i></div>
-              <div class="who" role="cell"><div class="av" aria-hidden="true">SQ</div><div><div class="name">22 of 27 players</div><div class="cm-meta">First team</div></div></div>
-              <div class="what" role="cell">Submitted <span class="target">today's wellness check-in</span></div>
-              <div class="when" role="cell" style="text-align:right">today</div>
-            </div>
-
-            <div class="activity-row" role="row">
-              <div class="ind" role="cell"><i class="ti ti-user-plus" aria-hidden="true"></i></div>
-              <div class="who" role="cell"><div class="av" aria-hidden="true">JC</div><div><div class="name">Joaquín Cabral</div><div class="cm-meta">Analyst</div></div></div>
-              <div class="what" role="cell">Joined the staff workspace</div>
-              <div class="when" role="cell" style="text-align:right">yesterday</div>
-            </div>
-
-            <div class="activity-row" role="row">
-              <div class="ind" role="cell"><i class="ti ti-trending-up" style="color:var(--cm-warning)" aria-hidden="true"></i></div>
-              <div class="who" role="cell"><div class="av" aria-hidden="true">SY</div><div><div class="name">System alert</div><div class="cm-meta">Load monitor</div></div></div>
-              <div class="what" role="cell">ACWR for <span class="target">4 players</span> crossed 1.5</div>
-              <div class="when" role="cell" style="text-align:right">yesterday</div>
-            </div>
+            <!-- Activity rows rendered by renderActivity() from Supabase data -->
 
           </div>
         </div>
@@ -775,46 +751,7 @@
           </div>
 
           <div class="tasks">
-            <div class="task">
-              <div class="check"></div>
-              <div class="body">
-                <div class="title">Approve MC&nbsp;14 — Day 3 session before 16:00</div>
-                <div class="meta"><i class="ti ti-flag-2" style="color:var(--cm-danger)"></i> High · from Pablo Fierro</div>
-              </div>
-              <div class="when">Today</div>
-            </div>
-            <div class="task">
-              <div class="check"></div>
-              <div class="body">
-                <div class="title">Review Bocanegra return-to-play protocol</div>
-                <div class="meta"><i class="ti ti-stethoscope"></i> Medical · from Dr. Acosta</div>
-              </div>
-              <div class="when">Today</div>
-            </div>
-            <div class="task is-done">
-              <div class="check"></div>
-              <div class="body">
-                <div class="title">Confirm wellness reminders sent</div>
-                <div class="meta"><i class="ti ti-bell"></i> Routine</div>
-              </div>
-              <div class="when">Mon</div>
-            </div>
-            <div class="task">
-              <div class="check"></div>
-              <div class="body">
-                <div class="title">Export squad list to PDF for Atlético match</div>
-                <div class="meta"><i class="ti ti-file-export"></i> Match-day prep</div>
-              </div>
-              <div class="when">Fri</div>
-            </div>
-            <div class="task">
-              <div class="check"></div>
-              <div class="body">
-                <div class="title">Onboard Joaquín Cabral to GPS analysis</div>
-                <div class="meta"><i class="ti ti-user-plus"></i> Setup</div>
-              </div>
-              <div class="when">Next wk</div>
-            </div>
+            <!-- Task rows rendered by renderTasks() from Supabase data -->
           </div>
         </div>
 
@@ -829,6 +766,32 @@
 <!-- Tweaks (designer-side floating panel) + in-app Settings drawer -->
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
+
+<!-- Add Task Modal -->
+<div class="hub-modal-backdrop" id="addTaskBackdrop" role="dialog" aria-modal="true" aria-labelledby="addTaskTitle">
+  <div class="hub-modal">
+    <h3 id="addTaskTitle">New task</h3>
+    <label>Title
+      <input type="text" id="atTitle" placeholder="Task title…" maxlength="200">
+    </label>
+    <div class="hub-modal-row">
+      <label>Priority
+        <select id="atPriority">
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+          <option value="high">High</option>
+        </select>
+      </label>
+      <label>Due date
+        <input type="date" id="atDue">
+      </label>
+    </div>
+    <div class="hub-modal-actions">
+      <button class="btn-cancel" id="atCancelBtn">Cancel</button>
+      <button class="btn-save" id="atSaveBtn">Save task</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
@@ -860,10 +823,60 @@ document.querySelectorAll('.task').forEach(el => {
   check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
 });
 
+// ── Add Task Modal ────────────────────────────────────────────────────────────
+(function initAddTask() {
+  const backdrop = document.getElementById('addTaskBackdrop');
+  const titleInput = document.getElementById('atTitle');
+  const dueInput   = document.getElementById('atDue');
+  const saveBtn    = document.getElementById('atSaveBtn');
+
+  function openModal() {
+    titleInput.value = '';
+    document.getElementById('atPriority').value = 'medium';
+    dueInput.value = new Date().toISOString().split('T')[0];
+    backdrop.classList.add('is-open');
+    titleInput.focus();
+  }
+  function closeModal() { backdrop.classList.remove('is-open'); }
+
+  document.getElementById('btnAddTask')?.addEventListener('click', openModal);
+  document.getElementById('atCancelBtn').addEventListener('click', closeModal);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  saveBtn.addEventListener('click', async () => {
+    const title = titleInput.value.trim();
+    if (!title) { titleInput.focus(); return; }
+    const clubId = window._hubClubId;
+    const userId = window._hubUserId;
+    if (!clubId) return;
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+
+    const { error } = await window.sb.from('tasks').insert({
+      club_id:    clubId,
+      assigned_to: userId,
+      title,
+      priority:   document.getElementById('atPriority').value,
+      status:     'open',
+      due_date:   dueInput.value || null,
+    });
+
+    if (error) {
+      alert('Error saving task: ' + error.message);
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save task';
+      return;
+    }
+    closeModal();
+    showHubToast('Task added');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save task';
+  });
+})();
+
 // ── Button handlers ───────────────────────────────────────────────────────────
-document.getElementById('btnAddTask')?.addEventListener('click', () => {
-  window.location.href = 'Chat%20%26%20Tasks.html';
-});
 document.getElementById('btnViewAllActivity')?.addEventListener('click', () => {
   window.location.href = 'Chat%20%26%20Tasks.html';
 });
@@ -1162,6 +1175,7 @@ function renderTasks(tasks) {
 
   const clubId = await window.getClubId();
   if (!clubId) { window.location.replace('Onboarding.html'); return; }
+  window._hubClubId = clubId;
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
 
@@ -1182,6 +1196,7 @@ function renderTasks(tasks) {
 
   const { data: { session: _s } } = await window.sb.auth.getSession();
   const userId = _s?.user?.id ?? null;
+  window._hubUserId = userId;
 
   const today = new Date().toISOString().split('T')[0];
   const _todayMidnight = new Date(); _todayMidnight.setHours(0, 0, 0, 0);

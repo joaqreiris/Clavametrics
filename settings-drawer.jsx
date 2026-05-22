@@ -90,8 +90,55 @@ function initSettings() {
   return s;
 }
 
-const SettingsDrawer = ({ open, onClose }) => {
-  const [s, setS] = React.useState(initSettings);
+const BillingPanel = () => {
+  const [club, setClub] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    window.getClub && window.getClub().then(c => { setClub(c); setLoading(false); });
+  }, []);
+
+  const plan   = club?.billing_plan   || null;
+  const amount = club?.billing_amount || null;
+  const next   = club?.billing_next_date || null;
+  const status = club?.billing_status || null;
+
+  return <>
+    <div className="sd-section">
+      <div className="sd-section-h"><div className="sd-section-l">Workspace subscription</div></div>
+      <div className="sd-section-body">
+        <div className="sd-billing-card">
+          <div className="sd-billing-row">
+            <span className="sd-row-label">Plan</span>
+            <span className="sd-billing-val">{loading ? '…' : (plan || '—')}</span>
+          </div>
+          <div className="sd-billing-row">
+            <span className="sd-row-label">Monthly amount</span>
+            <span className="sd-billing-val">{loading ? '…' : (amount ? `$${amount}` : '—')}</span>
+          </div>
+          <div className="sd-billing-row">
+            <span className="sd-row-label">Next billing date</span>
+            <span className="sd-billing-val">{loading ? '…' : (next ? new Date(next).toLocaleDateString([], { month:'long', day:'numeric', year:'numeric' }) : '—')}</span>
+          </div>
+          <div className="sd-billing-row">
+            <span className="sd-row-label">Status</span>
+            <span className="sd-billing-val" style={{color: status === 'active' ? 'var(--cm-success)' : 'var(--cm-fg-muted)'}}>{loading ? '…' : (status || '—')}</span>
+          </div>
+        </div>
+        <div className="sd-note" style={{marginTop:12}}>
+          <i className="ti ti-brand-stripe"></i>
+          Billing is managed via Stripe. Subscription data syncs automatically when the webhook is active. Contact your admin to change plans.
+        </div>
+      </div>
+    </div>
+  </>;
+};
+
+const SettingsDrawer = ({ open, onClose, profile }) => {
+  const [s, setS]       = React.useState(initSettings);
+  const [tab, setTab]   = React.useState("appearance");
+  const [resetConfirm, setResetConfirm] = React.useState(false);
+
   React.useEffect(() => { _apply(s); saveSettings(s); }, [s]);
   // Lock scroll
   React.useEffect(() => {
@@ -100,8 +147,11 @@ const SettingsDrawer = ({ open, onClose }) => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [open]);
+  // Reset confirm clears if drawer closes
+  React.useEffect(() => { if (!open) setResetConfirm(false); }, [open]);
 
   const set = (patch) => setS((p) => ({ ...p, ...patch }));
+  const setNotif = (key, val) => set({ notif: { ...s.notif, [key]: val } });
   const themeBg = (t) => t === "dark" ? "#0A0A0A" : (t === "hybrid" ? "linear-gradient(90deg,#0E1116 0%,#0E1116 30%,#FBFBFA 30%,#FBFBFA 100%)" : "#FBFBFA");
   const themeBorder = (t) => t === "dark" ? "rgba(255,255,255,0.10)" : "#E5E7EB";
 
@@ -146,99 +196,185 @@ const SettingsDrawer = ({ open, onClose }) => {
         </header>
 
         <nav className="sd-tabs">
-          <button className="sd-tab is-on"><i className="ti ti-palette"></i>Appearance</button>
-          <button className="sd-tab"><i className="ti ti-bell"></i>Notifications</button>
-          <button className="sd-tab"><i className="ti ti-shield-lock"></i>Account</button>
-          <button className="sd-tab"><i className="ti ti-credit-card"></i>Billing</button>
+          {[
+            { id:"appearance",    icon:"ti-palette",      label:"Appearance" },
+            { id:"notifications", icon:"ti-bell",         label:"Notifications" },
+            { id:"account",       icon:"ti-shield-lock",  label:"Account" },
+            { id:"billing",       icon:"ti-credit-card",  label:"Billing" },
+          ].map(({ id, icon, label }) => (
+            <button key={id} className={`sd-tab ${tab === id ? "is-on" : ""}`} onClick={() => setTab(id)}>
+              <i className={`ti ${icon}`}></i>{label}
+            </button>
+          ))}
         </nav>
 
         <div className="sd-body">
 
-          {/* Theme direction — visual tiles */}
-          <Section label="Theme" hint="How the chrome looks across the app.">
-            <div className="sd-tiles">
-              {["light","dark","hybrid"].map((t) => (
-                <button
-                  key={t}
-                  className={`sd-tile ${s.theme === t ? "is-on" : ""}`}
-                  onClick={() => set({ theme: t, accent: _ACCENT[t][s.accent] ? s.accent : "green" })}>
-                  <div className="sd-tile-pv" style={{ background: themeBg(t), borderColor: themeBorder(t) }}>
-                    <div className="sd-tile-pv-bar" style={{ background: t === "dark" ? "rgba(255,255,255,0.08)" : (t === "hybrid" ? "rgba(255,255,255,0.06)" : "#EFEFED") }}/>
-                    <div className="sd-tile-pv-c" style={{ background: t === "dark" ? "#161616" : "#fff", borderColor: themeBorder(t) }} />
-                  </div>
-                  <div className="sd-tile-label">
-                    <span>{t === "light" ? "Light" : t === "dark" ? "Dark" : "Hybrid"}</span>
-                    {s.theme === t ? <i className="ti ti-check"></i> : null}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </Section>
-
-          <Section label="Accent" hint="Used for primary buttons, active nav, and focus rings.">
-            <div className="sd-swatches">
-              {swatchesForTheme.map(([key, v]) => (
-                <button
-                  key={key}
-                  className={`sd-swatch ${s.accent === key ? "is-on" : ""}`}
-                  onClick={() => set({ accent: key })}
-                  title={key}>
-                  <span className="sd-swatch-hue" style={{ background: v.hue }} />
-                  <span className="sd-swatch-name">{key}</span>
-                </button>
-              ))}
-            </div>
-          </Section>
-
-          {s.theme !== "light" ? (
-            <Section label="Sidebar tone">
-              <div className="sd-chips">
-                {[
-                  { v:"default", l:"Default" },
-                  { v:"ink",     l:"Ink" },
-                  { v:"slate",   l:"Slate" },
-                  { v:"forest",  l:"Forest" },
-                  { v:"zinc",    l:"Zinc" },
-                ].map(o => (
-                  <button key={o.v} className={`sd-chip ${s.sidebarHue === o.v ? "is-on" : ""}`} onClick={() => set({ sidebarHue: o.v })}>{o.l}</button>
+          {/* ── APPEARANCE TAB ── */}
+          {tab === "appearance" && <>
+            <Section label="Theme" hint="How the chrome looks across the app.">
+              <div className="sd-tiles">
+                {["light","dark","hybrid"].map((t) => (
+                  <button
+                    key={t}
+                    className={`sd-tile ${s.theme === t ? "is-on" : ""}`}
+                    onClick={() => set({ theme: t, accent: _ACCENT[t][s.accent] ? s.accent : "green" })}>
+                    <div className="sd-tile-pv" style={{ background: themeBg(t), borderColor: themeBorder(t) }}>
+                      <div className="sd-tile-pv-bar" style={{ background: t === "dark" ? "rgba(255,255,255,0.08)" : (t === "hybrid" ? "rgba(255,255,255,0.06)" : "#EFEFED") }}/>
+                      <div className="sd-tile-pv-c" style={{ background: t === "dark" ? "#161616" : "#fff", borderColor: themeBorder(t) }} />
+                    </div>
+                    <div className="sd-tile-label">
+                      <span>{t === "light" ? "Light" : t === "dark" ? "Dark" : "Hybrid"}</span>
+                      {s.theme === t ? <i className="ti ti-check"></i> : null}
+                    </div>
+                  </button>
                 ))}
               </div>
             </Section>
-          ) : null}
 
-          <Section label="Density" hint="Affects vertical padding inside cards & tables.">
-            <div className="sd-chips">
+            <Section label="Accent" hint="Used for primary buttons, active nav, and focus rings.">
+              <div className="sd-swatches">
+                {swatchesForTheme.map(([key, v]) => (
+                  <button
+                    key={key}
+                    className={`sd-swatch ${s.accent === key ? "is-on" : ""}`}
+                    onClick={() => set({ accent: key })}
+                    title={key}>
+                    <span className="sd-swatch-hue" style={{ background: v.hue }} />
+                    <span className="sd-swatch-name">{key}</span>
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            {s.theme !== "light" ? (
+              <Section label="Sidebar tone">
+                <div className="sd-chips">
+                  {[
+                    { v:"default", l:"Default" },
+                    { v:"ink",     l:"Ink" },
+                    { v:"slate",   l:"Slate" },
+                    { v:"forest",  l:"Forest" },
+                    { v:"zinc",    l:"Zinc" },
+                  ].map(o => (
+                    <button key={o.v} className={`sd-chip ${s.sidebarHue === o.v ? "is-on" : ""}`} onClick={() => set({ sidebarHue: o.v })}>{o.l}</button>
+                  ))}
+                </div>
+              </Section>
+            ) : null}
+
+            <Section label="Density" hint="Affects vertical padding inside cards & tables.">
+              <div className="sd-chips">
+                {[
+                  { v:"compact",     l:"Compact" },
+                  { v:"balanced",    l:"Balanced" },
+                  { v:"comfortable", l:"Comfy" },
+                ].map(o => (
+                  <button key={o.v} className={`sd-chip ${s.density === o.v ? "is-on" : ""}`} onClick={() => set({ density: o.v })}>{o.l}</button>
+                ))}
+              </div>
+            </Section>
+
+            <Section label="Corners">
+              <div className="sd-chips">
+                {[
+                  { v:"tight",   l:"Tight" },
+                  { v:"regular", l:"Regular" },
+                  { v:"soft",    l:"Soft" },
+                ].map(o => (
+                  <button key={o.v} className={`sd-chip ${s.radius === o.v ? "is-on" : ""}`} onClick={() => set({ radius: o.v })}>{o.l}</button>
+                ))}
+              </div>
+            </Section>
+
+            <Section label="Reset">
+              {resetConfirm ? (
+                <div className="sd-reset-confirm">
+                  <span>Reset all appearance settings?</span>
+                  <button className="sd-reset-yes" onClick={() => {
+                    localStorage.removeItem(SETTINGS_KEY);
+                    const d = initSettings();
+                    setS(d);
+                    setResetConfirm(false);
+                  }}><i className="ti ti-check"></i>Yes, reset</button>
+                  <button className="sd-reset-no" onClick={() => setResetConfirm(false)}>Cancel</button>
+                </div>
+              ) : (
+                <button className="sd-reset" onClick={() => setResetConfirm(true)}>
+                  <i className="ti ti-rotate"></i>Reset to workspace defaults
+                </button>
+              )}
+            </Section>
+          </>}
+
+          {/* ── NOTIFICATIONS TAB ── */}
+          {tab === "notifications" && <>
+            <Section label="In-app alerts" hint="Shown as badges and banners inside the app.">
               {[
-                { v:"compact",     l:"Compact" },
-                { v:"balanced",    l:"Balanced" },
-                { v:"comfortable", l:"Comfy" },
-              ].map(o => (
-                <button key={o.v} className={`sd-chip ${s.density === o.v ? "is-on" : ""}`} onClick={() => set({ density: o.v })}>{o.l}</button>
+                { key:"alertInjury",  label:"Injury reported",         sub:"Badge on the Physio nav item" },
+                { key:"alertTask",    label:"Task assigned to me",      sub:"Badge on the Tasks nav item" },
+                { key:"alertSession", label:"Session published",        sub:"Shown in Hub activity feed" },
+              ].map(({ key, label, sub }) => (
+                <div key={key} className="sd-toggle-row">
+                  <div className="sd-row-l">
+                    <div className="sd-row-label">{label}</div>
+                    <div className="sd-row-sub">{sub}</div>
+                  </div>
+                  <button
+                    role="switch" aria-checked={!!(s.notif && s.notif[key])}
+                    className={`sd-toggle ${s.notif && s.notif[key] ? "is-on" : ""}`}
+                    onClick={() => setNotif(key, !(s.notif && s.notif[key]))}>
+                    <span className="sd-toggle-thumb" />
+                  </button>
+                </div>
               ))}
-            </div>
-          </Section>
-
-          <Section label="Corners">
-            <div className="sd-chips">
+            </Section>
+            <Section label="Email digest" hint="Requires email delivery to be configured by the workspace admin.">
               {[
-                { v:"tight",   l:"Tight" },
-                { v:"regular", l:"Regular" },
-                { v:"soft",    l:"Soft" },
-              ].map(o => (
-                <button key={o.v} className={`sd-chip ${s.radius === o.v ? "is-on" : ""}`} onClick={() => set({ radius: o.v })}>{o.l}</button>
+                { key:"emailWeekly",  label:"Weekly summary",    sub:"Sent every Monday morning" },
+                { key:"emailInjury",  label:"Injury alerts",     sub:"Immediate — for medical staff" },
+              ].map(({ key, label, sub }) => (
+                <div key={key} className="sd-toggle-row">
+                  <div className="sd-row-l">
+                    <div className="sd-row-label">{label}</div>
+                    <div className="sd-row-sub">{sub}</div>
+                  </div>
+                  <button
+                    role="switch" aria-checked={!!(s.notif && s.notif[key])}
+                    className={`sd-toggle ${s.notif && s.notif[key] ? "is-on" : ""}`}
+                    onClick={() => setNotif(key, !(s.notif && s.notif[key]))}>
+                    <span className="sd-toggle-thumb" />
+                  </button>
+                </div>
               ))}
-            </div>
-          </Section>
+              <div className="sd-note"><i className="ti ti-info-circle"></i>Email delivery is not yet configured for this workspace. Preferences are saved for when it is.</div>
+            </Section>
+          </>}
 
-          <Section label="Reset">
-            <button className="sd-reset" onClick={() => {
-              localStorage.removeItem(SETTINGS_KEY);
-              const d = initSettings();
-              setS(d);
-            }}>
-              <i className="ti ti-rotate"></i>Reset to workspace defaults
-            </button>
-          </Section>
+          {/* ── ACCOUNT TAB ── */}
+          {tab === "account" && <>
+            <Section label="Signed in as">
+              <div className="sd-account-row">
+                <div className="sd-account-avatar">{profile ? (profile.full_name || profile.email || '?')[0].toUpperCase() : '?'}</div>
+                <div>
+                  {profile?.full_name && <div className="sd-row-label">{profile.full_name}</div>}
+                  <div className="sd-row-sub">{profile?.email || '—'}</div>
+                  <div className="sd-row-sub" style={{marginTop:2}}>{profile?.role || ''}</div>
+                </div>
+              </div>
+            </Section>
+            <Section label="Session">
+              <button className="sd-reset sd-signout" onClick={async () => {
+                await window.sb.auth.signOut();
+                window.location.href = 'Login.html';
+              }}>
+                <i className="ti ti-logout"></i>Sign out
+              </button>
+            </Section>
+          </>}
+
+          {/* ── BILLING TAB ── */}
+          {tab === "billing" && <BillingPanel />}
 
         </div>
 
@@ -370,11 +506,50 @@ const SD_CSS = `
   }
   .sd-foot .ti { font-size:13px; }
 
-  /* Row helper (unused currently but available) */
+  /* Row helper */
   .sd-row { display:flex; align-items:center; gap:12px; padding:6px 0; }
   .sd-row-l { flex:1; }
   .sd-row-label { font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); }
   .sd-row-sub { font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:2px; }
+
+  /* Toggle rows (Notifications) */
+  .sd-toggle-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .sd-toggle-row:last-child { border-bottom:0; }
+  .sd-toggle {
+    flex-shrink:0; width:40px; height:22px; border-radius:11px;
+    border:none; cursor:pointer; position:relative;
+    background:var(--cm-bg-sunk,#E5E5E5); transition:background 160ms;
+  }
+  .sd-toggle.is-on { background:var(--cm-accent); }
+  .sd-toggle-thumb {
+    position:absolute; top:3px; left:3px;
+    width:16px; height:16px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 3px rgba(0,0,0,0.2);
+    transition:left 160ms;
+  }
+  .sd-toggle.is-on .sd-toggle-thumb { left:21px; }
+
+  /* Info note */
+  .sd-note { display:flex; align-items:flex-start; gap:7px; padding:10px 12px; margin-top:12px; background:var(--cm-bg-soft); border-radius:8px; font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .sd-note .ti { font-size:14px; flex-shrink:0; margin-top:1px; }
+
+  /* Account tab */
+  .sd-account-row { display:flex; align-items:center; gap:12px; padding:6px 0; }
+  .sd-account-avatar { width:38px; height:38px; border-radius:50%; background:var(--cm-accent); color:var(--cm-fg-on-accent,#fff); font:600 16px/38px var(--cm-font-sans); text-align:center; flex-shrink:0; }
+  .sd-signout { color:var(--cm-danger,#DC2626); }
+
+  /* Reset confirmation */
+  .sd-reset-confirm { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .sd-reset-confirm span { font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .sd-reset-yes { display:inline-flex; align-items:center; gap:5px; height:30px; padding:0 12px; border-radius:7px; border:none; background:var(--cm-danger,#DC2626); color:#fff; font:500 12.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .sd-reset-yes .ti { font-size:13px; }
+  .sd-reset-no { display:inline-flex; align-items:center; height:30px; padding:0 12px; border-radius:7px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-muted); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer; }
+
+  /* Billing tab */
+  .sd-billing-card { background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; overflow:hidden; }
+  .sd-billing-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .sd-billing-row:last-child { border-bottom:0; }
+  .sd-billing-val { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
 `;
 
 window.SettingsDrawer = SettingsDrawer;
@@ -382,12 +557,20 @@ window.openCMSettings = null;  // set by mountSettingsHost
 window.initCMSettings  = initSettings;
 
 function SettingsHost() {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen]       = React.useState(false);
+  const [profile, setProfile] = React.useState(null);
+
   React.useEffect(() => {
     window.openCMSettings = () => setOpen(true);
     return () => { window.openCMSettings = null; };
   }, []);
-  return <SettingsDrawer open={open} onClose={() => setOpen(false)} />;
+
+  React.useEffect(() => {
+    if (!open || profile) return;
+    window.getProfile && window.getProfile().then(p => setProfile(p));
+  }, [open]);
+
+  return <SettingsDrawer open={open} onClose={() => setOpen(false)} profile={profile} />;
 }
 
 (function mount() {

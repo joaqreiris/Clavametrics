@@ -400,11 +400,13 @@
           <h1>Tasks</h1>
           <span class="sub" id="tasksSub">Loading…</span>
           <div class="right">
-            <button class="tasks-pill is-on">All<span class="ct">9</span></button>
-            <button class="tasks-pill">Mine<span class="ct">5</span></button>
-            <button class="tasks-pill">Match-day<span class="ct">3</span></button>
-            <button class="tasks-pill">Medical<span class="ct">2</span></button>
-            <button class="tasks-pill">Routine<span class="ct">4</span></button>
+            <button class="tasks-pill is-on" data-filter="all">All<span class="ct" id="pillCtAll">—</span></button>
+            <button class="tasks-pill" data-filter="mine">Mine<span class="ct" id="pillCtMine">—</span></button>
+            <button class="tasks-pill" data-filter="overdue">Overdue<span class="ct" id="pillCtOverdue">—</span></button>
+            <button class="tasks-pill" data-filter="today">Due today<span class="ct" id="pillCtToday">—</span></button>
+            <button class="tasks-pill" data-filter="matchday">Match-day<span class="ct" id="pillCtMatchday">—</span></button>
+            <button class="tasks-pill" data-filter="medical">Medical<span class="ct" id="pillCtMedical">—</span></button>
+            <button class="tasks-pill" data-filter="routine">Routine<span class="ct" id="pillCtRoutine">—</span></button>
             <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
             <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i>Filter</button>
             <button class="cm-btn is-primary is-sm" onclick="openNewTask()"><i class="ti ti-plus" style="font-size:14px"></i>New task</button>
@@ -473,6 +475,14 @@
         <option value="medium" selected>Medium</option>
         <option value="high">High</option>
         <option value="urgent">Urgent</option>
+      </select>
+    </div>
+    <div class="cm-field"><label>Category</label>
+      <select id="newTaskCategory">
+        <option value="general" selected>General</option>
+        <option value="match_day">Match-day</option>
+        <option value="medical">Medical</option>
+        <option value="routine">Routine</option>
       </select>
     </div>
   </div>
@@ -556,6 +566,16 @@ function formatDate(str) {
 }
 function isOverdue(str) { return str && new Date(str+'T00:00:00') < new Date(new Date().toDateString()); }
 function isToday(str)   { return str && new Date(str+'T00:00:00').toDateString() === new Date().toDateString(); }
+
+// ── TASK FILTER PILLS ──
+document.querySelectorAll('.tasks-pill[data-filter]').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.tasks-pill[data-filter]').forEach(p => p.classList.remove('is-on'));
+    pill.classList.add('is-on');
+    activeTaskFilter = pill.dataset.filter;
+    renderKanban(getFilteredTasks());
+  });
+});
 
 // ── TABS ──
 document.querySelectorAll('.ct-tabs .ct-tab').forEach(b => b.addEventListener('click', () => {
@@ -869,25 +889,53 @@ function pickDm(userId) {
 
 // ── TASKS ──
 const STATUS_COL = { pending:'backlog', in_progress:'inprogress', blocked:'blocked', done:'done' };
+let activeTaskFilter = 'all';
+
+function getFilteredTasks() {
+  const myId = currentUser?.id;
+  switch (activeTaskFilter) {
+    case 'mine':     return allTasks.filter(t => t.assigned_to === myId && t.status !== 'cancelled');
+    case 'overdue':  return allTasks.filter(t => t.due_date && isOverdue(t.due_date) && t.status !== 'done' && t.status !== 'cancelled');
+    case 'today':    return allTasks.filter(t => t.due_date && isToday(t.due_date) && t.status !== 'done' && t.status !== 'cancelled');
+    case 'matchday': return allTasks.filter(t => t.category === 'match_day' && t.status !== 'cancelled');
+    case 'medical':  return allTasks.filter(t => t.category === 'medical'   && t.status !== 'cancelled');
+    case 'routine':  return allTasks.filter(t => t.category === 'routine'   && t.status !== 'cancelled');
+    default:         return allTasks.filter(t => t.status !== 'cancelled');
+  }
+}
+
+function updatePillCounts() {
+  const myId = currentUser?.id;
+  const el = (id, n) => { const e = document.getElementById(id); if (e) e.textContent = n; };
+  el('pillCtAll',      allTasks.filter(t => t.status !== 'cancelled').length);
+  el('pillCtMine',     allTasks.filter(t => t.assigned_to === myId && t.status !== 'cancelled').length);
+  el('pillCtOverdue',  allTasks.filter(t => t.due_date && isOverdue(t.due_date) && t.status !== 'done' && t.status !== 'cancelled').length);
+  el('pillCtToday',    allTasks.filter(t => t.due_date && isToday(t.due_date) && t.status !== 'done' && t.status !== 'cancelled').length);
+  el('pillCtMatchday', allTasks.filter(t => t.category === 'match_day' && t.status !== 'cancelled').length);
+  el('pillCtMedical',  allTasks.filter(t => t.category === 'medical'   && t.status !== 'cancelled').length);
+  el('pillCtRoutine',  allTasks.filter(t => t.category === 'routine'   && t.status !== 'cancelled').length);
+}
 
 async function loadTasks() {
   const { data } = await window.sb.from('tasks')
-    .select('id,title,description,status,priority,due_date,assigned_to_name')
+    .select('id,title,description,status,priority,due_date,assigned_to,assigned_to_name,category')
     .eq('club_id', currentUser.clubId)
     .order('created_at', { ascending: false });
   allTasks = data || [];
-  renderKanban();
+  renderKanban(getFilteredTasks());
+  updatePillCounts();
   renderChatRightTasks();
   updateTasksBadge();
 }
 
-function renderKanban() {
+function renderKanban(tasks) {
+  if (!tasks) tasks = getFilteredTasks();
   const cols   = { backlog: document.getElementById('colBacklog'), inprogress: document.getElementById('colInprogress'), blocked: document.getElementById('colBlocked'), done: document.getElementById('colDone') };
   const counts = { backlog: 0, inprogress: 0, blocked: 0, done: 0 };
 
   Object.values(cols).forEach(c => { if (c) c.innerHTML = ''; });
 
-  for (const t of allTasks) {
+  for (const t of tasks) {
     const key = STATUS_COL[t.status] || 'backlog';
     counts[key]++;
     const col = cols[key];
@@ -971,6 +1019,7 @@ function openNewTask() {
   document.getElementById('newTaskDesc').value     = '';
   document.getElementById('newTaskDue').value      = '';
   document.getElementById('newTaskPriority').value = 'medium';
+  document.getElementById('newTaskCategory').value = 'general';
   document.getElementById('newTaskAssignee').value = '';
   document.getElementById('newTaskOverlay').classList.add('is-open');
   document.getElementById('newTaskPanel').classList.add('is-open');
@@ -994,6 +1043,7 @@ async function saveNewTask() {
     description: document.getElementById('newTaskDesc').value.trim() || null,
     due_date:    document.getElementById('newTaskDue').value || null,
     priority:    document.getElementById('newTaskPriority').value,
+    category:    document.getElementById('newTaskCategory').value || 'general',
     status:      'pending'
   }).select().single();
   if (!error && data) {

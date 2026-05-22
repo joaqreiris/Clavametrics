@@ -498,45 +498,13 @@
               <span class="month"><strong>Jun</strong>'26</span>
             </div>
 
-            <!-- MC bars row (today is May 16, around 71% across the timeline) -->
-            <div class="cal-row-mcs" style="position:relative; height:38px">
-              <!-- MC 9 → 22 spread across the half-season -->
-              <div class="mc-bar is-past" style="left:0.5%;  width:6%;"><span class="num">MC 9</span><span class="name">Pre-season II</span></div>
-              <div class="mc-bar is-past" style="left:7%;    width:6%;"><span class="num">MC 10</span><span class="name">Apertura</span></div>
-              <div class="mc-bar is-past" style="left:13.5%; width:7%;"><span class="num">MC 11</span><span class="name">Atlético + Boca</span></div>
-              <div class="mc-bar is-past" style="left:21%;   width:6%;"><span class="num">MC 12</span><span class="name">Recovery week</span></div>
-              <div class="mc-bar is-past" style="left:27.5%; width:7%;"><span class="num">MC 13</span><span class="name">Triple match</span></div>
-              <div class="mc-bar is-current" style="left:35%; width:8.5%;"><span class="num">MC 14</span><span class="name">Atlético + Independiente</span></div>
-              <div class="mc-bar" style="left:44%; width:6.5%;"><span class="num">MC 15</span><span class="name">Mendoza away</span></div>
-              <div class="mc-bar" style="left:51%; width:6%;"><span class="num">MC 16</span><span class="name">Rest + Racing</span></div>
-              <div class="mc-bar" style="left:57.5%; width:8%;"><span class="num">MC 17</span><span class="name">Cup quarter-final</span></div>
-              <div class="mc-bar" style="left:66%; width:6.5%;"><span class="num">MC 18</span><span class="name">River + Banfield</span></div>
-              <div class="mc-bar" style="left:73%; width:7%;"><span class="num">MC 19</span><span class="name">Cup semi-final</span></div>
-              <div class="mc-bar" style="left:80.5%; width:6.5%;"><span class="num">MC 20</span><span class="name">Recovery</span></div>
-              <div class="mc-bar" style="left:87.5%; width:6%;"><span class="num">MC 21</span><span class="name">Final stretch</span></div>
-              <div class="mc-bar" style="left:94%; width:5.5%;"><span class="num">MC 22</span><span class="name">Cup final</span></div>
-
-              <!-- Today line -->
-              <div class="today-line" style="left:38.2%"></div>
+            <!-- MC bars row — rendered by renderSeasonRibbon() from Supabase microcycles data -->
+            <div class="cal-row-mcs" id="calRibbonMcs" style="position:relative; height:38px">
+              <div class="today-line" id="calTodayLine" style="left:50%"></div>
             </div>
 
-            <!-- Match markers row -->
-            <div class="cal-row-matches" style="position:relative; height:30px">
-              <span class="match-marker is-away" style="left:2.5%"><i class="ti ti-soccer-field"></i>R. Plate</span>
-              <span class="match-marker is-home" style="left:9.5%"><i class="ti ti-home"></i>Boca</span>
-              <span class="match-marker is-home" style="left:16.5%"><i class="ti ti-home"></i>Atlético</span>
-              <span class="match-marker is-away" style="left:24.5%"><i class="ti ti-plane"></i>San Lorenzo</span>
-              <span class="match-marker is-home" style="left:30%"><i class="ti ti-home"></i>Vélez</span>
-              <span class="match-marker is-key" style="left:38%"><i class="ti ti-trophy"></i>Atlético · MC 14</span>
-              <span class="match-marker is-away" style="left:46%"><i class="ti ti-plane"></i>Mendoza</span>
-              <span class="match-marker is-home" style="left:55%"><i class="ti ti-home"></i>Racing</span>
-              <span class="match-marker is-key" style="left:62%"><i class="ti ti-trophy"></i>Cup QF</span>
-              <span class="match-marker is-away" style="left:69%"><i class="ti ti-plane"></i>River</span>
-              <span class="match-marker is-home" style="left:75%"><i class="ti ti-home"></i>Banfield</span>
-              <span class="match-marker is-key" style="left:82%"><i class="ti ti-trophy"></i>Cup SF</span>
-              <span class="match-marker is-home" style="left:91%"><i class="ti ti-home"></i>Lanús</span>
-              <span class="match-marker is-key" style="left:97%"><i class="ti ti-trophy"></i>Cup Final</span>
-            </div>
+            <!-- Match markers row — rendered by renderSeasonRibbon() -->
+            <div class="cal-row-matches" id="calRibbonMatches" style="position:relative; height:30px"></div>
 
             <!-- Week ticks -->
             <div class="cal-row-weeks">
@@ -623,58 +591,8 @@
                 <button class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
               </div>
             </div>
-            <div>
-              <div class="upcoming-row">
-                <div class="upcoming-date"><div class="m">May</div><div class="d">16</div></div>
-                <div class="upcoming-body">
-                  <div class="upcoming-title">Speed · activation 50′</div>
-                  <div class="upcoming-meta"><span class="badge t-training">TRAINING</span>Today · CT field 2</div>
-                </div>
-                <div>
-                  <div class="upcoming-time">17:00</div>
-                </div>
-              </div>
-              <div class="upcoming-row">
-                <div class="upcoming-date"><div class="m">May</div><div class="d">17</div></div>
-                <div class="upcoming-body">
-                  <div class="upcoming-title">Walkthrough · 45′</div>
-                  <div class="upcoming-meta"><span class="badge t-training">TRAINING</span>Sat MD−1</div>
-                </div>
-                <div><div class="upcoming-time">11:00</div></div>
-              </div>
-              <div class="upcoming-row">
-                <div class="upcoming-date" style="background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)"><div class="m" style="color:var(--cm-danger)">May</div><div class="d" style="color:var(--cm-danger)">18</div></div>
-                <div class="upcoming-body">
-                  <div class="upcoming-title">vs Atlético · home</div>
-                  <div class="upcoming-meta"><span class="badge t-match">MATCH</span>Estadio Clava · 27,000 capacity</div>
-                </div>
-                <div><div class="upcoming-time">17:00</div></div>
-              </div>
-              <div class="upcoming-row">
-                <div class="upcoming-date"><div class="m">May</div><div class="d">22</div></div>
-                <div class="upcoming-body">
-                  <div class="upcoming-title">Flight → Mendoza</div>
-                  <div class="upcoming-meta"><span class="badge t-travel">TRAVEL</span>AR1432 · 2-day trip</div>
-                </div>
-                <div><div class="upcoming-time">08:00</div></div>
-              </div>
-              <div class="upcoming-row">
-                <div class="upcoming-date" style="background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)"><div class="m" style="color:var(--cm-danger)">May</div><div class="d" style="color:var(--cm-danger)">24</div></div>
-                <div class="upcoming-body">
-                  <div class="upcoming-title">vs Independiente · away</div>
-                  <div class="upcoming-meta"><span class="badge t-match">MATCH</span>Mendoza · Mario Kempes</div>
-                </div>
-                <div><div class="upcoming-time">17:00</div></div>
-              </div>
-              <div class="upcoming-row">
-                <div class="upcoming-date"><div class="m">May</div><div class="d">26</div></div>
-                <div class="upcoming-body">
-                  <div class="upcoming-title">Recovery week starts</div>
-                  <div class="upcoming-meta"><span class="badge t-recovery">RECOVERY</span>MC 15 begins · pool + light</div>
-                </div>
-                <div><div class="upcoming-when">all day</div></div>
-              </div>
-            </div>
+            <!-- Upcoming events rendered by renderUpcoming() from Supabase training_sessions + microcycles -->
+            <div id="calUpcomingList" style="min-height:40px"></div>
           </div>
 
           <!-- Planned workload by MC -->
@@ -1104,6 +1022,154 @@ document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn =>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
+// ── Season Ribbon ─────────────────────────────────────────────
+function renderSeasonRibbon(mcs) {
+  if (!mcs.length) return;
+
+  const ordered = mcs.slice().sort((a, b) => a.start_date > b.start_date ? 1 : -1);
+  const ribbonStart = new Date(ordered[0].start_date + 'T00:00:00');
+  const ribbonEnd   = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
+  const totalMs     = ribbonEnd - ribbonStart;
+  if (totalMs <= 0) return;
+
+  function pct(dateStr) {
+    const ms = new Date(dateStr + 'T00:00:00') - ribbonStart;
+    return Math.max(0, Math.min(100, (ms / totalMs) * 100)).toFixed(2);
+  }
+
+  const today = new Date();
+
+  // MC bars
+  const barsEl = document.getElementById('calRibbonMcs');
+  if (barsEl) {
+    barsEl.innerHTML = '';
+    ordered.forEach(mc => {
+      const left  = pct(mc.start_date);
+      const width = Math.max(0.5, parseFloat(pct(mc.end_date)) - parseFloat(pct(mc.start_date))).toFixed(2);
+      const isPast    = new Date(mc.end_date + 'T00:00:00') < today;
+      const isCurrent = mc.start_date <= TODAY && mc.end_date >= TODAY;
+      const bar = document.createElement('div');
+      bar.className = 'mc-bar' + (isPast ? ' is-past' : isCurrent ? ' is-current' : '');
+      bar.style.cssText = `left:${left}%;width:${width}%`;
+      bar.innerHTML = `<span class="num">${mc.name || '—'}</span>`;
+      barsEl.appendChild(bar);
+    });
+    // Today line at correct position
+    const todayPct = ((today - ribbonStart) / totalMs * 100).toFixed(2);
+    const tl = document.createElement('div');
+    tl.className = 'today-line';
+    tl.style.left = todayPct + '%';
+    barsEl.appendChild(tl);
+  }
+
+  // Match markers
+  const matchesEl = document.getElementById('calRibbonMatches');
+  if (matchesEl) {
+    matchesEl.innerHTML = '';
+    ordered.forEach(mc => {
+      if (!mc.match_date) return;
+      const left    = pct(mc.match_date);
+      const isAway  = mc.home_away === 'away';
+      const isCup   = /cup|copa|final/i.test(mc.rival || '');
+      const cls     = 'match-marker' + (isAway ? ' is-away' : isCup ? ' is-key' : ' is-home');
+      const icon    = isAway ? 'ti-plane' : isCup ? 'ti-trophy' : 'ti-home';
+      const marker  = document.createElement('span');
+      marker.className = cls;
+      marker.style.left = left + '%';
+      marker.innerHTML  = `<i class="ti ${icon}"></i>${mc.rival || 'Match'}`;
+      matchesEl.appendChild(marker);
+    });
+  }
+}
+
+// ── Upcoming Events ───────────────────────────────────────────
+async function renderUpcoming() {
+  const container = document.getElementById('calUpcomingList');
+  if (!container) return;
+
+  const in14d = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+
+  const { data: sessions } = await window.sb
+    .from('training_sessions')
+    .select('id,title,session_type,session_date,notes')
+    .eq('club_id', _clubId)
+    .gte('session_date', TODAY)
+    .lte('session_date', in14d)
+    .order('session_date')
+    .limit(6);
+
+  // Merge sessions with match days from MCs
+  const items = [];
+  (sessions || []).forEach(s => {
+    items.push({ date: s.session_date, title: s.title, type: s.session_type });
+  });
+  _allMCs.forEach(mc => {
+    if (!mc.match_date || mc.match_date < TODAY || mc.match_date > in14d) return;
+    if (!items.find(i => i.date === mc.match_date && i.type === 'match')) {
+      items.push({ date: mc.match_date, title: `vs ${mc.rival || 'Match'}`, type: 'match', isAway: mc.home_away === 'away' });
+    }
+  });
+  items.sort((a, b) => a.date > b.date ? 1 : -1);
+
+  if (!items.length) {
+    container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No upcoming events in the next 14 days</div>';
+    return;
+  }
+
+  const typeLabel = { match: 'MATCH', training: 'TRAINING', gym: 'GYM', travel: 'TRAVEL', recovery: 'RECOVERY', tactical: 'TACTICAL', physical: 'PHYSICAL' };
+  const typeCls   = { match: 't-match', training: 't-training', gym: 't-gym', travel: 't-travel', recovery: 't-recovery' };
+
+  container.innerHTML = items.slice(0, 6).map(item => {
+    const d      = new Date(item.date + 'T12:00:00');
+    const month  = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const day    = d.getDate();
+    const label  = typeLabel[item.type] || (item.type || 'EVENT').toUpperCase();
+    const cls    = typeCls[item.type] || '';
+    const isMatch = item.type === 'match';
+    const dStyle = isMatch ? 'background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)' : '';
+    const mStyle = isMatch ? 'color:var(--cm-danger)' : '';
+    const loc    = isMatch ? (item.isAway ? 'Away' : 'Home') : '';
+    return `
+      <div class="upcoming-row">
+        <div class="upcoming-date" style="${dStyle}"><div class="m" style="${mStyle}">${month}</div><div class="d" style="${mStyle}">${day}</div></div>
+        <div class="upcoming-body">
+          <div class="upcoming-title">${item.title}</div>
+          <div class="upcoming-meta"><span class="badge ${cls}">${label}</span>${loc}</div>
+        </div>
+        <div></div>
+      </div>`;
+  }).join('');
+}
+
+// ── Calendar KPIs ─────────────────────────────────────────────
+function renderCalKPIs(mcs) {
+  const today = new Date();
+  const in21d = new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0];
+
+  // Next match from MCs
+  const upcoming = mcs
+    .filter(mc => mc.match_date && mc.match_date >= TODAY)
+    .sort((a, b) => a.match_date > b.match_date ? 1 : -1);
+
+  const nextMatch = upcoming[0];
+  const kpiNext  = document.querySelector('.cal-kpi:nth-child(1) .cal-kpi-v');
+  const kpiNextT = document.querySelector('.cal-kpi:nth-child(1) .cal-kpi-t');
+  if (kpiNext && nextMatch) {
+    const d    = new Date(nextMatch.match_date + 'T12:00:00');
+    const diff = Math.round((d - today) / 86400000);
+    kpiNext.textContent  = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    kpiNextT.textContent = `${nextMatch.rival || 'Match'} · ${nextMatch.home_away || ''} · in ${diff} day${diff === 1 ? '' : 's'}`;
+  } else if (kpiNext) {
+    kpiNext.textContent  = '—';
+    kpiNextT.textContent = 'No upcoming matches';
+  }
+
+  // Match density: count matches in next 21 days
+  const matchCount = mcs.filter(mc => mc.match_date && mc.match_date >= TODAY && mc.match_date <= in21d).length;
+  const kpiDensity = document.querySelector('.cal-kpi:nth-child(2) .cal-kpi-v');
+  if (kpiDensity) kpiDensity.innerHTML = `${matchCount} <sub>in 21d</sub>`;
+}
+
 // ── Boot ──────────────────────────────────────────────────────
 (async () => {
   const ok = await window.requireAuth();
@@ -1121,13 +1187,18 @@ document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn =>
   const el1 = document.getElementById('sideInjCount'); if (el1) el1.textContent = injRes.count || '';
   const el2 = document.getElementById('calSquadCt');   if (el2) el2.textContent = `Players · ${playersRes.count ?? 0}`;
 
-  // Load all MCs ordered by start_date desc
+  // Load all MCs ordered by start_date asc for ribbon
   const { data: mcs } = await window.sb.from('microcycles')
     .select('id,name,start_date,end_date,match_date,rival,home_away,color')
     .eq('club_id', _clubId)
     .order('start_date', { ascending: false });
 
   _allMCs = mcs || [];
+
+  // Render ribbon and KPIs from real MC data
+  renderSeasonRibbon(_allMCs);
+  renderCalKPIs(_allMCs);
+  renderUpcoming(); // async, loads sessions from DB
 
   // Default to current/most recent MC
   _mcIdx = 0;

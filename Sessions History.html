@@ -180,10 +180,9 @@
           </div>
 
           <h4>Microcycle</h4>
-          <div class="sh-opt is-on"><span class="cb"></span>MC 14 · vs Atlético <span class="ct">6</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span>MC 13 · vs River <span class="ct">14</span></div>
-          <div class="sh-opt"><span class="cb"></span>MC 12 · vs Boca <span class="ct">10</span></div>
-          <div class="sh-opt"><span class="cb"></span>MC 11 · vs Racing <span class="ct">11</span></div>
+          <div id="shMcFilters" style="color:var(--cm-fg-muted);font:500 11.5px/1.4 var(--cm-font-sans);padding:2px 0">
+            MC filter requires microcycle data — add microcycle_id to sessions query.
+          </div>
 
           <h4>MD position</h4>
           <div class="sh-chips">
@@ -197,13 +196,8 @@
             <button class="sh-chip">MD+2</button>
           </div>
 
-          <h4>Orientation</h4>
-          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d intro"></span></span>Introductory <span class="ct">12</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d act"></span></span>Activation <span class="ct">28</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d ten"></span></span>Muscle tension <span class="ct">16</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d spd"></span></span>Speed <span class="ct">22</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d dur"></span></span>Duration <span class="ct">34</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span><span class="sh-orient" style="margin-right:2px"><span class="d rec"></span></span>Recovery <span class="ct">36</span></div>
+          <h4>Session type</h4>
+          <div id="shOrientFilters"><!-- populated by renderOrientFilters() --></div>
 
           <h4>Focus</h4>
           <div class="sh-chips">
@@ -214,10 +208,7 @@
             <button class="sh-chip">Positional</button>
           </div>
 
-          <h4>Type</h4>
-          <div class="sh-opt is-on"><span class="cb"></span>SSG <span class="ct">42</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span>MSG <span class="ct">38</span></div>
-          <div class="sh-opt is-on"><span class="cb"></span>LSG <span class="ct">68</span></div>
+<!-- Type (SSG/MSG/LSG) removed — no DB column in training_sessions -->
 
           <h4>Load band</h4>
           <div class="sh-chips">
@@ -242,11 +233,7 @@
 
           <div class="sh-active">
             <span class="lbl">Active filters:</span>
-            <span class="sh-active-chip">30d <i class="ti ti-x" style="font-size:11px"></i></span>
-            <span class="sh-active-chip">MC 14 · MC 13 <i class="ti ti-x" style="font-size:11px"></i></span>
-            <span class="sh-active-chip">MD−4 / MD−3 / MD−2 / MD−1 / MD+1 <i class="ti ti-x" style="font-size:11px"></i></span>
-            <span class="sh-active-chip">Tactical · Physical · Technical <i class="ti ti-x" style="font-size:11px"></i></span>
-            <span class="sh-active-chip">All orientations <i class="ti ti-x" style="font-size:11px"></i></span>
+            <span id="shActiveChips"><!-- populated by renderActiveChips() --></span>
             <span class="lbl" style="margin-left:auto"><strong id="shFilterCount" style="color:var(--cm-fg-strong)">—</strong> match filters</span>
           </div>
 
@@ -327,6 +314,7 @@
       .order('session_date', { ascending: false });
     if (error) { console.error(error); return; }
     allSessions = data || [];
+    renderOrientFilters();
     const tc = document.getElementById('shTotalCount');
     if (tc) tc.textContent = allSessions.length;
     applyFilters();
@@ -337,17 +325,68 @@
     return Math.round(s.rpe.reduce((t, r) => t + (r.load || 0), 0) / s.rpe.length);
   }
 
+  const ORIENT_BY_TYPE = {
+    Tactical:    { cls:'dur',   label:'Duration' },
+    Physical:    { cls:'spd',   label:'Speed' },
+    Match:       { cls:'ten',   label:'Match' },
+    Recovery:    { cls:'rec',   label:'Recovery' },
+    Gym:         { cls:'ten',   label:'Muscle tension' },
+    Conditioning:{ cls:'act',   label:'Activation' },
+    Technical:   { cls:'intro', label:'Introductory' },
+  };
+
+  function renderOrientFilters() {
+    const container = document.getElementById('shOrientFilters');
+    if (!container) return;
+    const counts = {};
+    allSessions.forEach(s => { const t = s.session_type || 'Other'; counts[t] = (counts[t] || 0) + 1; });
+    if (!Object.keys(counts).length) {
+      container.innerHTML = '<span style="color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">No sessions yet</span>';
+      return;
+    }
+    container.innerHTML = Object.entries(counts).map(([type, n]) => {
+      const o = ORIENT_BY_TYPE[type] || { cls:'act', label: type };
+      return `<div class="sh-opt is-on" data-st="${type}">
+        <span class="cb"></span>
+        <span class="sh-orient" style="margin-right:2px"><span class="d ${o.cls}"></span></span>
+        ${o.label} <span class="ct">${n}</span>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.sh-opt').forEach(el =>
+      el.addEventListener('click', () => { el.classList.toggle('is-on'); applyFilters(); }));
+  }
+
+  function renderActiveChips() {
+    const el = document.getElementById('shActiveChips');
+    if (!el) return;
+    const chips = [];
+    if (activeDays) chips.push(`${activeDays}d`);
+    const activeTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')]
+      .map(e => { const t = e.dataset.st; return ORIENT_BY_TYPE[t]?.label || t; });
+    if (activeTypes.length && activeTypes.length < Object.keys(ORIENT_BY_TYPE).length + 1)
+      chips.push(activeTypes.join(' · '));
+    el.innerHTML = chips.map(c =>
+      `<span class="sh-active-chip">${c} <i class="ti ti-x" style="font-size:11px"></i></span>`
+    ).join('');
+  }
+
   function applyFilters() {
     const q = searchText.toLowerCase().trim();
     const cutoff = activeDays ? new Date(Date.now() - activeDays * 864e5) : null;
+    const activeTypes = new Set(
+      [...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')]
+        .map(el => el.dataset.st).filter(Boolean)
+    );
     filteredSessions = allSessions.filter(s => {
       if (cutoff && new Date(s.session_date) < cutoff) return false;
       if (q && !`${s.title || ''} ${s.notes || ''}`.toLowerCase().includes(q)) return false;
+      if (activeTypes.size > 0 && !activeTypes.has(s.session_type || 'Other')) return false;
       return true;
     });
     currentPage = 0;
     const fc = document.getElementById('shFilterCount');
     if (fc) fc.textContent = filteredSessions.length;
+    renderActiveChips();
     updateKPIs();
     renderTable();
     renderFooter();
@@ -439,7 +478,26 @@
   }
 
   function openSess(e) { e.stopPropagation(); window.location.href = 'Daily Planning.html'; }
-  function dupSess(e) { e.stopPropagation(); }
+  async function dupSess(e) {
+    e.stopPropagation();
+    const row = e.target.closest('tr[data-id]');
+    if (!row) return;
+    const sess = allSessions.find(s => s.id === row.dataset.id);
+    if (!sess) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    const { error } = await window.sb.from('training_sessions').insert({
+      club_id:      sess.club_id,
+      session_date: sess.session_date,
+      title:        `Copy of ${sess.title || 'Untitled'}`,
+      notes:        sess.notes,
+      session_type: sess.session_type,
+      duration:     sess.duration,
+    });
+    if (error) { alert('Error duplicating session: ' + error.message); btn.disabled = false; return; }
+    btn.innerHTML = '<i class="ti ti-check"></i>';
+    setTimeout(() => location.reload(), 800);
+  }
 
   // Date chips — exclusive selection
   document.querySelectorAll('#dateChips .sh-chip[data-days]').forEach(chip => {
@@ -451,8 +509,8 @@
     });
   });
 
-  // Visual-only toggles for filter rail + view seg
-  document.querySelectorAll('.sh-opt').forEach(el => el.addEventListener('click', () => el.classList.toggle('is-on')));
+  // View seg (list/grid/calendar) — visual only, switching not yet implemented
+
   document.querySelectorAll('.sh-seg button').forEach(b => b.addEventListener('click', () => {
     b.parentElement.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');

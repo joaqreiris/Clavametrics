@@ -6,7 +6,16 @@
 // ─────────────────────────────────────────────────────────────
 // Status bar
 // ─────────────────────────────────────────────────────────────
-function IOSStatusBar({ dark = false, time = '9:41' }) {
+function IOSStatusBar({ dark = false }) {
+  function fmtTime() {
+    const n = new Date();
+    return `${n.getHours()}:${String(n.getMinutes()).padStart(2, '0')}`;
+  }
+  const [time, setTime] = React.useState(fmtTime);
+  React.useEffect(() => {
+    const id = setInterval(() => setTime(fmtTime()), 10000);
+    return () => clearInterval(id);
+  }, []);
   const c = dark ? '#fff' : '#000';
   return (
     <div style={{
