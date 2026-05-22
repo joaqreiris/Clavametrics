@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -373,8 +374,11 @@
             <span class="pill red"><span class="d"></span>&gt; 1.5 danger</span>
             <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Squad avg today · <strong id="lmAcwrToday" style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
           </div>
-          <div class="lm-card-b" style="padding-top:4px">
-            <svg viewBox="0 0 880 360" preserveAspectRatio="none" style="width:100%;height:360px;display:block" font-family="Geist, ui-sans-serif, system-ui, sans-serif">
+          <div class="lm-card-b" style="padding-top:4px;position:relative;height:360px">
+            <canvas id="acwrChart" style="display:none"></canvas>
+            <div id="acwrEmpty" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No RPE data in the last 28 days</div>
+            <!-- static SVG shown until JS replaces it -->
+            <svg id="acwrSvg" viewBox="0 0 880 360" preserveAspectRatio="none" style="width:100%;height:360px;display:block" font-family="Geist, ui-sans-serif, system-ui, sans-serif">
 
               <!-- Plot area: x 60-840, y 30-260 ; ratio plot.  Session-bars: y 280-340 -->
               <defs>
@@ -665,128 +669,264 @@
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
-
   if (club) window.applyClubTheme();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today    = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const from28d  = new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0];
+  const from7d   = new Date(Date.now() -  7 * 86400000).toISOString().split('T')[0];
 
-  const [playersRes, wellnessRes] = await Promise.all([
-    window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive').order('number'),
-    window.sb.from('wellness').select('player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at').eq('club_id', clubId).gte('submitted_at', today + 'T00:00:00').lt('submitted_at', tomorrow + 'T00:00:00').catch(() => ({ data: [] }))
+  const [playersRes, wellnessRes, sessionsRes] = await Promise.all([
+    window.sb.from('players')
+      .select('id,first_name,last_name,number,position')
+      .eq('club_id', clubId).neq('status', 'inactive').order('number'),
+    window.sb.from('wellness')
+      .select('player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at')
+      .eq('club_id', clubId)
+      .gte('submitted_at', today + 'T00:00:00').lt('submitted_at', tomorrow + 'T00:00:00')
+      .catch(() => ({ data: [] })),
+    window.sb.from('training_sessions')
+      .select('id,session_date,title,rpe(player_id,rpe,duration,load)')
+      .eq('club_id', clubId)
+      .gte('session_date', from28d)
+      .order('session_date')
+      .catch(() => ({ data: [] }))
   ]);
 
-  const players = playersRes.data || [];
+  const players      = playersRes.data  || [];
   const wellnessList = wellnessRes.data || [];
+  const sessions28d  = sessionsRes.data || [];
 
+  // ── Wellness ────────────────────────────────────────────────────
   const wellMap = {};
   wellnessList.forEach(w => { wellMap[w.player_id] = w; });
 
   const submitted = wellnessList.length;
-  const total = players.length;
-
-  document.getElementById('lmWellSub').textContent = `${submitted} of ${total} submitted today`;
+  const total     = players.length;
+  document.getElementById('lmWellSub').textContent  = `${submitted} of ${total} submitted today`;
   document.getElementById('lmWellHead').textContent = `${submitted} of ${total} submitted`;
 
-  function getVal(obj, candidates) {
-    for (const k of candidates) { if (obj[k] != null) return +obj[k]; }
-    return null;
+  function getVal(obj, keys) {
+    for (const k of keys) { if (obj[k] != null) return +obj[k]; } return null;
   }
-
-  function avgDim(list, candidates) {
-    const vals = list.map(w => getVal(w, candidates)).filter(v => v != null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  function avgDim(list, keys) {
+    const vals = list.map(w => getVal(w, keys)).filter(v => v != null);
+    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
   }
 
   const dims = [
-    { label: 'Sleep',    keys: ['sleep_quality','sleep'] },
-    { label: 'Mood',     keys: ['mood'] },
-    { label: 'Fatigue',  keys: ['fatigue'] },
-    { label: 'Stress',   keys: ['stress'] },
-    { label: 'Soreness', keys: ['muscle_soreness','soreness'] }
+    { label:'Sleep',    keys:['sleep_quality','sleep'] },
+    { label:'Mood',     keys:['mood'] },
+    { label:'Fatigue',  keys:['fatigue'] },
+    { label:'Stress',   keys:['stress'] },
+    { label:'Soreness', keys:['muscle_soreness','soreness'] }
   ];
-
   const dimAvgs = dims.map(d => avgDim(wellnessList, d.keys));
+  const readVals = wellnessList.map(w => getVal(w,['readiness','overall','score','wellness_score'])).filter(v=>v!=null);
+  const avgReadiness = readVals.length
+    ? readVals.reduce((a,b)=>a+b,0)/readVals.length
+    : (dimAvgs.filter(v=>v!=null).length ? dimAvgs.filter(v=>v!=null).reduce((a,b)=>a+b,0)/dimAvgs.filter(v=>v!=null).length : null);
 
-  const readinessVals = wellnessList
-    .map(w => getVal(w, ['readiness','overall','score','wellness_score']))
-    .filter(v => v != null);
-  const avgReadiness = readinessVals.length
-    ? readinessVals.reduce((a, b) => a + b, 0) / readinessVals.length
-    : (dimAvgs.filter(v => v != null).length
-        ? dimAvgs.filter(v => v != null).reduce((a, b) => a + b, 0) / dimAvgs.filter(v => v != null).length
-        : null);
-
-  if (avgReadiness != null) {
+  if (avgReadiness != null)
     document.getElementById('lmKpiWellness').innerHTML = `${avgReadiness.toFixed(1)} <sub>/ 10</sub>`;
-  }
 
   const wellBars = document.getElementById('lmWellBars');
-  if (wellnessList.length && dimAvgs.some(v => v != null)) {
-    wellBars.innerHTML = dims.map((d, i) => {
+  if (wellnessList.length && dimAvgs.some(v=>v!=null)) {
+    wellBars.innerHTML = dims.map((d,i) => {
       const val = dimAvgs[i];
       if (val == null) return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"><span class="bf" style="width:0%"></span></span><span class="v">—</span></div>`;
-      const pct = Math.round(val * 10);
-      const col = val >= 7 ? 'var(--cm-success)' : val >= 5 ? 'var(--cm-warning)' : 'var(--cm-danger)';
+      const pct = Math.round(val*10);
+      const col = val>=7?'var(--cm-success)':val>=5?'var(--cm-warning)':'var(--cm-danger)';
       return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"><span class="bf" style="width:${pct}%;background:${col}"></span></span><span class="v">${val.toFixed(1)}<sub>/10</sub></span></div>`;
     }).join('');
   }
 
-  const POS_CSS = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', FB:'fb', MF:'mf', DM:'mf', CM:'mf', WG:'wg', ST:'st', CF:'st' };
-  function normPos(p) { return p ? (POS_CSS[p.toUpperCase()] ? p.toUpperCase() : 'MF') : 'MF'; }
+  // ── ACWR from RPE ───────────────────────────────────────────────
+  const playerLoadHist = {}; // pid → [{date,load,score}]
+  sessions28d.forEach(s => {
+    (s.rpe || []).forEach(r => {
+      if (!playerLoadHist[r.player_id]) playerLoadHist[r.player_id] = [];
+      playerLoadHist[r.player_id].push({ date: s.session_date, load: r.load||0, score: r.rpe||0 });
+    });
+  });
 
-  function playerReadiness(w) {
-    if (!w) return null;
-    let val = getVal(w, ['readiness','overall','score','wellness_score']);
-    if (val != null) return val;
-    const dims2 = [['sleep_quality','sleep'],['mood'],['fatigue'],['stress'],['muscle_soreness','soreness']];
-    const vals = dims2.map(ks => getVal(w, ks)).filter(v => v != null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  const acwrByPlayer = {};
+  Object.entries(playerLoadHist).forEach(([pid, recs]) => {
+    const acute   = recs.filter(r=>r.date>=from7d).reduce((s,r)=>s+r.load,0);
+    const chronic = recs.reduce((s,r)=>s+r.load,0)/4;
+    acwrByPlayer[pid] = chronic>0 ? +(acute/chronic).toFixed(2) : null;
+  });
+
+  const acwrVals      = Object.values(acwrByPlayer).filter(v=>v!=null);
+  const squadAvg      = acwrVals.length ? +(acwrVals.reduce((a,b)=>a+b,0)/acwrVals.length).toFixed(2) : null;
+  const dangerPlayers = players.filter(p=>(acwrByPlayer[p.id]||0)>1.5);
+  const overPlayers   = players.filter(p=>{ const v=acwrByPlayer[p.id]; return v>1.3&&v<=1.5; });
+  const sweetPlayers  = players.filter(p=>{ const v=acwrByPlayer[p.id]; return v!=null&&v>=0.8&&v<=1.3; });
+  const underPlayers  = players.filter(p=>{ const v=acwrByPlayer[p.id]; return v!=null&&v<0.8; });
+  const noDataPlayers = players.filter(p=>acwrByPlayer[p.id]==null);
+
+  // KPI: Squad avg ACWR
+  if (squadAvg != null) {
+    document.getElementById('lmKpiAcwr').innerHTML = `${squadAvg}`;
+    document.getElementById('lmAcwrPin').style.left = Math.min(95,(squadAvg/2)*100)+'%';
+    const el = document.getElementById('lmAcwrToday');
+    if (el) { el.textContent=squadAvg; el.style.color=squadAvg>1.5?'var(--cm-danger)':squadAvg>1.3?'var(--cm-warning)':'var(--cm-success)'; }
+  }
+  document.getElementById('lmKpiDanger').innerHTML = `${dangerPlayers.length} <sub>/ ${total}</sub>`;
+  ['lmPillAll','lmPillDanger','lmPillOver','lmPillSweet','lmPillUnder'].forEach((id,i)=>{
+    const el=document.getElementById(id); if(el) el.textContent=[total,dangerPlayers.length,overPlayers.length,sweetPlayers.length,underPlayers.length][i];
+  });
+
+  // KPI: Session RPE avg (latest session)
+  const latestSess = sessions28d[sessions28d.length-1];
+  if (latestSess?.rpe?.length) {
+    const scores = latestSess.rpe.map(r=>r.rpe||0).filter(v=>v>0);
+    if (scores.length) document.getElementById('lmKpiRpe').innerHTML = `${(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1)} <sub>/ 10</sub>`;
   }
 
-  if (players.length) {
-    const sorted = [...players].sort((a, b) => {
-      const wa = playerReadiness(wellMap[a.id]);
-      const wb = playerReadiness(wellMap[b.id]);
-      if (wa == null && wb == null) return 0;
-      if (wa == null) return 1;
-      if (wb == null) return -1;
-      return wb - wa;
+  // Donut
+  if (total>0) {
+    const sp=+(sweetPlayers.length/total*100).toFixed(1), op=+(overPlayers.length/total*100).toFixed(1), dp=+(dangerPlayers.length/total*100).toFixed(1);
+    let off=25;
+    [['lmDonutSweet',sp],['lmDonutOver',op],['lmDonutDanger',dp]].forEach(([id,pct])=>{
+      const el=document.getElementById(id);
+      if(el){ el.setAttribute('stroke-dasharray',`${pct} ${(100-pct).toFixed(1)}`); el.setAttribute('stroke-dashoffset',off); }
+      off-=pct;
+    });
+    const t=document.getElementById('lmDonutTotal'); if(t) t.textContent=total;
+    document.getElementById('lmDistSweet').textContent=sweetPlayers.length;
+    document.getElementById('lmDistOver').textContent=overPlayers.length;
+    document.getElementById('lmDistDanger').textContent=dangerPlayers.length;
+    document.getElementById('lmDistNoData').textContent=noDataPlayers.length;
+    document.getElementById('lmDistSub').textContent=`today, n=${total}`;
+  }
+
+  // Alert banner
+  const banner = document.getElementById('lmAlertBanner');
+  if (dangerPlayers.length>0) {
+    banner.style.display='flex';
+    document.getElementById('lmAlertH').textContent=`${dangerPlayers.length} player${dangerPlayers.length>1?'s':''} in danger zone (ACWR > 1.5)`;
+    document.getElementById('lmAlertP').textContent=dangerPlayers.map(p=>`${p.first_name||''} ${p.last_name||''}`.trim()).join(' · ');
+  } else {
+    banner.style.display='none';
+  }
+
+  // ── ACWR chart ─────────────────────────────────────────────────
+  const canvas = document.getElementById('acwrChart');
+  if (canvas && sessions28d.length>1) {
+    document.getElementById('acwrSvg').style.display='none';
+    document.getElementById('acwrEmpty').style.display='none';
+    canvas.style.display='block';
+    canvas.style.width='100%'; canvas.style.height='360px';
+
+    const labels = sessions28d.map(s=>{ const d=new Date(s.session_date+'T12:00:00'); return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); });
+    const n = labels.length;
+
+    // Per-session squad avg ACWR (rolling to each session date)
+    const acwrTrend = sessions28d.map(sess=>{
+      const d7=new Date(new Date(sess.session_date+'T12:00:00')-7*86400000).toISOString().split('T')[0];
+      const playerAcwrs=Object.entries(playerLoadHist).map(([pid,recs])=>{
+        const acute=recs.filter(r=>r.date<=sess.session_date&&r.date>d7).reduce((s,r)=>s+r.load,0);
+        const chronic=recs.filter(r=>r.date<=sess.session_date).reduce((s,r)=>s+r.load,0)/4;
+        return chronic>0?acute/chronic:null;
+      }).filter(v=>v!=null);
+      return playerAcwrs.length?+(playerAcwrs.reduce((a,b)=>a+b,0)/playerAcwrs.length).toFixed(2):null;
     });
 
-    document.getElementById('lmTbody').innerHTML = sorted.map(p => {
-      const pos = normPos(p.position);
-      const posCss = POS_CSS[pos] || 'mf';
-      const fullName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
-      const av = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() || '?';
-      const well = playerReadiness(wellMap[p.id]);
+    const sessionLoads=sessions28d.map(s=>(s.rpe||[]).reduce((sum,r)=>sum+(r.load||0),0));
+    const maxLoad=Math.max(...sessionLoads,1);
+    const accent=getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim()||'#22c55e';
 
-      const wellHtml = well != null
-        ? `<div class="lm-cell"><span class="lm-cell-v ${well >= 7 ? 'good' : well >= 5 ? 'warn' : 'danger'}">${well.toFixed(1)}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${well >= 7 ? 'green' : well >= 5 ? 'amber' : 'red'}" style="width:${Math.round(well*10)}%"></span></div></div>`
-        : `<div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div>`;
+    new Chart(canvas,{
+      data:{
+        labels,
+        datasets:[
+          {type:'line',data:Array(n).fill(1.5),borderColor:'rgba(220,38,38,0.45)',borderDash:[4,3],borderWidth:1.5,pointRadius:0,yAxisID:'y',order:4},
+          {type:'line',data:Array(n).fill(1.3),borderColor:'rgba(217,119,6,0.35)',borderDash:[3,3],borderWidth:1,pointRadius:0,yAxisID:'y',order:4},
+          {type:'line',data:Array(n).fill(0.8),borderColor:'rgba(34,197,94,0.35)',borderDash:[3,3],borderWidth:1,pointRadius:0,yAxisID:'y',order:4},
+          {type:'bar',label:'Session load',data:sessionLoads,backgroundColor:'rgba(34,197,94,0.12)',borderColor:'rgba(34,197,94,0.2)',borderWidth:1,borderRadius:2,yAxisID:'y2',order:5},
+          {type:'line',label:'Squad avg ACWR',data:acwrTrend,borderColor:accent,backgroundColor:'rgba(34,197,94,0.07)',borderWidth:2.5,pointRadius:3.5,pointHoverRadius:6,pointBackgroundColor:accent,pointBorderColor:'#fff',pointBorderWidth:1.5,tension:0.3,fill:true,spanGaps:true,yAxisID:'y',order:1}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:false}},
+        scales:{
+          y:{min:0,max:2.2,position:'left',grid:{color:'rgba(128,128,128,0.1)'},ticks:{color:'rgba(128,128,128,0.65)',font:{size:11},callback:v=>v.toFixed(1)},title:{display:true,text:'ACWR',color:'rgba(128,128,128,0.5)',font:{size:10}}},
+          y2:{position:'right',grid:{display:false},max:maxLoad*3,ticks:{color:'rgba(128,128,128,0.45)',font:{size:10}},title:{display:true,text:'Load (AU)',color:'rgba(128,128,128,0.4)',font:{size:10}}},
+          x:{grid:{color:'rgba(128,128,128,0.08)'},ticks:{color:'rgba(128,128,128,0.65)',font:{size:10},maxTicksLimit:12}}
+        }
+      }
+    });
+  } else if (canvas && sessions28d.length===0) {
+    document.getElementById('acwrSvg').style.display='none';
+    document.getElementById('acwrEmpty').style.display='flex';
+  }
 
-      const zonePill = well != null
-        ? (well >= 7
-            ? `<span class="lm-zone-pill opt"><span class="d"></span>Good</span>`
-            : well >= 5
-              ? `<span class="lm-zone-pill over"><span class="d"></span>Fair</span>`
-              : `<span class="lm-zone-pill red"><span class="d"></span>Low</span>`)
-        : `<span class="lm-zone-pill under"><span class="d"></span>No data</span>`;
+  // ── Player table ───────────────────────────────────────────────
+  const POS_CSS={GK:'gk',CB:'cb',LB:'fb',RB:'fb',FB:'fb',MF:'mf',DM:'mf',CM:'mf',WG:'wg',ST:'st',CF:'st'};
+  function normPos(p){return p?(POS_CSS[p.toUpperCase()]?p.toUpperCase():'MF'):'MF';}
+  function playerReadiness(w){
+    if(!w)return null;
+    let v=getVal(w,['readiness','overall','score','wellness_score']);
+    if(v!=null)return v;
+    const d2=[['sleep_quality','sleep'],['mood'],['fatigue'],['stress'],['muscle_soreness','soreness']];
+    const vs=d2.map(ks=>getVal(w,ks)).filter(v=>v!=null);
+    return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null;
+  }
+
+  const latestRpeMap={};
+  if(latestSess?.rpe) latestSess.rpe.forEach(r=>{latestRpeMap[r.player_id]=r.rpe;});
+
+  if(players.length){
+    const sorted=[...players].sort((a,b)=>{
+      const wa=playerReadiness(wellMap[a.id]),wb=playerReadiness(wellMap[b.id]);
+      if(wa==null&&wb==null)return 0; if(wa==null)return 1; if(wb==null)return -1; return wb-wa;
+    });
+
+    document.getElementById('lmTbody').innerHTML=sorted.map(p=>{
+      const pos=normPos(p.position),posCss=POS_CSS[pos]||'mf';
+      const fullName=((p.first_name||'')+' '+(p.last_name||'')).trim();
+      const av=(((p.first_name||'')[0]||'')+((p.last_name||'')[0]||'')).toUpperCase()||'?';
+      const well=playerReadiness(wellMap[p.id]);
+      const acwr=acwrByPlayer[p.id];
+      const rpeScore=latestRpeMap[p.id];
+
+      const hist=playerLoadHist[p.id]||[];
+      const acuteLoad=hist.filter(r=>r.date>=from7d).reduce((s,r)=>s+r.load,0);
+      const chronicLoad=hist.length?+(hist.reduce((s,r)=>s+r.load,0)/4).toFixed(0):null;
+
+      const cellAcwr=acwr!=null
+        ?`<td><div class="lm-cell"><span class="lm-cell-v ${acwr>1.5?'danger':acwr>1.3?'warn':acwr>=0.8?'good':''}">${acwr}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${acwr>1.5?'red':acwr>1.3?'amber':'green'}" style="width:${Math.min(100,Math.round(acwr/2*100))}%"></span></div></div></td>`
+        :`<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
+      const cellRpe=rpeScore!=null
+        ?`<td><div class="lm-cell"><span class="lm-cell-v ${rpeScore>=8?'danger':rpeScore>=6?'warn':'good'}">${rpeScore}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${rpeScore>=8?'red':rpeScore>=6?'amber':'green'}" style="width:${Math.round(rpeScore*10)}%"></span></div></div></td>`
+        :`<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
+      const cellWell=well!=null
+        ?`<td><div class="lm-cell"><span class="lm-cell-v ${well>=7?'good':well>=5?'warn':'danger'}">${well.toFixed(1)}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${well>=7?'green':well>=5?'amber':'red'}" style="width:${Math.round(well*10)}%"></span></div></div></td>`
+        :`<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
+      const cellAC=hist.length
+        ?`<td><span class="lm-cell-v" style="font:500 12px/1 var(--cm-font-mono)">${Math.round(acuteLoad)} / ${chronicLoad}</span></td>`
+        :`<td><span class="lm-cell-v" style="color:var(--cm-fg-faint)">— / —</span></td>`;
+      const zonePill=acwr!=null
+        ?(acwr>1.5?`<span class="lm-zone-pill red"><span class="d"></span>Danger</span>`
+          :acwr>1.3?`<span class="lm-zone-pill over"><span class="d"></span>Overreach</span>`
+          :acwr>=0.8?`<span class="lm-zone-pill opt"><span class="d"></span>Sweet‑spot</span>`
+          :`<span class="lm-zone-pill under"><span class="d"></span>Underloaded</span>`)
+        :`<span class="lm-zone-pill under"><span class="d"></span>No data</span>`;
 
       return `<tr>
-        <td><span style="font:600 13px/1 var(--cm-font-mono)">${p.number ?? '—'}</span></td>
-        <td><div class="lm-player"><div class="lm-av">${av}</div><div><div class="lm-pname">${fullName || '—'}</div><div class="lm-pmeta">${p.position || ''}</div></div></div></td>
+        <td><span style="font:600 13px/1 var(--cm-font-mono)">${p.number??'—'}</span></td>
+        <td><div class="lm-player"><div class="lm-av">${av}</div><div><div class="lm-pname">${fullName||'—'}</div><div class="lm-pmeta">${p.position||''}</div></div></div></td>
         <td><span class="lm-pos ${posCss}">${pos}</span></td>
-        <td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>
-        <td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>
-        ${wellHtml}
-        <td><span class="lm-cell-v" style="color:var(--cm-fg-muted)">— / —</span></td>
+        ${cellAcwr}${cellRpe}${cellWell}${cellAC}
         <td>${zonePill}</td>
       </tr>`;
     }).join('');
 
-    document.getElementById('lmPlayerLoadSub').textContent = `${players.length} players · sorted by wellness ↓`;
-    document.getElementById('lmTableFoot').innerHTML = `Showing <strong style="color:var(--cm-fg)">${players.length}</strong> of ${players.length} players`;
+    document.getElementById('lmPlayerLoadSub').textContent=`${total} players · sorted by ACWR ↓`;
+    document.getElementById('lmTableFoot').innerHTML=`Showing <strong style="color:var(--cm-fg)">${total}</strong> of ${total} players`;
   }
 })().catch(console.error);
 </script>

@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -281,41 +282,9 @@
               </div>
               <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
-            <div class="gp-c-b gp-radar">
-              <svg viewBox="0 0 380 340" font-family="Geist, ui-sans-serif">
-                <g fill="none" stroke="var(--cm-border-soft)" stroke-width="1">
-                  <polygon points="190,30 320,105 320,235 190,310 60,235 60,105" opacity="0.9"/>
-                  <polygon points="190,65 290,120 290,220 190,275 90,220 90,120" opacity="0.7"/>
-                  <polygon points="190,100 260,140 260,200 190,240 120,200 120,140" opacity="0.55"/>
-                </g>
-                <g stroke="var(--cm-border)" stroke-width="1" opacity="0.5">
-                  <line x1="190" y1="170" x2="190" y2="30"/>
-                  <line x1="190" y1="170" x2="320" y2="105"/>
-                  <line x1="190" y1="170" x2="320" y2="235"/>
-                  <line x1="190" y1="170" x2="190" y2="310"/>
-                  <line x1="190" y1="170" x2="60" y2="235"/>
-                  <line x1="190" y1="170" x2="60" y2="105"/>
-                </g>
-                <polygon points="190,100 260,140 260,200 190,240 120,200 120,140" fill="var(--cm-neutral)" opacity="0.10" stroke="var(--cm-neutral)" stroke-width="1" stroke-dasharray="3 3"/>
-                <polygon points="190,72 296,128 256,214 190,224 130,202 100,128" fill="var(--cm-accent)" opacity="0.18" stroke="var(--cm-accent)" stroke-width="2" stroke-linejoin="round"/>
-                <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
-                  <circle cx="190" cy="72" r="4"/><circle cx="296" cy="128" r="4"/><circle cx="256" cy="214" r="4"/>
-                  <circle cx="190" cy="224" r="4"/><circle cx="130" cy="202" r="4"/><circle cx="100" cy="128" r="4"/>
-                </g>
-                <g font-size="12" font-weight="500" fill="var(--cm-fg)">
-                  <text x="190" y="20" text-anchor="middle">Distance</text>
-                  <text x="190" y="60" text-anchor="middle" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-accent)">z = +1.2</text>
-                  <text x="332" y="102" text-anchor="start">HSR</text>
-                  <text x="332" y="116" text-anchor="start" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-danger)">z = +1.8</text>
-                  <text x="332" y="242" text-anchor="start">Sprints</text>
-                  <text x="332" y="256" text-anchor="start" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-accent)">z = +0.8</text>
-                  <text x="190" y="328" text-anchor="middle">Top speed</text>
-                  <text x="50" y="242" text-anchor="end">Accel</text>
-                  <text x="50" y="256" text-anchor="end" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-accent)">z = +1.1</text>
-                  <text x="50" y="102" text-anchor="end">Load</text>
-                  <text x="50" y="116" text-anchor="end" font-family="Geist Mono, ui-monospace, monospace" font-size="11" font-weight="600" fill="var(--cm-danger)">z = +1.4</text>
-                </g>
-              </svg>
+            <div class="gp-c-b gp-radar" style="align-items:center;justify-content:center">
+              <canvas id="gpsRadar" style="max-height:320px"></canvas>
+              <div id="gpsRadarEmpty" style="display:none;color:var(--cm-fg-muted);font:var(--cm-body-sm);text-align:center;padding:40px">No GPS data for this session</div>
             </div>
           </div>
 
@@ -692,6 +661,84 @@
     if (kpiVals[0]) kpiVals[0].innerHTML = `${first.total_distance ? (first.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
     if (kpiVals[1]) kpiVals[1].innerHTML = `${first.high_speed_distance ?? '—'} <sub>m</sub>`;
     if (kpiVals[2]) kpiVals[2].innerHTML = `${first.sprint_distance ?? '—'}`;
+  }
+
+  // ── GPS Radar — z-score vs squad ───────────────────────────────
+  const radarCanvas = document.getElementById('gpsRadar');
+  const radarEmpty  = document.getElementById('gpsRadarEmpty');
+  if (radarCanvas && reports.length >= 2) {
+    const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
+    const LABELS  = ['Distance','HSR','Sprints','Top speed','Accel','Load'];
+
+    function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
+    function stdDev(arr,m) { return Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length)||1; }
+
+    const stats = METRICS.map(m => {
+      const vals = reports.map(r=>+(r[m]||0));
+      const mu   = mean(vals);
+      return { mu, sigma: stdDev(vals, mu) };
+    });
+
+    const selected = first || reports[0];
+    const zScores  = METRICS.map((m,i) => {
+      const { mu, sigma } = stats[i];
+      return +((+(selected[m]||0) - mu) / sigma).toFixed(2);
+    });
+
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
+
+    new Chart(radarCanvas, {
+      type: 'radar',
+      data: {
+        labels: LABELS,
+        datasets: [
+          {
+            label: 'Squad avg',
+            data: Array(6).fill(0),
+            borderColor: 'rgba(128,128,128,0.3)',
+            backgroundColor: 'rgba(128,128,128,0.06)',
+            borderDash: [4,3],
+            borderWidth: 1.5,
+            pointRadius: 0,
+          },
+          {
+            label: (selected.players ? `${(selected.players.first_name||'')[0]}. ${selected.players.last_name||''}` : 'Player'),
+            data: zScores,
+            borderColor: accent,
+            backgroundColor: 'rgba(34,197,94,0.12)',
+            borderWidth: 2,
+            pointRadius: 4,
+            pointBackgroundColor: accent,
+            pointBorderColor: '#fff',
+            pointBorderWidth: 1.5,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {
+          r: {
+            min: -3, max: 3,
+            ticks: { display: false, stepSize: 1 },
+            grid: { color: 'rgba(128,128,128,0.18)' },
+            angleLines: { color: 'rgba(128,128,128,0.18)' },
+            pointLabels: { color: 'rgba(128,128,128,0.8)', font: { size: 11 } }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` z = ${ctx.parsed.r>0?'+':''}${ctx.parsed.r.toFixed(2)}`
+            }
+          }
+        }
+      }
+    });
+  } else if (radarCanvas && reports.length < 2) {
+    radarCanvas.style.display = 'none';
+    if (radarEmpty) radarEmpty.style.display = 'block';
   }
 
   // Group view totals
