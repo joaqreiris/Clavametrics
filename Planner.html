@@ -823,46 +823,35 @@
     _type: 'arrow',
 
     initialize(options) {
-      this.callSuper('initialize', { originX:'center', originY:'center', ...options });
-      this.x1  = options.x1  || 0;
-      this.y1  = options.y1  || 0;
-      this.cx  = options.cx  || 0;
-      this.cy  = options.cy  || 0;
-      this.x2  = options.x2  || 0;
-      this.y2  = options.y2  || 0;
+      this.callSuper('initialize', {
+        ...options,
+        left: 0,
+        top: 0,
+        originX: 'left',
+        originY: 'top',
+        hasControls: false,
+        hasBorders: false,
+        selectable: true,
+        perPixelTargetFind: true,
+      });
+      this.x1 = options.x1 || 0;
+      this.y1 = options.y1 || 0;
+      this.cx = options.cx || 0;
+      this.cy = options.cy || 0;
+      this.x2 = options.x2 || 0;
+      this.y2 = options.y2 || 0;
       this.arrowColor  = options.arrowColor  || '#FBBF24';
       this.arrowDash   = options.arrowDash   || false;
       this.arrowCurved = options.arrowCurved || false;
       this.strokeWidth = options.strokeWidth || 2.5;
-      this.selectable  = true;
-      this.hasControls = false;
-      this.hasBorders  = false;
-      this.perPixelTargetFind = true;
-      this._updateBBox();
-    },
-
-    _updateBBox() {
-      const xs = [this.x1, this.cx, this.x2];
-      const ys = [this.y1, this.cy, this.y2];
-      const minX = Math.min(...xs) - 16;
-      const minY = Math.min(...ys) - 16;
-      const maxX = Math.max(...xs) + 16;
-      const maxY = Math.max(...ys) + 16;
-      this.width  = maxX - minX;
-      this.height = maxY - minY;
-      this.left   = (minX + maxX) / 2;
-      this.top    = (minY + maxY) / 2;
+      this.width  = 99999;
+      this.height = 99999;
       this.setCoords();
     },
 
     _render(ctx) {
-      // ctx origin is at (this.left, this.top) = bbox center; convert world→local
-      const ox = this.left, oy = this.top;
-      const loc = (wx, wy) => ({ x: wx - ox, y: wy - oy });
-
-      const p1 = loc(this.x1, this.y1);
-      const cp = loc(this.cx, this.cy);
-      const p2 = loc(this.x2, this.y2);
+      // left/top pinned to 0 — world coords map 1:1 to ctx coords
+      const { x1, y1, cx, cy, x2, y2 } = this;
 
       ctx.save();
       ctx.strokeStyle = this.arrowColor;
@@ -871,39 +860,54 @@
       ctx.setLineDash(this.arrowDash ? [8, 5] : []);
 
       ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
+      ctx.moveTo(x1, y1);
       if (this.arrowCurved) {
-        ctx.quadraticCurveTo(cp.x, cp.y, p2.x, p2.y);
+        ctx.quadraticCurveTo(cx, cy, x2, y2);
       } else {
-        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(x2, y2);
       }
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Arrowhead — tangent from control point (or p1) toward p2
-      const tx = this.arrowCurved ? (p2.x - cp.x) : (p2.x - p1.x);
-      const ty = this.arrowCurved ? (p2.y - cp.y) : (p2.y - p1.y);
-      const ang = Math.atan2(ty, tx);
-      const hL = 13, hW = 7;
+      const tx = this.arrowCurved ? (x2 - cx) : (x2 - x1);
+      const ty = this.arrowCurved ? (y2 - cy) : (y2 - y1);
+      const angle = Math.atan2(ty, tx);
+      const hLen = 13, hWid = 7;
       ctx.fillStyle = this.arrowColor;
       ctx.beginPath();
-      ctx.moveTo(p2.x + Math.cos(ang)*hL*0.3, p2.y + Math.sin(ang)*hL*0.3);
+      ctx.moveTo(x2 + Math.cos(angle)*2, y2 + Math.sin(angle)*2);
       ctx.lineTo(
-        p2.x - Math.cos(ang)*hL + Math.cos(ang - Math.PI/2)*hW,
-        p2.y - Math.sin(ang)*hL + Math.sin(ang - Math.PI/2)*hW
+        x2 - Math.cos(angle)*hLen + Math.cos(angle - Math.PI/2)*hWid,
+        y2 - Math.sin(angle)*hLen + Math.sin(angle - Math.PI/2)*hWid
       );
       ctx.lineTo(
-        p2.x - Math.cos(ang)*hL + Math.cos(ang + Math.PI/2)*hW,
-        p2.y - Math.sin(ang)*hL + Math.sin(ang + Math.PI/2)*hW
+        x2 - Math.cos(angle)*hLen + Math.cos(angle + Math.PI/2)*hWid,
+        y2 - Math.sin(angle)*hLen + Math.sin(angle + Math.PI/2)*hWid
       );
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     },
 
+    containsPoint(point) {
+      return this._hitTestBezier(point.x, point.y, 8);
+    },
+
+    _hitTestBezier(px, py, threshold) {
+      const { x1, y1, cx, cy, x2, y2, arrowCurved } = this;
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const bx = arrowCurved ? (1-t)*(1-t)*x1 + 2*(1-t)*t*cx + t*t*x2 : x1 + t*(x2-x1);
+        const by = arrowCurved ? (1-t)*(1-t)*y1 + 2*(1-t)*t*cy + t*t*y2 : y1 + t*(y2-y1);
+        if (Math.sqrt((px-bx)**2 + (py-by)**2) < threshold) return true;
+      }
+      return false;
+    },
+
     toObject() {
       return fabric.util.object.extend(this.callSuper('toObject'), {
-        x1: this.x1, y1: this.y1, cx: this.cx, cy: this.cy,
+        x1: this.x1, y1: this.y1,
+        cx: this.cx, cy: this.cy,
         x2: this.x2, y2: this.y2,
         arrowColor: this.arrowColor, arrowDash: this.arrowDash,
         arrowCurved: this.arrowCurved, strokeWidth: this.strokeWidth,
@@ -923,9 +927,12 @@
         fill: 'rgba(255,255,255,0.95)',
         stroke: options.arrowColor || '#FBBF24',
         strokeWidth: 2,
-        originX: 'center', originY: 'center',
-        hasControls: false, hasBorders: false,
-        selectable: true, evented: true,
+        originX: 'center',
+        originY: 'center',
+        hasControls: false,
+        hasBorders: false,
+        selectable: true,
+        evented: true,
         visible: false,
         ...options,
       });
@@ -933,6 +940,7 @@
     },
   });
   fabric.BezierHandle = BezierHandle;
+  BezierHandle.fromObject = (obj, cb) => cb(new BezierHandle(obj));
 
   // ── Bezier arrow system ─────────────────────────────────────────
   let currentArrowColor = '#FBBF24', currentArrowDash = false, currentArrowCurved = false;
@@ -942,40 +950,43 @@
   }
 
   function createBezierArrow(x1, y1, x2, y2, color, dashed, curved) {
-    const len = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
-    const offset = (curved && len > 0) ? len * 0.22 : 0;
-    const mx = (x1+x2)/2 - (y2-y1) * offset / (len || 1);
-    const my = (y1+y2)/2 + (x2-x1) * offset / (len || 1);
+    const len = Math.sqrt((x2-x1)**2 + (y2-y1)**2) || 1;
+    const offset = curved ? len * 0.20 : 0;
+    const cx = (x1+x2)/2 - (y2-y1) * offset / len;
+    const cy = (y1+y2)/2 + (x2-x1) * offset / len;
 
     const arrow = new BezierArrow({
-      x1, y1, cx: mx, cy: my, x2, y2,
+      x1, y1, cx, cy, x2, y2,
       arrowColor: color, arrowDash: dashed, arrowCurved: curved,
       strokeWidth: dashed ? 2 : 2.5,
     });
 
     const handle = new BezierHandle({
-      left: mx, top: my,
+      left: cx, top: cy,
       arrowColor: color,
       _arrowRef: arrow,
     });
 
+    // Handle dragged → update control point only (no bbox recalc, left/top stays 0)
     handle.on('moving', () => {
       arrow.cx = handle.left;
       arrow.cy = handle.top;
-      arrow._updateBBox();
       fc.renderAll();
     });
 
-    let _prevLeft = arrow.left, _prevTop = arrow.top;
+    // Arrow moved → Fabric sets left/top to drag offset; use as delta then reset to 0
     arrow.on('moving', () => {
-      const dx = arrow.left - _prevLeft;
-      const dy = arrow.top  - _prevTop;
+      const dx = arrow.left;
+      const dy = arrow.top;
+      if (dx === 0 && dy === 0) return;
       arrow.x1 += dx; arrow.y1 += dy;
       arrow.cx += dx; arrow.cy += dy;
       arrow.x2 += dx; arrow.y2 += dy;
       handle.left += dx; handle.top += dy;
       handle.setCoords();
-      _prevLeft = arrow.left; _prevTop = arrow.top;
+      arrow.left = 0;
+      arrow.top  = 0;
+      arrow.setCoords();
       fc.renderAll();
     });
 
