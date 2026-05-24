@@ -443,15 +443,15 @@
           <div class="pl-session-row">
             <div class="pl-session-ic"><i class="ti ti-soccer-field"></i></div>
             <div class="pl-session-info">
-              <h4>Set-pieces &amp; switching</h4>
-              <p>MC 14 · Thu 15 May · MD−3 · 17:00</p>
+              <h4 id="plSessionTitle">—</h4>
+              <p id="plSessionMeta">—</p>
             </div>
           </div>
           <div class="pl-grid">
-            <div class="pl-stat"><div class="pl-stat-l">Duration</div><div class="pl-stat-v">70<sub>min</sub></div></div>
-            <div class="pl-stat"><div class="pl-stat-l">Players</div><div class="pl-stat-v">22<sub>/27</sub></div></div>
-            <div class="pl-stat"><div class="pl-stat-l">Drills</div><div class="pl-stat-v">4</div></div>
-            <div class="pl-stat"><div class="pl-stat-l">Field</div><div class="pl-stat-v">CT&nbsp;2</div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Duration</div><div class="pl-stat-v" id="plStatDuration">—</div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Players</div><div class="pl-stat-v" id="plStatPlayers">—</div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Drills</div><div class="pl-stat-v" id="plStatDrills">—</div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Field</div><div class="pl-stat-v" id="plStatField">—</div></div>
           </div>
         </div>
 
@@ -460,10 +460,10 @@
           <div class="pl-m2">
             <div class="pl-m2-row">
               <span class="pl-m2-l">m² per player</span>
-              <span class="pl-m2-v">142<small>m²</small></span>
+              <span class="pl-m2-v" id="plM2Val">—<small>m²</small></span>
             </div>
-            <div class="pl-m2-orient">
-              <i class="ti ti-target-arrow"></i>Velocity / counter
+            <div class="pl-m2-orient" id="plM2Orient">
+              <i class="ti ti-target-arrow"></i>—
             </div>
             <div class="pl-m2-ref">
               <div class="r-act">Act &lt;40</div>
@@ -473,8 +473,8 @@
             </div>
           </div>
           <div class="pl-grid">
-            <div class="pl-stat"><div class="pl-stat-l">Field used</div><div class="pl-stat-v">42×54<sub>m</sub></div></div>
-            <div class="pl-stat"><div class="pl-stat-l">Total area</div><div class="pl-stat-v">2,268<sub>m²</sub></div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Field used</div><div class="pl-stat-v" id="plStatFieldUsed">—</div></div>
+            <div class="pl-stat"><div class="pl-stat-l">Total area</div><div class="pl-stat-v" id="plStatArea">—</div></div>
           </div>
         </div>
 
@@ -488,17 +488,7 @@
 
         <div class="pl-section">
           <h3 id="plAvailHead"><i class="ti ti-users"></i>Available · —</h3>
-          <div id="plAvailPills" style="display:flex;flex-wrap:wrap;gap:5px">
-            <span class="cm-pill is-success"><span class="cm-dot"></span>1 Galarza</span>
-            <span class="cm-pill is-success"><span class="cm-dot"></span>6 Sosa</span>
-            <span class="cm-pill is-warning"><span class="cm-dot"></span>15 Carrasco</span>
-            <span class="cm-pill is-success"><span class="cm-dot"></span>22 Ferreyra</span>
-            <span class="cm-pill is-success"><span class="cm-dot"></span>8 Paredes</span>
-            <span class="cm-pill is-success"><span class="cm-dot"></span>10 Domínguez</span>
-            <span class="cm-pill is-success"><span class="cm-dot"></span>17 Gimenez</span>
-            <span class="cm-pill is-success"><span class="cm-dot"></span>9 Rivas</span>
-            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);padding:3px 6px">+14 more</span>
-          </div>
+          <div id="plAvailPills" style="display:flex;flex-wrap:wrap;gap:5px"></div>
         </div>
 
       </aside>
@@ -555,10 +545,10 @@
         <div class="pl-dock">
           <div class="pl-dock-grp">
             <span class="lbl">Teams</span>
-            <button class="pl-dock-btn"><span class="p t1"></span></button>
-            <button class="pl-dock-btn"><span class="p t2"></span></button>
-            <button class="pl-dock-btn"><span class="p t3"></span></button>
-            <button class="pl-dock-btn"><span class="p t4"></span></button>
+            <button class="pl-dock-btn" title="Team1"><span class="p t1"></span></button>
+            <button class="pl-dock-btn" title="Team2"><span class="p t2"></span></button>
+            <button class="pl-dock-btn" title="Team3"><span class="p t3"></span></button>
+            <button class="pl-dock-btn" title="Team4"><span class="p t4"></span></button>
           </div>
           <div class="pl-dock-grp">
             <span class="lbl">Objects</span>
@@ -618,21 +608,69 @@
   const today = new Date().toISOString().split('T')[0];
 
   // ── Players + availability ──────────────────────────────────────
-  const [playersRes, availRes] = await Promise.all([
-    window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive'),
-    window.sb.from('availability').select('player_id,status').eq('club_id', clubId).eq('date', today).catch(() => ({ data:[] }))
-  ]);
-  const players  = playersRes.data || [];
+  const playersRes = await window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive');
+  const players = playersRes.data || [];
+
+  const availRes = await window.sb.from('availability').select('player_id,status').eq('club_id', clubId).eq('date', today);
+  if (availRes.error?.code === '42P01') console.warn('availability table missing');
   const availMap = Object.fromEntries((availRes.data||[]).map(a=>[a.player_id,a.status]));
   const hasAvail = (availRes.data||[]).length > 0;
   const statusClass = { av:'is-success', pa:'is-warning', in:'is-danger', si:'is-danger' };
-  const pillData = (hasAvail
+  const pillData = hasAvail
     ? players.filter(p=>{ const s=availMap[p.id]; return !s||s==='av'||s==='pa'; }).map(p=>({ label:`${p.number?p.number+' ':''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
-    : players.map(p=>({ label:`${p.number?p.number+' ':''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }))
-  );
-  const head=document.getElementById('plAvailHead'), pills=document.getElementById('plAvailPills');
-  if (head)  head.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
-  if (pills) pills.innerHTML = pillData.map(p=>`<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`).join('');
+    : players.map(p=>({ label:`${p.number?p.number+' ':''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
+
+  const head = document.getElementById('plAvailHead');
+  const pillsEl = document.getElementById('plAvailPills');
+  if (head) head.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
+  if (pillsEl) {
+    const SHOW = 8;
+    const renderPills = (all) => pillData.slice(0, all ? pillData.length : SHOW)
+      .map(p=>`<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`).join('');
+    const extra = pillData.length - SHOW;
+    pillsEl.innerHTML = renderPills(false) +
+      (extra > 0 ? `<button id="plAvailMore" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);padding:3px 6px;background:none;border:none;cursor:pointer">+${extra} more</button>` : '');
+    document.getElementById('plAvailMore')?.addEventListener('click', () => { pillsEl.innerHTML = renderPills(true); });
+  }
+
+  // ── Session block (live) ────────────────────────────────────────
+  {
+    const { data: sessions } = await window.sb
+      .from('training_sessions')
+      .select('id,title,session_date,duration,session_type')
+      .eq('club_id', clubId)
+      .order('session_date', { ascending: false })
+      .limit(1);
+    const sess = sessions?.[0];
+    const titleEl    = document.getElementById('plSessionTitle');
+    const metaEl     = document.getElementById('plSessionMeta');
+    const durEl      = document.getElementById('plStatDuration');
+    const playEl     = document.getElementById('plStatPlayers');
+    const fieldStatEl = document.getElementById('plStatField');
+    if (titleEl)    titleEl.textContent = sess?.title || 'No sessions yet';
+    if (metaEl)     metaEl.textContent  = sess ? `${sess.session_date} · ${sess.session_type || ''}` : 'Create one in Sessions';
+    if (durEl)      durEl.innerHTML     = sess?.duration ? `${sess.duration}<sub>min</sub>` : '—';
+    if (playEl)     playEl.textContent  = players.length || '—';
+    if (fieldStatEl) fieldStatEl.textContent = '—'; // field column not in schema
+  }
+
+  // ── Space & orientation (live, from player count) ────────────────
+  {
+    const DEFAULT_AREA = 2268; // 42×54 m default pitch
+    const area = players.length > 0 ? Math.round(DEFAULT_AREA / players.length) : null;
+    const orient = !area ? '—'
+      : area < 80  ? 'Strength / positional'
+      : area < 160 ? 'Velocity / counter'
+      : 'Endurance / pressing';
+    const m2El       = document.getElementById('plM2Val');
+    const orientEl   = document.getElementById('plM2Orient');
+    const fieldUsedEl = document.getElementById('plStatFieldUsed');
+    const areaEl     = document.getElementById('plStatArea');
+    if (m2El)       m2El.innerHTML     = area ? `${area}<small>m²</small>` : `—<small>m²</small>`;
+    if (orientEl)   orientEl.innerHTML = `<i class="ti ti-target-arrow"></i>${orient}`;
+    if (fieldUsedEl) fieldUsedEl.innerHTML = '42×54<sub>m</sub>';
+    if (areaEl)     areaEl.innerHTML   = `${DEFAULT_AREA.toLocaleString()}<sub>m²</sub>`;
+  }
 
   // ── Fabric.js canvas init ───────────────────────────────────────
   await new Promise(r => requestAnimationFrame(r)); // yield for layout
@@ -656,6 +694,7 @@
 
   // ── State ───────────────────────────────────────────────────────
   let currentDrillId = null;
+  let disableSave    = false;
   let currentTool    = 'select'; // select | draw | arrow
   let arrowStart     = null;
   let _playerCounter = 1;
@@ -687,11 +726,14 @@
     currentTool = tool;
     fc.isDrawingMode = (tool === 'draw');
     fc.selection     = (tool === 'select');
-    fc.getObjects().forEach(o => { o.selectable = (tool === 'select'); });
+    // 'select' and 'move' both allow dragging; other tools lock objects
+    const canDrag = tool === 'select' || tool === 'move';
+    fc.getObjects().forEach(o => { o.selectable = canDrag; o.evented = canDrag; });
     fc.renderAll();
     // Update toolbar active state
     const btns = document.querySelectorAll('.pl-canvas-bar .group:first-child button');
-    const toolMap = ['select','move','draw','lasso'];
+    // 'arrow' is a valid tool for mouse events but not in toolbar toolMap — cosmetic only
+    const toolMap = ['select','move','draw','lasso','arrow'];
     btns.forEach((b,i) => b.classList.toggle('is-on', toolMap[i]===tool));
   }
 
@@ -806,8 +848,42 @@
     }
   });
 
+  // ── Clipboard: copy / cut / paste ──────────────────────────────
+  let _clipboard = null;
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      const active = fc.getActiveObject();
+      if (!active) return;
+      active.clone(cloned => { _clipboard = cloned; });
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+      const active = fc.getActiveObject();
+      if (!active) return;
+      active.clone(cloned => { _clipboard = cloned; });
+      fc.remove(active); fc.discardActiveObject(); fc.renderAll();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      if (!_clipboard) return;
+      _clipboard.clone(cloned => {
+        fc.discardActiveObject();
+        cloned.set({ left: (_clipboard.left||0)+20, top: (_clipboard.top||0)+20, evented:true });
+        if (cloned._objects) { cloned._objects.forEach(o => fc.add(o)); } else { fc.add(cloned); }
+        _clipboard = cloned; // offset next paste
+        fc.setActiveObject(cloned);
+        fc.requestRenderAll();
+      });
+    }
+  });
+
   // ── Dock buttons wiring ─────────────────────────────────────────
   const dockActions = {
+    'Team1': () => addPlayer('t1'),
+    'Team2': () => addPlayer('t2'),
+    'Team3': () => addPlayer('t3'),
+    'Team4': () => addPlayer('t4'),
     'Ball':       () => addBall(),
     'Cone':       () => addCone(),
     'Pole':       () => addPole(),
@@ -828,17 +904,9 @@
   document.querySelectorAll('.pl-dock-btn').forEach(btn => {
     const title = btn.getAttribute('title');
     if (dockActions[title]) {
-      btn.addEventListener('click', () => {
-        // Team buttons (t1/t2/t3/t4) — no title
-        dockActions[title]();
-      });
+      btn.addEventListener('click', () => dockActions[title]());
+      btn._hasListener = true; // used by diagnostic to count wired buttons
     }
-  });
-
-  // Team color buttons in dock
-  document.querySelectorAll('.pl-dock-btn .p').forEach((span, i) => {
-    const teams = ['t1','t2','t3','t4'];
-    span.parentElement.addEventListener('click', () => { _playerCounter=1; addPlayer(teams[i]); });
   });
 
   // FAB buttons
@@ -863,18 +931,26 @@
 
   // ── Drill list ──────────────────────────────────────────────────
   async function loadDrills() {
-    const { data } = await window.sb.from('drills')
+    const { data, error } = await window.sb.from('drills')
       .select('id,name,duration,created_at')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
     const list = document.getElementById('plDrillList');
     if (!list) return;
+
+    // 42P01 = table does not exist
+    if (error?.code === '42P01') {
+      disableSave = true;
+      list.innerHTML = `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:8px 0">Drills table not found in database.</div>`;
+      return 0; // return count so stat card shows 0
+    }
+
     const drills = data || [];
 
     if (!drills.length) {
       list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No drills yet. Click "+ Add drill" to create one.</div>`;
-      return;
+      return 0;
     }
 
     list.innerHTML = drills.map((d, i) => `
@@ -890,6 +966,7 @@
     list.querySelectorAll('.pl-ex').forEach(el => {
       el.addEventListener('click', () => loadDrillCanvas(el.dataset.drillId, drills));
     });
+    return drills.length; // caller updates Drills stat card
   }
 
   async function loadDrillCanvas(id, drills) {
@@ -934,7 +1011,16 @@
 
   // Save
   document.getElementById('plSaveBtn')?.addEventListener('click', async () => {
-    if (!currentDrillId) { alert('Select or create a drill first.'); return; }
+    if (disableSave) return; // table doesn't exist, already communicated in drill list
+    if (!currentDrillId) {
+      // auto-create so canvas work isn't lost
+      const { data: nd, error: ne } = await window.sb.from('drills').insert({
+        club_id: clubId, name: `Unnamed drill · ${today}`, created_by: profile?.id || null
+      }).select().single();
+      if (ne || !nd) { alert('Select or create a drill first.'); return; }
+      currentDrillId = nd.id;
+      await loadDrills();
+    }
     const btn = document.getElementById('plSaveBtn');
     btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="font-size:14px"></i>Saving…';
     const { error } = await window.sb.from('drills').update({ objects_json: fc.toJSON() }).eq('id', currentDrillId);
@@ -945,8 +1031,27 @@
     }
   });
 
-  // Initial load
-  await loadDrills();
+  // DIAGNOSTIC — remove after fix confirmed
+  {
+    console.group('Planner diagnostic');
+    const _s = await window.sb.auth.getSession();
+    console.log('auth:', _s?.data?.session ? 'OK' : 'NO SESSION');
+    const _cid = await window.getClubId?.();
+    console.log('club_id:', _cid || 'MISSING');
+    for (const _t of ['players','training_sessions','drills','availability']) {
+      const { data: _d, error: _e } = await window.sb.from(_t).select('id').limit(1);
+      console.log(_t + ':', _e ? 'ERROR ' + _e.code + ' ' + _e.message : 'OK (' + (_d?.length ?? 0) + ' rows visible)');
+    }
+    const _db = document.querySelectorAll('.pl-dock-btn');
+    let _uw = 0; _db.forEach(b => { if (!b._hasListener) _uw++; });
+    console.log('dock buttons total:', _db.length, '| potentially unwired:', _uw);
+    console.groupEnd();
+  }
+
+  // Initial load — return value updates Drills stat card
+  const drillCount = await loadDrills();
+  const drillsStatEl = document.getElementById('plStatDrills');
+  if (drillsStatEl) drillsStatEl.textContent = drillCount ?? '—';
 
 })().catch(console.error);
 </script>
