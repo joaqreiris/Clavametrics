@@ -555,7 +555,7 @@
             <button class="pl-dock-btn" title="Ball"><i class="ti ti-ball-football"></i></button>
             <button class="pl-dock-btn" title="Cone"><i class="ti ti-triangle"></i></button>
             <button class="pl-dock-btn" title="Pole"><i class="ti ti-bookmark"></i></button>
-            <button class="pl-dock-btn" title="Barrier"><i class="ti ti-shield"></i></button>
+            <button class="pl-dock-btn" title="Gate"><i class="ti ti-door"></i></button>
             <button class="pl-dock-btn" title="Goal"><i class="ti ti-target"></i></button>
             <button class="pl-dock-btn" title="Mannequin"><i class="ti ti-walk"></i></button>
           </div>
@@ -695,8 +695,9 @@
   // ── State ───────────────────────────────────────────────────────
   let currentDrillId = null;
   let disableSave    = false;
-  let currentTool    = 'select'; // select | draw | arrow
-  let _bezierState   = null;    // null | {x1,y1} — two-click bezier arrow
+  let currentTool    = 'select';
+  let _arrowP1       = null;
+  let _previewLine   = null;
   let _playerCounter = 1;
   let _historyStack  = [];
   const MAX_HISTORY  = 30;
@@ -725,19 +726,17 @@
   function setTool(tool) {
     currentTool = tool;
     fc.isDrawingMode = (tool === 'draw');
-    fc.selection     = (tool === 'select');
-    // 'select' and 'move' both allow dragging; other tools lock objects
-    const canDrag = tool === 'select' || tool === 'move';
-    fc.getObjects().forEach(o => { o.selectable = canDrag; o.evented = canDrag; });
-    fc.renderAll();
-    // Crosshair cursor in arrow mode, normal otherwise
+    fc.selection = true;
+    fc.getObjects().forEach(o => {
+      if (o._type === '_preview') return;
+      o.selectable = true; o.evented = true;
+    });
     fc.defaultCursor = tool === 'arrow' ? 'crosshair' : 'default';
     fc.hoverCursor   = tool === 'arrow' ? 'crosshair' : 'move';
-    // Update toolbar active state
-    const btns = document.querySelectorAll('.pl-canvas-bar .group:first-child button');
-    // 'arrow' is a valid tool for mouse events but not in toolbar toolMap — cosmetic only
-    const toolMap = ['select','move','draw','lasso','arrow'];
-    btns.forEach((b,i) => b.classList.toggle('is-on', toolMap[i]===tool));
+    fc.renderAll();
+    const toolMap = ['select','move','draw','lasso'];
+    document.querySelectorAll('.pl-canvas-bar .group:first-child button')
+      .forEach((b,i) => b.classList.toggle('is-on', toolMap[i] === tool));
   }
 
   document.querySelectorAll('.pl-canvas-bar .group:first-child button').forEach((btn, i) => {
@@ -758,19 +757,18 @@
     if (prev) fc.loadFromJSON(prev, () => fc.renderAll());
   });
 
-  // ── SVG object strings ──────────────────────────────────────────
-  const SVG_BALL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#f0f0f0" stroke="#222" stroke-width="1.5"/><polygon points="20,5 24,14 20,18 16,14" fill="#222"/><polygon points="33,13 29,17 24,14 26,9" fill="#222"/><polygon points="35,26 29,23 29,17 34,14" fill="#222"/><polygon points="26,35 23,28 29,23 34,26" fill="#222"/><polygon points="14,35 17,28 23,28 20,35" fill="#222"/><polygon points="5,26 11,23 17,28 14,35" fill="#222"/><polygon points="5,14 11,17 11,23 5,26" fill="#222"/><polygon points="7,9 14,12 16,14 11,17" fill="#222"/><polygon points="20,5 14,12 16,14 20,18 24,14 26,9" fill="#222"/></svg>`;
-  const SVG_CONE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 40"><ellipse cx="16" cy="36" rx="14" ry="4" fill="rgba(0,0,0,0.25)"/><polygon points="16,2 30,36 2,36" fill="#f97316" stroke="#c2600a" stroke-width="1"/><polygon points="16,2 26,28 20,28 18,20 14,20 12,28 6,28" fill="#fb923c" opacity="0.5"/><ellipse cx="16" cy="36" rx="14" ry="3.5" fill="#f97316" stroke="#c2600a" stroke-width="1"/><rect x="4" y="28" width="24" height="4" rx="1" fill="#fbbf24" opacity="0.9"/></svg>`;
-  const SVG_POLE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 60"><ellipse cx="8" cy="56" rx="7" ry="3" fill="rgba(0,0,0,0.3)"/><rect x="5" y="2" width="6" height="30" rx="3" fill="#dc2626"/><rect x="5" y="32" width="6" height="14" rx="0" fill="#ffffff"/><rect x="5" y="46" width="6" height="10" rx="3" fill="#dc2626"/><ellipse cx="8" cy="58" rx="6" ry="2.5" fill="#555"/></svg>`;
-  const SVG_GOAL = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 40"><rect x="2" y="2" width="76" height="32" fill="none" stroke="white" stroke-width="3" rx="2"/><line x1="2" y1="2" x2="2" y2="38" stroke="white" stroke-width="3"/><line x1="78" y1="2" x2="78" y2="38" stroke="white" stroke-width="3"/><line x1="2" y1="38" x2="78" y2="38" stroke="white" stroke-width="2.5" stroke-dasharray="6,5"/><line x1="2" y1="8" x2="78" y2="8" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><line x1="2" y1="16" x2="78" y2="16" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><line x1="2" y1="24" x2="78" y2="24" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><line x1="20" y1="2" x2="20" y2="34" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><line x1="40" y1="2" x2="40" y2="34" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><line x1="60" y1="2" x2="60" y2="34" stroke="rgba(255,255,255,0.25)" stroke-width="1"/></svg>`;
-  const SVG_MANNEQUIN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 56"><circle cx="15" cy="6" r="5.5" fill="#f59e0b" stroke="#b45309" stroke-width="1.2"/><rect x="9" y="13" width="12" height="18" rx="3" fill="#f59e0b" stroke="#b45309" stroke-width="1"/><rect x="3" y="14" width="5" height="14" rx="2.5" fill="#f59e0b" stroke="#b45309" stroke-width="1"/><rect x="22" y="14" width="5" height="14" rx="2.5" fill="#f59e0b" stroke="#b45309" stroke-width="1"/><rect x="9" y="31" width="5" height="18" rx="2.5" fill="#f59e0b" stroke="#b45309" stroke-width="1"/><rect x="16" y="31" width="5" height="18" rx="2.5" fill="#f59e0b" stroke="#b45309" stroke-width="1"/></svg>`;
-  const SVG_BARRIER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 30"><rect x="2" y="4" width="66" height="22" rx="3" fill="#dc2626" stroke="#991b1b" stroke-width="1.5"/><rect x="2" y="4" width="66" height="7" rx="3" fill="#ffffff" opacity="0.15"/><line x1="18" y1="4" x2="18" y2="26" stroke="#991b1b" stroke-width="1.5"/><line x1="35" y1="4" x2="35" y2="26" stroke="#991b1b" stroke-width="1.5"/><line x1="52" y1="4" x2="52" y2="26" stroke="#991b1b" stroke-width="1.5"/><rect x="5" y="24" width="8" height="5" rx="1" fill="#7f1d1d"/><rect x="57" y="24" width="8" height="5" rx="1" fill="#7f1d1d"/></svg>`;
-
-  // ── Object factory ──────────────────────────────────────────────
+  // ── Object factories ────────────────────────────────────────────
   const TEAM_COLORS = { t1:'#15803D', t2:'#1D4ED8', t3:'#FACC15', t4:'#E5E7EB' };
   const TEAM_TEXT   = { t1:'#fff',    t2:'#fff',    t3:'#0A0A0A', t4:'#0A0A0A' };
 
   function center() { return { left: fc.width/2, top: fc.height/2 }; }
+
+  function finishAdd(obj, type) {
+    obj._type = type;
+    obj.set({ ...center(), originX:'center', originY:'center' });
+    fc.add(obj); fc.setActiveObject(obj); fc.renderAll();
+    setTool('select');
+  }
 
   function addPlayer(team='t1', label=String(_playerCounter++)) {
     const color = TEAM_COLORS[team]||'#15803D', tc = TEAM_TEXT[team]||'#fff';
@@ -780,45 +778,60 @@
     fc.add(group); fc.setActiveObject(group); fc.renderAll();
   }
 
-  function _addSVG(svgStr, type, scaleFn) {
-    fabric.loadSVGFromString(svgStr, (objects, options) => {
-      const obj = fabric.util.groupSVGElements(objects, options);
-      scaleFn(obj);
-      obj.set({ ...center(), originX:'center', originY:'center', _type: type });
-      fc.add(obj); fc.setActiveObject(obj); fc.renderAll();
-      setTool('select');
-    });
+  function addBall() {
+    const shell = new fabric.Circle({ radius:18, fill:'#f5f5f5', stroke:'#333', strokeWidth:2, originX:'center', originY:'center' });
+    const p1 = new fabric.Circle({ radius:5, fill:'#222', left:0,  top:-10, originX:'center', originY:'center' });
+    const p2 = new fabric.Circle({ radius:5, fill:'#222', left:9,  top:5,   originX:'center', originY:'center' });
+    const p3 = new fabric.Circle({ radius:5, fill:'#222', left:-9, top:5,   originX:'center', originY:'center' });
+    finishAdd(new fabric.Group([shell,p1,p2,p3]), 'ball');
   }
 
-  function addBall()     { _addSVG(SVG_BALL,     'ball',      o => o.scaleToWidth(36)); }
-  function addCone()     { _addSVG(SVG_CONE,     'cone',      o => o.scaleToWidth(28)); }
-  function addPole()     { _addSVG(SVG_POLE,     'pole',      o => o.scaleToHeight(50)); }
-  function addGoal()     { _addSVG(SVG_GOAL,     'goal',      o => o.scaleToWidth(80)); }
-  function addMannequin(){ _addSVG(SVG_MANNEQUIN,'mannequin', o => o.scaleToHeight(52)); }
-  function addBarrier()  { _addSVG(SVG_BARRIER,  'barrier',   o => o.scaleToWidth(70)); }
+  function addCone() {
+    const body = new fabric.Triangle({ width:28, height:32, fill:'#f97316', stroke:'#c2600a', strokeWidth:1, originX:'center', originY:'center' });
+    const band = new fabric.Rect({ width:28, height:5, fill:'#fbbf24', top:10, originX:'center', originY:'center' });
+    finishAdd(new fabric.Group([body,band]), 'cone');
+  }
+
+  function addPole() {
+    const red   = new fabric.Rect({ width:6, height:25, fill:'#dc2626', rx:2, left:0, top:-12.5, originX:'center', originY:'center' });
+    const white = new fabric.Rect({ width:6, height:25, fill:'#ffffff', rx:0, left:0, top:12.5,  originX:'center', originY:'center' });
+    finishAdd(new fabric.Group([red,white]), 'pole');
+  }
+
+  function addGoal() {
+    finishAdd(new fabric.Rect({ width:80, height:32, fill:'rgba(255,255,255,0.08)', stroke:'#fff', strokeWidth:3, rx:2 }), 'goal');
+  }
+
+  function addMannequin() {
+    const head = new fabric.Circle({ radius:6, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1.2, left:0, top:-22, originX:'center', originY:'center' });
+    const body = new fabric.Rect({ width:14, height:20, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1, rx:3, left:0, top:-2, originX:'center', originY:'center' });
+    finishAdd(new fabric.Group([head,body]), 'mannequin');
+  }
 
   function addZoneRect() {
-    const z = new fabric.Rect({ width:120, height:80, fill:'rgba(34,197,94,0.12)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], rx:4, ...center(), originX:'center', originY:'center', _type:'zone' });
-    fc.add(z); fc.setActiveObject(z); fc.renderAll();
+    finishAdd(new fabric.Rect({ width:120, height:80, fill:'rgba(34,197,94,0.12)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], rx:4 }), 'zone');
   }
 
   function addZoneCircle() {
-    const z = new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], ...center(), originX:'center', originY:'center', _type:'zone' });
-    fc.add(z); fc.setActiveObject(z); fc.renderAll();
+    finishAdd(new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3] }), 'zone');
   }
 
   // ── Bezier arrow system ─────────────────────────────────────────
   let currentArrowColor = '#FBBF24', currentArrowDash = false;
 
+  function _clearPreview() {
+    if (_previewLine) { fc.remove(_previewLine); _previewLine = null; }
+  }
+
   function createBezierArrow(x1,y1,x2,y2,color,dashed) {
-    const mx = (x1+x2)/2, my = (y1+y2)/2 - 40; // default control point above midpoint
+    const mx = (x1+x2)/2, my = (y1+y2)/2 - 40;
 
     const path = new fabric.Path(`M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`, {
       fill:'transparent', stroke:color,
       strokeWidth: dashed?2:2.5, strokeDashArray: dashed?[8,5]:null,
       selectable:true, hasBorders:false,
       _type:'arrow', _color:color, _dashed:dashed,
-      _cx:mx, _cy:my, _x1:x1, _y1:y1, _x2:x2, _y2:y2,
+      _x1:x1, _y1:y1, _x2:x2, _y2:y2, _cx:mx, _cy:my,
     });
 
     const angle = Math.atan2(y2-my, x2-mx) * 180 / Math.PI;
@@ -838,7 +851,17 @@
     handle.on('moving', () => {
       const hx = handle.left, hy = handle.top;
       path.set({ path:[['M',path._x1,path._y1],['Q',hx,hy,path._x2,path._y2]] });
+      path._cx = hx; path._cy = hy;
       head.set({ angle: Math.atan2(path._y2-hy, path._x2-hx)*180/Math.PI + 90 });
+      fc.renderAll();
+    });
+
+    path.on('moving', () => {
+      const dx = path.left - (path._lastLeft ?? path.left);
+      const dy = path.top  - (path._lastTop  ?? path.top);
+      head.set({ left: head.left+dx, top: head.top+dy });
+      handle.set({ left: handle.left+dx, top: handle.top+dy });
+      path._lastLeft = path.left; path._lastTop = path.top;
       fc.renderAll();
     });
 
@@ -850,67 +873,84 @@
     fc.setActiveObject(path); fc.renderAll();
   }
 
-  // Two-click to place bezier arrow; preview line on mouse:move
   fc.on('mouse:down', e => {
     if (currentTool !== 'arrow') return;
     const p = fc.getPointer(e.e);
-    // Clear any preview line
-    const prev = fc.getObjects().find(o => o._type === '_preview');
-    if (prev) fc.remove(prev);
-    if (!_bezierState) {
-      _bezierState = { x1:p.x, y1:p.y }; // first click — store start
+    _clearPreview();
+    if (!_arrowP1) {
+      _arrowP1 = { x:p.x, y:p.y };
     } else {
-      // second click — commit arrow
-      createBezierArrow(_bezierState.x1, _bezierState.y1, p.x, p.y, currentArrowColor, currentArrowDash);
-      _bezierState = null;
+      createBezierArrow(_arrowP1.x, _arrowP1.y, p.x, p.y, currentArrowColor, currentArrowDash);
+      _arrowP1 = null;
       setTool('select');
     }
   });
 
   fc.on('mouse:move', e => {
-    if (currentTool !== 'arrow' || !_bezierState) return;
+    if (currentTool !== 'arrow' || !_arrowP1) return;
     const p = fc.getPointer(e.e);
-    const existing = fc.getObjects().find(o => o._type === '_preview');
-    if (existing) fc.remove(existing);
-    const preview = new fabric.Line([_bezierState.x1, _bezierState.y1, p.x, p.y], {
+    _clearPreview();
+    _previewLine = new fabric.Line([_arrowP1.x, _arrowP1.y, p.x, p.y], {
       stroke:currentArrowColor, strokeWidth:1.5, strokeDashArray:[4,4],
       selectable:false, evented:false, _type:'_preview',
     });
-    fc.add(preview); fc.renderAll();
+    fc.add(_previewLine); fc.renderAll();
   });
 
-  // Delete selected object with Delete/Backspace
-  document.addEventListener('keydown', e => {
-    if ((e.key==='Delete'||e.key==='Backspace') && document.activeElement===document.body) {
-      const active = fc.getActiveObject();
-      if (active) { fc.remove(active); fc.discardActiveObject(); fc.renderAll(); }
-    }
-  });
-
-  // ── Clipboard: copy / cut / paste ──────────────────────────────
+  // ── Keyboard: Escape / Delete / Ctrl+Z / Clipboard ──────────────
   let _clipboard = null;
   document.addEventListener('keydown', e => {
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    if (e.key === 'Escape') {
+      if (_arrowP1) { _clearPreview(); _arrowP1 = null; setTool('select'); }
+      else { fc.discardActiveObject(); fc.renderAll(); }
+      return;
+    }
+
+    if (e.key === 'Delete' || e.key === 'Backspace') {
       const active = fc.getActiveObject();
       if (!active) return;
-      active.clone(cloned => { _clipboard = cloned; });
+      if (active.type === 'activeSelection') {
+        active.getObjects().forEach(o => fc.remove(o));
+        fc.discardActiveObject();
+      } else {
+        fc.remove(active);
+      }
+      fc.renderAll();
+      return;
     }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if (_historyStack.length < 2) return;
+      _historyStack.pop();
+      const prev = _historyStack[_historyStack.length-1];
+      if (prev) fc.loadFromJSON(prev, () => fc.renderAll());
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      const active = fc.getActiveObject();
+      if (active) active.clone(cloned => { _clipboard = cloned; });
+      return;
+    }
+
     if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
       const active = fc.getActiveObject();
       if (!active) return;
       active.clone(cloned => { _clipboard = cloned; });
       fc.remove(active); fc.discardActiveObject(); fc.renderAll();
+      return;
     }
+
     if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
       if (!_clipboard) return;
       _clipboard.clone(cloned => {
         fc.discardActiveObject();
-        cloned.set({ left: (_clipboard.left||0)+20, top: (_clipboard.top||0)+20, evented:true });
+        cloned.set({ left:(_clipboard.left||0)+20, top:(_clipboard.top||0)+20, evented:true });
         if (cloned._objects) { cloned._objects.forEach(o => fc.add(o)); } else { fc.add(cloned); }
-        _clipboard = cloned; // offset next paste
+        _clipboard = cloned;
         fc.setActiveObject(cloned);
         fc.requestRenderAll();
       });
@@ -926,7 +966,7 @@
     'Ball':       () => addBall(),
     'Cone':       () => addCone(),
     'Pole':       () => addPole(),
-    'Barrier':    () => addBarrier(),  // was 'Gate' → addZoneRect()
+    'Gate':       () => addZoneRect(),
     'Goal':       () => addGoal(),
     'Mannequin':  () => addMannequin(),
     'Pass':       () => { currentArrowColor='#22D3EE'; currentArrowDash=true;  setTool('arrow'); },
@@ -936,8 +976,8 @@
     'Rectangle':  () => addZoneRect(),
     'Circle':     () => addZoneCircle(),
     'Polygon':    () => addZoneRect(),
-    'Label':      () => { const t=new fabric.IText('Label',{...center(),originX:'center',originY:'center',fill:'#fff',fontSize:14,fontFamily:'sans-serif',_type:'text'}); fc.add(t); fc.setActiveObject(t); fc.renderAll(); },
-    'Number':     () => { const t=new fabric.IText('1',{...center(),originX:'center',originY:'center',fill:'#FBBF24',fontSize:18,fontWeight:'700',fontFamily:'monospace',_type:'text'}); fc.add(t); fc.setActiveObject(t); fc.renderAll(); },
+    'Label':      () => { const t=new fabric.IText('Label',{fill:'#fff',fontSize:14,fontFamily:'sans-serif'}); finishAdd(t,'text'); t.enterEditing(); },
+    'Number':     () => { const t=new fabric.IText('1',{fill:'#FBBF24',fontSize:18,fontWeight:'700',fontFamily:'monospace'}); finishAdd(t,'text'); },
   };
 
   document.querySelectorAll('.pl-dock-btn').forEach(btn => {
