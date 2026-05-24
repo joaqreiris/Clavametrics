@@ -562,7 +562,7 @@
           <div class="pl-dock-grp">
             <span class="lbl">Lines</span>
             <button class="pl-dock-btn" title="Pass"><i class="ti ti-arrow-right"></i></button>
-            <button class="pl-dock-btn is-on" title="Run"><i class="ti ti-arrow-bear-right"></i></button>
+            <button class="pl-dock-btn is-on" title="Run"><i class="ti ti-arrow-curve-right"></i></button>
             <button class="pl-dock-btn" title="Dribble"><i class="ti ti-line-dashed"></i></button>
             <button class="pl-dock-btn" title="Curve"><i class="ti ti-arrow-curve-right"></i></button>
           </div>
@@ -816,61 +816,179 @@
     finishAdd(new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3] }), 'zone');
   }
 
+  // ── Custom arrow classes (bypass Fabric path normalization) ─────
+
+  const BezierArrow = fabric.util.createClass(fabric.Object, {
+    type: 'BezierArrow',
+    _type: 'arrow',
+
+    initialize(options) {
+      this.callSuper('initialize', { originX:'center', originY:'center', ...options });
+      this.x1  = options.x1  || 0;
+      this.y1  = options.y1  || 0;
+      this.cx  = options.cx  || 0;
+      this.cy  = options.cy  || 0;
+      this.x2  = options.x2  || 0;
+      this.y2  = options.y2  || 0;
+      this.arrowColor  = options.arrowColor  || '#FBBF24';
+      this.arrowDash   = options.arrowDash   || false;
+      this.arrowCurved = options.arrowCurved || false;
+      this.strokeWidth = options.strokeWidth || 2.5;
+      this.selectable  = true;
+      this.hasControls = false;
+      this.hasBorders  = false;
+      this.perPixelTargetFind = true;
+      this._updateBBox();
+    },
+
+    _updateBBox() {
+      const xs = [this.x1, this.cx, this.x2];
+      const ys = [this.y1, this.cy, this.y2];
+      const minX = Math.min(...xs) - 16;
+      const minY = Math.min(...ys) - 16;
+      const maxX = Math.max(...xs) + 16;
+      const maxY = Math.max(...ys) + 16;
+      this.width  = maxX - minX;
+      this.height = maxY - minY;
+      this.left   = (minX + maxX) / 2;
+      this.top    = (minY + maxY) / 2;
+      this.setCoords();
+    },
+
+    _render(ctx) {
+      // ctx origin is at (this.left, this.top) = bbox center; convert world→local
+      const ox = this.left, oy = this.top;
+      const loc = (wx, wy) => ({ x: wx - ox, y: wy - oy });
+
+      const p1 = loc(this.x1, this.y1);
+      const cp = loc(this.cx, this.cy);
+      const p2 = loc(this.x2, this.y2);
+
+      ctx.save();
+      ctx.strokeStyle = this.arrowColor;
+      ctx.lineWidth   = this.strokeWidth;
+      ctx.lineCap     = 'round';
+      ctx.setLineDash(this.arrowDash ? [8, 5] : []);
+
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      if (this.arrowCurved) {
+        ctx.quadraticCurveTo(cp.x, cp.y, p2.x, p2.y);
+      } else {
+        ctx.lineTo(p2.x, p2.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Arrowhead — tangent from control point (or p1) toward p2
+      const tx = this.arrowCurved ? (p2.x - cp.x) : (p2.x - p1.x);
+      const ty = this.arrowCurved ? (p2.y - cp.y) : (p2.y - p1.y);
+      const ang = Math.atan2(ty, tx);
+      const hL = 13, hW = 7;
+      ctx.fillStyle = this.arrowColor;
+      ctx.beginPath();
+      ctx.moveTo(p2.x + Math.cos(ang)*hL*0.3, p2.y + Math.sin(ang)*hL*0.3);
+      ctx.lineTo(
+        p2.x - Math.cos(ang)*hL + Math.cos(ang - Math.PI/2)*hW,
+        p2.y - Math.sin(ang)*hL + Math.sin(ang - Math.PI/2)*hW
+      );
+      ctx.lineTo(
+        p2.x - Math.cos(ang)*hL + Math.cos(ang + Math.PI/2)*hW,
+        p2.y - Math.sin(ang)*hL + Math.sin(ang + Math.PI/2)*hW
+      );
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    },
+
+    toObject() {
+      return fabric.util.object.extend(this.callSuper('toObject'), {
+        x1: this.x1, y1: this.y1, cx: this.cx, cy: this.cy,
+        x2: this.x2, y2: this.y2,
+        arrowColor: this.arrowColor, arrowDash: this.arrowDash,
+        arrowCurved: this.arrowCurved, strokeWidth: this.strokeWidth,
+      });
+    },
+  });
+  fabric.BezierArrow = BezierArrow;
+  BezierArrow.fromObject = (obj, cb) => cb(new BezierArrow(obj));
+
+  const BezierHandle = fabric.util.createClass(fabric.Circle, {
+    type: 'BezierHandle',
+    _type: 'bezier_handle',
+
+    initialize(options) {
+      this.callSuper('initialize', {
+        radius: 7,
+        fill: 'rgba(255,255,255,0.95)',
+        stroke: options.arrowColor || '#FBBF24',
+        strokeWidth: 2,
+        originX: 'center', originY: 'center',
+        hasControls: false, hasBorders: false,
+        selectable: true, evented: true,
+        visible: false,
+        ...options,
+      });
+      this._arrowRef = options._arrowRef || null;
+    },
+  });
+  fabric.BezierHandle = BezierHandle;
+
   // ── Bezier arrow system ─────────────────────────────────────────
-  let currentArrowColor = '#FBBF24', currentArrowDash = false;
+  let currentArrowColor = '#FBBF24', currentArrowDash = false, currentArrowCurved = false;
 
   function _clearPreview() {
     if (_previewLine) { fc.remove(_previewLine); _previewLine = null; }
   }
 
-  function createBezierArrow(x1,y1,x2,y2,color,dashed) {
-    const mx = (x1+x2)/2, my = (y1+y2)/2 - 40;
+  function createBezierArrow(x1, y1, x2, y2, color, dashed, curved) {
+    const len = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+    const offset = (curved && len > 0) ? len * 0.22 : 0;
+    const mx = (x1+x2)/2 - (y2-y1) * offset / (len || 1);
+    const my = (y1+y2)/2 + (x2-x1) * offset / (len || 1);
 
-    const path = new fabric.Path(`M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`, {
-      fill:'transparent', stroke:color,
-      strokeWidth: dashed?2:2.5, strokeDashArray: dashed?[8,5]:null,
-      selectable:true, hasBorders:false,
-      _type:'arrow', _color:color, _dashed:dashed,
-      _x1:x1, _y1:y1, _x2:x2, _y2:y2, _cx:mx, _cy:my,
+    const arrow = new BezierArrow({
+      x1, y1, cx: mx, cy: my, x2, y2,
+      arrowColor: color, arrowDash: dashed, arrowCurved: curved,
+      strokeWidth: dashed ? 2 : 2.5,
     });
 
-    const angle = Math.atan2(y2-my, x2-mx) * 180 / Math.PI;
-    const head = new fabric.Triangle({
-      width:12, height:14, fill:color, angle:angle+90,
-      left:x2, top:y2, originX:'center', originY:'center',
-      selectable:false, evented:false, _type:'arrowhead',
-    });
-
-    const handle = new fabric.Circle({
-      radius:6, fill:'rgba(255,255,255,0.9)', stroke:color, strokeWidth:2,
-      left:mx, top:my, originX:'center', originY:'center',
-      selectable:true, hasControls:false, hasBorders:false,
-      _type:'bezier_handle', visible:false,
+    const handle = new BezierHandle({
+      left: mx, top: my,
+      arrowColor: color,
+      _arrowRef: arrow,
     });
 
     handle.on('moving', () => {
-      const hx = handle.left, hy = handle.top;
-      path.set({ path:[['M',path._x1,path._y1],['Q',hx,hy,path._x2,path._y2]] });
-      path._cx = hx; path._cy = hy;
-      head.set({ angle: Math.atan2(path._y2-hy, path._x2-hx)*180/Math.PI + 90 });
+      arrow.cx = handle.left;
+      arrow.cy = handle.top;
+      arrow._updateBBox();
       fc.renderAll();
     });
 
-    path.on('moving', () => {
-      const dx = path.left - (path._lastLeft ?? path.left);
-      const dy = path.top  - (path._lastTop  ?? path.top);
-      head.set({ left: head.left+dx, top: head.top+dy });
-      handle.set({ left: handle.left+dx, top: handle.top+dy });
-      path._lastLeft = path.left; path._lastTop = path.top;
+    let _prevLeft = arrow.left, _prevTop = arrow.top;
+    arrow.on('moving', () => {
+      const dx = arrow.left - _prevLeft;
+      const dy = arrow.top  - _prevTop;
+      arrow.x1 += dx; arrow.y1 += dy;
+      arrow.cx += dx; arrow.cy += dy;
+      arrow.x2 += dx; arrow.y2 += dy;
+      handle.left += dx; handle.top += dy;
+      handle.setCoords();
+      _prevLeft = arrow.left; _prevTop = arrow.top;
       fc.renderAll();
     });
 
-    path.on('selected',   () => { handle.set('visible', true);  fc.renderAll(); });
-    path.on('deselected', () => { handle.set('visible', false); fc.renderAll(); });
-    path.on('removed',    () => { fc.remove(handle); fc.remove(head); });
+    arrow.on('selected',   () => { handle.set('visible', true);  handle.setCoords(); fc.renderAll(); });
+    arrow.on('deselected', () => { handle.set('visible', false); fc.renderAll(); });
+    arrow.on('removed',    () => { fc.remove(handle); fc.renderAll(); });
 
-    fc.add(path); fc.add(head); fc.add(handle);
-    fc.setActiveObject(path); fc.renderAll();
+    fc.add(arrow);
+    fc.add(handle);
+    fc.setActiveObject(arrow);
+    fc.renderAll();
+    setTool('select');
+    document.querySelectorAll('.pl-dock-btn').forEach(b => b.classList.remove('is-on'));
   }
 
   fc.on('mouse:down', e => {
@@ -880,9 +998,8 @@
     if (!_arrowP1) {
       _arrowP1 = { x:p.x, y:p.y };
     } else {
-      createBezierArrow(_arrowP1.x, _arrowP1.y, p.x, p.y, currentArrowColor, currentArrowDash);
+      createBezierArrow(_arrowP1.x, _arrowP1.y, p.x, p.y, currentArrowColor, currentArrowDash, currentArrowCurved);
       _arrowP1 = null;
-      setTool('select');
     }
   });
 
@@ -969,10 +1086,10 @@
     'Gate':       () => addZoneRect(),
     'Goal':       () => addGoal(),
     'Mannequin':  () => addMannequin(),
-    'Pass':       () => { currentArrowColor='#22D3EE'; currentArrowDash=true;  setTool('arrow'); },
-    'Run':        () => { currentArrowColor='#FBBF24'; currentArrowDash=false; setTool('arrow'); },
-    'Dribble':    () => { currentArrowColor='#ffffff'; currentArrowDash=true;  setTool('arrow'); },
-    'Curve':      () => { currentArrowColor='#34D399'; currentArrowDash=false; setTool('arrow'); },
+    'Pass':    () => { currentArrowColor='#ffffff'; currentArrowDash=false; currentArrowCurved=false; setTool('arrow'); },
+    'Run':     () => { currentArrowColor='#FBBF24'; currentArrowDash=false; currentArrowCurved=true;  setTool('arrow'); },
+    'Dribble': () => { currentArrowColor='#ffffff'; currentArrowDash=true;  currentArrowCurved=false; setTool('arrow'); },
+    'Curve':   () => { currentArrowColor='#22D3EE'; currentArrowDash=true;  currentArrowCurved=true;  setTool('arrow'); },
     'Rectangle':  () => addZoneRect(),
     'Circle':     () => addZoneCircle(),
     'Polygon':    () => addZoneRect(),
