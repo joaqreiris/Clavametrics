@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -173,6 +174,10 @@
   .pl-canvas-bar .sep { width:1px; height:22px; background:var(--cm-border); }
   .pl-canvas-bar .stat { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
   .pl-canvas-bar .stat strong { color:var(--cm-fg); font-weight:600; }
+
+  /* Fabric.js canvas overlay */
+  .canvas-container { position:absolute!important; inset:0!important; width:100%!important; height:100%!important; }
+  #plCanvas, .canvas-container canvas { position:absolute!important; inset:0; width:100%!important; height:100%!important; }
 
   /* The field */
   .pl-field {
@@ -475,44 +480,10 @@
 
         <div class="pl-section">
           <h3><i class="ti ti-list-numbers"></i>Drills</h3>
-
-          <div class="pl-ex">
-            <div class="pl-ex-n">1</div>
-            <div class="pl-ex-body">
-              <div class="pl-ex-title">Activation · passing rondo</div>
-              <div class="pl-ex-meta">10′ · 8v2 · all field</div>
-            </div>
-            <div class="pl-ex-d"><i class="ti ti-clock"></i>10′</div>
+          <div id="plDrillList" style="display:flex;flex-direction:column;gap:4px">
+            <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">Loading…</div>
           </div>
-
-          <div class="pl-ex is-active">
-            <div class="pl-ex-n">2</div>
-            <div class="pl-ex-body">
-              <div class="pl-ex-title">Defending set-pieces</div>
-              <div class="pl-ex-meta">25′ · 11v11 · half field</div>
-            </div>
-            <div class="pl-ex-d" style="color:var(--cm-accent);font-weight:600"><i class="ti ti-clock"></i>25′</div>
-          </div>
-
-          <div class="pl-ex">
-            <div class="pl-ex-n">3</div>
-            <div class="pl-ex-body">
-              <div class="pl-ex-title">Wide switching · build-up</div>
-              <div class="pl-ex-meta">20′ · 4v4+3 · 42×54m</div>
-            </div>
-            <div class="pl-ex-d"><i class="ti ti-clock"></i>20′</div>
-          </div>
-
-          <div class="pl-ex">
-            <div class="pl-ex-n">4</div>
-            <div class="pl-ex-body">
-              <div class="pl-ex-title">Free play · finalization</div>
-              <div class="pl-ex-meta">15′ · 11v11 · full</div>
-            </div>
-            <div class="pl-ex-d"><i class="ti ti-clock"></i>15′</div>
-          </div>
-
-          <button class="pl-add-btn"><i class="ti ti-plus"></i>Add drill</button>
+          <button class="pl-add-btn" id="plAddDrill"><i class="ti ti-plus"></i>Add drill</button>
         </div>
 
         <div class="pl-section">
@@ -558,95 +529,25 @@
             <button title="Fit"><i class="ti ti-arrows-maximize"></i></button>
           </div>
           <div class="sep"></div>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-eye" style="font-size:14px"></i>Preview</button>
+          <button class="cm-btn is-outline is-sm" id="plSaveBtn"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Export</button>
         </div>
 
         <!-- Field -->
-        <div class="pl-field" id="plField" style="--opponent-crest: url('assets/sample-club-crest.png');">
-
-          <div class="pl-field-tag">
-            <span class="dot"></span>Drill 2 · Defending set-pieces · 25′
-            <span style="margin-left:14px;display:inline-flex;align-items:center;gap:6px;padding-left:14px;border-left:1px solid rgba(255,255,255,0.18)">
-              <img src="assets/sample-club-crest.png" style="width:18px;height:18px;object-fit:contain;filter:brightness(0) invert(1) opacity(0.92)">Clava FC
-              <span style="opacity:0.5;margin:0 4px">vs</span>
-              <img id="oppCrest" src="assets/sample-club-crest.png" style="width:18px;height:18px;object-fit:contain;filter:brightness(0) invert(1) opacity(0.7)">
-              <span style="opacity:0.85">Atlético</span>
-              <button id="oppPick" title="Change opponent crest" style="border:0;background:rgba(255,255,255,0.12);color:#fff;width:22px;height:22px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;margin-left:4px"><i class="ti ti-pencil" style="font-size:11px"></i></button>
-            </span>
+        <div class="pl-field" id="plField">
+          <div class="pl-field-tag" id="plFieldTag">
+            <span class="dot"></span><span id="plDrillLabel">No drill selected</span>
           </div>
 
-          <!-- Zone (corner area) -->
-          <div class="zone" style="left:46%; top:8%; width:50%; height:38%;">
-            <div class="lbl">DEFENSIVE BLOCK · 18-yd box</div>
-          </div>
+          <!-- Fabric.js canvas — objects rendered here -->
+          <canvas id="plCanvas"></canvas>
 
-          <!-- Goal at top -->
-          <div class="obj" style="left:50%; top:6%;">
-            <div class="goal"></div>
-          </div>
-
-          <!-- Cones marking the zone -->
-          <div class="obj" style="left:45%; top:7%;"><div class="cone"></div></div>
-          <div class="obj" style="left:96%; top:7%;"><div class="cone"></div></div>
-          <div class="obj" style="left:45%; top:46%;"><div class="cone"></div></div>
-          <div class="obj" style="left:96%; top:46%;"><div class="cone"></div></div>
-
-          <!-- Defenders (green — home, crest watermark) -->
-          <div class="obj" style="left:50%; top:14%;"><div class="player t1"><span>GK</span></div></div>
-          <div class="obj" style="left:62%; top:18%;"><div class="player t1"><span>3</span></div></div>
-          <div class="obj" style="left:75%; top:20%;"><div class="player t1"><span>4</span></div></div>
-          <div class="obj selected" style="left:55%; top:24%;"><div class="player t1"><span>5</span></div></div>
-          <div class="obj" style="left:82%; top:26%;"><div class="player t1"><span>2</span></div></div>
-          <div class="obj" style="left:68%; top:28%;"><div class="player t1"><span>6</span></div></div>
-          <div class="obj" style="left:88%; top:32%;"><div class="player t1"><span>8</span></div></div>
-
-          <!-- Attackers (blue — opponent, rival crest watermark) -->
-          <div class="obj" style="left:50%; top:8%;"><div class="player t2"><span>9</span></div></div>
-          <div class="obj" style="left:60%; top:10%;"><div class="player t2"><span>11</span></div></div>
-          <div class="obj" style="left:70%; top:9%;"><div class="player t2"><span>7</span></div></div>
-          <div class="obj" style="left:80%; top:14%;"><div class="player t2"><span>10</span></div></div>
-          <div class="obj" style="left:90%; top:12%;"><div class="player t2"><span>14</span></div></div>
-          <div class="obj" style="left:54%; top:18%;"><div class="player t2"><span>17</span></div></div>
-
-          <!-- Corner-kicker -->
-          <div class="obj" style="left:96%; top:6%;"><div class="player t3"><span>19</span></div></div>
-
-          <!-- Ball near corner -->
-          <div class="obj" style="left:97%; top:8%;"><div class="ball"></div></div>
-
-          <!-- Free zone (counter-attack target) -->
-          <div class="zone" style="left:8%; top:62%; width:30%; height:30%; border-color:#22D3EE; background:rgba(34,211,238,0.08);">
-            <div class="lbl" style="color:#22D3EE">COUNTER TARGET</div>
-          </div>
-
-          <!-- Pole markers for outlet -->
-          <div class="obj" style="left:30%; top:50%;"><div class="pole"></div></div>
-          <div class="obj" style="left:18%; top:62%;"><div class="pole"></div></div>
-
-          <!-- Arrows -->
-          <svg class="arrows-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <defs>
-              <marker id="arrowAcc" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#FBBF24"/>
-              </marker>
-              <marker id="arrowDef" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 Z" fill="#22D3EE"/>
-              </marker>
-            </defs>
-            <!-- corner cross to box -->
-            <path d="M 96 8 Q 80 22 56 24" fill="none" stroke="#FBBF24" stroke-width="0.55" stroke-dasharray="0.8 0.8" marker-end="url(#arrowAcc)" vector-effect="non-scaling-stroke"/>
-            <!-- counter-attack run -->
-            <path d="M 50 22 Q 35 45 22 65" fill="none" stroke="#22D3EE" stroke-width="0.55" marker-end="url(#arrowDef)" vector-effect="non-scaling-stroke"/>
-            <path d="M 56 24 Q 40 52 30 78" fill="none" stroke="#22D3EE" stroke-width="0.55" marker-end="url(#arrowDef)" vector-effect="non-scaling-stroke"/>
-          </svg>
-
-          <!-- Color FAB -->
+          <!-- FAB -->
           <div class="pl-field-fab">
-            <button title="Annotation"><i class="ti ti-edit"></i></button>
-            <button title="Color"><i class="ti ti-palette"></i></button>
-            <button title="Background"><i class="ti ti-photo"></i></button>
-            <button title="Fullscreen"><i class="ti ti-maximize"></i></button>
+            <button id="plFabText"   title="Add label"><i class="ti ti-typography"></i></button>
+            <button id="plFabDraw"   title="Draw mode"><i class="ti ti-pencil"></i></button>
+            <button id="plFabClear"  title="Clear canvas"><i class="ti ti-trash"></i></button>
+            <button id="plFabFull"   title="Fullscreen"><i class="ti ti-maximize"></i></button>
           </div>
         </div>
 
@@ -712,68 +613,342 @@
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
-
   if (club) window.applyClubTheme();
 
-  // Available players for today
   const today = new Date().toISOString().split('T')[0];
 
-  // Load players and availability in parallel
+  // ── Players + availability ──────────────────────────────────────
   const [playersRes, availRes] = await Promise.all([
-    window.sb.from('players')
-      .select('id,first_name,last_name,number,position')
-      .eq('club_id', clubId)
-      .neq('status', 'inactive'),
-    window.sb.from('availability')
-      .select('player_id,status')
-      .eq('club_id', clubId)
-      .eq('date', today)
-      .catch(() => ({ data: [] }))
+    window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive'),
+    window.sb.from('availability').select('player_id,status').eq('club_id', clubId).eq('date', today).catch(() => ({ data:[] }))
   ]);
+  const players  = playersRes.data || [];
+  const availMap = Object.fromEntries((availRes.data||[]).map(a=>[a.player_id,a.status]));
+  const hasAvail = (availRes.data||[]).length > 0;
+  const statusClass = { av:'is-success', pa:'is-warning', in:'is-danger', si:'is-danger' };
+  const pillData = (hasAvail
+    ? players.filter(p=>{ const s=availMap[p.id]; return !s||s==='av'||s==='pa'; }).map(p=>({ label:`${p.number?p.number+' ':''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
+    : players.map(p=>({ label:`${p.number?p.number+' ':''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }))
+  );
+  const head=document.getElementById('plAvailHead'), pills=document.getElementById('plAvailPills');
+  if (head)  head.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
+  if (pills) pills.innerHTML = pillData.map(p=>`<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`).join('');
 
-  const players    = playersRes.data || [];
-  const availMap   = Object.fromEntries((availRes.data || []).map(a => [a.player_id, a.status]));
-  const hasAvail   = (availRes.data || []).length > 0;
+  // ── Fabric.js canvas init ───────────────────────────────────────
+  await new Promise(r => requestAnimationFrame(r)); // yield for layout
+  const fieldEl = document.getElementById('plField');
+  const { width: fw, height: fh } = fieldEl.getBoundingClientRect();
+  const fc = new fabric.Canvas('plCanvas', {
+    width: fw, height: fh,
+    selection: true,
+    preserveObjectStacking: true,
+    backgroundColor: null
+  });
+  // Make Fabric wrapper transparent so field.jpg background shows through
+  fc.wrapperEl.style.position = 'absolute';
+  fc.wrapperEl.style.inset    = '0';
 
-  // Status → pill class mapping
-  const statusClass = {
-    av: 'is-success',
-    pa: 'is-warning',
-    in: 'is-danger',
-    si: 'is-danger',
-    na: '',
-    ab: '',
+  // Resize canvas when window resizes
+  window.addEventListener('resize', () => {
+    const { width, height } = fieldEl.getBoundingClientRect();
+    fc.setWidth(width); fc.setHeight(height); fc.renderAll();
+  });
+
+  // ── State ───────────────────────────────────────────────────────
+  let currentDrillId = null;
+  let currentTool    = 'select'; // select | draw | arrow
+  let arrowStart     = null;
+  let _playerCounter = 1;
+  let _historyStack  = [];
+  const MAX_HISTORY  = 30;
+
+  // Save canvas state to undo stack after each modification
+  fc.on('object:modified', () => pushHistory());
+  fc.on('object:added',    () => pushHistory());
+  fc.on('object:removed',  () => pushHistory());
+  function pushHistory() {
+    _historyStack.push(JSON.stringify(fc.toJSON()));
+    if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
+  }
+
+  // Update stat bar
+  function updateStat() {
+    const objs  = fc.getObjects();
+    const zones = objs.filter(o=>o._type==='zone').length;
+    const arrows= objs.filter(o=>o._type==='arrow').length;
+    const other = objs.length - zones - arrows;
+    const el = document.querySelector('.pl-canvas-bar .stat');
+    if (el) el.innerHTML = `<strong style="color:var(--cm-fg);font-weight:600">${other}</strong> objects · <strong style="color:var(--cm-fg);font-weight:600">${zones}</strong> zones · <strong style="color:var(--cm-fg);font-weight:600">${arrows}</strong> arrows`;
+  }
+  fc.on('after:render', updateStat);
+
+  // ── Tool switcher ───────────────────────────────────────────────
+  function setTool(tool) {
+    currentTool = tool;
+    fc.isDrawingMode = (tool === 'draw');
+    fc.selection     = (tool === 'select');
+    fc.getObjects().forEach(o => { o.selectable = (tool === 'select'); });
+    fc.renderAll();
+    // Update toolbar active state
+    const btns = document.querySelectorAll('.pl-canvas-bar .group:first-child button');
+    const toolMap = ['select','move','draw','lasso'];
+    btns.forEach((b,i) => b.classList.toggle('is-on', toolMap[i]===tool));
+  }
+
+  document.querySelectorAll('.pl-canvas-bar .group:first-child button').forEach((btn, i) => {
+    const tools = ['select','move','draw','lasso'];
+    btn.addEventListener('click', () => setTool(tools[i]));
+  });
+
+  // Draw mode brush setup
+  fc.freeDrawingBrush = new fabric.PencilBrush(fc);
+  fc.freeDrawingBrush.color = '#FBBF24';
+  fc.freeDrawingBrush.width = 3;
+
+  // Undo
+  document.querySelector('[title="Undo"]')?.addEventListener('click', () => {
+    if (_historyStack.length < 2) return;
+    _historyStack.pop(); // discard current
+    const prev = _historyStack[_historyStack.length-1];
+    if (prev) fc.loadFromJSON(prev, () => fc.renderAll());
+  });
+
+  // ── Object factory ──────────────────────────────────────────────
+  const TEAM_COLORS = { t1:'#15803D', t2:'#1D4ED8', t3:'#FACC15', t4:'#E5E7EB' };
+  const TEAM_TEXT   = { t1:'#fff',    t2:'#fff',    t3:'#0A0A0A', t4:'#0A0A0A' };
+
+  function center() { return { left: fc.width/2, top: fc.height/2 }; }
+
+  function addPlayer(team='t1', label=String(_playerCounter++)) {
+    const color = TEAM_COLORS[team]||'#15803D', tc = TEAM_TEXT[team]||'#fff';
+    const circle = new fabric.Circle({ radius:20, fill:color, stroke:'rgba(255,255,255,0.85)', strokeWidth:2.5, originX:'center', originY:'center' });
+    const text   = new fabric.Text(label, { fontSize:13, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center', top:0 });
+    const group  = new fabric.Group([circle, text], { ...center(), originX:'center', originY:'center', _type:'player', _team:team });
+    fc.add(group); fc.setActiveObject(group); fc.renderAll();
+  }
+
+  function addCone() {
+    const tri = new fabric.Triangle({ width:22, height:24, fill:'#f97316', stroke:'rgba(0,0,0,0.3)', strokeWidth:1, ...center(), originX:'center', originY:'center', _type:'cone' });
+    fc.add(tri); fc.setActiveObject(tri); fc.renderAll();
+  }
+
+  function addBall() {
+    const ball = new fabric.Circle({ radius:10, fill:'#e5e7eb', stroke:'rgba(0,0,0,0.5)', strokeWidth:1.5, ...center(), originX:'center', originY:'center', _type:'ball' });
+    fc.add(ball); fc.setActiveObject(ball); fc.renderAll();
+  }
+
+  function addPole() {
+    const pole = new fabric.Rect({ width:6, height:40, fill:'#ef4444', stroke:'rgba(0,0,0,0.3)', strokeWidth:1, rx:2, ...center(), originX:'center', originY:'center', _type:'pole' });
+    fc.add(pole); fc.setActiveObject(pole); fc.renderAll();
+  }
+
+  function addGoal() {
+    const goal = new fabric.Rect({ width:60, height:18, fill:'rgba(255,255,255,0.12)', stroke:'rgba(255,255,255,0.8)', strokeWidth:2.5, rx:3, ...center(), originX:'center', originY:'center', _type:'goal' });
+    fc.add(goal); fc.setActiveObject(goal); fc.renderAll();
+  }
+
+  function addMannequin() {
+    const body = new fabric.Circle({ radius:12, fill:'#6b7280', stroke:'rgba(255,255,255,0.5)', strokeWidth:1.5, ...center(), originX:'center', originY:'center', _type:'mannequin' });
+    fc.add(body); fc.setActiveObject(body); fc.renderAll();
+  }
+
+  function addZoneRect() {
+    const z = new fabric.Rect({ width:120, height:80, fill:'rgba(34,197,94,0.12)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], rx:4, ...center(), originX:'center', originY:'center', _type:'zone' });
+    fc.add(z); fc.setActiveObject(z); fc.renderAll();
+  }
+
+  function addZoneCircle() {
+    const z = new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], ...center(), originX:'center', originY:'center', _type:'zone' });
+    fc.add(z); fc.setActiveObject(z); fc.renderAll();
+  }
+
+  // Arrow drawing — click-drag on canvas in 'arrow' mode
+  function addArrow(x1,y1,x2,y2, color='#FBBF24', dashed=false) {
+    const angle = Math.atan2(y2-y1, x2-x1) * 180 / Math.PI;
+    const len   = Math.sqrt((x2-x1)**2+(y2-y1)**2);
+    // Line body
+    const line  = new fabric.Line([x1,y1,x2,y2], {
+      stroke: color, strokeWidth: dashed?2:2.5,
+      strokeDashArray: dashed?[8,5]:null,
+      selectable:true, hasBorders:true, hasControls:false, _type:'arrow'
+    });
+    // Arrowhead triangle at end
+    const head = new fabric.Triangle({
+      width:12, height:14, fill:color, angle:angle+90,
+      left:x2, top:y2, originX:'center', originY:'center',
+      selectable:false, _type:'arrowhead'
+    });
+    const grp = new fabric.Group([line, head], { selectable:true, _type:'arrow' });
+    fc.add(grp); fc.renderAll();
+  }
+
+  // Arrow tool: click to start, click to end
+  fc.on('mouse:down', e => {
+    if (currentTool !== 'arrow') return;
+    const p = fc.getPointer(e.e);
+    arrowStart = p;
+  });
+  fc.on('mouse:up', e => {
+    if (currentTool !== 'arrow' || !arrowStart) return;
+    const p = fc.getPointer(e.e);
+    if (Math.abs(p.x-arrowStart.x) > 10 || Math.abs(p.y-arrowStart.y) > 10) {
+      addArrow(arrowStart.x, arrowStart.y, p.x, p.y, currentArrowColor||'#FBBF24', currentArrowDash||false);
+    }
+    arrowStart = null;
+  });
+  let currentArrowColor = '#FBBF24', currentArrowDash = false;
+
+  // Delete selected object with Delete/Backspace
+  document.addEventListener('keydown', e => {
+    if ((e.key==='Delete'||e.key==='Backspace') && document.activeElement===document.body) {
+      const active = fc.getActiveObject();
+      if (active) { fc.remove(active); fc.discardActiveObject(); fc.renderAll(); }
+    }
+  });
+
+  // ── Dock buttons wiring ─────────────────────────────────────────
+  const dockActions = {
+    'Ball':       () => addBall(),
+    'Cone':       () => addCone(),
+    'Pole':       () => addPole(),
+    'Gate':       () => addZoneRect(),
+    'Goal':       () => addGoal(),
+    'Mannequin':  () => addMannequin(),
+    'Pass':       () => { currentArrowColor='#22D3EE'; currentArrowDash=true;  setTool('arrow'); },
+    'Run':        () => { currentArrowColor='#FBBF24'; currentArrowDash=false; setTool('arrow'); },
+    'Dribble':    () => { currentArrowColor='#fff';    currentArrowDash=true;  setTool('arrow'); },
+    'Curve':      () => { currentArrowColor='#FBBF24'; currentArrowDash=false; setTool('arrow'); },
+    'Rectangle':  () => addZoneRect(),
+    'Circle':     () => addZoneCircle(),
+    'Polygon':    () => addZoneRect(),
+    'Label':      () => { const t=new fabric.IText('Label',{...center(),originX:'center',originY:'center',fill:'#fff',fontSize:14,fontFamily:'sans-serif',_type:'text'}); fc.add(t); fc.setActiveObject(t); fc.renderAll(); },
+    'Number':     () => { const t=new fabric.IText('1',{...center(),originX:'center',originY:'center',fill:'#FBBF24',fontSize:18,fontWeight:'700',fontFamily:'monospace',_type:'text'}); fc.add(t); fc.setActiveObject(t); fc.renderAll(); },
   };
 
-  // If no availability data for today, show all active players as available
-  let pillData;
-  if (hasAvail) {
-    pillData = players
-      .filter(p => {
-        const s = availMap[p.id];
-        return !s || s === 'av' || s === 'pa'; // show av + partial
-      })
-      .map(p => ({
-        label: `${p.number ? p.number + ' ' : ''}${p.last_name || p.first_name || '?'}`,
-        cls: statusClass[availMap[p.id]] || 'is-success'
-      }));
-  } else {
-    pillData = players.map(p => ({
-      label: `${p.number ? p.number + ' ' : ''}${p.last_name || p.first_name || '?'}`,
-      cls: 'is-success'
-    }));
+  document.querySelectorAll('.pl-dock-btn').forEach(btn => {
+    const title = btn.getAttribute('title');
+    if (dockActions[title]) {
+      btn.addEventListener('click', () => {
+        // Team buttons (t1/t2/t3/t4) — no title
+        dockActions[title]();
+      });
+    }
+  });
+
+  // Team color buttons in dock
+  document.querySelectorAll('.pl-dock-btn .p').forEach((span, i) => {
+    const teams = ['t1','t2','t3','t4'];
+    span.parentElement.addEventListener('click', () => { _playerCounter=1; addPlayer(teams[i]); });
+  });
+
+  // FAB buttons
+  document.getElementById('plFabText')?.addEventListener('click', () => {
+    const t = new fabric.IText('Annotation', { ...center(), originX:'center', originY:'center', fill:'rgba(255,255,255,0.9)', fontSize:13, fontFamily:'sans-serif', _type:'text' });
+    fc.add(t); fc.setActiveObject(t); t.enterEditing(); fc.renderAll();
+  });
+  document.getElementById('plFabDraw')?.addEventListener('click', () => {
+    const on = currentTool === 'draw';
+    setTool(on ? 'select' : 'draw');
+    document.getElementById('plFabDraw').style.color = on ? '' : 'var(--cm-accent)';
+  });
+  document.getElementById('plFabClear')?.addEventListener('click', () => {
+    if (!confirm('Clear the canvas? This cannot be undone.')) return;
+    fc.clear(); fc.renderAll();
+  });
+  document.getElementById('plFabFull')?.addEventListener('click', () => {
+    const el = fieldEl;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else el.requestFullscreen?.();
+  });
+
+  // ── Drill list ──────────────────────────────────────────────────
+  async function loadDrills() {
+    const { data } = await window.sb.from('drills')
+      .select('id,name,duration,created_at')
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: false });
+
+    const list = document.getElementById('plDrillList');
+    if (!list) return;
+    const drills = data || [];
+
+    if (!drills.length) {
+      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No drills yet. Click "+ Add drill" to create one.</div>`;
+      return;
+    }
+
+    list.innerHTML = drills.map((d, i) => `
+      <div class="pl-ex${currentDrillId===d.id?' is-active':''}" data-drill-id="${d.id}" style="cursor:pointer">
+        <div class="pl-ex-n">${i+1}</div>
+        <div class="pl-ex-body">
+          <div class="pl-ex-title">${d.name}</div>
+          <div class="pl-ex-meta">${d.duration ? d.duration+'′' : '—'}</div>
+        </div>
+        <div class="pl-ex-d"><i class="ti ti-clock"></i>${d.duration?d.duration+'′':'—'}</div>
+      </div>`).join('');
+
+    list.querySelectorAll('.pl-ex').forEach(el => {
+      el.addEventListener('click', () => loadDrillCanvas(el.dataset.drillId, drills));
+    });
   }
 
-  const head  = document.getElementById('plAvailHead');
-  const pills = document.getElementById('plAvailPills');
+  async function loadDrillCanvas(id, drills) {
+    const drill = drills.find(d => d.id === id);
+    if (!drill) return;
+    currentDrillId = id;
 
-  if (head)  head.innerHTML  = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
-  if (pills) {
-    pills.innerHTML = pillData.map(p =>
-      `<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`
-    ).join('');
+    // Update label
+    const label = document.getElementById('plDrillLabel');
+    if (label) label.textContent = drill.name + (drill.duration ? ` · ${drill.duration}′` : '');
+
+    // Load canvas JSON if exists
+    if (drill.objects_json) {
+      fc.loadFromJSON(drill.objects_json, () => fc.renderAll());
+    } else {
+      fc.clear(); fc.renderAll();
+    }
+
+    // Update active state in list
+    document.querySelectorAll('#plDrillList .pl-ex').forEach(el =>
+      el.classList.toggle('is-active', el.dataset.drillId === id)
+    );
+    _historyStack = [];
   }
-})();
+
+  // Add drill
+  document.getElementById('plAddDrill')?.addEventListener('click', async () => {
+    const name = prompt('Drill name:', 'New drill');
+    if (!name) return;
+    const dur = prompt('Duration (minutes):', '');
+    const { data, error } = await window.sb.from('drills').insert({
+      club_id: clubId,
+      name: name.trim(),
+      duration: dur ? parseInt(dur)||null : null,
+      created_by: profile?.id || null
+    }).select().single();
+    if (!error && data) {
+      await loadDrills();
+      await loadDrillCanvas(data.id, [data]);
+    }
+  });
+
+  // Save
+  document.getElementById('plSaveBtn')?.addEventListener('click', async () => {
+    if (!currentDrillId) { alert('Select or create a drill first.'); return; }
+    const btn = document.getElementById('plSaveBtn');
+    btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="font-size:14px"></i>Saving…';
+    const { error } = await window.sb.from('drills').update({ objects_json: fc.toJSON() }).eq('id', currentDrillId);
+    btn.disabled = false; btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save';
+    if (!error) {
+      btn.innerHTML = '<i class="ti ti-check" style="font-size:14px;color:var(--cm-success)"></i>Saved';
+      setTimeout(() => { btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save'; }, 1500);
+    }
+  });
+
+  // Initial load
+  await loadDrills();
+
+})().catch(console.error);
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
@@ -785,55 +960,11 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-  // Click drill in left panel to highlight it
-  document.querySelectorAll('.pl-ex').forEach(el => el.addEventListener('click', () => {
-    document.querySelectorAll('.pl-ex').forEach(o => o.classList.remove('is-active'));
-    el.classList.add('is-active');
-  }));
-  // Dock single-select per group
+  // Dock visual single-select per group (cosmetic only — actions handled by main script)
   document.querySelectorAll('.pl-dock-grp').forEach(g => g.querySelectorAll('.pl-dock-btn').forEach(b => b.addEventListener('click', () => {
     g.querySelectorAll('.pl-dock-btn').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
   })));
-  // Top toolbar groups
-  document.querySelectorAll('.pl-canvas-bar .group').forEach(g => g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
-    b.classList.add('is-on');
-  })));
-  // Object selection on the field
-  document.querySelectorAll('.pl-field .obj').forEach(el => el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    document.querySelectorAll('.pl-field .obj').forEach(o => o.classList.remove('selected'));
-    el.classList.add('selected');
-  }));
-
-  // Opponent crest picker — cycles through a few sample rivals for demo
-  const rivals = [
-    { name:'Atlético',    crest:'assets/sample-club-crest.png' },
-    { name:'Boca',         crest:'assets/sample-club-crest.png' },
-    { name:'River Plate',  crest:'assets/sample-club-crest.png' },
-    { name:'Independiente',crest:'assets/sample-club-crest.png' },
-    { name:'San Lorenzo',  crest:'assets/sample-club-crest.png' },
-  ];
-  let ri = 0;
-  const oppPick = document.getElementById('oppPick');
-  const field = document.getElementById('plField');
-  const oppCrestImg = document.getElementById('oppCrest');
-  const oppLbl = oppPick && oppPick.previousElementSibling;
-  if (oppPick) {
-    oppPick.addEventListener('click', () => {
-      ri = (ri + 1) % rivals.length;
-      const r = rivals[ri];
-      // Demo: rotate hue per rival so the crest is visually distinct even with the same asset
-      const hue = ri * 70;
-      field.style.setProperty('--opponent-crest', `url('${r.crest}')`);
-      oppCrestImg.src = r.crest;
-      oppCrestImg.style.filter = `brightness(0) invert(1) opacity(0.75) hue-rotate(${hue}deg)`;
-      if (oppLbl) oppLbl.textContent = r.name;
-      // Tint the t2 players overlay to match
-      document.querySelectorAll('.pl-field .player.t2').forEach(p => p.style.filter = `hue-rotate(${hue}deg)`);
-    });
-  }
 </script>
 
 </body>
