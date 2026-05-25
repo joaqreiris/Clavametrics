@@ -819,6 +819,16 @@
           </select>
         </div>
       </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label for="calMcF_time">Match time</label>
+          <input type="time" id="calMcF_time">
+        </div>
+        <div class="sq-modal-field">
+          <label for="calMcF_stadium">Stadium / venue</label>
+          <input type="text" id="calMcF_stadium" placeholder="e.g. Estadio Centenario">
+        </div>
+      </div>
     </div>
     <div class="sq-modal-foot">
       <div class="grow"></div>
@@ -1115,8 +1125,10 @@ function openMcModal(existingMc) {
   document.getElementById('calMcF_end').value      = existingMc?.end_date   || '';
   document.getElementById('calMcF_match').value    = existingMc?.match_date || '';
   document.getElementById('calMcF_rival').value    = existingMc?.rival      || '';
-  document.getElementById('calMcF_homeaway').value = existingMc?.home_away  || '';
-  document.getElementById('calMcF_comp').value     = existingMc?.color      || '';
+  document.getElementById('calMcF_homeaway').value = existingMc?.home_away   || '';
+  document.getElementById('calMcF_comp').value     = existingMc?.color       || '';
+  document.getElementById('calMcF_time').value     = existingMc?.match_time  || '';
+  document.getElementById('calMcF_stadium').value  = existingMc?.stadium     || '';
   document.getElementById('calMcSaving').style.display = 'none';
   document.getElementById('calMcSave').disabled = false;
   document.getElementById('calMcBackdrop').classList.add('is-open');
@@ -1148,7 +1160,9 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
     match_date: document.getElementById('calMcF_match').value || null,
     rival:      document.getElementById('calMcF_rival').value.trim() || null,
     home_away:  document.getElementById('calMcF_homeaway').value || null,
-    color:      document.getElementById('calMcF_comp').value || null,
+    color:      document.getElementById('calMcF_comp').value     || null,
+    match_time: document.getElementById('calMcF_time').value     || null,
+    stadium:    document.getElementById('calMcF_stadium').value.trim() || null,
   };
 
   let error;
@@ -1166,7 +1180,7 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
   showCalToast(wasEdit ? 'Microcycle updated.' : 'Microcycle created.');
 
   const { data: mcs } = await window.sb.from('microcycles')
-    .select('id,name,start_date,end_date,match_date,rival,home_away,color')
+    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium')
     .eq('club_id', _clubId)
     .order('start_date', { ascending: false });
   _allMCs = mcs || [];
@@ -1670,8 +1684,9 @@ function showMatchPopover(anchor, items) {
       </div>
       <div style="display:flex;align-items:center;gap:6px;font:500 11px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted)">
         <i class="ti ${compIcon(cc)}" style="font-size:11px;color:${compClr}"></i>
-        <span>${compLabel(cc)} · ${dateFmt}</span>
+        <span>${compLabel(cc)} · ${dateFmt}${item.mcData?.match_time ? ' · ' + item.mcData.match_time.slice(0,5) : ''}</span>
       </div>
+      ${item.mcData?.stadium ? `<div style="display:flex;align-items:center;gap:6px;font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px"><i class="ti ti-map-pin" style="font-size:11px"></i><span>${item.mcData.stadium}</span></div>` : ''}
       ${editBtn}
     </div>`;
   }).join('');
@@ -2007,7 +2022,7 @@ async function showImportPreview(fixtures) {
 
   // Load all MCs ordered by start_date asc for ribbon
   const { data: mcs } = await window.sb.from('microcycles')
-    .select('id,name,start_date,end_date,match_date,rival,home_away,color')
+    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium')
     .eq('club_id', _clubId)
     .order('start_date', { ascending: false });
 
