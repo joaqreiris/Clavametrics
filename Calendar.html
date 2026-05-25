@@ -437,7 +437,7 @@
           <div class="ctx" id="calHeadCtx"><strong>Microcycle 14</strong> · MD-2 · 32 microcycles planned · season ends <strong>Jun 28</strong></div>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-calendar-plus" style="font-size:14px"></i>New microcycle</button>
+          <button class="cm-btn is-outline is-sm" id="calNewMcBtn"><i class="ti ti-calendar-plus" style="font-size:14px"></i>New microcycle</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import fixtures</button>
           <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New event</button>
         </div>
@@ -452,13 +452,13 @@
         </div>
         <div class="cal-kpi">
           <div class="cal-kpi-l"><i class="ti ti-route"></i>Match density</div>
-          <div class="cal-kpi-v">5 <sub>in 21d</sub></div>
-          <div class="cal-kpi-t" style="color:var(--cm-warning)">2 mid-week — load alert window</div>
+          <div class="cal-kpi-v" id="calDensityV">— <sub>in 21d</sub></div>
+          <div class="cal-kpi-t" id="calDensityT">Loading…</div>
         </div>
         <div class="cal-kpi">
           <div class="cal-kpi-l"><i class="ti ti-plane"></i>Travel days</div>
-          <div class="cal-kpi-v">4 <sub>this MC</sub></div>
-          <div class="cal-kpi-t">Mendoza away · 2-day trip</div>
+          <div class="cal-kpi-v" id="calTravelV">0 <sub>this MC</sub></div>
+          <div class="cal-kpi-t" id="calTravelT">No travel planned</div>
         </div>
         <div class="cal-kpi">
           <div class="cal-kpi-l"><i class="ti ti-activity"></i>Planned load</div>
@@ -488,14 +488,9 @@
 
         <div class="cal-ribbon-body">
           <div class="cal-ribbon" style="position:relative">
-            <!-- Months: Jan / Feb / Mar / Apr / May / Jun — 6 months across full width -->
-            <div class="cal-row-months" style="grid-template-columns: repeat(6,1fr)">
-              <span class="month"><strong>Jan</strong>'26</span>
-              <span class="month"><strong>Feb</strong>'26</span>
-              <span class="month"><strong>Mar</strong>'26</span>
-              <span class="month"><strong>Apr</strong>'26</span>
-              <span class="month"><strong>May</strong>'26</span>
-              <span class="month"><strong>Jun</strong>'26</span>
+            <!-- Months: rendered dynamically by renderSeasonRibbon() -->
+            <div class="cal-row-months" id="calRibbonMonths" style="grid-template-columns: repeat(6,1fr)">
+              <span class="month" style="color:var(--cm-fg-faint);font-style:italic">Loading…</span>
             </div>
 
             <!-- MC bars row — rendered by renderSeasonRibbon() from Supabase microcycles data -->
@@ -506,19 +501,8 @@
             <!-- Match markers row — rendered by renderSeasonRibbon() -->
             <div class="cal-row-matches" id="calRibbonMatches" style="position:relative; height:30px"></div>
 
-            <!-- Week ticks -->
-            <div class="cal-row-weeks">
-              <span class="wk" style="left:0.5%">W1</span>
-              <span class="wk" style="left:9%">W3</span>
-              <span class="wk" style="left:18%">W5</span>
-              <span class="wk" style="left:27%">W7</span>
-              <span class="wk" style="left:38%">W10</span>
-              <span class="wk" style="left:50%">W13</span>
-              <span class="wk" style="left:62%">W16</span>
-              <span class="wk" style="left:74%">W19</span>
-              <span class="wk" style="left:86%">W22</span>
-              <span class="wk" style="left:98%">W26</span>
-            </div>
+            <!-- Week ticks: rendered dynamically by renderSeasonRibbon() -->
+            <div class="cal-row-weeks" id="calRibbonWeeks"></div>
           </div>
         </div>
       </div>
@@ -673,6 +657,34 @@
         </div>
       </div>
 
+      <!-- Month view -->
+      <div id="calViewMonth" style="display:none;margin-top:0">
+        <div class="cal-card">
+          <div class="cal-card-h">
+            <h3 id="calMonthTitle">Month</h3>
+            <div class="right">
+              <div class="cal-pager">
+                <button id="calMonthPrev" title="Previous month"><i class="ti ti-chevron-left"></i></button>
+                <span class="label" id="calMonthLabel"></span>
+                <button id="calMonthNext" title="Next month"><i class="ti ti-chevron-right"></i></button>
+              </div>
+            </div>
+          </div>
+          <div id="calMonthGrid" style="overflow:hidden"></div>
+        </div>
+      </div>
+
+      <!-- List view -->
+      <div id="calViewList" style="display:none;margin-top:0">
+        <div class="cal-card">
+          <div class="cal-card-h">
+            <h3>Session list</h3>
+            <span class="sub" id="calListSub">upcoming sessions</span>
+          </div>
+          <div id="calListBody" style="min-height:80px"></div>
+        </div>
+      </div>
+
     </section>
   </main>
 </div>
@@ -705,6 +717,7 @@
             <option value="gym">Gym</option>
             <option value="match">Match</option>
             <option value="recovery">Recovery</option>
+            <option value="travel">Travel</option>
             <option value="other">Other</option>
           </select>
         </div>
@@ -735,19 +748,73 @@
 </div>
 <div class="sq-toast" id="calToast"></div>
 
+<!-- New Microcycle modal -->
+<div class="sq-modal-backdrop" id="calMcBackdrop">
+  <div class="sq-modal" role="dialog" aria-modal="true" aria-labelledby="calMcModalTitle">
+    <div class="sq-modal-head">
+      <h2 id="calMcModalTitle">New microcycle</h2>
+      <button class="sq-modal-close" id="calMcClose" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <div class="sq-modal-field">
+        <label for="calMcF_name">Name</label>
+        <input type="text" id="calMcF_name" placeholder="e.g. MC 15">
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label for="calMcF_start">Start date</label>
+          <input type="date" id="calMcF_start">
+        </div>
+        <div class="sq-modal-field">
+          <label for="calMcF_end">End date</label>
+          <input type="date" id="calMcF_end">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label for="calMcF_match">Match date (MD reference)</label>
+          <input type="date" id="calMcF_match">
+        </div>
+        <div class="sq-modal-field">
+          <label for="calMcF_rival">Rival</label>
+          <input type="text" id="calMcF_rival" placeholder="Opponent name">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label for="calMcF_homeaway">Home / Away</label>
+          <select id="calMcF_homeaway">
+            <option value="">—</option>
+            <option value="home">Home</option>
+            <option value="away">Away</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <span id="calMcSaving" style="display:none;font:var(--cm-meta);color:var(--cm-fg-muted)">Saving…</span>
+      <button class="cm-btn is-ghost is-sm" id="calMcCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="calMcSave">Create</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null;
+let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 const TODAY = new Date().toISOString().split('T')[0];
 
-const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor' };
+const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor', travel:'ti-plane' };
 function focusToClass(focus) {
   if (!focus) return 'training';
   const f = focus.toLowerCase();
-  if (f === 'match')   return 'match';
-  if (f === 'gym')     return 'gym';
+  if (f === 'match')    return 'match';
+  if (f === 'gym')      return 'gym';
   if (f === 'recovery') return 'recovery';
-  return 'training'; // tactical, conditioning, other → training
+  if (f === 'travel')   return 'travel';
+  return 'training';
 }
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -881,6 +948,14 @@ async function loadSessions() {
   }
   _sessions = (data || []).map(s => ({ ...s, session_date: s.session_date ? s.session_date.split('T')[0] : s.session_date }));
   _weekOffset = 0;
+
+  // Travel Days KPI
+  const travelCt = _sessions.filter(s => s.session_type === 'travel' || s.session_type === 'away').length;
+  const elTV = document.getElementById('calTravelV');
+  const elTT = document.getElementById('calTravelT');
+  if (elTV) elTV.innerHTML = `${travelCt} <sub>this MC</sub>`;
+  if (elTT) elTT.textContent = travelCt > 0 ? `${travelCt} travel session${travelCt > 1 ? 's' : ''} this MC` : 'No travel planned';
+
   renderGrid();
 }
 
@@ -946,6 +1021,62 @@ document.getElementById('calEvtDelete').addEventListener('click', deleteEvt);
 document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeEvtModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });
 
+// ── New Microcycle modal ──────────────────────────────────────
+function openMcModal() {
+  ['calMcF_name','calMcF_start','calMcF_end','calMcF_match','calMcF_rival'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('calMcF_homeaway').value = '';
+  document.getElementById('calMcSaving').style.display = 'none';
+  document.getElementById('calMcSave').disabled = false;
+  document.getElementById('calMcBackdrop').classList.add('is-open');
+  document.getElementById('calMcF_name').focus();
+}
+function closeMcModal() { document.getElementById('calMcBackdrop').classList.remove('is-open'); }
+
+document.getElementById('calNewMcBtn').addEventListener('click', openMcModal);
+document.getElementById('calMcClose').addEventListener('click', closeMcModal);
+document.getElementById('calMcCancel').addEventListener('click', closeMcModal);
+document.getElementById('calMcBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeMcModal(); });
+
+document.getElementById('calMcSave').addEventListener('click', async () => {
+  const name  = document.getElementById('calMcF_name').value.trim();
+  const start = document.getElementById('calMcF_start').value;
+  const end   = document.getElementById('calMcF_end').value;
+  if (!name || !start || !end) { showCalToast('Name, start date and end date are required.'); return; }
+  if (end < start) { showCalToast('End date must be after start date.'); return; }
+
+  const saving = document.getElementById('calMcSaving');
+  const saveBtn = document.getElementById('calMcSave');
+  saving.style.display = 'inline'; saveBtn.disabled = true;
+
+  const payload = {
+    club_id:    _clubId,
+    name,
+    start_date: start,
+    end_date:   end,
+    match_date: document.getElementById('calMcF_match').value || null,
+    rival:      document.getElementById('calMcF_rival').value.trim() || null,
+    home_away:  document.getElementById('calMcF_homeaway').value || null,
+  };
+
+  const { error } = await window.sb.from('microcycles').insert(payload);
+  saving.style.display = 'none'; saveBtn.disabled = false;
+  if (error) { showCalToast('Error: ' + error.message); return; }
+
+  closeMcModal();
+  showCalToast('Microcycle created.');
+
+  const { data: mcs } = await window.sb.from('microcycles')
+    .select('id,name,start_date,end_date,match_date,rival,home_away,color')
+    .eq('club_id', _clubId)
+    .order('start_date', { ascending: false });
+  _allMCs = mcs || [];
+  renderSeasonRibbon(_allMCs);
+  renderCalKPIs(_allMCs);
+  const newIdx = _allMCs.findIndex(m => m.start_date === start && m.name === name);
+  if (newIdx >= 0) { _mcIdx = newIdx; _weekOffset = 0; }
+  await loadSessions();
+});
+
 // ── Week navigation ───────────────────────────────────────────
 document.getElementById('calWeekPrev').addEventListener('click', () => { _weekOffset--; renderGrid(); });
 document.getElementById('calWeekNext').addEventListener('click', () => { _weekOffset++; renderGrid(); });
@@ -999,11 +1130,154 @@ document.querySelectorAll('.cal-filters').forEach(bar => {
   });
 });
 
-// ── Segment controls ──────────────────────────────────────────
+// ── View switching ────────────────────────────────────────────
+const VIEW_MAP = { 'Month': 'month', 'Microcycle': 'microcycle', 'List': 'list' };
+
+function switchView(view) {
+  _calView = view;
+  const mcGrid = document.querySelector('.cal-grid');
+  if (mcGrid) mcGrid.style.display = view === 'microcycle' ? '' : 'none';
+  document.getElementById('calViewMonth').style.display = view === 'month' ? '' : 'none';
+  document.getElementById('calViewList').style.display  = view === 'list'  ? '' : 'none';
+  if (view === 'month') renderMonthView();
+  if (view === 'list')  renderListView();
+}
+
 document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg').forEach(s => s.addEventListener('click', () => {
   g.querySelectorAll('.cal-seg').forEach(o => o.classList.remove('is-on'));
   s.classList.add('is-on');
+  const label = s.textContent.trim();
+  switchView(VIEW_MAP[label] || 'microcycle');
 })));
+
+// ── Month view ────────────────────────────────────────────────
+const EVT_BG = { training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)', travel:'var(--cm-warning-bg)' };
+const EVT_CLR = { training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)', travel:'var(--cm-warning)' };
+
+async function renderMonthView() {
+  const y = _monthY, m = _monthM;
+  const label = new Date(y, m, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  document.getElementById('calMonthLabel').textContent = label;
+  document.getElementById('calMonthTitle').textContent = label;
+
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const monthStart  = `${y}-${String(m+1).padStart(2,'0')}-01`;
+  const monthEnd    = `${y}-${String(m+1).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
+  document.getElementById('calMonthGrid').innerHTML = '<div style="padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
+
+  const { data: sessions } = await window.sb.from('training_sessions')
+    .select('id,title,session_type,session_date')
+    .eq('club_id', _clubId)
+    .gte('session_date', monthStart)
+    .lte('session_date', monthEnd)
+    .order('session_date');
+
+  const sessMap = {};
+  (sessions || []).forEach(s => {
+    const d = (s.session_date || '').split('T')[0];
+    if (!sessMap[d]) sessMap[d] = [];
+    sessMap[d].push(s);
+  });
+  _allMCs.forEach(mc => {
+    if (!mc.match_date || mc.match_date < monthStart || mc.match_date > monthEnd) return;
+    if (!sessMap[mc.match_date]) sessMap[mc.match_date] = [];
+    if (!sessMap[mc.match_date].find(s => s.session_type === 'match'))
+      sessMap[mc.match_date].push({ id:'mc-'+mc.id, title:`vs ${mc.rival||'Match'}`, session_type:'match' });
+  });
+
+  const firstDay = new Date(y, m, 1).getDay();
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = `<div style="display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid var(--cm-border-soft)">`;
+  DOW.forEach(d => {
+    html += `<div style="padding:6px 8px;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-fg-muted);border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft)">${d}</div>`;
+  });
+  for (let i = 0; i < firstDay; i++)
+    html += `<div style="min-height:80px;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft);background:var(--cm-bg-sunk);opacity:0.4"></div>`;
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday = dateStr === TODAY;
+    const col = (day + firstDay - 1) % 7;
+    const noBR = col === 6 ? ';border-right:0' : '';
+    const daySess = sessMap[dateStr] || [];
+    html += `<div style="min-height:80px;padding:6px 8px;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft)${noBR};background:${isToday?'color-mix(in srgb, var(--cm-accent) 5%, var(--cm-surface))':'var(--cm-surface)'}">
+      <div style="font:600 14px/1 var(--cm-font-sans);color:${isToday?'var(--cm-accent)':'var(--cm-fg-strong)'};margin-bottom:4px">${day}</div>
+      ${daySess.map(s => {
+        const cat = focusToClass(s.session_type);
+        const bg2 = EVT_BG[cat]  || EVT_BG.training;
+        const cl2 = EVT_CLR[cat] || EVT_CLR.training;
+        return `<div style="margin-bottom:2px;padding:2px 5px;border-radius:3px;background:${bg2};color:${cl2};font:600 10.5px/1.3 var(--cm-font-sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title||s.session_type}</div>`;
+      }).join('')}
+    </div>`;
+  }
+  html += '</div>';
+  document.getElementById('calMonthGrid').innerHTML = html;
+}
+
+document.getElementById('calMonthPrev').addEventListener('click', () => {
+  _monthM--; if (_monthM < 0) { _monthM = 11; _monthY--; }
+  renderMonthView();
+});
+document.getElementById('calMonthNext').addEventListener('click', () => {
+  _monthM++; if (_monthM > 11) { _monthM = 0; _monthY++; }
+  renderMonthView();
+});
+
+// ── List view ─────────────────────────────────────────────────
+async function renderListView() {
+  const container = document.getElementById('calListBody');
+  if (!container) return;
+  container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
+
+  const { data: sessions } = await window.sb.from('training_sessions')
+    .select('id,title,session_type,session_date,duration')
+    .eq('club_id', _clubId)
+    .gte('session_date', TODAY)
+    .order('session_date')
+    .limit(60);
+
+  const items = (sessions || []).map(s => ({
+    date: (s.session_date||'').split('T')[0], title: s.title, type: s.session_type, duration: s.duration
+  }));
+  _allMCs.forEach(mc => {
+    if (!mc.match_date || mc.match_date < TODAY) return;
+    if (!items.find(i => i.date === mc.match_date && i.type === 'match'))
+      items.push({ date: mc.match_date, title:`vs ${mc.rival||'Match'}`, type:'match', isAway: mc.home_away === 'away' });
+  });
+  items.sort((a, b) => a.date > b.date ? 1 : -1);
+
+  const sub = document.getElementById('calListSub');
+  if (sub) sub.textContent = `${items.length} upcoming session${items.length !== 1 ? 's' : ''}`;
+
+  if (!items.length) {
+    container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--cm-fg-muted)">No upcoming sessions found</div>';
+    return;
+  }
+
+  let html = '';
+  let lastDate = '';
+  items.forEach(item => {
+    const d = new Date(item.date + 'T12:00:00');
+    if (item.date !== lastDate) {
+      const dlabel = d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+      html += `<div style="padding:6px 16px 4px;font:600 11px/1 var(--cm-font-mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-fg-muted);border-top:1px solid var(--cm-border-soft);background:var(--cm-bg-soft)">${dlabel}</div>`;
+      lastDate = item.date;
+    }
+    const cat   = focusToClass(item.type);
+    const bg2   = EVT_BG[cat]  || EVT_BG.training;
+    const cl2   = EVT_CLR[cat] || EVT_CLR.training;
+    const tlabel = (item.type||'event').toUpperCase();
+    html += `<div class="upcoming-row">
+      <div class="upcoming-date"><div class="m">${d.toLocaleString('en-US',{month:'short'}).toUpperCase()}</div><div class="d">${d.getDate()}</div></div>
+      <div class="upcoming-body">
+        <div class="upcoming-title">${item.title||'—'}</div>
+        <div class="upcoming-meta"><span class="badge" style="background:${bg2};color:${cl2}">${tlabel}</span>${item.duration ? ' '+item.duration+'min' : ''}</div>
+      </div>
+      <div></div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
 
 // ── New event button ─────────────────────────────────────────
 document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn => {
@@ -1039,11 +1313,67 @@ function renderSeasonRibbon(mcs) {
 
   const today = new Date();
 
+  // Dynamic month headers
+  const monthsEl = document.getElementById('calRibbonMonths');
+  if (monthsEl) {
+    const months = [];
+    let cur = new Date(ribbonStart.getFullYear(), ribbonStart.getMonth(), 1);
+    while (cur <= ribbonEnd) { months.push(new Date(cur)); cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1); }
+    monthsEl.style.gridTemplateColumns = `repeat(${months.length},1fr)`;
+    monthsEl.innerHTML = months.map(mo => {
+      const mName = MONTHS_SHORT[mo.getMonth()];
+      const yr    = mo.getFullYear().toString().slice(2);
+      return `<span class="month" style="cursor:pointer" data-mo="${mo.getFullYear()}-${mo.getMonth()}"><strong>${mName}</strong>'${yr}</span>`;
+    }).join('');
+    // Click on month → switch to month view for that month
+    monthsEl.querySelectorAll('.month[data-mo]').forEach(span => {
+      span.addEventListener('click', () => {
+        const [yy, mm] = span.dataset.mo.split('-').map(Number);
+        _monthY = yy; _monthM = mm;
+        // Activate month seg button
+        document.querySelectorAll('.cal-segs .cal-seg').forEach(s => {
+          s.classList.toggle('is-on', s.textContent.trim() === 'Month');
+        });
+        switchView('month');
+      });
+    });
+  }
+
+  // Dynamic week ticks (every 2 weeks)
+  const weeksEl = document.getElementById('calRibbonWeeks');
+  if (weeksEl) {
+    weeksEl.innerHTML = '';
+    let wkDate = new Date(ribbonStart), wkNum = 1;
+    while (wkDate <= ribbonEnd) {
+      const wPct = ((wkDate - ribbonStart) / totalMs * 100).toFixed(1);
+      const tick = document.createElement('span');
+      tick.className = 'wk';
+      tick.style.left = wPct + '%';
+      tick.textContent = `W${wkNum}`;
+      weeksEl.appendChild(tick);
+      wkDate = new Date(wkDate.getTime() + 14 * 86400000);
+      wkNum += 2;
+    }
+  }
+
+  // Update pager label and ribbon subtitle
+  const pagerLabel = document.querySelector('.cal-ribbon-h .cal-pager .label');
+  if (pagerLabel) {
+    const sy = ribbonStart.getFullYear(), ey = ribbonEnd.getFullYear();
+    const seasonLabel = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
+    const sMo = MONTHS_SHORT[ribbonStart.getMonth()], eMo = MONTHS_SHORT[ribbonEnd.getMonth()];
+    pagerLabel.innerHTML = `${seasonLabel}<span class="yr">${sMo} → ${eMo}</span>`;
+  }
+  const ribbonSub = document.querySelector('.cal-ribbon-h .sub');
+  if (ribbonSub) {
+    ribbonSub.textContent = `${MONTHS_SHORT[ribbonStart.getMonth()]} ${ribbonStart.getFullYear()} → ${MONTHS_SHORT[ribbonEnd.getMonth()]} ${ribbonEnd.getFullYear()} · ${mcs.length} microcycles`;
+  }
+
   // MC bars
   const barsEl = document.getElementById('calRibbonMcs');
   if (barsEl) {
     barsEl.innerHTML = '';
-    ordered.forEach(mc => {
+    ordered.forEach((mc, idx) => {
       const left  = pct(mc.start_date);
       const width = Math.max(0.5, parseFloat(pct(mc.end_date)) - parseFloat(pct(mc.start_date))).toFixed(2);
       const isPast    = new Date(mc.end_date + 'T00:00:00') < today;
@@ -1051,10 +1381,23 @@ function renderSeasonRibbon(mcs) {
       const bar = document.createElement('div');
       bar.className = 'mc-bar' + (isPast ? ' is-past' : isCurrent ? ' is-current' : '');
       bar.style.cssText = `left:${left}%;width:${width}%`;
+      bar.title = `${mc.name||'MC'} · ${mc.start_date} → ${mc.end_date}`;
       bar.innerHTML = `<span class="num">${mc.name || '—'}</span>`;
+      // Click → navigate to this MC in microcycle view
+      bar.addEventListener('click', async () => {
+        const realIdx = _allMCs.findIndex(m => m.id === mc.id);
+        if (realIdx >= 0) {
+          _mcIdx = realIdx; _weekOffset = 0;
+          document.querySelectorAll('.cal-segs .cal-seg').forEach(s => {
+            s.classList.toggle('is-on', s.textContent.trim() === 'Microcycle');
+          });
+          switchView('microcycle');
+          await loadSessions();
+        }
+      });
       barsEl.appendChild(bar);
     });
-    // Today line at correct position
+    // Today line
     const todayPct = ((today - ribbonStart) / totalMs * 100).toFixed(2);
     const tl = document.createElement('div');
     tl.className = 'today-line';
@@ -1068,12 +1411,12 @@ function renderSeasonRibbon(mcs) {
     matchesEl.innerHTML = '';
     ordered.forEach(mc => {
       if (!mc.match_date) return;
-      const left    = pct(mc.match_date);
-      const isAway  = mc.home_away === 'away';
-      const isCup   = /cup|copa|final/i.test(mc.rival || '');
-      const cls     = 'match-marker' + (isAway ? ' is-away' : isCup ? ' is-key' : ' is-home');
-      const icon    = isAway ? 'ti-plane' : isCup ? 'ti-trophy' : 'ti-home';
-      const marker  = document.createElement('span');
+      const left   = pct(mc.match_date);
+      const isAway = mc.home_away === 'away';
+      const isCup  = /cup|copa|final/i.test(mc.rival || '');
+      const cls    = 'match-marker' + (isAway ? ' is-away' : isCup ? ' is-key' : ' is-home');
+      const icon   = isAway ? 'ti-plane' : isCup ? 'ti-trophy' : 'ti-home';
+      const marker = document.createElement('span');
       marker.className = cls;
       marker.style.left = left + '%';
       marker.innerHTML  = `<i class="ti ${icon}"></i>${mc.rival || 'Match'}`;
@@ -1164,10 +1507,21 @@ function renderCalKPIs(mcs) {
     kpiNextT.textContent = 'No upcoming matches';
   }
 
-  // Match density: count matches in next 21 days
+  // Match density: count matches in next 21 days / 3 weeks
   const matchCount = mcs.filter(mc => mc.match_date && mc.match_date >= TODAY && mc.match_date <= in21d).length;
-  const kpiDensity = document.querySelector('.cal-kpi:nth-child(2) .cal-kpi-v');
-  if (kpiDensity) kpiDensity.innerHTML = `${matchCount} <sub>in 21d</sub>`;
+  const kpiDV = document.getElementById('calDensityV');
+  const kpiDT = document.getElementById('calDensityT');
+  if (kpiDV) kpiDV.innerHTML = matchCount ? `${matchCount} <sub>in 21d</sub>` : `— <sub>in 21d</sub>`;
+  if (kpiDT) {
+    if (matchCount === 0) {
+      kpiDT.textContent = 'No matches in next 21 days';
+      kpiDT.style.color = '';
+    } else {
+      const density = (matchCount / 3).toFixed(1);
+      kpiDT.textContent = `~${density}/week · ${matchCount} match${matchCount > 1 ? 'es' : ''}`;
+      kpiDT.style.color = matchCount > 3 ? 'var(--cm-warning)' : '';
+    }
+  }
 }
 
 // ── Boot ──────────────────────────────────────────────────────
