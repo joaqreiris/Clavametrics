@@ -67,7 +67,7 @@
     ]},
     { label: 'Technical', items: [
       { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Planner' },
-      { href: 'Sessions%20Library.html',icon: 'ti-list-tree',         label: 'Sessions library' },
+      { href: 'Sessions%20Library.html',icon: 'ti-list-tree',         label: 'Exercise library' },
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning' },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history' },
       { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad' },

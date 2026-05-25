@@ -3,11 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sessions Library — ClavaMetrics</title>
+<title>Exercise Library — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
 <style>
   body.cm { background: var(--cm-bg); }
-
 
   .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
   .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
@@ -59,13 +58,9 @@
   @media (max-width:700px) { .sl-cards { grid-template-columns:1fr; } }
 
   .sl-card {
-    background:var(--cm-surface);
-    border:1px solid var(--cm-border);
-    border-radius:var(--cm-r-4);
-    box-shadow:var(--cm-shadow-1);
-    overflow:hidden;
-    display:flex; flex-direction:column;
-    cursor:pointer;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
+    overflow:hidden; display:flex; flex-direction:column; cursor:pointer;
     transition:border-color 120ms, box-shadow 120ms, transform 120ms;
   }
   .sl-card:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); transform:translateY(-1px); }
@@ -73,8 +68,7 @@
 
   /* Pitch thumbnail */
   .sl-thumb {
-    position:relative;
-    aspect-ratio: 1.6;
+    position:relative; aspect-ratio: 1.6;
     background-image:url('assets/field.jpg');
     background-size:cover; background-position:center;
     border-bottom:1px solid var(--cm-border);
@@ -83,160 +77,111 @@
   .sl-thumb .focus {
     position:absolute; top:10px; left:10px;
     display:inline-flex; align-items:center; gap:5px;
-    height:22px; padding:0 8px;
-    border-radius:5px;
-    font:600 10.5px/1 var(--cm-font-mono);
-    letter-spacing:0.04em; text-transform:uppercase;
-    color:#fff;
-    z-index:2;
+    height:22px; padding:0 8px; border-radius:5px;
+    font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase;
+    color:#fff; z-index:2;
   }
-  .sl-thumb .focus.tac { background:#4A90D9; }
-  .sl-thumb .focus.fis { background:#E07B39; }
-  .sl-thumb .focus.con { background:#1D9E75; }
-  .sl-thumb .focus.tec { background:#9B59B6; }
-
+  .sl-thumb .focus.f-act { background:rgba(217,119,6,0.9); }
+  .sl-thumb .focus.f-str { background:rgba(220,38,38,0.9); }
+  .sl-thumb .focus.f-vel { background:rgba(8,145,178,0.9); }
+  .sl-thumb .focus.f-end { background:rgba(22,163,74,0.9); }
+  .sl-thumb .focus.f-none { background:rgba(0,0,0,0.55); backdrop-filter:blur(6px); }
   .sl-thumb .dur {
     position:absolute; top:10px; right:10px;
     display:inline-flex; align-items:center; gap:4px;
-    height:22px; padding:0 8px;
-    border-radius:5px;
-    background:rgba(0,0,0,0.6);
-    color:#fff;
-    font:600 11px/1 var(--cm-font-mono);
-    backdrop-filter:blur(6px);
-    z-index:2;
+    height:22px; padding:0 8px; border-radius:5px;
+    background:rgba(0,0,0,0.6); color:#fff;
+    font:600 11px/1 var(--cm-font-mono); backdrop-filter:blur(6px); z-index:2;
   }
   .sl-thumb .dur .ti { font-size:12px; }
-
-  /* Mini tactical objects in thumb */
-  .sl-thumb .p {
-    position:absolute;
-    width:16px; height:16px;
-    border-radius:50%;
-    border:1.5px solid rgba(255,255,255,0.85);
-    color:#fff;
-    font:700 9px/1 var(--cm-font-mono);
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:0 1px 4px rgba(0,0,0,0.5);
-    transform:translate(-50%,-50%);
-  }
-  .sl-thumb .p.t1 { background:#15803D; }
-  .sl-thumb .p.t2 { background:#1D4ED8; }
-  .sl-thumb .p.t3 { background:#FACC15; color:#0A0A0A; }
-  .sl-thumb .b {
-    position:absolute;
-    width:9px; height:9px; border-radius:50%;
-    background:radial-gradient(circle at 30% 30%, #fff, #d4d4d4 70%, #777);
-    border:1px solid rgba(0,0,0,0.4);
-    box-shadow:0 1px 3px rgba(0,0,0,0.45);
-    transform:translate(-50%,-50%);
-  }
-  .sl-thumb .c {
-    position:absolute;
-    width:0; height:0;
-    border-left:5px solid transparent; border-right:5px solid transparent;
-    border-bottom:10px solid #f97316;
-    transform:translate(-50%,-50%);
-    filter:drop-shadow(0 1px 1px rgba(0,0,0,0.4));
-  }
-  .sl-thumb .arrow {
-    position:absolute;
-    inset:0;
-    pointer-events:none;
+  .sl-thumb .md-badge {
+    position:absolute; bottom:10px; left:10px;
+    height:20px; padding:0 7px; border-radius:4px;
+    background:rgba(0,0,0,0.6); color:#fff;
+    font:600 10px/1 var(--cm-font-mono); backdrop-filter:blur(6px); z-index:2;
+    display:flex; align-items:center;
   }
 
   /* Card body */
-  .sl-body { padding:13px 14px 14px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .sl-body { padding:13px 14px 12px; display:flex; flex-direction:column; gap:6px; flex:1; }
   .sl-card .title { font:600 14.5px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .sl-card .desc  { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
   .sl-card .meta  {
-    display:flex; align-items:center; gap:10px;
-    margin-top:auto; padding-top:8px;
-    border-top:1px solid var(--cm-border-soft);
-    font:500 11px/1 var(--cm-font-mono);
-    color:var(--cm-fg-muted);
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    margin-top:auto; padding-top:8px; border-top:1px solid var(--cm-border-soft);
+    font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
   }
   .sl-card .meta .it { display:inline-flex; align-items:center; gap:4px; }
   .sl-card .meta .it .ti { font-size:13px; }
-
-  /* Intensity stars/bars */
-  .sl-int { display:inline-flex; gap:2px; align-items:center; }
-  .sl-int .s { width:9px; height:9px; border-radius:2px; background:var(--cm-bg-sunk); }
-  .sl-int .s.on { background:var(--cm-warning); }
-  .sl-int .s.on.high { background:var(--cm-danger); }
 
   /* Tags row */
   .sl-tags { display:flex; gap:5px; flex-wrap:wrap; padding:0 14px 12px; }
   .sl-tag {
     display:inline-flex; align-items:center; gap:4px;
     height:20px; padding:0 7px; border-radius:4px;
-    font:500 11px/1 var(--cm-font-sans);
-    color:var(--cm-fg-muted);
-    background:var(--cm-bg-soft);
-    border:1px solid var(--cm-border-soft);
+    font:500 10.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+    background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft);
   }
+  .sl-tag.t-int-low   { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd,var(--cm-success-bg)); }
+  .sl-tag.t-int-med   { background:var(--cm-warning-bg); color:var(--cm-warning); border-color:var(--cm-warning-bd,var(--cm-warning-bg)); }
+  .sl-tag.t-int-high  { background:var(--cm-danger-bg);  color:var(--cm-danger);  border-color:var(--cm-danger-bd,var(--cm-danger-bg)); }
+  .sl-tag.t-int-vhigh { background:#3b0764; color:#c4b5fd; border-color:#7c3aed; }
+  .sl-tag.t-game      { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd,var(--cm-info-bg)); }
+  .sl-tag.t-focus     { font-size:10px; }
 
-  /* RIGHT rail: filter accordions */
+  /* RIGHT rail */
   .sl-rail {
     background:var(--cm-surface); border:1px solid var(--cm-border);
     border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
     position:sticky; top:80px;
-    max-height:calc(100vh - 100px);
-    overflow-y:auto;
+    max-height:calc(100vh - 100px); overflow-y:auto;
   }
   .sl-rail-h { padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); display:flex; align-items:center; }
   .sl-rail-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .sl-rail-h .right { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
-  .sl-rail-h .clear { background:none; border:0; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .sl-rail-h .clear { background:none; border:0; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; margin-left:8px; }
   .sl-rail-h .clear:hover { color:var(--cm-fg); }
+
+  /* Preview panel (inside rail, shown when card selected) */
+  .sl-preview { border-bottom:1px solid var(--cm-border-soft); padding:14px 16px; display:none; }
+  .sl-preview.is-visible { display:block; }
+  .sl-preview-topbar { display:flex; align-items:center; margin-bottom:10px; }
+  .sl-preview-topbar .name { font:600 13.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; }
+  .sl-preview-topbar .close { border:0; background:none; color:var(--cm-fg-muted); cursor:pointer; font-size:15px; padding:0; }
+  .sl-preview-topbar .close:hover { color:var(--cm-fg); }
+  .sl-preview-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-bottom:8px; }
+  .sl-preview-cell { background:var(--cm-bg-soft); border-radius:6px; padding:6px 8px; }
+  .sl-preview-cell .l { font:500 8px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:2px; }
+  .sl-preview-cell .v { font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sl-preview-tags { display:flex; gap:4px; flex-wrap:wrap; }
+  .sl-preview-open { width:100%; margin-top:10px; }
 
   .sl-acc { border-bottom:1px solid var(--cm-border-soft); }
   .sl-acc:last-child { border-bottom:0; }
-  .sl-acc-h { display:flex; align-items:center; gap:8px; padding:11px 16px; cursor:pointer; }
+  .sl-acc-h { display:flex; align-items:center; gap:8px; padding:11px 16px; cursor:pointer; user-select:none; }
   .sl-acc-h .l { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.04em; text-transform:uppercase; color:var(--cm-fg-muted); }
   .sl-acc-h .ct { margin-left:auto; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
-  .sl-acc-h .ti { font-size:14px; color:var(--cm-fg-muted); margin-left:6px; }
-  .sl-acc-b { padding:0 16px 14px; display:flex; flex-direction:column; gap:6px; }
+  .sl-acc-h .ti { font-size:14px; color:var(--cm-fg-muted); margin-left:6px; transition:transform 150ms; }
+  .sl-acc-h.is-open .ti { transform:rotate(180deg); }
+  .sl-acc-b { padding:0 16px 14px; display:flex; flex-direction:column; gap:4px; display:none; }
+  .sl-acc-b.is-open { display:flex; }
 
   .sl-opt { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; cursor:pointer; }
   .sl-opt:hover { background:var(--cm-bg-soft); }
   .sl-opt .cb {
-    width:14px; height:14px;
-    border-radius:4px;
-    border:1.5px solid var(--cm-border-strong);
-    background:var(--cm-surface);
-    flex-shrink:0;
-    display:flex; align-items:center; justify-content:center;
-    color:transparent;
+    width:14px; height:14px; border-radius:4px; border:1.5px solid var(--cm-border-strong);
+    background:var(--cm-surface); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; color:transparent;
   }
-  .sl-opt.is-on .cb {
-    background:var(--cm-accent);
-    border-color:var(--cm-accent);
-    color:#fff;
-  }
+  .sl-opt.is-on .cb { background:var(--cm-accent); border-color:var(--cm-accent); color:#fff; }
   .sl-opt.is-on .cb::after {
     content:""; width:7px; height:3px;
-    border-left:1.5px solid var(--cm-fg-on-accent);
-    border-bottom:1.5px solid var(--cm-fg-on-accent);
+    border-left:1.5px solid var(--cm-fg-on-accent); border-bottom:1.5px solid var(--cm-fg-on-accent);
     transform:rotate(-45deg);
   }
   .sl-opt .lbl { flex:1; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
   .sl-opt .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
 
-  /* Range slider */
-  .sl-range {
-    -webkit-appearance:none; width:100%; height:4px;
-    background:var(--cm-bg-sunk); border-radius:2px; outline:none;
-  }
-  .sl-range::-webkit-slider-thumb {
-    -webkit-appearance:none; width:14px; height:14px;
-    border-radius:50%; background:var(--cm-accent);
-    cursor:pointer;
-  }
-  .sl-range-row { display:flex; align-items:center; justify-content:space-between; padding:4px 8px; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
-  .sl-range-row strong { color:var(--cm-fg-strong); font:600 12.5px/1 var(--cm-font-mono); }
-
-  /* Foot CTA */
   .sl-rail-foot { padding:12px 16px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
@@ -247,9 +192,8 @@
 </head>
 <body class="cm">
 
-<div class="hub-shell" data-screen-label="12 Sessions Library">
+<div class="hub-shell" data-screen-label="12 Exercise Library">
 
-  <!-- Sidebar -->
   <div id="hub-side-root"></div>
 
   <main class="hub-main">
@@ -257,15 +201,14 @@
     <div class="hub-topbar">
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
-        <span style="color:var(--cm-fg-strong);font-weight:600">Sessions library</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Exercise library</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search drills, focus, equipment…">
+        <input id="topSearch" placeholder="Search exercises…">
       </div>
       <div class="actions">
         <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn"><i class="ti ti-help"></i></button>
         <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
@@ -274,13 +217,11 @@
 
       <header class="sl-head">
         <div>
-          <h1>Sessions library</h1>
-          <div class="ctx"><strong id="slSessionCount">—</strong> sessions · this club</div>
+          <h1>Exercise library</h1>
+          <div class="ctx"><strong id="slExCount">—</strong> exercises · <span id="slFilteredCount" style="display:none"><strong id="slFilteredNum">—</strong> matching filters · </span>this club</div>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import</button>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>From template</button>
-          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New drill</button>
+          <button class="cm-btn is-primary is-sm" onclick="window.location.href='Planner.html'"><i class="ti ti-plus" style="font-size:14px"></i>New exercise</button>
         </div>
       </header>
 
@@ -288,126 +229,131 @@
       <div class="sl-toolbar">
         <div class="sl-search">
           <i class="ti ti-search"></i>
-          <input placeholder="Filter drills by name, tag, equipment…">
+          <input id="cardSearch" placeholder="Filter by name…">
         </div>
         <div class="sl-segs">
-          <button class="sl-seg is-on"><i class="ti ti-layout-grid"></i>Grid</button>
-          <button class="sl-seg"><i class="ti ti-list"></i>List</button>
-          <button class="sl-seg"><i class="ti ti-binary-tree-2"></i>By focus</button>
+          <button class="sl-seg is-on" data-view="grid"><i class="ti ti-layout-grid"></i>Grid</button>
+          <button class="sl-seg" data-view="list"><i class="ti ti-list"></i>List</button>
         </div>
         <div style="width:1px;height:24px;background:var(--cm-border)"></div>
-        <button class="sl-pill is-on">All<span class="ct">126</span></button>
-        <button class="sl-pill"><span class="dot" style="background:#4A90D9"></span>Tactical<span class="ct">42</span></button>
-        <button class="sl-pill"><span class="dot" style="background:#E07B39"></span>Physical<span class="ct">28</span></button>
-        <button class="sl-pill"><span class="dot" style="background:#1D9E75"></span>Conditional<span class="ct">31</span></button>
-        <button class="sl-pill"><span class="dot" style="background:#9B59B6"></span>Technical<span class="ct">25</span></button>
+        <button class="sl-pill is-on" data-orient="ALL">All<span class="ct" id="ctAll">—</span></button>
+        <button class="sl-pill" data-orient="ACTIVATION"><span class="dot" style="background:#D97706"></span>Activation<span class="ct" id="ctAct">—</span></button>
+        <button class="sl-pill" data-orient="STRENGTH"><span class="dot" style="background:#DC2626"></span>Strength<span class="ct" id="ctStr">—</span></button>
+        <button class="sl-pill" data-orient="VELOCITY"><span class="dot" style="background:#0891B2"></span>Velocity<span class="ct" id="ctVel">—</span></button>
+        <button class="sl-pill" data-orient="ENDURANCE"><span class="dot" style="background:#16A34A"></span>Endurance<span class="ct" id="ctEnd">—</span></button>
         <div class="grow"></div>
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i>Recent</button>
+        <button class="cm-btn is-outline is-sm" id="sortBtn"><i class="ti ti-arrows-sort" style="font-size:14px"></i><span id="sortLabel">Recent</span></button>
       </div>
 
       <div class="sl-grid">
 
-        <!-- LEFT: drill cards — populated by boot() -->
+        <!-- LEFT: exercise cards -->
         <div class="sl-cards" id="slCardsGrid">
-          <div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading sessions…</div>
+          <div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading exercises…</div>
         </div>
 
-        <!-- RIGHT rail: filters -->
+        <!-- RIGHT rail: preview + filters -->
         <aside class="sl-rail">
           <div class="sl-rail-h">
             <h3>Filters</h3>
-            <button class="clear">Clear all</button>
+            <span class="right" id="railMatchCount"></span>
+            <button class="clear" id="clearAllFilters">Clear all</button>
           </div>
 
-          <div class="sl-acc">
-            <div class="sl-acc-h">
-              <span class="l">Focus</span>
-              <span class="ct">4 / 4</span>
-              <i class="ti ti-chevron-down"></i>
+          <!-- Preview panel (hidden until card selected) -->
+          <div class="sl-preview" id="slPreview">
+            <div class="sl-preview-topbar">
+              <div class="name" id="prevName">—</div>
+              <button class="close" id="prevClose" title="Close">✕</button>
             </div>
-            <div class="sl-acc-b">
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4A90D9;margin-right:6px;vertical-align:0"></span>Tactical</span><span class="ct">42</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#E07B39;margin-right:6px;vertical-align:0"></span>Physical</span><span class="ct">28</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1D9E75;margin-right:6px;vertical-align:0"></span>Conditional</span><span class="ct">31</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#9B59B6;margin-right:6px;vertical-align:0"></span>Technical</span><span class="ct">25</span></div>
-            </div>
+            <div class="sl-preview-grid" id="prevGrid"></div>
+            <div class="sl-preview-tags" id="prevTags"></div>
+            <button class="cm-btn is-outline is-sm sl-preview-open" onclick="window.location.href='Planner.html'">
+              <i class="ti ti-edit" style="font-size:13px"></i>Open in Planner
+            </button>
           </div>
 
+          <!-- Orientación -->
           <div class="sl-acc">
-            <div class="sl-acc-h">
-              <span class="l">MD position</span>
-              <span class="ct">3 of 7</span>
+            <div class="sl-acc-h is-open" data-acc="orient">
+              <span class="l">Orientación</span>
+              <span class="ct" id="ctOrientAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
-            <div class="sl-acc-b">
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">MD−5 · activation</span><span class="ct">14</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">MD−4 · peak</span><span class="ct">21</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">MD−3</span><span class="ct">28</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">MD−2</span><span class="ct">18</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">MD−1 · walkthrough</span><span class="ct">9</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">MD+1 · recovery</span><span class="ct">8</span></div>
-            </div>
-          </div>
-
-          <div class="sl-acc">
-            <div class="sl-acc-h">
-              <span class="l">Players</span>
-              <span class="ct">1 of 4</span>
-              <i class="ti ti-chevron-down"></i>
-            </div>
-            <div class="sl-acc-b">
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">2–6 (small group)</span><span class="ct">31</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">7–10</span><span class="ct">38</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">11–14 (full squad)</span><span class="ct">42</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">15+</span><span class="ct">15</span></div>
+            <div class="sl-acc-b is-open" id="accOrient">
+              <div class="sl-opt" data-group="orientation" data-val="ACTIVATION"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#D97706;margin-right:6px;vertical-align:0"></span>Activation</span><span class="ct" id="cntAct">—</span></div>
+              <div class="sl-opt" data-group="orientation" data-val="STRENGTH"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DC2626;margin-right:6px;vertical-align:0"></span>Strength</span><span class="ct" id="cntStr">—</span></div>
+              <div class="sl-opt" data-group="orientation" data-val="VELOCITY"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#0891B2;margin-right:6px;vertical-align:0"></span>Velocity</span><span class="ct" id="cntVel">—</span></div>
+              <div class="sl-opt" data-group="orientation" data-val="ENDURANCE"><span class="cb"></span><span class="lbl"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16A34A;margin-right:6px;vertical-align:0"></span>Endurance</span><span class="ct" id="cntEnd">—</span></div>
             </div>
           </div>
 
+          <!-- Intensidad -->
           <div class="sl-acc">
-            <div class="sl-acc-h">
-              <span class="l">Duration</span>
+            <div class="sl-acc-h" data-acc="intensity">
+              <span class="l">Intensidad</span>
+              <span class="ct" id="ctIntAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
-            <div class="sl-acc-b">
-              <input type="range" class="sl-range" min="5" max="60" value="35">
-              <div class="sl-range-row">
-                <span>5′</span>
-                <span><strong>5 → 35′</strong></span>
-                <span>60′</span>
-              </div>
+            <div class="sl-acc-b" id="accIntensity">
+              <div class="sl-opt" data-group="intensity" data-val="LOW"><span class="cb"></span><span class="lbl">Low</span><span class="ct" id="cntIntLow">—</span></div>
+              <div class="sl-opt" data-group="intensity" data-val="MEDIUM"><span class="cb"></span><span class="lbl">Medium</span><span class="ct" id="cntIntMed">—</span></div>
+              <div class="sl-opt" data-group="intensity" data-val="HIGH"><span class="cb"></span><span class="lbl">High</span><span class="ct" id="cntIntHigh">—</span></div>
+              <div class="sl-opt" data-group="intensity" data-val="VERY_HIGH"><span class="cb"></span><span class="lbl">Very High</span><span class="ct" id="cntIntVH">—</span></div>
             </div>
           </div>
 
+          <!-- Match Day -->
           <div class="sl-acc">
-            <div class="sl-acc-h">
-              <span class="l">Intensity</span>
+            <div class="sl-acc-h" data-acc="matchday">
+              <span class="l">Match Day</span>
+              <span class="ct" id="ctMdAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
-            <div class="sl-acc-b">
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">Low (1–2)</span><span class="ct">22</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">Moderate (3)</span><span class="ct">44</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">High (4)</span><span class="ct">38</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">Peak (5)</span><span class="ct">22</span></div>
+            <div class="sl-acc-b" id="accMatchday">
+              <div class="sl-opt" data-group="matchday" data-val="-3"><span class="cb"></span><span class="lbl">MD−3</span><span class="ct" id="cntMdM3">—</span></div>
+              <div class="sl-opt" data-group="matchday" data-val="-2"><span class="cb"></span><span class="lbl">MD−2</span><span class="ct" id="cntMdM2">—</span></div>
+              <div class="sl-opt" data-group="matchday" data-val="-1"><span class="cb"></span><span class="lbl">MD−1</span><span class="ct" id="cntMdM1">—</span></div>
+              <div class="sl-opt" data-group="matchday" data-val="0"><span class="cb"></span><span class="lbl">MD</span><span class="ct" id="cntMd0">—</span></div>
+              <div class="sl-opt" data-group="matchday" data-val="1"><span class="cb"></span><span class="lbl">MD+1</span><span class="ct" id="cntMdP1">—</span></div>
+              <div class="sl-opt" data-group="matchday" data-val="2"><span class="cb"></span><span class="lbl">MD+2</span><span class="ct" id="cntMdP2">—</span></div>
+              <div class="sl-opt" data-group="matchday" data-val="3"><span class="cb"></span><span class="lbl">MD+3</span><span class="ct" id="cntMdP3">—</span></div>
             </div>
           </div>
 
+          <!-- Tipo de juego -->
           <div class="sl-acc">
-            <div class="sl-acc-h">
-              <span class="l">Equipment</span>
-              <span class="ct">2 of 9</span>
+            <div class="sl-acc-h" data-acc="gametype">
+              <span class="l">Tipo de juego</span>
+              <span class="ct" id="ctGtAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
-            <div class="sl-acc-b">
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">Cones</span><span class="ct">81</span></div>
-              <div class="sl-opt is-on"><span class="cb"></span><span class="lbl">Ball</span><span class="ct">119</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">Poles</span><span class="ct">36</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">Mini-goals</span><span class="ct">42</span></div>
-              <div class="sl-opt"><span class="cb"></span><span class="lbl">Mannequins</span><span class="ct">18</span></div>
+            <div class="sl-acc-b" id="accGametype">
+              <div class="sl-opt" data-group="gametype" data-val="SSG"><span class="cb"></span><span class="lbl">SSG</span><span class="ct" id="cntSSG">—</span></div>
+              <div class="sl-opt" data-group="gametype" data-val="MSG"><span class="cb"></span><span class="lbl">MSG</span><span class="ct" id="cntMSG">—</span></div>
+              <div class="sl-opt" data-group="gametype" data-val="LSG"><span class="cb"></span><span class="lbl">LSG</span><span class="ct" id="cntLSG">—</span></div>
+              <div class="sl-opt" data-group="gametype" data-val="NONE"><span class="cb"></span><span class="lbl">Sin tipo</span><span class="ct" id="cntGtNone">—</span></div>
+            </div>
+          </div>
+
+          <!-- Foco -->
+          <div class="sl-acc">
+            <div class="sl-acc-h" data-acc="focus">
+              <span class="l">Foco</span>
+              <span class="ct" id="ctFocAcc"></span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b" id="accFocus">
+              <div class="sl-opt" data-group="focus" data-val="Táctico"><span class="cb"></span><span class="lbl">Táctico</span><span class="ct" id="cntFocTac">—</span></div>
+              <div class="sl-opt" data-group="focus" data-val="Individual"><span class="cb"></span><span class="lbl">Individual</span><span class="ct" id="cntFocInd">—</span></div>
+              <div class="sl-opt" data-group="focus" data-val="Físico"><span class="cb"></span><span class="lbl">Físico</span><span class="ct" id="cntFocFis">—</span></div>
             </div>
           </div>
 
           <div class="sl-rail-foot">
-            <button class="cm-btn is-primary is-block"><i class="ti ti-plus" style="font-size:14px"></i>Add 4 selected to MC 14</button>
+            <button class="cm-btn is-outline is-block" id="clearAllFilters2">
+              <i class="ti ti-filter-off" style="font-size:14px"></i>Clear all filters
+            </button>
           </div>
         </aside>
 
@@ -428,76 +374,374 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-  // Maps DB session_type (lowercase) to .focus CSS modifier
-  const TYPE_CSS = {
-    tactical:     'tac',
-    conditioning: 'con',
-    gym:          'fis',
-    match:        'tac',
-    recovery:     'con',
-    other:        'tac'
+(async () => {
+  if (!await window.requireAuth()) return;
+  window.applyClubTheme();
+  const clubId = await window.getClubId();
+  if (!clubId) return;
+
+  // ── Data ─────────────────────────────────────────────────────────
+  const { data, error } = await window.sb.from('exercises')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    document.getElementById('slCardsGrid').innerHTML =
+      `<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);">${error.message}</div>`;
+    return;
+  }
+
+  let allExercises = data || [];
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  function calcOrient(ex) {
+    if (ex.orientation) return ex.orientation;
+    const area = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0)
+      ? ex.field_width * ex.field_height : 0;
+    if (!area || !ex.players_count) return null;
+    const m2 = Math.round(area / ex.players_count);
+    if (m2 < 40)  return 'ACTIVATION';
+    if (m2 < 80)  return 'STRENGTH';
+    if (m2 < 160) return 'VELOCITY';
+    return 'ENDURANCE';
+  }
+
+  const ORIENT = {
+    ACTIVATION: { label:'Activation', short:'ACT', cls:'f-act' },
+    STRENGTH:   { label:'Strength',   short:'STR', cls:'f-str' },
+    VELOCITY:   { label:'Velocity',   short:'VEL', cls:'f-vel' },
+    ENDURANCE:  { label:'Endurance',  short:'END', cls:'f-end' },
   };
+  const INT_LABEL = { LOW:'Low', MEDIUM:'Medium', HIGH:'High', VERY_HIGH:'Very High' };
+  const INT_CLS   = { LOW:'t-int-low', MEDIUM:'t-int-med', HIGH:'t-int-high', VERY_HIGH:'t-int-vhigh' };
 
-  async function boot() {
-    if (!await window.requireAuth()) return;
-    window.applyClubTheme();
-    const clubId = await window.getClubId();
-    if (!clubId) return;
+  function fmtMd(v) {
+    if (v == null) return null;
+    return `MD${v >= 0 ? '+' : ''}${v}`;
+  }
 
-    const { data, error } = await window.sb.from('training_sessions')
-      .select('id,title,session_type,duration,session_date,notes')
-      .eq('club_id', clubId)
-      .order('session_date', { ascending: false });
+  function m2pp(ex) {
+    const area = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0)
+      ? ex.field_width * ex.field_height : 0;
+    return area && ex.players_count ? Math.round(area / ex.players_count) : null;
+  }
 
-    if (error) console.error(error);
+  // ── Filter state ─────────────────────────────────────────────────
+  const filters = {
+    orientation: new Set(),
+    intensity:   new Set(),
+    matchday:    new Set(),
+    gametype:    new Set(),
+    focus:       new Set(),
+  };
+  let pillOrient  = 'ALL';
+  let searchText  = '';
+  let sortMode    = 'recent';
+  let selectedId  = null;
 
-    const sessions = data || [];
-    const ct = document.getElementById('slSessionCount');
-    if (ct) ct.textContent = sessions.length;
+  function applyFilters() {
+    return allExercises.filter(ex => {
+      const orient = calcOrient(ex);
+      // Pill orientation (quick filter)
+      if (pillOrient !== 'ALL' && orient !== pillOrient) return false;
+      // Search
+      if (searchText && !(ex.name||'').toLowerCase().includes(searchText)) return false;
+      // Orientation filter
+      if (filters.orientation.size && !filters.orientation.has(orient)) return false;
+      // Intensity
+      if (filters.intensity.size && !filters.intensity.has(ex.intensity)) return false;
+      // Match Day
+      if (filters.matchday.size) {
+        const md = ex.match_day;
+        if (md == null || !filters.matchday.has(String(md))) return false;
+      }
+      // Game Type
+      if (filters.gametype.size) {
+        const gt = ex.game_type_enabled ? (ex.game_type || 'NONE') : 'NONE';
+        if (!filters.gametype.has(gt)) return false;
+      }
+      // Focus (OR — has any of selected)
+      if (filters.focus.size) {
+        const exF = ex.focus || [];
+        if (![...filters.focus].some(f => exF.includes(f))) return false;
+      }
+      return true;
+    });
+  }
 
+  // ── Counts for filter rail ───────────────────────────────────────
+  function computeCounts() {
+    const c = {
+      ACTIVATION:0, STRENGTH:0, VELOCITY:0, ENDURANCE:0,
+      LOW:0, MEDIUM:0, HIGH:0, VERY_HIGH:0,
+      '-3':0, '-2':0, '-1':0, '0':0, '1':0, '2':0, '3':0,
+      SSG:0, MSG:0, LSG:0, NONE_GT:0,
+      Táctico:0, Individual:0, Físico:0,
+    };
+    allExercises.forEach(ex => {
+      const o = calcOrient(ex);
+      if (o && c[o] !== undefined) c[o]++;
+      if (ex.intensity && c[ex.intensity] !== undefined) c[ex.intensity]++;
+      if (ex.match_day != null && c[String(ex.match_day)] !== undefined) c[String(ex.match_day)]++;
+      const gt = ex.game_type_enabled ? (ex.game_type || 'NONE') : 'NONE';
+      if (gt === 'NONE') c.NONE_GT++; else if (c[gt] !== undefined) c[gt]++;
+      (ex.focus||[]).forEach(f => { if (c[f] !== undefined) c[f]++; });
+    });
+    return c;
+  }
+
+  function updateCounts() {
+    const c = computeCounts();
+    const s = id => { const el = document.getElementById(id); if (el) el.textContent = ''; };
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ''; };
+    set('ctAll',     allExercises.length);
+    set('ctAct',     c.ACTIVATION  || '');
+    set('ctStr',     c.STRENGTH    || '');
+    set('ctVel',     c.VELOCITY    || '');
+    set('ctEnd',     c.ENDURANCE   || '');
+    set('cntAct',    c.ACTIVATION  || '');
+    set('cntStr',    c.STRENGTH    || '');
+    set('cntVel',    c.VELOCITY    || '');
+    set('cntEnd',    c.ENDURANCE   || '');
+    set('cntIntLow', c.LOW         || '');
+    set('cntIntMed', c.MEDIUM      || '');
+    set('cntIntHigh',c.HIGH        || '');
+    set('cntIntVH',  c.VERY_HIGH   || '');
+    set('cntMdM3',   c['-3']       || '');
+    set('cntMdM2',   c['-2']       || '');
+    set('cntMdM1',   c['-1']       || '');
+    set('cntMd0',    c['0']        || '');
+    set('cntMdP1',   c['1']        || '');
+    set('cntMdP2',   c['2']        || '');
+    set('cntMdP3',   c['3']        || '');
+    set('cntSSG',    c.SSG         || '');
+    set('cntMSG',    c.MSG         || '');
+    set('cntLSG',    c.LSG         || '');
+    set('cntGtNone', c.NONE_GT     || '');
+    set('cntFocTac', c['Táctico']  || '');
+    set('cntFocInd', c['Individual']|| '');
+    set('cntFocFis', c['Físico']   || '');
+  }
+
+  // ── Render cards ─────────────────────────────────────────────────
+  function renderCards() {
     const grid = document.getElementById('slCardsGrid');
     if (!grid) return;
+    let visible = applyFilters();
 
-    if (!sessions.length) {
-      grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No sessions yet.</div>';
+    // Sort
+    if (sortMode === 'az') visible.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    else if (sortMode === 'dur') visible.sort((a,b) => (b.duration||0) - (a.duration||0));
+
+    // Update header count
+    document.getElementById('slExCount').textContent = allExercises.length;
+    const filteredCountEl = document.getElementById('slFilteredCount');
+    const filteredNumEl   = document.getElementById('slFilteredNum');
+    const hasActiveFilter = [...Object.values(filters)].some(s => s.size > 0) || pillOrient !== 'ALL' || searchText;
+    if (hasActiveFilter && filteredCountEl && filteredNumEl) {
+      filteredCountEl.style.display = '';
+      filteredNumEl.textContent = visible.length;
+    } else if (filteredCountEl) {
+      filteredCountEl.style.display = 'none';
+    }
+
+    // Rail match count
+    const railCount = document.getElementById('railMatchCount');
+    if (railCount) railCount.textContent = hasActiveFilter ? `${visible.length} matching` : '';
+
+    if (!visible.length) {
+      grid.innerHTML = `<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${allExercises.length ? 'No exercises match filters.' : 'No exercises yet. Open Planner to create one.'}</div>`;
       return;
     }
 
-    grid.innerHTML = sessions.map((s, i) => {
-      const typeCss = TYPE_CSS[s.session_type] || 'tac';
-      const dur  = s.duration    ? `${s.duration}′` : '—';
-      const date = s.session_date
-        ? new Date(s.session_date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
-        : '—';
-      return `<div class="sl-card${i === 0 ? ' is-active' : ''}">
+    grid.innerHTML = visible.map(ex => {
+      const orient = calcOrient(ex);
+      const meta   = orient ? ORIENT[orient] : null;
+      const m2     = m2pp(ex);
+      const mdStr  = fmtMd(ex.match_day);
+      const dur    = ex.duration ? `${ex.duration}′` : null;
+
+      // Focus badge (orient)
+      const focusBadge = meta
+        ? `<span class="focus ${meta.cls}">${meta.short}</span>`
+        : `<span class="focus f-none">—</span>`;
+      const durBadge = dur ? `<span class="dur"><i class="ti ti-clock"></i>${dur}</span>` : '';
+      const mdBadgeThumb = mdStr ? `<span class="md-badge">${mdStr}</span>` : '';
+
+      // Tags
+      let tags = '';
+      if (ex.intensity) tags += `<span class="sl-tag ${INT_CLS[ex.intensity]}">${INT_LABEL[ex.intensity]}</span>`;
+      if (ex.game_type_enabled && ex.game_type) tags += `<span class="sl-tag t-game">${ex.game_type}</span>`;
+      (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${f}</span>`; });
+      const tagsRow = tags ? `<div class="sl-tags">${tags}</div>` : '';
+
+      // Meta row
+      const metaParts = [];
+      if (ex.players_count) metaParts.push(`<span class="it"><i class="ti ti-users"></i>${ex.players_count} players</span>`);
+      if (m2) metaParts.push(`<span class="it"><i class="ti ti-ruler-measure"></i>${m2} m²/p</span>`);
+      if (ex.series) metaParts.push(`<span class="it"><i class="ti ti-repeat"></i>${ex.series}×</span>`);
+
+      return `<div class="sl-card${selectedId === ex.id ? ' is-active' : ''}" data-id="${ex.id}">
         <div class="sl-thumb">
-          <span class="focus ${typeCss}">${s.session_type || '—'}</span>
-          <span class="dur"><i class="ti ti-clock"></i>${dur}</span>
+          ${focusBadge}${durBadge}${mdBadgeThumb}
         </div>
         <div class="sl-body">
-          <div class="title">${s.title || 'Untitled session'}</div>
-          <div class="desc">${s.notes || ''}</div>
-          <div class="meta"><span>${date}</span></div>
+          <div class="title">${ex.name || 'Untitled'}</div>
+          ${ex.work_time ? `<div class="desc">${ex.work_time} work · ${ex.rest_time||'—'} rest</div>` : ''}
+          ${metaParts.length ? `<div class="meta">${metaParts.join('')}</div>` : ''}
         </div>
+        ${tagsRow}
       </div>`;
     }).join('');
 
-    grid.querySelectorAll('.sl-card').forEach(c => c.addEventListener('click', () => {
-      grid.querySelectorAll('.sl-card').forEach(o => o.classList.remove('is-active'));
-      c.classList.add('is-active');
-    }));
+    grid.querySelectorAll('.sl-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = card.dataset.id;
+        if (selectedId === id) {
+          selectedId = null;
+          hidePreview();
+        } else {
+          selectedId = id;
+          showPreview(id);
+        }
+        grid.querySelectorAll('.sl-card').forEach(c =>
+          c.classList.toggle('is-active', c.dataset.id === selectedId));
+      });
+    });
   }
-  boot();
 
-  document.querySelectorAll('.sl-pill').forEach(p => p.addEventListener('click', () => {
-    document.querySelectorAll('.sl-toolbar .sl-pill').forEach(o => o.classList.remove('is-on'));
-    p.classList.add('is-on');
-  }));
-  document.querySelectorAll('.sl-segs').forEach(g => g.querySelectorAll('.sl-seg').forEach(s => s.addEventListener('click', () => {
-    g.querySelectorAll('.sl-seg').forEach(o => o.classList.remove('is-on'));
-    s.classList.add('is-on');
-  })));
-  document.querySelectorAll('.sl-opt').forEach(o => o.addEventListener('click', () => o.classList.toggle('is-on')));
+  // ── Preview panel ────────────────────────────────────────────────
+  function showPreview(id) {
+    const ex = allExercises.find(x => x.id === id);
+    if (!ex) return;
+    const orient = calcOrient(ex);
+    const meta   = orient ? ORIENT[orient] : null;
+    const m2     = m2pp(ex);
+    const mdStr  = fmtMd(ex.match_day);
+
+    document.getElementById('prevName').textContent = ex.name || 'Untitled';
+
+    const cells = [
+      { l:'Players',   v: ex.players_count || '—' },
+      { l:'Field',     v: (ex.field_width && ex.field_height) ? `${ex.field_width}×${ex.field_height} m` : '—' },
+      { l:'m²/player', v: m2 ? `${m2} m²` : '—' },
+      { l:'Duration',  v: ex.duration ? `${ex.duration} min` : '—' },
+      { l:'Match Day', v: mdStr || '—' },
+      { l:'Series',    v: ex.series || '—' },
+      { l:'Work',      v: ex.work_time || '—' },
+      { l:'Rest',      v: ex.rest_time || '—' },
+      { l:'Intensity', v: ex.intensity ? INT_LABEL[ex.intensity] : '—' },
+      { l:'Orientación', v: meta ? meta.label : '—' },
+    ];
+    document.getElementById('prevGrid').innerHTML = cells.map(c =>
+      `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`
+    ).join('');
+
+    let tags = '';
+    if (ex.game_type_enabled && ex.game_type) tags += `<span class="sl-tag t-game">${ex.game_type}</span>`;
+    if (ex.intensity) tags += `<span class="sl-tag ${INT_CLS[ex.intensity]}">${INT_LABEL[ex.intensity]}</span>`;
+    (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${f}</span>`; });
+    document.getElementById('prevTags').innerHTML = tags;
+
+    document.getElementById('slPreview').classList.add('is-visible');
+    document.getElementById('slPreview').scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  function hidePreview() {
+    document.getElementById('slPreview').classList.remove('is-visible');
+    selectedId = null;
+    document.querySelectorAll('.sl-card').forEach(c => c.classList.remove('is-active'));
+  }
+
+  document.getElementById('prevClose')?.addEventListener('click', hidePreview);
+
+  // ── Filter interactions ──────────────────────────────────────────
+  document.querySelectorAll('.sl-opt[data-group]').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const group = opt.dataset.group;
+      const val   = opt.dataset.val;
+      if (filters[group].has(val)) filters[group].delete(val);
+      else filters[group].add(val);
+      opt.classList.toggle('is-on', filters[group].has(val));
+      updateAccordionBadges();
+      renderCards();
+    });
+  });
+
+  // Accordion toggle
+  document.querySelectorAll('.sl-acc-h[data-acc]').forEach(h => {
+    h.addEventListener('click', () => {
+      const body = h.nextElementSibling;
+      const open = body.classList.toggle('is-open');
+      h.classList.toggle('is-open', open);
+    });
+  });
+
+  function updateAccordionBadges() {
+    const pairs = [
+      ['ctOrientAcc', filters.orientation],
+      ['ctIntAcc',    filters.intensity],
+      ['ctMdAcc',     filters.matchday],
+      ['ctGtAcc',     filters.gametype],
+      ['ctFocAcc',    filters.focus],
+    ];
+    pairs.forEach(([id, set]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = set.size ? set.size : '';
+    });
+  }
+
+  function clearAllFilters() {
+    Object.values(filters).forEach(s => s.clear());
+    document.querySelectorAll('.sl-opt.is-on').forEach(o => o.classList.remove('is-on'));
+    pillOrient = 'ALL';
+    document.querySelectorAll('.sl-pill').forEach(p =>
+      p.classList.toggle('is-on', p.dataset.orient === 'ALL'));
+    searchText = '';
+    const cs = document.getElementById('cardSearch');
+    const ts = document.getElementById('topSearch');
+    if (cs) cs.value = '';
+    if (ts) ts.value = '';
+    updateAccordionBadges();
+    renderCards();
+  }
+
+  document.getElementById('clearAllFilters')?.addEventListener('click',  clearAllFilters);
+  document.getElementById('clearAllFilters2')?.addEventListener('click', clearAllFilters);
+
+  // Pills
+  document.querySelectorAll('.sl-pill[data-orient]').forEach(p => {
+    p.addEventListener('click', () => {
+      pillOrient = p.dataset.orient;
+      document.querySelectorAll('.sl-pill[data-orient]').forEach(o =>
+        o.classList.toggle('is-on', o.dataset.orient === pillOrient));
+      renderCards();
+    });
+  });
+
+  // Search
+  ['cardSearch','topSearch'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', e => {
+      searchText = e.target.value.toLowerCase();
+      renderCards();
+    });
+  });
+
+  // Sort
+  const sortCycles = [['recent','Recent'],['az','A → Z'],['dur','Longest']];
+  let sortIdx = 0;
+  document.getElementById('sortBtn')?.addEventListener('click', () => {
+    sortIdx = (sortIdx + 1) % sortCycles.length;
+    sortMode = sortCycles[sortIdx][0];
+    document.getElementById('sortLabel').textContent = sortCycles[sortIdx][1];
+    renderCards();
+  });
+
+  // ── Initial render ───────────────────────────────────────────────
+  updateCounts();
+  renderCards();
+})();
 </script>
 </body>
 </html>
