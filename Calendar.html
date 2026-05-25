@@ -140,9 +140,10 @@
     overflow:hidden;
     text-overflow:ellipsis;
   }
-  .match-marker.is-home { color:var(--cm-success); border-color:var(--cm-success-bd); background:var(--cm-success-bg); }
-  .match-marker.is-away { color:var(--cm-info);    border-color:var(--cm-info-bd);    background:var(--cm-info-bg); }
-  .match-marker.is-key  { color:var(--cm-danger);  border-color:var(--cm-danger-bd);  background:var(--cm-danger-bg); }
+  .match-marker.is-liga     { color:var(--cm-success); border-color:var(--cm-success-bd); background:var(--cm-success-bg); }
+  .match-marker.is-copa     { color:var(--cm-warning); border-color:var(--cm-warning-bd); background:var(--cm-warning-bg); }
+  .match-marker.is-inter    { color:var(--cm-info);    border-color:var(--cm-info-bd);    background:var(--cm-info-bg); }
+  .match-marker.is-amistoso { color:var(--cm-fg-muted);border-color:var(--cm-border);     background:var(--cm-bg-soft); }
   .match-marker .ti { font-size:9px; flex-shrink:0; }
   .match-marker .extra { font:600 8px/1 var(--cm-font-mono); opacity:0.75; margin-left:1px; }
 
@@ -808,6 +809,15 @@
             <option value="away">Away</option>
           </select>
         </div>
+        <div class="sq-modal-field">
+          <label for="calMcF_comp">Competition</label>
+          <select id="calMcF_comp">
+            <option value="">Liga (default)</option>
+            <option value="copa">Copa</option>
+            <option value="inter">Internacional</option>
+            <option value="amistoso">Amistoso</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="sq-modal-foot">
@@ -874,7 +884,7 @@
 
 <script>
 // ── State ──────────────────────────────────────────────────────
-let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null;
+let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editMcId = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 let _ribbonMeta = null; // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
 let _matchSessions = []; // training_sessions with session_type='match' from DB
@@ -1096,17 +1106,25 @@ document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });
 
 // ── New Microcycle modal ──────────────────────────────────────
-function openMcModal() {
-  ['calMcF_name','calMcF_start','calMcF_end','calMcF_match','calMcF_rival'].forEach(id => { document.getElementById(id).value = ''; });
-  document.getElementById('calMcF_homeaway').value = '';
+function openMcModal(existingMc) {
+  _editMcId = existingMc?.id || null;
+  document.getElementById('calMcModalTitle').textContent = existingMc ? 'Edit microcycle' : 'New microcycle';
+  document.getElementById('calMcSave').textContent       = existingMc ? 'Save changes'    : 'Create';
+  document.getElementById('calMcF_name').value     = existingMc?.name       || '';
+  document.getElementById('calMcF_start').value    = existingMc?.start_date || '';
+  document.getElementById('calMcF_end').value      = existingMc?.end_date   || '';
+  document.getElementById('calMcF_match').value    = existingMc?.match_date || '';
+  document.getElementById('calMcF_rival').value    = existingMc?.rival      || '';
+  document.getElementById('calMcF_homeaway').value = existingMc?.home_away  || '';
+  document.getElementById('calMcF_comp').value     = existingMc?.color      || '';
   document.getElementById('calMcSaving').style.display = 'none';
   document.getElementById('calMcSave').disabled = false;
   document.getElementById('calMcBackdrop').classList.add('is-open');
   document.getElementById('calMcF_name').focus();
 }
-function closeMcModal() { document.getElementById('calMcBackdrop').classList.remove('is-open'); }
+function closeMcModal() { document.getElementById('calMcBackdrop').classList.remove('is-open'); _editMcId = null; }
 
-document.getElementById('calNewMcBtn').addEventListener('click', openMcModal);
+document.getElementById('calNewMcBtn').addEventListener('click', () => openMcModal());
 document.getElementById('calMcClose').addEventListener('click', closeMcModal);
 document.getElementById('calMcCancel').addEventListener('click', closeMcModal);
 document.getElementById('calMcBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeMcModal(); });
@@ -1123,7 +1141,6 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
   saving.style.display = 'inline'; saveBtn.disabled = true;
 
   const payload = {
-    id:         crypto.randomUUID(),
     club_id:    _clubId,
     name,
     start_date: start,
@@ -1131,14 +1148,22 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
     match_date: document.getElementById('calMcF_match').value || null,
     rival:      document.getElementById('calMcF_rival').value.trim() || null,
     home_away:  document.getElementById('calMcF_homeaway').value || null,
+    color:      document.getElementById('calMcF_comp').value || null,
   };
 
-  const { error } = await window.sb.from('microcycles').insert(payload);
+  let error;
+  if (_editMcId) {
+    ({ error } = await window.sb.from('microcycles').update(payload).eq('id', _editMcId));
+  } else {
+    payload.id = crypto.randomUUID();
+    ({ error } = await window.sb.from('microcycles').insert(payload));
+  }
   saving.style.display = 'none'; saveBtn.disabled = false;
   if (error) { showCalToast('Error: ' + error.message); return; }
 
+  const wasEdit = !!_editMcId;
   closeMcModal();
-  showCalToast('Microcycle created.');
+  showCalToast(wasEdit ? 'Microcycle updated.' : 'Microcycle created.');
 
   const { data: mcs } = await window.sb.from('microcycles')
     .select('id,name,start_date,end_date,match_date,rival,home_away,color')
@@ -1147,9 +1172,11 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
   _allMCs = mcs || [];
   renderSeasonRibbon(_allMCs);
   renderCalKPIs(_allMCs);
-  const newIdx = _allMCs.findIndex(m => m.start_date === start && m.name === name);
-  if (newIdx >= 0) { _mcIdx = newIdx; _weekOffset = 0; }
-  await loadSessions();
+  if (!wasEdit) {
+    const newIdx = _allMCs.findIndex(m => m.start_date === start && m.name === name);
+    if (newIdx >= 0) { _mcIdx = newIdx; _weekOffset = 0; }
+    await loadSessions();
+  }
 });
 
 // ── Week navigation ───────────────────────────────────────────
@@ -1407,22 +1434,25 @@ document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn =>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-// ── MC name abbreviation ──────────────────────────────────────
-function abbrevMc(name) {
-  if (!name) return '?';
-  const s = name.trim();
-  if (/^MC\s*\d+$/i.test(s)) return s.replace(/\s+/, '');          // "MC 04" → "MC04"
-  const m = s.match(/^([\w-]+)\s+(\d+)$/);
-  if (m) {
-    const w = m[1].split('-')[0].slice(0, 2);                       // "Jornada 1" → "Jo1"
-    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() + m[2];
-  }
-  const words = s.split(/\s+/);
-  if (words.length >= 2) {
-    const last = words[words.length - 1];
-    return last.length <= 5 ? last : last.slice(0, 4);              // "Copa Final" → "Final"
-  }
-  return s.length <= 5 ? s : s.slice(0, 4);
+// ── Competition helpers ───────────────────────────────────────
+function compClass(raw) {
+  const c = (raw || '').toLowerCase();
+  if (/copa|cup/i.test(c))            return 'copa';
+  if (/inter|champion|world|mundial/i.test(c)) return 'inter';
+  if (/amistoso|friendly/i.test(c))   return 'amistoso';
+  return 'liga';
+}
+function compIcon(cls) {
+  if (cls === 'copa')     return 'ti-trophy';
+  if (cls === 'inter')    return 'ti-world';
+  if (cls === 'amistoso') return 'ti-handshake';
+  return 'ti-ball-football';
+}
+function compLabel(cls) {
+  if (cls === 'copa')     return 'Copa';
+  if (cls === 'inter')    return 'Internacional';
+  if (cls === 'amistoso') return 'Amistoso';
+  return 'Liga';
 }
 
 // ── Season Ribbon ─────────────────────────────────────────────
@@ -1512,16 +1542,17 @@ function renderSeasonRibbon(mcs, extraMatches) {
   const barsEl = document.getElementById('calRibbonMcs');
   if (barsEl) {
     barsEl.innerHTML = '';
-    ordered.forEach(mc => {
+    ordered.forEach((mc, ordIdx) => {
       const left  = pct(mc.start_date);
       const width = Math.max(0.4, parseFloat(pct(mc.end_date)) - parseFloat(pct(mc.start_date))).toFixed(2);
       const isPast    = new Date(mc.end_date + 'T00:00:00') < today;
       const isCurrent = mc.start_date <= TODAY && mc.end_date >= TODAY;
+      const mcCode = 'MC' + String(ordIdx + 1).padStart(2, '0');
       const bar = document.createElement('div');
       bar.className = 'mc-bar' + (isPast ? ' is-past' : isCurrent ? ' is-current' : '');
       bar.style.cssText = `left:${left}%;width:${width}%`;
-      bar.title = `${mc.name||'MC'} · ${mc.start_date} → ${mc.end_date}`;
-      bar.innerHTML = `<span class="lbl">${abbrevMc(mc.name)}</span>`;
+      bar.title = `${mcCode} · ${mc.name||'MC'} · ${mc.start_date} → ${mc.end_date}`;
+      bar.innerHTML = `<span class="lbl">${mcCode}</span>`;
       bar.addEventListener('click', async () => {
         const realIdx = _allMCs.findIndex(m => m.id === mc.id);
         if (realIdx >= 0) {
@@ -1549,15 +1580,17 @@ function renderSeasonRibbon(mcs, extraMatches) {
     ordered.filter(mc => mc.match_date).forEach(mc => {
       if (!seenDates.has(mc.match_date)) {
         seenDates.add(mc.match_date);
-        rawMarkers.push({ date: mc.match_date, isAway: mc.home_away === 'away', isCup: /cup|copa|final/i.test(mc.rival||''), rival: mc.rival||'Match' });
+        rawMarkers.push({ date: mc.match_date, isAway: mc.home_away === 'away', comp: compClass(mc.color || ''), rival: mc.rival||'Match', isFromMc: true, mcData: mc });
       }
     });
     (extraMatches||[]).forEach(s => {
       const d = s.session_date;
       if (!seenDates.has(d)) {
         seenDates.add(d);
-        const notes = (s.notes||'').toLowerCase();
-        rawMarkers.push({ date: d, isAway: notes.includes('away'), isCup: false, rival: s.title.replace(/^vs\s+/i,'') });
+        const noteParts = (s.notes||'').split(' · ');
+        const haStr  = noteParts.find(p => /^(home|away)$/i.test(p)) || 'home';
+        const compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
+        rawMarkers.push({ date: d, isAway: haStr === 'away', comp: compClass(compStr), rival: s.title.replace(/^vs\s+/i,''), isFromMc: false });
       }
     });
 
@@ -1565,11 +1598,13 @@ function renderSeasonRibbon(mcs, extraMatches) {
       .filter(m => m.date >= ordered[0].start_date && m.date <= ordered[ordered.length-1].end_date)
       .sort((a,b) => a.date > b.date ? 1 : -1)
       .map(m => ({
-        pctVal: parseFloat(pct(m.date)),
-        leftStr: pct(m.date),
-        isAway: m.isAway,
-        isCup:  m.isCup,
-        rival:  m.rival,
+        pctVal:   parseFloat(pct(m.date)),
+        leftStr:  pct(m.date),
+        isAway:   m.isAway,
+        comp:     m.comp,
+        rival:    m.rival,
+        isFromMc: m.isFromMc,
+        mcData:   m.mcData,
       }));
 
     const groups = [];
@@ -1582,14 +1617,15 @@ function renderSeasonRibbon(mcs, extraMatches) {
     groups.forEach(g => {
       const first = g.items[0];
       const extra = g.items.length - 1;
-      const cls   = 'match-marker' + (first.isAway ? ' is-away' : first.isCup ? ' is-key' : ' is-home');
-      const icon  = first.isAway ? 'ti-plane' : first.isCup ? 'ti-trophy' : 'ti-home';
+      const cc    = first.comp || 'liga';
+      const icon  = compIcon(cc);
       const label = first.rival.length > 9 ? first.rival.slice(0, 8) + '…' : first.rival;
       const marker = document.createElement('span');
-      marker.className = cls;
+      marker.className = 'match-marker is-' + cc;
       marker.style.left = first.leftStr + '%';
-      marker.title = g.items.map(i => i.rival).join(' · ');
+      marker.title = g.items.map(i => `${i.rival} · ${compLabel(i.comp)} · ${i.isAway?'Away':'Home'}`).join(' | ');
       marker.innerHTML = `<i class="ti ${icon}"></i>${label}${extra ? `<span class="extra">+${extra}</span>` : ''}`;
+      marker.addEventListener('click', e => { e.stopPropagation(); showMatchPopover(marker, g.items); });
       matchesEl.appendChild(marker);
     });
   }
@@ -1601,6 +1637,72 @@ function renderSeasonRibbon(mcs, extraMatches) {
     const totalW = rb.querySelector('.cal-ribbon')?.scrollWidth || rb.scrollWidth;
     rb.scrollLeft = Math.max(0, parseFloat(todayPct) / 100 * totalW - rb.clientWidth / 2);
   });
+}
+
+// ── Match chip popover ────────────────────────────────────────
+let _matchPop = null;
+function closeMatchPopover() { if (_matchPop) { _matchPop.remove(); _matchPop = null; } }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMatchPopover(); });
+
+function showMatchPopover(anchor, items) {
+  closeMatchPopover();
+  const COMP_CLR = { liga: 'var(--cm-success)', copa: 'var(--cm-warning)', inter: 'var(--cm-info)', amistoso: 'var(--cm-fg-faint)' };
+  const pop = document.createElement('div');
+  pop.style.cssText = 'position:fixed;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:0 8px 24px rgba(0,0,0,.16);z-index:300;width:260px;overflow:hidden';
+
+  pop.innerHTML = items.map((item, i) => {
+    const d = new Date(item.date + 'T12:00:00');
+    const dateFmt = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const cc      = item.comp || 'liga';
+    const compClr = COMP_CLR[cc] || COMP_CLR.liga;
+    const haIcon  = item.isAway ? 'ti-plane' : 'ti-home';
+    const haLbl   = item.isAway ? 'Away' : 'Home';
+    const haBg    = item.isAway ? 'var(--cm-info-bg)'     : 'var(--cm-success-bg)';
+    const haClr   = item.isAway ? 'var(--cm-info)'        : 'var(--cm-success)';
+    const haBd    = item.isAway ? 'var(--cm-info-bd)'     : 'var(--cm-success-bd)';
+    const editBtn = item.isFromMc && item.mcData
+      ? `<div style="margin-top:8px"><button class="cm-btn is-ghost is-sm" style="height:26px" data-pop-edit="${item.mcData.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit microcycle</button></div>`
+      : '';
+    return `<div style="padding:12px 14px${i > 0 ? ';border-top:1px solid var(--cm-border-soft)' : ''}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1">vs ${item.rival}</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:3px;font:600 9px/1 var(--cm-font-mono);background:${haBg};color:${haClr};border:1px solid ${haBd}"><i class="ti ${haIcon}" style="font-size:9px"></i>${haLbl}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font:500 11px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted)">
+        <i class="ti ${compIcon(cc)}" style="font-size:11px;color:${compClr}"></i>
+        <span>${compLabel(cc)} · ${dateFmt}</span>
+      </div>
+      ${editBtn}
+    </div>`;
+  }).join('');
+
+  document.body.appendChild(pop);
+  _matchPop = pop;
+
+  pop.querySelectorAll('[data-pop-edit]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mc = items.find(i => i.mcData && i.mcData.id === btn.dataset.popEdit);
+      if (mc?.mcData) { closeMatchPopover(); openMcModal(mc.mcData); }
+    });
+  });
+
+  const rect = anchor.getBoundingClientRect();
+  const popW = 260;
+  requestAnimationFrame(() => {
+    const popH = pop.offsetHeight;
+    let top  = rect.bottom + 6;
+    if (top + popH > window.innerHeight - 10) top = rect.top - popH - 6;
+    let left = rect.left - popW / 2 + anchor.offsetWidth / 2;
+    left = Math.max(8, Math.min(window.innerWidth - popW - 8, left));
+    pop.style.top  = top  + 'px';
+    pop.style.left = left + 'px';
+  });
+
+  setTimeout(() => {
+    document.addEventListener('click', function _cp(e) {
+      if (!pop.contains(e.target)) { closeMatchPopover(); document.removeEventListener('click', _cp); }
+    });
+  }, 0);
 }
 
 // ── Upcoming Events ───────────────────────────────────────────
