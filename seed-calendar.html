@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seed Calendar — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm { background:var(--cm-bg) }
+  .wrap { max-width:640px; margin:60px auto; padding:0 24px }
+  h1 { font:600 20px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:6px }
+  p  { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin-bottom:24px }
+  #log { margin-top:20px; font:12.5px/1.8 var(--cm-font-mono); color:var(--cm-fg-muted); background:var(--cm-bg-sunk); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); padding:14px 16px; min-height:60px; white-space:pre-wrap; max-height:400px; overflow-y:auto; display:none }
+  .ok  { color:var(--cm-success) }
+  .err { color:var(--cm-danger) }
+  .skip{ color:var(--cm-fg-faint) }
+</style>
+</head>
+<body class="cm">
+
+<div class="wrap">
+  <h1>Seed Calendar Data</h1>
+  <p>Inserts 12 microcycles (May–Aug 2026) + training sessions for the active club. Skips date ranges that already have data. Use Clear to remove the seed before re-running.</p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button id="seedBtn" class="cm-btn is-primary">Insert seed data</button>
+    <button id="clearBtn" class="cm-btn is-outline" style="color:var(--cm-danger);border-color:var(--cm-danger-bd)">Clear seed data</button>
+    <a href="Calendar.html" class="cm-btn is-ghost" style="text-decoration:none">← Calendar</a>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script>
+// ── Microcycle definitions ─────────────────────────────────────
+const MC_DEFS = [
+  { name:'Pre-temporada 1', start:'2026-05-04', end:'2026-05-10' },
+  { name:'Pre-temporada 2', start:'2026-05-11', end:'2026-05-17', match:'2026-05-16', rival:'River Plate', ha:'home' },
+  { name:'Jornada 1',       start:'2026-05-18', end:'2026-05-24', match:'2026-05-23', rival:'Boca Jr.',    ha:'away' },
+  // MC 04 intentionally skipped (2026-05-25 → 2026-06-01) — already exists
+  { name:'Jornada 2',       start:'2026-06-02', end:'2026-06-08', match:'2026-06-07', rival:'Nacional',    ha:'home' },
+  { name:'Jornada 3',       start:'2026-06-09', end:'2026-06-15' },
+  { name:'Copa 1',          start:'2026-06-16', end:'2026-06-22', match:'2026-06-20', rival:'Defensor',    ha:'away' },
+  { name:'Jornada 4',       start:'2026-06-23', end:'2026-06-29', match:'2026-06-28', rival:'Peñarol',     ha:'home' },
+  { name:'Jornada 5',       start:'2026-06-30', end:'2026-07-06' },
+  { name:'Jornada 6',       start:'2026-07-07', end:'2026-07-13', match:'2026-07-12', rival:'Liverpool',   ha:'home' },
+  { name:'Jornada 7',       start:'2026-07-14', end:'2026-07-20' },
+  { name:'Jornada 8',       start:'2026-07-21', end:'2026-07-27', match:'2026-07-26', rival:'Danubio',     ha:'away' },
+  { name:'Copa Final',      start:'2026-07-28', end:'2026-08-03', match:'2026-08-01', rival:'Peñarol',     ha:'home' },
+];
+
+const SEED_MC_NAMES = MC_DEFS.map(m => m.name);
+
+// ── Helpers ────────────────────────────────────────────────────
+const logEl = document.getElementById('log');
+function log(msg, cls = '') {
+  logEl.style.display = '';
+  logEl.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split('T')[0];
+}
+
+// Build training sessions for one MC definition
+function buildSessions(clubId, m) {
+  const rows = [];
+  const s = m.start;
+  rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Tactical', session_type: 'tactical', session_date: s, duration: 90 });
+  rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Gym', session_type: 'gym', session_date: addDays(s, 1), duration: 60 });
+  rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Conditioning', session_type: 'conditioning', session_date: addDays(s, 2), duration: 75 });
+  rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Tactical', session_type: 'tactical', session_date: addDays(s, 3), duration: 75 });
+
+  if (m.ha === 'away' && m.match) {
+    rows.push({ id: crypto.randomUUID(), club_id: clubId, title: `Viaje a ${m.rival}`, session_type: 'travel', session_date: addDays(s, 4), duration: 0 });
+    rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Regreso',            session_type: 'travel', session_date: addDays(s, 6), duration: 0 });
+  } else if (m.match) {
+    rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Activación pre-partido', session_type: 'conditioning', session_date: addDays(s, 4), duration: 45 });
+    rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Recovery', session_type: 'recovery', session_date: addDays(s, 6), duration: 45 });
+  } else {
+    rows.push({ id: crypto.randomUUID(), club_id: clubId, title: 'Recovery', session_type: 'recovery', session_date: addDays(s, 5), duration: 45 });
+  }
+  return rows;
+}
+
+// ── Seed ──────────────────────────────────────────────────────
+async function runSeed() {
+  const btn = document.getElementById('seedBtn');
+  btn.disabled = true;
+  logEl.innerHTML = '';
+
+  const ok = await window.requireAuth();
+  if (!ok) { log('Not authenticated.', 'err'); btn.disabled = false; return; }
+
+  const clubId = await window.getClubId();
+  log(`Club ID: ${clubId}`);
+
+  // Existing MCs
+  const { data: existing } = await window.sb.from('microcycles')
+    .select('start_date,end_date').eq('club_id', clubId);
+  log(`Existing microcycles: ${(existing||[]).length}`);
+
+  // Filter out MCs whose date range already overlaps with existing data
+  const toInsert = MC_DEFS.filter(m =>
+    !(existing||[]).some(e => e.start_date <= m.end && e.end_date >= m.start)
+  );
+
+  if (toInsert.length) {
+    const mcRows = toInsert.map(m => ({
+      id:         crypto.randomUUID(),
+      club_id:    clubId,
+      name:       m.name,
+      start_date: m.start,
+      end_date:   m.end,
+      match_date: m.match || null,
+      rival:      m.rival || null,
+      home_away:  m.ha    || null,
+    }));
+    const { error } = await window.sb.from('microcycles').insert(mcRows);
+    if (error) { log(`Error inserting microcycles: ${error.message}`, 'err'); }
+    else { log(`✓ ${mcRows.length} microcycles inserted`, 'ok'); }
+  } else {
+    log('All MC date ranges already exist — skipping.', 'skip');
+  }
+
+  // Sessions per MC
+  let totalSess = 0, errors = 0;
+  for (const m of MC_DEFS) {
+    const { count } = await window.sb.from('training_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('club_id', clubId)
+      .gte('session_date', m.start)
+      .lte('session_date', m.end);
+
+    if (count > 0) {
+      log(`  skip ${m.name} (${count} sessions already exist)`, 'skip');
+      continue;
+    }
+
+    const sessions = buildSessions(clubId, m);
+    const { error } = await window.sb.from('training_sessions').insert(sessions);
+    if (error) {
+      log(`  Error ${m.name}: ${error.message}`, 'err');
+      errors++;
+    } else {
+      log(`  ✓ ${sessions.length} sessions → ${m.name}`, 'ok');
+      totalSess += sessions.length;
+    }
+  }
+
+  log(`\nDone — ${totalSess} sessions inserted${errors ? ', ' + errors + ' error(s)' : ''}.`, totalSess > 0 ? 'ok' : '');
+  log('→ Open Calendar to verify.', '');
+  btn.disabled = false;
+}
+
+// ── Clear ─────────────────────────────────────────────────────
+async function clearSeed() {
+  if (!confirm('Delete all seed microcycles and their training sessions (May 4 – Aug 3 2026)? This cannot be undone.')) return;
+  const btn = document.getElementById('clearBtn');
+  btn.disabled = true;
+  logEl.innerHTML = '';
+
+  const ok = await window.requireAuth();
+  if (!ok) { log('Not authenticated.', 'err'); btn.disabled = false; return; }
+
+  const clubId = await window.getClubId();
+
+  const { error: sErr } = await window.sb.from('training_sessions')
+    .delete().eq('club_id', clubId)
+    .gte('session_date', '2026-05-04')
+    .lte('session_date', '2026-08-03');
+  if (sErr) log(`Error deleting sessions: ${sErr.message}`, 'err');
+  else log('✓ Sessions deleted', 'ok');
+
+  const { error: mErr } = await window.sb.from('microcycles')
+    .delete().eq('club_id', clubId)
+    .in('name', SEED_MC_NAMES);
+  if (mErr) log(`Error deleting microcycles: ${mErr.message}`, 'err');
+  else log('✓ Microcycles deleted', 'ok');
+
+  btn.disabled = false;
+}
+
+document.getElementById('seedBtn').addEventListener('click', runSeed);
+document.getElementById('clearBtn').addEventListener('click', clearSeed);
+</script>
+</body>
+</html>

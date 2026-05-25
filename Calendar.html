@@ -1302,9 +1302,12 @@ function renderSeasonRibbon(mcs) {
   if (!mcs.length) return;
 
   const ordered = mcs.slice().sort((a, b) => a.start_date > b.start_date ? 1 : -1);
-  const ribbonStart = new Date(ordered[0].start_date + 'T00:00:00');
-  const ribbonEnd   = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
-  const totalMs     = ribbonEnd - ribbonStart;
+  // Pad range: start of month 1mo before first MC, end of month 1mo after last MC
+  const firstMcStart = new Date(ordered[0].start_date + 'T00:00:00');
+  const lastMcEnd    = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
+  const ribbonStart  = new Date(firstMcStart.getFullYear(), firstMcStart.getMonth() - 1, 1);
+  const ribbonEnd    = new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 2, 0);
+  const totalMs      = ribbonEnd - ribbonStart;
   if (totalMs <= 0) return;
 
   function pct(dateStr) {
