@@ -268,7 +268,7 @@
   /* === FIELD CANVAS === */
   .pl-canvas-wrap {
     position:relative;
-    overflow:hidden;
+    overflow:visible;
     background:var(--cm-bg-sunk);
     display:flex; flex-direction:column;
   }
@@ -367,6 +367,7 @@
     display:flex; align-items:center; gap:8px;
     padding:10px 14px;
     overflow-x:auto;
+    position:relative; z-index:10;
   }
   .pl-dock-grp { display:flex; gap:6px; align-items:center; padding:4px 8px; border-right:1px solid var(--cm-border-soft); }
   .pl-dock-grp:last-child { border-right:0; }
@@ -405,7 +406,7 @@
   .pl-poly-wrap { position:relative; }
   .pl-poly-menu { position:absolute; bottom:calc(100% + 4px); left:50%; transform:translateX(-50%);
     background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px;
-    padding:4px; min-width:130px; z-index:60; box-shadow:var(--cm-shadow-2); }
+    padding:4px; min-width:130px; z-index:500; box-shadow:var(--cm-shadow-2); }
   .pl-poly-opt { display:block; width:100%; text-align:left; background:none; border:0;
     padding:5px 10px; border-radius:5px; cursor:pointer; font:400 12px/1.4 var(--cm-font-sans);
     color:var(--cm-fg-muted); white-space:nowrap; }
@@ -425,6 +426,20 @@
   #plShareModal .share-row span { font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); }
   #plShareModal .share-link-box { display:flex; gap:6px; }
   #plShareModal .share-link-box input { flex:1; font:400 11.5px/1 var(--cm-font-mono); padding:5px 8px; border:1px solid var(--cm-border); border-radius:6px; background:var(--cm-bg-soft); color:var(--cm-fg); outline:none; }
+
+  /* Free polygon done bar */
+  #plPolyDoneBar { position:absolute; top:14px; left:50%; transform:translateX(-50%); z-index:20;
+    background:rgba(0,0,0,0.72); backdrop-filter:blur(6px); border-radius:8px; padding:6px 12px;
+    align-items:center; gap:10px; pointer-events:all; white-space:nowrap; display:none; }
+  #plPolyDoneBar.is-active { display:flex; }
+  #plPolyDoneBar span { font:500 11px/1 var(--cm-font-mono); color:rgba(255,255,255,0.75); letter-spacing:0.04em; }
+  #plPolyDoneBtn { height:24px; padding:0 10px; border-radius:5px; border:0; background:var(--cm-accent); color:var(--cm-fg-on-accent); font:600 11px/1 var(--cm-font-sans); cursor:pointer; }
+  #plPolyCancelBtn { height:24px; padding:0 10px; border-radius:5px; border:0; background:rgba(255,255,255,0.15); color:#fff; font:600 11px/1 var(--cm-font-sans); cursor:pointer; }
+  /* Player number inline edit input */
+  #plPlayerNumInput { display:none; position:absolute; z-index:50; width:40px; height:40px;
+    border-radius:50%; text-align:center; font:700 14px/1 monospace;
+    border:2.5px solid rgba(255,255,255,0.9); background:rgba(0,0,0,0.65); color:white;
+    outline:none; padding:0; box-sizing:border-box; }
 
   .pl-field-fab {
     position:absolute;
@@ -641,7 +656,7 @@
             <div class="pl-ex-summary-grid">
               <div class="pl-ex-summary-cell"><div class="l">Duration</div><div class="v" id="plSumDuration">—</div></div>
               <div class="pl-ex-summary-cell"><div class="l">Players</div><div class="v" id="plSumPlayers">—</div></div>
-              <div class="pl-ex-summary-cell"><div class="l">Drills</div><div class="v" id="plSumDrills">—</div></div>
+              <div class="pl-ex-summary-cell"><div class="l">Match Day</div><div class="v" id="plSumMatchDay">—</div></div>
               <div class="pl-ex-summary-cell"><div class="l">Field</div><div class="v" id="plSumField">—</div></div>
             </div>
           </div>
@@ -769,16 +784,7 @@
           </div>
         </div>
 
-        <!-- 5. Sub-drills -->
-        <div class="pl-section" id="plDrillsSection">
-          <h3><i class="ti ti-list-numbers"></i>Drills <span id="plDrillCount" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0;text-transform:none;font-weight:400;color:var(--cm-fg-faint)"></span></h3>
-          <div id="plDrillList">
-            <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:4px 0">Select an exercise to manage its drills.</div>
-          </div>
-          <button class="pl-add-btn" id="plAddDrill" style="display:none"><i class="ti ti-plus"></i>Add drill</button>
-        </div>
-
-        <!-- 6. Available players -->
+        <!-- 5. Available players -->
         <div class="pl-section">
           <h3 id="plAvailHead"><i class="ti ti-users"></i>Available · —</h3>
           <div id="plAvailPills"></div>
@@ -836,6 +842,13 @@
               <input type="color" id="plPropZoneStroke" value="#22c55e" title="Border color">
             </div>
           </div>
+
+          <div id="plPolyDoneBar">
+            <span>Click to add points · Dbl-click to close</span>
+            <button id="plPolyDoneBtn">Done</button>
+            <button id="plPolyCancelBtn">Cancel</button>
+          </div>
+          <input type="text" id="plPlayerNumInput" maxlength="3" autocomplete="off">
 
           <div class="pl-field-fab">
             <button id="plFabText"   title="Add label"><i class="ti ti-typography"></i></button>
@@ -1024,7 +1037,6 @@
   let currentTool      = 'select';
   let _arrowP1         = null;
   let _previewLine     = null;
-  let _playerCounter   = 1;
   let _historyStack    = [];
   const MAX_HISTORY    = 30;
   const _arrowData     = new Map();   // arrowId → arrow state + handles
@@ -1036,8 +1048,23 @@
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
+  let _editingPlayer   = null;
 
-  fc.on('object:modified', pushHistory);
+  fc.on('object:modified', e => {
+    const obj = e.target;
+    if (obj && (obj.type === 'i-text' || obj.type === 'text') && (obj.scaleX !== 1 || obj.scaleY !== 1)) {
+      const scale = Math.sqrt(Math.abs(obj.scaleX * obj.scaleY));
+      obj.set({ fontSize: Math.round((obj.fontSize || 14) * scale), scaleX: 1, scaleY: 1 });
+      obj.initDimensions?.(); obj.setCoords();
+    }
+    pushHistory();
+  });
+  fc.on('object:scaling', e => {
+    const obj = e.target;
+    if (obj.type !== 'i-text' && obj.type !== 'text') return;
+    const s = Math.max(obj.scaleX, obj.scaleY);
+    obj.scaleX = s; obj.scaleY = s;
+  });
   fc.on('object:added',    pushHistory);
   fc.on('object:removed',  pushHistory);
 
@@ -1062,15 +1089,20 @@
 
   // ── Tool switcher ───────────────────────────────────────────────
   function setTool(tool) {
+    if (currentTool === 'free_polygon' && tool !== 'free_polygon') {
+      if (_polyPreview) { fc.remove(_polyPreview); _polyPreview = null; }
+      _polyPoints = [];
+      document.getElementById('plPolyDoneBar')?.classList.remove('is-active');
+    }
     currentTool = tool;
     fc.isDrawingMode = (tool === 'draw');
-    fc.selection = true;
+    fc.selection = (tool !== 'free_polygon');
     fc.getObjects().forEach(o => {
       if (o._type === '_preview') return;
-      o.selectable = true; o.evented = true;
+      o.selectable = (tool !== 'free_polygon'); o.evented = true;
     });
-    fc.defaultCursor = tool === 'arrow' ? 'crosshair' : 'default';
-    fc.hoverCursor   = tool === 'arrow' ? 'crosshair' : 'move';
+    fc.defaultCursor = (tool === 'arrow' || tool === 'free_polygon') ? 'crosshair' : 'default';
+    fc.hoverCursor   = (tool === 'arrow' || tool === 'free_polygon') ? 'crosshair' : 'move';
     fc.renderAll();
     const toolMap = ['select','move','draw','lasso'];
     document.querySelectorAll('.pl-canvas-bar .group:first-child button')
@@ -1126,12 +1158,38 @@
     setTool('select');
   }
 
-  function addPlayer(team='t1', label=String(_playerCounter++)) {
+  function _nextPlayerNum(team) {
+    const nums = fc.getObjects()
+      .filter(o => o._type === 'player' && o._team === team)
+      .map(o => parseInt(o._objects?.find(c => c.type === 'text')?.text || '0') || 0);
+    return (nums.length ? Math.max(...nums) : 0) + 1;
+  }
+
+  function addPlayer(team='t1') {
+    const label = String(_nextPlayerNum(team));
     const color = teamColors[team]||'#15803D', tc = teamText[team]||'#fff';
     const circle = new fabric.Circle({ radius:20, fill:color, stroke:'rgba(255,255,255,0.85)', strokeWidth:2.5, originX:'center', originY:'center' });
     const text   = new fabric.Text(label, { fontSize:13, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center', top:0 });
-    const group  = new fabric.Group([circle, text], { ...center(), originX:'center', originY:'center', _type:'player', _team:team });
-    fc.add(group); fc.setActiveObject(group); fc.renderAll();
+    const _build = (extras=[]) => {
+      const grp = new fabric.Group([circle, ...extras, text], { ...center(), originX:'center', originY:'center', _type:'player', _team:team });
+      fc.add(grp); fc.setActiveObject(grp); fc.renderAll();
+    };
+    const crestUrl = (team === 't1') ? (club?.logo_url || null) : null;
+    if (crestUrl) {
+      const opts = crestUrl.startsWith('data:') ? {} : { crossOrigin:'anonymous' };
+      fabric.Image.fromURL(crestUrl, img => {
+        if (img) { const s = 26/Math.max(img.width,img.height,1); img.set({scaleX:s,scaleY:s,originX:'center',originY:'center',opacity:0.38}); _build([img]); }
+        else { _build(); }
+      }, opts);
+    } else { _build(); }
+  }
+
+  function _editPlayerLabel(grp, newLabel) {
+    const textObj = grp._objects?.find(o => o.type === 'text');
+    if (!textObj) return;
+    textObj.set({ text: newLabel });
+    grp.dirty = true;
+    fc.renderAll(); pushHistory();
   }
   function addBall() {
     const shell = new fabric.Circle({ radius:18, fill:'#f5f5f5', stroke:'#333', strokeWidth:2, originX:'center', originY:'center' });
@@ -1326,15 +1384,37 @@
     });
     fc.add(_previewLine); fc.renderAll();
   });
-  fc.on('mouse:dblclick', e => {
-    if(currentTool!=='free_polygon') return;
-    _polyLastT=Date.now();
-    if(_polyPreview){fc.remove(_polyPreview);_polyPreview=null;}
-    if(_polyPoints.length>3) _polyPoints.pop(); // remove duplicate from 2nd click of dblclick
-    if(_polyPoints.length>=3){
-      finishAdd(new fabric.Polygon([..._polyPoints],{fill:'rgba(34,197,94,0.12)',stroke:'rgba(34,197,94,0.6)',strokeWidth:2,strokeDashArray:[6,3],strokeUniform:true}),'zone');
+  function _finishFreePolygon() {
+    _polyLastT = Date.now();
+    const pts = [..._polyPoints]; _polyPoints = [];
+    if (_polyPreview) { fc.remove(_polyPreview); _polyPreview = null; }
+    if (pts.length > 3) pts.pop(); // correct for extra point from 2nd click of dblclick
+    if (pts.length >= 3) {
+      finishAdd(new fabric.Polygon([...pts], {fill:'rgba(34,197,94,0.12)',stroke:'rgba(34,197,94,0.6)',strokeWidth:2,strokeDashArray:[6,3],strokeUniform:true}), 'zone');
+    } else {
+      setTool('select');
     }
-    _polyPoints=[];
+  }
+
+  fc.on('mouse:dblclick', e => {
+    if (currentTool === 'free_polygon') { _finishFreePolygon(); return; }
+    // Double-click on player → edit label
+    const obj = fc.getActiveObject();
+    if (obj?._type === 'player') {
+      const textObj = obj._objects?.find(o => o.type === 'text');
+      if (!textObj) return;
+      _editingPlayer = obj;
+      const vpt = fc.viewportTransform;
+      const px = obj.left * vpt[0] + vpt[4];
+      const py = obj.top  * vpt[3] + vpt[5];
+      const inp = document.getElementById('plPlayerNumInput');
+      if (!inp) return;
+      inp.value = textObj.text;
+      inp.style.left = (px - 20) + 'px';
+      inp.style.top  = (py - 20) + 'px';
+      inp.style.display = 'block';
+      inp.focus(); inp.select();
+    }
   });
 
   // ── Properties panel ─────────────────────────────────────────────
@@ -1429,6 +1509,10 @@
     const tag = document.activeElement?.tagName;
     if (tag==='INPUT'||tag==='TEXTAREA') return;
     if (e.key==='Escape') {
+      if (currentTool === 'free_polygon') { setTool('select'); return; }
+      if (_editingPlayer) {
+        document.getElementById('plPlayerNumInput').style.display='none'; _editingPlayer=null; return;
+      }
       if (_arrowP1) { _clearPreview(); _arrowP1=null; setTool('select'); }
       else { fc.discardActiveObject(); fc.renderAll(); }
       return;
@@ -1509,7 +1593,7 @@
 
   document.getElementById('plDockRivalCrest')?.addEventListener('click', () => {
     const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
-    inp.onchange=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>addCrest(ev.target.result,0.45,'rival');r.readAsDataURL(f);};
+    inp.onchange=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>addCrest(ev.target.result,0.20,'rival');r.readAsDataURL(f);};
     inp.click();
   });
 
@@ -1570,10 +1654,29 @@
       else if(s==='diamond')addRegularPolygon(4);
       else if(s==='pentagon')addRegularPolygon(5);
       else if(s==='hexagon')addRegularPolygon(6);
-      else if(s==='free'){_polyPoints=[];currentTool='free_polygon';fc.defaultCursor='crosshair';fc.hoverCursor='crosshair';}
+      else if(s==='free'){_polyPoints=[];currentTool='free_polygon';fc.selection=false;fc.defaultCursor='crosshair';fc.hoverCursor='crosshair';document.getElementById('plPolyDoneBar')?.classList.add('is-active');}
     });
   });
   document.addEventListener('click',()=>{if(_polyMenu)_polyMenu.style.display='none';});
+
+  // ── Free polygon Done / Cancel ───────────────────────────────────
+  document.getElementById('plPolyDoneBtn')?.addEventListener('click', e => { e.stopPropagation(); _finishFreePolygon(); });
+  document.getElementById('plPolyCancelBtn')?.addEventListener('click', e => { e.stopPropagation(); setTool('select'); });
+
+  // ── Player label inline edit ─────────────────────────────────────
+  const _playerNumInput = document.getElementById('plPlayerNumInput');
+  function _commitPlayerEdit() {
+    if (!_editingPlayer) return;
+    const newLabel = _playerNumInput.value.trim();
+    _playerNumInput.style.display = 'none';
+    if (newLabel) _editPlayerLabel(_editingPlayer, newLabel);
+    _editingPlayer = null;
+  }
+  _playerNumInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); _commitPlayerEdit(); }
+    if (e.key === 'Escape') { _playerNumInput.style.display='none'; _editingPlayer=null; }
+  });
+  _playerNumInput?.addEventListener('blur', () => _commitPlayerEdit());
 
   // ── Share modal ─────────────────────────────────────────────────
   document.getElementById('plShareBtn')?.addEventListener('click',()=>{
@@ -1620,7 +1723,6 @@
   let currentFocus         = [];
   let currentGameType      = null;
   let currentGameTypeOn    = false;
-  let subDrills            = [];
 
   // ── Intensity toggle ────────────────────────────────────────────
   function setIntensity(val) {
@@ -1728,18 +1830,20 @@
     const w       = document.getElementById('plExWidth')?.value;
     const h       = document.getElementById('plExHeight')?.value;
 
-    const nameEl  = document.getElementById('plSumName');
-    const durEl   = document.getElementById('plSumDuration');
-    const playEl  = document.getElementById('plSumPlayers');
+    const md = document.getElementById('plExMatchDay')?.value;
+
+    const nameEl   = document.getElementById('plSumName');
+    const durEl    = document.getElementById('plSumDuration');
+    const playEl   = document.getElementById('plSumPlayers');
     const fieldEl2 = document.getElementById('plSumField');
-    const drillEl = document.getElementById('plSumDrills');
-    const metaEl  = document.getElementById('plSumMeta');
+    const mdEl     = document.getElementById('plSumMatchDay');
+    const metaEl   = document.getElementById('plSumMeta');
 
     if (nameEl)  nameEl.textContent = name;
     if (durEl)   durEl.innerHTML    = dur  ? `${dur}<sub>min</sub>` : '—';
     if (playEl)  playEl.textContent = players;
     if (fieldEl2) fieldEl2.innerHTML = (w && h) ? `${w}×${h}<sub>m</sub>` : '—';
-    if (drillEl) drillEl.textContent = subDrills.length || '—';
+    if (mdEl)    mdEl.textContent   = md !== undefined && md !== '' ? `MD${parseInt(md)>=0?'+':''}${md}` : '—';
     if (metaEl) {
       const today2 = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
       metaEl.textContent = `exercise · ${today2}`;
@@ -1767,6 +1871,7 @@
     document.getElementById(id)?.addEventListener('input', updateSpaceOrientation);
   });
   document.getElementById('plExName')?.addEventListener('input', updateSummaryCard);
+  document.getElementById('plExMatchDay')?.addEventListener('input', updateSummaryCard);
 
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
@@ -1793,11 +1898,9 @@
       currentExerciseId=null; fc.clear(); fc.renderAll(); _arrowData.clear();
       document.getElementById('plExSummarySection').style.display='none';
       document.getElementById('plExConfigSection').style.display='none';
-      document.getElementById('plAddDrill').style.display='none';
       const lbl=document.getElementById('plFieldLabel'); if(lbl)lbl.textContent='No exercise selected';
       const crumb=document.getElementById('plCrumbEx'); if(crumb)crumb.textContent='Exercise library';
       const stat=document.getElementById('plCanvasStat'); if(stat)stat.textContent='No exercise selected';
-      subDrills=[]; renderSubDrills();
     }
     await loadExercises();
   }
@@ -1836,12 +1939,10 @@
     const ex = exercises.find(e => e.id === id);
     if (!ex) return;
     currentExerciseId = id;
-    subDrills = [];
 
     // Show config sections
     document.getElementById('plExSummarySection')?.style.setProperty('display', '');
     document.getElementById('plExConfigSection')?.style.setProperty('display', '');
-    document.getElementById('plAddDrill').style.display = '';
 
     // Fill form
     document.getElementById('plExName').value      = ex.name || '';
@@ -1879,75 +1980,7 @@
 
     // Highlight active in list
     renderExerciseList();
-
-    // Sub-drills
-    await loadSubDrills(id);
   }
-
-  // ── Sub-drills ──────────────────────────────────────────────────
-  async function loadSubDrills(exerciseId) {
-    const { data, error } = await window.sb.from('exercise_drills')
-      .select('id,name,duration,notes,position')
-      .eq('exercise_id', exerciseId)
-      .order('position', { ascending: true });
-
-    if (error?.code === '42P01') { return; }
-
-    subDrills = data || [];
-    renderSubDrills();
-  }
-
-  function renderSubDrills() {
-    const list     = document.getElementById('plDrillList');
-    const countEl  = document.getElementById('plDrillCount');
-    if (!list) return;
-
-    if (countEl) countEl.textContent = subDrills.length ? `· ${subDrills.length}` : '';
-
-    if (!subDrills.length) {
-      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:4px 0">No drills yet.</div>`;
-      return;
-    }
-
-    list.innerHTML = subDrills.map((d, i) => `
-      <div class="pl-drill" data-drill-id="${d.id}">
-        <div class="pl-drill-n">${i+1}</div>
-        <div class="pl-drill-body">
-          <div class="pl-drill-name">${d.name}</div>
-          <div class="pl-drill-meta">${d.duration ? d.duration + '′' : '—'}${d.notes ? ' · ' + d.notes : ''}</div>
-        </div>
-        <button class="pl-drill-del" data-del-drill="${d.id}" title="Delete drill">
-          <i class="ti ti-x"></i>
-        </button>
-      </div>`).join('');
-
-    list.querySelectorAll('[data-del-drill]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const drillId = btn.dataset.delDrill;
-        const { error } = await window.sb.from('exercise_drills').delete().eq('id', drillId);
-        if (!error) await loadSubDrills(currentExerciseId);
-      });
-    });
-
-    updateSummaryCard();
-  }
-
-  document.getElementById('plAddDrill')?.addEventListener('click', async () => {
-    if (!currentExerciseId) return;
-    const name = prompt('Drill name:', '');
-    if (!name) return;
-    const durStr  = prompt('Duration (minutes):', '');
-    const notes   = prompt('Notes (optional):', '') || null;
-    const { data, error } = await window.sb.from('exercise_drills').insert({
-      club_id:     clubId,
-      exercise_id: currentExerciseId,
-      name:        name.trim(),
-      duration:    durStr ? parseInt(durStr) || null : null,
-      notes,
-      position:    subDrills.length
-    }).select().single();
-    if (!error && data) await loadSubDrills(currentExerciseId);
-  });
 
   // ── New exercise ────────────────────────────────────────────────
   document.getElementById('plNewExBtn')?.addEventListener('click', async () => {
