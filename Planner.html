@@ -885,8 +885,11 @@
       this.width=99999; this.height=99999; this.setCoords();
     },
     _render(ctx) {
+      const vpt = this.canvas?.viewportTransform || [1,0,0,1,0,0];
+      ctx.save();
+      ctx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);
       const { x1,y1,cx,cy,x2,y2 } = this;
-      ctx.save(); ctx.strokeStyle=this.arrowColor; ctx.lineWidth=this.strokeWidth; ctx.lineCap='round';
+      ctx.strokeStyle=this.arrowColor; ctx.lineWidth=this.strokeWidth; ctx.lineCap='round';
       ctx.setLineDash(this.arrowDash ? [8,5] : []);
       ctx.beginPath(); ctx.moveTo(x1,y1);
       if (this.arrowCurved) ctx.quadraticCurveTo(cx,cy,x2,y2); else ctx.lineTo(x2,y2);
