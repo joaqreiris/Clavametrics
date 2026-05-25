@@ -62,13 +62,14 @@
   .cal-ribbon-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
   .cal-ribbon-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
 
-  .cal-ribbon-body { padding:16px; overflow-x:auto; }
+  .cal-ribbon-body { padding:12px 16px 14px; overflow-x:auto; scroll-behavior:smooth; scrollbar-width:none; }
+  .cal-ribbon-body::-webkit-scrollbar { display:none; }
   .cal-ribbon {
     position:relative;
     display:grid;
-    grid-template-rows: auto 38px 30px 24px;
+    grid-template-rows: auto 30px 24px 18px;
     min-width:1200px;
-    gap:8px;
+    gap:5px;
   }
 
   /* Date rail (months / weeks) */
@@ -93,29 +94,28 @@
   }
   .mc-bar {
     position:absolute;
-    top:5px; bottom:5px;
-    border-radius:6px;
-    padding:4px 9px;
+    top:3px; bottom:3px;
+    border-radius:5px;
+    padding:0 6px;
     background:var(--cm-accent-soft);
     border:1px solid var(--cm-border);
     color:var(--cm-fg-strong);
-    display:flex; align-items:center; gap:6px;
-    font:500 12px/1 var(--cm-font-sans);
+    display:flex; align-items:center;
+    font:600 9.5px/1 var(--cm-font-mono);
+    letter-spacing:0.02em;
     cursor:pointer;
     overflow:hidden;
-    transition:transform 120ms, box-shadow 120ms;
+    white-space:nowrap;
+    transition:transform 100ms, box-shadow 100ms;
   }
   .mc-bar:hover { box-shadow:var(--cm-shadow-2); transform:translateY(-1px); }
-  .mc-bar .num { font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-accent); }
-  .mc-bar .name { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mc-bar .lbl { overflow:hidden; text-overflow:ellipsis; }
   .mc-bar.is-current {
     background:var(--cm-accent);
     color:var(--cm-fg-on-accent);
     border-color:var(--cm-accent);
   }
-  .mc-bar.is-current .num { color:var(--cm-fg-on-accent); opacity:0.85; }
-  .mc-bar.is-past { background:var(--cm-bg-sunk); border-color:var(--cm-border-soft); color:var(--cm-fg-muted); }
-  .mc-bar.is-past .num { color:var(--cm-fg-faint); }
+  .mc-bar.is-past { background:var(--cm-bg-sunk); border-color:var(--cm-border-soft); color:var(--cm-fg-faint); }
 
   /* Match markers row */
   .cal-row-matches {
@@ -124,23 +124,27 @@
   }
   .match-marker {
     position:absolute;
-    top:6px;
+    top:3px;
     transform:translateX(-50%);
-    display:flex; align-items:center; gap:5px;
-    padding:3px 8px;
+    display:flex; align-items:center; gap:3px;
+    padding:2px 5px;
     background:var(--cm-surface);
     border:1px solid var(--cm-border-strong);
     border-radius:999px;
-    font:600 10.5px/1 var(--cm-font-mono);
-    letter-spacing:0.04em;
+    font:600 9px/1 var(--cm-font-mono);
+    letter-spacing:0.03em;
     color:var(--cm-fg-strong);
     white-space:nowrap;
     cursor:pointer;
+    max-width:90px;
+    overflow:hidden;
+    text-overflow:ellipsis;
   }
   .match-marker.is-home { color:var(--cm-success); border-color:var(--cm-success-bd); background:var(--cm-success-bg); }
   .match-marker.is-away { color:var(--cm-info);    border-color:var(--cm-info-bd);    background:var(--cm-info-bg); }
   .match-marker.is-key  { color:var(--cm-danger);  border-color:var(--cm-danger-bd);  background:var(--cm-danger-bg); }
-  .match-marker .ti { font-size:11px; }
+  .match-marker .ti { font-size:9px; flex-shrink:0; }
+  .match-marker .extra { font:600 8px/1 var(--cm-font-mono); opacity:0.75; margin-left:1px; }
 
   /* Today line */
   .today-line {
@@ -494,12 +498,12 @@
             </div>
 
             <!-- MC bars row — rendered by renderSeasonRibbon() from Supabase microcycles data -->
-            <div class="cal-row-mcs" id="calRibbonMcs" style="position:relative; height:38px">
+            <div class="cal-row-mcs" id="calRibbonMcs" style="position:relative; height:30px">
               <div class="today-line" id="calTodayLine" style="left:50%"></div>
             </div>
 
             <!-- Match markers row — rendered by renderSeasonRibbon() -->
-            <div class="cal-row-matches" id="calRibbonMatches" style="position:relative; height:30px"></div>
+            <div class="cal-row-matches" id="calRibbonMatches" style="position:relative; height:24px"></div>
 
             <!-- Week ticks: rendered dynamically by renderSeasonRibbon() -->
             <div class="cal-row-weeks" id="calRibbonWeeks"></div>
@@ -1118,6 +1122,14 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
   }, 0);
 });
 
+// ── Ribbon pager: scroll left/right ──────────────────────────
+document.querySelectorAll('.cal-ribbon-h .cal-pager button').forEach((btn, i) => {
+  btn.addEventListener('click', () => {
+    const rb = document.querySelector('.cal-ribbon-body');
+    if (rb) rb.scrollBy({ left: i === 0 ? -320 : 320, behavior: 'smooth' });
+  });
+});
+
 // ── Filter pills ──────────────────────────────────────────────
 document.querySelectorAll('.cal-filters').forEach(bar => {
   bar.querySelectorAll('.cal-filter-pill').forEach(p => {
@@ -1297,6 +1309,24 @@ document.querySelectorAll('.cm-btn.is-primary, [id="calNewEvt"]').forEach(btn =>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
+// ── MC name abbreviation ──────────────────────────────────────
+function abbrevMc(name) {
+  if (!name) return '?';
+  const s = name.trim();
+  if (/^MC\s*\d+$/i.test(s)) return s.replace(/\s+/, '');          // "MC 04" → "MC04"
+  const m = s.match(/^([\w-]+)\s+(\d+)$/);
+  if (m) {
+    const w = m[1].split('-')[0].slice(0, 2);                       // "Jornada 1" → "Jo1"
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() + m[2];
+  }
+  const words = s.split(/\s+/);
+  if (words.length >= 2) {
+    const last = words[words.length - 1];
+    return last.length <= 5 ? last : last.slice(0, 4);              // "Copa Final" → "Final"
+  }
+  return s.length <= 5 ? s : s.slice(0, 4);
+}
+
 // ── Season Ribbon ─────────────────────────────────────────────
 function renderSeasonRibbon(mcs) {
   if (!mcs.length) return;
@@ -1343,20 +1373,22 @@ function renderSeasonRibbon(mcs) {
     });
   }
 
-  // Dynamic week ticks (every 2 weeks)
+  // Week ticks: every 4 weeks to reduce clutter
   const weeksEl = document.getElementById('calRibbonWeeks');
   if (weeksEl) {
     weeksEl.innerHTML = '';
-    let wkDate = new Date(ribbonStart), wkNum = 1;
+    let wkDate = new Date(ribbonStart), wkNum = 1, tick = 0;
     while (wkDate <= ribbonEnd) {
-      const wPct = ((wkDate - ribbonStart) / totalMs * 100).toFixed(1);
-      const tick = document.createElement('span');
-      tick.className = 'wk';
-      tick.style.left = wPct + '%';
-      tick.textContent = `W${wkNum}`;
-      weeksEl.appendChild(tick);
+      if (tick % 2 === 0) {
+        const wPct = ((wkDate - ribbonStart) / totalMs * 100).toFixed(1);
+        const el = document.createElement('span');
+        el.className = 'wk';
+        el.style.left = wPct + '%';
+        el.textContent = `W${wkNum}`;
+        weeksEl.appendChild(el);
+      }
       wkDate = new Date(wkDate.getTime() + 14 * 86400000);
-      wkNum += 2;
+      wkNum += 2; tick++;
     }
   }
 
@@ -1374,59 +1406,80 @@ function renderSeasonRibbon(mcs) {
   }
 
   // MC bars
+  const todayPct = ((today - ribbonStart) / totalMs * 100).toFixed(2);
   const barsEl = document.getElementById('calRibbonMcs');
   if (barsEl) {
     barsEl.innerHTML = '';
-    ordered.forEach((mc, idx) => {
+    ordered.forEach(mc => {
       const left  = pct(mc.start_date);
-      const width = Math.max(0.5, parseFloat(pct(mc.end_date)) - parseFloat(pct(mc.start_date))).toFixed(2);
+      const width = Math.max(0.4, parseFloat(pct(mc.end_date)) - parseFloat(pct(mc.start_date))).toFixed(2);
       const isPast    = new Date(mc.end_date + 'T00:00:00') < today;
       const isCurrent = mc.start_date <= TODAY && mc.end_date >= TODAY;
       const bar = document.createElement('div');
       bar.className = 'mc-bar' + (isPast ? ' is-past' : isCurrent ? ' is-current' : '');
       bar.style.cssText = `left:${left}%;width:${width}%`;
       bar.title = `${mc.name||'MC'} · ${mc.start_date} → ${mc.end_date}`;
-      bar.innerHTML = `<span class="num">${mc.name || '—'}</span>`;
-      // Click → navigate to this MC in microcycle view
+      bar.innerHTML = `<span class="lbl">${abbrevMc(mc.name)}</span>`;
       bar.addEventListener('click', async () => {
         const realIdx = _allMCs.findIndex(m => m.id === mc.id);
         if (realIdx >= 0) {
           _mcIdx = realIdx; _weekOffset = 0;
-          document.querySelectorAll('.cal-segs .cal-seg').forEach(s => {
-            s.classList.toggle('is-on', s.textContent.trim() === 'Microcycle');
-          });
+          document.querySelectorAll('.cal-segs .cal-seg').forEach(s => s.classList.toggle('is-on', s.textContent.trim() === 'Microcycle'));
           switchView('microcycle');
           await loadSessions();
         }
       });
       barsEl.appendChild(bar);
     });
-    // Today line
-    const todayPct = ((today - ribbonStart) / totalMs * 100).toFixed(2);
     const tl = document.createElement('div');
     tl.className = 'today-line';
     tl.style.left = todayPct + '%';
     barsEl.appendChild(tl);
   }
 
-  // Match markers
+  // Match markers — group overlapping chips (within 4% = ~50px at 1200px)
   const matchesEl = document.getElementById('calRibbonMatches');
   if (matchesEl) {
     matchesEl.innerHTML = '';
-    ordered.forEach(mc => {
-      if (!mc.match_date) return;
-      const left   = pct(mc.match_date);
-      const isAway = mc.home_away === 'away';
-      const isCup  = /cup|copa|final/i.test(mc.rival || '');
-      const cls    = 'match-marker' + (isAway ? ' is-away' : isCup ? ' is-key' : ' is-home');
-      const icon   = isAway ? 'ti-plane' : isCup ? 'ti-trophy' : 'ti-home';
+    const markerData = ordered
+      .filter(mc => mc.match_date)
+      .map(mc => ({
+        pctVal: parseFloat(pct(mc.match_date)),
+        leftStr: pct(mc.match_date),
+        isAway: mc.home_away === 'away',
+        isCup:  /cup|copa|final/i.test(mc.rival || ''),
+        rival:  mc.rival || 'Match',
+      }));
+
+    const groups = [];
+    markerData.forEach(m => {
+      const last = groups[groups.length - 1];
+      if (last && m.pctVal - last.anchorPct < 4) { last.items.push(m); }
+      else { groups.push({ anchorPct: m.pctVal, items: [m] }); }
+    });
+
+    groups.forEach(g => {
+      const first = g.items[0];
+      const extra = g.items.length - 1;
+      const cls   = 'match-marker' + (first.isAway ? ' is-away' : first.isCup ? ' is-key' : ' is-home');
+      const icon  = first.isAway ? 'ti-plane' : first.isCup ? 'ti-trophy' : 'ti-home';
+      const label = first.rival.length > 9 ? first.rival.slice(0, 8) + '…' : first.rival;
       const marker = document.createElement('span');
       marker.className = cls;
-      marker.style.left = left + '%';
-      marker.innerHTML  = `<i class="ti ${icon}"></i>${mc.rival || 'Match'}`;
+      marker.style.left = first.leftStr + '%';
+      marker.title = g.items.map(i => i.rival).join(' · ');
+      marker.innerHTML = `<i class="ti ${icon}"></i>${label}${extra ? `<span class="extra">+${extra}</span>` : ''}`;
       matchesEl.appendChild(marker);
     });
   }
+
+  // Auto-scroll ribbon to center TODAY line
+  requestAnimationFrame(() => {
+    const rb = document.querySelector('.cal-ribbon-body');
+    if (!rb) return;
+    const totalW = rb.querySelector('.cal-ribbon')?.scrollWidth || rb.scrollWidth;
+    rb.scrollLeft = Math.max(0, parseFloat(todayPct) / 100 * totalW - rb.clientWidth / 2);
+  });
 }
 
 // ── Upcoming Events ───────────────────────────────────────────
