@@ -184,8 +184,8 @@
     white-space:nowrap;
   }
 
-  /* === Main grid: current MC detail (left) + side rails === */
-  .cal-grid { display:grid; grid-template-columns:1.55fr 1fr; gap:14px; }
+  /* === Main grid: daily plan (flex) + fixed right rail === */
+  .cal-grid { display:grid; grid-template-columns:1fr 320px; gap:14px; }
   @media (max-width:1200px){ .cal-grid { grid-template-columns:1fr; } .cal-kpis { grid-template-columns:repeat(2,1fr); } }
 
   .cal-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
@@ -298,7 +298,7 @@
   .upcoming-date .m { font:500 8.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
   .upcoming-date .d { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:3px; }
   .upcoming-body { min-width:0; }
-  .upcoming-title { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .upcoming-title { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .upcoming-meta  { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
   .upcoming-meta .badge {
     display:inline-flex; align-items:center; gap:4px;
@@ -373,6 +373,21 @@
   .mc-info .v { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:2px; }
   .mc-info .v small { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
 
+  /* Import fixtures modal */
+  .cal-import-tabs { display:flex; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); overflow:hidden; margin-bottom:14px; }
+  .cal-import-tab { flex:1; padding:8px 12px; border:0; border-right:1px solid var(--cm-border); background:transparent; cursor:pointer; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; gap:6px; transition:background 100ms; }
+  .cal-import-tab:last-child { border-right:0; }
+  .cal-import-tab.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); font-weight:600; }
+  .cal-import-tab:hover:not(.is-on) { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .fix-preview { width:100%; border-collapse:collapse; font:var(--cm-body-sm); margin-top:6px; }
+  .fix-preview th { padding:5px 10px; background:var(--cm-bg-soft); font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); border-bottom:1px solid var(--cm-border); text-align:left; }
+  .fix-preview td { padding:6px 10px; border-bottom:1px solid var(--cm-border-soft); font:var(--cm-body-sm); }
+  .fix-preview tr.conflict td { background:var(--cm-warning-bg); }
+  .fix-preview .badge-ha { display:inline-flex; align-items:center; gap:3px; padding:1px 5px; border-radius:3px; font:600 9.5px/1 var(--cm-font-mono); }
+  .fix-preview .badge-ha.home { background:var(--cm-success-bg); color:var(--cm-success); }
+  .fix-preview .badge-ha.away { background:var(--cm-info-bg); color:var(--cm-info); }
+  .fix-preview .badge-conflict { background:var(--cm-warning-bg); color:var(--cm-warning); border:1px solid var(--cm-warning-bd); border-radius:3px; padding:1px 5px; font:600 9px/1 var(--cm-font-mono); }
+
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
   /* Modal */
@@ -442,7 +457,7 @@
         </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm" id="calNewMcBtn"><i class="ti ti-calendar-plus" style="font-size:14px"></i>New microcycle</button>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import fixtures</button>
+          <button class="cm-btn is-outline is-sm" id="calImportBtn"><i class="ti ti-file-import" style="font-size:14px"></i>Import fixtures</button>
           <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New event</button>
         </div>
       </header>
@@ -804,10 +819,65 @@
   </div>
 </div>
 
+<!-- Import Fixtures modal -->
+<div class="sq-modal-backdrop" id="calImportBackdrop">
+  <div class="sq-modal" style="width:640px" role="dialog" aria-modal="true">
+    <div class="sq-modal-head">
+      <h2>Import fixtures</h2>
+      <button class="sq-modal-close" id="calImportClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <div class="cal-import-tabs">
+        <button class="cal-import-tab is-on" data-tab="paste"><i class="ti ti-clipboard-text" style="font-size:13px"></i>Paste text</button>
+        <button class="cal-import-tab" data-tab="csv"><i class="ti ti-file-spreadsheet" style="font-size:13px"></i>Upload CSV</button>
+      </div>
+
+      <!-- Paste tab -->
+      <div id="calImportPasteTab">
+        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:6px">One fixture per line — any of these formats:</div>
+        <div style="font:11.5px/1.8 var(--cm-font-mono);color:var(--cm-fg-faint);background:var(--cm-bg-sunk);padding:7px 10px;border-radius:var(--cm-r-3);border:1px solid var(--cm-border-soft);margin-bottom:10px">2026-06-15 · Nacional · home · Liga<br>15/06/2026 Nacional away<br>Jun 28 Peñarol home Copa</div>
+        <textarea id="calImportPasteArea" style="width:100%;height:140px;padding:8px 10px;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg);font:12.5px/1.6 var(--cm-font-mono);resize:vertical;outline:none;box-sizing:border-box" placeholder="Paste fixtures here…"></textarea>
+        <button class="cm-btn is-outline is-sm" id="calImportParseBtn" style="margin-top:8px"><i class="ti ti-scan" style="font-size:13px"></i>Parse</button>
+      </div>
+
+      <!-- CSV tab -->
+      <div id="calImportCsvTab" style="display:none">
+        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:8px">Columns: <code style="background:var(--cm-bg-sunk);padding:1px 4px;border-radius:3px">date, opponent, home_away, competition</code> (header row required)</div>
+        <label style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border:1px dashed var(--cm-border);border-radius:var(--cm-r-3);cursor:pointer;font:var(--cm-body-sm);color:var(--cm-fg-muted)">
+          <i class="ti ti-upload" style="font-size:16px"></i><span id="calImportFileLabel">Choose .csv file</span>
+          <input type="file" id="calImportFile" accept=".csv" style="display:none">
+        </label>
+      </div>
+
+      <!-- Preview -->
+      <div id="calImportPreview" style="display:none;margin-top:14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <span id="calImportPreviewTitle" style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)"></span>
+          <label style="display:inline-flex;align-items:center;gap:5px;font:var(--cm-body-sm);color:var(--cm-fg-muted);cursor:pointer;margin-left:auto">
+            <input type="checkbox" id="calImportOverwrite" style="width:13px;height:13px"> Overwrite conflicts
+          </label>
+        </div>
+        <div style="max-height:240px;overflow-y:auto;border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
+          <table class="fix-preview"><thead><tr><th>Date</th><th>Opponent</th><th>H/A</th><th>Competition</th><th></th></tr></thead>
+          <tbody id="calImportPreviewBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <span id="calImportSaving" style="display:none;font:var(--cm-meta);color:var(--cm-fg-muted)">Importing…</span>
+      <button class="cm-btn is-ghost is-sm" id="calImportCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="calImportConfirm" style="display:none">Import</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
+let _ribbonMeta = null; // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
+let _matchSessions = []; // training_sessions with session_type='match' from DB
 const TODAY = new Date().toISOString().split('T')[0];
 
 const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor', travel:'ti-plane' };
@@ -1122,13 +1192,41 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
   }, 0);
 });
 
-// ── Ribbon pager: scroll left/right ──────────────────────────
-document.querySelectorAll('.cal-ribbon-h .cal-pager button').forEach((btn, i) => {
-  btn.addEventListener('click', () => {
-    const rb = document.querySelector('.cal-ribbon-body');
-    if (rb) rb.scrollBy({ left: i === 0 ? -320 : 320, behavior: 'smooth' });
+// ── Ribbon pager: scroll by 2 months + live label update ─────
+(function() {
+  const rb = document.querySelector('.cal-ribbon-body');
+  if (!rb) return;
+
+  // Scroll ±2 months on arrow click
+  document.querySelectorAll('.cal-ribbon-h .cal-pager button').forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      if (!_ribbonMeta) return;
+      const { totalMs } = _ribbonMeta;
+      const ribbonEl = rb.querySelector('.cal-ribbon');
+      const totalW = (ribbonEl ? ribbonEl.scrollWidth : rb.scrollWidth) || 1;
+      const monthPx = (61 * 86400000 / totalMs) * totalW; // 2 months
+      rb.scrollBy({ left: i === 0 ? -monthPx : monthPx, behavior: 'smooth' });
+    });
   });
-});
+
+  // Update pager label on scroll
+  let _scrollTimer;
+  rb.addEventListener('scroll', () => {
+    clearTimeout(_scrollTimer);
+    _scrollTimer = setTimeout(() => {
+      if (!_ribbonMeta) return;
+      const { ribbonStart, totalMs } = _ribbonMeta;
+      const ribbonEl = rb.querySelector('.cal-ribbon');
+      const totalW = (ribbonEl ? ribbonEl.scrollWidth : rb.scrollWidth) || 1;
+      const visStart = new Date(ribbonStart.getTime() + (rb.scrollLeft / totalW) * totalMs);
+      const visEnd   = new Date(ribbonStart.getTime() + ((rb.scrollLeft + rb.clientWidth) / totalW) * totalMs);
+      const sy = visStart.getFullYear(), ey = visEnd.getFullYear();
+      const yr = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
+      const pagerLabel = document.querySelector('.cal-ribbon-h .cal-pager .label');
+      if (pagerLabel) pagerLabel.innerHTML = `${yr}<span class="yr">${MONTHS_SHORT[visStart.getMonth()]} → ${MONTHS_SHORT[visEnd.getMonth()]}</span>`;
+    }, 40);
+  });
+})();
 
 // ── Filter pills ──────────────────────────────────────────────
 document.querySelectorAll('.cal-filters').forEach(bar => {
@@ -1328,7 +1426,8 @@ function abbrevMc(name) {
 }
 
 // ── Season Ribbon ─────────────────────────────────────────────
-function renderSeasonRibbon(mcs) {
+function renderSeasonRibbon(mcs, extraMatches) {
+  extraMatches = extraMatches || _matchSessions;
   if (!mcs.length) return;
 
   const ordered = mcs.slice().sort((a, b) => a.start_date > b.start_date ? 1 : -1);
@@ -1339,6 +1438,9 @@ function renderSeasonRibbon(mcs) {
   const ribbonEnd    = new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 2, 0);
   const totalMs      = ribbonEnd - ribbonStart;
   if (totalMs <= 0) return;
+
+  // Expose metadata for pager scroll
+  _ribbonMeta = { ribbonStart, totalMs };
 
   function pct(dateStr) {
     const ms = new Date(dateStr + 'T00:00:00') - ribbonStart;
@@ -1437,18 +1539,37 @@ function renderSeasonRibbon(mcs) {
     barsEl.appendChild(tl);
   }
 
-  // Match markers — group overlapping chips (within 4% = ~50px at 1200px)
+  // Match markers — merge microcycle match_dates + imported match sessions
   const matchesEl = document.getElementById('calRibbonMatches');
   if (matchesEl) {
     matchesEl.innerHTML = '';
-    const markerData = ordered
-      .filter(mc => mc.match_date)
-      .map(mc => ({
-        pctVal: parseFloat(pct(mc.match_date)),
-        leftStr: pct(mc.match_date),
-        isAway: mc.home_away === 'away',
-        isCup:  /cup|copa|final/i.test(mc.rival || ''),
-        rival:  mc.rival || 'Match',
+    // Collect all match dates (dedupe by date, MC data takes precedence)
+    const seenDates = new Set();
+    const rawMarkers = [];
+    ordered.filter(mc => mc.match_date).forEach(mc => {
+      if (!seenDates.has(mc.match_date)) {
+        seenDates.add(mc.match_date);
+        rawMarkers.push({ date: mc.match_date, isAway: mc.home_away === 'away', isCup: /cup|copa|final/i.test(mc.rival||''), rival: mc.rival||'Match' });
+      }
+    });
+    (extraMatches||[]).forEach(s => {
+      const d = s.session_date;
+      if (!seenDates.has(d)) {
+        seenDates.add(d);
+        const notes = (s.notes||'').toLowerCase();
+        rawMarkers.push({ date: d, isAway: notes.includes('away'), isCup: false, rival: s.title.replace(/^vs\s+/i,'') });
+      }
+    });
+
+    const markerData = rawMarkers
+      .filter(m => m.date >= ordered[0].start_date && m.date <= ordered[ordered.length-1].end_date)
+      .sort((a,b) => a.date > b.date ? 1 : -1)
+      .map(m => ({
+        pctVal: parseFloat(pct(m.date)),
+        leftStr: pct(m.date),
+        isAway: m.isAway,
+        isCup:  m.isCup,
+        rival:  m.rival,
       }));
 
     const groups = [];
@@ -1546,26 +1667,40 @@ function renderCalKPIs(mcs) {
   const today = new Date();
   const in21d = new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0];
 
-  // Next match from MCs
-  const upcoming = mcs
+  // Next match: check microcycles AND imported match sessions
+  const upcomingFromMc = mcs
     .filter(mc => mc.match_date && mc.match_date >= TODAY)
-    .sort((a, b) => a.match_date > b.match_date ? 1 : -1);
+    .map(mc => ({ date: mc.match_date, label: (mc.rival||'Match') + (mc.home_away ? ' · '+mc.home_away : '') }))
+    .sort((a,b) => a.date > b.date ? 1 : -1);
+  const upcomingFromSess = _matchSessions
+    .filter(s => s.session_date >= TODAY)
+    .map(s => ({ date: s.session_date, label: s.title + (s.notes ? ' · '+s.notes : '') }))
+    .sort((a,b) => a.date > b.date ? 1 : -1);
 
-  const nextMatch = upcoming[0];
+  // Merge & dedupe
+  const allUpcoming = [...upcomingFromMc, ...upcomingFromSess]
+    .sort((a,b) => a.date > b.date ? 1 : -1)
+    .filter((v, i, arr) => arr.findIndex(x => x.date === v.date) === i);
+
+  const nextMatch = allUpcoming[0];
   const kpiNext  = document.querySelector('.cal-kpi:nth-child(1) .cal-kpi-v');
   const kpiNextT = document.querySelector('.cal-kpi:nth-child(1) .cal-kpi-t');
   if (kpiNext && nextMatch) {
-    const d    = new Date(nextMatch.match_date + 'T12:00:00');
+    const d    = new Date(nextMatch.date + 'T12:00:00');
     const diff = Math.round((d - today) / 86400000);
     kpiNext.textContent  = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    kpiNextT.textContent = `${nextMatch.rival || 'Match'} · ${nextMatch.home_away || ''} · in ${diff} day${diff === 1 ? '' : 's'}`;
+    kpiNextT.textContent = `${nextMatch.label} · in ${diff} day${diff === 1 ? '' : 's'}`;
   } else if (kpiNext) {
     kpiNext.textContent  = '—';
     kpiNextT.textContent = 'No upcoming matches';
   }
 
-  // Match density: count matches in next 21 days / 3 weeks
-  const matchCount = mcs.filter(mc => mc.match_date && mc.match_date >= TODAY && mc.match_date <= in21d).length;
+  // Match density: dedupe dates from both sources
+  const matchDates21 = new Set([
+    ...mcs.filter(mc => mc.match_date && mc.match_date >= TODAY && mc.match_date <= in21d).map(mc => mc.match_date),
+    ..._matchSessions.filter(s => s.session_date >= TODAY && s.session_date <= in21d).map(s => s.session_date),
+  ]);
+  const matchCount = matchDates21.size;
   const kpiDV = document.getElementById('calDensityV');
   const kpiDT = document.getElementById('calDensityT');
   if (kpiDV) kpiDV.innerHTML = matchCount ? `${matchCount} <sub>in 21d</sub>` : `— <sub>in 21d</sub>`;
@@ -1580,6 +1715,176 @@ function renderCalKPIs(mcs) {
     }
   }
 }
+
+// ── Import Fixtures ───────────────────────────────────────────
+let _importParsed = []; // currently parsed fixtures
+
+function parseFixtureLine(line) {
+  line = line.trim();
+  if (!line || line.startsWith('#')) return null;
+  // Find date (YYYY-MM-DD or DD/MM/YYYY or "Jun 28 2026" etc.)
+  const isoRe   = /(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/;
+  const euroRe  = /(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/;
+  const monRe   = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{1,2})(?:[,\s]+(\d{4}))?/i;
+  let dateStr = null;
+  let m;
+  if ((m = line.match(isoRe)))    dateStr = `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  else if ((m = line.match(euroRe))) dateStr = `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  else if ((m = line.match(monRe))) {
+    const MONS = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+    const yr = m[3] || String(new Date().getFullYear());
+    dateStr = `${yr}-${MONS[m[1].slice(0,3).toLowerCase()]}-${m[2].padStart(2,'0')}`;
+  }
+  if (!dateStr) return null;
+
+  const rest = line.replace(isoRe,'').replace(euroRe,'').replace(monRe,'').trim();
+  const parts = rest.split(/\s*[·|;,\t]\s*/).map(p=>p.trim()).filter(Boolean);
+  const haMatch = rest.match(/\b(home|away|local|visitante)\b/i);
+  const ha = haMatch ? (/(local|home)/i.test(haMatch[1]) ? 'home' : 'away') : 'home';
+  const rival = parts.find(p => !/^(home|away|local|visitante)$/i.test(p)) || 'Unknown';
+  const comp  = parts.filter(p => !/^(home|away|local|visitante)$/i.test(p) && p !== rival)[0] || '';
+  return { date: dateStr, rival, home_away: ha, competition: comp };
+}
+
+function parseCSVText(text) {
+  const lines = text.trim().split('\n');
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g,''));
+  const dateKey = headers.find(h => /date/.test(h)) || headers[0];
+  const rivalKey = headers.find(h => /opp|rival|team|opponent/.test(h)) || headers[1];
+  const haKey   = headers.find(h => /home|away|ha|location/.test(h)) || headers[2];
+  const compKey = headers.find(h => /comp|league|cup|liga/.test(h)) || headers[3];
+  return lines.slice(1).map(line => {
+    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
+    const obj = {}; headers.forEach((h,i) => obj[h] = cols[i]||'');
+    const raw = parseFixtureLine(`${obj[dateKey]} ${obj[rivalKey]||''} ${obj[haKey]||''}`);
+    if (!raw) return null;
+    return { ...raw, rival: obj[rivalKey]||raw.rival, home_away: obj[haKey]||raw.home_away, competition: obj[compKey]||'' };
+  }).filter(Boolean);
+}
+
+async function showImportPreview(fixtures) {
+  _importParsed = fixtures;
+  if (!fixtures.length) {
+    showCalToast('No valid fixtures found.');
+    return;
+  }
+  // Check conflicts
+  const dates = fixtures.map(f => f.date);
+  const { data: existing } = await window.sb.from('training_sessions')
+    .select('session_date').eq('club_id', _clubId).eq('session_type','match').in('session_date', dates);
+  const conflictDates = new Set((existing||[]).map(s => s.session_date.split('T')[0]));
+
+  const previewEl = document.getElementById('calImportPreview');
+  const bodyEl    = document.getElementById('calImportPreviewBody');
+  const titleEl   = document.getElementById('calImportPreviewTitle');
+  previewEl.style.display = '';
+  titleEl.textContent = `${fixtures.length} fixture${fixtures.length>1?'s':''} parsed${conflictDates.size ? ` · ${conflictDates.size} conflict${conflictDates.size>1?'s':''}` : ''}`;
+  const confBtn = document.getElementById('calImportConfirm');
+  confBtn.style.display = '';
+  confBtn.textContent = `Import ${fixtures.length} fixture${fixtures.length>1?'s':''}`;
+
+  bodyEl.innerHTML = fixtures.map(f => {
+    const isConflict = conflictDates.has(f.date);
+    return `<tr class="${isConflict?'conflict':''}">
+      <td>${f.date}</td>
+      <td>${f.rival}</td>
+      <td><span class="badge-ha ${f.home_away}">${f.home_away==='home'?'<i class="ti ti-home" style="font-size:9px"></i> Home':'<i class="ti ti-plane" style="font-size:9px"></i> Away'}</span></td>
+      <td style="color:var(--cm-fg-muted)">${f.competition||'—'}</td>
+      <td>${isConflict?'<span class="badge-conflict">conflict</span>':''}</td>
+    </tr>`;
+  }).join('');
+}
+
+(function() {
+  const backdrop = document.getElementById('calImportBackdrop');
+  const openImport = () => {
+    _importParsed = [];
+    document.getElementById('calImportPasteArea').value = '';
+    document.getElementById('calImportPreview').style.display = 'none';
+    document.getElementById('calImportConfirm').style.display = 'none';
+    document.getElementById('calImportSaving').style.display = 'none';
+    backdrop.classList.add('is-open');
+    document.getElementById('calImportPasteArea').focus();
+  };
+  const closeImport = () => backdrop.classList.remove('is-open');
+
+  document.getElementById('calImportBtn').addEventListener('click', openImport);
+  document.getElementById('calImportClose').addEventListener('click', closeImport);
+  document.getElementById('calImportCancel').addEventListener('click', closeImport);
+  backdrop.addEventListener('click', e => { if (e.target === e.currentTarget) closeImport(); });
+
+  // Tab switching
+  backdrop.querySelectorAll('.cal-import-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      backdrop.querySelectorAll('.cal-import-tab').forEach(t => t.classList.remove('is-on'));
+      tab.classList.add('is-on');
+      document.getElementById('calImportPasteTab').style.display = tab.dataset.tab === 'paste' ? '' : 'none';
+      document.getElementById('calImportCsvTab').style.display   = tab.dataset.tab === 'csv'   ? '' : 'none';
+    });
+  });
+
+  // Parse paste
+  document.getElementById('calImportParseBtn').addEventListener('click', () => {
+    const text = document.getElementById('calImportPasteArea').value;
+    const fixtures = text.trim().split('\n').map(parseFixtureLine).filter(Boolean);
+    showImportPreview(fixtures);
+  });
+
+  // CSV file
+  document.getElementById('calImportFile').addEventListener('change', async function() {
+    if (!this.files[0]) return;
+    document.getElementById('calImportFileLabel').textContent = this.files[0].name;
+    const text = await this.files[0].text();
+    const fixtures = parseCSVText(text);
+    showImportPreview(fixtures);
+  });
+
+  // Confirm import
+  document.getElementById('calImportConfirm').addEventListener('click', async () => {
+    if (!_importParsed.length) return;
+    const overwrite = document.getElementById('calImportOverwrite').checked;
+    const saving = document.getElementById('calImportSaving');
+    const confBtn = document.getElementById('calImportConfirm');
+    saving.style.display = 'inline'; confBtn.disabled = true;
+
+    if (overwrite) {
+      const conflictDates = _importParsed.map(f => f.date);
+      await window.sb.from('training_sessions')
+        .delete().eq('club_id',_clubId).eq('session_type','match').in('session_date', conflictDates);
+    } else {
+      // Check existing dates and skip
+      const dates = _importParsed.map(f => f.date);
+      const { data: ex } = await window.sb.from('training_sessions')
+        .select('session_date').eq('club_id',_clubId).eq('session_type','match').in('session_date',dates);
+      const existSet = new Set((ex||[]).map(s => s.session_date.split('T')[0]));
+      _importParsed = _importParsed.filter(f => !existSet.has(f.date));
+    }
+
+    if (_importParsed.length) {
+      const rows = _importParsed.map(f => ({
+        id: crypto.randomUUID(), club_id: _clubId,
+        title: `vs ${f.rival}`, session_type: 'match',
+        session_date: f.date, duration: null,
+        notes: [f.home_away, f.competition].filter(Boolean).join(' · ') || null,
+      }));
+      const { error } = await window.sb.from('training_sessions').insert(rows);
+      saving.style.display = 'none'; confBtn.disabled = false;
+      if (error) { showCalToast('Error: ' + error.message); return; }
+    }
+
+    saving.style.display = 'none'; confBtn.disabled = false;
+    closeImport();
+    showCalToast(`${_importParsed.length} fixture${_importParsed.length>1?'s':''} imported.`);
+    // Reload match sessions and re-render ribbon + KPIs
+    const { data: ms } = await window.sb.from('training_sessions')
+      .select('id,title,session_date,notes').eq('club_id',_clubId).eq('session_type','match').order('session_date');
+    _matchSessions = (ms||[]).map(s => ({...s, session_date: s.session_date.split('T')[0]}));
+    renderSeasonRibbon(_allMCs, _matchSessions);
+    renderCalKPIs(_allMCs);
+    renderUpcoming();
+  });
+})();
 
 // ── Boot ──────────────────────────────────────────────────────
 (async () => {
@@ -1606,8 +1911,16 @@ function renderCalKPIs(mcs) {
 
   _allMCs = mcs || [];
 
-  // Render ribbon and KPIs from real MC data
-  renderSeasonRibbon(_allMCs);
+  // Load match-type training sessions (imported fixtures)
+  const { data: matchSess } = await window.sb.from('training_sessions')
+    .select('id,title,session_date,notes')
+    .eq('club_id', _clubId)
+    .eq('session_type', 'match')
+    .order('session_date');
+  _matchSessions = (matchSess||[]).map(s => ({...s, session_date: s.session_date.split('T')[0]}));
+
+  // Render ribbon and KPIs from real MC data + match sessions
+  renderSeasonRibbon(_allMCs, _matchSessions);
   renderCalKPIs(_allMCs);
   renderUpcoming(); // async, loads sessions from DB
 
