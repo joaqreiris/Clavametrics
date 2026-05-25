@@ -913,24 +913,30 @@
   });
 
   // ── Canvas state ────────────────────────────────────────────────
-  let currentTool    = 'select';
-  let _arrowP1       = null;
-  let _previewLine   = null;
-  let _playerCounter = 1;
-  let _historyStack  = [];
-  const MAX_HISTORY  = 30;
+  let currentTool      = 'select';
+  let _arrowP1         = null;
+  let _previewLine     = null;
+  let _playerCounter   = 1;
+  let _historyStack    = [];
+  const MAX_HISTORY    = 30;
+  const _arrowData     = new Map();   // arrowId → arrow state + handles
+  let _nextArrowId     = 0;
+  let _suppressHistory = false;
+  let _handleDragging  = false;
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved'];
 
   fc.on('object:modified', pushHistory);
   fc.on('object:added',    pushHistory);
   fc.on('object:removed',  pushHistory);
 
   function pushHistory() {
-    _historyStack.push(JSON.stringify(fc.toJSON()));
+    if (_suppressHistory) return;
+    _historyStack.push(JSON.stringify(fc.toJSON(ARROW_PROPS)));
     if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
   }
 
   function updateObjStat() {
-    const objs   = fc.getObjects().filter(o => o._type !== '_preview' && o._type !== 'bezier_handle');
+    const objs   = fc.getObjects().filter(o => o._type !== '_preview' && o._type !== 'arrow_handle');
     const zones  = objs.filter(o => o._type === 'zone').length;
     const arrows = objs.filter(o => o._type === 'arrow').length;
     const other  = objs.length - zones - arrows;
@@ -1030,30 +1036,21 @@
     finishAdd(new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], strokeUniform:true }), 'zone');
   }
 
-  // ── Arrow drawing (fabric.Path + fabric.Group — no custom _render) ──
+  // ── Arrow drawing ────────────────────────────────────────────────
   let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false;
 
   function _clearPreview() {
     if (_previewLine) { fc.remove(_previewLine); _previewLine=null; }
   }
 
-  function createBezierArrow(x1,y1,x2,y2,color,dashed,curved) {
-    const len = Math.sqrt((x2-x1)**2+(y2-y1)**2);
-    if (len < 5) return;
-    const offset = curved ? len*0.20 : 0;
-    const cx = (x1+x2)/2-(y2-y1)*offset/len, cy = (y1+y2)/2+(x2-x1)*offset/len;
-
-    const lineD = curved
-      ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`
-      : `M ${x1} ${y1} L ${x2} ${y2}`;
-
-    const tx = curved?(x2-cx):(x2-x1), ty = curved?(y2-cy):(y2-y1);
-    const ang = Math.atan2(ty,tx), hL=13, hW=7;
-    const tip = { x: x2+Math.cos(ang)*2,   y: y2+Math.sin(ang)*2 };
-    const lft = { x: x2-Math.cos(ang)*hL+Math.cos(ang-Math.PI/2)*hW, y: y2-Math.sin(ang)*hL+Math.sin(ang-Math.PI/2)*hW };
-    const rgt = { x: x2-Math.cos(ang)*hL+Math.cos(ang+Math.PI/2)*hW, y: y2-Math.sin(ang)*hL+Math.sin(ang+Math.PI/2)*hW };
-    const headD = `M ${tip.x} ${tip.y} L ${lft.x} ${lft.y} L ${rgt.x} ${rgt.y} Z`;
-
+  function _buildArrowGroup(d) {
+    const { x1,y1,cx,cy,x2,y2,color,dashed,curved } = d;
+    const lineD = curved ? `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}` : `M ${x1} ${y1} L ${x2} ${y2}`;
+    const tx=curved?(x2-cx):(x2-x1), ty=curved?(y2-cy):(y2-y1);
+    const ang=Math.atan2(ty,tx), hL=13, hW=7;
+    const headD=`M ${x2+Math.cos(ang)*2} ${y2+Math.sin(ang)*2} `+
+      `L ${x2-Math.cos(ang)*hL+Math.cos(ang-Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang-Math.PI/2)*hW} `+
+      `L ${x2-Math.cos(ang)*hL+Math.cos(ang+Math.PI/2)*hW} ${y2-Math.sin(ang)*hL+Math.sin(ang+Math.PI/2)*hW} Z`;
     const linePath = new fabric.Path(lineD, {
       stroke:color, strokeWidth:dashed?2:2.5, fill:'', strokeLineCap:'round',
       strokeDashArray:dashed?[8,5]:null, strokeUniform:true, selectable:false, evented:false
@@ -1061,14 +1058,105 @@
     const headPath = new fabric.Path(headD, {
       stroke:color, strokeWidth:0.5, fill:color, strokeUniform:true, selectable:false, evented:false
     });
-
-    const grp = new fabric.Group([linePath, headPath], {
+    return new fabric.Group([linePath, headPath], {
       selectable:true, evented:true, hasControls:false, hasBorders:false,
-      perPixelTargetFind:true, _type:'arrow'
+      perPixelTargetFind:true, _type:'arrow', _arrowId:d.id,
+      _x1:d.x1, _y1:d.y1, _cx:d.cx, _cy:d.cy, _x2:d.x2, _y2:d.y2,
+      _arrowColor:d.color, _arrowDash:d.dashed, _arrowCurved:d.curved
     });
-    fc.add(grp); fc.setActiveObject(grp); fc.renderAll();
+  }
+
+  function _attachGroupHandlers(d) {
+    d.grp.on('mousedown', () => {
+      d.grp._dsl=d.grp.left; d.grp._dst=d.grp.top;
+      d._dsx1=d.x1; d._dsy1=d.y1; d._dsx2=d.x2; d._dsy2=d.y2; d._dscx=d.cx; d._dscy=d.cy;
+    });
+    d.grp.on('moving', () => {
+      if (d.grp._dsl==null) return;
+      const dx=d.grp.left-d.grp._dsl, dy=d.grp.top-d.grp._dst;
+      d.x1=d._dsx1+dx; d.y1=d._dsy1+dy;
+      d.x2=d._dsx2+dx; d.y2=d._dsy2+dy;
+      d.cx=d._dscx+dx; d.cy=d._dscy+dy;
+      const [h1,h2,hc]=d.handles;
+      if (h1){h1.left=d.x1;h1.top=d.y1;h1.setCoords();}
+      if (h2){h2.left=d.x2;h2.top=d.y2;h2.setCoords();}
+      if (hc){hc.left=d.cx;hc.top=d.cy;hc.setCoords();}
+    });
+    d.grp.on('modified', () => {
+      d.grp.set({_x1:d.x1,_y1:d.y1,_cx:d.cx,_cy:d.cy,_x2:d.x2,_y2:d.y2});
+    });
+    d.grp.on('removed', () => { _removeArrowHandles(d); _arrowData.delete(d.id); });
+  }
+
+  function _removeArrowHandles(d) {
+    if (!d.handles?.length) return;
+    _suppressHistory=true; d.handles.forEach(h=>fc.remove(h)); _suppressHistory=false;
+    d.handles=[];
+  }
+  function _hideAllArrowHandles() { _arrowData.forEach(d=>_removeArrowHandles(d)); }
+
+  function _showArrowHandles(arrowId) {
+    const d=_arrowData.get(arrowId); if (!d) return;
+    _removeArrowHandles(d);
+    const hs={radius:7,fill:'rgba(255,255,255,0.9)',stroke:d.color,strokeWidth:2,
+      originX:'center',originY:'center',hasControls:false,hasBorders:false,
+      selectable:true,evented:true,_type:'arrow_handle',_arrowId:arrowId};
+    const h1=new fabric.Circle({...hs,left:d.x1,top:d.y1,_role:'p1'});
+    const h2=new fabric.Circle({...hs,left:d.x2,top:d.y2,_role:'p2'});
+    h1.on('mousedown',()=>{_handleDragging=true;});
+    h2.on('mousedown',()=>{_handleDragging=true;});
+    h1.on('moving',()=>{d.x1=h1.left;d.y1=h1.top;_rebuildArrow(arrowId);});
+    h2.on('moving',()=>{d.x2=h2.left;d.y2=h2.top;_rebuildArrow(arrowId);});
+    d.handles=[h1,h2];
+    if (d.curved) {
+      const hc=new fabric.Circle({...hs,left:d.cx,top:d.cy,_role:'pc',
+        radius:6,fill:'rgba(251,191,36,0.25)',strokeDashArray:[4,2]});
+      hc.on('mousedown',()=>{_handleDragging=true;});
+      hc.on('moving',()=>{d.cx=hc.left;d.cy=hc.top;_rebuildArrow(arrowId);});
+      d.handles.push(hc);
+    }
+    _suppressHistory=true; d.handles.forEach(h=>fc.add(h)); _suppressHistory=false;
+    fc.renderAll();
+  }
+
+  function _rebuildArrow(arrowId) {
+    const d=_arrowData.get(arrowId); if (!d) return;
+    const old=d.grp;
+    d.grp=_buildArrowGroup(d);
+    _suppressHistory=true; fc.remove(old); fc.add(d.grp); _suppressHistory=false;
+    _attachGroupHandlers(d);
+    fc.requestRenderAll();
+  }
+
+  function _rebuildArrowDataFromCanvas() {
+    _arrowData.forEach(d=>_removeArrowHandles(d));
+    _arrowData.clear();
+    fc.getObjects().filter(o=>o._type==='arrow'&&o._x1!=null).forEach(grp=>{
+      const d={
+        id:grp._arrowId||(++_nextArrowId),
+        x1:grp._x1,y1:grp._y1,cx:grp._cx,cy:grp._cy,x2:grp._x2,y2:grp._y2,
+        color:grp._arrowColor||'#FBBF24',dashed:!!grp._arrowDash,curved:!!grp._arrowCurved,
+        grp,handles:[]
+      };
+      if (d.id>_nextArrowId) _nextArrowId=d.id;
+      _arrowData.set(d.id,d);
+      grp._arrowId=d.id;
+      _attachGroupHandlers(d);
+    });
+  }
+
+  function createBezierArrow(x1,y1,x2,y2,color,dashed,curved) {
+    const len=Math.sqrt((x2-x1)**2+(y2-y1)**2); if (len<5) return;
+    const offset=curved?len*0.20:0;
+    const cx=(x1+x2)/2-(y2-y1)*offset/len, cy=(y1+y2)/2+(x2-x1)*offset/len;
+    const id=++_nextArrowId;
+    const d={id,x1,y1,cx,cy,x2,y2,color,dashed,curved,grp:null,handles:[]};
+    d.grp=_buildArrowGroup(d);
+    _arrowData.set(id,d);
+    _attachGroupHandlers(d);
+    fc.add(d.grp); fc.setActiveObject(d.grp); fc.renderAll();
     setTool('select');
-    document.querySelectorAll('.pl-dock-btn').forEach(b => b.classList.remove('is-on'));
+    document.querySelectorAll('.pl-dock-btn').forEach(b=>b.classList.remove('is-on'));
   }
 
   fc.on('mouse:down', e => {
@@ -1088,6 +1176,21 @@
     fc.add(_previewLine); fc.renderAll();
   });
 
+  fc.on('selection:created', ({selected}) => {
+    const obj=selected?.[0];
+    if (obj?._type==='arrow_handle') return;
+    _hideAllArrowHandles();
+    if (obj?._type==='arrow') _showArrowHandles(obj._arrowId);
+  });
+  fc.on('selection:updated', ({selected}) => {
+    const obj=selected?.[0];
+    if (obj?._type==='arrow_handle') return;
+    _hideAllArrowHandles();
+    if (obj?._type==='arrow') _showArrowHandles(obj._arrowId);
+  });
+  fc.on('selection:cleared', ()=>_hideAllArrowHandles());
+  fc.on('mouse:up', ()=>{ if (_handleDragging){_handleDragging=false;pushHistory();} });
+
   // ── Keyboard handlers ───────────────────────────────────────────
   let _clipboard = null;
   document.addEventListener('keydown', e => {
@@ -1101,15 +1204,22 @@
     if (e.key==='Delete'||e.key==='Backspace') {
       const active = fc.getActiveObject();
       if (!active) return;
-      if (active.type==='activeSelection') { active.getObjects().forEach(o=>fc.remove(o)); fc.discardActiveObject(); }
-      else fc.remove(active);
+      if (active._type==='arrow_handle') {
+        const d=_arrowData.get(active._arrowId);
+        if (d) fc.remove(d.grp);
+        fc.discardActiveObject();
+      } else if (active.type==='activeSelection') {
+        active.getObjects().forEach(o=>fc.remove(o)); fc.discardActiveObject();
+      } else {
+        fc.remove(active);
+      }
       fc.renderAll(); return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='z') {
       if (_historyStack.length<2) return;
       _historyStack.pop();
       const prev = _historyStack[_historyStack.length-1];
-      if (prev) fc.loadFromJSON(prev, ()=>fc.renderAll());
+      if (prev) fc.loadFromJSON(prev, ()=>{ _rebuildArrowDataFromCanvas(); fc.renderAll(); });
       return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='c') {
@@ -1438,8 +1548,9 @@
     if (ex.game_type_enabled) setGameType(ex.game_type || null);
 
     // Canvas
+    _arrowData.clear();
     if (ex.objects_json) {
-      fc.loadFromJSON(ex.objects_json, () => fc.renderAll());
+      fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); fc.renderAll(); });
     } else {
       fc.clear(); fc.renderAll();
     }
@@ -1570,7 +1681,7 @@
       focus:             currentFocus.length ? currentFocus : null,
       game_type_enabled: currentGameTypeOn,
       game_type:         currentGameTypeOn ? (currentGameType || null) : null,
-      objects_json:      fc.toJSON()
+      objects_json:      fc.toJSON(ARROW_PROPS)
     };
 
     const { error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId);
