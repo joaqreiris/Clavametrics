@@ -385,6 +385,8 @@
   .pl-dock-btn.is-on { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
   .pl-dock-btn .ti { font-size:18px; color:var(--cm-fg-muted); }
   .pl-dock-btn.is-on .ti { color:var(--cm-accent); }
+  .pl-dock-btn svg { display:block; width:18px; height:18px; color:var(--cm-fg-muted); }
+  .pl-dock-btn.is-on svg { color:var(--cm-accent); }
   .pl-dock-btn .p { width:18px; height:18px; border-radius:50%; }
   .pl-dock-btn .p.t1 { background:#15803D; }
   .pl-dock-btn .p.t2 { background:#1D4ED8; }
@@ -641,10 +643,18 @@
           </div>
           <div class="pl-dock-grp">
             <span class="lbl">Lines</span>
-            <button class="pl-dock-btn" title="Pass"><i class="ti ti-arrow-right"></i></button>
-            <button class="pl-dock-btn is-on" title="Run"><i class="ti ti-arrow-curve-right"></i></button>
-            <button class="pl-dock-btn" title="Dribble"><i class="ti ti-line-dashed"></i></button>
-            <button class="pl-dock-btn" title="Curve"><i class="ti ti-arrow-curve-right"></i></button>
+            <button class="pl-dock-btn" title="Pass">
+              <svg viewBox="0 0 24 24" fill="none"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+            <button class="pl-dock-btn is-on" title="Run">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+            <button class="pl-dock-btn" title="Dribble">
+              <svg viewBox="0 0 24 24" fill="none"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
+            </button>
+            <button class="pl-dock-btn" title="Curve">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
+            </button>
           </div>
           <div class="pl-dock-grp">
             <span class="lbl">Zones</span>
@@ -656,6 +666,20 @@
             <span class="lbl">Text</span>
             <button class="pl-dock-btn" title="Label"><i class="ti ti-typography"></i></button>
             <button class="pl-dock-btn" title="Number"><i class="ti ti-123"></i></button>
+          </div>
+          <div class="pl-dock-grp">
+            <span class="lbl">Crests</span>
+            <button class="pl-dock-btn" title="HomeCrest" id="plDockHomeCrest">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+                <path d="M12 3 L20 6 L20 13 Q20 18 12 21 Q4 18 4 13 L4 6 Z"/>
+                <text x="12" y="15.5" text-anchor="middle" font-size="7" font-weight="700" stroke="none" fill="currentColor">H</text>
+              </svg>
+            </button>
+            <button class="pl-dock-btn" title="RivalCrest" id="plDockRivalCrest">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="3 2">
+                <path d="M12 3 L20 6 L20 13 Q20 18 12 21 Q4 18 4 13 L4 6 Z"/>
+              </svg>
+            </button>
           </div>
           <div style="flex:1"></div>
           <span class="stat" id="plObjStat" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
@@ -785,6 +809,11 @@
   fc.freeDrawingBrush.color = '#FBBF24';
   fc.freeDrawingBrush.width = 3;
 
+  // Keep stroke width constant on free-drawn paths regardless of scale
+  fc.on('path:created', e => {
+    if (e.path) e.path.set({ strokeUniform: true, _type: 'drawing' });
+  });
+
   document.querySelector('[title="Undo"]')?.addEventListener('click', () => {
     if (_historyStack.length < 2) return;
     _historyStack.pop();
@@ -829,7 +858,7 @@
     finishAdd(new fabric.Group([red,white]), 'pole');
   }
   function addGoal() {
-    finishAdd(new fabric.Rect({ width:80, height:32, fill:'rgba(255,255,255,0.08)', stroke:'#fff', strokeWidth:3, rx:2 }), 'goal');
+    finishAdd(new fabric.Rect({ width:80, height:32, fill:'rgba(255,255,255,0.08)', stroke:'#fff', strokeWidth:3, rx:2, strokeUniform:true }), 'goal');
   }
   function addMannequin() {
     const head = new fabric.Circle({ radius:6, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1.2, left:0, top:-22, originX:'center', originY:'center' });
@@ -837,17 +866,17 @@
     finishAdd(new fabric.Group([head,body]), 'mannequin');
   }
   function addZoneRect() {
-    finishAdd(new fabric.Rect({ width:120, height:80, fill:'rgba(34,197,94,0.12)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], rx:4 }), 'zone');
+    finishAdd(new fabric.Rect({ width:120, height:80, fill:'rgba(34,197,94,0.12)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], rx:4, strokeUniform:true }), 'zone');
   }
   function addZoneCircle() {
-    finishAdd(new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3] }), 'zone');
+    finishAdd(new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], strokeUniform:true }), 'zone');
   }
 
   // ── BezierArrow ─────────────────────────────────────────────────
   const BezierArrow = fabric.util.createClass(fabric.Object, {
     type: 'BezierArrow', _type: 'arrow',
     initialize(options) {
-      this.callSuper('initialize', { ...options, left:0, top:0, originX:'left', originY:'top',
+      this.callSuper('initialize', { ...options, left:0, top:0, originX:'center', originY:'center',
         hasControls:false, hasBorders:false, selectable:true, perPixelTargetFind:true });
       this.x1=options.x1||0; this.y1=options.y1||0; this.cx=options.cx||0; this.cy=options.cy||0;
       this.x2=options.x2||0; this.y2=options.y2||0;
@@ -989,6 +1018,42 @@
         _clipboard=cloned; fc.setActiveObject(cloned); fc.requestRenderAll();
       });
     }
+  });
+
+  // ── Team crests ─────────────────────────────────────────────────
+  function addCrest(url, opacity = 0.45, label = '') {
+    if (!url) return;
+    fabric.Image.fromURL(url, img => {
+      if (!img) { alert('Could not load image. Check that the URL is accessible.'); return; }
+      const maxSide = 90;
+      const scale = maxSide / Math.max(img.width, img.height, 1);
+      img.set({
+        left: fc.width / 2,
+        top:  fc.height / 2,
+        originX: 'center',
+        originY: 'center',
+        scaleX: scale,
+        scaleY: scale,
+        opacity,
+        _type: 'crest',
+        _label: label,
+      });
+      fc.add(img);
+      fc.setActiveObject(img);
+      fc.renderAll();
+      setTool('select');
+    }, { crossOrigin: 'anonymous' });
+  }
+
+  document.getElementById('plDockHomeCrest')?.addEventListener('click', () => {
+    const url = club?.logo_url;
+    if (url) { addCrest(url, 0.45, 'home'); }
+    else { alert('No club logo configured. Set it in Admin settings.'); }
+  });
+
+  document.getElementById('plDockRivalCrest')?.addEventListener('click', () => {
+    const url = prompt('Rival team crest URL (image link):');
+    if (url?.trim()) addCrest(url.trim(), 0.45, 'rival');
   });
 
   // ── Dock buttons ────────────────────────────────────────────────
