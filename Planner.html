@@ -268,7 +268,7 @@
   /* === FIELD CANVAS === */
   .pl-canvas-wrap {
     position:relative;
-    overflow:visible;
+    overflow:hidden;
     background:var(--cm-bg-sunk);
     display:flex; flex-direction:column;
   }
@@ -367,7 +367,6 @@
     display:flex; align-items:center; gap:8px;
     padding:10px 14px;
     overflow-x:auto;
-    position:relative; z-index:10;
   }
   .pl-dock-grp { display:flex; gap:6px; align-items:center; padding:4px 8px; border-right:1px solid var(--cm-border-soft); }
   .pl-dock-grp:last-child { border-right:0; }
@@ -404,9 +403,9 @@
   .pl-ex-del:hover { background:var(--cm-danger-bg); }
   /* Polygon shape dropdown */
   .pl-poly-wrap { position:relative; }
-  .pl-poly-menu { position:absolute; bottom:calc(100% + 4px); left:50%; transform:translateX(-50%);
+  .pl-poly-menu { position:fixed;
     background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px;
-    padding:4px; min-width:130px; z-index:500; box-shadow:var(--cm-shadow-2); }
+    padding:4px; min-width:130px; z-index:9000; box-shadow:var(--cm-shadow-2); }
   .pl-poly-opt { display:block; width:100%; text-align:left; background:none; border:0;
     padding:5px 10px; border-radius:5px; cursor:pointer; font:400 12px/1.4 var(--cm-font-sans);
     color:var(--cm-fg-muted); white-space:nowrap; }
@@ -1644,7 +1643,12 @@
   const _polyMenu=document.getElementById('plPolyMenu');
   _polyBtn?.addEventListener('click',e=>{
     e.stopPropagation();
-    _polyMenu.style.display=_polyMenu.style.display==='none'?'':'none';
+    if(_polyMenu.style.display!=='none'){_polyMenu.style.display='none';return;}
+    const r=_polyBtn.getBoundingClientRect();
+    _polyMenu.style.left=(r.left+r.width/2)+'px';
+    _polyMenu.style.top=(r.top-4)+'px';
+    _polyMenu.style.transform='translateX(-50%) translateY(-100%)';
+    _polyMenu.style.display='';
   });
   document.querySelectorAll('.pl-poly-opt').forEach(opt=>{
     opt.addEventListener('click',e=>{
