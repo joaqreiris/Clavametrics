@@ -12,9 +12,6 @@
 <style>
   body.cm { background: var(--cm-bg); }
 
-  /* Shared shell */
-
-  /* Topbar */
   .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
   .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
   .hub-crumb .ti { font-size:14px; }
@@ -38,42 +35,88 @@
     overflow-y:auto;
     display:flex; flex-direction:column;
   }
-  .pl-section { padding:16px 18px; border-bottom:1px solid var(--cm-border-soft); }
+  .pl-section { padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
   .pl-section:last-child { border-bottom:0; }
-  .pl-section h3 { font:600 12px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
-  .pl-section h3 .ti { font-size:13px; }
+  .pl-section h3 { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .pl-section h3 .ti { font-size:12px; }
 
-  .pl-session-row {
-    display:flex; align-items:center; gap:10px;
-    padding:8px;
+  /* Exercise summary card */
+  .pl-ex-summary {
     background:var(--cm-bg-soft);
     border:1px solid var(--cm-border);
-    border-radius:8px;
-    margin-bottom:14px;
+    border-radius:9px;
+    overflow:hidden;
+    margin-bottom:10px;
   }
-  .pl-session-ic {
-    width:34px; height:34px;
-    border-radius:8px;
+  .pl-ex-summary-head {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 12px;
+    border-bottom:1px solid var(--cm-border-soft);
+  }
+  .pl-ex-summary-ic {
+    width:32px; height:32px;
+    border-radius:7px;
     background:var(--cm-accent);
     color:var(--cm-fg-on-accent);
     display:flex; align-items:center; justify-content:center;
     flex-shrink:0;
   }
-  .pl-session-ic .ti { font-size:17px; }
-  .pl-session-info { flex:1; min-width:0; }
-  .pl-session-info h4 { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .pl-session-info p  { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
-
-  .pl-grid { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:14px; }
-  .pl-stat {
-    background:var(--cm-bg-soft);
-    border:1px solid var(--cm-border-soft);
-    border-radius:7px;
-    padding:8px 10px;
+  .pl-ex-summary-ic .ti { font-size:16px; }
+  .pl-ex-summary-info { flex:1; min-width:0; }
+  .pl-ex-summary-info h4 { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl-ex-summary-info p  { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .pl-ex-summary-grid {
+    display:grid; grid-template-columns:1fr 1fr;
   }
-  .pl-stat-l { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:4px; }
-  .pl-stat-v { font:600 16px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
-  .pl-stat-v sub { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:3px; }
+  .pl-ex-summary-cell {
+    padding:8px 12px;
+    border-right:1px solid var(--cm-border-soft);
+    border-bottom:1px solid var(--cm-border-soft);
+  }
+  .pl-ex-summary-cell:nth-child(2n) { border-right:0; }
+  .pl-ex-summary-cell:nth-last-child(-n+2) { border-bottom:0; }
+  .pl-ex-summary-cell .l { font:500 9.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:3px; }
+  .pl-ex-summary-cell .v { font:600 15px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pl-ex-summary-cell .v sub { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+
+  /* Form fields */
+  .pl-form-field { display:flex; flex-direction:column; gap:4px; }
+  .pl-form-label { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .pl-form-input {
+    width:100%; padding:7px 9px;
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border);
+    border-radius:6px;
+    font:500 12.5px/1 var(--cm-font-sans);
+    color:var(--cm-fg);
+    outline:none;
+    box-sizing:border-box;
+    transition:border-color 120ms;
+  }
+  .pl-form-input:focus { border-color:var(--cm-accent); }
+  .pl-form-row { display:grid; gap:8px; }
+  .pl-form-row.cols-3 { grid-template-columns:1fr 1fr 1fr; }
+  .pl-form-row.cols-2 { grid-template-columns:1fr 1fr; }
+
+  /* Orientation selector */
+  .pl-orient-row { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+  .pl-orient-btn {
+    padding:7px 4px;
+    border-radius:6px;
+    border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft);
+    color:var(--cm-fg-muted);
+    font:600 9px/1 var(--cm-font-mono);
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:all 120ms;
+  }
+  .pl-orient-btn:hover { border-color:var(--cm-border-strong); color:var(--cm-fg); }
+  .pl-orient-btn.is-on[data-orient="ACTIVATION"] { background:var(--cm-warning-bg); color:var(--cm-warning); border-color:var(--cm-warning-bd); }
+  .pl-orient-btn.is-on[data-orient="STRENGTH"]   { background:var(--cm-danger-bg);  color:var(--cm-danger);  border-color:var(--cm-danger-bd); }
+  .pl-orient-btn.is-on[data-orient="VELOCITY"]   { background:var(--cm-info-bg);    color:var(--cm-info);    border-color:var(--cm-info-bd); }
+  .pl-orient-btn.is-on[data-orient="ENDURANCE"]  { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
 
   /* m² calculator */
   .pl-m2 {
@@ -81,7 +124,7 @@
     border:1px solid var(--cm-border-soft);
     border-radius:8px;
     padding:12px;
-    margin-bottom:12px;
+    margin-bottom:10px;
   }
   .pl-m2-row { display:flex; align-items:baseline; justify-content:space-between; }
   .pl-m2-l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
@@ -92,64 +135,135 @@
     display:flex; align-items:center; gap:6px;
     padding:6px 10px;
     border-radius:6px;
-    font:600 11.5px/1 var(--cm-font-mono);
+    font:600 11px/1 var(--cm-font-mono);
     letter-spacing:0.06em;
     text-transform:uppercase;
-    background:var(--cm-warning-bg);
-    color:var(--cm-warning);
-    border:1px solid var(--cm-warning-bd);
+    border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft);
+    color:var(--cm-fg-muted);
+    transition:all 200ms;
   }
   .pl-m2-orient .ti { font-size:13px; }
+  .pl-m2-orient.o-act { background:var(--cm-warning-bg); color:var(--cm-warning); border-color:var(--cm-warning-bd); }
+  .pl-m2-orient.o-str { background:var(--cm-danger-bg);  color:var(--cm-danger);  border-color:var(--cm-danger-bd); }
+  .pl-m2-orient.o-vel { background:var(--cm-info-bg);    color:var(--cm-info);    border-color:var(--cm-info-bd); }
+  .pl-m2-orient.o-end { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+
   .pl-m2-ref { display:grid; grid-template-columns: repeat(4,1fr); gap:3px; margin-top:8px; }
-  .pl-m2-ref div { padding:4px 5px; border-radius:4px; font:600 9.5px/1 var(--cm-font-mono); text-align:center; letter-spacing:0.04em; }
+  .pl-m2-ref div {
+    padding:4px 3px; border-radius:4px;
+    font:600 9px/1 var(--cm-font-mono);
+    text-align:center; letter-spacing:0.04em;
+    opacity:0.35;
+    transition:opacity 150ms;
+  }
+  .pl-m2-ref div.is-active { opacity:1; }
   .pl-m2-ref .r-act { background:var(--cm-warning-bg); color:var(--cm-warning); }
   .pl-m2-ref .r-str { background:var(--cm-danger-bg);  color:var(--cm-danger); }
   .pl-m2-ref .r-vel { background:var(--cm-info-bg);    color:var(--cm-info); }
   .pl-m2-ref .r-end { background:var(--cm-success-bg); color:var(--cm-success); }
 
-  /* Exercises list */
+  .pl-stat-grid { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
+  .pl-stat {
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft);
+    border-radius:6px;
+    padding:7px 9px;
+  }
+  .pl-stat-l { font:500 9.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:3px; }
+  .pl-stat-v { font:600 14px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
+  .pl-stat-v sub { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+
+  /* Exercise list */
   .pl-ex {
-    display:flex; align-items:center; gap:10px;
-    padding:9px 10px;
+    display:flex; align-items:center; gap:8px;
+    padding:8px 9px;
     border:1px solid var(--cm-border-soft);
     border-radius:7px;
-    margin-bottom:5px;
+    margin-bottom:4px;
     cursor:pointer;
     background:var(--cm-surface);
+    transition:border-color 120ms, background 120ms;
   }
   .pl-ex:hover { border-color:var(--cm-border-strong); background:var(--cm-bg-soft); }
   .pl-ex.is-active { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
   .pl-ex-n {
-    width:22px; height:22px;
-    border-radius:6px;
+    width:20px; height:20px;
+    border-radius:5px;
     background:var(--cm-bg-soft);
     border:1px solid var(--cm-border);
     display:flex; align-items:center; justify-content:center;
-    font:600 11px/1 var(--cm-font-mono);
+    font:600 10px/1 var(--cm-font-mono);
     color:var(--cm-fg-strong);
     flex-shrink:0;
   }
   .pl-ex.is-active .pl-ex-n { background:var(--cm-accent); color:var(--cm-fg-on-accent); border-color:var(--cm-accent); }
   .pl-ex-body { flex:1; min-width:0; }
-  .pl-ex-title { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .pl-ex-meta  { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
-  .pl-ex-d { display:flex; align-items:center; gap:3px; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
-  .pl-ex-d .ti { font-size:11px; }
+  .pl-ex-title { font:600 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl-ex-meta  { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .pl-ex-badge {
+    flex-shrink:0;
+    padding:2px 6px;
+    border-radius:4px;
+    font:700 8.5px/1 var(--cm-font-mono);
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+  }
+  .pl-ex-badge.o-act { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .pl-ex-badge.o-str { background:var(--cm-danger-bg);  color:var(--cm-danger); }
+  .pl-ex-badge.o-vel { background:var(--cm-info-bg);    color:var(--cm-info); }
+  .pl-ex-badge.o-end { background:var(--cm-success-bg); color:var(--cm-success); }
+  .pl-ex-badge.o-none { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
+
+  /* Sub-drills list */
+  .pl-drill {
+    display:flex; align-items:center; gap:8px;
+    padding:7px 9px;
+    border:1px solid var(--cm-border-soft);
+    border-radius:6px;
+    margin-bottom:4px;
+    background:var(--cm-surface);
+  }
+  .pl-drill-n {
+    width:18px; height:18px;
+    border-radius:4px;
+    background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border);
+    display:flex; align-items:center; justify-content:center;
+    font:600 9.5px/1 var(--cm-font-mono);
+    color:var(--cm-fg-muted);
+    flex-shrink:0;
+  }
+  .pl-drill-body { flex:1; min-width:0; }
+  .pl-drill-name { font:500 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pl-drill-meta { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .pl-drill-del {
+    width:22px; height:22px;
+    border-radius:5px; border:0;
+    background:transparent;
+    color:var(--cm-fg-faint);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .pl-drill-del:hover { background:var(--cm-danger-bg); color:var(--cm-danger); }
+  .pl-drill-del .ti { font-size:12px; }
 
   .pl-add-btn {
     width:100%;
-    margin-top:8px;
-    display:flex; align-items:center; justify-content:center; gap:6px;
-    padding:9px;
+    margin-top:6px;
+    display:flex; align-items:center; justify-content:center; gap:5px;
+    padding:8px;
     border:1px dashed var(--cm-border-strong);
-    border-radius:7px;
+    border-radius:6px;
     background:transparent;
     color:var(--cm-fg-muted);
-    font:500 12.5px/1 var(--cm-font-sans);
+    font:500 12px/1 var(--cm-font-sans);
     cursor:pointer;
+    transition:all 120ms;
   }
   .pl-add-btn:hover { border-color:var(--cm-accent); color:var(--cm-fg); }
-  .pl-add-btn .ti { font-size:14px; }
+  .pl-add-btn .ti { font-size:13px; }
 
   /* === FIELD CANVAS === */
   .pl-canvas-wrap {
@@ -158,7 +272,6 @@
     background:var(--cm-bg-sunk);
     display:flex; flex-direction:column;
   }
-
   .pl-canvas-bar {
     display:flex; align-items:center; gap:8px;
     padding:10px 14px;
@@ -175,11 +288,10 @@
   .pl-canvas-bar .stat { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
   .pl-canvas-bar .stat strong { color:var(--cm-fg); font-weight:600; }
 
-  /* Fabric.js canvas overlay */
+  /* Fabric.js canvas */
   .canvas-container { position:absolute!important; inset:0!important; width:100%!important; height:100%!important; }
   #plCanvas, .canvas-container canvas { position:absolute!important; inset:0; width:100%!important; height:100%!important; }
 
-  /* The field */
   .pl-field {
     position:relative;
     flex:1;
@@ -193,7 +305,6 @@
     border:1px solid rgba(0,0,0,0.2);
     min-height:520px;
   }
-  /* Subtle vignette */
   .pl-field::after {
     content:"";
     position:absolute; inset:0;
@@ -201,17 +312,23 @@
     pointer-events:none;
   }
 
-  /* Tactical objects */
-  .obj {
+  .pl-field-tag {
     position:absolute;
-    transform: translate(-50%, -50%);
-    cursor:grab;
-    user-select:none;
-    transition: box-shadow 120ms, transform 0ms;
+    top:14px; left:14px;
+    background:rgba(0,0,0,0.6);
+    color:#fff;
+    padding:6px 12px;
+    border-radius:7px;
+    backdrop-filter:blur(6px);
+    z-index:10;
+    font:500 12px/1 var(--cm-font-mono);
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:8px;
   }
-  .obj.selected { box-shadow:0 0 0 2px var(--cm-accent), 0 0 18px rgba(34,197,94,0.5); border-radius:50%; }
+  .pl-field-tag .dot { width:7px; height:7px; border-radius:50%; background:var(--cm-success); box-shadow:0 0 8px var(--cm-success); }
 
-  /* Players — with club crest watermark backdrop */
+  /* Players */
   .player {
     width:40px; height:40px;
     border-radius:50%;
@@ -225,16 +342,13 @@
     overflow:hidden;
     isolation:isolate;
   }
-  /* Color base */
-  .player.t1 { background-color:#15803D; }    /* home green */
-  .player.t2 { background-color:#1D4ED8; }    /* opponent blue */
+  .player.t1 { background-color:#15803D; }
+  .player.t2 { background-color:#1D4ED8; }
   .player.t3 { background-color:#FACC15; color:#0A0A0A; text-shadow:none; }
   .player.t4 { background-color:#E5E7EB; color:#0A0A0A; border-color:rgba(0,0,0,0.2); text-shadow:none; }
-  /* Crest watermark inside the chip */
   .player::before {
     content:"";
-    position:absolute;
-    inset:0;
+    position:absolute; inset:0;
     background-image: var(--player-crest, none);
     background-size: 84% 84%;
     background-repeat:no-repeat;
@@ -243,99 +357,10 @@
     mix-blend-mode: screen;
     z-index:-1;
   }
-  /* Home (t1) shows OUR club crest */
   .player.t1 { --player-crest: url('assets/sample-club-crest.png'); }
-  /* Opponent (t2) shows the rival crest (set via JS data-opponent on .pl-field) */
-  .pl-field .player.t2 { --player-crest: var(--opponent-crest, none); }
-  /* Player number on top of crest */
   .player > span { position:relative; z-index:1; }
 
-  /* Ball */
-  .ball {
-    width:18px; height:18px;
-    border-radius:50%;
-    background:radial-gradient(circle at 30% 30%, #fff, #d4d4d4 70%, #777);
-    border:1px solid rgba(0,0,0,0.5);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.45);
-  }
-  .ball::after {
-    content:""; position:absolute; inset:3px;
-    border-radius:50%;
-    background:
-      radial-gradient(circle at 50% 50%, transparent 60%, rgba(0,0,0,0.25) 70%);
-  }
-
-  /* Cone */
-  .cone {
-    width:0; height:0;
-    border-left:9px solid transparent;
-    border-right:9px solid transparent;
-    border-bottom:22px solid #f97316;
-    filter:drop-shadow(0 2px 3px rgba(0,0,0,0.45));
-  }
-  .cone::after {
-    content:""; position:absolute;
-    width:18px; height:3px; background:#FACC15;
-    border-radius:1px;
-    top:15px; left:-9px;
-  }
-
-  /* Pole */
-  .pole {
-    width:4px; height:50px;
-    background: linear-gradient(180deg, #DC2626 0%, #DC2626 50%, #fff 50%, #fff 100%);
-    border-radius:2px;
-    box-shadow: 0 2px 3px rgba(0,0,0,0.4);
-  }
-  .pole::before {
-    content:""; position:absolute;
-    width:14px; height:14px;
-    border-radius:50%;
-    background:rgba(0,0,0,0.35);
-    bottom:-5px; left:-5px;
-    filter:blur(3px);
-  }
-
-  /* Goal */
-  .goal {
-    width:80px; height:32px;
-    border:2.5px solid #fff;
-    border-top:0;
-    box-shadow:0 4px 12px rgba(0,0,0,0.4);
-  }
-  .goal::before {
-    content:""; position:absolute;
-    inset:0;
-    background:
-      repeating-linear-gradient(0deg, transparent 0, transparent 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 6px),
-      repeating-linear-gradient(90deg, transparent 0, transparent 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 6px);
-  }
-
-  /* Zone box */
-  .zone {
-    border:2.5px dashed #FBBF24;
-    background:rgba(251,191,36,0.10);
-    border-radius:6px;
-  }
-  .zone .lbl {
-    position:absolute;
-    top:-22px; left:6px;
-    font:700 10px/1 var(--cm-font-mono);
-    letter-spacing:0.06em;
-    color:#FBBF24;
-    background:rgba(0,0,0,0.7);
-    padding:4px 7px;
-    border-radius:4px;
-  }
-
-  /* Arrows for passing lines */
-  .arrows-svg {
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    pointer-events:none;
-  }
-
-  /* Bottom dock — object palette */
+  /* Bottom dock */
   .pl-dock {
     background:var(--cm-surface);
     border-top:1px solid var(--cm-border);
@@ -366,7 +391,6 @@
   .pl-dock-btn .p.t3 { background:#FACC15; }
   .pl-dock-btn .p.t4 { background:#E5E7EB; border:1px solid rgba(0,0,0,0.2); }
 
-  /* Color FAB on field */
   .pl-field-fab {
     position:absolute;
     bottom:14px; right:14px;
@@ -382,25 +406,13 @@
     backdrop-filter:blur(6px);
     cursor:pointer;
     display:flex; align-items:center; justify-content:center;
+    transition:background 120ms;
   }
   .pl-field-fab button:hover { background:rgba(0,0,0,0.75); }
   .pl-field-fab button .ti { font-size:16px; }
 
-  .pl-field-tag {
-    position:absolute;
-    top:14px; left:14px;
-    background:rgba(0,0,0,0.6);
-    color:#fff;
-    padding:6px 12px;
-    border-radius:7px;
-    backdrop-filter:blur(6px);
-    z-index:10;
-    font:500 12px/1 var(--cm-font-mono);
-    letter-spacing:0.04em;
-    text-transform:uppercase;
-    display:flex; align-items:center; gap:8px;
-  }
-  .pl-field-tag .dot { width:7px; height:7px; border-radius:50%; background:var(--cm-success); box-shadow:0 0 8px var(--cm-success); }
+  /* Available players section */
+  #plAvailPills { display:flex; flex-wrap:wrap; gap:5px; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 </style>
@@ -409,7 +421,6 @@
 
 <div class="hub-shell" data-screen-label="10 Planner">
 
-  <!-- Sidebar -->
   <div id="hub-side-root"></div>
 
   <main class="hub-main">
@@ -419,13 +430,12 @@
         <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Planner</span>
         <span class="sep">/</span>
-        <span>MC 14 · Thu MD−3 · Set-pieces 70′</span>
+        <span id="plCrumbEx">Exercise library</span>
       </div>
       <div class="right">
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-history" style="font-size:14px"></i>Versions</button>
         <button class="cm-btn is-outline is-sm"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-link" style="font-size:14px"></i>Share</button>
-        <button class="cm-btn is-primary is-sm"><i class="ti ti-circle-check" style="font-size:14px"></i>Publish</button>
+        <button class="cm-btn is-outline is-sm" id="plShareBtn"><i class="ti ti-link" style="font-size:14px"></i>Share</button>
+        <button class="cm-btn is-primary is-sm" id="plSaveBtn"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save</button>
         <div class="actions" style="margin-left:8px">
           <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
           <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
@@ -438,23 +448,97 @@
       <!-- LEFT PANEL -->
       <aside class="pl-panel">
 
+        <!-- 1. Exercise library -->
         <div class="pl-section">
-          <h3><i class="ti ti-clipboard-list"></i>Session</h3>
-          <div class="pl-session-row">
-            <div class="pl-session-ic"><i class="ti ti-soccer-field"></i></div>
-            <div class="pl-session-info">
-              <h4 id="plSessionTitle">—</h4>
-              <p id="plSessionMeta">—</p>
-            </div>
-          </div>
-          <div class="pl-grid">
-            <div class="pl-stat"><div class="pl-stat-l">Duration</div><div class="pl-stat-v" id="plStatDuration">—</div></div>
-            <div class="pl-stat"><div class="pl-stat-l">Players</div><div class="pl-stat-v" id="plStatPlayers">—</div></div>
-            <div class="pl-stat"><div class="pl-stat-l">Drills</div><div class="pl-stat-v" id="plStatDrills">—</div></div>
-            <div class="pl-stat"><div class="pl-stat-l">Field</div><div class="pl-stat-v" id="plStatField">—</div></div>
+          <h3>
+            <i class="ti ti-book-2"></i>Library
+            <button class="cm-btn is-primary is-sm" id="plNewExBtn" style="margin-left:auto;height:22px;padding:0 8px;font-size:10.5px">
+              <i class="ti ti-plus" style="font-size:11px"></i>New
+            </button>
+          </h3>
+          <div id="plExList">
+            <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">Loading…</div>
           </div>
         </div>
 
+        <!-- 2. Exercise summary (shown when exercise selected) -->
+        <div class="pl-section" id="plExSummarySection" style="display:none">
+          <h3><i class="ti ti-dumbbell"></i>Summary</h3>
+          <div class="pl-ex-summary">
+            <div class="pl-ex-summary-head">
+              <div class="pl-ex-summary-ic"><i class="ti ti-soccer-field"></i></div>
+              <div class="pl-ex-summary-info">
+                <h4 id="plSumName">—</h4>
+                <p id="plSumMeta">exercise</p>
+              </div>
+            </div>
+            <div class="pl-ex-summary-grid">
+              <div class="pl-ex-summary-cell"><div class="l">Duration</div><div class="v" id="plSumDuration">—</div></div>
+              <div class="pl-ex-summary-cell"><div class="l">Players</div><div class="v" id="plSumPlayers">—</div></div>
+              <div class="pl-ex-summary-cell"><div class="l">Drills</div><div class="v" id="plSumDrills">—</div></div>
+              <div class="pl-ex-summary-cell"><div class="l">Field</div><div class="v" id="plSumField">—</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Exercise config form (shown when exercise selected) -->
+        <div class="pl-section" id="plExConfigSection" style="display:none">
+          <h3><i class="ti ti-settings-2"></i>Configuration</h3>
+
+          <div class="pl-form-field" style="margin-bottom:10px">
+            <label class="pl-form-label">Exercise name</label>
+            <input type="text" class="pl-form-input" id="plExName" placeholder="e.g. High-press 4v4+2…">
+          </div>
+
+          <div class="pl-form-row cols-3" style="margin-bottom:10px">
+            <div class="pl-form-field">
+              <label class="pl-form-label">Players</label>
+              <input type="number" class="pl-form-input" id="plExPlayers" placeholder="—" min="1" max="40">
+            </div>
+            <div class="pl-form-field">
+              <label class="pl-form-label">Width m</label>
+              <input type="number" class="pl-form-input" id="plExWidth" placeholder="—" min="1" step="0.5">
+            </div>
+            <div class="pl-form-field">
+              <label class="pl-form-label">Height m</label>
+              <input type="number" class="pl-form-input" id="plExHeight" placeholder="—" min="1" step="0.5">
+            </div>
+          </div>
+
+          <div class="pl-form-row cols-2" style="margin-bottom:10px">
+            <div class="pl-form-field">
+              <label class="pl-form-label">Duration (min)</label>
+              <input type="number" class="pl-form-input" id="plExDuration" placeholder="—" min="1" max="180">
+            </div>
+            <div class="pl-form-field">
+              <label class="pl-form-label">Series</label>
+              <input type="number" class="pl-form-input" id="plExSeries" placeholder="4" min="1" max="20">
+            </div>
+          </div>
+
+          <div class="pl-form-row cols-2" style="margin-bottom:10px">
+            <div class="pl-form-field">
+              <label class="pl-form-label">Work time</label>
+              <input type="text" class="pl-form-input" id="plExWorkTime" placeholder="3:00">
+            </div>
+            <div class="pl-form-field">
+              <label class="pl-form-label">Rest time</label>
+              <input type="text" class="pl-form-input" id="plExRestTime" placeholder="1:30">
+            </div>
+          </div>
+
+          <div class="pl-form-field" style="margin-bottom:12px">
+            <label class="pl-form-label">Tactical orientation</label>
+            <div class="pl-orient-row" id="plOrientBtns">
+              <button class="pl-orient-btn" data-orient="ACTIVATION">Activation</button>
+              <button class="pl-orient-btn" data-orient="STRENGTH">Strength</button>
+              <button class="pl-orient-btn" data-orient="VELOCITY">Velocity</button>
+              <button class="pl-orient-btn" data-orient="ENDURANCE">Endurance</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Space & Orientation (always visible) -->
         <div class="pl-section">
           <h3><i class="ti ti-ruler-measure"></i>Space &amp; orientation</h3>
           <div class="pl-m2">
@@ -463,32 +547,34 @@
               <span class="pl-m2-v" id="plM2Val">—<small>m²</small></span>
             </div>
             <div class="pl-m2-orient" id="plM2Orient">
-              <i class="ti ti-target-arrow"></i>—
+              <i class="ti ti-target-arrow"></i><span id="plM2OrientText">—</span>
             </div>
             <div class="pl-m2-ref">
-              <div class="r-act">Act &lt;40</div>
-              <div class="r-str">Str 40–80</div>
-              <div class="r-vel">Vel 80–160</div>
-              <div class="r-end">End &gt;160</div>
+              <div class="r-act" data-ref="ACTIVATION">Act &lt;40</div>
+              <div class="r-str" data-ref="STRENGTH">Str 40–80</div>
+              <div class="r-vel" data-ref="VELOCITY">Vel 80–160</div>
+              <div class="r-end" data-ref="ENDURANCE">End &gt;160</div>
             </div>
           </div>
-          <div class="pl-grid">
+          <div class="pl-stat-grid">
             <div class="pl-stat"><div class="pl-stat-l">Field used</div><div class="pl-stat-v" id="plStatFieldUsed">—</div></div>
             <div class="pl-stat"><div class="pl-stat-l">Total area</div><div class="pl-stat-v" id="plStatArea">—</div></div>
           </div>
         </div>
 
-        <div class="pl-section">
-          <h3><i class="ti ti-list-numbers"></i>Drills</h3>
-          <div id="plDrillList" style="display:flex;flex-direction:column;gap:4px">
-            <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">Loading…</div>
+        <!-- 5. Sub-drills -->
+        <div class="pl-section" id="plDrillsSection">
+          <h3><i class="ti ti-list-numbers"></i>Drills <span id="plDrillCount" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0;text-transform:none;font-weight:400;color:var(--cm-fg-faint)"></span></h3>
+          <div id="plDrillList">
+            <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:4px 0">Select an exercise to manage its drills.</div>
           </div>
-          <button class="pl-add-btn" id="plAddDrill"><i class="ti ti-plus"></i>Add drill</button>
+          <button class="pl-add-btn" id="plAddDrill" style="display:none"><i class="ti ti-plus"></i>Add drill</button>
         </div>
 
+        <!-- 6. Available players -->
         <div class="pl-section">
           <h3 id="plAvailHead"><i class="ti ti-users"></i>Available · —</h3>
-          <div id="plAvailPills" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+          <div id="plAvailPills"></div>
         </div>
 
       </aside>
@@ -496,7 +582,6 @@
       <!-- CANVAS -->
       <section class="pl-canvas-wrap">
 
-        <!-- Canvas top bar -->
         <div class="pl-canvas-bar">
           <div class="group">
             <button title="Select"><i class="ti ti-pointer"></i></button>
@@ -510,7 +595,7 @@
             <button title="Redo"><i class="ti ti-arrow-forward-up"></i></button>
           </div>
           <div class="sep"></div>
-          <span class="stat">Drill <strong>2 of 4</strong> · Defending set-pieces</span>
+          <span class="stat" id="plCanvasStat">No exercise selected</span>
           <div style="flex:1"></div>
           <div class="group">
             <button title="Zoom out"><i class="ti ti-zoom-out"></i></button>
@@ -519,20 +604,16 @@
             <button title="Fit"><i class="ti ti-arrows-maximize"></i></button>
           </div>
           <div class="sep"></div>
-          <button class="cm-btn is-outline is-sm" id="plSaveBtn"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Export</button>
         </div>
 
-        <!-- Field -->
         <div class="pl-field" id="plField">
           <div class="pl-field-tag" id="plFieldTag">
-            <span class="dot"></span><span id="plDrillLabel">No drill selected</span>
+            <span class="dot"></span><span id="plFieldLabel">No exercise selected</span>
           </div>
 
-          <!-- Fabric.js canvas — objects rendered here -->
           <canvas id="plCanvas"></canvas>
 
-          <!-- FAB -->
           <div class="pl-field-fab">
             <button id="plFabText"   title="Add label"><i class="ti ti-typography"></i></button>
             <button id="plFabDraw"   title="Draw mode"><i class="ti ti-pencil"></i></button>
@@ -541,7 +622,6 @@
           </div>
         </div>
 
-        <!-- Bottom dock -->
         <div class="pl-dock">
           <div class="pl-dock-grp">
             <span class="lbl">Teams</span>
@@ -577,13 +657,9 @@
             <button class="pl-dock-btn" title="Label"><i class="ti ti-typography"></i></button>
             <button class="pl-dock-btn" title="Number"><i class="ti ti-123"></i></button>
           </div>
-
           <div style="flex:1"></div>
-
-          <span class="stat" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
-            <strong style="color:var(--cm-fg);font-weight:600">14</strong> objects ·
-            <strong style="color:var(--cm-fg);font-weight:600">2</strong> zones ·
-            <strong style="color:var(--cm-fg);font-weight:600">3</strong> arrows
+          <span class="stat" id="plObjStat" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
+            <strong style="color:var(--cm-fg);font-weight:600">0</strong> objects
           </span>
         </div>
 
@@ -592,7 +668,6 @@
   </main>
 </div>
 
-<!-- Tweaks + Settings -->
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -607,73 +682,38 @@
 
   const today = new Date().toISOString().split('T')[0];
 
-  // ── Players + availability ──────────────────────────────────────
-  const playersRes = await window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive');
-  const players = playersRes.data || [];
+  // ── Available players ───────────────────────────────────────────
+  const { data: playersData } = await window.sb.from('players')
+    .select('id,first_name,last_name,number,position')
+    .eq('club_id', clubId).neq('status', 'inactive');
+  const players = playersData || [];
 
-  const availRes = await window.sb.from('availability').select('player_id,status').eq('club_id', clubId).eq('date', today);
-  if (availRes.error?.code === '42P01') console.warn('availability table missing');
-  const availMap = Object.fromEntries((availRes.data||[]).map(a=>[a.player_id,a.status]));
+  const availRes = await window.sb.from('availability')
+    .select('player_id,status').eq('club_id', clubId).eq('date', today);
+  const availMap = Object.fromEntries((availRes.data||[]).map(a => [a.player_id, a.status]));
   const hasAvail = (availRes.data||[]).length > 0;
   const statusClass = { av:'is-success', pa:'is-warning', in:'is-danger', si:'is-danger' };
-  const pillData = hasAvail
-    ? players.filter(p=>{ const s=availMap[p.id]; return !s||s==='av'||s==='pa'; }).map(p=>({ label:`${p.number?p.number+' ':''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
-    : players.map(p=>({ label:`${p.number?p.number+' ':''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
 
-  const head = document.getElementById('plAvailHead');
-  const pillsEl = document.getElementById('plAvailPills');
-  if (head) head.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
+  const pillData = hasAvail
+    ? players.filter(p => { const s = availMap[p.id]; return !s || s === 'av' || s === 'pa'; })
+        .map(p => ({ label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
+    : players.map(p => ({ label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
+
+  const headEl   = document.getElementById('plAvailHead');
+  const pillsEl  = document.getElementById('plAvailPills');
+  if (headEl)  headEl.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
   if (pillsEl) {
     const SHOW = 8;
-    const renderPills = (all) => pillData.slice(0, all ? pillData.length : SHOW)
-      .map(p=>`<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`).join('');
+    const renderPills = all => pillData.slice(0, all ? pillData.length : SHOW)
+      .map(p => `<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`).join('');
     const extra = pillData.length - SHOW;
     pillsEl.innerHTML = renderPills(false) +
       (extra > 0 ? `<button id="plAvailMore" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);padding:3px 6px;background:none;border:none;cursor:pointer">+${extra} more</button>` : '');
     document.getElementById('plAvailMore')?.addEventListener('click', () => { pillsEl.innerHTML = renderPills(true); });
   }
 
-  // ── Session block (live) ────────────────────────────────────────
-  {
-    const { data: sessions } = await window.sb
-      .from('training_sessions')
-      .select('id,title,session_date,duration,session_type')
-      .eq('club_id', clubId)
-      .order('session_date', { ascending: false })
-      .limit(1);
-    const sess = sessions?.[0];
-    const titleEl    = document.getElementById('plSessionTitle');
-    const metaEl     = document.getElementById('plSessionMeta');
-    const durEl      = document.getElementById('plStatDuration');
-    const playEl     = document.getElementById('plStatPlayers');
-    const fieldStatEl = document.getElementById('plStatField');
-    if (titleEl)    titleEl.textContent = sess?.title || 'No sessions yet';
-    if (metaEl)     metaEl.textContent  = sess ? `${sess.session_date} · ${sess.session_type || ''}` : 'Create one in Sessions';
-    if (durEl)      durEl.innerHTML     = sess?.duration ? `${sess.duration}<sub>min</sub>` : '—';
-    if (playEl)     playEl.textContent  = players.length || '—';
-    if (fieldStatEl) fieldStatEl.textContent = '—'; // field column not in schema
-  }
-
-  // ── Space & orientation (live, from player count) ────────────────
-  {
-    const DEFAULT_AREA = 2268; // 42×54 m default pitch
-    const area = players.length > 0 ? Math.round(DEFAULT_AREA / players.length) : null;
-    const orient = !area ? '—'
-      : area < 80  ? 'Strength / positional'
-      : area < 160 ? 'Velocity / counter'
-      : 'Endurance / pressing';
-    const m2El       = document.getElementById('plM2Val');
-    const orientEl   = document.getElementById('plM2Orient');
-    const fieldUsedEl = document.getElementById('plStatFieldUsed');
-    const areaEl     = document.getElementById('plStatArea');
-    if (m2El)       m2El.innerHTML     = area ? `${area}<small>m²</small>` : `—<small>m²</small>`;
-    if (orientEl)   orientEl.innerHTML = `<i class="ti ti-target-arrow"></i>${orient}`;
-    if (fieldUsedEl) fieldUsedEl.innerHTML = '42×54<sub>m</sub>';
-    if (areaEl)     areaEl.innerHTML   = `${DEFAULT_AREA.toLocaleString()}<sub>m²</sub>`;
-  }
-
   // ── Fabric.js canvas init ───────────────────────────────────────
-  await new Promise(r => requestAnimationFrame(r)); // yield for layout
+  await new Promise(r => requestAnimationFrame(r));
   const fieldEl = document.getElementById('plField');
   const { width: fw, height: fh } = fieldEl.getBoundingClientRect();
   const fc = new fabric.Canvas('plCanvas', {
@@ -682,19 +722,15 @@
     preserveObjectStacking: true,
     backgroundColor: null
   });
-  // Make Fabric wrapper transparent so field.jpg background shows through
   fc.wrapperEl.style.position = 'absolute';
   fc.wrapperEl.style.inset    = '0';
 
-  // Resize canvas when window resizes
   window.addEventListener('resize', () => {
     const { width, height } = fieldEl.getBoundingClientRect();
     fc.setWidth(width); fc.setHeight(height); fc.renderAll();
   });
 
-  // ── State ───────────────────────────────────────────────────────
-  let currentDrillId = null;
-  let disableSave    = false;
+  // ── Canvas state ────────────────────────────────────────────────
   let currentTool    = 'select';
   let _arrowP1       = null;
   let _previewLine   = null;
@@ -702,25 +738,27 @@
   let _historyStack  = [];
   const MAX_HISTORY  = 30;
 
-  // Save canvas state to undo stack after each modification
-  fc.on('object:modified', () => pushHistory());
-  fc.on('object:added',    () => pushHistory());
-  fc.on('object:removed',  () => pushHistory());
+  fc.on('object:modified', pushHistory);
+  fc.on('object:added',    pushHistory);
+  fc.on('object:removed',  pushHistory);
+
   function pushHistory() {
     _historyStack.push(JSON.stringify(fc.toJSON()));
     if (_historyStack.length > MAX_HISTORY) _historyStack.shift();
   }
 
-  // Update stat bar
-  function updateStat() {
-    const objs  = fc.getObjects();
-    const zones = objs.filter(o=>o._type==='zone').length;
-    const arrows= objs.filter(o=>o._type==='arrow').length;
-    const other = objs.length - zones - arrows;
-    const el = document.querySelector('.pl-canvas-bar .stat');
-    if (el) el.innerHTML = `<strong style="color:var(--cm-fg);font-weight:600">${other}</strong> objects · <strong style="color:var(--cm-fg);font-weight:600">${zones}</strong> zones · <strong style="color:var(--cm-fg);font-weight:600">${arrows}</strong> arrows`;
+  function updateObjStat() {
+    const objs   = fc.getObjects().filter(o => o._type !== '_preview' && o._type !== 'bezier_handle');
+    const zones  = objs.filter(o => o._type === 'zone').length;
+    const arrows = objs.filter(o => o._type === 'arrow').length;
+    const other  = objs.length - zones - arrows;
+    const el = document.getElementById('plObjStat');
+    if (el) el.innerHTML =
+      `<strong style="color:var(--cm-fg);font-weight:600">${other}</strong> objects · ` +
+      `<strong style="color:var(--cm-fg);font-weight:600">${zones}</strong> zones · ` +
+      `<strong style="color:var(--cm-fg);font-weight:600">${arrows}</strong> arrows`;
   }
-  fc.on('after:render', updateStat);
+  fc.on('after:render', updateObjStat);
 
   // ── Tool switcher ───────────────────────────────────────────────
   function setTool(tool) {
@@ -736,23 +774,20 @@
     fc.renderAll();
     const toolMap = ['select','move','draw','lasso'];
     document.querySelectorAll('.pl-canvas-bar .group:first-child button')
-      .forEach((b,i) => b.classList.toggle('is-on', toolMap[i] === tool));
+      .forEach((b, i) => b.classList.toggle('is-on', toolMap[i] === tool));
   }
-
   document.querySelectorAll('.pl-canvas-bar .group:first-child button').forEach((btn, i) => {
     const tools = ['select','move','draw','lasso'];
     btn.addEventListener('click', () => setTool(tools[i]));
   });
 
-  // Draw mode brush setup
   fc.freeDrawingBrush = new fabric.PencilBrush(fc);
   fc.freeDrawingBrush.color = '#FBBF24';
   fc.freeDrawingBrush.width = 3;
 
-  // Undo
   document.querySelector('[title="Undo"]')?.addEventListener('click', () => {
     if (_historyStack.length < 2) return;
-    _historyStack.pop(); // discard current
+    _historyStack.pop();
     const prev = _historyStack[_historyStack.length-1];
     if (prev) fc.loadFromJSON(prev, () => fc.renderAll());
   });
@@ -762,7 +797,6 @@
   const TEAM_TEXT   = { t1:'#fff',    t2:'#fff',    t3:'#0A0A0A', t4:'#0A0A0A' };
 
   function center() { return { left: fc.width/2, top: fc.height/2 }; }
-
   function finishAdd(obj, type) {
     obj._type = type;
     obj.set({ ...center(), originX:'center', originY:'center' });
@@ -777,7 +811,6 @@
     const group  = new fabric.Group([circle, text], { ...center(), originX:'center', originY:'center', _type:'player', _team:team });
     fc.add(group); fc.setActiveObject(group); fc.renderAll();
   }
-
   function addBall() {
     const shell = new fabric.Circle({ radius:18, fill:'#f5f5f5', stroke:'#333', strokeWidth:2, originX:'center', originY:'center' });
     const p1 = new fabric.Circle({ radius:5, fill:'#222', left:0,  top:-10, originX:'center', originY:'center' });
@@ -785,219 +818,115 @@
     const p3 = new fabric.Circle({ radius:5, fill:'#222', left:-9, top:5,   originX:'center', originY:'center' });
     finishAdd(new fabric.Group([shell,p1,p2,p3]), 'ball');
   }
-
   function addCone() {
     const body = new fabric.Triangle({ width:28, height:32, fill:'#f97316', stroke:'#c2600a', strokeWidth:1, originX:'center', originY:'center' });
     const band = new fabric.Rect({ width:28, height:5, fill:'#fbbf24', top:10, originX:'center', originY:'center' });
     finishAdd(new fabric.Group([body,band]), 'cone');
   }
-
   function addPole() {
     const red   = new fabric.Rect({ width:6, height:25, fill:'#dc2626', rx:2, left:0, top:-12.5, originX:'center', originY:'center' });
     const white = new fabric.Rect({ width:6, height:25, fill:'#ffffff', rx:0, left:0, top:12.5,  originX:'center', originY:'center' });
     finishAdd(new fabric.Group([red,white]), 'pole');
   }
-
   function addGoal() {
     finishAdd(new fabric.Rect({ width:80, height:32, fill:'rgba(255,255,255,0.08)', stroke:'#fff', strokeWidth:3, rx:2 }), 'goal');
   }
-
   function addMannequin() {
     const head = new fabric.Circle({ radius:6, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1.2, left:0, top:-22, originX:'center', originY:'center' });
     const body = new fabric.Rect({ width:14, height:20, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1, rx:3, left:0, top:-2, originX:'center', originY:'center' });
     finishAdd(new fabric.Group([head,body]), 'mannequin');
   }
-
   function addZoneRect() {
     finishAdd(new fabric.Rect({ width:120, height:80, fill:'rgba(34,197,94,0.12)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3], rx:4 }), 'zone');
   }
-
   function addZoneCircle() {
     finishAdd(new fabric.Circle({ radius:50, fill:'rgba(34,197,94,0.10)', stroke:'rgba(34,197,94,0.6)', strokeWidth:2, strokeDashArray:[6,3] }), 'zone');
   }
 
-  // ── Custom arrow classes (bypass Fabric path normalization) ─────
-
+  // ── BezierArrow ─────────────────────────────────────────────────
   const BezierArrow = fabric.util.createClass(fabric.Object, {
-    type: 'BezierArrow',
-    _type: 'arrow',
-
+    type: 'BezierArrow', _type: 'arrow',
     initialize(options) {
-      this.callSuper('initialize', {
-        ...options,
-        left: 0,
-        top: 0,
-        originX: 'left',
-        originY: 'top',
-        hasControls: false,
-        hasBorders: false,
-        selectable: true,
-        perPixelTargetFind: true,
-      });
-      this.x1 = options.x1 || 0;
-      this.y1 = options.y1 || 0;
-      this.cx = options.cx || 0;
-      this.cy = options.cy || 0;
-      this.x2 = options.x2 || 0;
-      this.y2 = options.y2 || 0;
-      this.arrowColor  = options.arrowColor  || '#FBBF24';
-      this.arrowDash   = options.arrowDash   || false;
-      this.arrowCurved = options.arrowCurved || false;
-      this.strokeWidth = options.strokeWidth || 2.5;
-      this.width  = 99999;
-      this.height = 99999;
-      this.setCoords();
+      this.callSuper('initialize', { ...options, left:0, top:0, originX:'left', originY:'top',
+        hasControls:false, hasBorders:false, selectable:true, perPixelTargetFind:true });
+      this.x1=options.x1||0; this.y1=options.y1||0; this.cx=options.cx||0; this.cy=options.cy||0;
+      this.x2=options.x2||0; this.y2=options.y2||0;
+      this.arrowColor=options.arrowColor||'#FBBF24'; this.arrowDash=options.arrowDash||false;
+      this.arrowCurved=options.arrowCurved||false; this.strokeWidth=options.strokeWidth||2.5;
+      this.width=99999; this.height=99999; this.setCoords();
     },
-
     _render(ctx) {
-      // left/top pinned to 0 — world coords map 1:1 to ctx coords
-      const { x1, y1, cx, cy, x2, y2 } = this;
-
-      ctx.save();
-      ctx.strokeStyle = this.arrowColor;
-      ctx.lineWidth   = this.strokeWidth;
-      ctx.lineCap     = 'round';
-      ctx.setLineDash(this.arrowDash ? [8, 5] : []);
-
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      if (this.arrowCurved) {
-        ctx.quadraticCurveTo(cx, cy, x2, y2);
-      } else {
-        ctx.lineTo(x2, y2);
-      }
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      const tx = this.arrowCurved ? (x2 - cx) : (x2 - x1);
-      const ty = this.arrowCurved ? (y2 - cy) : (y2 - y1);
-      const angle = Math.atan2(ty, tx);
-      const hLen = 13, hWid = 7;
-      ctx.fillStyle = this.arrowColor;
-      ctx.beginPath();
-      ctx.moveTo(x2 + Math.cos(angle)*2, y2 + Math.sin(angle)*2);
-      ctx.lineTo(
-        x2 - Math.cos(angle)*hLen + Math.cos(angle - Math.PI/2)*hWid,
-        y2 - Math.sin(angle)*hLen + Math.sin(angle - Math.PI/2)*hWid
-      );
-      ctx.lineTo(
-        x2 - Math.cos(angle)*hLen + Math.cos(angle + Math.PI/2)*hWid,
-        y2 - Math.sin(angle)*hLen + Math.sin(angle + Math.PI/2)*hWid
-      );
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      const { x1,y1,cx,cy,x2,y2 } = this;
+      ctx.save(); ctx.strokeStyle=this.arrowColor; ctx.lineWidth=this.strokeWidth; ctx.lineCap='round';
+      ctx.setLineDash(this.arrowDash ? [8,5] : []);
+      ctx.beginPath(); ctx.moveTo(x1,y1);
+      if (this.arrowCurved) ctx.quadraticCurveTo(cx,cy,x2,y2); else ctx.lineTo(x2,y2);
+      ctx.stroke(); ctx.setLineDash([]);
+      const tx=this.arrowCurved?(x2-cx):(x2-x1), ty=this.arrowCurved?(y2-cy):(y2-y1);
+      const angle=Math.atan2(ty,tx), hLen=13, hWid=7;
+      ctx.fillStyle=this.arrowColor; ctx.beginPath();
+      ctx.moveTo(x2+Math.cos(angle)*2, y2+Math.sin(angle)*2);
+      ctx.lineTo(x2-Math.cos(angle)*hLen+Math.cos(angle-Math.PI/2)*hWid, y2-Math.sin(angle)*hLen+Math.sin(angle-Math.PI/2)*hWid);
+      ctx.lineTo(x2-Math.cos(angle)*hLen+Math.cos(angle+Math.PI/2)*hWid, y2-Math.sin(angle)*hLen+Math.sin(angle+Math.PI/2)*hWid);
+      ctx.closePath(); ctx.fill(); ctx.restore();
     },
-
-    containsPoint(point) {
-      return this._hitTestBezier(point.x, point.y, 8);
-    },
-
-    _hitTestBezier(px, py, threshold) {
-      const { x1, y1, cx, cy, x2, y2, arrowCurved } = this;
-      for (let i = 0; i <= 20; i++) {
-        const t = i / 20;
-        const bx = arrowCurved ? (1-t)*(1-t)*x1 + 2*(1-t)*t*cx + t*t*x2 : x1 + t*(x2-x1);
-        const by = arrowCurved ? (1-t)*(1-t)*y1 + 2*(1-t)*t*cy + t*t*y2 : y1 + t*(y2-y1);
-        if (Math.sqrt((px-bx)**2 + (py-by)**2) < threshold) return true;
+    containsPoint(point) { return this._hitTestBezier(point.x, point.y, 8); },
+    _hitTestBezier(px,py,threshold) {
+      const { x1,y1,cx,cy,x2,y2,arrowCurved } = this;
+      for (let i=0;i<=20;i++) {
+        const t=i/20;
+        const bx=arrowCurved?(1-t)*(1-t)*x1+2*(1-t)*t*cx+t*t*x2:x1+t*(x2-x1);
+        const by=arrowCurved?(1-t)*(1-t)*y1+2*(1-t)*t*cy+t*t*y2:y1+t*(y2-y1);
+        if (Math.sqrt((px-bx)**2+(py-by)**2)<threshold) return true;
       }
       return false;
     },
-
     toObject() {
       return fabric.util.object.extend(this.callSuper('toObject'), {
-        x1: this.x1, y1: this.y1,
-        cx: this.cx, cy: this.cy,
-        x2: this.x2, y2: this.y2,
-        arrowColor: this.arrowColor, arrowDash: this.arrowDash,
-        arrowCurved: this.arrowCurved, strokeWidth: this.strokeWidth,
+        x1:this.x1,y1:this.y1,cx:this.cx,cy:this.cy,x2:this.x2,y2:this.y2,
+        arrowColor:this.arrowColor,arrowDash:this.arrowDash,arrowCurved:this.arrowCurved,strokeWidth:this.strokeWidth
       });
-    },
+    }
   });
   fabric.BezierArrow = BezierArrow;
   BezierArrow.fromObject = (obj, cb) => cb(new BezierArrow(obj));
 
   const BezierHandle = fabric.util.createClass(fabric.Circle, {
-    type: 'BezierHandle',
-    _type: 'bezier_handle',
-
+    type: 'BezierHandle', _type: 'bezier_handle',
     initialize(options) {
-      this.callSuper('initialize', {
-        radius: 7,
-        fill: 'rgba(255,255,255,0.95)',
-        stroke: options.arrowColor || '#FBBF24',
-        strokeWidth: 2,
-        originX: 'center',
-        originY: 'center',
-        hasControls: false,
-        hasBorders: false,
-        selectable: true,
-        evented: true,
-        visible: false,
-        ...options,
-      });
-      this._arrowRef = options._arrowRef || null;
-    },
+      this.callSuper('initialize', { radius:7, fill:'rgba(255,255,255,0.95)', stroke:options.arrowColor||'#FBBF24',
+        strokeWidth:2, originX:'center', originY:'center', hasControls:false, hasBorders:false,
+        selectable:true, evented:true, visible:false, ...options });
+      this._arrowRef = options._arrowRef||null;
+    }
   });
   fabric.BezierHandle = BezierHandle;
   BezierHandle.fromObject = (obj, cb) => cb(new BezierHandle(obj));
 
-  // ── Bezier arrow system ─────────────────────────────────────────
-  let currentArrowColor = '#FBBF24', currentArrowDash = false, currentArrowCurved = false;
+  let currentArrowColor='#FBBF24', currentArrowDash=false, currentArrowCurved=false;
 
   function _clearPreview() {
-    if (_previewLine) { fc.remove(_previewLine); _previewLine = null; }
+    if (_previewLine) { fc.remove(_previewLine); _previewLine=null; }
   }
 
-  function createBezierArrow(x1, y1, x2, y2, color, dashed, curved) {
-    const len = Math.sqrt((x2-x1)**2 + (y2-y1)**2) || 1;
-    const offset = curved ? len * 0.20 : 0;
-    const cx = (x1+x2)/2 - (y2-y1) * offset / len;
-    const cy = (y1+y2)/2 + (x2-x1) * offset / len;
-
-    const arrow = new BezierArrow({
-      x1, y1, cx, cy, x2, y2,
-      arrowColor: color, arrowDash: dashed, arrowCurved: curved,
-      strokeWidth: dashed ? 2 : 2.5,
-    });
-
-    const handle = new BezierHandle({
-      left: cx, top: cy,
-      arrowColor: color,
-      _arrowRef: arrow,
-    });
-
-    // Handle dragged → update control point only (no bbox recalc, left/top stays 0)
-    handle.on('moving', () => {
-      arrow.cx = handle.left;
-      arrow.cy = handle.top;
-      fc.renderAll();
-    });
-
-    // Arrow moved → Fabric sets left/top to drag offset; use as delta then reset to 0
+  function createBezierArrow(x1,y1,x2,y2,color,dashed,curved) {
+    const len=Math.sqrt((x2-x1)**2+(y2-y1)**2)||1;
+    const offset=curved?len*0.20:0;
+    const cx=(x1+x2)/2-(y2-y1)*offset/len, cy=(y1+y2)/2+(x2-x1)*offset/len;
+    const arrow = new BezierArrow({ x1,y1,cx,cy,x2,y2, arrowColor:color,arrowDash:dashed,arrowCurved:curved, strokeWidth:dashed?2:2.5 });
+    const handle = new BezierHandle({ left:cx, top:cy, arrowColor:color, _arrowRef:arrow });
+    handle.on('moving', () => { arrow.cx=handle.left; arrow.cy=handle.top; fc.renderAll(); });
     arrow.on('moving', () => {
-      const dx = arrow.left;
-      const dy = arrow.top;
-      if (dx === 0 && dy === 0) return;
-      arrow.x1 += dx; arrow.y1 += dy;
-      arrow.cx += dx; arrow.cy += dy;
-      arrow.x2 += dx; arrow.y2 += dy;
-      handle.left += dx; handle.top += dy;
-      handle.setCoords();
-      arrow.left = 0;
-      arrow.top  = 0;
-      arrow.setCoords();
-      fc.renderAll();
+      const dx=arrow.left, dy=arrow.top;
+      if (dx===0&&dy===0) return;
+      arrow.x1+=dx; arrow.y1+=dy; arrow.cx+=dx; arrow.cy+=dy; arrow.x2+=dx; arrow.y2+=dy;
+      handle.left+=dx; handle.top+=dy; handle.setCoords();
+      arrow.left=0; arrow.top=0; arrow.setCoords(); fc.renderAll();
     });
-
-    arrow.on('selected',   () => { handle.set('visible', true);  handle.setCoords(); fc.renderAll(); });
-    arrow.on('deselected', () => { handle.set('visible', false); fc.renderAll(); });
+    arrow.on('selected',   () => { handle.set('visible',true);  handle.setCoords(); fc.renderAll(); });
+    arrow.on('deselected', () => { handle.set('visible',false); fc.renderAll(); });
     arrow.on('removed',    () => { fc.remove(handle); fc.renderAll(); });
-
-    fc.add(arrow);
-    fc.add(handle);
-    fc.setActiveObject(arrow);
-    fc.renderAll();
+    fc.add(arrow); fc.add(handle); fc.setActiveObject(arrow); fc.renderAll();
     setTool('select');
     document.querySelectorAll('.pl-dock-btn').forEach(b => b.classList.remove('is-on'));
   }
@@ -1006,259 +935,438 @@
     if (currentTool !== 'arrow') return;
     const p = fc.getPointer(e.e);
     _clearPreview();
-    if (!_arrowP1) {
-      _arrowP1 = { x:p.x, y:p.y };
-    } else {
-      createBezierArrow(_arrowP1.x, _arrowP1.y, p.x, p.y, currentArrowColor, currentArrowDash, currentArrowCurved);
-      _arrowP1 = null;
-    }
+    if (!_arrowP1) { _arrowP1 = { x:p.x, y:p.y }; }
+    else { createBezierArrow(_arrowP1.x,_arrowP1.y,p.x,p.y,currentArrowColor,currentArrowDash,currentArrowCurved); _arrowP1=null; }
   });
-
   fc.on('mouse:move', e => {
-    if (currentTool !== 'arrow' || !_arrowP1) return;
+    if (currentTool!=='arrow'||!_arrowP1) return;
     const p = fc.getPointer(e.e);
     _clearPreview();
-    _previewLine = new fabric.Line([_arrowP1.x, _arrowP1.y, p.x, p.y], {
-      stroke:currentArrowColor, strokeWidth:1.5, strokeDashArray:[4,4],
-      selectable:false, evented:false, _type:'_preview',
+    _previewLine = new fabric.Line([_arrowP1.x,_arrowP1.y,p.x,p.y], {
+      stroke:currentArrowColor, strokeWidth:1.5, strokeDashArray:[4,4], selectable:false, evented:false, _type:'_preview'
     });
     fc.add(_previewLine); fc.renderAll();
   });
 
-  // ── Keyboard: Escape / Delete / Ctrl+Z / Clipboard ──────────────
+  // ── Keyboard handlers ───────────────────────────────────────────
   let _clipboard = null;
   document.addEventListener('keydown', e => {
     const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
-    if (e.key === 'Escape') {
-      if (_arrowP1) { _clearPreview(); _arrowP1 = null; setTool('select'); }
+    if (tag==='INPUT'||tag==='TEXTAREA') return;
+    if (e.key==='Escape') {
+      if (_arrowP1) { _clearPreview(); _arrowP1=null; setTool('select'); }
       else { fc.discardActiveObject(); fc.renderAll(); }
       return;
     }
-
-    if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (e.key==='Delete'||e.key==='Backspace') {
       const active = fc.getActiveObject();
       if (!active) return;
-      if (active.type === 'activeSelection') {
-        active.getObjects().forEach(o => fc.remove(o));
-        fc.discardActiveObject();
-      } else {
-        fc.remove(active);
-      }
-      fc.renderAll();
-      return;
+      if (active.type==='activeSelection') { active.getObjects().forEach(o=>fc.remove(o)); fc.discardActiveObject(); }
+      else fc.remove(active);
+      fc.renderAll(); return;
     }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      if (_historyStack.length < 2) return;
+    if ((e.ctrlKey||e.metaKey)&&e.key==='z') {
+      if (_historyStack.length<2) return;
       _historyStack.pop();
       const prev = _historyStack[_historyStack.length-1];
-      if (prev) fc.loadFromJSON(prev, () => fc.renderAll());
+      if (prev) fc.loadFromJSON(prev, ()=>fc.renderAll());
       return;
     }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-      const active = fc.getActiveObject();
-      if (active) active.clone(cloned => { _clipboard = cloned; });
-      return;
+    if ((e.ctrlKey||e.metaKey)&&e.key==='c') {
+      const active=fc.getActiveObject(); if (active) active.clone(c=>{_clipboard=c;}); return;
     }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
-      const active = fc.getActiveObject();
-      if (!active) return;
-      active.clone(cloned => { _clipboard = cloned; });
-      fc.remove(active); fc.discardActiveObject(); fc.renderAll();
-      return;
+    if ((e.ctrlKey||e.metaKey)&&e.key==='x') {
+      const active=fc.getActiveObject(); if (!active) return;
+      active.clone(c=>{_clipboard=c;});
+      fc.remove(active); fc.discardActiveObject(); fc.renderAll(); return;
     }
-
-    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+    if ((e.ctrlKey||e.metaKey)&&e.key==='v') {
       if (!_clipboard) return;
-      _clipboard.clone(cloned => {
+      _clipboard.clone(cloned=>{
         fc.discardActiveObject();
         cloned.set({ left:(_clipboard.left||0)+20, top:(_clipboard.top||0)+20, evented:true });
-        if (cloned._objects) { cloned._objects.forEach(o => fc.add(o)); } else { fc.add(cloned); }
-        _clipboard = cloned;
-        fc.setActiveObject(cloned);
-        fc.requestRenderAll();
+        if (cloned._objects) cloned._objects.forEach(o=>fc.add(o)); else fc.add(cloned);
+        _clipboard=cloned; fc.setActiveObject(cloned); fc.requestRenderAll();
       });
     }
   });
 
-  // ── Dock buttons wiring ─────────────────────────────────────────
+  // ── Dock buttons ────────────────────────────────────────────────
   const dockActions = {
-    'Team1': () => addPlayer('t1'),
-    'Team2': () => addPlayer('t2'),
-    'Team3': () => addPlayer('t3'),
-    'Team4': () => addPlayer('t4'),
-    'Ball':       () => addBall(),
-    'Cone':       () => addCone(),
-    'Pole':       () => addPole(),
-    'Gate':       () => addZoneRect(),
-    'Goal':       () => addGoal(),
-    'Mannequin':  () => addMannequin(),
-    'Pass':    () => { currentArrowColor='#ffffff'; currentArrowDash=false; currentArrowCurved=false; setTool('arrow'); },
-    'Run':     () => { currentArrowColor='#FBBF24'; currentArrowDash=false; currentArrowCurved=true;  setTool('arrow'); },
-    'Dribble': () => { currentArrowColor='#ffffff'; currentArrowDash=true;  currentArrowCurved=false; setTool('arrow'); },
-    'Curve':   () => { currentArrowColor='#22D3EE'; currentArrowDash=true;  currentArrowCurved=true;  setTool('arrow'); },
-    'Rectangle':  () => addZoneRect(),
-    'Circle':     () => addZoneCircle(),
-    'Polygon':    () => addZoneRect(),
-    'Label':      () => { const t=new fabric.IText('Label',{fill:'#fff',fontSize:14,fontFamily:'sans-serif'}); finishAdd(t,'text'); t.enterEditing(); },
-    'Number':     () => { const t=new fabric.IText('1',{fill:'#FBBF24',fontSize:18,fontWeight:'700',fontFamily:'monospace'}); finishAdd(t,'text'); },
+    'Team1':() => addPlayer('t1'), 'Team2':() => addPlayer('t2'),
+    'Team3':() => addPlayer('t3'), 'Team4':() => addPlayer('t4'),
+    'Ball':()=>addBall(), 'Cone':()=>addCone(), 'Pole':()=>addPole(),
+    'Gate':()=>addZoneRect(), 'Goal':()=>addGoal(), 'Mannequin':()=>addMannequin(),
+    'Pass':   ()=>{currentArrowColor='#ffffff';currentArrowDash=false;currentArrowCurved=false;setTool('arrow');},
+    'Run':    ()=>{currentArrowColor='#FBBF24';currentArrowDash=false;currentArrowCurved=true; setTool('arrow');},
+    'Dribble':()=>{currentArrowColor='#ffffff';currentArrowDash=true; currentArrowCurved=false;setTool('arrow');},
+    'Curve':  ()=>{currentArrowColor='#22D3EE';currentArrowDash=true; currentArrowCurved=true; setTool('arrow');},
+    'Rectangle':()=>addZoneRect(), 'Circle':()=>addZoneCircle(), 'Polygon':()=>addZoneRect(),
+    'Label':  ()=>{const t=new fabric.IText('Label',{fill:'#fff',fontSize:14,fontFamily:'sans-serif'});finishAdd(t,'text');t.enterEditing();},
+    'Number': ()=>{const t=new fabric.IText('1',{fill:'#FBBF24',fontSize:18,fontWeight:'700',fontFamily:'monospace'});finishAdd(t,'text');}
   };
-
   document.querySelectorAll('.pl-dock-btn').forEach(btn => {
-    const title = btn.getAttribute('title');
-    if (dockActions[title]) {
-      btn.addEventListener('click', () => dockActions[title]());
-      btn._hasListener = true; // used by diagnostic to count wired buttons
-    }
+    const title=btn.getAttribute('title');
+    if (dockActions[title]) btn.addEventListener('click', ()=>dockActions[title]());
   });
 
-  // FAB buttons
-  document.getElementById('plFabText')?.addEventListener('click', () => {
-    const t = new fabric.IText('Annotation', { ...center(), originX:'center', originY:'center', fill:'rgba(255,255,255,0.9)', fontSize:13, fontFamily:'sans-serif', _type:'text' });
+  // FAB
+  document.getElementById('plFabText')?.addEventListener('click', ()=>{
+    const t=new fabric.IText('Annotation',{...center(),originX:'center',originY:'center',fill:'rgba(255,255,255,0.9)',fontSize:13,fontFamily:'sans-serif',_type:'text'});
     fc.add(t); fc.setActiveObject(t); t.enterEditing(); fc.renderAll();
   });
-  document.getElementById('plFabDraw')?.addEventListener('click', () => {
-    const on = currentTool === 'draw';
-    setTool(on ? 'select' : 'draw');
-    document.getElementById('plFabDraw').style.color = on ? '' : 'var(--cm-accent)';
+  document.getElementById('plFabDraw')?.addEventListener('click', ()=>{
+    const on=currentTool==='draw'; setTool(on?'select':'draw');
+    document.getElementById('plFabDraw').style.color=on?'':'var(--cm-accent)';
   });
-  document.getElementById('plFabClear')?.addEventListener('click', () => {
+  document.getElementById('plFabClear')?.addEventListener('click', ()=>{
     if (!confirm('Clear the canvas? This cannot be undone.')) return;
     fc.clear(); fc.renderAll();
   });
-  document.getElementById('plFabFull')?.addEventListener('click', () => {
-    const el = fieldEl;
+  document.getElementById('plFabFull')?.addEventListener('click', ()=>{
     if (document.fullscreenElement) document.exitFullscreen();
-    else el.requestFullscreen?.();
+    else fieldEl.requestFullscreen?.();
   });
 
-  // ── Drill list ──────────────────────────────────────────────────
-  async function loadDrills() {
-    const { data, error } = await window.sb.from('drills')
-      .select('id,name,duration,created_at')
+  // Dock visual single-select per group
+  document.querySelectorAll('.pl-dock-grp').forEach(g=>g.querySelectorAll('.pl-dock-btn').forEach(b=>b.addEventListener('click',()=>{
+    g.querySelectorAll('.pl-dock-btn').forEach(o=>o.classList.remove('is-on')); b.classList.add('is-on');
+  })));
+
+  // ── Exercise library state ───────────────────────────────────────
+  let currentExerciseId    = null;
+  let exercises            = [];
+  let currentManualOrient  = null;
+  let subDrills            = [];
+
+  // ── Orientation helpers ─────────────────────────────────────────
+  function calcOrientFromM2(m2) {
+    if (!m2 || m2 <= 0) return null;
+    if (m2 < 40)  return 'ACTIVATION';
+    if (m2 < 80)  return 'STRENGTH';
+    if (m2 < 160) return 'VELOCITY';
+    return 'ENDURANCE';
+  }
+
+  const ORIENT_META = {
+    ACTIVATION: { label:'Activation', short:'ACT', cls:'o-act', refCls:'r-act', badgeCls:'o-act' },
+    STRENGTH:   { label:'Strength',   short:'STR', cls:'o-str', refCls:'r-str', badgeCls:'o-str' },
+    VELOCITY:   { label:'Velocity',   short:'VEL', cls:'o-vel', refCls:'r-vel', badgeCls:'o-vel' },
+    ENDURANCE:  { label:'Endurance',  short:'END', cls:'o-end', refCls:'r-end', badgeCls:'o-end' },
+  };
+
+  function updateSpaceOrientation() {
+    const players = parseInt(document.getElementById('plExPlayers')?.value) || 0;
+    const w       = parseFloat(document.getElementById('plExWidth')?.value)  || 0;
+    const h       = parseFloat(document.getElementById('plExHeight')?.value) || 0;
+    const area    = w * h;
+    const m2      = (players > 0 && area > 0) ? Math.round(area / players) : null;
+    const calcOrient = calcOrientFromM2(m2);
+    const displayOrient = calcOrient || currentManualOrient;
+    const meta = displayOrient ? ORIENT_META[displayOrient] : null;
+
+    // m²/player
+    const m2El = document.getElementById('plM2Val');
+    if (m2El) m2El.innerHTML = m2 ? `${m2}<small>m²</small>` : `—<small>m²</small>`;
+
+    // Orientation badge
+    const orientEl   = document.getElementById('plM2Orient');
+    const orientText = document.getElementById('plM2OrientText');
+    if (orientEl && orientText) {
+      orientEl.className = 'pl-m2-orient' + (meta ? ` ${meta.cls}` : '');
+      let label = meta ? meta.label : '—';
+      if (calcOrient && currentManualOrient && calcOrient !== currentManualOrient) {
+        label = `${ORIENT_META[calcOrient].label} / ${ORIENT_META[currentManualOrient].label}`;
+      }
+      orientText.textContent = label;
+    }
+
+    // Reference tiles highlight
+    document.querySelectorAll('.pl-m2-ref div').forEach(div => {
+      div.classList.toggle('is-active', div.dataset.ref === calcOrient);
+    });
+
+    // Field stats
+    const fieldUsedEl = document.getElementById('plStatFieldUsed');
+    const areaEl      = document.getElementById('plStatArea');
+    if (fieldUsedEl) fieldUsedEl.innerHTML = (w && h) ? `${w}×${h}<sub>m</sub>` : '—';
+    if (areaEl)      areaEl.innerHTML      = area ? `${Math.round(area).toLocaleString()}<sub>m²</sub>` : '—';
+
+    // Summary card
+    updateSummaryCard();
+  }
+
+  function updateSummaryCard() {
+    const name    = document.getElementById('plExName')?.value || '—';
+    const players = document.getElementById('plExPlayers')?.value || '—';
+    const dur     = document.getElementById('plExDuration')?.value;
+    const w       = document.getElementById('plExWidth')?.value;
+    const h       = document.getElementById('plExHeight')?.value;
+
+    const nameEl  = document.getElementById('plSumName');
+    const durEl   = document.getElementById('plSumDuration');
+    const playEl  = document.getElementById('plSumPlayers');
+    const fieldEl2 = document.getElementById('plSumField');
+    const drillEl = document.getElementById('plSumDrills');
+    const metaEl  = document.getElementById('plSumMeta');
+
+    if (nameEl)  nameEl.textContent = name;
+    if (durEl)   durEl.innerHTML    = dur  ? `${dur}<sub>min</sub>` : '—';
+    if (playEl)  playEl.textContent = players;
+    if (fieldEl2) fieldEl2.innerHTML = (w && h) ? `${w}×${h}<sub>m</sub>` : '—';
+    if (drillEl) drillEl.textContent = subDrills.length || '—';
+    if (metaEl) {
+      const today2 = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+      metaEl.textContent = `exercise · ${today2}`;
+    }
+  }
+
+  function setOrientBtn(orient) {
+    currentManualOrient = orient || null;
+    document.querySelectorAll('.pl-orient-btn').forEach(btn => {
+      btn.classList.toggle('is-on', btn.dataset.orient === orient);
+    });
+    updateSpaceOrientation();
+  }
+
+  // Orientation button toggles
+  document.querySelectorAll('.pl-orient-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const same = btn.classList.contains('is-on');
+      setOrientBtn(same ? null : btn.dataset.orient);
+    });
+  });
+
+  // Form input listeners — live updates
+  ['plExPlayers','plExWidth','plExHeight','plExDuration','plExSeries','plExWorkTime','plExRestTime'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', updateSpaceOrientation);
+  });
+  document.getElementById('plExName')?.addEventListener('input', updateSummaryCard);
+
+  // ── Exercise CRUD ────────────────────────────────────────────────
+  async function loadExercises() {
+    const { data, error } = await window.sb.from('exercises')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
-    const list = document.getElementById('plDrillList');
-    if (!list) return;
-
-    // 42P01 = table does not exist
     if (error?.code === '42P01') {
-      disableSave = true;
-      list.innerHTML = `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:8px 0">Drills table not found in database.</div>`;
-      return 0; // return count so stat card shows 0
+      document.getElementById('plExList').innerHTML =
+        `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:8px 0">Run the SQL migration first to enable exercises.</div>`;
+      return;
     }
 
-    const drills = data || [];
-
-    if (!drills.length) {
-      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No drills yet. Click "+ Add drill" to create one.</div>`;
-      return 0;
-    }
-
-    list.innerHTML = drills.map((d, i) => `
-      <div class="pl-ex${currentDrillId===d.id?' is-active':''}" data-drill-id="${d.id}" style="cursor:pointer">
-        <div class="pl-ex-n">${i+1}</div>
-        <div class="pl-ex-body">
-          <div class="pl-ex-title">${d.name}</div>
-          <div class="pl-ex-meta">${d.duration ? d.duration+'′' : '—'}</div>
-        </div>
-        <div class="pl-ex-d"><i class="ti ti-clock"></i>${d.duration?d.duration+'′':'—'}</div>
-      </div>`).join('');
-
-    list.querySelectorAll('.pl-ex').forEach(el => {
-      el.addEventListener('click', () => loadDrillCanvas(el.dataset.drillId, drills));
-    });
-    return drills.length; // caller updates Drills stat card
+    exercises = data || [];
+    renderExerciseList();
   }
 
-  async function loadDrillCanvas(id, drills) {
-    const drill = drills.find(d => d.id === id);
-    if (!drill) return;
-    currentDrillId = id;
+  function renderExerciseList() {
+    const list = document.getElementById('plExList');
+    if (!list) return;
 
-    // Update label
-    const label = document.getElementById('plDrillLabel');
-    if (label) label.textContent = drill.name + (drill.duration ? ` · ${drill.duration}′` : '');
+    if (!exercises.length) {
+      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No exercises yet. Click "New" to create one.</div>`;
+      return;
+    }
 
-    // Load canvas JSON if exists
-    if (drill.objects_json) {
-      fc.loadFromJSON(drill.objects_json, () => fc.renderAll());
+    list.innerHTML = exercises.map((ex, i) => {
+      const area  = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0)
+        ? Math.round((ex.field_width * ex.field_height) / ex.players_count) : null;
+      const calcO = calcOrientFromM2(area);
+      const dispO = ex.orientation || calcO;
+      const meta  = dispO ? ORIENT_META[dispO] : null;
+      return `
+        <div class="pl-ex${currentExerciseId === ex.id ? ' is-active' : ''}" data-ex-id="${ex.id}">
+          <div class="pl-ex-n">${i+1}</div>
+          <div class="pl-ex-body">
+            <div class="pl-ex-title">${ex.name || 'Untitled'}</div>
+            <div class="pl-ex-meta">${ex.players_count ? ex.players_count + ' pl' : '—'} · ${area ? area + ' m²/p' : '—'}</div>
+          </div>
+          <span class="pl-ex-badge ${meta ? 'o-' + meta.short.toLowerCase() : 'o-none'}">${meta ? meta.short : '—'}</span>
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.pl-ex').forEach(el => {
+      el.addEventListener('click', () => selectExercise(el.dataset.exId));
+    });
+  }
+
+  async function selectExercise(id) {
+    const ex = exercises.find(e => e.id === id);
+    if (!ex) return;
+    currentExerciseId = id;
+    subDrills = [];
+
+    // Show config sections
+    document.getElementById('plExSummarySection')?.style.setProperty('display', '');
+    document.getElementById('plExConfigSection')?.style.setProperty('display', '');
+    document.getElementById('plAddDrill').style.display = '';
+
+    // Fill form
+    document.getElementById('plExName').value      = ex.name || '';
+    document.getElementById('plExPlayers').value   = ex.players_count || '';
+    document.getElementById('plExWidth').value     = ex.field_width   || '';
+    document.getElementById('plExHeight').value    = ex.field_height  || '';
+    document.getElementById('plExDuration').value  = ex.duration      || '';
+    document.getElementById('plExSeries').value    = ex.series        || '';
+    document.getElementById('plExWorkTime').value  = ex.work_time     || '';
+    document.getElementById('plExRestTime').value  = ex.rest_time     || '';
+
+    setOrientBtn(ex.orientation || null);
+
+    // Canvas
+    if (ex.objects_json) {
+      fc.loadFromJSON(ex.objects_json, () => fc.renderAll());
     } else {
       fc.clear(); fc.renderAll();
     }
-
-    // Update active state in list
-    document.querySelectorAll('#plDrillList .pl-ex').forEach(el =>
-      el.classList.toggle('is-active', el.dataset.drillId === id)
-    );
     _historyStack = [];
+
+    // Field tag
+    const label = document.getElementById('plFieldLabel');
+    if (label) label.textContent = ex.name || 'Untitled';
+    const crumb = document.getElementById('plCrumbEx');
+    if (crumb) crumb.textContent = ex.name || 'Untitled';
+    const canvasStat = document.getElementById('plCanvasStat');
+    if (canvasStat) canvasStat.innerHTML = `Exercise · <strong style="color:var(--cm-fg)">${ex.name || 'Untitled'}</strong>`;
+
+    // Highlight active in list
+    renderExerciseList();
+
+    // Sub-drills
+    await loadSubDrills(id);
   }
 
-  // Add drill
+  // ── Sub-drills ──────────────────────────────────────────────────
+  async function loadSubDrills(exerciseId) {
+    const { data, error } = await window.sb.from('exercise_drills')
+      .select('id,name,duration,notes,position')
+      .eq('exercise_id', exerciseId)
+      .order('position', { ascending: true });
+
+    if (error?.code === '42P01') { return; }
+
+    subDrills = data || [];
+    renderSubDrills();
+  }
+
+  function renderSubDrills() {
+    const list     = document.getElementById('plDrillList');
+    const countEl  = document.getElementById('plDrillCount');
+    if (!list) return;
+
+    if (countEl) countEl.textContent = subDrills.length ? `· ${subDrills.length}` : '';
+
+    if (!subDrills.length) {
+      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:4px 0">No drills yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = subDrills.map((d, i) => `
+      <div class="pl-drill" data-drill-id="${d.id}">
+        <div class="pl-drill-n">${i+1}</div>
+        <div class="pl-drill-body">
+          <div class="pl-drill-name">${d.name}</div>
+          <div class="pl-drill-meta">${d.duration ? d.duration + '′' : '—'}${d.notes ? ' · ' + d.notes : ''}</div>
+        </div>
+        <button class="pl-drill-del" data-del-drill="${d.id}" title="Delete drill">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>`).join('');
+
+    list.querySelectorAll('[data-del-drill]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const drillId = btn.dataset.delDrill;
+        const { error } = await window.sb.from('exercise_drills').delete().eq('id', drillId);
+        if (!error) await loadSubDrills(currentExerciseId);
+      });
+    });
+
+    updateSummaryCard();
+  }
+
   document.getElementById('plAddDrill')?.addEventListener('click', async () => {
-    const name = prompt('Drill name:', 'New drill');
+    if (!currentExerciseId) return;
+    const name = prompt('Drill name:', '');
     if (!name) return;
-    const dur = prompt('Duration (minutes):', '');
-    const { data, error } = await window.sb.from('drills').insert({
-      club_id: clubId,
-      name: name.trim(),
-      duration: dur ? parseInt(dur)||null : null,
+    const durStr  = prompt('Duration (minutes):', '');
+    const notes   = prompt('Notes (optional):', '') || null;
+    const { data, error } = await window.sb.from('exercise_drills').insert({
+      club_id:     clubId,
+      exercise_id: currentExerciseId,
+      name:        name.trim(),
+      duration:    durStr ? parseInt(durStr) || null : null,
+      notes,
+      position:    subDrills.length
+    }).select().single();
+    if (!error && data) await loadSubDrills(currentExerciseId);
+  });
+
+  // ── New exercise ────────────────────────────────────────────────
+  document.getElementById('plNewExBtn')?.addEventListener('click', async () => {
+    const { data, error } = await window.sb.from('exercises').insert({
+      club_id:    clubId,
+      name:       'New exercise',
       created_by: profile?.id || null
     }).select().single();
     if (!error && data) {
-      await loadDrills();
-      await loadDrillCanvas(data.id, [data]);
+      await loadExercises();
+      selectExercise(data.id);
+      setTimeout(() => document.getElementById('plExName')?.select(), 100);
     }
   });
 
-  // Save
-  document.getElementById('plSaveBtn')?.addEventListener('click', async () => {
-    if (disableSave) return; // table doesn't exist, already communicated in drill list
-    if (!currentDrillId) {
-      // auto-create so canvas work isn't lost
-      const { data: nd, error: ne } = await window.sb.from('drills').insert({
-        club_id: clubId, name: `Unnamed drill · ${today}`, created_by: profile?.id || null
-      }).select().single();
-      if (ne || !nd) { alert('Select or create a drill first.'); return; }
-      currentDrillId = nd.id;
-      await loadDrills();
+  // ── Save exercise ───────────────────────────────────────────────
+  async function saveExercise() {
+    if (!currentExerciseId) {
+      alert('Select or create an exercise first.'); return;
     }
     const btn = document.getElementById('plSaveBtn');
-    btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="font-size:14px"></i>Saving…';
-    const { error } = await window.sb.from('drills').update({ objects_json: fc.toJSON() }).eq('id', currentDrillId);
-    btn.disabled = false; btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save';
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader" style="font-size:14px"></i>Saving…';
+
+    const w = parseFloat(document.getElementById('plExWidth')?.value)  || 0;
+    const h = parseFloat(document.getElementById('plExHeight')?.value) || 0;
+    const players = parseInt(document.getElementById('plExPlayers')?.value) || 0;
+    const area = w * h;
+    const m2   = (players > 0 && area > 0) ? Math.round(area / players) : null;
+
+    const payload = {
+      name:          document.getElementById('plExName')?.value?.trim() || 'Untitled',
+      players_count: players,
+      field_width:   w || null,
+      field_height:  h || null,
+      duration:      parseInt(document.getElementById('plExDuration')?.value) || null,
+      series:        parseInt(document.getElementById('plExSeries')?.value)   || null,
+      work_time:     document.getElementById('plExWorkTime')?.value?.trim()   || null,
+      rest_time:     document.getElementById('plExRestTime')?.value?.trim()   || null,
+      orientation:   currentManualOrient || null,
+      objects_json:  fc.toJSON()
+    };
+
+    const { error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId);
+    btn.disabled = false;
     if (!error) {
       btn.innerHTML = '<i class="ti ti-check" style="font-size:14px;color:var(--cm-success)"></i>Saved';
-      setTimeout(() => { btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save'; }, 1500);
+      setTimeout(() => { btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save'; }, 1800);
+      await loadExercises();
+      // Update field label with new name
+      const newName = payload.name;
+      const label = document.getElementById('plFieldLabel');
+      if (label) label.textContent = newName;
+      const crumb = document.getElementById('plCrumbEx');
+      if (crumb) crumb.textContent = newName;
+    } else {
+      btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save';
+      alert('Error saving: ' + error.message);
     }
-  });
-
-  // DIAGNOSTIC — remove after fix confirmed
-  {
-    console.group('Planner diagnostic');
-    const _s = await window.sb.auth.getSession();
-    console.log('auth:', _s?.data?.session ? 'OK' : 'NO SESSION');
-    const _cid = await window.getClubId?.();
-    console.log('club_id:', _cid || 'MISSING');
-    for (const _t of ['players','training_sessions','drills','availability']) {
-      const { data: _d, error: _e } = await window.sb.from(_t).select('id').limit(1);
-      console.log(_t + ':', _e ? 'ERROR ' + _e.code + ' ' + _e.message : 'OK (' + (_d?.length ?? 0) + ' rows visible)');
-    }
-    const _db = document.querySelectorAll('.pl-dock-btn');
-    let _uw = 0; _db.forEach(b => { if (!b._hasListener) _uw++; });
-    console.log('dock buttons total:', _db.length, '| potentially unwired:', _uw);
-    console.groupEnd();
   }
 
-  // Initial load — return value updates Drills stat card
-  const drillCount = await loadDrills();
-  const drillsStatEl = document.getElementById('plStatDrills');
-  if (drillsStatEl) drillsStatEl.textContent = drillCount ?? '—';
+  document.getElementById('plSaveBtn')?.addEventListener('click', saveExercise);
+
+  // ── Initial load ─────────────────────────────────────────────────
+  await loadExercises();
+  updateSpaceOrientation();
 
 })().catch(console.error);
 </script>
@@ -1270,14 +1378,6 @@
 <script type="text/babel" src="settings-drawer.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
-
-<script>
-  // Dock visual single-select per group (cosmetic only — actions handled by main script)
-  document.querySelectorAll('.pl-dock-grp').forEach(g => g.querySelectorAll('.pl-dock-btn').forEach(b => b.addEventListener('click', () => {
-    g.querySelectorAll('.pl-dock-btn').forEach(o => o.classList.remove('is-on'));
-    b.classList.add('is-on');
-  })));
-</script>
 
 </body>
 </html>

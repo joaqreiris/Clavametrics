@@ -120,6 +120,11 @@
   .dp-ex-tag.tac{background:rgba(59,130,246,0.92);color:#fff}
   .dp-ex-tag.fis{background:rgba(245,158,11,0.92);color:#451a03}
   .dp-ex-tag.tec{background:rgba(155,89,182,0.92);color:#fff}
+  /* Planner exercise orientation tags */
+  .dp-ex-tag.orient-act{background:rgba(245,158,11,0.92);color:#451a03}
+  .dp-ex-tag.orient-str{background:rgba(220,38,38,0.92);color:#fff}
+  .dp-ex-tag.orient-vel{background:rgba(59,130,246,0.92);color:#fff}
+  .dp-ex-tag.orient-end{background:rgba(22,163,74,0.92);color:#fff}
   .dp-ex-dur{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 8px;border-radius:11px;background:rgba(0,0,0,0.55);color:#fff;font:700 11px/1 var(--cm-font-mono);backdrop-filter:blur(4px)}
   .dp-ex-dur .ti{font-size:11px}
   .dp-ex-thumb-content{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:8px}
@@ -435,6 +440,21 @@
 let _dpClubId = null, _dpPlayers = [], _dpInjMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 let _libExercises = [];
 
+// Orientation helpers for Planner exercises
+function _dpCalcOrientFromM2(m2) {
+  if (!m2 || m2 <= 0) return null;
+  if (m2 < 40)  return 'ACTIVATION';
+  if (m2 < 80)  return 'STRENGTH';
+  if (m2 < 160) return 'VELOCITY';
+  return 'ENDURANCE';
+}
+const _DP_ORIENT = {
+  ACTIVATION: { short:'ACT', tagCls:'orient-act', label:'Activation' },
+  STRENGTH:   { short:'STR', tagCls:'orient-str', label:'Strength' },
+  VELOCITY:   { short:'VEL', tagCls:'orient-vel', label:'Velocity' },
+  ENDURANCE:  { short:'END', tagCls:'orient-end', label:'Endurance' },
+};
+
 function _dpFmt(dateStr) {
   const d = new Date(dateStr + 'T12:00:00');
   return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
@@ -566,7 +586,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,intensity,notes,exercise_id,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   renderExerciseList(data || []);
@@ -584,32 +604,68 @@ function renderExerciseList(exercises) {
   const totalMin = exercises.reduce((s, e) => s + (e.duration || 0), 0);
   if (ct) ct.textContent = `${exercises.length} · ${totalMin} min`;
   grid.innerHTML = exercises.map(e => {
-    const nm  = e.gym_exercises?.name || e.name || '—';
-    const cat = (e.gym_exercises?.category || 'other').toLowerCase();
-    const cls = CAT_CLS[cat] || 'oth';
-    const lbl = CAT_LABEL[cat] || 'Other';
     const dur = e.duration ? `${e.duration}′` : '—';
-    const desc = e.gym_exercises?.description || e.notes || '';
-    const intensity = e.intensity || '';
-    return `<div class="dp-ex" data-seid="${e.id}">
-      <div class="dp-ex-thumb">
-        <span class="dp-ex-tag ${cls}">${lbl}</span>
-        <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
-        <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
-          <i class="ti ti-dumbbell" style="font-size:28px;opacity:.35;color:#fff"></i>
+    if (e.planner_exercise_id) {
+      // Planner (field) exercise
+      const orient  = e.calc_orientation || null;
+      const meta    = orient ? _DP_ORIENT[orient] : null;
+      const tagCls  = meta ? meta.tagCls : 'tac';
+      const tagLbl  = meta ? meta.short  : 'FIELD';
+      const m2      = e.m2_per_player;
+      const players = e.players_count;
+      const w = e.field_width, h = e.field_height;
+      const fieldStr = (w && h) ? `${w}×${h}m` : null;
+      return `<div class="dp-ex" data-seid="${e.id}">
+        <div class="dp-ex-thumb">
+          <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
+          <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
+          <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
+            <i class="ti ti-soccer-field" style="font-size:28px;opacity:.35;color:#fff"></i>
+          </div>
         </div>
-      </div>
-      <div class="dp-ex-b">
-        <div class="dp-ex-name">${nm}</div>
-        <div class="dp-ex-meta">${intensity ? `<span class="it"><i class="ti ti-flame"></i>${intensity}</span>` : ''}</div>
-        ${desc ? `<div class="dp-ex-desc">${desc}</div>` : ''}
-        <div class="dp-ex-foot">
-          <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? 'LIBRARY' : 'MANUAL'}</span>
-          <span class="grow"></span>
-          <button onclick="deleteExercise('${e.id}')" title="Remove"><i class="ti ti-trash"></i></button>
+        <div class="dp-ex-b">
+          <div class="dp-ex-name">${e.name || '—'}</div>
+          <div class="dp-ex-meta">
+            ${players ? `<span class="it"><i class="ti ti-users"></i>${players} pl</span>` : ''}
+            ${m2 ? `<span class="it"><i class="ti ti-layout-navbar"></i>${m2} m²/p</span>` : ''}
+            ${fieldStr ? `<span class="it"><i class="ti ti-rectangle"></i>${fieldStr}</span>` : ''}
+          </div>
+          <div class="dp-ex-foot">
+            <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">PLANNER</span>
+            <span class="grow"></span>
+            <a href="Planner.html" title="Open in Planner" style="width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:var(--cm-fg-muted);text-decoration:none" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''"><i class="ti ti-external-link" style="font-size:13px"></i></a>
+            <button onclick="deleteExercise('${e.id}')" title="Remove"><i class="ti ti-trash"></i></button>
+          </div>
         </div>
-      </div>
-    </div>`;
+      </div>`;
+    } else {
+      // Gym / manual exercise
+      const nm  = e.gym_exercises?.name || e.name || '—';
+      const cat = (e.gym_exercises?.category || 'other').toLowerCase();
+      const cls = CAT_CLS[cat] || 'oth';
+      const lbl = CAT_LABEL[cat] || 'Other';
+      const desc      = e.gym_exercises?.description || e.notes || '';
+      const intensity = e.intensity || '';
+      return `<div class="dp-ex" data-seid="${e.id}">
+        <div class="dp-ex-thumb">
+          <span class="dp-ex-tag ${cls}">${lbl}</span>
+          <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
+          <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
+            <i class="ti ti-dumbbell" style="font-size:28px;opacity:.35;color:#fff"></i>
+          </div>
+        </div>
+        <div class="dp-ex-b">
+          <div class="dp-ex-name">${nm}</div>
+          <div class="dp-ex-meta">${intensity ? `<span class="it"><i class="ti ti-flame"></i>${intensity}</span>` : ''}</div>
+          ${desc ? `<div class="dp-ex-desc">${desc}</div>` : ''}
+          <div class="dp-ex-foot">
+            <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? 'LIBRARY' : 'MANUAL'}</span>
+            <span class="grow"></span>
+            <button onclick="deleteExercise('${e.id}')" title="Remove"><i class="ti ti-trash"></i></button>
+          </div>
+        </div>
+      </div>`;
+    }
   }).join('') + '<button class="dp-ex-add" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
 }
 
@@ -628,48 +684,81 @@ async function deleteExercise(seid) {
   if (!error) await loadSessionExercises(_dpCurrentSessionId);
 }
 
-// ── From library ──
+// ── From library (Planner exercises) ──
 async function openLibModal() {
   document.getElementById('libBackdrop').style.display = 'flex';
   document.getElementById('libSearch').value = '';
   document.getElementById('libFooter').textContent = 'Loading…';
-  if (!_libExercises.length) {
-    const { data } = await window.sb.from('gym_exercises')
-      .select('id,name,category,muscle_group,description')
-      .eq('club_id', _dpClubId).order('name');
-    _libExercises = data || [];
+  _libExercises = [];
+  const { data, error } = await window.sb.from('exercises')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time')
+    .eq('club_id', _dpClubId).order('name');
+  if (error?.code === '42P01') {
+    document.getElementById('libList').innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Run the SQL migration to enable the Planner library.</div>';
+    document.getElementById('libFooter').textContent = '—';
+    return;
   }
+  _libExercises = data || [];
   filterLib();
 }
 function closeLibModal() { document.getElementById('libBackdrop').style.display = 'none'; }
 function filterLib() {
   const q   = (document.getElementById('libSearch').value || '').toLowerCase();
-  const fil = q ? _libExercises.filter(e => (e.name + ' ' + (e.category||'')).toLowerCase().includes(q)) : _libExercises;
+  const fil = q ? _libExercises.filter(e => (e.name||'').toLowerCase().includes(q)) : _libExercises;
   const list = document.getElementById('libList');
-  document.getElementById('libFooter').textContent = `${fil.length} exercises`;
-  if (!fil.length) { list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises found</div>'; return; }
+  document.getElementById('libFooter').textContent = `${fil.length} exercise${fil.length !== 1 ? 's' : ''} in library`;
+  if (!fil.length) {
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises found. Create some in <a href="Planner.html" style="color:var(--cm-accent);text-decoration:none">Planner</a>.</div>';
+    return;
+  }
   list.innerHTML = fil.map(e => {
-    const cat = (e.category||'other').toLowerCase();
-    const cls = CAT_CLS[cat] || 'oth';
-    const lbl = CAT_LABEL[cat] || 'Other';
-    return `<div onclick="addLibExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
-      <div style="flex-shrink:0"><span class="dp-ex-tag ${cls}" style="position:static;transform:none;font-size:10px">${lbl}</span></div>
+    const area    = (e.field_width && e.field_height) ? e.field_width * e.field_height : null;
+    const m2      = (area && e.players_count > 0) ? Math.round(area / e.players_count) : null;
+    const calcO   = _dpCalcOrientFromM2(m2);
+    const dispO   = e.orientation || calcO;
+    const meta    = dispO ? _DP_ORIENT[dispO] : null;
+    const tagCls  = meta ? meta.tagCls : 'tac';
+    const tagLbl  = meta ? meta.short  : 'FIELD';
+    const dur     = e.duration ? `${e.duration}′` : null;
+    const blocks  = (e.series && e.work_time) ? `${e.series}×${e.work_time}` : null;
+    const players = e.players_count || null;
+    const fieldStr = (e.field_width && e.field_height) ? `${e.field_width}×${e.field_height}m` : null;
+    const meta2   = [players ? `${players} players` : null, m2 ? `${m2} m²/p` : null, fieldStr].filter(Boolean).join(' · ');
+    return `<div onclick="addPlannerExercise('${e.id}')" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''">
+      <div style="flex-shrink:0">
+        <span class="dp-ex-tag ${tagCls}" style="position:static;transform:none;font-size:10px">${tagLbl}</span>
+      </div>
       <div style="flex:1;min-width:0">
-        <div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name}</div>
-        ${e.muscle_group ? `<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${e.muscle_group}</div>` : ''}
+        <div style="font:500 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name || 'Untitled'}</div>
+        <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap">
+          ${dur    ? `<span><i class="ti ti-clock" style="font-size:10px"></i> ${dur}</span>` : ''}
+          ${blocks ? `<span>${blocks}</span>` : ''}
+          ${meta2  ? `<span style="color:var(--cm-fg-faint)">${meta2}</span>` : ''}
+        </div>
       </div>
       <i class="ti ti-plus" style="font-size:16px;color:var(--cm-accent);flex-shrink:0"></i>
     </div>`;
   }).join('');
 }
-async function addLibExercise(exerciseId) {
+async function addPlannerExercise(exerciseId) {
   if (!_dpCurrentSessionId) { alert('No session for this date. Create a training session first.'); return; }
-  const ex = _libExercises.find(e => e.id === exerciseId);
+  const ex  = _libExercises.find(e => e.id === exerciseId);
   const pos = document.querySelectorAll('#dpExGrid .dp-ex').length;
+  const area = (ex?.field_width && ex?.field_height) ? ex.field_width * ex.field_height : null;
+  const m2   = (area && ex?.players_count > 0) ? Math.round(area / ex.players_count) : null;
   const { error } = await window.sb.from('session_exercises').insert({
-    club_id: _dpClubId, session_id: _dpCurrentSessionId,
-    exercise_id: exerciseId, name: ex?.name || null,
-    phase: 'main', duration: 10, position: pos
+    club_id:             _dpClubId,
+    session_id:          _dpCurrentSessionId,
+    planner_exercise_id: exerciseId,
+    name:                ex?.name        || null,
+    phase:               'main',
+    duration:            ex?.duration    || null,
+    position:            pos,
+    field_width:         ex?.field_width  || null,
+    field_height:        ex?.field_height || null,
+    players_count:       ex?.players_count || null,
+    m2_per_player:       m2,
+    calc_orientation:    _dpCalcOrientFromM2(m2) || ex?.orientation || null
   });
   if (!error) { closeLibModal(); await loadSessionExercises(_dpCurrentSessionId); }
 }
