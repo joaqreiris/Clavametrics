@@ -19,13 +19,14 @@
   .hub-topbar .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
   .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
 
-  /* === Planner layout: 2 columns === */
+  /* === Planner layout: 3 columns === */
   .pl-page {
     display:grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 300px 1fr 280px;
     height: calc(100vh - 56px);
     overflow:hidden;
   }
+  @media (max-width:1200px) { .pl-page { grid-template-columns: 280px 1fr 260px; } }
   @media (max-width:1100px) { .pl-page { grid-template-columns: 1fr; height:auto; } }
 
   /* LEFT PANEL */
@@ -417,6 +418,121 @@
   #plAvailPills { display:flex; flex-wrap:wrap; gap:5px; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* === Toggle buttons (intensity / focus / game type) === */
+  .pl-toggle-row { display:flex; gap:4px; flex-wrap:wrap; }
+  .pl-toggle-btn {
+    padding:6px 9px; border-radius:6px;
+    border:1px solid var(--cm-border); background:var(--cm-bg-soft);
+    color:var(--cm-fg-muted); font:600 9px/1 var(--cm-font-mono);
+    letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; transition:all 120ms;
+  }
+  .pl-toggle-btn:hover { border-color:var(--cm-border-strong); color:var(--cm-fg); }
+  .pl-toggle-btn.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:var(--cm-accent); }
+  .pl-toggle-btn.int-low.is-on    { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+  .pl-toggle-btn.int-med.is-on    { background:var(--cm-warning-bg); color:var(--cm-warning); border-color:var(--cm-warning-bd); }
+  .pl-toggle-btn.int-high.is-on   { background:var(--cm-danger-bg);  color:var(--cm-danger);  border-color:var(--cm-danger-bd); }
+  .pl-toggle-btn.int-vhigh.is-on  { background:#3b0764; color:#c4b5fd; border-color:#7c3aed; }
+
+  /* Game type toggle switch */
+  .pl-switch-row { display:flex; align-items:center; gap:8px; }
+  .pl-switch { position:relative; width:34px; height:18px; flex-shrink:0; }
+  .pl-switch input { opacity:0; width:0; height:0; }
+  .pl-switch-slider {
+    position:absolute; inset:0; background:var(--cm-border-strong);
+    border-radius:9px; cursor:pointer; transition:background 150ms;
+  }
+  .pl-switch-slider::before {
+    content:""; position:absolute; width:12px; height:12px; left:3px; bottom:3px;
+    background:#fff; border-radius:50%; transition:transform 150ms;
+  }
+  .pl-switch input:checked + .pl-switch-slider { background:var(--cm-accent); }
+  .pl-switch input:checked + .pl-switch-slider::before { transform:translateX(16px); }
+  .pl-switch-lbl { font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .pl-gt-selector { margin-top:6px; display:none; }
+  .pl-gt-selector.is-visible { display:flex; }
+
+  /* === RIGHT LIBRARY PANEL === */
+  .pl-rlib {
+    background:var(--cm-surface); border-left:1px solid var(--cm-border);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .pl-rlib-head {
+    padding:12px 12px 10px; border-bottom:1px solid var(--cm-border-soft);
+    display:flex; align-items:center; gap:6px; flex-shrink:0;
+  }
+  .pl-rlib-head h3 { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); flex:1; display:flex; align-items:center; gap:6px; }
+  .pl-rlib-head h3 .ti { font-size:12px; }
+  .pl-rlib-search { padding:8px 10px; border-bottom:1px solid var(--cm-border-soft); flex-shrink:0; }
+  .pl-rlib-search input {
+    width:100%; padding:6px 9px;
+    background:var(--cm-bg-soft); border:1px solid var(--cm-border);
+    border-radius:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg);
+    outline:none; box-sizing:border-box; transition:border-color 120ms;
+  }
+  .pl-rlib-search input:focus { border-color:var(--cm-accent); }
+  .pl-rlib-filters { padding:8px 10px; border-bottom:1px solid var(--cm-border-soft); display:flex; flex-direction:column; gap:7px; flex-shrink:0; }
+  .pl-rlib-flbl { font:500 9px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:3px; }
+  .pl-rlib-chips { display:flex; gap:3px; flex-wrap:wrap; }
+  .pl-rlib-chip {
+    padding:4px 7px; border-radius:5px; border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft); color:var(--cm-fg-muted);
+    font:600 8.5px/1 var(--cm-font-mono); letter-spacing:0.05em; text-transform:uppercase;
+    cursor:pointer; transition:all 100ms;
+  }
+  .pl-rlib-chip:hover { border-color:var(--cm-border-strong); color:var(--cm-fg); }
+  .pl-rlib-chip.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:var(--cm-accent); }
+  .pl-rlib-md-row { display:flex; gap:4px; align-items:center; }
+  .pl-rlib-md-row input {
+    width:60px; padding:4px 6px; background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border); border-radius:5px;
+    font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg);
+    outline:none; box-sizing:border-box; text-align:center;
+  }
+  .pl-rlib-md-row input:focus { border-color:var(--cm-accent); }
+  .pl-rlib-md-row span { font:500 9.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pl-rlib-list { flex:1; padding:8px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+
+  /* Library card */
+  .pl-lib-card {
+    padding:9px 10px; border:1px solid var(--cm-border-soft); border-radius:8px;
+    background:var(--cm-bg-soft); cursor:pointer; transition:border-color 120ms, background 120ms;
+  }
+  .pl-lib-card:hover { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .pl-lib-card.is-active { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .pl-lib-card-name { font:600 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl-lib-card-meta { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .pl-lib-card-tags { display:flex; gap:3px; flex-wrap:wrap; margin-top:5px; }
+  .pl-lib-tag {
+    padding:2px 5px; border-radius:3px;
+    font:700 7.5px/1 var(--cm-font-mono); letter-spacing:0.05em; text-transform:uppercase;
+  }
+  .pl-lib-tag.o-act { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .pl-lib-tag.o-str { background:var(--cm-danger-bg);  color:var(--cm-danger); }
+  .pl-lib-tag.o-vel { background:var(--cm-info-bg);    color:var(--cm-info); }
+  .pl-lib-tag.o-end { background:var(--cm-success-bg); color:var(--cm-success); }
+  .pl-lib-tag.t-int-low  { background:var(--cm-success-bg); color:var(--cm-success); }
+  .pl-lib-tag.t-int-med  { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .pl-lib-tag.t-int-high { background:var(--cm-danger-bg);  color:var(--cm-danger); }
+  .pl-lib-tag.t-int-vhigh{ background:#3b0764; color:#c4b5fd; }
+  .pl-lib-tag.t-game     { background:var(--cm-info-bg); color:var(--cm-info); }
+  .pl-lib-tag.t-focus    { background:var(--cm-bg); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
+  .pl-lib-tag.t-md       { background:var(--cm-bg); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
+
+  /* Preview floating card */
+  .pl-lib-preview {
+    position:fixed; z-index:200; pointer-events:none;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:10px; box-shadow:var(--cm-shadow-2);
+    padding:12px; width:210px; opacity:0; transition:opacity 100ms;
+  }
+  .pl-lib-preview.is-visible { opacity:1; }
+  .pl-lib-preview-name { font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:8px; }
+  .pl-lib-preview-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  .pl-lib-preview-cell { background:var(--cm-bg-soft); border-radius:5px; padding:5px 7px; }
+  .pl-lib-preview-cell .l { font:500 8px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:2px; }
+  .pl-lib-preview-cell .v { font:600 12px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pl-lib-preview-tags { display:flex; gap:3px; flex-wrap:wrap; margin-top:7px; }
 </style>
 </head>
 <body class="cm">
@@ -450,20 +566,7 @@
       <!-- LEFT PANEL -->
       <aside class="pl-panel">
 
-        <!-- 1. Exercise library -->
-        <div class="pl-section">
-          <h3>
-            <i class="ti ti-book-2"></i>Library
-            <button class="cm-btn is-primary is-sm" id="plNewExBtn" style="margin-left:auto;height:22px;padding:0 8px;font-size:10.5px">
-              <i class="ti ti-plus" style="font-size:11px"></i>New
-            </button>
-          </h3>
-          <div id="plExList">
-            <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">Loading…</div>
-          </div>
-        </div>
-
-        <!-- 2. Exercise summary (shown when exercise selected) -->
+        <!-- 1. Exercise summary (shown when exercise selected) -->
         <div class="pl-section" id="plExSummarySection" style="display:none">
           <h3><i class="ti ti-dumbbell"></i>Summary</h3>
           <div class="pl-ex-summary">
@@ -526,6 +629,47 @@
             <div class="pl-form-field">
               <label class="pl-form-label">Rest time</label>
               <input type="text" class="pl-form-input" id="plExRestTime" placeholder="1:30">
+            </div>
+          </div>
+
+          <div class="pl-form-row cols-2" style="margin-bottom:10px">
+            <div class="pl-form-field">
+              <label class="pl-form-label">Match Day</label>
+              <input type="number" class="pl-form-input" id="plExMatchDay" placeholder="e.g. -3" min="-7" max="7">
+            </div>
+            <div class="pl-form-field">
+              <label class="pl-form-label">Intensity</label>
+              <div class="pl-toggle-row" id="plIntensityBtns">
+                <button class="pl-toggle-btn int-low"   data-int="LOW">Low</button>
+                <button class="pl-toggle-btn int-med"   data-int="MEDIUM">Med</button>
+                <button class="pl-toggle-btn int-high"  data-int="HIGH">High</button>
+                <button class="pl-toggle-btn int-vhigh" data-int="VERY_HIGH">V.High</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="pl-form-field" style="margin-bottom:10px">
+            <label class="pl-form-label">Focus</label>
+            <div class="pl-toggle-row" id="plFocusBtns">
+              <button class="pl-toggle-btn" data-focus="Táctico">Táctico</button>
+              <button class="pl-toggle-btn" data-focus="Individual">Individual</button>
+              <button class="pl-toggle-btn" data-focus="Físico">Físico</button>
+            </div>
+          </div>
+
+          <div class="pl-form-field" style="margin-bottom:10px">
+            <label class="pl-form-label">Tipo de juego</label>
+            <div class="pl-switch-row" style="margin-bottom:6px">
+              <label class="pl-switch">
+                <input type="checkbox" id="plGameTypeToggle">
+                <span class="pl-switch-slider"></span>
+              </label>
+              <span class="pl-switch-lbl" id="plGameTypeLbl">Off</span>
+            </div>
+            <div class="pl-toggle-row pl-gt-selector" id="plGameTypeBtns">
+              <button class="pl-toggle-btn" data-gt="SSG">SSG</button>
+              <button class="pl-toggle-btn" data-gt="MSG">MSG</button>
+              <button class="pl-toggle-btn" data-gt="LSG">LSG</button>
             </div>
           </div>
 
@@ -688,6 +832,86 @@
         </div>
 
       </section>
+
+      <!-- RIGHT PANEL: Exercise Library -->
+      <aside class="pl-rlib">
+        <div class="pl-rlib-head">
+          <h3><i class="ti ti-book-2"></i>Library</h3>
+          <button class="cm-btn is-primary is-sm" id="plNewExBtn" style="height:22px;padding:0 8px;font-size:10.5px">
+            <i class="ti ti-plus" style="font-size:11px"></i>New
+          </button>
+        </div>
+
+        <div class="pl-rlib-search">
+          <input type="text" id="plLibSearch" placeholder="Search exercises…">
+        </div>
+
+        <div class="pl-rlib-filters">
+          <div>
+            <div class="pl-rlib-flbl">Match Day</div>
+            <div class="pl-rlib-md-row">
+              <span>MD</span>
+              <input type="number" id="plFiltMdMin" placeholder="min" min="-7" max="7">
+              <span>to</span>
+              <input type="number" id="plFiltMdMax" placeholder="max" min="-7" max="7">
+            </div>
+          </div>
+          <div>
+            <div class="pl-rlib-flbl">Intensity</div>
+            <div class="pl-rlib-chips" id="plFiltIntensity">
+              <button class="pl-rlib-chip" data-val="LOW">Low</button>
+              <button class="pl-rlib-chip" data-val="MEDIUM">Medium</button>
+              <button class="pl-rlib-chip" data-val="HIGH">High</button>
+              <button class="pl-rlib-chip" data-val="VERY_HIGH">V.High</button>
+            </div>
+          </div>
+          <div>
+            <div class="pl-rlib-flbl">Focus</div>
+            <div class="pl-rlib-chips" id="plFiltFocus">
+              <button class="pl-rlib-chip" data-val="Táctico">Táctico</button>
+              <button class="pl-rlib-chip" data-val="Individual">Individual</button>
+              <button class="pl-rlib-chip" data-val="Físico">Físico</button>
+            </div>
+          </div>
+          <div>
+            <div class="pl-rlib-flbl">Tipo de juego</div>
+            <div class="pl-rlib-chips" id="plFiltGameType">
+              <button class="pl-rlib-chip" data-val="SSG">SSG</button>
+              <button class="pl-rlib-chip" data-val="MSG">MSG</button>
+              <button class="pl-rlib-chip" data-val="LSG">LSG</button>
+              <button class="pl-rlib-chip" data-val="NONE">Sin tipo</button>
+            </div>
+          </div>
+          <div>
+            <div class="pl-rlib-flbl">Orientación</div>
+            <div class="pl-rlib-chips" id="plFiltOrient">
+              <button class="pl-rlib-chip" data-val="ACTIVATION">Act</button>
+              <button class="pl-rlib-chip" data-val="STRENGTH">Str</button>
+              <button class="pl-rlib-chip" data-val="VELOCITY">Vel</button>
+              <button class="pl-rlib-chip" data-val="ENDURANCE">End</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pl-rlib-list" id="plLibList">
+          <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">Loading…</div>
+        </div>
+      </aside>
+
+      <!-- Preview tooltip (shared) -->
+      <div class="pl-lib-preview" id="plLibPreview">
+        <div class="pl-lib-preview-name" id="plPrevName">—</div>
+        <div class="pl-lib-preview-grid">
+          <div class="pl-lib-preview-cell"><div class="l">Players</div><div class="v" id="plPrevPlayers">—</div></div>
+          <div class="pl-lib-preview-cell"><div class="l">Field</div><div class="v" id="plPrevField">—</div></div>
+          <div class="pl-lib-preview-cell"><div class="l">m²/player</div><div class="v" id="plPrevM2">—</div></div>
+          <div class="pl-lib-preview-cell"><div class="l">Duration</div><div class="v" id="plPrevDur">—</div></div>
+          <div class="pl-lib-preview-cell"><div class="l">Match Day</div><div class="v" id="plPrevMd">—</div></div>
+          <div class="pl-lib-preview-cell"><div class="l">Intensity</div><div class="v" id="plPrevInt">—</div></div>
+        </div>
+        <div class="pl-lib-preview-tags" id="plPrevTags"></div>
+      </div>
+
     </section>
   </main>
 </div>
@@ -1105,7 +1329,53 @@
   let currentExerciseId    = null;
   let exercises            = [];
   let currentManualOrient  = null;
+  let currentIntensity     = null;
+  let currentFocus         = [];
+  let currentGameType      = null;
+  let currentGameTypeOn    = false;
   let subDrills            = [];
+
+  // ── Intensity toggle ────────────────────────────────────────────
+  function setIntensity(val) {
+    currentIntensity = val || null;
+    document.querySelectorAll('#plIntensityBtns .pl-toggle-btn').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.int === val));
+  }
+  document.querySelectorAll('#plIntensityBtns .pl-toggle-btn').forEach(b => {
+    b.addEventListener('click', () => setIntensity(b.classList.contains('is-on') ? null : b.dataset.int));
+  });
+
+  // ── Focus multi-select ──────────────────────────────────────────
+  function setFocus(arr) {
+    currentFocus = arr || [];
+    document.querySelectorAll('#plFocusBtns .pl-toggle-btn').forEach(b =>
+      b.classList.toggle('is-on', currentFocus.includes(b.dataset.focus)));
+  }
+  document.querySelectorAll('#plFocusBtns .pl-toggle-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      if (currentFocus.includes(b.dataset.focus)) currentFocus = currentFocus.filter(f => f !== b.dataset.focus);
+      else currentFocus = [...currentFocus, b.dataset.focus];
+      setFocus(currentFocus);
+    });
+  });
+
+  // ── Game type toggle ────────────────────────────────────────────
+  function setGameTypeEnabled(on) {
+    currentGameTypeOn = !!on;
+    document.getElementById('plGameTypeToggle').checked = currentGameTypeOn;
+    document.getElementById('plGameTypeLbl').textContent = currentGameTypeOn ? 'On' : 'Off';
+    document.getElementById('plGameTypeBtns').classList.toggle('is-visible', currentGameTypeOn);
+    if (!currentGameTypeOn) setGameType(null);
+  }
+  function setGameType(val) {
+    currentGameType = val || null;
+    document.querySelectorAll('#plGameTypeBtns .pl-toggle-btn').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.gt === val));
+  }
+  document.getElementById('plGameTypeToggle')?.addEventListener('change', e => setGameTypeEnabled(e.target.checked));
+  document.querySelectorAll('#plGameTypeBtns .pl-toggle-btn').forEach(b => {
+    b.addEventListener('click', () => setGameType(b.classList.contains('is-on') ? null : b.dataset.gt));
+  });
 
   // ── Orientation helpers ─────────────────────────────────────────
   function calcOrientFromM2(m2) {
@@ -1214,49 +1484,146 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
     if (error?.code === '42P01') {
-      document.getElementById('plExList').innerHTML =
+      document.getElementById('plLibList').innerHTML =
         `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:8px 0">Run the SQL migration first to enable exercises.</div>`;
       return;
     }
 
     exercises = data || [];
-    renderExerciseList();
+    renderLibraryList();
   }
 
-  function renderExerciseList() {
-    const list = document.getElementById('plExList');
+  // ── Right panel filter state ────────────────────────────────────
+  const filtState = { intensity: new Set(), focus: new Set(), gameType: new Set(), orient: new Set() };
+
+  function toggleFilterChip(container, val) {
+    const key = container.id === 'plFiltIntensity' ? 'intensity'
+               : container.id === 'plFiltFocus'     ? 'focus'
+               : container.id === 'plFiltGameType'  ? 'gameType'
+               : 'orient';
+    if (filtState[key].has(val)) filtState[key].delete(val);
+    else filtState[key].add(val);
+    container.querySelectorAll('.pl-rlib-chip').forEach(c =>
+      c.classList.toggle('is-on', filtState[key].has(c.dataset.val)));
+    renderLibraryList();
+  }
+
+  ['plFiltIntensity','plFiltFocus','plFiltGameType','plFiltOrient'].forEach(id => {
+    document.getElementById(id)?.querySelectorAll('.pl-rlib-chip').forEach(c =>
+      c.addEventListener('click', () => toggleFilterChip(document.getElementById(id), c.dataset.val)));
+  });
+  document.getElementById('plLibSearch')?.addEventListener('input', renderLibraryList);
+  document.getElementById('plFiltMdMin')?.addEventListener('input', renderLibraryList);
+  document.getElementById('plFiltMdMax')?.addEventListener('input', renderLibraryList);
+
+  // ── Intensity & orient label helpers ────────────────────────────
+  const INT_LABEL = { LOW:'Low', MEDIUM:'Medium', HIGH:'High', VERY_HIGH:'Very High' };
+  const INT_CLS   = { LOW:'t-int-low', MEDIUM:'t-int-med', HIGH:'t-int-high', VERY_HIGH:'t-int-vhigh' };
+
+  function renderLibraryList() {
+    const list = document.getElementById('plLibList');
     if (!list) return;
 
-    if (!exercises.length) {
-      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No exercises yet. Click "New" to create one.</div>`;
+    const search = (document.getElementById('plLibSearch')?.value || '').toLowerCase();
+    const mdMin  = document.getElementById('plFiltMdMin')?.value !== '' ? parseInt(document.getElementById('plFiltMdMin').value) : null;
+    const mdMax  = document.getElementById('plFiltMdMax')?.value !== '' ? parseInt(document.getElementById('plFiltMdMax').value) : null;
+
+    const filtered = exercises.filter(ex => {
+      if (search && !(ex.name||'').toLowerCase().includes(search)) return false;
+      if (mdMin !== null && (ex.match_day === null || ex.match_day < mdMin)) return false;
+      if (mdMax !== null && (ex.match_day === null || ex.match_day > mdMax)) return false;
+      if (filtState.intensity.size && !filtState.intensity.has(ex.intensity)) return false;
+      if (filtState.focus.size) {
+        const exFocus = ex.focus || [];
+        if (![...filtState.focus].some(f => exFocus.includes(f))) return false;
+      }
+      if (filtState.gameType.size) {
+        if (filtState.gameType.has('NONE') && filtState.gameType.size === 1) {
+          if (ex.game_type_enabled) return false;
+        } else {
+          const need = [...filtState.gameType].filter(v => v !== 'NONE');
+          if (need.length && !need.includes(ex.game_type)) return false;
+        }
+      }
+      if (filtState.orient.size && !filtState.orient.has(ex.orientation)) return false;
+      return true;
+    });
+
+    if (!filtered.length) {
+      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">${exercises.length ? 'No exercises match filters.' : 'No exercises yet. Click "New" to create one.'}</div>`;
       return;
     }
 
-    list.innerHTML = exercises.map((ex, i) => {
+    list.innerHTML = filtered.map(ex => {
       const area  = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0)
         ? Math.round((ex.field_width * ex.field_height) / ex.players_count) : null;
       const calcO = calcOrientFromM2(area);
       const dispO = ex.orientation || calcO;
       const meta  = dispO ? ORIENT_META[dispO] : null;
+      const mdStr = ex.match_day != null ? `MD${ex.match_day >= 0 ? '+' : ''}${ex.match_day}` : null;
+
+      let tags = '';
+      if (meta) tags += `<span class="pl-lib-tag ${meta.badgeCls}">${meta.short}</span>`;
+      if (ex.intensity) tags += `<span class="pl-lib-tag ${INT_CLS[ex.intensity]}">${INT_LABEL[ex.intensity]}</span>`;
+      if (ex.game_type_enabled && ex.game_type) tags += `<span class="pl-lib-tag t-game">${ex.game_type}</span>`;
+      if (mdStr) tags += `<span class="pl-lib-tag t-md">${mdStr}</span>`;
+      (ex.focus||[]).forEach(f => { tags += `<span class="pl-lib-tag t-focus">${f}</span>`; });
+
       return `
-        <div class="pl-ex${currentExerciseId === ex.id ? ' is-active' : ''}" data-ex-id="${ex.id}">
-          <div class="pl-ex-n">${i+1}</div>
-          <div class="pl-ex-body">
-            <div class="pl-ex-title">${ex.name || 'Untitled'}</div>
-            <div class="pl-ex-meta">${ex.players_count ? ex.players_count + ' pl' : '—'} · ${area ? area + ' m²/p' : '—'}</div>
-          </div>
-          <span class="pl-ex-badge ${meta ? 'o-' + meta.short.toLowerCase() : 'o-none'}">${meta ? meta.short : '—'}</span>
+        <div class="pl-lib-card${currentExerciseId === ex.id ? ' is-active' : ''}" data-ex-id="${ex.id}">
+          <div class="pl-lib-card-name">${ex.name || 'Untitled'}</div>
+          <div class="pl-lib-card-meta">${ex.players_count ? ex.players_count + ' pl' : '—'} · ${area ? area + ' m²/p' : '—'}${ex.duration ? ' · ' + ex.duration + 'min' : ''}</div>
+          ${tags ? `<div class="pl-lib-card-tags">${tags}</div>` : ''}
         </div>`;
     }).join('');
 
-    list.querySelectorAll('.pl-ex').forEach(el => {
-      el.addEventListener('click', () => selectExercise(el.dataset.exId));
+    list.querySelectorAll('.pl-lib-card').forEach(card => {
+      card.addEventListener('click',      () => selectExercise(card.dataset.exId));
+      card.addEventListener('mouseenter', e  => showPreview(card.dataset.exId, e));
+      card.addEventListener('mouseleave', ()  => hidePreview());
+      card.addEventListener('mousemove',  e  => positionPreview(e));
     });
+  }
+
+  // ── Preview tooltip ─────────────────────────────────────────────
+  const previewEl = document.getElementById('plLibPreview');
+  function showPreview(id, e) {
+    const ex = exercises.find(x => x.id === id);
+    if (!ex || !previewEl) return;
+    const area = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0)
+      ? Math.round((ex.field_width * ex.field_height) / ex.players_count) : null;
+    const dispO = ex.orientation || calcOrientFromM2(area);
+    const meta  = dispO ? ORIENT_META[dispO] : null;
+    const mdStr = ex.match_day != null ? `MD${ex.match_day >= 0 ? '+' : ''}${ex.match_day}` : '—';
+
+    document.getElementById('plPrevName').textContent    = ex.name || 'Untitled';
+    document.getElementById('plPrevPlayers').textContent = ex.players_count || '—';
+    document.getElementById('plPrevField').textContent   = (ex.field_width && ex.field_height) ? `${ex.field_width}×${ex.field_height}` : '—';
+    document.getElementById('plPrevM2').textContent      = area ? `${area} m²` : '—';
+    document.getElementById('plPrevDur').textContent     = ex.duration ? `${ex.duration} min` : '—';
+    document.getElementById('plPrevMd').textContent      = mdStr;
+    document.getElementById('plPrevInt').textContent     = ex.intensity ? INT_LABEL[ex.intensity] : '—';
+
+    let tags = '';
+    if (meta) tags += `<span class="pl-lib-tag ${meta.badgeCls}">${meta.label}</span>`;
+    if (ex.game_type_enabled && ex.game_type) tags += `<span class="pl-lib-tag t-game">${ex.game_type}</span>`;
+    (ex.focus||[]).forEach(f => { tags += `<span class="pl-lib-tag t-focus">${f}</span>`; });
+    document.getElementById('plPrevTags').innerHTML = tags;
+
+    positionPreview(e);
+    previewEl.classList.add('is-visible');
+  }
+  function hidePreview() { previewEl?.classList.remove('is-visible'); }
+  function positionPreview(e) {
+    if (!previewEl) return;
+    const x = e.clientX - 230, y = e.clientY + 12;
+    previewEl.style.left = Math.max(8, x) + 'px';
+    previewEl.style.top  = Math.min(window.innerHeight - 260, y) + 'px';
   }
 
   async function selectExercise(id) {
@@ -1279,8 +1646,13 @@
     document.getElementById('plExSeries').value    = ex.series        || '';
     document.getElementById('plExWorkTime').value  = ex.work_time     || '';
     document.getElementById('plExRestTime').value  = ex.rest_time     || '';
+    document.getElementById('plExMatchDay').value  = ex.match_day != null ? ex.match_day : '';
 
     setOrientBtn(ex.orientation || null);
+    setIntensity(ex.intensity || null);
+    setFocus(ex.focus || []);
+    setGameTypeEnabled(!!ex.game_type_enabled);
+    if (ex.game_type_enabled) setGameType(ex.game_type || null);
 
     // Canvas
     if (ex.objects_json) {
@@ -1299,7 +1671,7 @@
     if (canvasStat) canvasStat.innerHTML = `Exercise · <strong style="color:var(--cm-fg)">${ex.name || 'Untitled'}</strong>`;
 
     // Highlight active in list
-    renderExerciseList();
+    renderLibraryList();
 
     // Sub-drills
     await loadSubDrills(id);
@@ -1371,6 +1743,7 @@
   });
 
   // ── New exercise ────────────────────────────────────────────────
+  // plNewExBtn is in the right panel
   document.getElementById('plNewExBtn')?.addEventListener('click', async () => {
     const { data, error } = await window.sb.from('exercises').insert({
       club_id:    clubId,
@@ -1399,17 +1772,23 @@
     const area = w * h;
     const m2   = (players > 0 && area > 0) ? Math.round(area / players) : null;
 
+    const mdRaw = document.getElementById('plExMatchDay')?.value;
     const payload = {
-      name:          document.getElementById('plExName')?.value?.trim() || 'Untitled',
-      players_count: players,
-      field_width:   w || null,
-      field_height:  h || null,
-      duration:      parseInt(document.getElementById('plExDuration')?.value) || null,
-      series:        parseInt(document.getElementById('plExSeries')?.value)   || null,
-      work_time:     document.getElementById('plExWorkTime')?.value?.trim()   || null,
-      rest_time:     document.getElementById('plExRestTime')?.value?.trim()   || null,
-      orientation:   currentManualOrient || null,
-      objects_json:  fc.toJSON()
+      name:              document.getElementById('plExName')?.value?.trim() || 'Untitled',
+      players_count:     players,
+      field_width:       w || null,
+      field_height:      h || null,
+      duration:          parseInt(document.getElementById('plExDuration')?.value) || null,
+      series:            parseInt(document.getElementById('plExSeries')?.value)   || null,
+      work_time:         document.getElementById('plExWorkTime')?.value?.trim()   || null,
+      rest_time:         document.getElementById('plExRestTime')?.value?.trim()   || null,
+      orientation:       currentManualOrient || null,
+      match_day:         mdRaw !== '' && mdRaw != null ? parseInt(mdRaw) : null,
+      intensity:         currentIntensity || null,
+      focus:             currentFocus.length ? currentFocus : null,
+      game_type_enabled: currentGameTypeOn,
+      game_type:         currentGameTypeOn ? (currentGameType || null) : null,
+      objects_json:      fc.toJSON()
     };
 
     const { error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId);

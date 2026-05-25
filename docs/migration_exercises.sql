@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS exercises (
 
 ALTER TABLE exercises ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Club members can manage exercises" ON exercises;
 CREATE POLICY "Club members can manage exercises"
   ON exercises FOR ALL
   USING (club_id = (SELECT club_id FROM profiles WHERE id = auth.uid()));
@@ -41,11 +42,20 @@ CREATE TABLE IF NOT EXISTS exercise_drills (
 
 ALTER TABLE exercise_drills ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Club members can manage exercise_drills" ON exercise_drills;
 CREATE POLICY "Club members can manage exercise_drills"
   ON exercise_drills FOR ALL
   USING (club_id = (SELECT club_id FROM profiles WHERE id = auth.uid()));
 
--- 3. Extend session_exercises to support Planner exercises
+-- 3. New exercise metadata columns (match_day, intensity, focus, game type)
+ALTER TABLE exercises
+  ADD COLUMN IF NOT EXISTS match_day         integer,
+  ADD COLUMN IF NOT EXISTS intensity         text CHECK (intensity IN ('LOW','MEDIUM','HIGH','VERY_HIGH')),
+  ADD COLUMN IF NOT EXISTS focus             text[],
+  ADD COLUMN IF NOT EXISTS game_type_enabled boolean DEFAULT false,
+  ADD COLUMN IF NOT EXISTS game_type         text CHECK (game_type IN ('SSG','MSG','LSG'));
+
+-- 4. Extend session_exercises to support Planner exercises
 ALTER TABLE session_exercises
   ADD COLUMN IF NOT EXISTS planner_exercise_id  uuid    REFERENCES exercises(id),
   ADD COLUMN IF NOT EXISTS field_width          numeric(6,1),
