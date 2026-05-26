@@ -745,7 +745,7 @@
             <option value="travel">Travel</option>
             <option value="meeting">Meeting</option>
             <option value="evaluation">Evaluation</option>
-            <option value="video">Video session</option>
+            <option value="video_session">Video session</option>
             <option value="other">Other</option>
           </select>
         </div>
@@ -762,6 +762,46 @@
         <div class="sq-modal-field">
           <label for="calEvtF_notes">Notes</label>
           <textarea id="calEvtF_notes" placeholder="Optional" rows="2"></textarea>
+        </div>
+      </div>
+      <!-- Match extra fields (shown only when type = match) -->
+      <div id="calEvtMatchFields" style="display:none">
+        <div class="sq-modal-row">
+          <div class="sq-modal-field">
+            <label for="calEvtF_opponent">Opponent</label>
+            <input type="text" id="calEvtF_opponent" placeholder="e.g. Real Madrid">
+          </div>
+          <div class="sq-modal-field">
+            <label for="calEvtF_homeaway">Home / Away</label>
+            <select id="calEvtF_homeaway">
+              <option value="">—</option>
+              <option value="home">Home</option>
+              <option value="away">Away</option>
+              <option value="neutral">Neutral</option>
+            </select>
+          </div>
+        </div>
+        <div class="sq-modal-row">
+          <div class="sq-modal-field">
+            <label for="calEvtF_competition">Competition</label>
+            <select id="calEvtF_competition">
+              <option value="">—</option>
+              <option value="league">League</option>
+              <option value="cup">Cup</option>
+              <option value="international">International</option>
+              <option value="friendly">Friendly</option>
+            </select>
+          </div>
+          <div class="sq-modal-field">
+            <label for="calEvtF_starttime">Kick-off time</label>
+            <input type="time" id="calEvtF_starttime">
+          </div>
+        </div>
+        <div class="sq-modal-row">
+          <div class="sq-modal-field" style="grid-column:1/-1">
+            <label for="calEvtF_location">Location / Stadium</label>
+            <input type="text" id="calEvtF_location" placeholder="e.g. Estadio Municipal">
+          </div>
         </div>
       </div>
     </div>
@@ -903,10 +943,10 @@
 
 <script>
 // ── State ──────────────────────────────────────────────────────
-let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editMcId = null;
+let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editEvtSource = null, _editMcId = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 let _ribbonMeta = null; // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
-let _matchSessions = []; // training_sessions with session_type='match' from DB
+let _matchSessions = []; // calendar_events with type='match'
 const TODAY = new Date().toISOString().split('T')[0];
 
 const EVT_ICONS = {
@@ -1040,27 +1080,49 @@ function renderGrid() {
   });
 }
 
+// ── Fetch + merge training_sessions and calendar_events ────────
+async function fetchAllEvents(dateFrom, dateTo) {
+  const [sessRes, evtRes] = await Promise.all([
+    window.sb.from('training_sessions')
+      .select('id,title,session_type,duration,session_date,notes')
+      .eq('club_id', _clubId)
+      .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
+    window.sb.from('calendar_events')
+      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location')
+      .eq('club_id', _clubId)
+      .gte('date', dateFrom).lte('date', dateTo).order('date')
+  ]);
+  if (sessRes.error) return { error: sessRes.error.message };
+  const norm = (sessRes.data || []).map(s => ({
+    ...s, session_date: (s.session_date || '').split('T')[0], source: 'session'
+  }));
+  const evts = evtRes.error ? [] : (evtRes.data || []).map(e => ({
+    id: e.id, title: e.title, session_type: e.type,
+    session_date: (e.date || '').split('T')[0],
+    duration: e.duration_minutes, notes: e.notes,
+    opponent: e.opponent, competition: e.competition,
+    home_away: e.home_away, start_time: e.start_time, location: e.location,
+    source: 'event'
+  }));
+  return { data: [...norm, ...evts].sort((a, b) => a.session_date > b.session_date ? 1 : -1) };
+}
+
 // ── Load sessions for current MC ──────────────────────────────
 async function loadSessions() {
   const mc = _allMCs[_mcIdx];
   if (!mc) return;
   const grid = document.getElementById('calDaysGrid');
   if (grid) grid.innerHTML = '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
-  const { data, error } = await window.sb.from('training_sessions')
-    .select('id,title,session_type,duration,session_date,notes')
-    .eq('club_id', _clubId)
-    .gte('session_date', mc.start_date)
-    .lte('session_date', mc.end_date)
-    .order('session_date');
+  const { data, error } = await fetchAllEvents(mc.start_date, mc.end_date);
   if (error) {
-    if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Error loading sessions: ${error.message}</div>`;
+    if (grid) grid.innerHTML = `<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">Error loading sessions: ${error}</div>`;
     return;
   }
-  _sessions = (data || []).map(s => ({ ...s, session_date: s.session_date ? s.session_date.split('T')[0] : s.session_date }));
+  _sessions = data;
   _weekOffset = 0;
 
   // Travel Days KPI
-  const travelCt = _sessions.filter(s => s.session_type === 'travel' || s.session_type === 'away').length;
+  const travelCt = _sessions.filter(s => s.session_type === 'travel').length;
   const elTV = document.getElementById('calTravelV');
   const elTT = document.getElementById('calTravelT');
   if (elTV) elTV.innerHTML = `${travelCt} <sub>this MC</sub>`;
@@ -1070,19 +1132,36 @@ async function loadSessions() {
 }
 
 // ── Event modal ───────────────────────────────────────────────
+const CAL_EVT_TYPES = ['match','recovery','travel','meeting','evaluation','video_session'];
+
+function toggleMatchFields(type) {
+  const el = document.getElementById('calEvtMatchFields');
+  if (el) el.style.display = type === 'match' ? '' : 'none';
+}
+
 function openEvtModal(session, defaultDate) {
-  _editEvtId = session?.id || null;
+  _editEvtId     = session?.id     || null;
+  _editEvtSource = session?.source || null;
   document.getElementById('calEvtTitle').textContent = session ? 'Edit event' : 'New event';
   document.getElementById('calEvtId').value = session?.id || '';
   document.getElementById('calEvtF_title').value = session?.title || '';
-  document.getElementById('calEvtF_type').value  = session?.session_type || 'tactical';
+  const evtType = session?.session_type || 'tactical';
+  document.getElementById('calEvtF_type').value  = evtType;
   document.getElementById('calEvtF_date').value  = session?.session_date || defaultDate || TODAY;
   document.getElementById('calEvtF_duration').value = session?.duration || '';
   document.getElementById('calEvtF_notes').value = session?.notes || '';
   document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
   document.getElementById('calEvtSaving').style.display = 'none';
 
-  // Planning link
+  // Match extra fields
+  document.getElementById('calEvtF_opponent').value    = session?.opponent    || '';
+  document.getElementById('calEvtF_homeaway').value    = session?.home_away   || '';
+  document.getElementById('calEvtF_competition').value = session?.competition || '';
+  document.getElementById('calEvtF_starttime').value   = session?.start_time  ? session.start_time.slice(0,5) : '';
+  document.getElementById('calEvtF_location').value    = session?.location    || '';
+  toggleMatchFields(evtType);
+
+  // Planning link (only for training/gym)
   const planLink  = document.getElementById('calEvtPlanLink');
   const planLabel = document.getElementById('calEvtPlanLinkLabel');
   if (session && planLink) {
@@ -1091,14 +1170,13 @@ function openEvtModal(session, defaultDate) {
     if (cls === 'gym') {
       planLink.href = `Gym Planner.html?date=${date}`;
       planLabel.textContent = 'Open in Gym Planner';
-    } else if (!['match','travel','meeting','evaluation','video'].includes(cls)) {
+      planLink.style.display = 'inline-flex';
+    } else if (!CAL_EVT_TYPES.includes(session.session_type)) {
       planLink.href = `Daily Planning.html?date=${date}`;
       planLabel.textContent = 'Open in Daily Planning';
+      planLink.style.display = 'inline-flex';
     } else {
       planLink.style.display = 'none';
-    }
-    if (['gym','training'].includes(cls) || !['match','travel','meeting','evaluation','video'].includes(cls)) {
-      planLink.style.display = 'inline-flex';
     }
   } else if (planLink) {
     planLink.style.display = 'none';
@@ -1114,36 +1192,66 @@ async function saveEvt() {
   const saveBtn = document.getElementById('calEvtSave');
   saving.style.display = 'inline'; saveBtn.disabled = true;
 
-  const payload = {
-    title:        document.getElementById('calEvtF_title').value.trim(),
-    session_type: document.getElementById('calEvtF_type').value,
-    session_date: document.getElementById('calEvtF_date').value,
-    duration:     parseInt(document.getElementById('calEvtF_duration').value) || null,
-    notes:        document.getElementById('calEvtF_notes').value.trim() || null,
-  };
-  if (!payload.title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
+  const type     = document.getElementById('calEvtF_type').value;
+  const title    = document.getElementById('calEvtF_title').value.trim();
+  const date     = document.getElementById('calEvtF_date').value;
+  const duration = parseInt(document.getElementById('calEvtF_duration').value) || null;
+  const notes    = document.getElementById('calEvtF_notes').value.trim() || null;
 
+  if (!title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
+
+  const clubId = _clubId || await window.getClubId();
+  const isCalEvt = CAL_EVT_TYPES.includes(type);
   let error;
-  if (_editEvtId) {
-    ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
+
+  if (isCalEvt) {
+    const payload = { title, type, date, duration_minutes: duration, notes };
+    if (type === 'match') {
+      payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
+      payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
+      payload.competition = document.getElementById('calEvtF_competition').value || null;
+      payload.start_time  = document.getElementById('calEvtF_starttime').value || null;
+      payload.location    = document.getElementById('calEvtF_location').value.trim() || null;
+    }
+    if (_editEvtId && _editEvtSource === 'event') {
+      ({ error } = await window.sb.from('calendar_events').update(payload).eq('id', _editEvtId));
+    } else if (_editEvtId && _editEvtSource === 'session') {
+      // Type changed from training to calendar event: migrate
+      await window.sb.from('training_sessions').delete().eq('id', _editEvtId);
+      payload.club_id = clubId;
+      ({ error } = await window.sb.from('calendar_events').insert(payload));
+    } else {
+      payload.club_id = clubId;
+      ({ error } = await window.sb.from('calendar_events').insert(payload));
+    }
   } else {
-    const clubId = _clubId || await window.getClubId();
-    payload.club_id = clubId;
-    ({ error } = await window.sb.from('training_sessions').insert(payload));
+    const payload = { title, session_type: type, session_date: date, duration, notes };
+    if (_editEvtId && _editEvtSource === 'session') {
+      ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
+    } else if (_editEvtId && _editEvtSource === 'event') {
+      // Type changed from calendar event to training: migrate
+      await window.sb.from('calendar_events').delete().eq('id', _editEvtId);
+      payload.club_id = clubId;
+      ({ error } = await window.sb.from('training_sessions').insert(payload));
+    } else {
+      payload.club_id = clubId;
+      ({ error } = await window.sb.from('training_sessions').insert(payload));
+    }
   }
 
   saving.style.display = 'none'; saveBtn.disabled = false;
   if (error) { showCalToast('Error: ' + error.message); return; }
   closeEvtModal();
-  showCalToast(_editEvtId ? 'Session updated.' : 'Session added.');
+  showCalToast(_editEvtId ? 'Event updated.' : 'Event added.');
   await loadSessions();
 }
 
 async function deleteEvt() {
-  if (!_editEvtId || !confirm('Delete this session?')) return;
-  const { error } = await window.sb.from('training_sessions').delete().eq('id', _editEvtId);
+  if (!_editEvtId || !confirm('Delete this event?')) return;
+  const table = _editEvtSource === 'event' ? 'calendar_events' : 'training_sessions';
+  const { error } = await window.sb.from(table).delete().eq('id', _editEvtId);
   if (error) { showCalToast('Error: ' + error.message); return; }
-  closeEvtModal(); showCalToast('Session deleted.');
+  closeEvtModal(); showCalToast('Event deleted.');
   await loadSessions();
 }
 
@@ -1152,6 +1260,7 @@ document.getElementById('calEvtCancel').addEventListener('click', closeEvtModal)
 document.getElementById('calEvtSave').addEventListener('click', saveEvt);
 document.getElementById('calEvtDelete').addEventListener('click', deleteEvt);
 document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeEvtModal(); });
+document.getElementById('calEvtF_type').addEventListener('change', function() { toggleMatchFields(this.value); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });
 
 // Reload sessions when user returns to this tab (sync changes from Daily/Gym Planning)
@@ -1347,8 +1456,8 @@ document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg
 })));
 
 // ── Month view ────────────────────────────────────────────────
-const EVT_BG = { training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)', travel:'var(--cm-warning-bg)' };
-const EVT_CLR = { training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)', travel:'var(--cm-warning)' };
+const EVT_BG = { training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)', travel:'var(--cm-warning-bg)', meeting:'var(--cm-bg-soft)', evaluation:'var(--cm-warning-bg)', video:'var(--cm-info-bg)' };
+const EVT_CLR = { training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)', travel:'var(--cm-warning)', meeting:'var(--cm-fg-muted)', evaluation:'var(--cm-warning)', video:'var(--cm-info)' };
 
 async function renderMonthView() {
   const y = _monthY, m = _monthM;
@@ -1361,12 +1470,7 @@ async function renderMonthView() {
   const monthEnd    = `${y}-${String(m+1).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
   document.getElementById('calMonthGrid').innerHTML = '<div style="padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
 
-  const { data: sessions } = await window.sb.from('training_sessions')
-    .select('id,title,session_type,session_date')
-    .eq('club_id', _clubId)
-    .gte('session_date', monthStart)
-    .lte('session_date', monthEnd)
-    .order('session_date');
+  const { data: sessions } = await fetchAllEvents(monthStart, monthEnd);
 
   const sessMap = {};
   (sessions || []).forEach(s => {
@@ -1425,15 +1529,11 @@ async function renderListView() {
   if (!container) return;
   container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
 
-  const { data: sessions } = await window.sb.from('training_sessions')
-    .select('id,title,session_type,session_date,duration')
-    .eq('club_id', _clubId)
-    .gte('session_date', TODAY)
-    .order('session_date')
-    .limit(60);
+  const in6mo = new Date(Date.now() + 183 * 86400000).toISOString().split('T')[0];
+  const { data: sessions } = await fetchAllEvents(TODAY, in6mo);
 
   const items = (sessions || []).map(s => ({
-    date: (s.session_date||'').split('T')[0], title: s.title, type: s.session_type, duration: s.duration
+    date: s.session_date, title: s.title, type: s.session_type, duration: s.duration
   }));
   _allMCs.forEach(mc => {
     if (!mc.match_date || mc.match_date < TODAY) return;
@@ -1645,10 +1745,17 @@ function renderSeasonRibbon(mcs, extraMatches) {
       const d = s.session_date;
       if (!seenDates.has(d)) {
         seenDates.add(d);
-        const noteParts = (s.notes||'').split(' · ');
-        const haStr  = noteParts.find(p => /^(home|away)$/i.test(p)) || 'home';
-        const compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
-        rawMarkers.push({ date: d, isAway: haStr === 'away', comp: compClass(compStr), rival: s.title.replace(/^vs\s+/i,''), isFromMc: false });
+        let isAway, compStr;
+        if (s.home_away !== undefined) {
+          isAway  = s.home_away === 'away';
+          compStr = s.competition || '';
+        } else {
+          const noteParts = (s.notes||'').split(' · ');
+          isAway  = /away/i.test(noteParts.find(p => /^(home|away)$/i.test(p)) || '');
+          compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
+        }
+        const rival = s.opponent || (s.title||'Match').replace(/^vs\s+/i,'');
+        rawMarkers.push({ date: d, isAway, comp: compClass(compStr), rival, isFromMc: false });
       }
     });
 
@@ -1771,14 +1878,7 @@ async function renderUpcoming() {
 
   const in14d = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
 
-  const { data: sessions } = await window.sb
-    .from('training_sessions')
-    .select('id,title,session_type,session_date,notes')
-    .eq('club_id', _clubId)
-    .gte('session_date', TODAY)
-    .lte('session_date', in14d)
-    .order('session_date')
-    .limit(6);
+  const { data: sessions } = await fetchAllEvents(TODAY, in14d);
 
   // Merge sessions with match days from MCs
   const items = [];
@@ -1932,9 +2032,9 @@ async function showImportPreview(fixtures) {
   }
   // Check conflicts
   const dates = fixtures.map(f => f.date);
-  const { data: existing } = await window.sb.from('training_sessions')
-    .select('session_date').eq('club_id', _clubId).eq('session_type','match').in('session_date', dates);
-  const conflictDates = new Set((existing||[]).map(s => s.session_date.split('T')[0]));
+  const { data: existing } = await window.sb.from('calendar_events')
+    .select('date').eq('club_id', _clubId).eq('type','match').in('date', dates);
+  const conflictDates = new Set((existing||[]).map(s => (s.date||'').split('T')[0]));
 
   const previewEl = document.getElementById('calImportPreview');
   const bodyEl    = document.getElementById('calImportPreviewBody');
@@ -2011,25 +2111,28 @@ async function showImportPreview(fixtures) {
 
     if (overwrite) {
       const conflictDates = _importParsed.map(f => f.date);
-      await window.sb.from('training_sessions')
-        .delete().eq('club_id',_clubId).eq('session_type','match').in('session_date', conflictDates);
+      await window.sb.from('calendar_events')
+        .delete().eq('club_id',_clubId).eq('type','match').in('date', conflictDates);
     } else {
       // Check existing dates and skip
       const dates = _importParsed.map(f => f.date);
-      const { data: ex } = await window.sb.from('training_sessions')
-        .select('session_date').eq('club_id',_clubId).eq('session_type','match').in('session_date',dates);
-      const existSet = new Set((ex||[]).map(s => s.session_date.split('T')[0]));
+      const { data: ex } = await window.sb.from('calendar_events')
+        .select('date').eq('club_id',_clubId).eq('type','match').in('date',dates);
+      const existSet = new Set((ex||[]).map(s => (s.date||'').split('T')[0]));
       _importParsed = _importParsed.filter(f => !existSet.has(f.date));
     }
 
     if (_importParsed.length) {
       const rows = _importParsed.map(f => ({
         id: crypto.randomUUID(), club_id: _clubId,
-        title: `vs ${f.rival}`, session_type: 'match',
-        session_date: f.date, duration: null,
-        notes: [f.home_away, f.competition].filter(Boolean).join(' · ') || null,
+        title: `vs ${f.rival}`, type: 'match',
+        date: f.date,
+        opponent: f.rival,
+        home_away: f.home_away || 'home',
+        competition: f.competition || null,
+        duration_minutes: null,
       }));
-      const { error } = await window.sb.from('training_sessions').insert(rows);
+      const { error } = await window.sb.from('calendar_events').insert(rows);
       saving.style.display = 'none'; confBtn.disabled = false;
       if (error) { showCalToast('Error: ' + error.message); return; }
     }
@@ -2037,10 +2140,10 @@ async function showImportPreview(fixtures) {
     saving.style.display = 'none'; confBtn.disabled = false;
     closeImport();
     showCalToast(`${_importParsed.length} fixture${_importParsed.length>1?'s':''} imported.`);
-    // Reload match sessions and re-render ribbon + KPIs
-    const { data: ms } = await window.sb.from('training_sessions')
-      .select('id,title,session_date,notes').eq('club_id',_clubId).eq('session_type','match').order('session_date');
-    _matchSessions = (ms||[]).map(s => ({...s, session_date: s.session_date.split('T')[0]}));
+    // Reload match events and re-render ribbon + KPIs
+    const { data: ms } = await window.sb.from('calendar_events')
+      .select('id,title,date,opponent,home_away,competition').eq('club_id',_clubId).eq('type','match').order('date');
+    _matchSessions = (ms||[]).map(s => ({...s, session_date: (s.date||'').split('T')[0], title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')}));
     renderSeasonRibbon(_allMCs, _matchSessions);
     renderCalKPIs(_allMCs);
     renderUpcoming();
@@ -2072,13 +2175,17 @@ async function showImportPreview(fixtures) {
 
   _allMCs = mcs || [];
 
-  // Load match-type training sessions (imported fixtures)
-  const { data: matchSess } = await window.sb.from('training_sessions')
-    .select('id,title,session_date,notes')
+  // Load match events from calendar_events for ribbon
+  const { data: matchSess } = await window.sb.from('calendar_events')
+    .select('id,title,date,opponent,home_away,competition')
     .eq('club_id', _clubId)
-    .eq('session_type', 'match')
-    .order('session_date');
-  _matchSessions = (matchSess||[]).map(s => ({...s, session_date: s.session_date.split('T')[0]}));
+    .eq('type', 'match')
+    .order('date');
+  _matchSessions = (matchSess||[]).map(s => ({
+    ...s,
+    session_date: (s.date||'').split('T')[0],
+    title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')
+  }));
 
   // Render ribbon and KPIs from real MC data + match sessions
   renderSeasonRibbon(_allMCs, _matchSessions);
