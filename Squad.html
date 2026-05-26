@@ -76,7 +76,7 @@
     background:var(--cm-surface); border:1px solid var(--cm-border);
     border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:clip;
   }
-  .sq-table-scroll { overflow-x:auto; }
+  .sq-table-scroll { overflow-x:auto; overflow-y:clip; }
   .sq-table { width:100%; border-collapse:collapse; }
   .sq-table thead th {
     text-align:left; padding:9px 12px;
@@ -730,6 +730,8 @@ function renderTable() {
   });
 
   tbody.innerHTML = html;
+  // Reset select-all when table re-renders (filter/search change)
+  document.querySelector('thead [data-cb]')?.classList.remove('is-on');
 
   // Edit button handlers
   tbody.querySelectorAll('.sq-edit-btn').forEach(btn => {
@@ -835,6 +837,18 @@ async function reloadPlayers() {
   }
 
   await reloadPlayers();
+
+  // Select-all checkbox (thead — static, wired once)
+  document.querySelector('thead [data-cb]')?.addEventListener('click', e => {
+    e.stopPropagation();
+    const cb = e.currentTarget;
+    const isNowOn = !cb.classList.contains('is-on');
+    cb.classList.toggle('is-on', isNowOn);
+    document.querySelectorAll('#sqTbody [data-cb]').forEach(rowCb => {
+      rowCb.classList.toggle('is-on', isNowOn);
+      rowCb.closest('tr')?.classList.toggle('is-selected', isNowOn);
+    });
+  });
 
   // Filter pills
   document.querySelectorAll('.sq-pill-filter').forEach(pill => {
