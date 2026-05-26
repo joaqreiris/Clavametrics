@@ -650,7 +650,7 @@
         <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--cm-border);background:var(--cm-bg-soft);font:var(--cm-meta);color:var(--cm-fg-muted)">
           <span id="lmTableFoot">Loading…</span>
           <div style="flex:1"></div>
-          <button class="cm-btn is-ghost is-sm">Load remaining 18<i class="ti ti-arrow-down" style="font-size:14px"></i></button>
+          <button class="cm-btn is-ghost is-sm" id="lmLoadMoreBtn" style="display:none">Load remaining<i class="ti ti-arrow-down" style="font-size:14px"></i></button>
         </div>
       </div>
 
@@ -741,8 +741,9 @@
     ? readVals.reduce((a,b)=>a+b,0)/readVals.length
     : (nonNullDims.length ? nonNullDims.reduce((a,b)=>a+b,0)/nonNullDims.length : null);
 
-  document.getElementById('lmWellSub').textContent  = `${wellnessList.length} of ${total} submitted today`;
-  document.getElementById('lmWellHead').textContent = `${wellnessList.length} of ${total} submitted`;
+  const submittedToday = new Set(wellnessList.map(w => w.player_id)).size;
+  document.getElementById('lmWellSub').textContent  = `${submittedToday} of ${total} submitted today`;
+  document.getElementById('lmWellHead').textContent = `${submittedToday} of ${total} submitted`;
   document.getElementById('lmKpiWellness').innerHTML = avgReadiness != null
     ? `${avgReadiness.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
 
@@ -820,20 +821,21 @@
     // KPI: Danger count
     document.getElementById('lmKpiDanger').innerHTML = `${dangerPlayers.length} <sub>/ ${total}</sub>`;
 
-    // KPI: Session RPE avg (latest session) + today submission count
-    const todaySessions = sessionsData.filter(s => s.session_date === todayStr);
-    const rpeTodaySet   = new Set(todaySessions.flatMap(s => (s.rpe||[]).map(r => r.player_id)));
-    document.getElementById('lmRpeSub').textContent = `${rpeTodaySet.size} of ${total} submitted today`;
+    // KPI: Session RPE avg — AVG of all rpe.rpe from last 7 days
+    const rpe7dScores = sessionsData
+      .filter(s => s.session_date >= from7dStr)
+      .flatMap(s => (s.rpe||[]).map(r => r.rpe||0))
+      .filter(v => v > 0);
+    const rpe7dAvg = rpe7dScores.length ? rpe7dScores.reduce((a,b)=>a+b,0)/rpe7dScores.length : null;
+    document.getElementById('lmKpiRpe').innerHTML = rpe7dAvg != null
+      ? `${rpe7dAvg.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
+    document.getElementById('lmRpeSub').textContent = rpe7dAvg != null
+      ? `avg last 7 days · ${rpe7dScores.length} records` : 'no sessions last 7 days';
 
+    // latestRpeMap for per-player RPE cell in table
     const latestSess   = sessionsData[sessionsData.length - 1];
     const latestRpeMap = {};
     if (latestSess?.rpe) latestSess.rpe.forEach(r => { latestRpeMap[r.player_id] = r.rpe; });
-    if (latestSess?.rpe?.length) {
-      const scores = latestSess.rpe.map(r => r.rpe||0).filter(v => v > 0);
-      if (scores.length) document.getElementById('lmKpiRpe').innerHTML = `${(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1)} <sub>/ 10</sub>`;
-    } else {
-      document.getElementById('lmKpiRpe').innerHTML = `— <sub>/ 10</sub>`;
-    }
 
     // Filter pills
     ['lmPillAll','lmPillDanger','lmPillOver','lmPillSweet','lmPillUnder'].forEach((id, i) => {
@@ -902,9 +904,10 @@
 
       const acwrTrend = sessForChart.map(sess => {
         const d7  = new Date(new Date(sess.session_date+'T12:00:00') - 7*86400000).toISOString().split('T')[0];
+        const d28 = new Date(new Date(sess.session_date+'T12:00:00') - 28*86400000).toISOString().split('T')[0];
         const vals = Object.entries(playerLoadHist).map(([, recs]) => {
           const acute   = recs.filter(r => r.date <= sess.session_date && r.date > d7).reduce((s,r) => s+r.load, 0);
-          const chronic = recs.filter(r => r.date <= sess.session_date).reduce((s,r) => s+r.load, 0) / 4;
+          const chronic = recs.filter(r => r.date <= sess.session_date && r.date > d28).reduce((s,r) => s+r.load, 0) / 4;
           return chronic > 0 ? acute/chronic : null;
         }).filter(v => v != null);
         return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : null;
@@ -1001,6 +1004,7 @@
 
     document.getElementById('lmPlayerLoadSub').textContent = `${total} players · sorted by ACWR ↓`;
     document.getElementById('lmTableFoot').innerHTML = `Showing <strong style="color:var(--cm-fg)">${total}</strong> of ${total} players`;
+    document.getElementById('lmLoadMoreBtn').style.display = 'none';
   }
 
   // Period buttons → recalculate all widgets
