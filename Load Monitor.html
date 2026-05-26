@@ -239,6 +239,51 @@
   .lm-tablebar .grow { flex:1; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* Fullscreen modal */
+  .lm-modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,0.65);
+    backdrop-filter:blur(4px); z-index:200;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .lm-modal {
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:0 24px 64px rgba(0,0,0,0.4);
+    width:100%; max-width:1240px; display:flex; flex-direction:column;
+  }
+  .lm-modal-h {
+    display:flex; align-items:center; gap:10px;
+    padding:14px 16px; border-bottom:1px solid var(--cm-border-soft);
+  }
+  .lm-modal-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; }
+  .lm-modal-b { padding:16px; height:70vh; position:relative; }
+
+  /* Dropdown menus */
+  .lm-dropdown { position:relative; }
+  .lm-dropdown-menu {
+    position:absolute; right:0; top:calc(100% + 6px);
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-3); box-shadow:0 8px 24px rgba(0,0,0,0.18);
+    z-index:100; min-width:192px; padding:4px; display:none;
+  }
+  .lm-dropdown-menu.is-open { display:block; }
+  .lm-dropdown-menu button {
+    display:flex; align-items:center; gap:8px; width:100%;
+    padding:7px 10px; border:0; background:transparent;
+    color:var(--cm-fg); font:var(--cm-body-sm);
+    border-radius:5px; cursor:pointer; text-align:left;
+  }
+  .lm-dropdown-menu button:hover { background:var(--cm-bg-soft); }
+  .lm-dropdown-menu button.is-active { color:var(--cm-accent); font-weight:600; }
+  .lm-dropdown-menu button .ti { color:var(--cm-fg-muted); font-size:14px; }
+  .lm-dropdown-menu .dm-divider { height:1px; background:var(--cm-border-soft); margin:4px 0; }
+  .lm-dropdown-menu .dm-label { padding:4px 10px 2px; font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
+
+  /* Distribution table view */
+  #lmDistTable { display:none; flex-direction:column; gap:4px; overflow-y:auto; max-height:120px; }
+  #lmDistTable .dt-row { display:flex; align-items:center; gap:8px; padding:3px 0; font:var(--cm-body-sm); }
+  #lmDistTable .dt-name { flex:1; color:var(--cm-fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #lmDistTable .dt-val { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
 </style>
 </head>
 <body class="cm">
@@ -281,7 +326,7 @@
             <button class="lm-seg">Microcycle</button>
             <button class="lm-seg">Season</button>
           </div>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
+          <button class="cm-btn is-outline is-sm" id="lmExportBtn"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
         </div>
       </header>
 
@@ -364,8 +409,8 @@
                 <span class="it"><span class="sw" style="background:var(--cm-fg-muted);opacity:0.6"></span>Chronic (28‑day rolling)</span>
                 <span class="it"><span class="sw dash"></span>Sweet‑spot</span>
               </div>
-              <button class="cm-icon-btn"><i class="ti ti-download"></i></button>
-              <button class="cm-icon-btn"><i class="ti ti-maximize"></i></button>
+              <button class="cm-icon-btn" id="lmChartDlBtn" title="Download PNG"><i class="ti ti-download"></i></button>
+              <button class="cm-icon-btn" id="lmChartMaxBtn" title="Fullscreen"><i class="ti ti-maximize"></i></button>
             </div>
           </div>
           <div class="lm-pillline">
@@ -374,7 +419,7 @@
             <span class="pill red"><span class="d"></span>&gt; 1.5 danger</span>
             <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Squad avg today · <strong id="lmAcwrToday" style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
           </div>
-          <div class="lm-card-b" style="padding-top:4px;position:relative;height:360px;overflow:hidden">
+          <div class="lm-card-b" style="padding-top:4px;position:relative;height:360px;overflow:visible">
             <canvas id="acwrChart" style="display:none"></canvas>
             <div id="acwrEmpty" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No RPE data in the last 28 days</div>
             <!-- static SVG shown until JS replaces it -->
@@ -558,10 +603,22 @@
             <div class="lm-card-h">
               <h3>ACWR distribution</h3>
               <span class="sub" id="lmDistSub">loading…</span>
-              <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
+              <div class="right lm-dropdown">
+                <button class="cm-icon-btn" id="lmDistMenuBtn"><i class="ti ti-dots"></i></button>
+                <div class="lm-dropdown-menu" id="lmDistMenu">
+                  <button id="lmDistViewTable"><i class="ti ti-table"></i>View as table</button>
+                  <button id="lmDistExportPng"><i class="ti ti-photo"></i>Export PNG</button>
+                  <div class="dm-divider"></div>
+                  <div class="dm-label">Change period</div>
+                  <button data-period="7d"><i class="ti ti-calendar"></i>7 days</button>
+                  <button data-period="28d"><i class="ti ti-calendar"></i>28 days</button>
+                  <button data-period="Microcycle"><i class="ti ti-refresh"></i>Microcycle</button>
+                  <button data-period="Season"><i class="ti ti-calendar-stats"></i>Season</button>
+                </div>
+              </div>
             </div>
             <div class="lm-card-b">
-              <div class="lm-dist">
+              <div class="lm-dist" id="lmDistDonutWrap">
                 <svg class="lm-donut" viewBox="0 0 42 42">
                   <!-- ring: total 27 \u2014 segments: 13 sweet (48%), 10 over (37%), 4 danger (15%) -->
                   <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--cm-bg-sunk)" stroke-width="4"/>
@@ -581,6 +638,7 @@
                   <div class="lm-dist-row"><span class="sw" style="background:var(--cm-bg-sunk);border:1px solid var(--cm-border-strong)"></span><span class="lbl">No data</span><span class="ct" id="lmDistNoData">0</span></div>
                 </div>
               </div>
+              <div id="lmDistTable"></div>
             </div>
           </div>
 
@@ -589,7 +647,7 @@
             <div class="lm-card-h">
               <h3>Wellness today</h3>
               <span class="sub" id="lmWellHead">— of — submitted</span>
-              <div class="right"><button class="cm-icon-btn"><i class="ti ti-arrow-up-right"></i></button></div>
+              <div class="right"><button class="cm-icon-btn" id="lmWellNavBtn" title="Go to Wellness"><i class="ti ti-arrow-up-right"></i></button></div>
             </div>
             <div class="lm-card-b">
               <div class="lm-wellbars" id="lmWellBars">
@@ -611,7 +669,16 @@
           <h3>Player load</h3>
           <span class="sub" id="lmPlayerLoadSub">loading…</span>
           <div class="right">
-            <button class="cm-icon-btn"><i class="ti ti-arrows-sort"></i></button>
+            <div class="lm-dropdown">
+              <button class="cm-icon-btn" id="lmSortBtn" title="Sort"><i class="ti ti-arrows-sort"></i></button>
+              <div class="lm-dropdown-menu" id="lmSortMenu">
+                <div class="dm-label">Sort by</div>
+                <button data-sort="acwr" class="sort-opt is-active"><i class="ti ti-chart-bar"></i>ACWR (highest first)</button>
+                <button data-sort="zone" class="sort-opt"><i class="ti ti-alert-triangle"></i>Zone (danger first)</button>
+                <button data-sort="name" class="sort-opt"><i class="ti ti-sort-az"></i>Name (A → Z)</button>
+                <button data-sort="pos" class="sort-opt"><i class="ti ti-shirt-sport"></i>Position</button>
+              </div>
+            </div>
             <button class="cm-icon-btn"><i class="ti ti-columns-3"></i></button>
           </div>
         </div>
@@ -658,6 +725,20 @@
   </main>
 </div>
 
+<!-- Fullscreen ACWR chart modal -->
+<div class="lm-modal-overlay" id="lmChartModal" style="display:none">
+  <div class="lm-modal">
+    <div class="lm-modal-h">
+      <h3>Acute : Chronic workload ratio</h3>
+      <span id="lmModalSub" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"></span>
+      <button class="cm-icon-btn" id="lmModalClose" style="margin-left:auto"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="lm-modal-b">
+      <canvas id="acwrChartModal"></canvas>
+    </div>
+  </div>
+</div>
+
 <!-- Tweaks + Settings -->
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
@@ -680,19 +761,13 @@
 
   // ── DIAGNÓSTICO RLS ────────────────────────────────────────────────────────
   const { data: rpeData, error: rpeError } = await window.sb
-    .from('rpe')
-    .select('*, training_sessions(session_date)')
-    .eq('club_id', clubId);
+    .from('rpe').select('*, training_sessions(session_date)').eq('club_id', clubId);
   console.log('[DIAG] RPE data:', rpeData?.length, '| error:', rpeError, '| first row:', rpeData?.[0]);
-
   const { data: wellnessData, error: wellnessError } = await window.sb
-    .from('wellness')
-    .select('*')
-    .eq('club_id', clubId);
+    .from('wellness').select('*').eq('club_id', clubId);
   console.log('[DIAG] Wellness data:', wellnessData?.length, '| error:', wellnessError, '| first row:', wellnessData?.[0]);
   // ── FIN DIAGNÓSTICO ────────────────────────────────────────────────────────
 
-  // Stable: players — valid statuses: available/injured/modified/unavailable (no 'inactive')
   const playersRes = await window.sb.from('players')
     .select('id,first_name,last_name,number,position,status')
     .eq('club_id', clubId)
@@ -702,27 +777,18 @@
   const total   = players.length;
   console.log('[LM] players cargados:', total, players.map(p=>`${p.first_name} ${p.last_name} (${p.status})`));
 
-  // Active microcycle (for Micro button)
   const microRes = await window.sb.from('microcycles')
-    .select('start_date,end_date,name')
-    .eq('club_id', clubId)
-    .lte('start_date', todayStr)
-    .gte('end_date', todayStr)
-    .order('start_date', { ascending: false })
-    .limit(1);
+    .select('start_date,end_date,name').eq('club_id', clubId)
+    .lte('start_date', todayStr).gte('end_date', todayStr)
+    .order('start_date', { ascending: false }).limit(1);
   if (microRes.error) console.warn('[LM] microcycles error:', microRes.error);
   const microRow = (microRes.data || [])[0] || null;
 
-  // Season start = earliest session date in this club
   const firstSessRes = await window.sb.from('training_sessions')
-    .select('session_date')
-    .eq('club_id', clubId)
-    .order('session_date')
-    .limit(1);
+    .select('session_date').eq('club_id', clubId).order('session_date').limit(1);
   if (firstSessRes.error) console.warn('[LM] firstSess error:', firstSessRes.error);
   const seasonStart = (firstSessRes.data || [])[0]?.session_date || from28dStr;
 
-  // Today's wellness (always today, period-independent)
   const wellRes = await window.sb.from('wellness')
     .select('player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at')
     .eq('club_id', clubId)
@@ -734,14 +800,12 @@
   const wellMap = {};
   wellnessList.forEach(w => { wellMap[w.player_id] = w; });
 
-  // Helper
   function getVal(obj, keys) { for (const k of keys) { if (obj?.[k] != null) return +obj[k]; } return null; }
   function avgDim(list, keys) {
     const vals = list.map(w => getVal(w, keys)).filter(v => v != null);
     return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
   }
 
-  // Render wellness (period-independent — always today)
   const wDims = [
     { label:'Sleep',    keys:['sleep_quality','sleep'] },
     { label:'Mood',     keys:['mood'] },
@@ -749,9 +813,9 @@
     { label:'Stress',   keys:['stress'] },
     { label:'Soreness', keys:['muscle_soreness','soreness'] }
   ];
-  const dimAvgs   = wDims.map(d => avgDim(wellnessList, d.keys));
-  const readVals  = wellnessList.map(w => getVal(w, ['readiness','overall','score','wellness_score'])).filter(v => v != null);
-  const nonNullDims = dimAvgs.filter(v => v != null);
+  const dimAvgs    = wDims.map(d => avgDim(wellnessList, d.keys));
+  const readVals   = wellnessList.map(w => getVal(w, ['readiness','overall','score','wellness_score'])).filter(v => v != null);
+  const nonNullDims= dimAvgs.filter(v => v != null);
   const avgReadiness = readVals.length
     ? readVals.reduce((a,b)=>a+b,0)/readVals.length
     : (nonNullDims.length ? nonNullDims.reduce((a,b)=>a+b,0)/nonNullDims.length : null);
@@ -777,197 +841,66 @@
     ).join('');
   }
 
-  // Chart.js instance (destroyed on each period change)
+  // ── State ──────────────────────────────────────────────────────────────────
+  let currentPeriod     = '28d';
+  let sortMode          = 'acwr';
+  let lastTableData     = null;
+  let lastChartData     = null;
   let acwrChartInstance = null;
+  let acwrModalChart    = null;
+  let distTableVisible  = false;
 
-  async function loadData(period) {
-    let chartFrom, fetchFrom;
-    if      (period === '7d')         { chartFrom = from7dStr;                         fetchFrom = from28dStr; }
-    else if (period === 'Microcycle') { chartFrom = microRow?.start_date || from7dStr; fetchFrom = from28dStr; }
-    else if (period === 'Season')     { chartFrom = seasonStart;                        fetchFrom = seasonStart; }
-    else                              { chartFrom = from28dStr;                         fetchFrom = from28dStr; } // 28d
+  const POS_CSS   = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', FB:'fb', MF:'mf', DM:'mf', CM:'mf', WG:'wg', ST:'st', CF:'st' };
+  const POS_ORDER = { GK:0, CB:1, FB:2, LB:2, RB:2, DM:3, CM:3, MF:3, WG:4, ST:5, CF:5 };
+  const ZONE_ORDER = v => v == null ? 4 : v > 1.5 ? 0 : v > 1.3 ? 1 : v >= 0.8 ? 2 : 3;
 
-    const sessRes = await window.sb.from('training_sessions')
-      .select('id,session_date,rpe(player_id,rpe,duration,load)')
-      .eq('club_id', clubId)
-      .gte('session_date', fetchFrom)
-      .order('session_date');
-    if (sessRes.error) console.error('[LM] training_sessions+rpe error:', sessRes.error);
-    const sessionsData = sessRes.data || [];
-    const totalRpe = sessionsData.reduce((n, s) => n + (s.rpe||[]).length, 0);
-    console.log(`[LM] period=${period} sessions=${sessionsData.length} rpe records=${totalRpe}`);
-
-    // Build per-player load history
-    const playerLoadHist = {};
-    sessionsData.forEach(s => {
-      (s.rpe || []).forEach(r => {
-        if (!playerLoadHist[r.player_id]) playerLoadHist[r.player_id] = [];
-        playerLoadHist[r.player_id].push({ date: s.session_date, load: r.load||0, score: r.rpe||0 });
-      });
-    });
-
-    // ACWR per player — acute = last 7d, chronic = last 28d / 4
-    const acwrByPlayer = {};
-    Object.entries(playerLoadHist).forEach(([pid, recs]) => {
-      const recs28  = recs.filter(r => r.date >= from28dStr);
-      const acute   = recs28.filter(r => r.date >= from7dStr).reduce((s,r) => s+r.load, 0);
-      const chronic = recs28.reduce((s,r) => s+r.load, 0) / 4;
-      acwrByPlayer[pid] = chronic > 0 ? +(acute/chronic).toFixed(2) : null;
-    });
-
-    const acwrVals      = Object.values(acwrByPlayer).filter(v => v != null);
-    const squadAvg      = acwrVals.length ? +(acwrVals.reduce((a,b)=>a+b,0)/acwrVals.length).toFixed(2) : null;
-    const dangerPlayers = players.filter(p => (acwrByPlayer[p.id]||0) > 1.5);
-    const overPlayers   = players.filter(p => { const v=acwrByPlayer[p.id]; return v>1.3&&v<=1.5; });
-    const sweetPlayers  = players.filter(p => { const v=acwrByPlayer[p.id]; return v!=null&&v>=0.8&&v<=1.3; });
-    const underPlayers  = players.filter(p => { const v=acwrByPlayer[p.id]; return v!=null&&v<0.8; });
-    const noDataPlayers = players.filter(p => acwrByPlayer[p.id] == null);
-
-    // KPI: Squad avg ACWR
-    if (squadAvg != null) {
-      document.getElementById('lmKpiAcwr').textContent = squadAvg;
-      document.getElementById('lmAcwrPin').style.left  = Math.min(95, (squadAvg/2)*100) + '%';
-      const el = document.getElementById('lmAcwrToday');
-      if (el) { el.textContent = squadAvg; el.style.color = squadAvg>1.5?'var(--cm-danger)':squadAvg>1.3?'var(--cm-warning)':'var(--cm-success)'; }
-    } else {
-      document.getElementById('lmKpiAcwr').textContent = '—';
-    }
-
-    // KPI: Danger count
-    document.getElementById('lmKpiDanger').innerHTML = `${dangerPlayers.length} <sub>/ ${total}</sub>`;
-
-    // KPI: Session RPE avg — AVG of all rpe.rpe from last 7 days
-    const rpe7dScores = sessionsData
-      .filter(s => s.session_date >= from7dStr)
-      .flatMap(s => (s.rpe||[]).map(r => r.rpe||0))
-      .filter(v => v > 0);
-    const rpe7dAvg = rpe7dScores.length ? rpe7dScores.reduce((a,b)=>a+b,0)/rpe7dScores.length : null;
-    document.getElementById('lmKpiRpe').innerHTML = rpe7dAvg != null
-      ? `${rpe7dAvg.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
-    document.getElementById('lmRpeSub').textContent = rpe7dAvg != null
-      ? `avg last 7 days · ${rpe7dScores.length} records` : 'no sessions last 7 days';
-
-    // latestRpeMap for per-player RPE cell in table
-    const latestSess   = sessionsData[sessionsData.length - 1];
-    const latestRpeMap = {};
-    if (latestSess?.rpe) latestSess.rpe.forEach(r => { latestRpeMap[r.player_id] = r.rpe; });
-
-    // Filter pills
-    ['lmPillAll','lmPillDanger','lmPillOver','lmPillSweet','lmPillUnder'].forEach((id, i) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = [total, dangerPlayers.length, overPlayers.length, sweetPlayers.length, underPlayers.length][i];
-    });
-
-    // Alert banner — danger + overreach with real names
-    const banner = document.getElementById('lmAlertBanner');
-    if (dangerPlayers.length > 0 || overPlayers.length > 0) {
-      const parts = [];
-      if (dangerPlayers.length > 0) parts.push(`${dangerPlayers.length} in danger`);
-      if (overPlayers.length > 0)   parts.push(`${overPlayers.length} in overreach`);
-      document.getElementById('lmAlertH').textContent = parts.join(' · ') + ' zone';
-      const allAt = [...dangerPlayers, ...overPlayers];
-      document.getElementById('lmAlertP').textContent = allAt.map(p => `${p.first_name||''} ${p.last_name||''}`.trim()).join(' · ');
-      banner.style.display = 'flex';
-    } else {
-      banner.style.display = 'none';
-    }
-
-    // ACWR distribution donut
-    if (total > 0) {
-      const sp = +(sweetPlayers.length/total*100).toFixed(1);
-      const op = +(overPlayers.length/total*100).toFixed(1);
-      const dp = +(dangerPlayers.length/total*100).toFixed(1);
-      let off  = 25;
-      [['lmDonutSweet',sp],['lmDonutOver',op],['lmDonutDanger',dp]].forEach(([id, pct]) => {
-        const el = document.getElementById(id);
-        if (el) { el.setAttribute('stroke-dasharray', `${pct} ${(100-pct).toFixed(1)}`); el.setAttribute('stroke-dashoffset', off); }
-        off -= pct;
-      });
-      const t = document.getElementById('lmDonutTotal'); if (t) t.textContent = total;
-      document.getElementById('lmDistSweet').textContent  = sweetPlayers.length;
-      document.getElementById('lmDistOver').textContent   = overPlayers.length;
-      document.getElementById('lmDistDanger').textContent = dangerPlayers.length;
-      document.getElementById('lmDistNoData').textContent = noDataPlayers.length;
-      document.getElementById('lmDistSub').textContent    = `today, n=${total}`;
-    }
-
-    // Header context
-    const ctxEl = document.getElementById('lmCtx');
-    if (ctxEl) {
-      const alertCount = dangerPlayers.length + overPlayers.length;
-      const alertStr   = alertCount > 0 ? ` · ${alertCount} alert${alertCount>1?'s':''}` : '';
-      ctxEl.innerHTML  = `<strong>${period}</strong>${alertStr} · ${total} players`;
-    }
-
-    // ACWR chart
-    const canvas  = document.getElementById('acwrChart');
-    const svgEl   = document.getElementById('acwrSvg');
-    const emptyEl = document.getElementById('acwrEmpty');
-    if (acwrChartInstance) { acwrChartInstance.destroy(); acwrChartInstance = null; }
-
-    const sessForChart = sessionsData.filter(s => s.session_date >= chartFrom);
-    if (sessForChart.length > 0) {
-      svgEl.style.display   = 'none';
-      emptyEl.style.display = 'none';
-      canvas.style.display  = 'block';
-
-      const labels = sessForChart.map(s => {
-        const d = new Date(s.session_date + 'T12:00:00');
-        return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
-      });
-      const n = labels.length;
-
-      const acwrTrend = sessForChart.map(sess => {
-        const d7  = new Date(new Date(sess.session_date+'T12:00:00') - 7*86400000).toISOString().split('T')[0];
-        const d28 = new Date(new Date(sess.session_date+'T12:00:00') - 28*86400000).toISOString().split('T')[0];
-        const vals = Object.entries(playerLoadHist).map(([, recs]) => {
-          const acute   = recs.filter(r => r.date <= sess.session_date && r.date > d7).reduce((s,r) => s+r.load, 0);
-          const chronic = recs.filter(r => r.date <= sess.session_date && r.date > d28).reduce((s,r) => s+r.load, 0) / 4;
-          return chronic > 0 ? acute/chronic : null;
-        }).filter(v => v != null);
-        return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : null;
-      });
-
-      const sessionLoads = sessForChart.map(s => (s.rpe||[]).reduce((sum,r) => sum+(r.load||0), 0));
-      const maxLoad      = Math.max(...sessionLoads, 1);
-      const accent       = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
-
-      acwrChartInstance = new Chart(canvas, {
-        data: {
-          labels,
-          datasets: [
-            { type:'line', data:Array(n).fill(1.5), borderColor:'rgba(220,38,38,0.45)', borderDash:[4,3], borderWidth:1.5, pointRadius:0, yAxisID:'y', order:4 },
-            { type:'line', data:Array(n).fill(1.3), borderColor:'rgba(217,119,6,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
-            { type:'line', data:Array(n).fill(0.8), borderColor:'rgba(34,197,94,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
-            { type:'bar',  label:'Session load',    data:sessionLoads, backgroundColor:'rgba(34,197,94,0.12)', borderColor:'rgba(34,197,94,0.2)', borderWidth:1, borderRadius:2, yAxisID:'y2', order:5 },
-            { type:'line', label:'Squad avg ACWR',  data:acwrTrend, borderColor:accent, backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2.5, pointRadius:3.5, pointHoverRadius:6, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5, tension:0.3, fill:true, spanGaps:true, yAxisID:'y', order:1 }
-          ]
-        },
-        options: {
-          responsive:true, maintainAspectRatio:false,
-          interaction: { mode:'index', intersect:false },
-          plugins:     { legend: { display:false } },
-          scales: {
-            y:  { min:0, max:2.2, position:'left',  grid:{ color:'rgba(128,128,128,0.1)' },  ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:11 }, callback: v => v.toFixed(1) }, title:{ display:true, text:'ACWR',      color:'rgba(128,128,128,0.5)', font:{ size:10 } } },
-            y2: { position:'right', grid:{ display:false }, max:maxLoad*3, ticks:{ color:'rgba(128,128,128,0.45)', font:{ size:10 } }, title:{ display:true, text:'Load (AU)', color:'rgba(128,128,128,0.4)', font:{ size:10 } } },
-            x:  { grid:{ color:'rgba(128,128,128,0.08)' }, ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:10 }, maxTicksLimit:12 } }
-          }
+  // ── Chart config (shared: main + modal) ────────────────────────────────────
+  function buildChartConfig(labels, n, sessionLoads, acwrTrend, accent, maxLoad) {
+    return {
+      data: {
+        labels,
+        datasets: [
+          { type:'line', data:Array(n).fill(1.5), borderColor:'rgba(220,38,38,0.45)', borderDash:[4,3], borderWidth:1.5, pointRadius:0, yAxisID:'y', order:4 },
+          { type:'line', data:Array(n).fill(1.3), borderColor:'rgba(217,119,6,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
+          { type:'line', data:Array(n).fill(0.8), borderColor:'rgba(34,197,94,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
+          { type:'bar',  label:'Session load',   data:sessionLoads, backgroundColor:'rgba(34,197,94,0.12)', borderColor:'rgba(34,197,94,0.2)', borderWidth:1, borderRadius:2, yAxisID:'y2', order:5 },
+          { type:'line', label:'Squad avg ACWR', data:acwrTrend, borderColor:accent, backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2.5, pointRadius:3.5, pointHoverRadius:6, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5, tension:0.3, fill:true, spanGaps:true, yAxisID:'y', order:1 }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        layout: { padding: { right: 12 } },
+        interaction: { mode:'index', intersect:false },
+        plugins:     { legend: { display:false } },
+        scales: {
+          y:  { min:0, max:2.2, position:'left',  grid:{ color:'rgba(128,128,128,0.1)' }, ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:11 }, callback: v => v.toFixed(1) }, title:{ display:true, text:'ACWR', color:'rgba(128,128,128,0.5)', font:{ size:10 } } },
+          y2: { position:'right', grid:{ display:false }, max:maxLoad*3, ticks:{ color:'rgba(128,128,128,0.45)', font:{ size:10 }, callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v }, title:{ display:true, text:'Load (AU)', color:'rgba(128,128,128,0.4)', font:{ size:10 } } },
+          x:  { grid:{ color:'rgba(128,128,128,0.08)' }, ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:10 }, maxTicksLimit:12 } }
         }
-      });
-    } else {
-      svgEl.style.display   = 'none';
-      emptyEl.style.display = 'flex';
-      canvas.style.display  = 'none';
-    }
+      }
+    };
+  }
 
-    // Player load table — sorted by ACWR desc (danger first)
-    const POS_CSS = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', FB:'fb', MF:'mf', DM:'mf', CM:'mf', WG:'wg', ST:'st', CF:'st' };
-    const sorted  = [...players].sort((a, b) => {
-      const aa = acwrByPlayer[a.id], ab = acwrByPlayer[b.id];
-      if (aa == null && ab == null) return 0;
-      if (aa == null) return 1; if (ab == null) return -1;
-      return ab - aa;
-    });
+  // ── Render player table (client-side, no re-fetch) ─────────────────────────
+  function renderTable() {
+    if (!lastTableData) return;
+    const { players: pts, acwrByPlayer, playerLoadHist, latestRpeMap } = lastTableData;
+
+    let sorted = [...pts];
+    if (sortMode === 'acwr') {
+      sorted.sort((a, b) => {
+        const aa = acwrByPlayer[a.id], ab = acwrByPlayer[b.id];
+        if (aa == null && ab == null) return 0;
+        if (aa == null) return 1; if (ab == null) return -1;
+        return ab - aa;
+      });
+    } else if (sortMode === 'zone') {
+      sorted.sort((a, b) => ZONE_ORDER(acwrByPlayer[a.id]) - ZONE_ORDER(acwrByPlayer[b.id]));
+    } else if (sortMode === 'name') {
+      sorted.sort((a, b) => ((a.last_name||'')+(a.first_name||'')).localeCompare((b.last_name||'')+(b.first_name||'')));
+    } else if (sortMode === 'pos') {
+      sorted.sort((a, b) => (POS_ORDER[a.position?.toUpperCase()] ?? 99) - (POS_ORDER[b.position?.toUpperCase()] ?? 99));
+    }
 
     document.getElementById('lmTbody').innerHTML = sorted.map(p => {
       const pos      = p.position ? (POS_CSS[p.position.toUpperCase()] ? p.position.toUpperCase() : 'MF') : 'MF';
@@ -1017,18 +950,365 @@
       </tr>`;
     }).join('');
 
-    document.getElementById('lmPlayerLoadSub').textContent = `${total} players · sorted by ACWR ↓`;
+    const sortLabel = { acwr:'ACWR ↓', zone:'Zone', name:'A–Z', pos:'Position' }[sortMode] || 'ACWR ↓';
+    document.getElementById('lmPlayerLoadSub').textContent = `${total} players · sorted by ${sortLabel}`;
     document.getElementById('lmTableFoot').innerHTML = `Showing <strong style="color:var(--cm-fg)">${total}</strong> of ${total} players`;
     document.getElementById('lmLoadMoreBtn').style.display = 'none';
   }
 
-  // Period buttons → recalculate all widgets
+  // ── Export CSV ─────────────────────────────────────────────────────────────
+  function exportCSV() {
+    if (!lastTableData) return;
+    const { players: pts, acwrByPlayer, playerLoadHist, latestRpeMap } = lastTableData;
+    const headers = ['Player','Position','ACWR','Acute Load 7d','Chronic Load 28d','Zone','Last RPE','Sessions'];
+    const rows = pts.map(p => {
+      const acwr    = acwrByPlayer[p.id];
+      const hist    = playerLoadHist[p.id] || [];
+      const acute   = hist.filter(r => r.date >= from7dStr).reduce((s,r) => s+r.load, 0);
+      const chronic = hist.length ? +(hist.reduce((s,r)=>s+r.load,0)/4).toFixed(0) : '';
+      const zone    = acwr == null ? 'No data' : acwr>1.5?'Danger':acwr>1.3?'Overreach':acwr>=0.8?'Sweet-spot':'Underloaded';
+      return [`${p.first_name||''} ${p.last_name||''}`.trim(), p.position||'', acwr??'', Math.round(acute), chronic, zone, latestRpeMap[p.id]??'', hist.length];
+    });
+    const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type:'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `load_monitor_${currentPeriod}_${todayStr}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Export donut PNG (canvas-drawn) ────────────────────────────────────────
+  function exportDonutPng() {
+    if (!lastTableData) return;
+    const cs      = getComputedStyle(document.documentElement);
+    const success = cs.getPropertyValue('--cm-success').trim() || '#22c55e';
+    const warning = cs.getPropertyValue('--cm-warning').trim() || '#f59e0b';
+    const danger  = cs.getPropertyValue('--cm-danger').trim()  || '#ef4444';
+    const fgMuted = cs.getPropertyValue('--cm-fg-muted').trim()|| '#6b7280';
+    const bgSunk  = cs.getPropertyValue('--cm-bg-sunk').trim() || '#e5e7eb';
+    const { sweetCount, overCount, dangerCount, noDataCount } = lastTableData;
+    const segments = [
+      { label:'Sweet-spot', count:sweetCount,  color:success },
+      { label:'Overreach',  count:overCount,   color:warning },
+      { label:'Danger',     count:dangerCount, color:danger  },
+      { label:'No data',    count:noDataCount, color:bgSunk  }
+    ].filter(d => d.count > 0);
+    const size = 400, cx = 200, cy = 170, r = 80, sw = 28;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = cs.getPropertyValue('--cm-surface').trim() || '#fff';
+    ctx.fillRect(0, 0, size, size);
+    const tot = total || 1;
+    let angle = -Math.PI / 2;
+    segments.forEach(d => {
+      const sweep = (d.count / tot) * 2 * Math.PI;
+      ctx.beginPath(); ctx.arc(cx, cy, r, angle, angle + sweep);
+      ctx.lineWidth = sw; ctx.strokeStyle = d.color; ctx.stroke();
+      angle += sweep;
+    });
+    ctx.fillStyle = fgMuted; ctx.textAlign = 'center';
+    ctx.font = 'bold 28px sans-serif'; ctx.fillText(String(total), cx, cy + 8);
+    ctx.font = '12px sans-serif'; ctx.fillText('PLAYERS', cx, cy + 26);
+    let ly = cy + r + sw / 2 + 32;
+    segments.forEach(d => {
+      ctx.fillStyle = d.color; ctx.fillRect(cx - 72, ly - 12, 14, 14);
+      ctx.fillStyle = fgMuted; ctx.font = '13px sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(`${d.label}: ${d.count}`, cx - 52, ly); ly += 22;
+    });
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `acwr_dist_${currentPeriod}_${todayStr}.png`; a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+
+  // ── Distribution table toggle ──────────────────────────────────────────────
+  function toggleDistTable() {
+    distTableVisible = !distTableVisible;
+    const donutWrap = document.getElementById('lmDistDonutWrap');
+    const tableWrap = document.getElementById('lmDistTable');
+    if (donutWrap) donutWrap.style.display = distTableVisible ? 'none' : 'flex';
+    if (tableWrap) {
+      tableWrap.style.display = distTableVisible ? 'flex' : 'none';
+      if (distTableVisible && lastTableData) {
+        const { players: pts, acwrByPlayer } = lastTableData;
+        tableWrap.innerHTML = [...pts]
+          .sort((a, b) => ZONE_ORDER(acwrByPlayer[a.id]) - ZONE_ORDER(acwrByPlayer[b.id]))
+          .map(p => {
+            const acwr  = acwrByPlayer[p.id];
+            const zone  = acwr == null ? 'under' : acwr>1.5?'red':acwr>1.3?'over':acwr>=0.8?'opt':'under';
+            const label = acwr == null ? 'No data' : acwr>1.5?'Danger':acwr>1.3?'Overreach':acwr>=0.8?'Sweet-spot':'Underloaded';
+            return `<div class="dt-row">
+              <span class="dt-name">${((p.first_name||'')[0]||'')}. ${p.last_name||''}</span>
+              <span class="lm-zone-pill ${zone}" style="font-size:10px;height:18px"><span class="d"></span>${label}</span>
+              <span class="dt-val">${acwr ?? '—'}</span>
+            </div>`;
+          }).join('');
+      }
+    }
+    const btn = document.getElementById('lmDistViewTable');
+    if (btn) btn.textContent = distTableVisible ? '⬅ Back to donut' : 'View as table';
+  }
+
+  // ── loadData ───────────────────────────────────────────────────────────────
+  async function loadData(period) {
+    currentPeriod = period;
+    let chartFrom, fetchFrom;
+    if      (period === '7d')         { chartFrom = from7dStr;                         fetchFrom = from28dStr; }
+    else if (period === 'Microcycle') { chartFrom = microRow?.start_date || from7dStr; fetchFrom = from28dStr; }
+    else if (period === 'Season')     { chartFrom = seasonStart;                        fetchFrom = seasonStart; }
+    else                              { chartFrom = from28dStr;                         fetchFrom = from28dStr; }
+
+    const sessRes = await window.sb.from('training_sessions')
+      .select('id,session_date,rpe(player_id,rpe,duration,load)')
+      .eq('club_id', clubId).gte('session_date', fetchFrom).order('session_date');
+    if (sessRes.error) console.error('[LM] training_sessions+rpe error:', sessRes.error);
+    const sessionsData = sessRes.data || [];
+    const totalRpe = sessionsData.reduce((n, s) => n + (s.rpe||[]).length, 0);
+    console.log(`[LM] period=${period} sessions=${sessionsData.length} rpe records=${totalRpe}`);
+
+    const playerLoadHist = {};
+    sessionsData.forEach(s => {
+      (s.rpe || []).forEach(r => {
+        if (!playerLoadHist[r.player_id]) playerLoadHist[r.player_id] = [];
+        playerLoadHist[r.player_id].push({ date: s.session_date, load: r.load||0, score: r.rpe||0 });
+      });
+    });
+
+    const acwrByPlayer = {};
+    Object.entries(playerLoadHist).forEach(([pid, recs]) => {
+      const recs28  = recs.filter(r => r.date >= from28dStr);
+      const acute   = recs28.filter(r => r.date >= from7dStr).reduce((s,r) => s+r.load, 0);
+      const chronic = recs28.reduce((s,r) => s+r.load, 0) / 4;
+      acwrByPlayer[pid] = chronic > 0 ? +(acute/chronic).toFixed(2) : null;
+    });
+
+    const acwrVals      = Object.values(acwrByPlayer).filter(v => v != null);
+    const squadAvg      = acwrVals.length ? +(acwrVals.reduce((a,b)=>a+b,0)/acwrVals.length).toFixed(2) : null;
+    const dangerPlayers = players.filter(p => (acwrByPlayer[p.id]||0) > 1.5);
+    const overPlayers   = players.filter(p => { const v=acwrByPlayer[p.id]; return v>1.3&&v<=1.5; });
+    const sweetPlayers  = players.filter(p => { const v=acwrByPlayer[p.id]; return v!=null&&v>=0.8&&v<=1.3; });
+    const underPlayers  = players.filter(p => { const v=acwrByPlayer[p.id]; return v!=null&&v<0.8; });
+    const noDataPlayers = players.filter(p => acwrByPlayer[p.id] == null);
+
+    const latestSess   = sessionsData[sessionsData.length - 1];
+    const latestRpeMap = {};
+    if (latestSess?.rpe) latestSess.rpe.forEach(r => { latestRpeMap[r.player_id] = r.rpe; });
+
+    lastTableData = {
+      players, acwrByPlayer, playerLoadHist, latestRpeMap,
+      sweetCount: sweetPlayers.length, overCount: overPlayers.length,
+      dangerCount: dangerPlayers.length, noDataCount: noDataPlayers.length
+    };
+
+    // KPI: Squad avg ACWR
+    if (squadAvg != null) {
+      document.getElementById('lmKpiAcwr').textContent = squadAvg;
+      document.getElementById('lmAcwrPin').style.left  = Math.min(95, (squadAvg/2)*100) + '%';
+      const el = document.getElementById('lmAcwrToday');
+      if (el) { el.textContent = squadAvg; el.style.color = squadAvg>1.5?'var(--cm-danger)':squadAvg>1.3?'var(--cm-warning)':'var(--cm-success)'; }
+    } else {
+      document.getElementById('lmKpiAcwr').textContent = '—';
+    }
+
+    document.getElementById('lmKpiDanger').innerHTML = `${dangerPlayers.length} <sub>/ ${total}</sub>`;
+
+    const rpe7dScores = sessionsData
+      .filter(s => s.session_date >= from7dStr)
+      .flatMap(s => (s.rpe||[]).map(r => r.rpe||0))
+      .filter(v => v > 0);
+    const rpe7dAvg = rpe7dScores.length ? rpe7dScores.reduce((a,b)=>a+b,0)/rpe7dScores.length : null;
+    document.getElementById('lmKpiRpe').innerHTML = rpe7dAvg != null
+      ? `${rpe7dAvg.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
+    document.getElementById('lmRpeSub').textContent = rpe7dAvg != null
+      ? `avg last 7 days · ${rpe7dScores.length} records` : 'no sessions last 7 days';
+
+    ['lmPillAll','lmPillDanger','lmPillOver','lmPillSweet','lmPillUnder'].forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = [total, dangerPlayers.length, overPlayers.length, sweetPlayers.length, underPlayers.length][i];
+    });
+
+    const banner = document.getElementById('lmAlertBanner');
+    if (dangerPlayers.length > 0 || overPlayers.length > 0) {
+      const parts = [];
+      if (dangerPlayers.length > 0) parts.push(`${dangerPlayers.length} in danger`);
+      if (overPlayers.length > 0)   parts.push(`${overPlayers.length} in overreach`);
+      document.getElementById('lmAlertH').textContent = parts.join(' · ') + ' zone';
+      const allAt = [...dangerPlayers, ...overPlayers];
+      document.getElementById('lmAlertP').textContent = allAt.map(p => `${p.first_name||''} ${p.last_name||''}`.trim()).join(' · ');
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+
+    if (total > 0) {
+      const sp = +(sweetPlayers.length/total*100).toFixed(1);
+      const op = +(overPlayers.length/total*100).toFixed(1);
+      const dp = +(dangerPlayers.length/total*100).toFixed(1);
+      let off  = 25;
+      [['lmDonutSweet',sp],['lmDonutOver',op],['lmDonutDanger',dp]].forEach(([id, pct]) => {
+        const el = document.getElementById(id);
+        if (el) { el.setAttribute('stroke-dasharray', `${pct} ${(100-pct).toFixed(1)}`); el.setAttribute('stroke-dashoffset', off); }
+        off -= pct;
+      });
+      const t = document.getElementById('lmDonutTotal'); if (t) t.textContent = total;
+      document.getElementById('lmDistSweet').textContent  = sweetPlayers.length;
+      document.getElementById('lmDistOver').textContent   = overPlayers.length;
+      document.getElementById('lmDistDanger').textContent = dangerPlayers.length;
+      document.getElementById('lmDistNoData').textContent = noDataPlayers.length;
+      document.getElementById('lmDistSub').textContent    = `today, n=${total}`;
+    }
+
+    const ctxEl = document.getElementById('lmCtx');
+    if (ctxEl) {
+      const alertCount = dangerPlayers.length + overPlayers.length;
+      const alertStr   = alertCount > 0 ? ` · ${alertCount} alert${alertCount>1?'s':''}` : '';
+      ctxEl.innerHTML  = `<strong>${period}</strong>${alertStr} · ${total} players`;
+    }
+
+    // ACWR chart
+    const canvas  = document.getElementById('acwrChart');
+    const svgEl   = document.getElementById('acwrSvg');
+    const emptyEl = document.getElementById('acwrEmpty');
+    if (acwrChartInstance) { acwrChartInstance.destroy(); acwrChartInstance = null; }
+
+    const sessForChart = sessionsData.filter(s => s.session_date >= chartFrom);
+    if (sessForChart.length > 0) {
+      svgEl.style.display   = 'none';
+      emptyEl.style.display = 'none';
+      canvas.style.display  = 'block';
+
+      const labels = sessForChart.map(s => {
+        const d = new Date(s.session_date + 'T12:00:00');
+        return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      });
+      const n = labels.length;
+
+      const acwrTrend = sessForChart.map(sess => {
+        const d7  = new Date(new Date(sess.session_date+'T12:00:00') - 7*86400000).toISOString().split('T')[0];
+        const d28 = new Date(new Date(sess.session_date+'T12:00:00') - 28*86400000).toISOString().split('T')[0];
+        const vals = Object.entries(playerLoadHist).map(([, recs]) => {
+          const acute   = recs.filter(r => r.date <= sess.session_date && r.date > d7).reduce((s,r) => s+r.load, 0);
+          const chronic = recs.filter(r => r.date <= sess.session_date && r.date > d28).reduce((s,r) => s+r.load, 0) / 4;
+          return chronic > 0 ? acute/chronic : null;
+        }).filter(v => v != null);
+        return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : null;
+      });
+
+      const sessionLoads = sessForChart.map(s => (s.rpe||[]).reduce((sum,r) => sum+(r.load||0), 0));
+      const maxLoad      = Math.max(...sessionLoads, 1);
+      const accent       = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
+
+      lastChartData = { labels, n, acwrTrend, sessionLoads, accent, maxLoad };
+      acwrChartInstance = new Chart(canvas, buildChartConfig(labels, n, sessionLoads, acwrTrend, accent, maxLoad));
+    } else {
+      svgEl.style.display   = 'none';
+      emptyEl.style.display = 'flex';
+      canvas.style.display  = 'none';
+      lastChartData = null;
+    }
+
+    // If dist table was visible, refresh it
+    if (distTableVisible) { distTableVisible = false; toggleDistTable(); }
+
+    renderTable();
+  }
+
+  // ── Button wiring ──────────────────────────────────────────────────────────
+
+  // Period segments
   document.querySelectorAll('.lm-segs .lm-seg').forEach(btn => {
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.lm-segs .lm-seg').forEach(b => b.classList.remove('is-on'));
       btn.classList.add('is-on');
       await loadData(btn.textContent.trim());
     });
+  });
+
+  // Export CSV
+  document.getElementById('lmExportBtn')?.addEventListener('click', exportCSV);
+
+  // Chart download PNG
+  document.getElementById('lmChartDlBtn')?.addEventListener('click', () => {
+    const canvas = document.getElementById('acwrChart');
+    if (canvas.style.display === 'none') return;
+    canvas.toBlob(blob => {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href = url; a.download = `acwr_chart_${currentPeriod}_${todayStr}.png`; a.click();
+      URL.revokeObjectURL(url);
+    });
+  });
+
+  // Chart fullscreen modal
+  document.getElementById('lmChartMaxBtn')?.addEventListener('click', () => {
+    if (!lastChartData) return;
+    const modal = document.getElementById('lmChartModal');
+    modal.style.display = 'flex';
+    document.getElementById('lmModalSub').textContent = `${currentPeriod} · squad average`;
+    const mc = document.getElementById('acwrChartModal');
+    if (acwrModalChart) { acwrModalChart.destroy(); acwrModalChart = null; }
+    const { labels, n, acwrTrend, sessionLoads, accent, maxLoad } = lastChartData;
+    acwrModalChart = new Chart(mc, buildChartConfig(labels, n, sessionLoads, acwrTrend, accent, maxLoad));
+  });
+  const closeModal = () => {
+    document.getElementById('lmChartModal').style.display = 'none';
+    if (acwrModalChart) { acwrModalChart.destroy(); acwrModalChart = null; }
+  };
+  document.getElementById('lmModalClose')?.addEventListener('click', closeModal);
+  document.getElementById('lmChartModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+  // Distribution "..." menu
+  document.getElementById('lmDistMenuBtn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    document.getElementById('lmDistMenu').classList.toggle('is-open');
+  });
+  document.getElementById('lmDistViewTable')?.addEventListener('click', () => {
+    toggleDistTable();
+    document.getElementById('lmDistMenu').classList.remove('is-open');
+  });
+  document.getElementById('lmDistExportPng')?.addEventListener('click', () => {
+    exportDonutPng();
+    document.getElementById('lmDistMenu').classList.remove('is-open');
+  });
+  document.querySelectorAll('#lmDistMenu [data-period]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const p = btn.dataset.period;
+      document.getElementById('lmDistMenu').classList.remove('is-open');
+      document.querySelectorAll('.lm-segs .lm-seg').forEach(b => b.classList.toggle('is-on', b.textContent.trim() === p));
+      await loadData(p);
+    });
+  });
+
+  // Wellness nav
+  document.getElementById('lmWellNavBtn')?.addEventListener('click', () => {
+    window.location.href = `Wellness.html?period=${encodeURIComponent(currentPeriod)}`;
+  });
+
+  // Sort dropdown
+  document.getElementById('lmSortBtn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    document.getElementById('lmSortMenu').classList.toggle('is-open');
+  });
+  document.querySelectorAll('#lmSortMenu [data-sort]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sortMode = btn.dataset.sort;
+      document.querySelectorAll('#lmSortMenu [data-sort]').forEach(b => b.classList.toggle('is-active', b.dataset.sort === sortMode));
+      document.getElementById('lmSortMenu').classList.remove('is-open');
+      renderTable();
+    });
+  });
+
+  // Alert banner close
+  document.querySelector('#lmAlertBanner .cm-icon-btn')?.addEventListener('click', () => {
+    document.getElementById('lmAlertBanner').style.display = 'none';
+  });
+
+  // Close all dropdowns on outside click
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.lm-dropdown-menu.is-open').forEach(m => m.classList.remove('is-open'));
   });
 
   await loadData('28d');
