@@ -609,25 +609,36 @@
 // Position → display config
 const POS_CFG = {
   // Abbreviations
-  GK: { group:'Goalkeepers',        icon:'ti-shield',            css:'gk', pill:'GK', order:0 },
-  CB: { group:'Defenders',          icon:'ti-wall',              css:'cb', pill:'CB', order:1 },
-  LB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  RB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  FB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
-  MF: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  DM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  CM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  WG: { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  ST: { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
-  CF: { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
+  GK:  { group:'Goalkeepers',        icon:'ti-shield',            css:'gk', pill:'GK', order:0 },
+  CB:  { group:'Defenders',          icon:'ti-wall',              css:'cb', pill:'CB', order:1 },
+  LB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  RB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  FB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  WB:  { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  LWB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  RWB: { group:'Defenders',          icon:'ti-wall',              css:'fb', pill:'FB', order:1 },
+  DM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  CDM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  CM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  MF:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  LM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  RM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  CAM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  AM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  WG:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  LW:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  RW:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  ST:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
+  CF:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
+  SS:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
   // Full names (from DB)
-  GOALKEEPER: { group:'Goalkeepers',        icon:'ti-shield',           css:'gk', pill:'GK', order:0 },
-  DEFENDER:   { group:'Defenders',          icon:'ti-wall',             css:'cb', pill:'CB', order:1 },
-  MIDFIELDER: { group:'Midfielders',        icon:'ti-circles-relation', css:'mf', pill:'MF', order:2 },
-  FORWARD:    { group:'Wingers & Forwards', icon:'ti-flame',            css:'st', pill:'ST', order:3 },
-  WINGER:     { group:'Wingers & Forwards', icon:'ti-flame',            css:'wg', pill:'WG', order:3 },
+  GOALKEEPER:  { group:'Goalkeepers',        icon:'ti-shield',           css:'gk', pill:'GK', order:0 },
+  DEFENDER:    { group:'Defenders',          icon:'ti-wall',             css:'cb', pill:'CB', order:1 },
+  MIDFIELDER:  { group:'Midfielders',        icon:'ti-circles-relation', css:'mf', pill:'MF', order:2 },
+  FORWARD:     { group:'Wingers & Forwards', icon:'ti-flame',            css:'st', pill:'ST', order:3 },
+  WINGER:      { group:'Wingers & Forwards', icon:'ti-flame',            css:'wg', pill:'WG', order:3 },
 };
-const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers & Forwards'];
+const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers & Forwards','Other'];
 
 function calcAge(dob) {
   if (!dob) return '—';
@@ -761,7 +772,8 @@ async function reloadPlayers() {
     .eq('club_id', _currentClubId)
     .order('number', { ascending: true, nullsFirst: false });
   if (_currentTeamId) q = q.eq('team_id', _currentTeamId);
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) console.error('[Squad] players query error:', error);
 
   _allPlayers = data || [];
   const total = _allPlayers.length;
@@ -1062,6 +1074,7 @@ async function reloadPlayers() {
       { label: 'Defenders',          groups: ['Defenders'] },
       { label: 'Midfielders',        groups: ['Midfielders'] },
       { label: 'Wingers & Forwards', groups: ['Wingers & Forwards'] },
+      { label: 'Other',              groups: ['Other'] },
     ];
     const byGroup = {};
     GROUPS_ORDER.forEach(g => byGroup[g] = []);
