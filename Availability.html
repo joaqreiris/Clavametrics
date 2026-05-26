@@ -468,6 +468,8 @@
 <!-- Tweaks + Settings -->
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
+<!-- Summary tooltip -->
+<div id="avSummaryTip" style="position:fixed;display:none;z-index:200;padding:8px 11px;background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:7px;font:500 12px/1.6 var(--cm-font-sans);pointer-events:none;white-space:nowrap;box-shadow:var(--cm-shadow-pop)"></div>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
@@ -479,9 +481,12 @@
 
 <script>
   // ── State ──
-  let CLUB_ID  = null;
-  let MC_DATES = [];
-  let todayIdx = -1;
+  let CLUB_ID    = null;
+  let MC_DATES   = [];
+  let todayIdx   = -1;
+  let avMap      = {};        // player_id|date → availability row — shared across init + handlers
+  let players    = [];        // current club players
+  let injuredIds = new Set(); // player IDs with active injury
 
   const DAY_LTR   = ['S','M','T','W','T','F','S'];
   const POS_NORM  = { GK:'gk', GOALKEEPER:'gk', CB:'cb', SW:'cb', DEFENDER:'cb', CENTRE_BACK:'cb', CENTERBACK:'cb', FB:'fb', RB:'fb', LB:'fb', RWB:'fb', LWB:'fb', FULLBACK:'fb', MF:'mf', CM:'mf', CDM:'mf', CAM:'mf', DM:'mf', AM:'mf', MIDFIELDER:'mf', WG:'wg', RW:'wg', LW:'wg', RM:'wg', LM:'wg', WINGER:'wg', ST:'st', CF:'st', SS:'st', FW:'st', FORWARD:'st', STRIKER:'st' };
@@ -521,6 +526,41 @@
     const segs = ['av','pa','in','si','na','ab'].filter(k => counts[k] > 0)
       .map(k => `<span class="s ${k}" style="flex:${counts[k]}"></span>`).join('');
     return `<div class="av-summary"><div class="av-summary-bar">${segs}</div><div class="av-summary-min">${mins}<sub>′</sub></div></div>`;
+  }
+
+  // ── Summary tooltip HTML ──
+  function summaryTooltip(statuses) {
+    const counts = { av:0, pa:0, in:0, si:0, na:0, ab:0 };
+    let mins = 0;
+    statuses.forEach(s => {
+      if (!s) return;
+      if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
+      else { const k = statusKey(s); if (k in counts) counts[k]++; }
+    });
+    const rows = [
+      [counts.av, 'var(--cm-success)', 'available'],
+      [counts.pa, 'var(--cm-warning)', 'partial'],
+      [counts.in, 'var(--cm-danger)',  'injured'],
+      [counts.si, 'var(--cm-violet)',  'illness'],
+      [counts.na, 'var(--cm-info)',    'away'],
+      [counts.ab, 'var(--cm-neutral)', 'absent'],
+    ].filter(([n]) => n > 0)
+     .map(([n, c, label]) => `<span style="color:${c}">●</span> ${n} ${n === 1 ? label.replace(/s$/, '') : label}`);
+    if (mins > 0) rows.push(`<i class="ti ti-clock" style="font-size:11px"></i> ${mins} match min`);
+    return rows.join('<br>');
+  }
+
+  // ── Live-update one player's Summary cell after avMap mutation ──
+  function updateRowSummary(playerId) {
+    const row = matrix && matrix.querySelector(`tr[data-player-id="${playerId}"]`);
+    if (!row) return;
+    const statuses = MC_DATES.map((date, i) => {
+      const e = avMap[playerId + '|' + date];
+      if (!e) return (todayIdx >= 0 && i > todayIdx) ? null : (injuredIds.has(playerId) ? 'unavailable' : 'available');
+      return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
+    });
+    const sumCell = row.querySelector('.col-sum');
+    if (sumCell) sumCell.innerHTML = summary(statuses);
   }
 
   // ── Render header ──
@@ -580,7 +620,7 @@
           return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
         });
         const cells = statuses.map((s, i) => cellHTML(s, i, p.id, MC_DATES[i])).join('');
-        html += `<tr>
+        html += `<tr data-player-id="${p.id}">
           <td class="col-player"><div class="av-pl"><div class="av-pl-av">${initials}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${name}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span></div></div></div></td>
           <td class="col-num"><span class="av-num">${p.number || ''}</span></td>
           ${cells}
@@ -775,10 +815,10 @@
 
     renderHeader(matchDates);
 
-    const players    = playersData || [];
-    const avMap      = {};
+    players    = playersData || [];
+    avMap      = {};
     (availData || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
-    const injuredIds = new Set((injuriesData || []).map(r => r.player_id));
+    injuredIds = new Set((injuriesData || []).map(r => r.player_id));
     const yesterdayByPlayer = yesterdayData
       ? Object.fromEntries(yesterdayData.map(r => [r.player_id, r]))
       : null;
@@ -822,6 +862,38 @@
   function isBlockedCell(td) {
     return td.classList.contains('is-off') || td.classList.contains('is-future');
   }
+
+  // ── Summary tooltip ──
+  const tip = document.getElementById('avSummaryTip');
+
+  document.getElementById('avBody').addEventListener('mouseover', e => {
+    const sumCell = e.target.closest('td.col-sum');
+    if (!sumCell) { tip.style.display = 'none'; return; }
+    const pid = sumCell.closest('tr')?.dataset.playerId;
+    if (!pid) return;
+    const statuses = MC_DATES.map((date, i) => {
+      const ent = avMap[pid + '|' + date];
+      if (!ent) return (todayIdx >= 0 && i > todayIdx) ? null : (injuredIds.has(pid) ? 'unavailable' : 'available');
+      return ent.minutes > 0 ? 'match:' + ent.minutes : (ent.status || 'available');
+    });
+    const html = summaryTooltip(statuses);
+    if (!html) return;
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+  });
+
+  document.getElementById('avBody').addEventListener('mousemove', e => {
+    if (tip.style.display === 'none') return;
+    const x = e.clientX + 14, y = e.clientY + 14;
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = (x + tw > window.innerWidth  ? e.clientX - tw - 8 : x) + 'px';
+    tip.style.top  = (y + th > window.innerHeight ? e.clientY - th - 8 : y) + 'px';
+  });
+
+  document.getElementById('avBody').addEventListener('mouseout', e => {
+    if (!e.relatedTarget || !e.target.closest('td.col-sum')?.contains(e.relatedTarget))
+      tip.style.display = 'none';
+  });
 
   // ── Drag multi-select ──
   let isDragging = false;
@@ -884,15 +956,19 @@
     const btn = document.querySelector(`.av-bulk-btn.${cssKey}`);
     if (!btn) return;
     btn.addEventListener('click', () => {
+      const updated = new Set();
       matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
         const { pid, date } = td.dataset;
         if (pid && date) {
           td.innerHTML = dotEl(fullStatus);
           td.className = 'cell';
+          avMap[pid + '|' + date] = { player_id: pid, date, status: fullStatus, minutes: 0 };
+          updated.add(pid);
           saveAvailability(pid, date, fullStatus);
         }
       });
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+      updated.forEach(pid => updateRowSummary(pid));
       updateBulk();
     });
   });
@@ -900,31 +976,39 @@
   // ── Match · 90' button ──
   const matchBtn = document.querySelector('.av-bulk-btn.match');
   if (matchBtn) matchBtn.addEventListener('click', () => {
+    const updated = new Set();
     matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
       const { pid, date } = td.dataset;
       if (pid && date) {
         td.innerHTML = `<span class="av-cell-match-min">90′</span>`;
         td.className = 'cell av-cell-match';
+        avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: 90 };
+        updated.add(pid);
         saveAvailability(pid, date, 'available', 90);
       }
     });
     matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+    updated.forEach(pid => updateRowSummary(pid));
     updateBulk();
   });
 
   // Clear (danger) button
   const clearBtn = document.querySelector('.av-bulk-btn.danger');
   if (clearBtn) clearBtn.addEventListener('click', () => {
+    const updated = new Set();
     matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
       const { pid, date } = td.dataset;
       if (pid && date) {
         td.innerHTML = '';
         td.className = 'cell';
+        delete avMap[pid + '|' + date];
+        updated.add(pid);
         window.sb.from('availability').delete().eq('player_id', pid).eq('date', date)
           .then(({ error }) => { if (error) console.warn('[Availability] delete error:', error.message); });
       }
     });
     matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+    updated.forEach(pid => updateRowSummary(pid));
     updateBulk();
   });
 
