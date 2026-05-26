@@ -74,8 +74,9 @@
   /* Table ---------------------------------------------- */
   .sq-table-wrap {
     background:var(--cm-surface); border:1px solid var(--cm-border);
-    border-radius:var(--cm-r-4); overflow:auto; box-shadow:var(--cm-shadow-1);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden;
   }
+  .sq-table-scroll { overflow-x:auto; }
   .sq-table { width:100%; border-collapse:collapse; }
   .sq-table thead th {
     text-align:left; padding:9px 12px;
@@ -185,6 +186,7 @@
   .sq-row-actions button .ti { font-size:15px; }
 
   /* Group header row */
+  .sq-table tbody tr.is-group { scroll-margin-top:94px; }
   .sq-table tbody tr.is-group td {
     background:var(--cm-bg-soft);
     border-top:1px solid var(--cm-border);
@@ -370,9 +372,10 @@
           <p id="sqHeadP">27 players · First team 2025/26</p>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
-          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>Add player</button>
+          <button class="cm-btn is-outline is-sm" id="sqImportBtn"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
+          <button class="cm-btn is-outline is-sm" id="sqExportBtn"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
+          <button class="cm-btn is-primary is-sm" id="sqAddPlayerBtn"><i class="ti ti-plus" style="font-size:14px"></i>Add player</button>
+          <input type="file" id="sqImportFile" accept=".csv" style="display:none">
         </div>
       </header>
 
@@ -409,6 +412,7 @@
 
       <!-- Table -->
       <div class="sq-table-wrap">
+        <div class="sq-table-scroll">
         <table class="sq-table">
           <thead>
             <tr>
@@ -429,6 +433,7 @@
             <tr><td colspan="10" style="padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading players…</td></tr>
           </tbody>
         </table>
+        </div><!-- /.sq-table-scroll -->
 
         <div class="sq-table-foot">
           <span id="sqTableFoot">Showing <strong style="color:var(--cm-fg)">0</strong> of 0 players</span>
@@ -463,6 +468,18 @@
     </div>
     <div class="sq-modal-body">
       <input type="hidden" id="sqModalId">
+      <!-- Photo upload -->
+      <div class="sq-modal-field" style="grid-column:1/-1">
+        <label>Photo</label>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div id="sqF_photoPreview" style="width:48px;height:48px;border-radius:50%;background:var(--cm-bg-sunk);border:1px solid var(--cm-border);display:flex;align-items:center;justify-content:center;font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg);flex-shrink:0;overflow:hidden"></div>
+          <div>
+            <button type="button" class="cm-btn is-outline is-sm" id="sqF_photoBtn"><i class="ti ti-upload" style="font-size:13px"></i>Upload photo</button>
+            <input type="file" id="sqF_photo" accept="image/*" style="display:none">
+            <div style="font:var(--cm-meta);color:var(--cm-fg-muted);margin-top:4px">PNG or JPG · max 2 MB</div>
+          </div>
+        </div>
+      </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
           <label for="sqF_first_name">First name</label>
@@ -547,6 +564,32 @@
   </div>
 </div>
 
+<!-- Import preview modal -->
+<div class="sq-modal-backdrop" id="sqImportBackdrop">
+  <div class="sq-modal" style="width:660px" role="dialog" aria-modal="true">
+    <div class="sq-modal-head">
+      <h2>Import players from CSV</h2>
+      <button class="sq-modal-close" id="sqImportClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <p id="sqImportInfo" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:0"></p>
+      <div id="sqImportConflicts" style="display:none;padding:8px 12px;background:var(--cm-warning-bg);border:1px solid var(--cm-warning-bd);border-radius:var(--cm-r-3);font:var(--cm-body-sm);color:var(--cm-warning)"></div>
+      <div style="overflow-x:auto;border-radius:var(--cm-r-3);border:1px solid var(--cm-border);max-height:320px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font:var(--cm-body-sm)">
+          <thead id="sqImportThead" style="background:var(--cm-bg-soft);position:sticky;top:0"></thead>
+          <tbody id="sqImportTbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <span class="sq-modal-saving" id="sqImportSaving" style="display:none">Importing…</span>
+      <button class="cm-btn is-ghost is-sm" id="sqImportCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqImportConfirm">Import players</button>
+    </div>
+  </div>
+</div>
+
 <div class="sq-toast" id="sqToast"></div>
 
 <script>
@@ -590,6 +633,7 @@ let _activeFilter = 'All';
 let _searchQ = '';
 let _editingId = null;
 let _currentClubId = null;
+let _currentClubName = '';
 
 function renderTable() {
   const tbody = document.getElementById('sqTbody');
@@ -735,6 +779,7 @@ async function reloadPlayers() {
 
   if (club) {
     window.applyClubTheme();
+    _currentClubName = club.name || '';
     const crumb = document.getElementById('sqCrumbClub');
     if (crumb) crumb.textContent = club.name;
   }
@@ -801,6 +846,17 @@ async function reloadPlayers() {
     document.getElementById('sqF_status').value      = player?.status          || 'available';
     document.getElementById('sqModalDelete').style.display = player ? 'inline-flex' : 'none';
     document.getElementById('sqModalSaving').style.display = 'none';
+    // Photo preview
+    const photoInput = document.getElementById('sqF_photo');
+    if (photoInput) photoInput.value = '';
+    const preview = document.getElementById('sqF_photoPreview');
+    if (preview) {
+      if (player?.photo_url) {
+        preview.innerHTML = `<img src="${player.photo_url}" style="width:100%;height:100%;object-fit:cover" alt="">`;
+      } else {
+        preview.textContent = (((player?.first_name||'')[0]||'') + ((player?.last_name||'')[0]||'')).toUpperCase() || '?';
+      }
+    }
     backdrop.classList.add('is-open');
     document.getElementById('sqF_first_name').focus();
   }
@@ -835,24 +891,39 @@ async function reloadPlayers() {
       return;
     }
 
+    const photoFile = document.getElementById('sqF_photo')?.files?.[0] || null;
+
+    async function uploadPhoto(playerId, clubId) {
+      if (!photoFile) return null;
+      const ext = photoFile.name.split('.').pop().toLowerCase();
+      const path = `${clubId}/${playerId}.${ext}`;
+      const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, photoFile, { upsert: true });
+      if (upErr) { console.error('Photo upload failed:', upErr); return null; }
+      const { data: urlData } = window.sb.storage.from('player-photos').getPublicUrl(path);
+      return urlData?.publicUrl || null;
+    }
+
     let error;
     if (_editingId) {
+      const photoUrl = await uploadPhoto(_editingId, _currentClubId);
+      if (photoUrl) payload.photo_url = photoUrl;
       ({ error } = await window.sb.from('players').update(payload).eq('id', _editingId));
     } else {
       const clubId = _currentClubId || await window.getClubId();
       if (!clubId) { showToast('Error: no club found for your account.'); saving.style.display = 'none'; saveBtn.disabled = false; return; }
       payload.club_id = clubId;
-      ({ error } = await window.sb.from('players').insert(payload));
+      const { data: inserted, error: insertErr } = await window.sb.from('players').insert(payload).select('id');
+      error = insertErr;
+      if (!insertErr && inserted?.length) {
+        const photoUrl = await uploadPhoto(inserted[0].id, clubId);
+        if (photoUrl) await window.sb.from('players').update({ photo_url: photoUrl }).eq('id', inserted[0].id);
+      }
     }
 
     saving.style.display = 'none';
     saveBtn.disabled = false;
 
-    if (error) {
-      showToast('Error: ' + error.message);
-      return;
-    }
-
+    if (error) { showToast('Error: ' + error.message); return; }
     closeModal();
     showToast(_editingId ? 'Player updated.' : 'Player added.');
     await reloadPlayers();
@@ -883,7 +954,7 @@ async function reloadPlayers() {
   });
 
   // Add player button
-  document.querySelector('.cm-btn.is-primary')?.addEventListener('click', () => openModal(null));
+  document.getElementById('sqAddPlayerBtn')?.addEventListener('click', () => openModal(null));
 
   // ── Views ──────────────────────────────────────────────────────
   let _activeView = 'list';
@@ -1003,6 +1074,132 @@ async function reloadPlayers() {
       });
     });
   });
+
+  // ── Photo preview in modal ─────────────────────────────────────
+  document.getElementById('sqF_photoBtn')?.addEventListener('click', () => document.getElementById('sqF_photo').click());
+  document.getElementById('sqF_photo')?.addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const preview = document.getElementById('sqF_photoPreview');
+    if (preview) {
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover" alt="">`;
+    }
+  });
+
+  // ── Export CSV ─────────────────────────────────────────────────
+  document.getElementById('sqExportBtn')?.addEventListener('click', () => {
+    if (!_allPlayers.length) { showToast('No players to export.'); return; }
+    const cols = ['number','first_name','last_name','position','date_of_birth','nationality','height','weight','dominant_foot'];
+    const header = cols.join(',');
+    const rows = _allPlayers.map(p => cols.map(c => {
+      const v = String(p[c] ?? '');
+      return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g,'""')}"` : v;
+    }).join(','));
+    const csv = [header, ...rows].join('\n');
+    const date = new Date().toISOString().split('T')[0];
+    const club = (_currentClubName || 'squad').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv], { type:'text/csv' })),
+      download: `squad_${club}_${date}.csv`
+    });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  });
+
+  // ── Import CSV ─────────────────────────────────────────────────
+  const IMPORT_COLS = ['first_name','last_name','number','position','date_of_birth','nationality','height','weight','dominant_foot'];
+
+  function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[\s\-]/g,'_').replace(/[^a-z_]/g,''));
+    return lines.slice(1).filter(l => l.trim()).map(line => {
+      const vals = [];
+      let cur = '', inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ''; }
+        else cur += ch;
+      }
+      vals.push(cur.trim());
+      const obj = {};
+      headers.forEach((h, i) => { if (IMPORT_COLS.includes(h)) obj[h] = vals[i] || ''; });
+      return obj;
+    });
+  }
+
+  let _importRows = [];
+
+  function openImportModal(rows) {
+    _importRows = rows;
+    const existingNums = new Set(_allPlayers.map(p => String(p.number)));
+    const conflicts = rows.filter(r => r.number && existingNums.has(r.number)).map(r => `#${r.number}`);
+    document.getElementById('sqImportInfo').textContent = `${rows.length} player${rows.length !== 1 ? 's' : ''} found in CSV.`;
+    const conflictEl = document.getElementById('sqImportConflicts');
+    if (conflicts.length) {
+      conflictEl.textContent = `⚠ Jersey numbers already in squad: ${[...new Set(conflicts)].join(', ')}. These rows will be imported — resolve conflicts manually if needed.`;
+      conflictEl.style.display = '';
+    } else {
+      conflictEl.style.display = 'none';
+    }
+    const displayCols = IMPORT_COLS.filter(c => rows.some(r => r[c]));
+    document.getElementById('sqImportThead').innerHTML = `<tr>${displayCols.map(c =>
+      `<th style="padding:7px 10px;font:500 11px/1 var(--cm-font-sans);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);white-space:nowrap">${c.replace(/_/g,' ')}</th>`
+    ).join('')}</tr>`;
+    document.getElementById('sqImportTbody').innerHTML = rows.slice(0,30).map(r =>
+      `<tr>${displayCols.map(c =>
+        `<td style="padding:7px 10px;border-bottom:1px solid var(--cm-border-soft);color:${r[c]?'var(--cm-fg)':'var(--cm-fg-faint)'}">${r[c]||'—'}</td>`
+      ).join('')}</tr>`
+    ).join('');
+    document.getElementById('sqImportBackdrop').classList.add('is-open');
+  }
+
+  function closeImportModal() {
+    document.getElementById('sqImportBackdrop').classList.remove('is-open');
+    document.getElementById('sqImportFile').value = '';
+    _importRows = [];
+  }
+
+  async function confirmImport() {
+    if (!_importRows.length) return;
+    const saving = document.getElementById('sqImportSaving');
+    const btn = document.getElementById('sqImportConfirm');
+    saving.style.display = 'inline'; btn.disabled = true;
+    const rows = _importRows
+      .map(r => ({
+        club_id:       _currentClubId,
+        first_name:    r.first_name  || null,
+        last_name:     r.last_name   || null,
+        number:        parseInt(r.number) || null,
+        position:      r.position    || null,
+        date_of_birth: r.date_of_birth || null,
+        nationality:   r.nationality || null,
+        height:        parseFloat(r.height) || null,
+        weight:        parseFloat(r.weight) || null,
+        dominant_foot: r.dominant_foot || null,
+      }))
+      .filter(r => r.first_name || r.last_name);
+    const { error } = await window.sb.from('players').insert(rows);
+    saving.style.display = 'none'; btn.disabled = false;
+    if (error) { showToast('Import failed: ' + error.message); return; }
+    closeImportModal();
+    showToast(`${rows.length} player${rows.length !== 1 ? 's' : ''} imported.`);
+    await reloadPlayers();
+  }
+
+  document.getElementById('sqImportBtn')?.addEventListener('click', () => document.getElementById('sqImportFile').click());
+  document.getElementById('sqImportFile')?.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCSV(text);
+    if (!rows.length) { showToast('CSV empty or no matching columns (expected: first_name, last_name, number…).'); return; }
+    openImportModal(rows);
+  });
+  document.getElementById('sqImportClose')?.addEventListener('click', closeImportModal);
+  document.getElementById('sqImportCancel')?.addEventListener('click', closeImportModal);
+  document.getElementById('sqImportConfirm')?.addEventListener('click', confirmImport);
+  document.getElementById('sqImportBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeImportModal(); });
 </script>
 </body>
 </html>

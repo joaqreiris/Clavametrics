@@ -346,7 +346,7 @@
       <header class="av-head">
         <div>
           <h1>Availability</h1>
-          <div class="ctx"><strong>Microcycle 14</strong> · 6 sessions + 1 match · 27 players · last edit 4 min ago by <strong>Dr. Acosta</strong></div>
+          <div class="ctx" id="avCtxText"><strong id="avMcName">—</strong> · <span id="avPlayerCount">—</span> players</div>
         </div>
         <div class="meta">
           <div class="av-segs">
@@ -392,17 +392,17 @@
       <div class="av-toolbar">
         <div class="av-mc-picker">
           <button title="Previous"><i class="ti ti-chevron-left"></i></button>
-          <span class="label"><i class="ti ti-calendar-month"></i>Microcycle 14<span class="mc-meta">11 May → 24 May</span></span>
+          <span class="label"><i class="ti ti-calendar-month"></i><span id="avMcPickerName">—</span><span class="mc-meta" id="avMcPickerDates"></span></span>
           <button title="Next"><i class="ti ti-chevron-right"></i></button>
         </div>
         <div style="width:1px;height:24px;background:var(--cm-border)"></div>
-        <button class="av-pill-filter is-on">All<span class="ct">27</span></button>
-        <button class="av-pill-filter"><span class="dot" style="background:#B91C1C"></span>GK<span class="ct">3</span></button>
-        <button class="av-pill-filter"><span class="dot" style="background:#1D4ED8"></span>CB<span class="ct">4</span></button>
-        <button class="av-pill-filter"><span class="dot" style="background:#60A5FA"></span>FB<span class="ct">4</span></button>
-        <button class="av-pill-filter"><span class="dot" style="background:#15803D"></span>MF<span class="ct">7</span></button>
-        <button class="av-pill-filter"><span class="dot" style="background:#B45309"></span>WG<span class="ct">4</span></button>
-        <button class="av-pill-filter"><span class="dot" style="background:#B91C1C"></span>ST<span class="ct">5</span></button>
+        <button class="av-pill-filter is-on" data-pos="all">All<span class="ct" id="avPillAll">—</span></button>
+        <button class="av-pill-filter" data-pos="gk"><span class="dot" style="background:#B91C1C"></span>GK<span class="ct" id="avPillGK">—</span></button>
+        <button class="av-pill-filter" data-pos="cb"><span class="dot" style="background:#1D4ED8"></span>CB<span class="ct" id="avPillCB">—</span></button>
+        <button class="av-pill-filter" data-pos="fb"><span class="dot" style="background:#60A5FA"></span>FB<span class="ct" id="avPillFB">—</span></button>
+        <button class="av-pill-filter" data-pos="mf"><span class="dot" style="background:#15803D"></span>MF<span class="ct" id="avPillMF">—</span></button>
+        <button class="av-pill-filter" data-pos="wg"><span class="dot" style="background:#B45309"></span>WG<span class="ct" id="avPillWG">—</span></button>
+        <button class="av-pill-filter" data-pos="st"><span class="dot" style="background:#B91C1C"></span>ST<span class="ct" id="avPillST">—</span></button>
         <div class="grow"></div>
         <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i>Filters</button>
         <button class="cm-btn is-outline is-sm"><i class="ti ti-layout-rows" style="font-size:14px"></i>Group by</button>
@@ -457,8 +457,7 @@
         <div class="av-foot">
           <span><span class="key"><i class="ti ti-info-circle" style="font-size:13px;vertical-align:-2px"></i>Hover</span> for status detail · <span class="key"><i class="ti ti-keyboard"></i></span> shortcuts <kbd class="cm-kbd">A</kbd> available <kbd class="cm-kbd">P</kbd> partial <kbd class="cm-kbd">I</kbd> injury</span>
           <div class="grow"></div>
-          <span>Showing <strong style="color:var(--cm-fg)">14</strong> of 27 players</span>
-          <button class="cm-btn is-ghost is-sm">Load remaining 13<i class="ti ti-arrow-down" style="font-size:14px"></i></button>
+          <span id="avFooterCount">Showing <strong style="color:var(--cm-fg)">—</strong> players</span>
         </div>
       </div>
 
@@ -485,7 +484,7 @@
   let todayIdx = -1;
 
   const DAY_LTR   = ['S','M','T','W','T','F','S'];
-  const POS_NORM  = { GK:'gk', CB:'cb', SW:'cb', FB:'fb', RB:'fb', LB:'fb', RWB:'fb', LWB:'fb', MF:'mf', CM:'mf', CDM:'mf', CAM:'mf', DM:'mf', AM:'mf', WG:'wg', RW:'wg', LW:'wg', RM:'wg', LM:'wg', ST:'st', CF:'st', SS:'st', FW:'st' };
+  const POS_NORM  = { GK:'gk', GOALKEEPER:'gk', CB:'cb', SW:'cb', DEFENDER:'cb', CENTRE_BACK:'cb', CENTERBACK:'cb', FB:'fb', RB:'fb', LB:'fb', RWB:'fb', LWB:'fb', FULLBACK:'fb', MF:'mf', CM:'mf', CDM:'mf', CAM:'mf', DM:'mf', AM:'mf', MIDFIELDER:'mf', WG:'wg', RW:'wg', LW:'wg', RM:'wg', LM:'wg', WINGER:'wg', ST:'st', CF:'st', SS:'st', FW:'st', FORWARD:'st', STRIKER:'st' };
   const POS_ORDER  = ['gk','cb','fb','mf','wg','st'];
   const POS_LABELS = { gk:'Goalkeepers', cb:'Centre backs', fb:'Full backs', mf:'Midfielders', wg:'Wingers', st:'Forwards' };
   const POS_ICONS  = { gk:'shield', cb:'wall', fb:'arrow-bar-both', mf:'circles-relation', wg:'flame', st:'target' };
@@ -545,7 +544,7 @@
   function renderMatrix(players, avMap, injuredIds) {
     const byPos = {};
     POS_ORDER.forEach(p => byPos[p] = []);
-    players.forEach(p => { const k = POS_NORM[p.position] || 'mf'; byPos[k].push(p); });
+    players.forEach(p => { const k = POS_NORM[(p.position||'').toUpperCase()] || 'mf'; byPos[k].push(p); });
 
     let html = '';
     POS_ORDER.forEach(pos => {
@@ -555,7 +554,7 @@
       group.forEach(p => {
         const name     = [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
         const initials = [(p.last_name||'')[0], (p.first_name||'')[0]].filter(Boolean).join('').toUpperCase() || '?';
-        const posKey   = POS_NORM[p.position] || 'mf';
+        const posKey   = POS_NORM[(p.position||'').toUpperCase()] || 'mf';
         const statuses = MC_DATES.map(date => {
           const e = avMap[p.id + '|' + date];
           if (!e) return injuredIds.has(p.id) ? 'unavailable' : 'available';
@@ -618,12 +617,18 @@
     // Try active microcycle from Supabase
     try {
       const { data: mcs } = await window.sb.from('microcycles')
-        .select('start_date, end_date')
+        .select('start_date, end_date, name')
         .eq('club_id', CLUB_ID)
         .lte('start_date', todayStr)
         .gte('end_date', todayStr)
         .limit(1);
-      if (mcs?.length) { mcStart = mcs[0].start_date; mcEnd = mcs[0].end_date; }
+      if (mcs?.length) {
+        mcStart = mcs[0].start_date; mcEnd = mcs[0].end_date;
+        const nameEl = document.getElementById('avMcName');
+        const pickerEl = document.getElementById('avMcPickerName');
+        if (nameEl) nameEl.textContent = mcs[0].name || 'Current MC';
+        if (pickerEl) pickerEl.textContent = mcs[0].name || 'Current MC';
+      }
     } catch(e) {}
 
     // Fallback: current Monday → following Sunday (14 days)
@@ -655,6 +660,21 @@
     const avMap      = {};
     (availRes.data || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
     const injuredIds = new Set((injuriesRes.data || []).map(r => r.player_id));
+
+    // Update header + toolbar with real counts
+    const posCounts = { gk:0, cb:0, fb:0, mf:0, wg:0, st:0 };
+    players.forEach(p => { const k = POS_NORM[(p.position||'').toUpperCase()]; if (k) posCounts[k] = (posCounts[k]||0) + 1; });
+    const el = id => document.getElementById(id);
+    el('avPlayerCount') && (el('avPlayerCount').textContent = players.length);
+    el('avPillAll') && (el('avPillAll').textContent = players.length);
+    el('avPillGK')  && (el('avPillGK').textContent  = posCounts.gk);
+    el('avPillCB')  && (el('avPillCB').textContent  = posCounts.cb);
+    el('avPillFB')  && (el('avPillFB').textContent  = posCounts.fb);
+    el('avPillMF')  && (el('avPillMF').textContent  = posCounts.mf);
+    el('avPillWG')  && (el('avPillWG').textContent  = posCounts.wg);
+    el('avPillST')  && (el('avPillST').textContent  = posCounts.st);
+    el('avFooterCount') && (el('avFooterCount').innerHTML = `Showing <strong style="color:var(--cm-fg)">${players.length}</strong> players`);
+    el('avMcPickerDates') && (el('avMcPickerDates').textContent = ` ${mcStart} → ${mcEnd}`);
 
     renderMatrix(players, avMap, injuredIds);
     renderKPIs(players, avMap, todayStr);
