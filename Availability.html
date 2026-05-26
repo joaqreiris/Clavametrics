@@ -624,9 +624,9 @@
   // ── Save cell to Supabase ──
   async function saveAvailability(pid, date, status, minutes = 0) {
     if (!CLUB_ID) return;
-    await window.sb.from('availability')
-      .upsert({ player_id: pid, date, status, minutes, club_id: CLUB_ID }, { onConflict: 'player_id,date' })
-      .catch(() => {});
+    const { error } = await window.sb.from('availability')
+      .upsert({ player_id: pid, date, status, minutes, club_id: CLUB_ID }, { onConflict: 'player_id,date' });
+    if (error) console.warn('[Availability] save error:', error.message);
   }
 
   // ── Init ──
@@ -695,23 +695,32 @@
 
     renderHeader();
 
-    const [playersRes, availRes, injuriesRes, yesterdayRes] = await Promise.all([
-      window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID).order('last_name').catch(e => { console.error('[Availability] players query error:', e); return { data: [] }; }),
-      window.sb.from('availability').select('player_id, date, status, minutes').eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd).catch(() => ({ data: [] })),
-      window.sb.from('injuries').select('player_id').eq('club_id', CLUB_ID).eq('status', 'active').catch(() => ({ data: [] })),
-      window.sb.from('availability').select('player_id, status').eq('club_id', CLUB_ID).eq('date', yesterdayStr).catch(() => ({ data: null }))
-    ]);
+    const { data: playersData, error: playersErr } = await window.sb
+      .from('players').select('id, first_name, last_name, position, number')
+      .eq('club_id', CLUB_ID).order('last_name');
 
     console.log('[Availability] currentClubId en Availability:', CLUB_ID);
-    console.log('[Availability] players:', playersRes.data, '| error:', playersRes.error?.message || null);
+    console.log('[Availability] players:', playersData, '| error:', playersErr?.message || null);
 
-    const players    = playersRes.data || [];
+    const { data: availData } = await window.sb
+      .from('availability').select('player_id, date, status, minutes')
+      .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd);
+
+    const { data: injuriesData } = await window.sb
+      .from('injuries').select('player_id')
+      .eq('club_id', CLUB_ID).eq('status', 'active');
+
+    const { data: yesterdayData } = await window.sb
+      .from('availability').select('player_id, status')
+      .eq('club_id', CLUB_ID).eq('date', yesterdayStr);
+
+    const players    = playersData || [];
     const avMap      = {};
-    (availRes.data || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
-    const injuredIds = new Set((injuriesRes.data || []).map(r => r.player_id));
+    (availData || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
+    const injuredIds = new Set((injuriesData || []).map(r => r.player_id));
     // null means yesterday had no records → hide delta; {} means records exist but 0 available
-    const yesterdayByPlayer = yesterdayRes.data
-      ? Object.fromEntries(yesterdayRes.data.map(r => [r.player_id, r]))
+    const yesterdayByPlayer = yesterdayData
+      ? Object.fromEntries(yesterdayData.map(r => [r.player_id, r]))
       : null;
 
     // Update header + toolbar with real counts
@@ -796,7 +805,8 @@
       if (pid && date) {
         td.innerHTML = '';
         td.className = 'cell';
-        window.sb.from('availability').delete().eq('player_id', pid).eq('date', date).catch(() => {});
+        window.sb.from('availability').delete().eq('player_id', pid).eq('date', date)
+          .then(({ error }) => { if (error) console.warn('[Availability] delete error:', error.message); });
       }
     });
     matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
