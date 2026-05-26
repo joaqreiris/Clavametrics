@@ -151,6 +151,12 @@
     @page { size: A4; margin: 14mm 12mm; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     body.cm{ background:#fff }
+    /* Hide chrome */
+    #hub-side-root, .hub-sidebar { display:none!important }
+    .hub-topbar { display:none!important }
+    .dp-head .meta { display:none!important }
+    .hub-main { margin-left:0!important; padding:0!important }
+    .hub-shell { display:block!important }
     .dp-doc{ max-width:100%; padding:0; margin:0 }
     .dp-head{ padding-bottom:8px; margin-bottom:10px; border-bottom:1px solid #333 }
     .dp-head h1{ font-size:18px; color:#000 }
@@ -241,7 +247,7 @@
       <header class="dp-head">
         <div>
           <h1>Daily planning</h1>
-          <div class="ctx"><span class="save-dot"></span>Autosaved · <span id="dpUserName">…</span></div>
+          <div class="ctx"><span class="save-dot"></span><span id="dpSaveStatus">Autosaved</span> · <span id="dpUserName">…</span></div>
         </div>
         <div class="meta">
           <div class="dp-pager"><button id="dpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="dpPagerLabel"><i class="ti ti-calendar-event"></i>Fri 16 May<span class="sub">MD−2</span></span><button id="dpNavNext"><i class="ti ti-chevron-right"></i></button></div>
@@ -303,7 +309,7 @@
       <div class="dp-card dp-physio-card">
         <div class="dp-card-h">
           <h3>Physio adaptations</h3>
-          <span class="ct" id="dpPhysioCt">2</span>
+          <span class="ct" id="dpPhysioCt">—</span>
           <div class="right"><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">From <a href="Physio.html" style="color:var(--cm-accent);text-decoration:none">Physio · today</a></span></div>
         </div>
         <div class="dp-card-b">
@@ -317,29 +323,22 @@
       <div class="dp-card">
         <div class="dp-card-h">
           <h3>Squad</h3>
-          <span class="ct" id="dpSquadCt">22 of 27</span>
+          <span class="ct" id="dpSquadCt">—</span>
           <div class="right">
-            <button class="cm-btn is-ghost is-sm" style="height:26px;padding:0 9px"><i class="ti ti-printer" style="font-size:13px"></i>Print roster</button>
+            <button class="cm-btn is-ghost is-sm" style="height:26px;padding:0 9px" onclick="dpPrintRoster()"><i class="ti ti-printer" style="font-size:13px"></i>Print roster</button>
           </div>
         </div>
         <div class="dp-squad-h">
-          <button class="dp-squad-pill is-on">All <span class="ct">27</span></button>
-          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">19</span></button>
-          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">3</span></button>
-          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">2</span></button>
-          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-info)"></span>Away <span class="ct">3</span></button>
+          <button class="dp-squad-pill is-on">All <span class="ct">—</span></button>
+          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">—</span></button>
+          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">—</span></button>
+          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">—</span></button>
         </div>
         <div class="dp-card-b" id="dpSquadBody" style="padding:14px 16px 4px">
           <!-- Populated by loadDay() -->
         </div>
         <div class="dp-squad-summary" id="dpSquadSummary">
-          <span><strong>22</strong> of 27 available</span>
-          <span class="sep"></span>
-          <span><strong style="color:var(--cm-warning)">3</strong> partial</span>
-          <span class="sep"></span>
-          <span><strong style="color:var(--cm-danger)">2</strong> out</span>
-          <span class="sep"></span>
-          <span><strong style="color:var(--cm-info)">3</strong> away (U-20 + nat. team)</span>
+          <span>Loading…</span>
         </div>
       </div>
 
@@ -349,6 +348,7 @@
           <h3>Activation</h3>
           <span class="ct" id="dpActCt">—</span>
           <div class="right" style="gap:8px">
+            <button class="cm-btn is-outline is-sm" onclick="openLibModal('activation')"><i class="ti ti-plus" style="font-size:13px"></i>Add exercise</button>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
             <input type="number" id="dpActDuration" min="0" max="120" style="width:50px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—">
           </div>
@@ -436,6 +436,7 @@
 <script>
 let _dpClubId = null, _dpPlayers = [], _dpInjMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
+let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 
 // Orientation helpers for Planner exercises
 function _dpCalcOrientFromM2(m2) {
@@ -504,6 +505,7 @@ async function loadDay(dateStr) {
 
   const avMap = {};
   (availRes.data || []).forEach(a => { avMap[a.player_id] = a; });
+  _dpAvMap = avMap;
 
   const POS_GROUP = {
     GK:{l:'GK',o:0}, CB:{l:'DEF',o:1}, LB:{l:'DEF',o:1}, RB:{l:'DEF',o:1}, FB:{l:'DEF',o:1},
@@ -579,7 +581,7 @@ async function loadDay(dateStr) {
     }).join('');
   } else {
     document.getElementById('dpPhysioCt').textContent = '0';
-    document.getElementById('dpPhysioList').innerHTML = '';
+    document.getElementById('dpPhysioList').innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No adaptations for this session.</div>';
   }
 }
 
@@ -593,17 +595,19 @@ async function loadSessionExercises(sessionId) {
     grid.innerHTML = `<div style="padding:32px 20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">
       <i class="ti ti-calendar-off" style="font-size:24px;display:block;margin-bottom:8px;color:var(--cm-fg-faint)"></i>
       No session for this date.
-      <div style="margin-top:12px"><button class="cm-btn is-primary is-sm" onclick="dpAutoSaveSession()"><i class="ti ti-plus" style="font-size:13px"></i>Create session</button></div>
+      <div style="margin-top:12px"><button class="cm-btn is-primary is-sm" onclick="dpCreateSession()"><i class="ti ti-plus" style="font-size:13px"></i>Create training session for this date</button></div>
     </div>`;
-    updateTotalsBar([], 0);
+    _dpFieldExercises = [];
+    recalcTotals();
     return;
   }
   const { data } = await window.sb.from('session_exercises')
     .select('id,name,phase,duration,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
-  renderExerciseList(data || []);
-  updateTotalsBar(data || [], null);
+  _dpFieldExercises = data || [];
+  renderExerciseList(_dpFieldExercises);
+  recalcTotals();
 }
 
 function renderExerciseList(exercises) {
@@ -682,14 +686,19 @@ function renderExerciseList(exercises) {
   }).join('') + '<button class="dp-ex-add" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
 }
 
-function updateTotalsBar(exercises, sessionDuration) {
-  const fieldMin = (exercises || []).reduce((s, e) => s + (e.duration || 0), 0);
-  const fieldCt  = (exercises || []).length;
-  const elFV = document.getElementById('dpTotField');     if (elFV) elFV.innerHTML = `${fieldMin || '—'}<sub>min</sub>`;
-  const elFC = document.getElementById('dpTotFieldCt');   if (elFC) elFC.textContent = fieldCt ? `${fieldCt} exercises` : '';
-  const elTV = document.getElementById('dpTotTotal');     if (elTV) elTV.innerHTML = `${fieldMin || '—'}<sub>min</sub>`;
-  const elTB = document.getElementById('dpTotBlocks');    if (elTB) elTB.textContent = fieldCt ? `${fieldCt} blocks` : '';
-  const elSD = document.getElementById('dpTotSession');   if (elSD) elSD.innerHTML = sessionDuration ? `${sessionDuration}<sub>min</sub>` : '—<sub>min</sub>';
+function recalcTotals() {
+  const actMin   = _dpActTotalMin;
+  const fieldMin = _dpFieldExercises.reduce((s, e) => s + (e.duration || 0), 0);
+  const fieldCt  = _dpFieldExercises.length;
+  const total    = actMin + fieldMin;
+  const elAV = document.getElementById('dpTotAct');        if (elAV) elAV.innerHTML = actMin   ? `${actMin}<sub>min</sub>`   : '—<sub>min</sub>';
+  const elFV = document.getElementById('dpTotField');      if (elFV) elFV.innerHTML = fieldMin ? `${fieldMin}<sub>min</sub>` : '—<sub>min</sub>';
+  const elFC = document.getElementById('dpTotFieldCt');    if (elFC) elFC.textContent = fieldCt ? `${fieldCt} exercises` : '';
+  const elTV = document.getElementById('dpTotTotal');      if (elTV) elTV.innerHTML = total    ? `${total}<sub>min</sub>`   : '—<sub>min</sub>';
+  const elTB = document.getElementById('dpTotBlocks');     if (elTB) elTB.textContent = fieldCt ? `${fieldCt} blocks` : '';
+  const elSD = document.getElementById('dpTotSession');    if (elSD) elSD.innerHTML = total    ? `${total}<sub>min</sub>`   : '—<sub>min</sub>';
+  const elSN = document.getElementById('dpTotSessionNote');
+  if (elSN) elSN.textContent = (actMin && fieldMin) ? `${actMin}′ activation + ${fieldMin}′ field` : '';
 }
 
 async function deleteExercise(seid) {
@@ -698,14 +707,19 @@ async function deleteExercise(seid) {
 }
 
 // ── From library (Planner exercises) ──
-async function openLibModal() {
+async function openLibModal(mode) {
+  _libMode = mode || 'main';
+  const title = _libMode === 'activation' ? 'Activation exercises' : 'Exercise library';
+  document.querySelector('#libBackdrop [style*="font:600 14px"]').textContent = title;
   document.getElementById('libBackdrop').style.display = 'flex';
   document.getElementById('libSearch').value = '';
   document.getElementById('libFooter').textContent = 'Loading…';
   _libExercises = [];
-  const { data, error } = await window.sb.from('exercises')
+  let q = window.sb.from('exercises')
     .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time')
     .eq('club_id', _dpClubId).order('name');
+  if (_libMode === 'activation') q = q.eq('orientation', 'ACTIVATION');
+  const { data, error } = await q;
   if (error?.code === '42P01') {
     document.getElementById('libList').innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Run the SQL migration to enable the Planner library.</div>';
     document.getElementById('libFooter').textContent = '—';
@@ -759,12 +773,13 @@ async function addPlannerExercise(exerciseId) {
   const pos = document.querySelectorAll('#dpExGrid .dp-ex').length;
   const area = (ex?.field_width && ex?.field_height) ? ex.field_width * ex.field_height : null;
   const m2   = (area && ex?.players_count > 0) ? Math.round(area / ex.players_count) : null;
+  const phase = _libMode === 'activation' ? 'activation' : 'main';
   const { error } = await window.sb.from('session_exercises').insert({
     club_id:             _dpClubId,
     session_id:          _dpCurrentSessionId,
     planner_exercise_id: exerciseId,
     name:                ex?.name        || null,
-    phase:               'main',
+    phase,
     duration:            ex?.duration    || null,
     position:            pos,
     field_width:         ex?.field_width  || null,
@@ -773,7 +788,11 @@ async function addPlannerExercise(exerciseId) {
     m2_per_player:       m2,
     calc_orientation:    _dpCalcOrientFromM2(m2) || ex?.orientation || null
   });
-  if (!error) { closeLibModal(); await loadSessionExercises(_dpCurrentSessionId); }
+  if (!error) {
+    closeLibModal();
+    if (phase === 'activation') await loadActivationActivities(_dpCurrentSessionId);
+    else await loadSessionExercises(_dpCurrentSessionId);
+  }
 }
 
 // ── Manual exercise ──
@@ -804,9 +823,9 @@ async function saveManualExercise() {
 // ── Session info autosave ──
 async function dpAutoSaveSession() {
   const date  = _dpCurrentDate;
-  const title = document.getElementById('dpDateInput')?.value ? _dpFmt(date) : date;
+  const title = _dpFmt(date);
   const payload = {
-    title:        title,
+    title,
     session_date: date,
     session_type: document.getElementById('dpSessionType')?.value || 'tactical',
     session_time: document.getElementById('dpStartTime')?.value  || null,
@@ -823,6 +842,42 @@ async function dpAutoSaveSession() {
       _dpUpdatePublishBtn();
     }
   }
+  const s = document.getElementById('dpSaveStatus');
+  if (s) { s.textContent = 'Saved'; setTimeout(() => { s.textContent = 'Autosaved'; }, 2500); }
+}
+
+function dpQueueSave() {
+  clearTimeout(_dpSaveTimer);
+  _dpSaveTimer = setTimeout(dpAutoSaveSession, 1500);
+}
+
+async function dpCreateSession() {
+  await dpAutoSaveSession();
+}
+
+// ── Print Roster ──
+function dpPrintRoster() {
+  const POS_DISP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', DM:'DM', CM:'MF', MF:'MF', WG:'WG', ST:'ST', CF:'CF' };
+  const statusLabel = { available:'Available', partial:'Partial', unavailable:'Out', limited:'Partial' };
+  const rows = _dpPlayers.map(p => {
+    const av  = _dpAvMap[p.id];
+    const inj = _dpInjMap[p.id];
+    let status = 'Available';
+    if (av?.status === 'un' || av?.status === 'unavailable') status = 'Out';
+    else if (inj || av?.status === 'pa' || av?.status === 'partial') status = 'Partial';
+    const pos = POS_DISP[(p.position||'').toUpperCase()] || (p.position||'—').toUpperCase();
+    return `<tr><td>${p.number ?? '—'}</td><td>${p.first_name || ''} ${p.last_name || ''}</td><td>${pos}</td><td>${status}</td></tr>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Roster · ${_dpCurrentDate}</title>
+    <style>body{font-family:sans-serif;padding:20px}h2{margin:0 0 4px}p{margin:0 0 14px;color:#666;font-size:12px}
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{text-align:left;padding:6px 10px;background:#f0f0f0;border-bottom:2px solid #ccc;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+    td{padding:5px 10px;border-bottom:1px solid #eee}@media print{@page{margin:14mm 12mm}}</style>
+    </head><body><h2>Roster · ${_dpCurrentDate}</h2><p>${_dpPlayers.length} players</p>
+    <table><thead><tr><th>#</th><th>Name</th><th>Position</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>
+    <script>window.onload=function(){window.print();}<\/script></body></html>`;
+  const w = window.open('', '_blank', 'width=700,height=900');
+  if (w) { w.document.write(html); w.document.close(); }
 }
 
 // ── Activation activities ──
@@ -832,14 +887,17 @@ async function loadActivationActivities(sessionId) {
   const durEl = document.getElementById('dpActDuration');
   if (!sessionId) {
     strip.innerHTML = '<button class="dp-act-add" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
-    if (ctEl) ctEl.textContent = '0 min';
+    if (ctEl) ctEl.textContent = '—';
     if (durEl) durEl.value = '';
+    _dpActTotalMin = 0;
+    recalcTotals();
     return;
   }
   const { data } = await window.sb.from('session_exercises')
     .select('id,name,duration').eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   const total = acts.reduce((s, a) => s + (a.duration || 0), 0);
+  _dpActTotalMin = total;
   if (ctEl) ctEl.textContent = total ? `${total} min` : '—';
   if (durEl) durEl.value = total || '';
   strip.innerHTML = acts.map(a =>
@@ -849,6 +907,7 @@ async function loadActivationActivities(sessionId) {
       <button class="x" onclick="dpActDelete('${a.id}')"><i class="ti ti-x"></i></button>
     </div>`
   ).join('') + '<button class="dp-act-add" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
+  recalcTotals();
 }
 
 async function dpActAdd() {
@@ -954,11 +1013,12 @@ async function dpExportPDF() {
   document.getElementById('dpNavNext').addEventListener('click', () => loadDay(_dpAddDays(_dpCurrentDate, 1)));
   document.getElementById('dpDateInput').addEventListener('change', e => { if (e.target.value) loadDay(e.target.value); });
 
-  // Autosave session info on field changes (create session if needed)
+  // Autosave session info with debounce on field changes
   ['dpStartTime','dpSessionType','dpFocus','dpNotes'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('change', dpAutoSaveSession);
+    el.addEventListener('change', dpQueueSave);
+    el.addEventListener('input', dpQueueSave);
   });
 })().catch(console.error);
 </script>
