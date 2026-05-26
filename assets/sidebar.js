@@ -129,7 +129,7 @@
         </div>
         <div class="body">
           <div class="name" id="sideClubName"></div>
-          <div class="club">First team · 2025/26</div>
+          <div class="club" id="sideTeamLabel"></div>
         </div>
         <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
       </div>
@@ -204,12 +204,14 @@
       typeof window.getClub    === 'function' ? window.getClub()    : Promise.resolve(null),
     ]);
 
-    const nameEl     = document.getElementById('sideClubName');
-    const initialsEl = document.getElementById('userInitials');
-    const userNameEl = document.getElementById('userName');
-    const userRoleEl = document.getElementById('userRole');
+    const nameEl      = document.getElementById('sideClubName');
+    const teamLabelEl = document.getElementById('sideTeamLabel');
+    const initialsEl  = document.getElementById('userInitials');
+    const userNameEl  = document.getElementById('userName');
+    const userRoleEl  = document.getElementById('userRole');
 
     if (nameEl && club?.name)         nameEl.textContent = club.name;
+    if (teamLabelEl && profile?.club_role) teamLabelEl.textContent = profile.club_role;
     if (profile) {
       const full     = profile.full_name || '';
       const initials = full.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '–';
