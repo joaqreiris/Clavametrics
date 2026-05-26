@@ -212,6 +212,10 @@
 
     if (nameEl && club?.name)         nameEl.textContent = club.name;
     if (teamLabelEl && profile?.club_role) teamLabelEl.textContent = profile.club_role;
+    const markEl = document.querySelector('.hub-brand .mark');
+    if (markEl && club?.logo_url) {
+      markEl.innerHTML = `<img src="${club.logo_url}" alt="${club.name || ''}" style="width:100%;height:100%;object-fit:contain;border-radius:5px">`;
+    }
     if (profile) {
       const full     = profile.full_name || '';
       const initials = full.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '–';

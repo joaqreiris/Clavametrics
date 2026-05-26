@@ -210,8 +210,18 @@
     background:var(--cm-accent); color:var(--cm-fg-on-accent);
     display:flex; align-items:center; justify-content:center;
     font:700 16px/1 var(--cm-font-sans); letter-spacing:-0.02em;
-    flex-shrink:0;
+    flex-shrink:0; position:relative; overflow:hidden;
   }
+  .org-bar .org-ic.has-logo { background:var(--cm-surface); border:1px solid var(--cm-border); }
+  .org-bar .org-ic img { width:100%; height:100%; object-fit:contain; display:block; }
+  .org-ic-overlay {
+    position:absolute; inset:0; background:rgba(0,0,0,.48);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transition:opacity 120ms; border-radius:inherit;
+    color:#fff; font-size:15px; cursor:pointer;
+  }
+  .org-bar .org-ic:hover .org-ic-overlay { opacity:1; }
+  .club-crest img { width:100%; height:100%; object-fit:contain; border-radius:inherit; display:block; }
   .org-bar .info { flex:1; min-width:0; }
   .org-bar .org-name { font:600 16px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
   .org-bar .org-meta { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px; }
@@ -317,6 +327,7 @@
       <!-- WORKSPACE BAR -->
       <div class="org-bar">
         <div class="org-ic" id="adOrgIc">—</div>
+        <input type="file" id="adLogoInput" accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none">
         <div class="info">
           <div class="org-name" id="adOrgName">Loading… <span style="color:var(--cm-fg-muted);font-weight:500;font-size:13px">· workspace</span></div>
           <div class="org-meta" id="adOrgMeta">—</div>
@@ -802,6 +813,65 @@
   }
 
   await renderModules();
+
+  // ── Club logo upload ────────────────────────────────────────────────
+  const canUploadLogo = ['admin','owner'].includes(profile?.role) ||
+                        ['admin','owner'].includes(profile?.club_role);
+  const orgIc     = document.getElementById('adOrgIc');
+  const logoInput = document.getElementById('adLogoInput');
+
+  function applyLogoToOrgIc(url) {
+    orgIc.classList.add('has-logo');
+    orgIc.innerHTML = `<img src="${url}" alt="Club logo">` +
+      (canUploadLogo ? '<div class="org-ic-overlay"><i class="ti ti-camera"></i></div>' : '');
+  }
+
+  if (club?.logo_url) {
+    applyLogoToOrgIc(club.logo_url);
+    const crest = document.querySelector('#adClubsGrid .club-crest');
+    if (crest) crest.innerHTML = `<img src="${club.logo_url}" alt="Club logo">`;
+  } else if (canUploadLogo) {
+    orgIc.insertAdjacentHTML('beforeend', '<div class="org-ic-overlay"><i class="ti ti-camera"></i></div>');
+  }
+
+  if (canUploadLogo) {
+    orgIc.style.cursor = 'pointer';
+    orgIc.addEventListener('click', () => logoInput.click());
+
+    logoInput.addEventListener('change', async () => {
+      const file = logoInput.files[0];
+      if (!file) return;
+      const ext  = file.name.split('.').pop().toLowerCase();
+      const path = `${clubId}/logo.${ext}`;
+
+      const { error: upErr } = await window.sb.storage
+        .from('club-logos')
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) { alert('Upload failed: ' + upErr.message); return; }
+
+      const { data: { publicUrl } } = window.sb.storage
+        .from('club-logos')
+        .getPublicUrl(path);
+
+      const { error: dbErr } = await window.sb
+        .from('clubs')
+        .update({ logo_url: publicUrl })
+        .eq('id', clubId);
+      if (dbErr) { alert('Save failed: ' + dbErr.message); return; }
+
+      const displayUrl = publicUrl + '?t=' + Date.now();
+      applyLogoToOrgIc(displayUrl);
+
+      const crest = document.querySelector('#adClubsGrid .club-crest');
+      if (crest) crest.innerHTML = `<img src="${displayUrl}" alt="Club logo">`;
+
+      const mark = document.querySelector('.hub-brand .mark');
+      if (mark) mark.innerHTML = `<img src="${displayUrl}" alt="${club?.name || ''}" style="width:100%;height:100%;object-fit:contain;border-radius:5px">`;
+
+      if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();
+      logoInput.value = '';
+    });
+  }
 
 })().catch(console.error);
 </script>
