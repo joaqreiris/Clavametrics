@@ -1077,12 +1077,12 @@ async function dpExportPDF() {
 }
 
 (async () => {
-  if (!await requireAuth()) return;
-  const clubId = await getClubId();
+  if (!await window.requireAuth()) return;
+  const clubId = await window.getClubId();
   _dpClubId = clubId;
-  const [profile, club] = await Promise.all([getProfile(), getClub()]);
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
 
-  if (club) await applyClubTheme();
+  if (club) await window.applyClubTheme();
 
   const nameEl = document.getElementById('dpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
