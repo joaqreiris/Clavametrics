@@ -212,6 +212,7 @@
     position:relative;
   }
   .mc-day:nth-child(7n) { border-right:0; }
+  .mc-day:last-child { border-right:0; }
   .mc-day-head {
     display:flex; align-items:baseline; gap:6px; margin-bottom:8px;
   }
@@ -341,9 +342,10 @@
 
   /* Drag & drop */
   .mc-evt[draggable="true"] { cursor: grab; user-select: none; }
-  .mc-evt[draggable="true"].is-dragging { opacity: 0.35; }
+  .mc-evt[draggable="true"].is-dragging { opacity: 0.4; }
   .mc-evt.drag-over { background: var(--cm-accent-soft) !important; border-color: var(--cm-accent) !important; border-width: 1.5px; }
   .mc-evt-placeholder { height: 34px; border: 2px dashed var(--cm-accent); border-radius: 6px; background: color-mix(in srgb, var(--cm-accent) 8%, transparent); margin-bottom: 4px; pointer-events: none; }
+  body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 
   /* Workload chart */
   .wk-chart { padding:14px 16px 18px; }
@@ -1058,10 +1060,9 @@ function renderGrid() {
   const headEl = document.getElementById('calHeadCtx');
   if (headEl) headEl.innerHTML = `<strong>${mcName}</strong>${headMdLabel}${headTarget}`;
 
-  // Continuous grid layout
-  const isManyDays = totalDays > 7;
-  grid.className = 'mc-days' + (isManyDays ? ' is-scroll' : '');
-  grid.style.gridTemplateColumns = isManyDays ? '' : `repeat(${totalDays}, 1fr)`;
+  // Grid layout: ≤7 days = single row; >7 days = wrap in rows of 7
+  grid.className = 'mc-days';
+  grid.style.gridTemplateColumns = totalDays > 7 ? '' : `repeat(${totalDays}, 1fr)`;
 
   // Build all day columns
   let html = '';
@@ -1120,51 +1121,102 @@ function renderGrid() {
   });
 
   // Drag & drop within same day
+  const _ph = document.createElement('div');
+  _ph.className = 'mc-evt-placeholder';
+
+  function _removePh() { if (_ph.parentNode) _ph.parentNode.removeChild(_ph); }
+
   grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
     el.addEventListener('dragstart', e => {
-      _dragId = el.dataset.id;
+      _dragId   = el.dataset.id;
       _dragDate = el.dataset.date;
       el.classList.add('is-dragging');
+      document.body.classList.add('is-dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', _dragId);
     });
+
     el.addEventListener('dragend', () => {
       el.classList.remove('is-dragging');
+      document.body.classList.remove('is-dragging');
+      _removePh();
       grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
     });
+
     el.addEventListener('dragover', e => {
       e.preventDefault();
-      if (el.dataset.id !== _dragId) el.classList.add('drag-over');
+      if (el.dataset.id === _dragId) return;
+      el.classList.add('drag-over');
+      if (_ph.nextSibling !== el) el.parentNode.insertBefore(_ph, el);
     });
-    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+
+    el.addEventListener('dragleave', e => {
+      if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over');
+    });
+
     el.addEventListener('drop', e => {
       e.preventDefault();
-      el.classList.remove('drag-over');
+      _removePh();
+      grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
       if (!_dragId || el.dataset.id === _dragId) return;
+
       const draggedSess = _sessions.find(s => s.id === _dragId);
       const targetSess  = _sessions.find(s => s.id === el.dataset.id);
       if (!draggedSess || !targetSess || draggedSess.session_date !== targetSess.session_date) return;
+
       const dateStr = draggedSess.session_date;
       const dayEvts = _sessions.filter(s => s.session_date === dateStr);
+
+      // Snapshot for rollback
+      const snapshot = dayEvts.map(s => ({ id: s.id, sort_order: s.sort_order }));
+
       const dragIdx = dayEvts.findIndex(s => s.id === _dragId);
       const dropIdx = dayEvts.findIndex(s => s.id === el.dataset.id);
+      if (dragIdx === -1 || dropIdx === -1) return;
+
+      // Optimistic reorder
       dayEvts.splice(dragIdx, 1);
       dayEvts.splice(dropIdx, 0, draggedSess);
+      dayEvts.forEach((s, idx) => { s.sort_order = idx; });
+
       const others = _sessions.filter(s => s.session_date !== dateStr);
-      _sessions = [...others, ...dayEvts].sort((a, b) => a.session_date > b.session_date ? 1 : -1);
+      _sessions = [...others, ...dayEvts].sort((a, b) => {
+        if (a.session_date < b.session_date) return -1;
+        if (a.session_date > b.session_date) return 1;
+        return (a.sort_order || 0) - (b.sort_order || 0);
+      });
+
       _dragId = null; _dragDate = null;
       renderGrid();
-      updateSortOrders(dateStr);
+
+      // Persist — revert on failure
+      updateSortOrders(dateStr).catch(() => {
+        snapshot.forEach(({ id, sort_order }) => {
+          const s = _sessions.find(x => x.id === id);
+          if (s) s.sort_order = sort_order;
+        });
+        const revertDay    = _sessions.filter(s => s.session_date === dateStr)
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+        const revertOthers = _sessions.filter(s => s.session_date !== dateStr);
+        _sessions = [...revertOthers, ...revertDay].sort((a, b) => {
+          if (a.session_date < b.session_date) return -1;
+          if (a.session_date > b.session_date) return 1;
+          return (a.sort_order || 0) - (b.sort_order || 0);
+        });
+        renderGrid();
+      });
     });
   });
 }
 
 async function updateSortOrders(dateStr) {
   const dayEvts = _sessions.filter(s => s.session_date === dateStr);
-  await Promise.all(dayEvts.map((s, idx) => {
+  const results = await Promise.all(dayEvts.map((s, idx) => {
     const table = s.source === 'event' ? 'calendar_events' : 'training_sessions';
     return window.sb.from(table).update({ sort_order: idx }).eq('id', s.id);
   }));
+  const failed = results.find(r => r.error);
+  if (failed) throw failed.error;
 }
 
 // ── Fetch + merge training_sessions and calendar_events ────────
