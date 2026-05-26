@@ -598,6 +598,21 @@
   .pl-lib-tag.t-focus    { background:var(--cm-bg); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
   .pl-lib-tag.t-md       { background:var(--cm-bg); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
 
+  /* === PRINT STYLES === */
+  #pl-print-sheet { display: none; }
+  @media print {
+    body > *:not(#pl-print-sheet) { display: none !important; }
+    #pl-print-sheet { display: block !important; padding: 20px; font-family: sans-serif; color: #000; }
+    .pl-print-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; border-bottom: 2px solid #222; padding-bottom: 12px; }
+    .pl-print-logo { width: 56px; height: 56px; object-fit: contain; }
+    .pl-print-title { font-size: 22px; font-weight: 700; margin: 0; }
+    .pl-print-canvas { width: 100%; border-radius: 8px; border: 1px solid #ddd; margin: 16px 0; display: block; }
+    .pl-print-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .pl-print-meta-cell { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; }
+    .pl-print-meta-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #777; margin-bottom: 4px; }
+    .pl-print-meta-value { font-size: 14px; font-weight: 600; }
+  }
+
   /* Preview floating card */
   .pl-lib-preview {
     position:fixed; z-index:200; pointer-events:none;
@@ -631,7 +646,7 @@
       </div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="right">
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
+        <button class="cm-btn is-outline is-sm" id="plPrintBtn"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
         <button class="cm-btn is-outline is-sm" id="plShareBtn"><i class="ti ti-link" style="font-size:14px"></i>Share</button>
         <button class="cm-btn is-primary is-sm" id="plSaveBtn"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save</button>
         <div class="actions" style="margin-left:8px">
@@ -978,6 +993,9 @@
     </section>
   </main>
 </div>
+
+<!-- Print sheet (populated by JS, visible only during print) -->
+<div id="pl-print-sheet"><div id="pl-print-content"></div></div>
 
 <!-- Share modal -->
 <div id="plShareModal">
@@ -1885,13 +1903,6 @@
     else fc.setZoom(newZoom);
     updateZoomDisplay();
   }
-  fieldEl.addEventListener('wheel', e => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.1 : -0.1;
-    const rect = fieldEl.getBoundingClientRect();
-    const point = new fabric.Point(e.clientX - rect.left, e.clientY - rect.top);
-    applyZoom(fc.getZoom() + delta, point);
-  }, { passive: false });
   document.getElementById('plZoomIn')?.addEventListener('click', () => applyZoom(fc.getZoom() + 0.1));
   document.getElementById('plZoomOut')?.addEventListener('click', () => applyZoom(fc.getZoom() - 0.1));
   document.getElementById('plZoomFit')?.addEventListener('click', () => {
@@ -2232,6 +2243,42 @@
   }
 
   document.getElementById('plSaveBtn')?.addEventListener('click', saveExercise);
+
+  // ── Print ────────────────────────────────────────────────────────
+  document.getElementById('plPrintBtn')?.addEventListener('click', () => {
+    const exName   = document.getElementById('plExName')?.value || 'Exercise';
+    const canvasImg = fc.toDataURL({ format: 'png', multiplier: 2 });
+    const players  = document.getElementById('plExPlayers')?.value  || '—';
+    const width    = document.getElementById('plExWidth')?.value;
+    const height   = document.getElementById('plExHeight')?.value;
+    const duration = document.getElementById('plExDuration')?.value;
+    const mdRaw    = document.getElementById('plExMatchDay')?.value;
+    const mdStr    = (mdRaw !== '' && mdRaw != null) ? `MD${parseInt(mdRaw) >= 0 ? '+' : ''}${mdRaw}` : '—';
+    const fieldStr = (width && height) ? `${width}×${height} m` : '—';
+    const INT_LABEL = { LOW:'Low', MEDIUM:'Medium', HIGH:'High', VERY_HIGH:'Very High' };
+    const intensityStr  = currentIntensity ? (INT_LABEL[currentIntensity] || currentIntensity) : '—';
+    const focusStr      = currentFocus.length ? currentFocus.join(', ') : '—';
+    const gameTypeStr   = currentGameTypeOn ? (currentGameType || 'On') : '—';
+    const orientStr     = currentManualOrient ? (ORIENT_META[currentManualOrient]?.label || currentManualOrient) : '—';
+    const logoHtml      = club?.logo_url ? `<img class="pl-print-logo" src="${club.logo_url}" alt="Club logo">` : '';
+    document.getElementById('pl-print-content').innerHTML = `
+      <div class="pl-print-header">
+        ${logoHtml}
+        <h1 class="pl-print-title">${exName}</h1>
+      </div>
+      <img class="pl-print-canvas" src="${canvasImg}" alt="Exercise canvas">
+      <div class="pl-print-meta-grid">
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Players</div><div class="pl-print-meta-value">${players}</div></div>
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Dimensions</div><div class="pl-print-meta-value">${fieldStr}</div></div>
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Duration</div><div class="pl-print-meta-value">${duration ? duration + ' min' : '—'}</div></div>
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Match Day</div><div class="pl-print-meta-value">${mdStr}</div></div>
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Orientation</div><div class="pl-print-meta-value">${orientStr}</div></div>
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Intensity</div><div class="pl-print-meta-value">${intensityStr}</div></div>
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Focus</div><div class="pl-print-meta-value">${focusStr}</div></div>
+        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Game Type</div><div class="pl-print-meta-value">${gameTypeStr}</div></div>
+      </div>`;
+    window.print();
+  });
 
   // ── Initial load ─────────────────────────────────────────────────
   await loadExercises();
