@@ -678,6 +678,20 @@
 
   console.log('[LM] club_id usado:', clubId);
 
+  // ── DIAGNÓSTICO RLS ────────────────────────────────────────────────────────
+  const { data: rpeData, error: rpeError } = await window.sb
+    .from('rpe')
+    .select('*, training_sessions(session_date)')
+    .eq('club_id', clubId);
+  console.log('[DIAG] RPE data:', rpeData?.length, '| error:', rpeError, '| first row:', rpeData?.[0]);
+
+  const { data: wellnessData, error: wellnessError } = await window.sb
+    .from('wellness')
+    .select('*')
+    .eq('club_id', clubId);
+  console.log('[DIAG] Wellness data:', wellnessData?.length, '| error:', wellnessError, '| first row:', wellnessData?.[0]);
+  // ── FIN DIAGNÓSTICO ────────────────────────────────────────────────────────
+
   // Stable: players — valid statuses: available/injured/modified/unavailable (no 'inactive')
   const playersRes = await window.sb.from('players')
     .select('id,first_name,last_name,number,position,status')
@@ -712,8 +726,8 @@
     .select('player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at')
     .eq('club_id', clubId)
     .gte('submitted_at', todayStr + 'T00:00:00')
-    .lt('submitted_at', tomorrowStr + 'T00:00:00')
-    .catch(() => ({ data: [] }));
+    .lt('submitted_at', tomorrowStr + 'T00:00:00');
+  if (wellRes.error) console.error('[LM] wellness error:', wellRes.error);
   const wellnessList = wellRes.data || [];
   console.log('[LM] wellness records (hoy):', wellnessList.length);
   const wellMap = {};
@@ -776,8 +790,8 @@
       .select('id,session_date,rpe(player_id,rpe,duration,load)')
       .eq('club_id', clubId)
       .gte('session_date', fetchFrom)
-      .order('session_date')
-      .catch(() => ({ data: [] }));
+      .order('session_date');
+    if (sessRes.error) console.error('[LM] training_sessions+rpe error:', sessRes.error);
     const sessionsData = sessRes.data || [];
     const totalRpe = sessionsData.reduce((n, s) => n + (s.rpe||[]).length, 0);
     console.log(`[LM] period=${period} sessions=${sessionsData.length} rpe records=${totalRpe}`);
