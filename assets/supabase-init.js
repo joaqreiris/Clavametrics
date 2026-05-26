@@ -89,12 +89,24 @@
   });
 
   // Returns active players for the club (excludes inactive), ordered by number.
-  window.getActivePlayers = async function (clubId) {
-    const { data } = await window.sb.from('players')
-      .select('id,first_name,last_name,number,position,status')
+  // Pass teamId to restrict to a specific team/category.
+  window.getActivePlayers = async function (clubId, teamId) {
+    let q = window.sb.from('players')
+      .select('id,first_name,last_name,number,position,status,team_id')
       .eq('club_id', clubId)
       .neq('status', 'inactive')
       .order('number');
+    if (teamId) q = q.eq('team_id', teamId);
+    const { data } = await q;
+    return data || [];
+  };
+
+  // Returns all teams for a club, ordered by name.
+  window.getTeams = async function (clubId) {
+    const { data } = await window.sb.from('teams')
+      .select('id,name,season')
+      .eq('club_id', clubId)
+      .order('name');
     return data || [];
   };
 

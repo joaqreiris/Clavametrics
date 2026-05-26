@@ -371,6 +371,11 @@
           <h1>Squad</h1>
           <p id="sqHeadP">27 players · First team 2025/26</p>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select id="sqTeamSelect" class="cm-select is-sm" style="min-width:130px">
+            <option value="">All teams</option>
+          </select>
+        </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm" id="sqImportBtn"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
           <button class="cm-btn is-outline is-sm" id="sqExportBtn"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
@@ -553,6 +558,14 @@
           </select>
         </div>
       </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field">
+          <label for="sqF_team">Team / Category</label>
+          <select id="sqF_team">
+            <option value="">— Unassigned —</option>
+          </select>
+        </div>
+      </div>
     </div>
     <div class="sq-modal-foot">
       <button class="cm-btn is-danger is-sm" id="sqModalDelete" style="display:none"><i class="ti ti-trash" style="font-size:13px"></i>Remove</button>
@@ -629,6 +642,8 @@ function fmtDob(dob) {
 }
 
 let _allPlayers = [];
+let _teams = [];
+let _currentTeamId = null;
 let _activeFilter = 'All';
 let _searchQ = '';
 let _editingId = null;
@@ -695,7 +710,7 @@ function renderTable() {
         <td class="sq-mono">${age}</td>
         <td class="sq-mono">${foot}</td>
         <td><span class="sq-anthro">${h}${w}</span></td>
-        <td><span class="sq-role-pill">First team</span></td>
+        <td><span class="sq-role-pill">${(_teams.find(t => t.id === p.team_id)?.name) || '—'}</span></td>
         <td class="sq-mono">—</td>
         <td><div class="sq-row-actions"><button class="sq-edit-btn" data-id="${p.id}" title="Edit profile"><i class="ti ti-edit"></i></button></div></td>
       </tr>`;
@@ -741,16 +756,21 @@ function renderTable() {
 }
 
 async function reloadPlayers() {
-  const { data } = await window.sb.from('players')
-    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url')
+  let q = window.sb.from('players')
+    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
     .eq('club_id', _currentClubId)
     .order('number', { ascending: true, nullsFirst: false });
+  if (_currentTeamId) q = q.eq('team_id', _currentTeamId);
+  const { data } = await q;
 
   _allPlayers = data || [];
   const total = _allPlayers.length;
   const headP  = document.getElementById('sqHeadP');
   const listCt = document.getElementById('sqListCt');
-  if (headP)  headP.textContent = `${total} players · First team`;
+  const teamLabel = _currentTeamId
+    ? (_teams.find(t => t.id === _currentTeamId)?.name || 'Team')
+    : 'All teams';
+  if (headP)  headP.textContent = `${total} players · ${teamLabel}`;
   if (listCt) listCt.textContent = total;
 
   const posCounts = {};
@@ -782,6 +802,23 @@ async function reloadPlayers() {
     _currentClubName = club.name || '';
     const crumb = document.getElementById('sqCrumbClub');
     if (crumb) crumb.textContent = club.name;
+  }
+
+  // Load teams and populate selectors
+  if (clubId) {
+    _teams = await window.getTeams(clubId);
+    const teamSel = document.getElementById('sqTeamSelect');
+    const modalTeamSel = document.getElementById('sqF_team');
+    _teams.forEach(t => {
+      teamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
+      modalTeamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
+    });
+    teamSel?.addEventListener('change', async () => {
+      _currentTeamId = teamSel.value || null;
+      await reloadPlayers();
+    });
+    // Pre-select current team in selector if filtering
+    if (_currentTeamId && teamSel) teamSel.value = _currentTeamId;
   }
 
   await reloadPlayers();
@@ -844,6 +881,7 @@ async function reloadPlayers() {
     document.getElementById('sqF_weight_kg').value   = player?.weight          || '';
     document.getElementById('sqF_dominant_foot').value = player?.dominant_foot || '';
     document.getElementById('sqF_status').value      = player?.status          || 'available';
+    document.getElementById('sqF_team').value         = player?.team_id || _currentTeamId || '';
     document.getElementById('sqModalDelete').style.display = player ? 'inline-flex' : 'none';
     document.getElementById('sqModalSaving').style.display = 'none';
     // Photo preview
@@ -882,6 +920,7 @@ async function reloadPlayers() {
       height:        parseFloat(document.getElementById('sqF_height_cm').value) || null,
       weight:        parseFloat(document.getElementById('sqF_weight_kg').value) || null,
       dominant_foot: document.getElementById('sqF_dominant_foot').value || null,
+      team_id:       document.getElementById('sqF_team').value || null,
     };
 
     if (!payload.first_name) {
@@ -1168,6 +1207,7 @@ async function reloadPlayers() {
     const rows = _importRows
       .map(r => ({
         club_id:       _currentClubId,
+        team_id:       _currentTeamId || null,
         first_name:    r.first_name  || null,
         last_name:     r.last_name   || null,
         number:        parseInt(r.number) || null,
