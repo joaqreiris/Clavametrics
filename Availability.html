@@ -501,7 +501,8 @@
     let cls = 'cell';
     if (isFuture) cls += ' is-future';
     const data = pid ? ` data-pid="${pid}" data-date="${date}"` : '';
-    if (!status) return `<td class="${cls} is-off"${data}></td>`;
+    // Future with no record → blank (not striped day-off pattern)
+    if (!status) return isFuture ? `<td class="${cls}"${data}></td>` : `<td class="${cls} is-off"${data}></td>`;
     if (status.startsWith('match:')) {
       const min = parseInt(status.split(':')[1], 10);
       return `<td class="${cls} av-cell-match"${data}>${min > 0 ? `<span class="av-cell-match-min">${min}′</span>` : dotEl('ab')}</td>`;
@@ -523,7 +524,9 @@
   }
 
   // ── Render header ──
-  function renderHeader() {
+  // matchDates: { [dateStr]: opponentName } for match-day indicators
+  function renderHeader(matchDates) {
+    matchDates = matchDates || {};
     const tr = document.getElementById('avHead');
     if (!tr) return;
     let h = '<th class="col-player">Player</th><th class="col-num">#</th>';
@@ -531,9 +534,15 @@
       const d = new Date(date + 'T00:00:00Z');
       const letter = DAY_LTR[d.getUTCDay()];
       const num    = d.getUTCDate();
+      const isToday = i === todayIdx;
+      const isMatch = !!matchDates[date];
       let cls = 'day';
-      if (i === todayIdx) cls += ' is-today';
-      const tag = i === todayIdx ? '<span class="md-tag">Today</span>' : '';
+      if (isToday) cls += ' is-today';
+      else if (isMatch) cls += ' is-match';
+      let tag = '';
+      if (isToday && isMatch) tag = '<span class="md-tag">Today · MD</span>';
+      else if (isToday) tag = '<span class="md-tag">Today</span>';
+      else if (isMatch) tag = `<span class="md-tag" title="vs ${matchDates[date]}">MD</span>`;
       h += `<th class="${cls}"><b>${letter}</b>${num}${tag}</th>`;
     });
     h += '<th class="col-sum">Summary · match min</th>';
@@ -562,9 +571,12 @@
         const name     = [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
         const initials = [(p.last_name||'')[0], (p.first_name||'')[0]].filter(Boolean).join('').toUpperCase() || '?';
         const posKey   = POS_NORM[(p.position||'').toUpperCase()] || 'mf';
-        const statuses = MC_DATES.map(date => {
+        const statuses = MC_DATES.map((date, i) => {
           const e = avMap[p.id + '|' + date];
-          if (!e) return injuredIds.has(p.id) ? 'unavailable' : 'available';
+          if (!e) {
+            if (todayIdx >= 0 && i > todayIdx) return null; // future: blank, no assumed status
+            return injuredIds.has(p.id) ? 'unavailable' : 'available';
+          }
           return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
         });
         const cells = statuses.map((s, i) => cellHTML(s, i, p.id, MC_DATES[i])).join('');
@@ -621,6 +633,39 @@
     }
   }
 
+  // ── Auto-fill: upsert today's status for players with no manual record ──
+  // Uses ignoreDuplicates so existing manual edits are never overwritten.
+  async function autofillToday(players, avMap, injuredIds, todayStr) {
+    const rows = [];
+    players.forEach(p => {
+      if (avMap[p.id + '|' + todayStr]) return;
+      rows.push({ player_id: p.id, date: todayStr, status: injuredIds.has(p.id) ? 'injured' : 'available', minutes: 0, club_id: CLUB_ID });
+    });
+    if (!rows.length) return;
+    const { error } = await window.sb.from('availability')
+      .upsert(rows, { onConflict: 'player_id,date', ignoreDuplicates: true });
+    if (error) console.warn('[Availability] autofill today error:', error.message);
+    rows.forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
+  }
+
+  // ── Auto-fill: fill 'injured' for MC dates within each active injury's expected_return ──
+  async function autofillInjuryRange(injuries, avMap, todayStr) {
+    const rows = [];
+    injuries.forEach(inj => {
+      if (!inj.expected_return || inj.expected_return < todayStr) return;
+      MC_DATES.forEach(date => {
+        if (date < todayStr || date > inj.expected_return) return;
+        if (avMap[inj.player_id + '|' + date]) return; // don't overwrite manual edits
+        rows.push({ player_id: inj.player_id, date, status: 'injured', minutes: 0, club_id: CLUB_ID });
+      });
+    });
+    if (!rows.length) return;
+    const { error } = await window.sb.from('availability')
+      .upsert(rows, { onConflict: 'player_id,date', ignoreDuplicates: true });
+    if (error) console.warn('[Availability] autofill injury range error:', error.message);
+    rows.forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
+  }
+
   // ── Save cell to Supabase ──
   async function saveAvailability(pid, date, status, minutes = 0) {
     if (!CLUB_ID) return;
@@ -662,15 +707,17 @@
     let mcStart, mcEnd;
 
     // Try active microcycle from Supabase
+    let mcMatchDate = null, mcRival = null;
     try {
       const { data: mcs } = await window.sb.from('microcycles')
-        .select('start_date, end_date, name')
+        .select('start_date, end_date, name, match_date, rival')
         .eq('club_id', CLUB_ID)
         .lte('start_date', todayStr)
         .gte('end_date', todayStr)
         .limit(1);
       if (mcs?.length) {
         mcStart = mcs[0].start_date; mcEnd = mcs[0].end_date;
+        mcMatchDate = mcs[0].match_date; mcRival = mcs[0].rival;
         const nameEl = document.getElementById('avMcName');
         const pickerEl = document.getElementById('avMcPickerName');
         if (nameEl) nameEl.textContent = mcs[0].name || 'Current MC';
@@ -693,8 +740,7 @@
     while (cur <= end) { MC_DATES.push(cur.toISOString().slice(0, 10)); cur = new Date(cur.getTime() + 86400000); }
     todayIdx = MC_DATES.indexOf(todayStr);
 
-    renderHeader();
-
+    // Fetch all data
     const { data: playersData, error: playersErr } = await window.sb
       .from('players').select('id, first_name, last_name, position, number')
       .eq('club_id', CLUB_ID).order('last_name');
@@ -706,24 +752,42 @@
       .from('availability').select('player_id, date, status, minutes')
       .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd);
 
+    // Fetch active injuries including expected_return for auto-fill range
     const { data: injuriesData } = await window.sb
-      .from('injuries').select('player_id')
+      .from('injuries').select('player_id, expected_return')
       .eq('club_id', CLUB_ID).eq('status', 'active');
 
     const { data: yesterdayData } = await window.sb
       .from('availability').select('player_id, status')
       .eq('club_id', CLUB_ID).eq('date', yesterdayStr);
 
+    // Fetch match events for MD indicators
+    const { data: matchEventsData } = await window.sb
+      .from('calendar_events').select('date, opponent, title')
+      .eq('club_id', CLUB_ID).eq('type', 'match')
+      .gte('date', mcStart).lte('date', mcEnd);
+
+    // Build match-dates map (date → opponent name for tooltip)
+    const matchDates = {};
+    (matchEventsData || []).forEach(e => { matchDates[e.date] = e.opponent || e.title || 'Match'; });
+    if (mcMatchDate && mcMatchDate >= mcStart && mcMatchDate <= mcEnd)
+      matchDates[mcMatchDate] = matchDates[mcMatchDate] || mcRival || 'Match';
+
+    renderHeader(matchDates);
+
     const players    = playersData || [];
     const avMap      = {};
     (availData || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
     const injuredIds = new Set((injuriesData || []).map(r => r.player_id));
-    // null means yesterday had no records → hide delta; {} means records exist but 0 available
     const yesterdayByPlayer = yesterdayData
       ? Object.fromEntries(yesterdayData.map(r => [r.player_id, r]))
       : null;
 
-    // Update header + toolbar with real counts
+    // Auto-fill: fill injury range first, then today's defaults
+    await autofillInjuryRange(injuriesData || [], avMap, todayStr);
+    await autofillToday(players, avMap, injuredIds, todayStr);
+
+    // Update toolbar counts
     const posCounts = { gk:0, cb:0, fb:0, mf:0, wg:0, st:0 };
     players.forEach(p => { const k = POS_NORM[(p.position||'').toUpperCase()]; if (k) posCounts[k] = (posCounts[k]||0) + 1; });
     const el = id => document.getElementById(id);
@@ -740,6 +804,7 @@
 
     renderMatrix(players, avMap, injuredIds);
     renderKPIs(players, avMap, todayStr, yesterdayByPlayer);
+    updateBulk(); // hide bulk bar (starts with is-on in HTML)
   }
 
   init();
@@ -754,9 +819,38 @@
     if (sel.length > 0) bulk.querySelector('.cnt').textContent = `${sel.length} cell${sel.length > 1 ? 's' : ''} selected`;
   }
 
-  matrix.addEventListener('click', e => {
+  function isBlockedCell(td) {
+    return td.classList.contains('is-off') || td.classList.contains('is-future');
+  }
+
+  // ── Drag multi-select ──
+  let isDragging = false;
+  let dragMoved  = false; // true once cursor enters a second cell during drag
+
+  matrix.addEventListener('mousedown', e => {
     const td = e.target.closest('td.cell');
-    if (!td || td.classList.contains('is-off')) return;
+    if (!td || isBlockedCell(td)) return;
+    isDragging = true;
+    dragMoved  = false;
+    e.preventDefault(); // prevent browser text-selection during drag
+  });
+
+  matrix.addEventListener('mouseover', e => {
+    if (!isDragging) return;
+    const td = e.target.closest('td.cell');
+    if (!td || isBlockedCell(td)) return;
+    td.classList.add('is-selected');
+    dragMoved = true;
+    updateBulk();
+  });
+
+  document.addEventListener('mouseup', () => { isDragging = false; });
+
+  // ── Click (single toggle) ──
+  matrix.addEventListener('click', e => {
+    if (dragMoved) { dragMoved = false; return; } // drag already handled selection
+    const td = e.target.closest('td.cell');
+    if (!td || isBlockedCell(td)) return;
     if (e.shiftKey || e.metaKey || e.ctrlKey) {
       td.classList.toggle('is-selected');
     } else {
@@ -776,9 +870,15 @@
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
       updateBulk();
     }
+    // ⌘+A / Ctrl+A — select all editable cells
+    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+      e.preventDefault();
+      matrix.querySelectorAll('td.cell:not(.is-future):not(.is-off)').forEach(td => td.classList.add('is-selected'));
+      updateBulk();
+    }
   });
 
-  // Bulk bar status buttons — CSS keys stay abbreviated; DB values are full names
+  // ── Bulk bar status buttons — CSS keys stay abbreviated; DB values are full names ──
   const BULK_STATUS = { av:'available', pa:'partial', in:'injured', si:'sick', na:'away' };
   Object.entries(BULK_STATUS).forEach(([cssKey, fullStatus]) => {
     const btn = document.querySelector(`.av-bulk-btn.${cssKey}`);
@@ -795,6 +895,21 @@
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
       updateBulk();
     });
+  });
+
+  // ── Match · 90' button ──
+  const matchBtn = document.querySelector('.av-bulk-btn.match');
+  if (matchBtn) matchBtn.addEventListener('click', () => {
+    matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
+      const { pid, date } = td.dataset;
+      if (pid && date) {
+        td.innerHTML = `<span class="av-cell-match-min">90′</span>`;
+        td.className = 'cell av-cell-match';
+        saveAvailability(pid, date, 'available', 90);
+      }
+    });
+    matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
+    updateBulk();
   });
 
   // Clear (danger) button
