@@ -48,7 +48,7 @@
   .dp-f textarea{resize:vertical;min-height:64px}
 
   /* Totals bar */
-  .dp-totals{display:grid;grid-template-columns:repeat(4,1fr);background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);margin-bottom:14px;overflow:hidden}
+  .dp-totals{display:grid;grid-template-columns:repeat(5,1fr);background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-1);margin-bottom:14px;overflow:hidden}
   .dp-totals .t{padding:14px 18px;display:flex;flex-direction:column;gap:5px;border-right:1px solid var(--cm-border-soft);position:relative}
   .dp-totals .t:last-child{border-right:0}
   .dp-totals .t .v{font:600 24px/1 var(--cm-font-sans);letter-spacing:-0.02em;color:var(--cm-fg-strong)}
@@ -292,6 +292,13 @@
             <div class="dp-f"><label>Focus</label>
               <select id="dpFocus"><option value="tactical">Tactical</option><option value="individual">Individual</option><option value="physical" selected>Physical</option><option value="sectorial">Sectorial</option></select>
             </div>
+            <div class="dp-f"><label>Expected RPE <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(1–10)</span></label>
+              <select id="dpEstRpe" onchange="dpUpdateAu()">
+                <option value="">—</option>
+                <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+                <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+              </select>
+            </div>
             <div class="dp-f"><label>Match day</label>
               <select><option>— Not a match day —</option><option>MD−5</option><option>MD−4</option><option>MD−3</option><option selected>MD−2</option><option>MD−1</option><option>MD</option><option>MD+1</option><option>MD+2</option></select>
             </div>
@@ -308,6 +315,7 @@
         <div class="t"><span class="l">Field work</span><span class="v" id="dpTotField">—<sub>min</sub></span><span class="delta" id="dpTotFieldCt"></span></div>
         <div class="t"><span class="l">Total</span><span class="v" id="dpTotTotal">—<sub>min</sub></span><span class="delta" id="dpTotBlocks"></span></div>
         <div class="t"><span class="l">Session duration</span><span class="v" id="dpTotSession">—<sub>min</sub></span><span class="delta" id="dpTotSessionNote" style="color:var(--cm-fg-muted)"></span></div>
+        <div class="t"><span class="l">Planned AU</span><span class="v" id="dpTotAu">—<sub>AU</sub></span><span class="delta" id="dpTotAuNote" style="color:var(--cm-fg-muted)"></span></div>
       </div>
 
       <!-- ===== PHYSIO ADAPTATIONS ===== -->
@@ -491,7 +499,7 @@ async function loadDay(dateStr) {
   const [availRes, adaptRes, sessRes] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: [] })),
     window.sb.from('treatments').select('id,player_id,date,type,notes,adaptation,zones, players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: null })),
-    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle().catch(() => ({ data: null }))
+    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published,estimated_rpe').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle().catch(() => ({ data: null }))
   ]);
 
   _dpCurrentSessionId = sessRes.data?.id || null;
@@ -501,10 +509,12 @@ async function loadDay(dateStr) {
     const st = document.getElementById('dpStartTime'); if (st) st.value = sess.session_time || '';
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = sess.session_type || '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = sess.notes || '';
+    const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = sess.estimated_rpe || '';
   } else {
     const st = document.getElementById('dpStartTime'); if (st) st.value = '';
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = '';
+    const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = '';
   }
   _dpUpdatePublishBtn();
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
@@ -698,11 +708,14 @@ function renderExerciseList(exercises) {
   }).join('') + '<button class="dp-ex-add" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
 }
 
+let _dpSessionTotalMin = 0;
+
 function recalcTotals() {
   const actMin   = _dpActTotalMin;
   const fieldMin = _dpFieldExercises.reduce((s, e) => s + (e.duration || 0), 0);
   const fieldCt  = _dpFieldExercises.length;
   const total    = actMin + fieldMin;
+  _dpSessionTotalMin = total;
   const elAV = document.getElementById('dpTotAct');        if (elAV) elAV.innerHTML = actMin   ? `${actMin}<sub>min</sub>`   : '—<sub>min</sub>';
   const elFV = document.getElementById('dpTotField');      if (elFV) elFV.innerHTML = fieldMin ? `${fieldMin}<sub>min</sub>` : '—<sub>min</sub>';
   const elFC = document.getElementById('dpTotFieldCt');    if (elFC) elFC.textContent = fieldCt ? `${fieldCt} exercises` : '';
@@ -711,6 +724,17 @@ function recalcTotals() {
   const elSD = document.getElementById('dpTotSession');    if (elSD) elSD.innerHTML = total    ? `${total}<sub>min</sub>`   : '—<sub>min</sub>';
   const elSN = document.getElementById('dpTotSessionNote');
   if (elSN) elSN.textContent = (actMin && fieldMin) ? `${actMin}′ activation + ${fieldMin}′ field` : '';
+  dpUpdateAu();
+}
+
+function dpUpdateAu() {
+  const rpe = parseInt(document.getElementById('dpEstRpe')?.value) || 0;
+  const dur = _dpSessionTotalMin;
+  const au  = (rpe && dur) ? rpe * dur : null;
+  const elV = document.getElementById('dpTotAu');
+  const elN = document.getElementById('dpTotAuNote');
+  if (elV) elV.innerHTML = au ? `${au}<sub>AU</sub>` : '—<sub>AU</sub>';
+  if (elN) elN.textContent = (rpe && !dur) ? 'add exercises first' : (dur && !rpe) ? 'set RPE above' : '';
 }
 
 async function deleteExercise(seid) {
@@ -839,10 +863,11 @@ async function dpAutoSaveSession() {
   const payload = {
     title,
     session_date: date,
-    session_type: document.getElementById('dpSessionType')?.value || 'tactical',
-    session_time: document.getElementById('dpStartTime')?.value  || null,
-    notes:        document.getElementById('dpNotes')?.value?.trim() || null,
-    club_id:      _dpClubId
+    session_type:  document.getElementById('dpSessionType')?.value || 'tactical',
+    session_time:  document.getElementById('dpStartTime')?.value  || null,
+    notes:         document.getElementById('dpNotes')?.value?.trim() || null,
+    estimated_rpe: parseInt(document.getElementById('dpEstRpe')?.value) || null,
+    club_id:       _dpClubId
   };
   if (_dpCurrentSessionId) {
     await window.sb.from('training_sessions').update(payload).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
@@ -1027,7 +1052,7 @@ async function dpExportPDF() {
   document.getElementById('dpDateInput').addEventListener('change', e => { if (e.target.value) loadDay(e.target.value); });
 
   // Autosave session info with debounce on field changes
-  ['dpStartTime','dpSessionType','dpFocus','dpNotes'].forEach(id => {
+  ['dpStartTime','dpSessionType','dpFocus','dpNotes','dpEstRpe'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('change', dpQueueSave);

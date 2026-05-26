@@ -325,6 +325,26 @@
   }
   .upcoming-time { font:600 13px/1 var(--cm-font-mono); color:var(--cm-fg); }
 
+  /* Continuous (scrollable) MC grid when totalDays > 7 */
+  .mc-days.is-scroll {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--cm-border) transparent;
+  }
+  .mc-days.is-scroll .mc-day {
+    min-width: 148px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--cm-border-soft);
+  }
+  .mc-days.is-scroll .mc-day:last-child { border-right: 0; }
+
+  /* Drag & drop */
+  .mc-evt[draggable="true"] { cursor: grab; user-select: none; }
+  .mc-evt[draggable="true"].is-dragging { opacity: 0.35; }
+  .mc-evt.drag-over { background: var(--cm-accent-soft) !important; border-color: var(--cm-accent) !important; border-width: 1.5px; }
+  .mc-evt-placeholder { height: 34px; border: 2px dashed var(--cm-accent); border-radius: 6px; background: color-mix(in srgb, var(--cm-accent) 8%, transparent); margin-bottom: 4px; pointer-events: none; }
+
   /* Workload chart */
   .wk-chart { padding:14px 16px 18px; }
   .wk-rows { display:flex; gap:5px; align-items:end; height:130px; margin-bottom:12px; }
@@ -566,7 +586,7 @@
               <div><div class="l">Total duration</div><div class="v" id="calMcDuration">—</div></div>
             </div>
             <div class="mc-info">
-              <div class="ic" style="color:var(--cm-success);background:var(--cm-success-bg);border-color:var(--cm-success-bd)"><i class="ti ti-zzz"></i></div>
+              <div class="ic" style="color:var(--cm-success);background:var(--cm-success-bg);border-color:var(--cm-success-bd)"><i class="ti ti-calendar-time"></i></div>
               <div><div class="l">MC length</div><div class="v" id="calMcLength">—</div></div>
             </div>
           </div>
@@ -764,6 +784,21 @@
           <textarea id="calEvtF_notes" placeholder="Optional" rows="2"></textarea>
         </div>
       </div>
+      <!-- Expected RPE (training & gym only) -->
+      <div id="calEvtRpeRow" class="sq-modal-row" style="display:none">
+        <div class="sq-modal-field">
+          <label for="calEvtF_rpe">Expected RPE <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(1–10)</span></label>
+          <select id="calEvtF_rpe">
+            <option value="">—</option>
+            <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+            <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+          </select>
+        </div>
+        <div class="sq-modal-field" style="display:flex;align-items:flex-end;padding-bottom:1px">
+          <div style="font:500 12px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">AU: <strong id="calEvtAuPreview" style="color:var(--cm-fg-strong)">—</strong></div>
+        </div>
+      </div>
+
       <!-- Match extra fields (shown only when type = match) -->
       <div id="calEvtMatchFields" style="display:none">
         <div class="sq-modal-row">
@@ -979,7 +1014,9 @@ function showCalToast(msg) {
   setTimeout(() => t.classList.remove('is-show'), 2800);
 }
 
-// ── Render grid ────────────────────────────────────────────────
+// ── Render grid (continuous view — all MC days in one scrollable row) ──────────────
+let _dragId = null, _dragDate = null;
+
 function renderGrid() {
   const mc = _allMCs[_mcIdx];
   const grid = document.getElementById('calDaysGrid');
@@ -987,18 +1024,19 @@ function renderGrid() {
 
   const start = mc.start_date, end = mc.end_date;
   const totalDays = daysBetween(start, end) + 1;
-  const totalWeeks = Math.ceil(totalDays / 7);
-  const weekStart = addDays(start, _weekOffset * 7);
-  const weekEnd   = addDays(weekStart, 6);
 
   // Header
   document.getElementById('calMcTitle').textContent = (mc.name || 'Microcycle') + ' · daily plan';
   document.getElementById('calMcSub').textContent =
     `${fmtShort(new Date(start))} → ${fmtShort(new Date(end))} · ${_sessions.length} sessions`;
+
+  // Pager: hide prev/next, show total days only
+  const prevBtn = document.getElementById('calWeekPrev');
+  const nextBtn = document.getElementById('calWeekNext');
+  if (prevBtn) prevBtn.style.display = 'none';
+  if (nextBtn) nextBtn.style.display = 'none';
   document.getElementById('calWeekLabel').innerHTML =
-    `<i class="ti ti-calendar-event"></i>Week ${_weekOffset + 1} of ${totalWeeks}`;
-  document.getElementById('calWeekPrev').disabled = _weekOffset === 0;
-  document.getElementById('calWeekNext').disabled = _weekOffset >= totalWeeks - 1;
+    `<i class="ti ti-calendar-event"></i>${totalDays}<span class="yr" style="margin-left:4px">days</span>`;
 
   // Summary row
   if (mc.rival) document.getElementById('calMcTarget').innerHTML = `${mc.rival}<small>${mc.home_away ? ' · '+mc.home_away : ''}</small>`;
@@ -1010,23 +1048,25 @@ function renderGrid() {
   document.getElementById('calMcLength').innerHTML = `${totalDays}<small>days</small>`;
 
   // Top bar MC heading
-  if (mc) {
-    const mcName = mc.name || 'Microcycle';
-    let mdLabel = '';
-    if (mc.match_date) {
-      const diff = daysBetween(TODAY, mc.match_date);
-      mdLabel = diff === 0 ? ' · MD' : diff > 0 ? ` · MD−${diff}` : ` · MD+${Math.abs(diff)}`;
-    }
-    const target = mc.rival ? ` · <strong>${mc.rival}</strong>` : '';
-    const el = document.getElementById('calHeadCtx');
-    if (el) el.innerHTML = `<strong>${mcName}</strong>${mdLabel}${target}`;
+  const mcName = mc.name || 'Microcycle';
+  let headMdLabel = '';
+  if (mc.match_date) {
+    const diff = daysBetween(TODAY, mc.match_date);
+    headMdLabel = diff === 0 ? ' · MD' : diff > 0 ? ` · MD−${diff}` : ` · MD+${Math.abs(diff)}`;
   }
+  const headTarget = mc.rival ? ` · <strong>${mc.rival}</strong>` : '';
+  const headEl = document.getElementById('calHeadCtx');
+  if (headEl) headEl.innerHTML = `<strong>${mcName}</strong>${headMdLabel}${headTarget}`;
 
-  // Build 7 day columns
+  // Continuous grid layout
+  const isManyDays = totalDays > 7;
+  grid.className = 'mc-days' + (isManyDays ? ' is-scroll' : '');
+  grid.style.gridTemplateColumns = isManyDays ? '' : `repeat(${totalDays}, 1fr)`;
+
+  // Build all day columns
   let html = '';
-  for (let i = 0; i < 7; i++) {
-    const dateStr = addDays(weekStart, i);
-    if (dateStr > end) { html += '<div class="mc-day" style="background:var(--cm-bg-sunk);opacity:0.4"></div>'; continue; }
+  for (let i = 0; i < totalDays; i++) {
+    const dateStr = addDays(start, i);
     const d = new Date(dateStr + 'T12:00:00');
     const isToday = dateStr === TODAY;
     const daySessions = _sessions.filter(s => s.session_date === dateStr);
@@ -1039,7 +1079,6 @@ function renderGrid() {
       else if (diff > 0 && diff <= 10) mdLabel = `MD−${diff}`;
       else if (diff < 0 && diff >= -3) mdLabel = `MD+${Math.abs(diff)}`;
     }
-
     const mdStyle = mdLabel === 'MD' ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
 
     const eventsHtml = isOff
@@ -1048,19 +1087,20 @@ function renderGrid() {
           const cat = focusToClass(s.session_type);
           const icon = EVT_ICONS[cat] || 'ti-calendar';
           const dur = s.duration ? ` ${s.duration}′` : '';
-          return `<div class="mc-evt ${cat}" data-id="${s.id}" style="cursor:pointer">
+          const au = (s.duration && s.estimated_rpe) ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>` : '';
+          return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" draggable="true">
             <i class="ti ${icon}"></i>
-            <span class="name">${s.title || s.session_type || cat}${dur}</span>
+            <span class="name">${s.title || s.session_type || cat}${dur}</span>${au}
           </div>`;
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
 
-    html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}">
+    html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}" data-date="${dateStr}">
       <div class="mc-day-head">
         <span class="mc-day-dow">${DAYS_SHORT[d.getDay()]}</span>
         <span class="mc-day-num">${d.getDate()}</span>
         ${mdLabel ? `<span class="mc-day-md" style="${mdStyle}">${mdLabel}</span>` : ''}
       </div>
-      <div class="mc-day-events">
+      <div class="mc-day-events" data-date="${dateStr}">
         ${eventsHtml}
         <button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">+ Add</button>
       </div>
@@ -1078,17 +1118,64 @@ function renderGrid() {
   grid.querySelectorAll('[data-add-date]').forEach(btn => {
     btn.addEventListener('click', e => { e.stopPropagation(); openEvtModal(null, btn.dataset.addDate); });
   });
+
+  // Drag & drop within same day
+  grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
+    el.addEventListener('dragstart', e => {
+      _dragId = el.dataset.id;
+      _dragDate = el.dataset.date;
+      el.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', _dragId);
+    });
+    el.addEventListener('dragend', () => {
+      el.classList.remove('is-dragging');
+      grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+    });
+    el.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (el.dataset.id !== _dragId) el.classList.add('drag-over');
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      if (!_dragId || el.dataset.id === _dragId) return;
+      const draggedSess = _sessions.find(s => s.id === _dragId);
+      const targetSess  = _sessions.find(s => s.id === el.dataset.id);
+      if (!draggedSess || !targetSess || draggedSess.session_date !== targetSess.session_date) return;
+      const dateStr = draggedSess.session_date;
+      const dayEvts = _sessions.filter(s => s.session_date === dateStr);
+      const dragIdx = dayEvts.findIndex(s => s.id === _dragId);
+      const dropIdx = dayEvts.findIndex(s => s.id === el.dataset.id);
+      dayEvts.splice(dragIdx, 1);
+      dayEvts.splice(dropIdx, 0, draggedSess);
+      const others = _sessions.filter(s => s.session_date !== dateStr);
+      _sessions = [...others, ...dayEvts].sort((a, b) => a.session_date > b.session_date ? 1 : -1);
+      _dragId = null; _dragDate = null;
+      renderGrid();
+      updateSortOrders(dateStr);
+    });
+  });
+}
+
+async function updateSortOrders(dateStr) {
+  const dayEvts = _sessions.filter(s => s.session_date === dateStr);
+  await Promise.all(dayEvts.map((s, idx) => {
+    const table = s.source === 'event' ? 'calendar_events' : 'training_sessions';
+    return window.sb.from(table).update({ sort_order: idx }).eq('id', s.id);
+  }));
 }
 
 // ── Fetch + merge training_sessions and calendar_events ────────
 async function fetchAllEvents(dateFrom, dateTo) {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
-      .select('id,title,session_type,duration,session_date,notes')
+      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe')
       .eq('club_id', _clubId)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
-      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location')
+      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe')
       .eq('club_id', _clubId)
       .gte('date', dateFrom).lte('date', dateTo).order('date')
   ]);
@@ -1102,9 +1189,13 @@ async function fetchAllEvents(dateFrom, dateTo) {
     duration: e.duration_minutes, notes: e.notes,
     opponent: e.opponent, competition: e.competition,
     home_away: e.home_away, start_time: e.start_time, location: e.location,
+    sort_order: e.sort_order, estimated_rpe: e.estimated_rpe,
     source: 'event'
   }));
-  return { data: [...norm, ...evts].sort((a, b) => a.session_date > b.session_date ? 1 : -1) };
+  return { data: [...norm, ...evts].sort((a, b) => {
+    if (a.session_date !== b.session_date) return a.session_date > b.session_date ? 1 : -1;
+    return (a.sort_order || 0) - (b.sort_order || 0);
+  }) };
 }
 
 // ── Load sessions for current MC ──────────────────────────────
@@ -1129,6 +1220,81 @@ async function loadSessions() {
   if (elTT) elTT.textContent = travelCt > 0 ? `${travelCt} travel session${travelCt > 1 ? 's' : ''} this MC` : 'No travel planned';
 
   renderGrid();
+  renderWorkload();
+}
+
+// ── Planned Workload widget ────────────────────────────────────
+async function renderWorkload() {
+  const chartEl = document.querySelector('.wk-chart');
+  if (!chartEl) return;
+  const clubId = _clubId || await window.getClubId();
+  if (!clubId || !_allMCs.length) return;
+
+  const sorted = [..._allMCs].sort((a, b) => a.start_date > b.start_date ? 1 : -1);
+  const ci = sorted.findIndex(m => m.start_date <= TODAY && m.end_date >= TODAY);
+  const cur = ci >= 0 ? ci : sorted.length - 1;
+  const from = Math.max(0, cur - 5);
+  const to   = Math.min(sorted.length - 1, cur + 2);
+  const mcs  = sorted.slice(from, to + 1);
+  if (!mcs.length) return;
+
+  const dateFrom = mcs[0].start_date;
+  const dateTo   = mcs[mcs.length - 1].end_date;
+
+  const [sessRes, evtRes] = await Promise.all([
+    window.sb.from('training_sessions')
+      .select('session_date,duration,estimated_rpe,session_type')
+      .eq('club_id', clubId).gte('session_date', dateFrom).lte('session_date', dateTo),
+    window.sb.from('calendar_events')
+      .select('date,duration_minutes,estimated_rpe,type')
+      .eq('club_id', clubId).gte('date', dateFrom).lte('date', dateTo)
+  ]);
+
+  const allSessions = [
+    ...(sessRes.data || []).map(s => ({ date: (s.session_date||'').split('T')[0], duration: s.duration, rpe: s.estimated_rpe, type: focusToClass(s.session_type) })),
+    ...(evtRes.data  || []).map(e => ({ date: (e.date||'').split('T')[0], duration: e.duration_minutes, rpe: e.estimated_rpe, type: focusToClass(e.type) }))
+  ];
+
+  const mcData = mcs.map(mc => {
+    const sessions = allSessions.filter(s => s.date >= mc.start_date && s.date <= mc.end_date);
+    const withRpe  = sessions.filter(s => s.rpe && s.duration);
+    const pending  = sessions.filter(s => !s.rpe || !s.duration).length;
+    const trAu  = withRpe.filter(s => s.type === 'training').reduce((sum, s) => sum + s.duration * s.rpe, 0);
+    const gymAu = withRpe.filter(s => s.type === 'gym').reduce((sum, s) => sum + s.duration * s.rpe, 0);
+    return { mc, au: trAu + gymAu, trAu, gymAu, pending, total: sessions.length };
+  });
+
+  const maxAu = Math.max(...mcData.map(d => d.au), 1);
+  const currentMcId = _allMCs[_mcIdx]?.id;
+
+  const barsHtml = mcData.map(d => {
+    const trH  = d.trAu  ? `${Math.round((d.trAu  / maxAu) * 95)}%` : '0';
+    const gymH = d.gymAu ? `${Math.round((d.gymAu / maxAu) * 95)}%` : '0';
+    const tooltip = d.au > 0
+      ? `${d.mc.name||'MC'}: ${d.au} AU${d.pending ? ` · ${d.pending} pending RPE` : ''}`
+      : `${d.mc.name||'MC'}: no RPE data`;
+    return `<div class="wk-bar-grp" title="${tooltip}">
+      <div class="wk-bar tr"  style="height:${trH}"></div>
+      <div class="wk-bar gym" style="height:${gymH}"></div>
+    </div>`;
+  }).join('');
+
+  const labelsHtml = mcData.map(d => {
+    const isCurrent = d.mc.id === currentMcId;
+    return `<span${isCurrent ? ' class="is-current"' : ''}>${d.mc.name || 'MC'}</span>`;
+  }).join('');
+
+  const curPending = mcData.find(d => d.mc.id === currentMcId)?.pending || 0;
+  const pendingNote = curPending > 0 ? `<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px">${curPending} session${curPending > 1 ? 's' : ''} pending RPE in current MC</div>` : '';
+
+  chartEl.innerHTML = `
+    <div class="wk-rows">${barsHtml || '<div style="width:100%;text-align:center;padding:20px 0;color:var(--cm-fg-faint);font:var(--cm-meta)">—</div>'}</div>
+    <div class="wk-labels">${labelsHtml}</div>
+    ${pendingNote}
+    <div class="wk-legend">
+      <span class="it"><span class="sw" style="background:var(--cm-info)"></span>Training</span>
+      <span class="it"><span class="sw" style="background:var(--cm-violet)"></span>Gym</span>
+    </div>`;
 }
 
 // ── Event modal ───────────────────────────────────────────────
@@ -1137,6 +1303,18 @@ const CAL_EVT_TYPES = ['match','recovery','travel','meeting','evaluation','video
 function toggleMatchFields(type) {
   const el = document.getElementById('calEvtMatchFields');
   if (el) el.style.display = type === 'match' ? '' : 'none';
+}
+
+function toggleRpeRow(type) {
+  const el = document.getElementById('calEvtRpeRow');
+  if (el) el.style.display = (type === 'tactical' || type === 'gym' || type === 'conditioning') ? '' : 'none';
+}
+
+function updateAuPreview() {
+  const dur = parseInt(document.getElementById('calEvtF_duration')?.value) || 0;
+  const rpe = parseInt(document.getElementById('calEvtF_rpe')?.value) || 0;
+  const el  = document.getElementById('calEvtAuPreview');
+  if (el) el.textContent = (dur && rpe) ? String(dur * rpe) : '—';
 }
 
 function openEvtModal(session, defaultDate) {
@@ -1159,7 +1337,10 @@ function openEvtModal(session, defaultDate) {
   document.getElementById('calEvtF_competition').value = session?.competition || '';
   document.getElementById('calEvtF_starttime').value   = session?.start_time  ? session.start_time.slice(0,5) : '';
   document.getElementById('calEvtF_location').value    = session?.location    || '';
+  document.getElementById('calEvtF_rpe').value = session?.estimated_rpe || '';
   toggleMatchFields(evtType);
+  toggleRpeRow(evtType);
+  updateAuPreview();
 
   // Planning link (only for training/gym)
   const planLink  = document.getElementById('calEvtPlanLink');
@@ -1192,11 +1373,12 @@ async function saveEvt() {
   const saveBtn = document.getElementById('calEvtSave');
   saving.style.display = 'inline'; saveBtn.disabled = true;
 
-  const type     = document.getElementById('calEvtF_type').value;
-  const title    = document.getElementById('calEvtF_title').value.trim();
-  const date     = document.getElementById('calEvtF_date').value;
-  const duration = parseInt(document.getElementById('calEvtF_duration').value) || null;
-  const notes    = document.getElementById('calEvtF_notes').value.trim() || null;
+  const type        = document.getElementById('calEvtF_type').value;
+  const title       = document.getElementById('calEvtF_title').value.trim();
+  const date        = document.getElementById('calEvtF_date').value;
+  const duration    = parseInt(document.getElementById('calEvtF_duration').value) || null;
+  const notes       = document.getElementById('calEvtF_notes').value.trim() || null;
+  const estimatedRpe = parseInt(document.getElementById('calEvtF_rpe').value) || null;
 
   if (!title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
 
@@ -1205,7 +1387,7 @@ async function saveEvt() {
   let error;
 
   if (isCalEvt) {
-    const payload = { title, type, date, duration_minutes: duration, notes };
+    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe };
     if (type === 'match') {
       payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
@@ -1225,7 +1407,7 @@ async function saveEvt() {
       ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
   } else {
-    const payload = { title, session_type: type, session_date: date, duration, notes };
+    const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe };
     if (_editEvtId && _editEvtSource === 'session') {
       ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
     } else if (_editEvtId && _editEvtSource === 'event') {
@@ -1260,7 +1442,13 @@ document.getElementById('calEvtCancel').addEventListener('click', closeEvtModal)
 document.getElementById('calEvtSave').addEventListener('click', saveEvt);
 document.getElementById('calEvtDelete').addEventListener('click', deleteEvt);
 document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeEvtModal(); });
-document.getElementById('calEvtF_type').addEventListener('change', function() { toggleMatchFields(this.value); });
+document.getElementById('calEvtF_type').addEventListener('change', function() {
+  toggleMatchFields(this.value);
+  toggleRpeRow(this.value);
+  updateAuPreview();
+});
+document.getElementById('calEvtF_duration').addEventListener('input', updateAuPreview);
+document.getElementById('calEvtF_rpe').addEventListener('change', updateAuPreview);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });
 
 // Reload sessions when user returns to this tab (sync changes from Daily/Gym Planning)
