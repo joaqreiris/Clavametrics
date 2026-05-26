@@ -194,7 +194,6 @@
     font:500 11px/1 var(--cm-font-sans);
     letter-spacing:0.08em; text-transform:uppercase;
     color:var(--cm-fg-muted);
-    position:sticky; top:86px; z-index:1;
   }
   .sq-table tbody tr.is-group td .sq-group-count {
     font:500 11.5px/1 var(--cm-font-mono);
@@ -964,7 +963,7 @@ async function reloadPlayers() {
       const ext = photoFile.name.split('.').pop().toLowerCase();
       const path = `${clubId}/${playerId}.${ext}`;
       const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, photoFile, { upsert: true });
-      if (upErr) { console.error('Photo upload failed:', upErr); return null; }
+      if (upErr) { console.error('Photo upload failed:', upErr); showToast('Photo upload failed: ' + upErr.message); return null; }
       const { data: urlData } = window.sb.storage.from('player-photos').getPublicUrl(path);
       return urlData?.publicUrl || null;
     }
