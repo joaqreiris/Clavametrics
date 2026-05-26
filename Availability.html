@@ -542,6 +542,13 @@
 
   // ── Render matrix rows ──
   function renderMatrix(players, avMap, injuredIds) {
+    if (!players.length) {
+      document.getElementById('avBody').innerHTML =
+        `<tr><td colspan="20" style="padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">
+          No players found for this club. Check that players are added in <a href="Squad.html" style="color:var(--cm-accent)">Squad</a> and your profile has the correct club assigned.
+         </td></tr>`;
+      return;
+    }
     const byPos = {};
     POS_ORDER.forEach(p => byPos[p] = []);
     players.forEach(p => { const k = POS_NORM[(p.position||'').toUpperCase()] || 'mf'; byPos[k].push(p); });
@@ -608,7 +615,8 @@
     const ok = await window.requireAuth();
     if (!ok) return;
     CLUB_ID = await window.getClubId();
-    if (!CLUB_ID) return;
+    console.log('[Availability] CLUB_ID:', CLUB_ID, '| profile:', window.__cm_profile || 'not cached yet');
+    if (!CLUB_ID) { console.error('[Availability] CLUB_ID is null — profile may be missing or club_id not set'); return; }
     window.getClub().then(c => { if (c) window.applyClubTheme(); });
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -649,12 +657,13 @@
     renderHeader();
 
     const [playersRes, availRes, injuriesRes] = await Promise.all([
-      window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID).order('last_name').catch(() => ({ data: [] })),
+      window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID).order('last_name'),
       window.sb.from('availability').select('player_id, date, status, minutes').eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd).catch(() => ({ data: [] })),
       window.sb.from('injuries').select('player_id').eq('club_id', CLUB_ID).eq('status', 'active').catch(() => ({ data: [] }))
     ]);
 
-    if (playersRes.error) console.error('Availability: players query failed', playersRes.error);
+    console.log('[Availability] players result — count:', playersRes.data?.length, '| error:', playersRes.error?.message || null);
+    if (playersRes.error) console.error('[Availability] players query failed:', playersRes.error);
 
     const players    = playersRes.data || [];
     const avMap      = {};
