@@ -214,6 +214,7 @@
     if (teamLabelEl && profile?.club_role) teamLabelEl.textContent = profile.club_role;
     const markEl = document.querySelector('.hub-brand .mark');
     if (markEl && club?.logo_url) {
+      markEl.style.background = 'transparent';
       markEl.innerHTML = `<img src="${club.logo_url}" alt="${club.name || ''}" style="width:100%;height:100%;object-fit:contain;border-radius:5px">`;
     }
     if (profile) {

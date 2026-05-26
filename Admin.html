@@ -212,7 +212,7 @@
     font:700 16px/1 var(--cm-font-sans); letter-spacing:-0.02em;
     flex-shrink:0; position:relative; overflow:hidden;
   }
-  .org-bar .org-ic.has-logo { background:var(--cm-surface); border:1px solid var(--cm-border); }
+  .org-bar .org-ic.has-logo { background:transparent; border:none; }
   .org-bar .org-ic img { width:100%; height:100%; object-fit:contain; display:block; }
   .org-ic-overlay {
     position:absolute; inset:0; background:rgba(0,0,0,.48);
@@ -829,7 +829,7 @@
   if (club?.logo_url) {
     applyLogoToOrgIc(club.logo_url);
     const crest = document.querySelector('#adClubsGrid .club-crest');
-    if (crest) crest.innerHTML = `<img src="${club.logo_url}" alt="Club logo">`;
+    if (crest) { crest.className = 'club-crest'; crest.style.background = 'transparent'; crest.innerHTML = `<img src="${club.logo_url}" alt="Club logo">`; }
   } else if (canUploadLogo) {
     orgIc.insertAdjacentHTML('beforeend', '<div class="org-ic-overlay"><i class="ti ti-camera"></i></div>');
   }
@@ -863,10 +863,10 @@
       applyLogoToOrgIc(displayUrl);
 
       const crest = document.querySelector('#adClubsGrid .club-crest');
-      if (crest) crest.innerHTML = `<img src="${displayUrl}" alt="Club logo">`;
+      if (crest) { crest.className = 'club-crest'; crest.style.background = 'transparent'; crest.innerHTML = `<img src="${displayUrl}" alt="Club logo">`; }
 
       const mark = document.querySelector('.hub-brand .mark');
-      if (mark) mark.innerHTML = `<img src="${displayUrl}" alt="${club?.name || ''}" style="width:100%;height:100%;object-fit:contain;border-radius:5px">`;
+      if (mark) { mark.style.background = 'transparent'; mark.innerHTML = `<img src="${displayUrl}" alt="${club?.name || ''}" style="width:100%;height:100%;object-fit:contain;border-radius:5px">`; }
 
       if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();
       logoInput.value = '';
