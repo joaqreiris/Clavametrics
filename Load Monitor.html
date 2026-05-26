@@ -272,7 +272,7 @@
       <header class="lm-head">
         <div>
           <h1>Load Monitor</h1>
-          <div class="ctx"><strong>Microcycle 14</strong> · MD-3 today · ACWR &amp; fatigue alerts across 27 players · last sync 8 min ago</div>
+          <div class="ctx" id="lmCtx"><strong>28d</strong> · connecting…</div>
         </div>
         <div class="meta">
           <div class="lm-segs">
@@ -286,7 +286,7 @@
       </header>
 
       <!-- Alert banner -->
-      <div class="lm-alert" id="lmAlertBanner">
+      <div class="lm-alert" id="lmAlertBanner" style="display:none">
         <div class="ic"><i class="ti ti-alert-triangle"></i></div>
         <div class="body">
           <div class="h" id="lmAlertH">4 players entered the danger zone (ACWR &gt; 1.5) in the last 48 h</div>
@@ -342,7 +342,7 @@
           <div class="lm-kpi-v" id="lmKpiRpe">6.8 <sub>/ 10</sub></div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d warn"><i class="ti ti-arrow-up-right"></i>+0.4</span>
-            <span>MD-3 session today</span>
+            <span id="lmRpeSub">—</span>
           </div>
           <svg class="lm-kpi-sp" viewBox="0 0 84 36" preserveAspectRatio="none">
             <polyline points="0,24 14,18 28,22 42,16 56,20 70,18 84,14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -374,7 +374,7 @@
             <span class="pill red"><span class="d"></span>&gt; 1.5 danger</span>
             <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Squad avg today · <strong id="lmAcwrToday" style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
           </div>
-          <div class="lm-card-b" style="padding-top:4px;position:relative;height:360px">
+          <div class="lm-card-b" style="padding-top:4px;position:relative;height:360px;overflow:hidden">
             <canvas id="acwrChart" style="display:none"></canvas>
             <div id="acwrEmpty" style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No RPE data in the last 28 days</div>
             <!-- static SVG shown until JS replaces it -->
@@ -667,254 +667,320 @@
   const ok = await window.requireAuth();
   if (!ok) return;
 
-  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
-  if (club) window.applyClubTheme();
+  window.applyClubTheme();
 
-  const today    = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-  const from28d  = new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0];
-  const from7d   = new Date(Date.now() -  7 * 86400000).toISOString().split('T')[0];
+  const todayStr    = new Date().toISOString().split('T')[0];
+  const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  const from28dStr  = new Date(Date.now() - 28 * 86400000).toISOString().split('T')[0];
+  const from7dStr   = new Date(Date.now() -  7 * 86400000).toISOString().split('T')[0];
 
-  const [playersRes, wellnessRes, sessionsRes] = await Promise.all([
-    window.sb.from('players')
-      .select('id,first_name,last_name,number,position')
-      .eq('club_id', clubId).neq('status', 'inactive').order('number'),
-    window.sb.from('wellness')
-      .select('player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at')
-      .eq('club_id', clubId)
-      .gte('submitted_at', today + 'T00:00:00').lt('submitted_at', tomorrow + 'T00:00:00')
-      .catch(() => ({ data: [] })),
-    window.sb.from('training_sessions')
-      .select('id,session_date,title,rpe(player_id,rpe,duration,load)')
-      .eq('club_id', clubId)
-      .gte('session_date', from28d)
-      .order('session_date')
-      .catch(() => ({ data: [] }))
-  ]);
+  // Stable: players
+  const playersRes = await window.sb.from('players')
+    .select('id,first_name,last_name,number,position')
+    .eq('club_id', clubId).neq('status', 'inactive').order('number');
+  const players = playersRes.data || [];
+  const total   = players.length;
 
-  const players      = playersRes.data  || [];
-  const wellnessList = wellnessRes.data || [];
-  const sessions28d  = sessionsRes.data || [];
+  // Active microcycle (for Micro button)
+  const microRes = await window.sb.from('microcycles')
+    .select('start_date,end_date,name')
+    .eq('club_id', clubId)
+    .lte('start_date', todayStr)
+    .gte('end_date', todayStr)
+    .order('start_date', { ascending: false })
+    .limit(1)
+    .catch(() => ({ data: [] }));
+  const microRow = (microRes.data || [])[0] || null;
 
-  // ── Wellness ────────────────────────────────────────────────────
+  // Season start = earliest session date in this club
+  const firstSessRes = await window.sb.from('training_sessions')
+    .select('session_date')
+    .eq('club_id', clubId)
+    .order('session_date').limit(1)
+    .catch(() => ({ data: [] }));
+  const seasonStart = (firstSessRes.data || [])[0]?.session_date || from28dStr;
+
+  // Today's wellness (always today, period-independent)
+  const wellRes = await window.sb.from('wellness')
+    .select('player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at')
+    .eq('club_id', clubId)
+    .gte('submitted_at', todayStr + 'T00:00:00')
+    .lt('submitted_at', tomorrowStr + 'T00:00:00')
+    .catch(() => ({ data: [] }));
+  const wellnessList = wellRes.data || [];
   const wellMap = {};
   wellnessList.forEach(w => { wellMap[w.player_id] = w; });
 
-  const submitted = wellnessList.length;
-  const total     = players.length;
-  document.getElementById('lmWellSub').textContent  = `${submitted} of ${total} submitted today`;
-  document.getElementById('lmWellHead').textContent = `${submitted} of ${total} submitted`;
-
-  function getVal(obj, keys) {
-    for (const k of keys) { if (obj[k] != null) return +obj[k]; } return null;
-  }
+  // Helper
+  function getVal(obj, keys) { for (const k of keys) { if (obj?.[k] != null) return +obj[k]; } return null; }
   function avgDim(list, keys) {
     const vals = list.map(w => getVal(w, keys)).filter(v => v != null);
-    return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
   }
 
-  const dims = [
+  // Render wellness (period-independent — always today)
+  const wDims = [
     { label:'Sleep',    keys:['sleep_quality','sleep'] },
     { label:'Mood',     keys:['mood'] },
     { label:'Fatigue',  keys:['fatigue'] },
     { label:'Stress',   keys:['stress'] },
     { label:'Soreness', keys:['muscle_soreness','soreness'] }
   ];
-  const dimAvgs = dims.map(d => avgDim(wellnessList, d.keys));
-  const readVals = wellnessList.map(w => getVal(w,['readiness','overall','score','wellness_score'])).filter(v=>v!=null);
+  const dimAvgs   = wDims.map(d => avgDim(wellnessList, d.keys));
+  const readVals  = wellnessList.map(w => getVal(w, ['readiness','overall','score','wellness_score'])).filter(v => v != null);
+  const nonNullDims = dimAvgs.filter(v => v != null);
   const avgReadiness = readVals.length
     ? readVals.reduce((a,b)=>a+b,0)/readVals.length
-    : (dimAvgs.filter(v=>v!=null).length ? dimAvgs.filter(v=>v!=null).reduce((a,b)=>a+b,0)/dimAvgs.filter(v=>v!=null).length : null);
+    : (nonNullDims.length ? nonNullDims.reduce((a,b)=>a+b,0)/nonNullDims.length : null);
 
-  if (avgReadiness != null)
-    document.getElementById('lmKpiWellness').innerHTML = `${avgReadiness.toFixed(1)} <sub>/ 10</sub>`;
+  document.getElementById('lmWellSub').textContent  = `${wellnessList.length} of ${total} submitted today`;
+  document.getElementById('lmWellHead').textContent = `${wellnessList.length} of ${total} submitted`;
+  document.getElementById('lmKpiWellness').innerHTML = avgReadiness != null
+    ? `${avgReadiness.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
 
   const wellBars = document.getElementById('lmWellBars');
-  if (wellnessList.length && dimAvgs.some(v=>v!=null)) {
-    wellBars.innerHTML = dims.map((d,i) => {
+  if (wellnessList.length && dimAvgs.some(v => v != null)) {
+    wellBars.innerHTML = wDims.map((d, i) => {
       const val = dimAvgs[i];
-      if (val == null) return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"><span class="bf" style="width:0%"></span></span><span class="v">—</span></div>`;
-      const pct = Math.round(val*10);
-      const col = val>=7?'var(--cm-success)':val>=5?'var(--cm-warning)':'var(--cm-danger)';
+      if (val == null) return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"></span><span class="v">—</span></div>`;
+      const pct = Math.round(val * 10);
+      const col = val>=7 ? 'var(--cm-success)' : val>=5 ? 'var(--cm-warning)' : 'var(--cm-danger)';
       return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"><span class="bf" style="width:${pct}%;background:${col}"></span></span><span class="v">${val.toFixed(1)}<sub>/10</sub></span></div>`;
     }).join('');
-  }
-
-  // ── ACWR from RPE ───────────────────────────────────────────────
-  const playerLoadHist = {}; // pid → [{date,load,score}]
-  sessions28d.forEach(s => {
-    (s.rpe || []).forEach(r => {
-      if (!playerLoadHist[r.player_id]) playerLoadHist[r.player_id] = [];
-      playerLoadHist[r.player_id].push({ date: s.session_date, load: r.load||0, score: r.rpe||0 });
-    });
-  });
-
-  const acwrByPlayer = {};
-  Object.entries(playerLoadHist).forEach(([pid, recs]) => {
-    const acute   = recs.filter(r=>r.date>=from7d).reduce((s,r)=>s+r.load,0);
-    const chronic = recs.reduce((s,r)=>s+r.load,0)/4;
-    acwrByPlayer[pid] = chronic>0 ? +(acute/chronic).toFixed(2) : null;
-  });
-
-  const acwrVals      = Object.values(acwrByPlayer).filter(v=>v!=null);
-  const squadAvg      = acwrVals.length ? +(acwrVals.reduce((a,b)=>a+b,0)/acwrVals.length).toFixed(2) : null;
-  const dangerPlayers = players.filter(p=>(acwrByPlayer[p.id]||0)>1.5);
-  const overPlayers   = players.filter(p=>{ const v=acwrByPlayer[p.id]; return v>1.3&&v<=1.5; });
-  const sweetPlayers  = players.filter(p=>{ const v=acwrByPlayer[p.id]; return v!=null&&v>=0.8&&v<=1.3; });
-  const underPlayers  = players.filter(p=>{ const v=acwrByPlayer[p.id]; return v!=null&&v<0.8; });
-  const noDataPlayers = players.filter(p=>acwrByPlayer[p.id]==null);
-
-  // KPI: Squad avg ACWR
-  if (squadAvg != null) {
-    document.getElementById('lmKpiAcwr').innerHTML = `${squadAvg}`;
-    document.getElementById('lmAcwrPin').style.left = Math.min(95,(squadAvg/2)*100)+'%';
-    const el = document.getElementById('lmAcwrToday');
-    if (el) { el.textContent=squadAvg; el.style.color=squadAvg>1.5?'var(--cm-danger)':squadAvg>1.3?'var(--cm-warning)':'var(--cm-success)'; }
-  }
-  document.getElementById('lmKpiDanger').innerHTML = `${dangerPlayers.length} <sub>/ ${total}</sub>`;
-  ['lmPillAll','lmPillDanger','lmPillOver','lmPillSweet','lmPillUnder'].forEach((id,i)=>{
-    const el=document.getElementById(id); if(el) el.textContent=[total,dangerPlayers.length,overPlayers.length,sweetPlayers.length,underPlayers.length][i];
-  });
-
-  // KPI: Session RPE avg (latest session)
-  const latestSess = sessions28d[sessions28d.length-1];
-  if (latestSess?.rpe?.length) {
-    const scores = latestSess.rpe.map(r=>r.rpe||0).filter(v=>v>0);
-    if (scores.length) document.getElementById('lmKpiRpe').innerHTML = `${(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1)} <sub>/ 10</sub>`;
-  }
-
-  // Donut
-  if (total>0) {
-    const sp=+(sweetPlayers.length/total*100).toFixed(1), op=+(overPlayers.length/total*100).toFixed(1), dp=+(dangerPlayers.length/total*100).toFixed(1);
-    let off=25;
-    [['lmDonutSweet',sp],['lmDonutOver',op],['lmDonutDanger',dp]].forEach(([id,pct])=>{
-      const el=document.getElementById(id);
-      if(el){ el.setAttribute('stroke-dasharray',`${pct} ${(100-pct).toFixed(1)}`); el.setAttribute('stroke-dashoffset',off); }
-      off-=pct;
-    });
-    const t=document.getElementById('lmDonutTotal'); if(t) t.textContent=total;
-    document.getElementById('lmDistSweet').textContent=sweetPlayers.length;
-    document.getElementById('lmDistOver').textContent=overPlayers.length;
-    document.getElementById('lmDistDanger').textContent=dangerPlayers.length;
-    document.getElementById('lmDistNoData').textContent=noDataPlayers.length;
-    document.getElementById('lmDistSub').textContent=`today, n=${total}`;
-  }
-
-  // Alert banner
-  const banner = document.getElementById('lmAlertBanner');
-  if (dangerPlayers.length>0) {
-    banner.style.display='flex';
-    document.getElementById('lmAlertH').textContent=`${dangerPlayers.length} player${dangerPlayers.length>1?'s':''} in danger zone (ACWR > 1.5)`;
-    document.getElementById('lmAlertP').textContent=dangerPlayers.map(p=>`${p.first_name||''} ${p.last_name||''}`.trim()).join(' · ');
   } else {
-    banner.style.display='none';
+    wellBars.innerHTML = wDims.map(d =>
+      `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"></span><span class="v">—</span></div>`
+    ).join('');
   }
 
-  // ── ACWR chart ─────────────────────────────────────────────────
-  const canvas = document.getElementById('acwrChart');
-  if (canvas && sessions28d.length>1) {
-    document.getElementById('acwrSvg').style.display='none';
-    document.getElementById('acwrEmpty').style.display='none';
-    canvas.style.display='block';
-    canvas.style.width='100%'; canvas.style.height='360px';
+  // Chart.js instance (destroyed on each period change)
+  let acwrChartInstance = null;
 
-    const labels = sessions28d.map(s=>{ const d=new Date(s.session_date+'T12:00:00'); return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); });
-    const n = labels.length;
+  async function loadData(period) {
+    let chartFrom, fetchFrom;
+    if      (period === '7d')         { chartFrom = from7dStr;                         fetchFrom = from28dStr; }
+    else if (period === 'Microcycle') { chartFrom = microRow?.start_date || from7dStr; fetchFrom = from28dStr; }
+    else if (period === 'Season')     { chartFrom = seasonStart;                        fetchFrom = seasonStart; }
+    else                              { chartFrom = from28dStr;                         fetchFrom = from28dStr; } // 28d
 
-    // Per-session squad avg ACWR (rolling to each session date)
-    const acwrTrend = sessions28d.map(sess=>{
-      const d7=new Date(new Date(sess.session_date+'T12:00:00')-7*86400000).toISOString().split('T')[0];
-      const playerAcwrs=Object.entries(playerLoadHist).map(([pid,recs])=>{
-        const acute=recs.filter(r=>r.date<=sess.session_date&&r.date>d7).reduce((s,r)=>s+r.load,0);
-        const chronic=recs.filter(r=>r.date<=sess.session_date).reduce((s,r)=>s+r.load,0)/4;
-        return chronic>0?acute/chronic:null;
-      }).filter(v=>v!=null);
-      return playerAcwrs.length?+(playerAcwrs.reduce((a,b)=>a+b,0)/playerAcwrs.length).toFixed(2):null;
+    const sessRes = await window.sb.from('training_sessions')
+      .select('id,session_date,rpe(player_id,rpe,duration,load)')
+      .eq('club_id', clubId)
+      .gte('session_date', fetchFrom)
+      .order('session_date')
+      .catch(() => ({ data: [] }));
+    const sessionsData = sessRes.data || [];
+
+    // Build per-player load history
+    const playerLoadHist = {};
+    sessionsData.forEach(s => {
+      (s.rpe || []).forEach(r => {
+        if (!playerLoadHist[r.player_id]) playerLoadHist[r.player_id] = [];
+        playerLoadHist[r.player_id].push({ date: s.session_date, load: r.load||0, score: r.rpe||0 });
+      });
     });
 
-    const sessionLoads=sessions28d.map(s=>(s.rpe||[]).reduce((sum,r)=>sum+(r.load||0),0));
-    const maxLoad=Math.max(...sessionLoads,1);
-    const accent=getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim()||'#22c55e';
+    // ACWR per player — acute = last 7d, chronic = last 28d / 4
+    const acwrByPlayer = {};
+    Object.entries(playerLoadHist).forEach(([pid, recs]) => {
+      const recs28  = recs.filter(r => r.date >= from28dStr);
+      const acute   = recs28.filter(r => r.date >= from7dStr).reduce((s,r) => s+r.load, 0);
+      const chronic = recs28.reduce((s,r) => s+r.load, 0) / 4;
+      acwrByPlayer[pid] = chronic > 0 ? +(acute/chronic).toFixed(2) : null;
+    });
 
-    new Chart(canvas,{
-      data:{
-        labels,
-        datasets:[
-          {type:'line',data:Array(n).fill(1.5),borderColor:'rgba(220,38,38,0.45)',borderDash:[4,3],borderWidth:1.5,pointRadius:0,yAxisID:'y',order:4},
-          {type:'line',data:Array(n).fill(1.3),borderColor:'rgba(217,119,6,0.35)',borderDash:[3,3],borderWidth:1,pointRadius:0,yAxisID:'y',order:4},
-          {type:'line',data:Array(n).fill(0.8),borderColor:'rgba(34,197,94,0.35)',borderDash:[3,3],borderWidth:1,pointRadius:0,yAxisID:'y',order:4},
-          {type:'bar',label:'Session load',data:sessionLoads,backgroundColor:'rgba(34,197,94,0.12)',borderColor:'rgba(34,197,94,0.2)',borderWidth:1,borderRadius:2,yAxisID:'y2',order:5},
-          {type:'line',label:'Squad avg ACWR',data:acwrTrend,borderColor:accent,backgroundColor:'rgba(34,197,94,0.07)',borderWidth:2.5,pointRadius:3.5,pointHoverRadius:6,pointBackgroundColor:accent,pointBorderColor:'#fff',pointBorderWidth:1.5,tension:0.3,fill:true,spanGaps:true,yAxisID:'y',order:1}
-        ]
-      },
-      options:{
-        responsive:true,maintainAspectRatio:false,
-        interaction:{mode:'index',intersect:false},
-        plugins:{legend:{display:false}},
-        scales:{
-          y:{min:0,max:2.2,position:'left',grid:{color:'rgba(128,128,128,0.1)'},ticks:{color:'rgba(128,128,128,0.65)',font:{size:11},callback:v=>v.toFixed(1)},title:{display:true,text:'ACWR',color:'rgba(128,128,128,0.5)',font:{size:10}}},
-          y2:{position:'right',grid:{display:false},max:maxLoad*3,ticks:{color:'rgba(128,128,128,0.45)',font:{size:10}},title:{display:true,text:'Load (AU)',color:'rgba(128,128,128,0.4)',font:{size:10}}},
-          x:{grid:{color:'rgba(128,128,128,0.08)'},ticks:{color:'rgba(128,128,128,0.65)',font:{size:10},maxTicksLimit:12}}
+    const acwrVals      = Object.values(acwrByPlayer).filter(v => v != null);
+    const squadAvg      = acwrVals.length ? +(acwrVals.reduce((a,b)=>a+b,0)/acwrVals.length).toFixed(2) : null;
+    const dangerPlayers = players.filter(p => (acwrByPlayer[p.id]||0) > 1.5);
+    const overPlayers   = players.filter(p => { const v=acwrByPlayer[p.id]; return v>1.3&&v<=1.5; });
+    const sweetPlayers  = players.filter(p => { const v=acwrByPlayer[p.id]; return v!=null&&v>=0.8&&v<=1.3; });
+    const underPlayers  = players.filter(p => { const v=acwrByPlayer[p.id]; return v!=null&&v<0.8; });
+    const noDataPlayers = players.filter(p => acwrByPlayer[p.id] == null);
+
+    // KPI: Squad avg ACWR
+    if (squadAvg != null) {
+      document.getElementById('lmKpiAcwr').textContent = squadAvg;
+      document.getElementById('lmAcwrPin').style.left  = Math.min(95, (squadAvg/2)*100) + '%';
+      const el = document.getElementById('lmAcwrToday');
+      if (el) { el.textContent = squadAvg; el.style.color = squadAvg>1.5?'var(--cm-danger)':squadAvg>1.3?'var(--cm-warning)':'var(--cm-success)'; }
+    } else {
+      document.getElementById('lmKpiAcwr').textContent = '—';
+    }
+
+    // KPI: Danger count
+    document.getElementById('lmKpiDanger').innerHTML = `${dangerPlayers.length} <sub>/ ${total}</sub>`;
+
+    // KPI: Session RPE avg (latest session) + today submission count
+    const todaySessions = sessionsData.filter(s => s.session_date === todayStr);
+    const rpeTodaySet   = new Set(todaySessions.flatMap(s => (s.rpe||[]).map(r => r.player_id)));
+    document.getElementById('lmRpeSub').textContent = `${rpeTodaySet.size} of ${total} submitted today`;
+
+    const latestSess   = sessionsData[sessionsData.length - 1];
+    const latestRpeMap = {};
+    if (latestSess?.rpe) latestSess.rpe.forEach(r => { latestRpeMap[r.player_id] = r.rpe; });
+    if (latestSess?.rpe?.length) {
+      const scores = latestSess.rpe.map(r => r.rpe||0).filter(v => v > 0);
+      if (scores.length) document.getElementById('lmKpiRpe').innerHTML = `${(scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1)} <sub>/ 10</sub>`;
+    } else {
+      document.getElementById('lmKpiRpe').innerHTML = `— <sub>/ 10</sub>`;
+    }
+
+    // Filter pills
+    ['lmPillAll','lmPillDanger','lmPillOver','lmPillSweet','lmPillUnder'].forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = [total, dangerPlayers.length, overPlayers.length, sweetPlayers.length, underPlayers.length][i];
+    });
+
+    // Alert banner — danger + overreach with real names
+    const banner = document.getElementById('lmAlertBanner');
+    if (dangerPlayers.length > 0 || overPlayers.length > 0) {
+      const parts = [];
+      if (dangerPlayers.length > 0) parts.push(`${dangerPlayers.length} in danger`);
+      if (overPlayers.length > 0)   parts.push(`${overPlayers.length} in overreach`);
+      document.getElementById('lmAlertH').textContent = parts.join(' · ') + ' zone';
+      const allAt = [...dangerPlayers, ...overPlayers];
+      document.getElementById('lmAlertP').textContent = allAt.map(p => `${p.first_name||''} ${p.last_name||''}`.trim()).join(' · ');
+      banner.style.display = 'flex';
+    } else {
+      banner.style.display = 'none';
+    }
+
+    // ACWR distribution donut
+    if (total > 0) {
+      const sp = +(sweetPlayers.length/total*100).toFixed(1);
+      const op = +(overPlayers.length/total*100).toFixed(1);
+      const dp = +(dangerPlayers.length/total*100).toFixed(1);
+      let off  = 25;
+      [['lmDonutSweet',sp],['lmDonutOver',op],['lmDonutDanger',dp]].forEach(([id, pct]) => {
+        const el = document.getElementById(id);
+        if (el) { el.setAttribute('stroke-dasharray', `${pct} ${(100-pct).toFixed(1)}`); el.setAttribute('stroke-dashoffset', off); }
+        off -= pct;
+      });
+      const t = document.getElementById('lmDonutTotal'); if (t) t.textContent = total;
+      document.getElementById('lmDistSweet').textContent  = sweetPlayers.length;
+      document.getElementById('lmDistOver').textContent   = overPlayers.length;
+      document.getElementById('lmDistDanger').textContent = dangerPlayers.length;
+      document.getElementById('lmDistNoData').textContent = noDataPlayers.length;
+      document.getElementById('lmDistSub').textContent    = `today, n=${total}`;
+    }
+
+    // Header context
+    const ctxEl = document.getElementById('lmCtx');
+    if (ctxEl) {
+      const alertCount = dangerPlayers.length + overPlayers.length;
+      const alertStr   = alertCount > 0 ? ` · ${alertCount} alert${alertCount>1?'s':''}` : '';
+      ctxEl.innerHTML  = `<strong>${period}</strong>${alertStr} · ${total} players`;
+    }
+
+    // ACWR chart
+    const canvas  = document.getElementById('acwrChart');
+    const svgEl   = document.getElementById('acwrSvg');
+    const emptyEl = document.getElementById('acwrEmpty');
+    if (acwrChartInstance) { acwrChartInstance.destroy(); acwrChartInstance = null; }
+
+    const sessForChart = sessionsData.filter(s => s.session_date >= chartFrom);
+    if (sessForChart.length > 0) {
+      svgEl.style.display   = 'none';
+      emptyEl.style.display = 'none';
+      canvas.style.display  = 'block';
+
+      const labels = sessForChart.map(s => {
+        const d = new Date(s.session_date + 'T12:00:00');
+        return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+      });
+      const n = labels.length;
+
+      const acwrTrend = sessForChart.map(sess => {
+        const d7  = new Date(new Date(sess.session_date+'T12:00:00') - 7*86400000).toISOString().split('T')[0];
+        const vals = Object.entries(playerLoadHist).map(([, recs]) => {
+          const acute   = recs.filter(r => r.date <= sess.session_date && r.date > d7).reduce((s,r) => s+r.load, 0);
+          const chronic = recs.filter(r => r.date <= sess.session_date).reduce((s,r) => s+r.load, 0) / 4;
+          return chronic > 0 ? acute/chronic : null;
+        }).filter(v => v != null);
+        return vals.length ? +(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : null;
+      });
+
+      const sessionLoads = sessForChart.map(s => (s.rpe||[]).reduce((sum,r) => sum+(r.load||0), 0));
+      const maxLoad      = Math.max(...sessionLoads, 1);
+      const accent       = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
+
+      acwrChartInstance = new Chart(canvas, {
+        data: {
+          labels,
+          datasets: [
+            { type:'line', data:Array(n).fill(1.5), borderColor:'rgba(220,38,38,0.45)', borderDash:[4,3], borderWidth:1.5, pointRadius:0, yAxisID:'y', order:4 },
+            { type:'line', data:Array(n).fill(1.3), borderColor:'rgba(217,119,6,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
+            { type:'line', data:Array(n).fill(0.8), borderColor:'rgba(34,197,94,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
+            { type:'bar',  label:'Session load',    data:sessionLoads, backgroundColor:'rgba(34,197,94,0.12)', borderColor:'rgba(34,197,94,0.2)', borderWidth:1, borderRadius:2, yAxisID:'y2', order:5 },
+            { type:'line', label:'Squad avg ACWR',  data:acwrTrend, borderColor:accent, backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2.5, pointRadius:3.5, pointHoverRadius:6, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5, tension:0.3, fill:true, spanGaps:true, yAxisID:'y', order:1 }
+          ]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          interaction: { mode:'index', intersect:false },
+          plugins:     { legend: { display:false } },
+          scales: {
+            y:  { min:0, max:2.2, position:'left',  grid:{ color:'rgba(128,128,128,0.1)' },  ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:11 }, callback: v => v.toFixed(1) }, title:{ display:true, text:'ACWR',      color:'rgba(128,128,128,0.5)', font:{ size:10 } } },
+            y2: { position:'right', grid:{ display:false }, max:maxLoad*3, ticks:{ color:'rgba(128,128,128,0.45)', font:{ size:10 } }, title:{ display:true, text:'Load (AU)', color:'rgba(128,128,128,0.4)', font:{ size:10 } } },
+            x:  { grid:{ color:'rgba(128,128,128,0.08)' }, ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:10 }, maxTicksLimit:12 } }
+          }
         }
-      }
-    });
-  } else if (canvas && sessions28d.length===0) {
-    document.getElementById('acwrSvg').style.display='none';
-    document.getElementById('acwrEmpty').style.display='flex';
-  }
+      });
+    } else {
+      svgEl.style.display   = 'none';
+      emptyEl.style.display = 'flex';
+      canvas.style.display  = 'none';
+    }
 
-  // ── Player table ───────────────────────────────────────────────
-  const POS_CSS={GK:'gk',CB:'cb',LB:'fb',RB:'fb',FB:'fb',MF:'mf',DM:'mf',CM:'mf',WG:'wg',ST:'st',CF:'st'};
-  function normPos(p){return p?(POS_CSS[p.toUpperCase()]?p.toUpperCase():'MF'):'MF';}
-  function playerReadiness(w){
-    if(!w)return null;
-    let v=getVal(w,['readiness','overall','score','wellness_score']);
-    if(v!=null)return v;
-    const d2=[['sleep_quality','sleep'],['mood'],['fatigue'],['stress'],['muscle_soreness','soreness']];
-    const vs=d2.map(ks=>getVal(w,ks)).filter(v=>v!=null);
-    return vs.length?vs.reduce((a,b)=>a+b,0)/vs.length:null;
-  }
-
-  const latestRpeMap={};
-  if(latestSess?.rpe) latestSess.rpe.forEach(r=>{latestRpeMap[r.player_id]=r.rpe;});
-
-  if(players.length){
-    const sorted=[...players].sort((a,b)=>{
-      const wa=playerReadiness(wellMap[a.id]),wb=playerReadiness(wellMap[b.id]);
-      if(wa==null&&wb==null)return 0; if(wa==null)return 1; if(wb==null)return -1; return wb-wa;
+    // Player load table — sorted by ACWR desc (danger first)
+    const POS_CSS = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', FB:'fb', MF:'mf', DM:'mf', CM:'mf', WG:'wg', ST:'st', CF:'st' };
+    const sorted  = [...players].sort((a, b) => {
+      const aa = acwrByPlayer[a.id], ab = acwrByPlayer[b.id];
+      if (aa == null && ab == null) return 0;
+      if (aa == null) return 1; if (ab == null) return -1;
+      return ab - aa;
     });
 
-    document.getElementById('lmTbody').innerHTML=sorted.map(p=>{
-      const pos=normPos(p.position),posCss=POS_CSS[pos]||'mf';
-      const fullName=((p.first_name||'')+' '+(p.last_name||'')).trim();
-      const av=(((p.first_name||'')[0]||'')+((p.last_name||'')[0]||'')).toUpperCase()||'?';
-      const well=playerReadiness(wellMap[p.id]);
-      const acwr=acwrByPlayer[p.id];
-      const rpeScore=latestRpeMap[p.id];
+    document.getElementById('lmTbody').innerHTML = sorted.map(p => {
+      const pos      = p.position ? (POS_CSS[p.position.toUpperCase()] ? p.position.toUpperCase() : 'MF') : 'MF';
+      const posCss   = POS_CSS[pos] || 'mf';
+      const fullName = ((p.first_name||'') + ' ' + (p.last_name||'')).trim();
+      const av       = (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() || '?';
+      const w        = wellMap[p.id];
+      const well     = (() => {
+        if (!w) return null;
+        let v = getVal(w, ['readiness','overall','score','wellness_score']);
+        if (v != null) return v;
+        const vs = [['sleep_quality','sleep'],['mood'],['fatigue'],['stress'],['muscle_soreness','soreness']]
+          .map(ks => getVal(w, ks)).filter(v => v != null);
+        return vs.length ? vs.reduce((a,b)=>a+b,0)/vs.length : null;
+      })();
+      const acwr      = acwrByPlayer[p.id];
+      const rpeScore  = latestRpeMap[p.id];
+      const hist      = playerLoadHist[p.id] || [];
+      const acuteLoad = hist.filter(r => r.date >= from7dStr).reduce((s,r) => s+r.load, 0);
+      const chronicLoad = hist.length ? +(hist.reduce((s,r)=>s+r.load,0)/4).toFixed(0) : null;
 
-      const hist=playerLoadHist[p.id]||[];
-      const acuteLoad=hist.filter(r=>r.date>=from7d).reduce((s,r)=>s+r.load,0);
-      const chronicLoad=hist.length?+(hist.reduce((s,r)=>s+r.load,0)/4).toFixed(0):null;
-
-      const cellAcwr=acwr!=null
-        ?`<td><div class="lm-cell"><span class="lm-cell-v ${acwr>1.5?'danger':acwr>1.3?'warn':acwr>=0.8?'good':''}">${acwr}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${acwr>1.5?'red':acwr>1.3?'amber':'green'}" style="width:${Math.min(100,Math.round(acwr/2*100))}%"></span></div></div></td>`
-        :`<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
-      const cellRpe=rpeScore!=null
-        ?`<td><div class="lm-cell"><span class="lm-cell-v ${rpeScore>=8?'danger':rpeScore>=6?'warn':'good'}">${rpeScore}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${rpeScore>=8?'red':rpeScore>=6?'amber':'green'}" style="width:${Math.round(rpeScore*10)}%"></span></div></div></td>`
-        :`<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
-      const cellWell=well!=null
-        ?`<td><div class="lm-cell"><span class="lm-cell-v ${well>=7?'good':well>=5?'warn':'danger'}">${well.toFixed(1)}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${well>=7?'green':well>=5?'amber':'red'}" style="width:${Math.round(well*10)}%"></span></div></div></td>`
-        :`<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
-      const cellAC=hist.length
-        ?`<td><span class="lm-cell-v" style="font:500 12px/1 var(--cm-font-mono)">${Math.round(acuteLoad)} / ${chronicLoad}</span></td>`
-        :`<td><span class="lm-cell-v" style="color:var(--cm-fg-faint)">— / —</span></td>`;
-      const zonePill=acwr!=null
-        ?(acwr>1.5?`<span class="lm-zone-pill red"><span class="d"></span>Danger</span>`
-          :acwr>1.3?`<span class="lm-zone-pill over"><span class="d"></span>Overreach</span>`
-          :acwr>=0.8?`<span class="lm-zone-pill opt"><span class="d"></span>Sweet‑spot</span>`
-          :`<span class="lm-zone-pill under"><span class="d"></span>Underloaded</span>`)
-        :`<span class="lm-zone-pill under"><span class="d"></span>No data</span>`;
+      const cellAcwr = acwr != null
+        ? `<td><div class="lm-cell"><span class="lm-cell-v ${acwr>1.5?'danger':acwr>1.3?'warn':acwr>=0.8?'good':''}">${acwr}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${acwr>1.5?'red':acwr>1.3?'amber':'green'}" style="width:${Math.min(100,Math.round(acwr/2*100))}%"></span></div></div></td>`
+        : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
+      const cellRpe = rpeScore != null
+        ? `<td><div class="lm-cell"><span class="lm-cell-v ${rpeScore>=8?'danger':rpeScore>=6?'warn':'good'}">${rpeScore}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${rpeScore>=8?'red':rpeScore>=6?'amber':'green'}" style="width:${Math.round(rpeScore*10)}%"></span></div></div></td>`
+        : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
+      const cellWell = well != null
+        ? `<td><div class="lm-cell"><span class="lm-cell-v ${well>=7?'good':well>=5?'warn':'danger'}">${well.toFixed(1)}</span><div class="lm-cell-bar"><span class="lm-cell-fill ${well>=7?'green':well>=5?'amber':'red'}" style="width:${Math.round(well*10)}%"></span></div></div></td>`
+        : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
+      const cellAC = hist.length
+        ? `<td><span class="lm-cell-v" style="font:500 12px/1 var(--cm-font-mono)">${Math.round(acuteLoad)} / ${chronicLoad}</span></td>`
+        : `<td><span class="lm-cell-v" style="color:var(--cm-fg-faint)">— / —</span></td>`;
+      const zonePill = acwr != null
+        ? (acwr>1.5 ? `<span class="lm-zone-pill red"><span class="d"></span>Danger</span>`
+          : acwr>1.3 ? `<span class="lm-zone-pill over"><span class="d"></span>Overreach</span>`
+          : acwr>=0.8 ? `<span class="lm-zone-pill opt"><span class="d"></span>Sweet‑spot</span>`
+          : `<span class="lm-zone-pill under"><span class="d"></span>Underloaded</span>`)
+        : `<span class="lm-zone-pill under"><span class="d"></span>No data</span>`;
 
       return `<tr>
         <td><span style="font:600 13px/1 var(--cm-font-mono)">${p.number??'—'}</span></td>
@@ -925,9 +991,20 @@
       </tr>`;
     }).join('');
 
-    document.getElementById('lmPlayerLoadSub').textContent=`${total} players · sorted by ACWR ↓`;
-    document.getElementById('lmTableFoot').innerHTML=`Showing <strong style="color:var(--cm-fg)">${total}</strong> of ${total} players`;
+    document.getElementById('lmPlayerLoadSub').textContent = `${total} players · sorted by ACWR ↓`;
+    document.getElementById('lmTableFoot').innerHTML = `Showing <strong style="color:var(--cm-fg)">${total}</strong> of ${total} players`;
   }
+
+  // Period buttons → recalculate all widgets
+  document.querySelectorAll('.lm-segs .lm-seg').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.lm-segs .lm-seg').forEach(b => b.classList.remove('is-on'));
+      btn.classList.add('is-on');
+      await loadData(btn.textContent.trim());
+    });
+  });
+
+  await loadData('28d');
 })().catch(console.error);
 </script>
 
@@ -940,15 +1017,6 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 
 <script>
-  // Period segments
-  document.querySelectorAll('.lm-segs').forEach(group => {
-    group.querySelectorAll('.lm-seg').forEach(s => {
-      s.addEventListener('click', () => {
-        group.querySelectorAll('.lm-seg').forEach(o => o.classList.remove('is-on'));
-        s.classList.add('is-on');
-      });
-    });
-  });
   // Filter pills (single-select within their pill row)
   document.querySelectorAll('.lm-tablebar').forEach(bar => {
     // Split into 2 logical groups by .grow
