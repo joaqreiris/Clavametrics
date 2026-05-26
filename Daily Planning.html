@@ -89,6 +89,9 @@
   .dp-player.partial .num{background:var(--cm-warning);color:#fff}
   .dp-player .reason{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-danger);padding-right:6px}
   .dp-player.partial .reason{color:#7C2D12}
+  .dp-player.away{background:#eff6ff;border-color:#bfdbfe;color:#1e40af}
+  .dp-player.away .num{background:#3b82f6;color:#fff}
+  .dp-player.away .reason{color:#1e40af}
 
   /* Group rows */
   .dp-pl-group{display:flex;align-items:center;gap:8px;margin:6px 0 8px}
@@ -198,6 +201,8 @@
     .dp-player.unavailable .num{ background:#999 !important }
     .dp-player.partial{ background:#fff4e0 !important; border-color:#d97706 !important; color:#7c2d12 !important }
     .dp-player.partial .num{ background:#d97706 !important }
+    .dp-player.away{ background:#eff6ff !important; border-color:#bfdbfe !important; color:#1e40af !important }
+    .dp-player.away .num{ background:#3b82f6 !important }
     .dp-player.partial .pos{ background:#7c2d12 !important }
     .dp-squad-summary{ padding:5px 10px; font-size:10px; background:#f8f8f8; border-top:1px solid #ddd }
     .dp-squad-summary .sep{ height:12px }
@@ -329,10 +334,11 @@
           </div>
         </div>
         <div class="dp-squad-h">
-          <button class="dp-squad-pill is-on">All <span class="ct">—</span></button>
-          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">—</span></button>
-          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">—</span></button>
-          <button class="dp-squad-pill"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">—</span></button>
+          <button class="dp-squad-pill is-on" data-filter="all">All <span class="ct">—</span></button>
+          <button class="dp-squad-pill" data-filter="available"><span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">—</span></button>
+          <button class="dp-squad-pill" data-filter="partial"><span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">—</span></button>
+          <button class="dp-squad-pill" data-filter="unavailable"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">—</span></button>
+          <button class="dp-squad-pill" data-filter="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away <span class="ct">—</span></button>
         </div>
         <div class="dp-card-b" id="dpSquadBody" style="padding:14px 16px 4px">
           <!-- Populated by loadDay() -->
@@ -522,9 +528,10 @@ async function loadDay(dateStr) {
     const num = p.number ?? '—';
     let cls = '', reason = '';
     if (inj) { cls = 'partial'; reason = inj.body_area || inj.injury_type || 'inj'; }
-    if (av?.status === 'un' || av?.status === 'unavailable') { cls = 'unavailable'; reason = av.notes || 'out'; }
-    else if (av?.status === 'pa' || av?.status === 'partial') { if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; } }
-    return `<span class="dp-player${cls ? ' '+cls : ''}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}</span>`;
+    if (av?.status === 'away') { cls = 'away'; reason = av.notes || 'away'; }
+    else if (av?.status === 'un' || av?.status === 'unavailable') { cls = 'unavailable'; reason = av.notes || 'out'; }
+    else if (av?.status === 'pa' || av?.status === 'partial' || av?.status === 'limited') { if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; } }
+    return `<span class="dp-player${cls ? ' '+cls : ''}" data-status="${cls||'available'}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}</span>`;
   }
 
   const groups = {};
@@ -540,25 +547,30 @@ async function loadDay(dateStr) {
       `<div class="dp-pl-group"><span class="l">${lbl}</span><span class="l-line"></span></div><div class="dp-players">${list.map(chip).join('')}</div>`
     ).join('');
 
-  let avCt = 0, partCt = 0, unCt = 0;
+  let avCt = 0, partCt = 0, unCt = 0, awayCt = 0;
   _dpPlayers.forEach(p => {
     const av = avMap[p.id], inj = _dpInjMap[p.id];
-    if (av?.status === 'un' || av?.status === 'unavailable') unCt++;
-    else if (inj || av?.status === 'pa' || av?.status === 'partial') partCt++;
+    if (av?.status === 'away') awayCt++;
+    else if (av?.status === 'un' || av?.status === 'unavailable') unCt++;
+    else if (inj || av?.status === 'pa' || av?.status === 'partial' || av?.status === 'limited') partCt++;
     else avCt++;
   });
   const total = _dpPlayers.length;
 
   document.getElementById('dpSquadCt').textContent = `${avCt + partCt} of ${total}`;
+
+  const awayNotes = _dpPlayers.filter(p => avMap[p.id]?.status === 'away' && avMap[p.id]?.notes).map(p => avMap[p.id].notes);
+  const awayDesc = awayNotes.length ? ` (${[...new Set(awayNotes)].join(' + ')})` : '';
   document.getElementById('dpSquadSummary').innerHTML =
-    `<span><strong>${avCt + partCt}</strong> of ${total} available</span><span class="sep"></span><span><strong style="color:var(--cm-warning)">${partCt}</strong> partial</span><span class="sep"></span><span><strong style="color:var(--cm-danger)">${unCt}</strong> out</span>`;
+    `<span><strong>${avCt + partCt}</strong> of ${total} available</span><span class="sep"></span><span><strong style="color:var(--cm-warning)">${partCt}</strong> partial</span><span class="sep"></span><span><strong style="color:var(--cm-danger)">${unCt}</strong> out</span><span class="sep"></span><span><strong style="color:var(--cm-info,#3b82f6)">${awayCt}</strong> away${awayDesc}</span>`;
 
   document.querySelectorAll('.dp-squad-pill').forEach(p => {
-    const t = p.textContent.trim();
-    if (t.startsWith('All')) p.innerHTML = `All <span class="ct">${total}</span>`;
-    else if (t.includes('Available')) p.innerHTML = `<span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">${avCt}</span>`;
-    else if (t.includes('Partial')) p.innerHTML = `<span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">${partCt}</span>`;
-    else if (t.includes('Unavailable')) p.innerHTML = `<span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">${unCt}</span>`;
+    const f = p.dataset.filter;
+    if (f === 'all') p.innerHTML = `All <span class="ct">${total}</span>`;
+    else if (f === 'available') p.innerHTML = `<span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">${avCt}</span>`;
+    else if (f === 'partial') p.innerHTML = `<span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">${partCt}</span>`;
+    else if (f === 'unavailable') p.innerHTML = `<span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">${unCt}</span>`;
+    else if (f === 'away') p.innerHTML = `<span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away <span class="ct">${awayCt}</span>`;
   });
 
   const withAdapt = (adaptRes.data || []).filter(t => t.adaptation || t.coach_adaptation || t.has_adaptation);
@@ -858,13 +870,14 @@ async function dpCreateSession() {
 // ── Print Roster ──
 function dpPrintRoster() {
   const POS_DISP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', DM:'DM', CM:'MF', MF:'MF', WG:'WG', ST:'ST', CF:'CF' };
-  const statusLabel = { available:'Available', partial:'Partial', unavailable:'Out', limited:'Partial' };
+  const statusLabel = { available:'Available', partial:'Partial', limited:'Partial', unavailable:'Out', away:'Away' };
   const rows = _dpPlayers.map(p => {
     const av  = _dpAvMap[p.id];
     const inj = _dpInjMap[p.id];
     let status = 'Available';
-    if (av?.status === 'un' || av?.status === 'unavailable') status = 'Out';
-    else if (inj || av?.status === 'pa' || av?.status === 'partial') status = 'Partial';
+    if (av?.status === 'away') status = 'Away';
+    else if (av?.status === 'un' || av?.status === 'unavailable') status = 'Out';
+    else if (inj || av?.status === 'pa' || av?.status === 'partial' || av?.status === 'limited') status = 'Partial';
     const pos = POS_DISP[(p.position||'').toUpperCase()] || (p.position||'—').toUpperCase();
     return `<tr><td>${p.number ?? '—'}</td><td>${p.first_name || ''} ${p.last_name || ''}</td><td>${pos}</td><td>${status}</td></tr>`;
   }).join('');
@@ -1034,6 +1047,10 @@ async function dpExportPDF() {
   document.querySelectorAll('.dp-squad-pill').forEach(p => p.addEventListener('click', () => {
     document.querySelectorAll('.dp-squad-pill').forEach(o => o.classList.remove('is-on'));
     p.classList.add('is-on');
+    const f = p.dataset.filter;
+    document.querySelectorAll('#dpSquadBody .dp-player').forEach(el => {
+      el.style.display = (f === 'all' || el.dataset.status === f) ? '' : 'none';
+    });
   }));
 </script>
 </body>
