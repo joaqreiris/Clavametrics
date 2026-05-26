@@ -240,6 +240,14 @@
   .dm-picker-close { background:none; border:none; color:var(--cm-fg-muted); font-size:18px; cursor:pointer; line-height:1; }
   .dm-picker-search { margin:10px 12px; padding:7px 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; color:var(--cm-fg); font:var(--cm-body-sm); outline:none; width:calc(100% - 24px); }
   .dm-picker-list { flex:1; overflow-y:auto; padding:4px 8px 10px; }
+
+  .cr-section-head { display:flex; align-items:center; gap:6px; }
+  .cr-section-head h4 { margin:0; }
+  .cr-head-btn { background:none; border:none; color:var(--cm-fg-muted); cursor:pointer; padding:3px 5px; border-radius:5px; display:flex; align-items:center; justify-content:center; }
+  .cr-head-btn:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .cr-unpin { background:none; border:none; color:var(--cm-fg-faint); cursor:pointer; padding:2px 4px; border-radius:4px; display:none; align-items:center; justify-content:center; flex-shrink:0; }
+  .cr-file:hover .cr-unpin { display:flex; }
+  .cr-unpin:hover { color:var(--cm-danger); background:var(--cm-danger-bg); }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
@@ -307,19 +315,45 @@
 
         <aside class="chat-right">
           <div class="cr-section">
-            <h4>About</h4>
-            <div style="font:500 12.5px/1.45 var(--cm-font-sans); color:var(--cm-fg-muted)">Performance &amp; technical staff for the first team. MC plans, load reports, daily decisions.</div>
+            <div class="cr-section-head">
+              <h4>About</h4>
+              <button id="chatAboutEditBtn" class="cr-head-btn" style="display:none" onclick="startEditAbout()" title="Edit description"><i class="ti ti-pencil" style="font-size:11px"></i></button>
+            </div>
+            <div id="chatAboutText" style="font:500 12.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
+            <div id="chatAboutEditArea" style="display:none;flex-direction:column;gap:6px;margin-top:6px">
+              <textarea id="chatAboutInput" rows="3" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;resize:vertical"></textarea>
+              <div style="display:flex;gap:6px;justify-content:flex-end">
+                <button class="cm-btn is-outline is-sm" onclick="cancelEditAbout()">Cancel</button>
+                <button class="cm-btn is-primary is-sm" onclick="saveAbout()">Save</button>
+              </div>
+            </div>
           </div>
           <div class="cr-section">
             <h4 id="chatRightMembersTitle">Members</h4>
             <div id="chatRightMembers"></div>
           </div>
           <div class="cr-section">
-            <h4>Pinned files · 4</h4>
-            <div class="cr-file"><div class="ic" style="color:var(--cm-danger)"><i class="ti ti-file-type-pdf"></i></div><div class="body"><div class="t">MC13_LoadReport.pdf</div><div class="s">1.4 MB · 12 min ago</div></div></div>
-            <div class="cr-file"><div class="ic" style="color:var(--cm-info)"><i class="ti ti-clipboard-list"></i></div><div class="body"><div class="t">MC 14 · Day 3 session</div><div class="s">Planner · 2 h ago</div></div></div>
-            <div class="cr-file"><div class="ic" style="color:var(--cm-success)"><i class="ti ti-file-spreadsheet"></i></div><div class="body"><div class="t">Velez_GPS_export.xlsx</div><div class="s">StatSports · Wed</div></div></div>
-            <div class="cr-file"><div class="ic" style="color:var(--cm-violet)"><i class="ti ti-video"></i></div><div class="body"><div class="t">Set-piece clips · 2024-2026</div><div class="s">Hudl · Tue</div></div></div>
+            <div class="cr-section-head">
+              <h4 id="pinnedFilesTitle">Pinned files</h4>
+              <button class="cr-head-btn" onclick="openPinFileForm()" title="Pin a file"><i class="ti ti-plus" style="font-size:11px"></i></button>
+            </div>
+            <div id="pinFileForm" style="display:none;flex-direction:column;gap:6px;margin-top:4px">
+              <input type="text" id="pinFileUrl" placeholder="File URL or link…" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+              <input type="text" id="pinFileName" placeholder="File name…" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+              <select id="pinFileType" style="width:100%;padding:6px 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+                <option value="">Type (optional)</option>
+                <option value="pdf">PDF</option>
+                <option value="image">Image</option>
+                <option value="spreadsheet">Spreadsheet</option>
+                <option value="video">Video</option>
+                <option value="other">Other</option>
+              </select>
+              <div style="display:flex;gap:6px;justify-content:flex-end">
+                <button class="cm-btn is-outline is-sm" onclick="closePinFileForm()">Cancel</button>
+                <button class="cm-btn is-primary is-sm" onclick="savePinFile()">Pin</button>
+              </div>
+            </div>
+            <div id="pinnedFilesContainer"></div>
           </div>
           <div class="cr-section">
             <h4 id="chatRightTasksTitle">Open tasks</h4>
@@ -474,6 +508,7 @@ let allTasks    = [];
 let messages    = [];
 let members     = [];
 let activeConv  = 'group';
+let pinnedFiles = [];
 let dmLastMsg   = {};
 let dmUnread    = {};
 const renderedIds = new Set();
@@ -523,6 +558,123 @@ document.querySelectorAll('.ct-tabs .ct-tab').forEach(b => b.addEventListener('c
   document.querySelectorAll('.ct-view').forEach(s => s.style.display = s.dataset.view === v ? '' : 'none');
 }));
 
+// ── ABOUT ──
+async function loadAbout() {
+  const { data } = await window.sb.from('clubs')
+    .select('description').eq('id', currentUser.clubId).single();
+  const text = data?.description || '';
+  const el = document.getElementById('chatAboutText');
+  if (el) el.textContent = text || 'No description yet.';
+  const editBtn = document.getElementById('chatAboutEditBtn');
+  if (editBtn && ['admin','owner'].includes(currentUser?.role)) editBtn.style.display = '';
+}
+
+function startEditAbout() {
+  const text = document.getElementById('chatAboutText').textContent;
+  const inp = document.getElementById('chatAboutInput');
+  if (inp) inp.value = text === 'No description yet.' ? '' : text;
+  document.getElementById('chatAboutText').style.display = 'none';
+  const editBtn = document.getElementById('chatAboutEditBtn');
+  if (editBtn) editBtn.style.display = 'none';
+  const area = document.getElementById('chatAboutEditArea');
+  if (area) area.style.display = 'flex';
+  if (inp) inp.focus();
+}
+
+function cancelEditAbout() {
+  document.getElementById('chatAboutText').style.display = '';
+  const editBtn = document.getElementById('chatAboutEditBtn');
+  if (editBtn && ['admin','owner'].includes(currentUser?.role)) editBtn.style.display = '';
+  const area = document.getElementById('chatAboutEditArea');
+  if (area) area.style.display = 'none';
+}
+
+async function saveAbout() {
+  const text = (document.getElementById('chatAboutInput').value || '').trim();
+  const { error } = await window.sb.from('clubs')
+    .update({ description: text }).eq('id', currentUser.clubId);
+  if (error) { console.error('About save error:', error); alert('Error saving description: ' + error.message); return; }
+  document.getElementById('chatAboutText').textContent = text || 'No description yet.';
+  cancelEditAbout();
+}
+
+// ── PINNED FILES ──
+async function loadPinnedFiles() {
+  const { data } = await window.sb.from('pinned_files')
+    .select('id,file_url,file_name,file_type,pinned_at')
+    .eq('club_id', currentUser.clubId)
+    .eq('conv_id', 'group')
+    .order('pinned_at', { ascending: false });
+  pinnedFiles = data || [];
+  renderPinnedFiles();
+}
+
+function fileTypeIcon(type) {
+  if (type === 'pdf')         return { icon: 'ti-file-type-pdf',   color: 'var(--cm-danger)' };
+  if (type === 'image')       return { icon: 'ti-photo',            color: 'var(--cm-success)' };
+  if (type === 'spreadsheet') return { icon: 'ti-file-spreadsheet', color: 'var(--cm-success)' };
+  if (type === 'video')       return { icon: 'ti-video',            color: 'var(--cm-violet)' };
+  return { icon: 'ti-file', color: 'var(--cm-fg-muted)' };
+}
+
+function renderPinnedFiles() {
+  const container = document.getElementById('pinnedFilesContainer');
+  const titleEl   = document.getElementById('pinnedFilesTitle');
+  if (!container) return;
+  if (titleEl) titleEl.textContent = pinnedFiles.length ? `Pinned files · ${pinnedFiles.length}` : 'Pinned files';
+  if (!pinnedFiles.length) {
+    container.innerHTML = '<div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:4px 0">No pinned files</div>';
+    return;
+  }
+  container.innerHTML = pinnedFiles.map(f => {
+    const { icon, color } = fileTypeIcon(f.file_type);
+    return `<div class="cr-file">
+      <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
+      <div class="body"><div class="t">${esc(f.file_name)}</div><div class="s">${formatTime(f.pinned_at)}</div></div>
+      <button class="cr-unpin" onclick="unpinFile('${f.id}')" title="Unpin"><i class="ti ti-x" style="font-size:10px"></i></button>
+    </div>`;
+  }).join('');
+}
+
+function openPinFileForm() {
+  const form = document.getElementById('pinFileForm');
+  if (form) { form.style.display = 'flex'; document.getElementById('pinFileUrl').focus(); }
+}
+
+function closePinFileForm() {
+  const form = document.getElementById('pinFileForm');
+  if (!form) return;
+  form.style.display = 'none';
+  document.getElementById('pinFileUrl').value  = '';
+  document.getElementById('pinFileName').value = '';
+  document.getElementById('pinFileType').value = '';
+}
+
+async function savePinFile() {
+  const url  = (document.getElementById('pinFileUrl').value  || '').trim();
+  const name = (document.getElementById('pinFileName').value || '').trim();
+  const type = document.getElementById('pinFileType').value;
+  if (!url)  { document.getElementById('pinFileUrl').focus();  return; }
+  if (!name) { document.getElementById('pinFileName').focus(); return; }
+  const { data, error } = await window.sb.from('pinned_files').insert({
+    club_id:   currentUser.clubId,
+    conv_id:   'group',
+    file_url:  url,
+    file_name: name,
+    file_type: type || null,
+    pinned_by: currentUser.id
+  }).select().single();
+  if (error) { console.error('Pin file error:', error); alert('Error pinning file: ' + error.message); return; }
+  if (data) { pinnedFiles.unshift(data); renderPinnedFiles(); closePinFileForm(); }
+}
+
+async function unpinFile(id) {
+  const { error } = await window.sb.from('pinned_files').delete().eq('id', id);
+  if (error) { console.error('Unpin error:', error); return; }
+  pinnedFiles = pinnedFiles.filter(f => f.id !== id);
+  renderPinnedFiles();
+}
+
 // ── BOOT ──
 async function boot() {
   const ok = await window.requireAuth();
@@ -539,7 +691,7 @@ async function boot() {
   };
 
   if (club) await window.applyClubTheme();
-  await Promise.all([loadMembers(), loadMessages(), loadTasks()]);
+  await Promise.all([loadMembers(), loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles()]);
   await loadDmPreviews();
   renderConvList();
   updateChatHeader();
@@ -941,14 +1093,17 @@ async function saveDetailStatus() {
   const { error } = await window.sb.from('tasks')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', taskId);
-  if (!error) {
-    const t = allTasks.find(x => x.id === taskId);
-    if (t) t.status = status;
-    renderKanban();
-    renderChatRightTasks();
-    updateTasksBadge();
-    closeTaskDetail();
+  if (error) {
+    console.error('Task update error:', error);
+    alert('Error saving status: ' + error.message);
+    return;
   }
+  const t = allTasks.find(x => x.id === taskId);
+  if (t) t.status = status;
+  renderKanban();
+  renderChatRightTasks();
+  updateTasksBadge();
+  closeTaskDetail();
 }
 
 // ── NEW TASK ──
@@ -984,13 +1139,20 @@ async function saveNewTask() {
     category:    document.getElementById('newTaskCategory').value || 'general',
     status:      'pending'
   }).select().single();
-  if (!error && data) {
-    allTasks.unshift(data);
-    renderKanban();
-    renderChatRightTasks();
-    updateTasksBadge();
-    closeNewTask();
+  if (error) {
+    console.error('Task insert error:', error);
+    alert('Error creating task: ' + error.message);
+    return;
   }
+  if (!data) {
+    console.error('Task insert returned no data — check RLS policies on tasks table');
+    return;
+  }
+  allTasks.unshift(data);
+  renderKanban();
+  renderChatRightTasks();
+  updateTasksBadge();
+  closeNewTask();
 }
 
 function populateAssigneeSelects() {
