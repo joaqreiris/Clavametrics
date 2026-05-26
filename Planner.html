@@ -686,21 +686,6 @@
             <input type="text" class="pl-form-input" id="plExName" placeholder="e.g. High-press 4v4+2…">
           </div>
 
-          <div class="pl-form-row cols-3" style="margin-bottom:10px">
-            <div class="pl-form-field">
-              <label class="pl-form-label">Players</label>
-              <input type="number" class="pl-form-input" id="plExPlayers" placeholder="—" min="1" max="40">
-            </div>
-            <div class="pl-form-field">
-              <label class="pl-form-label">Width m</label>
-              <input type="number" class="pl-form-input" id="plExWidth" placeholder="—" min="1" step="0.5">
-            </div>
-            <div class="pl-form-field">
-              <label class="pl-form-label">Height m</label>
-              <input type="number" class="pl-form-input" id="plExHeight" placeholder="—" min="1" step="0.5">
-            </div>
-          </div>
-
           <div class="pl-form-row cols-2" style="margin-bottom:10px">
             <div class="pl-form-field">
               <label class="pl-form-label">Duration (min)</label>
@@ -756,6 +741,7 @@
               <button class="pl-toggle-btn" data-focus="Táctico">Tactical</button>
               <button class="pl-toggle-btn" data-focus="Individual">Individual</button>
               <button class="pl-toggle-btn" data-focus="Físico">Physical</button>
+              <button class="pl-toggle-btn" data-focus="Sectorial">Sectorial</button>
             </div>
           </div>
 
@@ -775,13 +761,28 @@
             </div>
           </div>
 
-          <div class="pl-form-field" style="margin-bottom:12px">
+          <div class="pl-form-field" style="margin-bottom:10px">
             <label class="pl-form-label">Tactical orientation</label>
             <div class="pl-orient-row" id="plOrientBtns">
               <button class="pl-orient-btn" data-orient="ACTIVATION">Activation</button>
               <button class="pl-orient-btn" data-orient="STRENGTH">Strength</button>
               <button class="pl-orient-btn" data-orient="VELOCITY">Velocity</button>
               <button class="pl-orient-btn" data-orient="ENDURANCE">Endurance</button>
+            </div>
+          </div>
+
+          <div class="pl-form-row cols-3" style="margin-bottom:12px">
+            <div class="pl-form-field">
+              <label class="pl-form-label">Players</label>
+              <input type="number" class="pl-form-input" id="plExPlayers" placeholder="—" min="1" max="40">
+            </div>
+            <div class="pl-form-field">
+              <label class="pl-form-label">Width m</label>
+              <input type="number" class="pl-form-input" id="plExWidth" placeholder="—" min="1" step="0.5">
+            </div>
+            <div class="pl-form-field">
+              <label class="pl-form-label">Height m</label>
+              <input type="number" class="pl-form-input" id="plExHeight" placeholder="—" min="1" step="0.5">
             </div>
           </div>
         </div>
@@ -1031,8 +1032,8 @@
 
   const pillData = hasAvail
     ? players.filter(p => { const s = availMap[p.id]; return !s || s === 'av' || s === 'pa'; })
-        .map(p => ({ id:p.id, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
-    : players.map(p => ({ id:p.id, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
+        .map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
+    : players.map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
 
   const _placedPlayerIds = new Set();
   let activeTeam = 't1';
@@ -1048,7 +1049,8 @@
       return `<div class="avail-pill ${p.cls}${placed ? ' is-placed' : ''}"
         draggable="${!placed}"
         data-player-id="${p.id}"
-        data-player-label="${p.lastName}">
+        data-player-label="${p.lastName}"
+        data-player-number="${p.number ?? ''}">
         <span class="avail-dot"></span>${p.label}
       </div>`;
     }).join('');
@@ -1056,7 +1058,9 @@
       pill.addEventListener('dragstart', e => {
         e.dataTransfer.effectAllowed = 'copy';
         e.dataTransfer.setData('text/plain', JSON.stringify({
-          id: pill.dataset.playerId, label: pill.dataset.playerLabel
+          id: pill.dataset.playerId,
+          label: pill.dataset.playerLabel,
+          number: pill.dataset.playerNumber !== '' ? Number(pill.dataset.playerNumber) : null
         }));
       });
     });
@@ -1232,13 +1236,25 @@
     } else { _build(); }
   }
 
-  function addNamedPlayer(team, lastName, playerId, x, y) {
-    const color = teamColors[team] || '#15803D';
-    const tc    = teamText[team] || '#fff';
-    const label = (lastName || '?').substring(0, 7).toUpperCase();
-    const circle = new fabric.Circle({ radius:20, fill:color, stroke:'rgba(255,255,255,0.85)', strokeWidth:2.5, originX:'center', originY:'center' });
-    const text   = new fabric.Text(label, { fontSize:9, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center' });
-    const grp    = new fabric.Group([circle, text], {
+  function addNamedPlayer(team, lastName, jerseyNum, playerId, x, y) {
+    const color  = teamColors[team] || '#15803D';
+    const tc     = teamText[team] || '#fff';
+    const numStr = jerseyNum != null ? String(jerseyNum) : '?';
+    const nameStr = (lastName || '?').substring(0, 8).toUpperCase();
+    const circle = new fabric.Circle({
+      radius:20, fill:color, stroke:'rgba(255,255,255,0.85)', strokeWidth:2.5,
+      originX:'center', originY:'center', top:0, left:0
+    });
+    const numText = new fabric.Text(numStr, {
+      fontSize:13, fontWeight:'700', fontFamily:'monospace', fill:tc,
+      originX:'center', originY:'center', top:0, left:0
+    });
+    const nameText = new fabric.Text(nameStr, {
+      fontSize:9, fontWeight:'600', fontFamily:'monospace',
+      fill:'rgba(255,255,255,0.95)', originX:'center', originY:'top', top:24, left:0,
+      shadow: new fabric.Shadow({ color:'rgba(0,0,0,0.85)', blur:3, offsetX:0, offsetY:1 })
+    });
+    const grp = new fabric.Group([circle, numText, nameText], {
       left:x, top:y, originX:'center', originY:'center',
       _type:'player', _team:team, _playerId:playerId
     });
@@ -1266,7 +1282,7 @@
     const vpt  = fc.viewportTransform;
     const cx = (e.clientX - rect.left - vpt[4]) / zoom;
     const cy = (e.clientY - rect.top  - vpt[5]) / zoom;
-    addNamedPlayer(activeTeam, data.label, data.id, cx, cy);
+    addNamedPlayer(activeTeam, data.label, data.number, data.id, cx, cy);
   });
 
   // When a player token is removed from canvas, re-enable in Available
@@ -1791,6 +1807,8 @@
     if (!ex) return;
     const btn = document.getElementById('plShareChatBtn');
     btn.style.opacity = '0.6';
+    const { data: { user: authUser } } = await window.sb.auth.getUser();
+    if (!authUser) { btn.style.opacity = ''; alert('You must be logged in to share.'); return; }
     const mdStr = ex.match_day != null ? `MD${ex.match_day >= 0 ? '+' : ''}${ex.match_day}` : null;
     const INT_LABEL = { LOW:'Low', MEDIUM:'Medium', HIGH:'High', VERY_HIGH:'Very High' };
     const lines = [`📋 *${ex.name || 'Untitled'}*`];
@@ -1803,7 +1821,7 @@
     const content = lines.join('\n');
     const { error } = await window.sb.from('messages').insert({
       club_id:      clubId,
-      sender_id:    profile?.id || null,
+      sender_id:    authUser.id,
       sender_name:  profile?.full_name || profile?.email || 'Planner',
       content,
       message_type: 'exercise',
