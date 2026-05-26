@@ -685,6 +685,37 @@
   }
   .pt-foot .l { font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); flex:1; }
   .pt-foot .l strong { color:var(--cm-fg); font-weight:600; }
+
+  /* ── Physical Analysis Modal ── */
+  .ev-modal.w-xl { width:880px; }
+  .pa-body { display:grid; grid-template-columns:1.1fr 1fr; gap:0; min-height:0; }
+  @media (max-width:900px) { .pa-body { grid-template-columns:1fr; } }
+  .pa-form { padding:16px 18px 20px; border-right:1px solid var(--cm-border-soft); }
+  @media (max-width:900px) { .pa-form { border-right:0; border-bottom:1px solid var(--cm-border-soft); } }
+  .pa-ref { padding:16px 18px 20px; background:var(--cm-bg-soft); }
+  .pa-section { font:600 10.5px/1 var(--cm-font-mono); letter-spacing:.07em; text-transform:uppercase; color:var(--cm-fg-muted); margin:14px 0 8px; }
+  .pa-section:first-child { margin-top:0; }
+  .pa-result-hero { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+  .pa-hero-row { display:flex; align-items:flex-start; gap:20px; }
+  .pa-hero-val { font:700 32px/1 var(--cm-font-sans); letter-spacing:-0.03em; color:var(--cm-fg-strong); }
+  .pa-hero-val small { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .pa-hero-label { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:5px; }
+  .pa-level-badge { display:inline-flex; align-items:center; height:22px; padding:0 10px; border-radius:5px; font:700 10.5px/1 var(--cm-font-mono); letter-spacing:.04em; margin-top:8px; }
+  .pa-level-badge.elite       { background:rgba(34,197,94,.15);  color:#15803D; border:1px solid rgba(34,197,94,.25); }
+  .pa-level-badge.advanced    { background:rgba(59,130,246,.15); color:#1D4ED8; border:1px solid rgba(59,130,246,.25); }
+  .pa-level-badge.intermediate{ background:rgba(217,119,6,.14);  color:#B45309; border:1px solid rgba(217,119,6,.25); }
+  .pa-level-badge.developing  { background:rgba(220,38,38,.12);  color:#B91C1C; border:1px solid rgba(220,38,38,.2); }
+  .pa-zone-table { width:100%; border-collapse:collapse; }
+  .pa-zone-table th { text-align:left; padding:7px 8px; font:500 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); border-bottom:1px solid var(--cm-border-soft); }
+  .pa-zone-table th.r { text-align:right; }
+  .pa-zone-table td { padding:7px 8px; border-bottom:1px solid var(--cm-border-soft); font-size:12px; color:var(--cm-fg); }
+  .pa-zone-table tr:last-child td { border-bottom:0; }
+  .pa-zone-table td.r { text-align:right; font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .pa-zone-name { font:600 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pa-zone-pct  { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pa-zone-active { background:var(--cm-accent-soft) !important; }
+  .pa-foot { padding:12px 18px; border-top:1px solid var(--cm-border); display:flex; gap:8px; align-items:center; background:var(--cm-bg-soft); flex-shrink:0; }
+  .pa-foot .info { flex:1; font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 </style>
 </head>
 <body class="cm">
@@ -1309,6 +1340,37 @@
   </div>
 </div>
 
+<!-- ========== MODAL: Physical Test Analysis ========== -->
+<div class="ev-overlay" id="physAnalysisOvl" onclick="if(event.target===this)closePhysModal()">
+  <div class="ev-modal w-xl" style="max-height:90vh;display:flex;flex-direction:column">
+    <div class="ev-mh">
+      <div class="ev-mh-info">
+        <div class="ev-mh-title" id="paMTitle">Test analysis</div>
+        <div class="ev-mh-sub" id="paMSub"></div>
+      </div>
+      <button class="cm-icon-btn" onclick="closePhysModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="flex:1;overflow-y:auto;min-height:0">
+      <div class="pa-body">
+        <div class="pa-form">
+          <div class="pa-section">Player &amp; inputs</div>
+          <div id="paFormContent"></div>
+          <div id="paResults" style="margin-top:12px"></div>
+        </div>
+        <div class="pa-ref">
+          <div id="paZones"><div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter values to see analysis</div></div>
+          <div id="paHistory"></div>
+        </div>
+      </div>
+    </div>
+    <div class="pa-foot">
+      <span class="info" id="paFootInfo">Fill in all required fields to save</span>
+      <button class="cm-btn is-outline" onclick="closePhysModal()">Cancel</button>
+      <button class="cm-btn is-primary" onclick="savePhysAnalysis()"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save result</button>
+    </div>
+  </div>
+</div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -1913,7 +1975,7 @@
   // ── Catalog test buttons ──
   document.querySelectorAll('.pt-btn:not(.pt-btn-add)').forEach(btn => {
     const label = btn.querySelector('.b-l')?.textContent?.trim();
-    if (label) btn.addEventListener('click', () => openTestModal(label));
+    if (label) btn.addEventListener('click', () => isPhysAnalysisTest(label) ? openPhysAnalysis(label) : openTestModal(label));
   });
   document.querySelector('.pt-btn-add')?.addEventListener('click', () => openNewEvalModal());
 
@@ -1944,6 +2006,566 @@
     document.querySelectorAll('.pt-provider').forEach(o => o.classList.remove('is-active'));
     p.classList.add('is-active');
   }));
+
+  // ══════════════════════════════════════════════════════════
+  // PHYSICAL TEST ANALYSIS ENGINE
+  // ══════════════════════════════════════════════════════════
+
+  const PHYS_TESTS = {
+    '30-15 IFT':       { key:'ift',   label:'30-15 IFT',          sub:'Buchheit 2008 · VIFT → VO₂max + 6 training zones' },
+    '1,600 m TT':      { key:'tt1600',label:'1,600 m Time Trial',  sub:'Cooper adapted · VO₂max + pace-based running zones' },
+    'VBT · back squat':{ key:'vbt',   label:'VBT · Back Squat',    sub:'González-Badillo · velocity zone + 1RM estimation', exercise:'Back Squat' },
+    'VBT · bench press':{ key:'vbt',  label:'VBT · Bench Press',   sub:'González-Badillo · velocity zone + 1RM estimation', exercise:'Bench Press' },
+    'VBT · hip thrust':{ key:'vbt',   label:'VBT · Hip Thrust',    sub:'González-Badillo · velocity zone + 1RM estimation', exercise:'Hip Thrust' },
+    '1RM bench':       { key:'orm',   label:'%1RM Estimation',     sub:'Epley + Brzycki averaged · full load prescription table', exercise:'Bench Press' },
+  };
+
+  const VBT_EVAL_TYPES = { 'Back Squat':'VBT · back squat', 'Bench Press':'VBT · bench press', 'Hip Thrust':'VBT · hip thrust' };
+
+  let _paCurrent = null;
+  let _paPlayerData = null;
+
+  function isPhysAnalysisTest(label) { return label in PHYS_TESTS; }
+
+  async function openPhysAnalysis(label) {
+    const cfg = PHYS_TESTS[label];
+    if (!cfg) { openTestModal(label); return; }
+    _paCurrent = { cfg, label };
+    _paPlayerData = null;
+    document.getElementById('paMTitle').textContent = cfg.label;
+    document.getElementById('paMSub').textContent   = cfg.sub;
+    document.getElementById('paResults').innerHTML  = '';
+    document.getElementById('paZones').innerHTML    = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter values to see analysis</div>';
+    document.getElementById('paHistory').innerHTML  = '';
+    document.getElementById('paFootInfo').textContent = 'Fill in all required fields to save';
+    renderPhysForm(cfg);
+    document.getElementById('physAnalysisOvl').classList.add('is-open');
+  }
+
+  function closePhysModal() {
+    document.getElementById('physAnalysisOvl').classList.remove('is-open');
+  }
+
+  function renderPhysForm(cfg) {
+    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const playerSel = `
+      <div class="ev-frow"><label class="ev-fl">Player</label>
+        <select id="paPlayer" class="ev-finput" onchange="onPaPlayerChange()" required>
+          <option value="">Select player…</option>${opts}
+        </select></div>
+      <div class="ev-frow"><label class="ev-fl">Date</label>
+        <input id="paDate" type="date" class="ev-finput" value="${new Date().toISOString().split('T')[0]}" required></div>`;
+
+    let specificFields = '';
+
+    if (cfg.key === 'ift') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">VIFT <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paVift" type="number" step="0.5" min="10" max="24" class="ev-finput" placeholder="e.g. 19.0" oninput="calcIFT()"><span class="unit">km/h</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Gender</label>
+            <select id="paGender" class="ev-finput" onchange="calcIFT()">
+              <option value="M">Male</option><option value="F">Female</option>
+            </select></div>
+        </div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Age <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from DOB)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paAge" type="number" min="15" max="55" step="1" class="ev-finput" placeholder="—" oninput="calcIFT()"><span class="unit">yrs</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Weight <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from profile)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paWeight" type="number" min="40" max="150" step="0.5" class="ev-finput" placeholder="—" oninput="calcIFT()"><span class="unit">kg</span></div></div></div>
+        </div>`;
+
+    } else if (cfg.key === 'tt1600') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-frow"><label class="ev-fl">Finish time <span style="color:var(--cm-danger)">*</span></label>
+          <div class="ev-f2" style="margin-bottom:0">
+            <div class="pt-field"><div class="input-wrap"><input id="paTTmin" type="number" min="3" max="20" step="1" class="ev-finput" placeholder="min" oninput="calc1600m()"><span class="unit">min</span></div></div>
+            <div class="pt-field"><div class="input-wrap"><input id="paTTsec" type="number" min="0" max="59" step="1" class="ev-finput" placeholder="sec" oninput="calc1600m()"><span class="unit">s</span></div></div>
+          </div></div>`;
+
+    } else if (cfg.key === 'vbt') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-frow"><label class="ev-fl">Exercise</label>
+          <select id="paExercise" class="ev-finput" onchange="onVBTExerciseChange()">
+            <option value="Back Squat"${cfg.exercise==='Back Squat'?' selected':''}>Back Squat</option>
+            <option value="Bench Press"${cfg.exercise==='Bench Press'?' selected':''}>Bench Press</option>
+            <option value="Hip Thrust"${cfg.exercise==='Hip Thrust'?' selected':''}>Hip Thrust</option>
+            <option value="Romanian Deadlift">Romanian Deadlift</option>
+            <option value="Pull-up">Pull-up</option>
+          </select></div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Mean velocity <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paVel" type="number" step="0.01" min="0.05" max="3.5" class="ev-finput" placeholder="e.g. 0.78" oninput="calcVBT()"><span class="unit">m/s</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Load used</label>
+            <div class="pt-field"><div class="input-wrap"><input id="paVBTkg" type="number" step="0.5" min="5" max="400" class="ev-finput" placeholder="kg" oninput="calcVBT()"><span class="unit">kg</span></div></div></div>
+        </div>`;
+
+    } else if (cfg.key === 'orm') {
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Test inputs</div>
+        <div class="ev-frow"><label class="ev-fl">Exercise</label>
+          <select id="pa1RMExercise" class="ev-finput" onchange="on1RMExerciseChange()">
+            <option value="Squat">Squat</option>
+            <option value="Bench Press"${cfg.exercise==='Bench Press'?' selected':''}>Bench Press</option>
+            <option value="Hip Thrust">Hip Thrust</option>
+            <option value="Romanian Deadlift">Romanian Deadlift</option>
+            <option value="Pull-up">Pull-up</option>
+            <option value="Nordic Curl">Nordic Curl</option>
+          </select></div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Weight lifted <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="pa1RMkg" type="number" step="0.5" min="5" max="400" class="ev-finput" placeholder="kg" oninput="calc1RM_modal()"><span class="unit">kg</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Reps completed <span style="color:var(--cm-danger)">*</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="pa1RMreps" type="number" step="1" min="1" max="30" class="ev-finput" placeholder="reps" oninput="calc1RM_modal()"><span class="unit">reps</span></div></div></div>
+        </div>`;
+    }
+
+    document.getElementById('paFormContent').innerHTML = playerSel + specificFields +
+      `<div class="ev-frow" style="margin-top:10px"><label class="ev-fl">Notes</label>
+        <textarea id="paNotes" class="ev-finput" rows="2" placeholder="Optional…"></textarea></div>`;
+
+    const playerEl = document.getElementById('paPlayer');
+    if (playerEl && selectedPlayerId) { playerEl.value = selectedPlayerId; onPaPlayerChange(); }
+  }
+
+  async function onPaPlayerChange() {
+    const pid = document.getElementById('paPlayer')?.value;
+    if (!pid || !clubId) return;
+    const { data } = await window.sb.from('players')
+      .select('id, first_name, last_name, date_of_birth, weight, position')
+      .eq('id', pid).single();
+    _paPlayerData = data;
+    const cfg = _paCurrent?.cfg;
+    if (data && cfg?.key === 'ift') {
+      if (data.date_of_birth) {
+        const age = Math.floor((Date.now() - new Date(data.date_of_birth)) / (365.25 * 86400000));
+        const ageEl = document.getElementById('paAge');
+        if (ageEl && !ageEl.value) ageEl.value = age;
+      }
+      if (data.weight) {
+        const wEl = document.getElementById('paWeight');
+        if (wEl && !wEl.value) wEl.value = data.weight;
+      }
+      calcIFT();
+    }
+    // Load previous test history for this player
+    const testType = _paCurrent?.label;
+    if (testType) loadPaHistory(pid, testType);
+  }
+
+  async function loadPaHistory(pid, testType) {
+    if (!pid || !testType || !clubId) return;
+    const { data } = await window.sb.from('evaluations')
+      .select('test_date, value, unit')
+      .eq('player_id', pid).eq('club_id', clubId).eq('evaluation_type', testType)
+      .order('test_date', { ascending: false }).limit(5);
+    const histEl = document.getElementById('paHistory');
+    if (!histEl) return;
+    if (!data || !data.length) { histEl.innerHTML = ''; return; }
+    const rows = data.map((e, i) => {
+      const dt = new Date(e.test_date + 'T00:00:00');
+      const fmtDate = `${MONTHS_SHORT[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`;
+      const prev = data[i + 1];
+      let dHtml = '';
+      if (prev) {
+        const d = +(e.value - prev.value).toFixed(2);
+        if (d > 0) dHtml = `<span style="color:var(--cm-success);font:600 11px/1 var(--cm-font-mono)">↑ +${d}</span>`;
+        else if (d < 0) dHtml = `<span style="color:var(--cm-danger);font:600 11px/1 var(--cm-font-mono)">↓ ${d}</span>`;
+        else dHtml = `<span style="color:var(--cm-fg-faint);font:600 11px/1 var(--cm-font-mono)">±0</span>`;
+      }
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--cm-border-soft)">
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);flex:1">${fmtDate}</span>
+        <span style="font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${e.value}${e.unit ? ' ' + e.unit : ''}</span>
+        ${dHtml}
+      </div>`;
+    }).join('');
+    histEl.innerHTML = `<div class="pa-section">Previous results · ${testType}</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:4px 12px">${rows}</div>`;
+  }
+
+  // ─── Calc: 30-15 IFT (Buchheit 2008) ───
+  function calcIFT() {
+    const vift   = parseFloat(document.getElementById('paVift')?.value);
+    const gender = document.getElementById('paGender')?.value || 'M';
+    const age    = parseFloat(document.getElementById('paAge')?.value);
+    const weight = parseFloat(document.getElementById('paWeight')?.value);
+    const resEl  = document.getElementById('paResults');
+    const zoneEl = document.getElementById('paZones');
+
+    if (!vift || vift < 10) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter VIFT to see analysis</div>';
+      return;
+    }
+
+    const G = gender === 'M' ? 1 : 2;
+    const hasAll = !isNaN(age) && !isNaN(weight);
+    let vo2max = null;
+    if (hasAll) vo2max = +(28.3 - 2.15*G - 0.741*age - 0.0357*weight + 0.0586*age*vift + 1.03*vift).toFixed(1);
+
+    let level, levelCls;
+    if (gender === 'M') {
+      if      (vift >= 19.5) { level = 'Elite / Professional'; levelCls = 'elite'; }
+      else if (vift >= 17.5) { level = 'Advanced';             levelCls = 'advanced'; }
+      else if (vift >= 15.5) { level = 'Intermediate';         levelCls = 'intermediate'; }
+      else                   { level = 'Developing';            levelCls = 'developing'; }
+    } else {
+      if      (vift >= 17.0) { level = 'Elite / Professional'; levelCls = 'elite'; }
+      else if (vift >= 15.0) { level = 'Advanced';             levelCls = 'advanced'; }
+      else if (vift >= 13.5) { level = 'Intermediate';         levelCls = 'intermediate'; }
+      else                   { level = 'Developing';            levelCls = 'developing'; }
+    }
+
+    const zones = [
+      { name:'Zone 1', desc:'Recovery',           lo:0.60, hi:0.65 },
+      { name:'Zone 2', desc:'Extensive aerobic',  lo:0.70, hi:0.75 },
+      { name:'Zone 3', desc:'Intensive aerobic',  lo:0.80, hi:0.85 },
+      { name:'Zone 4', desc:'Anaerobic threshold',lo:0.85, hi:0.90 },
+      { name:'Zone 5', desc:'VO₂max',             lo:0.95, hi:1.00 },
+      { name:'Zone 6', desc:'Anaerobic speed',    lo:1.05, hi:1.15 },
+    ];
+
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">VIFT</div><div class="pa-hero-val">${vift}<small>km/h</small></div></div>
+          ${vo2max !== null ? `<div><div class="pa-hero-label">VO₂max est.</div><div class="pa-hero-val">${vo2max}<small>ml/kg/min</small></div></div>` : ''}
+        </div>
+        <span class="pa-level-badge ${levelCls}">${level}</span>
+        ${!hasAll ? `<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:6px">Add age + weight above to compute VO₂max</div>` : ''}
+      </div>`;
+
+    const zoneRows = zones.map(z => `<tr>
+      <td><div class="pa-zone-name">${z.name}</div><div class="pa-zone-pct">${z.desc}</div></td>
+      <td>${Math.round(z.lo*100)}–${Math.round(z.hi*100)}% VIFT</td>
+      <td class="r">${(vift*z.lo).toFixed(1)}–${(vift*z.hi).toFixed(1)} km/h</td>
+    </tr>`).join('');
+
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Training zones · VIFT ${vift} km/h</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Zone</th><th>% VIFT</th><th class="r">Speed</th></tr></thead>
+        <tbody>${zoneRows}</tbody></table>
+      </div>
+      <div class="pa-section">Formula · Buchheit (2008)</div>
+      <div class="pt-formula" style="font-size:11px">
+        VO₂max = 28.3 − (2.15×G) − (0.741×A) − (0.0357×W)<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ (0.0586×A×VIFT) + (1.03×VIFT)
+        <span class="cit">G=1(M) / 2(F) · A=age · W=weight</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `VIFT ${vift} km/h · ${level}${vo2max ? ` · VO₂max ${vo2max} ml/kg/min` : ' · add age+weight for VO₂max'}`;
+  }
+
+  // ─── Calc: 1600m Time Trial ───
+  function calc1600m() {
+    const mins    = parseFloat(document.getElementById('paTTmin')?.value) || 0;
+    const secs    = parseFloat(document.getElementById('paTTsec')?.value) || 0;
+    const totalSec = mins * 60 + secs;
+    const resEl   = document.getElementById('paResults');
+    const zoneEl  = document.getElementById('paZones');
+
+    if (totalSec < 60) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter time to see analysis</div>';
+      return;
+    }
+
+    const vAvg_ms   = 1600 / totalSec;
+    const dist12min = vAvg_ms * 720;
+    const vo2Cooper = (dist12min - 504.9) / 44.73;
+    const vo2Direct = 3.5 + 483 / (totalSec / 60);
+    const vo2max    = +((vo2Cooper + vo2Direct) / 2).toFixed(1);
+    const vAvgKmh   = +(vAvg_ms * 3.6).toFixed(2);
+    const paceSecKm = totalSec / 1.6;
+    const pm = Math.floor(paceSecKm / 60), ps = Math.round(paceSecKm % 60);
+    const paceStr = `${pm}:${String(ps).padStart(2, '0')}`;
+
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">VO₂max (avg)</div><div class="pa-hero-val">${vo2max}<small>ml/kg/min</small></div></div>
+          <div><div class="pa-hero-label">Pace</div><div class="pa-hero-val">${paceStr}<small>/km</small></div></div>
+        </div>
+        <div style="margin-top:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
+          Avg speed: ${vAvgKmh} km/h · 12-min equiv: ${Math.round(dist12min)} m
+        </div>
+      </div>`;
+
+    const zones = [
+      { name:'Recovery',    lo:0,    hi:0.60 },
+      { name:'Aerobic base',lo:0.60, hi:0.70 },
+      { name:'Tempo',       lo:0.70, hi:0.80 },
+      { name:'Threshold',   lo:0.80, hi:0.90 },
+      { name:'VO₂max',      lo:0.90, hi:1.00 },
+      { name:'Speed',       lo:1.00, hi:1.15 },
+    ];
+    const fp = (s) => { const m=Math.floor(s/60),sec=Math.round(s%60); return `${m}:${String(sec).padStart(2,'0')}`; };
+    const zoneRows = zones.map(z => {
+      const loKmh = (vAvg_ms * z.lo * 3.6).toFixed(1);
+      const hiKmh = (vAvg_ms * z.hi * 3.6).toFixed(1);
+      const loPaceSec = z.lo > 0 ? 3600 / (vAvg_ms * z.lo * 3.6) : 0;
+      const hiPaceSec = z.hi > 0 ? 3600 / (vAvg_ms * z.hi * 3.6) : 0;
+      const speedStr = z.lo === 0 ? `< ${hiKmh} km/h` : z.hi === 1.15 ? `> ${loKmh} km/h` : `${loKmh}–${hiKmh} km/h`;
+      const pStr     = z.lo === 0 ? `> ${fp(hiPaceSec)} /km` : z.hi === 1.15 ? `< ${fp(loPaceSec)} /km` : `${fp(hiPaceSec)}–${fp(loPaceSec)} /km`;
+      return `<tr><td><div class="pa-zone-name">${z.name}</div><div class="pa-zone-pct">${Math.round(z.lo*100)}–${Math.round(z.hi*100)}% vVO₂max</div></td><td>${speedStr}</td><td class="r">${pStr}</td></tr>`;
+    }).join('');
+
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Running zones · ${vAvgKmh} km/h avg</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Zone</th><th>Speed</th><th class="r">Pace</th></tr></thead>
+        <tbody>${zoneRows}</tbody></table>
+      </div>
+      <div class="pa-section">Formulas</div>
+      <div class="pt-formula" style="font-size:11px">
+        Cooper: VO₂max = (d₁₂ − 504.9) / 44.73<br>
+        Direct: VO₂max = 3.5 + 483 / t(min)<br>
+        <span class="cit">d₁₂ = velocity × 720 s · both averaged</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `VO₂max ${vo2max} ml/kg/min · ${paceStr}/km · ${vAvgKmh} km/h avg`;
+  }
+
+  // ─── Calc: VBT (González-Badillo) ───
+  function calcVBT() {
+    const vel      = parseFloat(document.getElementById('paVel')?.value);
+    const loadKg   = parseFloat(document.getElementById('paVBTkg')?.value);
+    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+    const resEl    = document.getElementById('paResults');
+    const zoneEl   = document.getElementById('paZones');
+
+    if (!vel || vel <= 0) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter velocity to see analysis</div>';
+      return;
+    }
+
+    let zone, zonePct, zoneColor;
+    if      (vel <= 0.35) { zone='Maximum strength'; zonePct='90–100% 1RM'; zoneColor='#B91C1C'; }
+    else if (vel <= 0.50) { zone='Strength';          zonePct='80–90% 1RM';  zoneColor='#B45309'; }
+    else if (vel <= 0.75) { zone='Strength-power';    zonePct='65–80% 1RM';  zoneColor='#CA8A04'; }
+    else if (vel <= 1.00) { zone='Power';              zonePct='50–65% 1RM';  zoneColor='#15803D'; }
+    else if (vel <= 1.30) { zone='Power-velocity';     zonePct='35–50% 1RM';  zoneColor='#1D4ED8'; }
+    else                  { zone='Velocity';           zonePct='< 35% 1RM';   zoneColor='#7C3AED'; }
+
+    const est1RMpct = Math.max(5, Math.min(100, 128.7 - 65.4 * vel));
+    const est1RM = (loadKg && est1RMpct > 0) ? +(loadKg / (est1RMpct / 100)).toFixed(1) : null;
+
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">Velocity</div><div class="pa-hero-val">${vel}<small>m/s</small></div></div>
+          ${est1RM ? `<div><div class="pa-hero-label">Est. 1RM</div><div class="pa-hero-val">${est1RM}<small>kg</small></div></div>` : ''}
+        </div>
+        <div style="margin-top:8px">
+          <span style="display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:5px;background:${zoneColor}20;color:${zoneColor};font:700 11px/1 var(--cm-font-mono);border:1px solid ${zoneColor}40">${zone} · ${zonePct}</span>
+          ${est1RMpct ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">≈ ${Math.round(est1RMpct)}% 1RM</span>` : ''}
+        </div>
+      </div>`;
+
+    const allZones = [
+      { name:'Maximum strength', lo:0.15, hi:0.35, pct:'90–100%', obj:'Max force' },
+      { name:'Strength',         lo:0.35, hi:0.50, pct:'80–90%',  obj:'Force capacity' },
+      { name:'Strength-power',   lo:0.50, hi:0.75, pct:'65–80%',  obj:'Rate of force dev.' },
+      { name:'Power',            lo:0.75, hi:1.00, pct:'50–65%',  obj:'Peak power' },
+      { name:'Power-velocity',   lo:1.00, hi:1.30, pct:'35–50%',  obj:'Stretch-shortening' },
+      { name:'Velocity',         lo:1.30, hi:3.50, pct:'< 35%',   obj:'Max velocity' },
+    ];
+    const lossRows = [
+      { goal:'Max strength', thr:'≤ 20%' },
+      { goal:'Hypertrophy',  thr:'25–30%' },
+      { goal:'Power',        thr:'≤ 15%' },
+    ].map(l => `<tr><td>${l.goal}</td><td class="r">${l.thr}</td></tr>`).join('');
+
+    const zoneRows = allZones.map(z => {
+      const active = vel >= z.lo && vel < z.hi;
+      const hiStr  = z.hi === 3.50 ? `> ${z.lo}` : `${z.lo}–${z.hi}`;
+      return `<tr${active ? ' class="pa-zone-active"' : ''}><td><div class="pa-zone-name">${z.name}${active ? ' ◀' : ''}</div><div class="pa-zone-pct">${z.obj}</div></td><td>${hiStr} m/s</td><td class="r">${z.pct}</td></tr>`;
+    }).join('');
+
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Velocity zones · ${exercise}</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Zone</th><th>Velocity</th><th class="r">% 1RM</th></tr></thead>
+        <tbody>${zoneRows}</tbody></table>
+      </div>
+      <div class="pa-section">Velocity loss thresholds</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Goal</th><th class="r">Max loss</th></tr></thead>
+        <tbody>${lossRows}</tbody></table>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `${exercise} · ${vel} m/s · ${zone} · ${zonePct}${est1RM ? ` · Est. 1RM ${est1RM} kg` : ''}`;
+  }
+
+  function onVBTExerciseChange() {
+    calcVBT();
+    const pid      = document.getElementById('paPlayer')?.value;
+    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+    const type     = VBT_EVAL_TYPES[exercise] || `VBT · ${exercise.toLowerCase()}`;
+    if (pid) loadPaHistory(pid, type);
+  }
+
+  // ─── Calc: %1RM (Epley + Brzycki) ───
+  function calc1RM_modal() {
+    const kg       = parseFloat(document.getElementById('pa1RMkg')?.value);
+    const reps     = parseInt(document.getElementById('pa1RMreps')?.value);
+    const exercise = document.getElementById('pa1RMExercise')?.value || 'Squat';
+    const resEl    = document.getElementById('paResults');
+    const zoneEl   = document.getElementById('paZones');
+
+    if (!kg || !reps || reps < 1) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter weight and reps to see analysis</div>';
+      return;
+    }
+
+    const epley   = +(kg * (1 + reps / 30)).toFixed(1);
+    const brzycki = reps < 37 ? +(kg * 36 / (37 - reps)).toFixed(1) : epley;
+    const avg     = +((epley + brzycki) / 2).toFixed(1);
+
+    resEl.innerHTML = `
+      <div class="pa-result-hero">
+        <div class="pa-hero-row">
+          <div><div class="pa-hero-label">Estimated 1RM</div><div class="pa-hero-val">${avg}<small>kg</small></div></div>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:12px">
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Epley: ${epley} kg</span>
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Brzycki: ${brzycki} kg</span>
+        </div>
+      </div>`;
+
+    const loadTable = [
+      { pct:100, reps:1,  label:'Max strength' },
+      { pct:95,  reps:2,  label:'' },
+      { pct:90,  reps:4,  label:'Strength' },
+      { pct:85,  reps:6,  label:'Strength-power' },
+      { pct:80,  reps:8,  label:'Hypertrophy-strength' },
+      { pct:75,  reps:10, label:'Hypertrophy' },
+      { pct:70,  reps:12, label:'Hypertrophy-endurance' },
+      { pct:65,  reps:15, label:'Muscular endurance' },
+      { pct:60,  reps:20, label:'' },
+    ].map(r => ({ ...r, kgVal: +(avg * r.pct / 100).toFixed(1) }));
+
+    const tableRows = loadTable.map(r => `<tr>
+      <td style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${r.pct}%</td>
+      <td>${r.reps} rep${r.reps > 1 ? 's' : ''}</td>
+      <td style="color:var(--cm-fg-muted);font:400 11px/1 var(--cm-font-mono)">${r.label}</td>
+      <td class="r">${r.kgVal} kg</td>
+    </tr>`).join('');
+
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Load prescription · ${exercise}</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>%1RM</th><th>Reps</th><th>Goal</th><th class="r">Load</th></tr></thead>
+        <tbody>${tableRows}</tbody></table>
+      </div>
+      <div class="pa-section">Formulas</div>
+      <div class="pt-formula" style="font-size:11px">
+        Epley:   1RM = w × (1 + reps/30)<br>
+        Brzycki: 1RM = w × 36 / (37 − reps)<br>
+        <span class="cit">Average of both formulas used</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `${exercise} · Est. 1RM ${avg} kg (Epley: ${epley} · Brzycki: ${brzycki})`;
+  }
+
+  function on1RMExerciseChange() {
+    calc1RM_modal();
+    const pid      = document.getElementById('paPlayer')?.value;
+    const exercise = document.getElementById('pa1RMExercise')?.value || 'Squat';
+    if (pid) loadPaHistory(pid, `1RM · ${exercise}`);
+  }
+
+  // ─── Save physical analysis to Supabase ───
+  async function savePhysAnalysis() {
+    if (!_paCurrent || !clubId) return;
+    const cfg      = _paCurrent.cfg;
+    const pid      = document.getElementById('paPlayer')?.value;
+    const testDate = document.getElementById('paDate')?.value;
+    const userNote = document.getElementById('paNotes')?.value?.trim() || '';
+
+    if (!pid || !testDate) { alert('Please select a player and date.'); return; }
+
+    let value, unit, evalType, computed = {};
+
+    if (cfg.key === 'ift') {
+      value = parseFloat(document.getElementById('paVift')?.value);
+      if (!value) { alert('Please enter VIFT.'); return; }
+      unit     = 'km/h';
+      evalType = '30-15 IFT';
+      const gender = document.getElementById('paGender')?.value || 'M';
+      const age    = parseFloat(document.getElementById('paAge')?.value);
+      const weight = parseFloat(document.getElementById('paWeight')?.value);
+      const G = gender === 'M' ? 1 : 2;
+      computed = { inputs: { vift: value, gender, age: isNaN(age) ? null : age, weight: isNaN(weight) ? null : weight } };
+      if (!isNaN(age) && !isNaN(weight))
+        computed.vo2max = +(28.3 - 2.15*G - 0.741*age - 0.0357*weight + 0.0586*age*value + 1.03*value).toFixed(1);
+      const isM = gender === 'M';
+      computed.level = (isM ? value>=19.5 : value>=17.0) ? 'Elite/Professional'
+                     : (isM ? value>=17.5 : value>=15.0) ? 'Advanced'
+                     : (isM ? value>=15.5 : value>=13.5) ? 'Intermediate' : 'Developing';
+
+    } else if (cfg.key === 'tt1600') {
+      const mins = parseFloat(document.getElementById('paTTmin')?.value) || 0;
+      const secs = parseFloat(document.getElementById('paTTsec')?.value) || 0;
+      const totalSec = mins * 60 + secs;
+      if (totalSec < 60) { alert('Please enter a valid time.'); return; }
+      const vAvg_ms = 1600 / totalSec;
+      const vo2maxVal = +((( (vAvg_ms*720) - 504.9) / 44.73 + 3.5 + 483 / (totalSec/60)) / 2).toFixed(1);
+      value    = vo2maxVal;
+      unit     = 'ml/kg/min';
+      evalType = '1,600 m TT';
+      const pm = Math.floor(totalSec/1.6/60), ps = Math.round((totalSec/1.6)%60);
+      computed = { inputs: { timeSec: totalSec }, vo2max: vo2maxVal, vAvgKmh: +(vAvg_ms*3.6).toFixed(2), pace: `${pm}:${String(ps).padStart(2,'0')}` };
+
+    } else if (cfg.key === 'vbt') {
+      value = parseFloat(document.getElementById('paVel')?.value);
+      if (!value) { alert('Please enter velocity.'); return; }
+      unit = 'm/s';
+      const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+      evalType = VBT_EVAL_TYPES[exercise] || `VBT · ${exercise.toLowerCase()}`;
+      const loadKg = parseFloat(document.getElementById('paVBTkg')?.value);
+      const pct    = Math.max(5, Math.min(100, 128.7 - 65.4 * value));
+      const est1RM = loadKg ? +(loadKg / (pct / 100)).toFixed(1) : null;
+      let zone;
+      if      (value <= 0.35) zone = 'Maximum strength';
+      else if (value <= 0.50) zone = 'Strength';
+      else if (value <= 0.75) zone = 'Strength-power';
+      else if (value <= 1.00) zone = 'Power';
+      else if (value <= 1.30) zone = 'Power-velocity';
+      else                    zone = 'Velocity';
+      computed = { inputs: { velocity: value, loadKg: isNaN(loadKg) ? null : loadKg, exercise }, zone, est1RMpct: Math.round(pct), est1RM };
+
+    } else if (cfg.key === 'orm') {
+      const kg   = parseFloat(document.getElementById('pa1RMkg')?.value);
+      const reps = parseInt(document.getElementById('pa1RMreps')?.value);
+      if (!kg || !reps) { alert('Please enter weight and reps.'); return; }
+      const exercise = document.getElementById('pa1RMExercise')?.value || 'Squat';
+      const epley    = +(kg * (1 + reps/30)).toFixed(1);
+      const brzycki  = reps < 37 ? +(kg * 36 / (37 - reps)).toFixed(1) : epley;
+      value    = +((epley + brzycki) / 2).toFixed(1);
+      unit     = 'kg';
+      evalType = `1RM · ${exercise}`;
+      computed = { inputs: { weightKg: kg, reps, exercise }, epley, brzycki, avg: value };
+    }
+
+    if (userNote) computed.userNotes = userNote;
+    const payload = { player_id: pid, club_id: clubId, evaluation_type: evalType, value, unit, test_date: testDate, notes: JSON.stringify(computed) };
+    const { error } = await window.sb.from('evaluations').insert(payload);
+    if (error) { alert('Error: ' + error.message); return; }
+
+    closePhysModal();
+    _squadLoaded = false; _historyLoaded = false;
+    loadKPIs();
+    if (selectedPlayerId === pid) selectPlayer(pid);
+    if (_indPid === pid) loadIndividualProfile(pid);
+    if (_currentTestType === evalType && document.getElementById('testOvl').classList.contains('is-open')) loadTestResults();
+  }
 
   boot();
 
