@@ -10,15 +10,18 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Authenticated users can upload/replace their club logo
-CREATE POLICY IF NOT EXISTS "Club admins upload logos"
+DROP POLICY IF EXISTS "Club admins upload logos" ON storage.objects;
+CREATE POLICY "Club admins upload logos"
   ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'club-logos');
 
-CREATE POLICY IF NOT EXISTS "Club admins replace logos"
+DROP POLICY IF EXISTS "Club admins replace logos" ON storage.objects;
+CREATE POLICY "Club admins replace logos"
   ON storage.objects FOR UPDATE TO authenticated
   USING (bucket_id = 'club-logos');
 
 -- Public can read logos (sidebar, mobile app, etc.)
-CREATE POLICY IF NOT EXISTS "Public logo read"
+DROP POLICY IF EXISTS "Public logo read" ON storage.objects;
+CREATE POLICY "Public logo read"
   ON storage.objects FOR SELECT TO public
   USING (bucket_id = 'club-logos');
