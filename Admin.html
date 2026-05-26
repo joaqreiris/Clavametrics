@@ -853,11 +853,13 @@
         .from('club-logos')
         .getPublicUrl(path);
 
-      const { error: dbErr } = await window.sb
+      const { data: dbData, error: dbErr } = await window.sb
         .from('clubs')
         .update({ logo_url: publicUrl })
-        .eq('id', clubId);
+        .eq('id', clubId)
+        .select('id');
       if (dbErr) { alert('Save failed: ' + dbErr.message); return; }
+      if (!dbData?.length) { alert('Save failed: permission denied — no rows updated.'); return; }
 
       const displayUrl = publicUrl + '?t=' + Date.now();
       applyLogoToOrgIc(displayUrl);
