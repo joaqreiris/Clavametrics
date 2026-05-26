@@ -709,16 +709,17 @@
     .lte('start_date', todayStr)
     .gte('end_date', todayStr)
     .order('start_date', { ascending: false })
-    .limit(1)
-    .catch(() => ({ data: [] }));
+    .limit(1);
+  if (microRes.error) console.warn('[LM] microcycles error:', microRes.error);
   const microRow = (microRes.data || [])[0] || null;
 
   // Season start = earliest session date in this club
   const firstSessRes = await window.sb.from('training_sessions')
     .select('session_date')
     .eq('club_id', clubId)
-    .order('session_date').limit(1)
-    .catch(() => ({ data: [] }));
+    .order('session_date')
+    .limit(1);
+  if (firstSessRes.error) console.warn('[LM] firstSess error:', firstSessRes.error);
   const seasonStart = (firstSessRes.data || [])[0]?.session_date || from28dStr;
 
   // Today's wellness (always today, period-independent)
