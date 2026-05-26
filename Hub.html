@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -1001,94 +1002,6 @@ function renderActivity(sessions, injuries, gps, wellnessCount, squadCount) {
     feed.appendChild(row);
   });
 }
-
-(function initSearch() {
-  const wrapper = document.querySelector('.hub-search');
-  const input   = wrapper.querySelector('input');
-  const drop    = document.createElement('div');
-  drop.className = 'hub-search-results';
-  drop.hidden = true;
-  wrapper.appendChild(drop);
-
-  function esc(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c =>
-      ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-  }
-
-  let timer, clubId;
-
-  document.addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); input.focus(); input.select(); }
-    if (e.key === 'Escape') { drop.hidden = true; input.blur(); }
-  });
-  document.addEventListener('click', e => { if (!wrapper.contains(e.target)) drop.hidden = true; });
-  input.addEventListener('focus', () => { if (input.value.trim().length >= 2) drop.hidden = false; });
-
-  input.addEventListener('input', () => {
-    clearTimeout(timer);
-    const q = input.value.trim();
-    if (q.length < 2) { drop.hidden = true; return; }
-    timer = setTimeout(() => runSearch(q), 280);
-  });
-
-  async function runSearch(q) {
-    if (!clubId) clubId = await window.getClubId();
-    if (!clubId) return;
-
-    drop.innerHTML = '<div class="hub-search-empty">Searching…</div>';
-    drop.hidden = false;
-
-    const like = `%${q}%`;
-    const [pRes, sRes, mRes] = await Promise.all([
-      window.sb.from('players')
-        .select('first_name, last_name, position')
-        .eq('club_id', clubId)
-        .or(`first_name.ilike.${like},last_name.ilike.${like}`)
-        .limit(5),
-      window.sb.from('training_sessions')
-        .select('title, session_date')
-        .eq('club_id', clubId)
-        .ilike('title', like)
-        .order('session_date', { ascending: false })
-        .limit(4),
-      window.sb.from('microcycles')
-        .select('name, rival')
-        .eq('club_id', clubId)
-        .or(`name.ilike.${like},rival.ilike.${like}`)
-        .limit(3)
-    ]);
-
-    const players  = pRes.data || [];
-    const sessions = sRes.data || [];
-    const mcs      = mRes.data || [];
-
-    if (!players.length && !sessions.length && !mcs.length) {
-      drop.innerHTML = `<div class="hub-search-empty">No results for "${esc(q)}"</div>`;
-      return;
-    }
-
-    let html = '';
-    if (players.length) {
-      html += '<div class="hub-search-group-label">Players</div>';
-      players.forEach(p => {
-        html += `<a class="hub-search-item" href="Squad.html"><i class="ti ti-user"></i><span>${esc(p.first_name)} ${esc(p.last_name)}</span><span class="hub-search-meta">${esc(p.position || '—')}</span></a>`;
-      });
-    }
-    if (sessions.length) {
-      html += '<div class="hub-search-group-label">Sessions</div>';
-      sessions.forEach(s => {
-        html += `<a class="hub-search-item" href="Sessions%20History.html"><i class="ti ti-soccer-field"></i><span>${esc(s.title)}</span><span class="hub-search-meta">${esc(s.session_date)}</span></a>`;
-      });
-    }
-    if (mcs.length) {
-      html += '<div class="hub-search-group-label">Microcycles</div>';
-      mcs.forEach(mc => {
-        html += `<a class="hub-search-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>${esc(mc.name)}</span><span class="hub-search-meta">${esc(mc.rival || '')}</span></a>`;
-      });
-    }
-    drop.innerHTML = html;
-  }
-})();
 
 function renderAvailabilityPills(records) {
   const meta = document.querySelector('.hub-greet .meta');

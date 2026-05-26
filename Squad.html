@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -709,7 +710,7 @@ function renderTable() {
       const foot    = p.dominant_foot || '—';
       const h       = p.height ? `${p.height}<span class="u">cm</span><span class="sep">·</span>` : '';
       const w       = p.weight ? `${p.weight}<span class="u">kg</span>` : '—';
-      html += `<tr data-pos="${pcfg.pill}" data-name="${fullName.toLowerCase()}" data-num="${num}">
+      html += `<tr data-pos="${pcfg.pill}" data-name="${fullName.toLowerCase()}" data-num="${num}" data-id="${p.id}">
         <td><span class="sq-cb" data-cb></span></td>
         <td><span class="sq-num">${num}</span></td>
         <td><div class="sq-player">
@@ -801,6 +802,12 @@ async function reloadPlayers() {
   });
 
   renderTable();
+
+  const _hlId = new URLSearchParams(location.search).get('highlight');
+  if (_hlId) requestAnimationFrame(() => {
+    const row = document.querySelector(`tr[data-id="${_hlId}"]`);
+    if (row) { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); row.classList.add('gs-highlight'); }
+  });
 }
 
 (async () => {

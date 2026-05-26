@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -2452,6 +2453,20 @@ async function showImportPreview(fixtures) {
   const todayMcIdx = _allMCs.findIndex(m => m.start_date <= TODAY && m.end_date >= TODAY);
   if (todayMcIdx >= 0) _mcIdx = todayMcIdx;
 
+  // Deep-link: ?mc=<id> navigates to that microcycle
+  const _urlParams = new URLSearchParams(location.search);
+  const _urlMcId   = _urlParams.get('mc');
+  const _urlHlId   = _urlParams.get('highlight');
+  const _urlDate   = _urlParams.get('date');
+  if (_urlMcId) {
+    const idx = _allMCs.findIndex(m => m.id === _urlMcId);
+    if (idx >= 0) _mcIdx = idx;
+  } else if (_urlHlId && _urlDate) {
+    const evtDate = _urlDate.slice(0, 7); // YYYY-MM
+    const idx = _allMCs.findIndex(m => m.start_date && m.start_date.slice(0, 7) <= evtDate && m.end_date && m.end_date.slice(0, 7) >= evtDate);
+    if (idx >= 0) _mcIdx = idx;
+  }
+
   if (_allMCs.length === 0) {
     document.getElementById('calDaysGrid').innerHTML =
       '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--cm-fg-muted)">No microcycles found. Create one to get started.</div>';
@@ -2459,6 +2474,12 @@ async function showImportPreview(fixtures) {
   }
 
   await loadSessions();
+
+  // Deep-link: scroll to and highlight specific event
+  if (_urlHlId) requestAnimationFrame(() => {
+    const el = document.querySelector(`.mc-evt[data-id="${_urlHlId}"]`);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('gs-highlight'); }
+  });
 
   // Wire "+ New event" topbar button
   const newEvtBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
