@@ -634,8 +634,27 @@
     const ok = await window.requireAuth();
     if (!ok) return;
     CLUB_ID = await window.getClubId();
-    console.log('[Availability] CLUB_ID:', CLUB_ID, '| profile:', window.__cm_profile || 'not cached yet');
-    if (!CLUB_ID) { console.error('[Availability] CLUB_ID is null — profile may be missing or club_id not set'); return; }
+    console.log('[Availability] CLUB_ID:', CLUB_ID, '| profile:', window.__cm_profile || null);
+
+    // Fallback: if helper returned null, query profile directly with getUser()
+    if (!CLUB_ID) {
+      console.warn('[Availability] getClubId() returned null — trying direct profile query');
+      const { data: { user } } = await window.sb.auth.getUser();
+      console.log('[Availability] getUser():', user?.id || 'null');
+      if (user) {
+        const { data: profile, error: profileErr } = await window.sb.from('profiles')
+          .select('club_id').eq('id', user.id).single();
+        console.log('[Availability] direct profile:', profile, '| error:', profileErr?.message || null);
+        CLUB_ID = profile?.club_id || null;
+      }
+    }
+
+    if (!CLUB_ID) {
+      console.error('[Availability] CLUB_ID still null — profile missing or club_id not set for this user');
+      document.getElementById('avFooterCount').innerHTML =
+        'Error: no club assigned to your profile. Contact your administrator.';
+      return;
+    }
     window.getClub().then(c => { if (c) window.applyClubTheme(); });
 
     const todayStr     = new Date().toISOString().split('T')[0];
@@ -683,8 +702,8 @@
       window.sb.from('availability').select('player_id, status').eq('club_id', CLUB_ID).eq('date', yesterdayStr).catch(() => ({ data: null }))
     ]);
 
-    console.log('[Availability] players result — count:', playersRes.data?.length, '| error:', playersRes.error?.message || null);
-    if (playersRes.error) console.error('[Availability] players query failed:', playersRes.error);
+    console.log('[Availability] currentClubId en Availability:', CLUB_ID);
+    console.log('[Availability] players:', playersRes.data, '| error:', playersRes.error?.message || null);
 
     const players    = playersRes.data || [];
     const avMap      = {};

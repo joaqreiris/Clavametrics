@@ -19,15 +19,19 @@
     if (_clubId) return Promise.resolve(_clubId);
     if (_clubIdPromise) return _clubIdPromise;
     _clubIdPromise = (async () => {
-      const { data: { session } } = await window.sb.auth.getSession();
-      if (!session?.user) return null;
-      const { data: profile } = await window.sb.from('profiles')
+      // getUser() validates against the server — more reliable than getSession() (localStorage-only)
+      const { data: { user }, error: authErr } = await window.sb.auth.getUser();
+      if (authErr) console.warn('[supabase-init] getUser error:', authErr.message);
+      if (!user) return null;
+      const { data: profile, error: profileErr } = await window.sb.from('profiles')
         .select('club_id, role, full_name')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .single();
+      if (profileErr) console.warn('[supabase-init] profile fetch error:', profileErr.message);
       if (profile) {
         _clubId  = profile.club_id;
         _profile = profile;
+        window.__cm_profile = profile;
       }
       return _clubId;
     })();
