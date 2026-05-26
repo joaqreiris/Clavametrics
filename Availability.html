@@ -515,11 +515,14 @@
     return `<td class="${cls}"${data}>${dotEl(status)}</td>`;
   }
 
-  function summary(statuses) {
+  // dates: parallel array of YYYY-MM-DD strings; entries after today are excluded from counts
+  function summary(statuses, dates) {
+    const todayStr = new Date().toISOString().split('T')[0];
     const counts = { av:0, pa:0, in:0, si:0, na:0, ab:0 };
     let mins = 0;
-    statuses.forEach(s => {
+    statuses.forEach((s, i) => {
       if (!s) return;
+      if (dates && dates[i] > todayStr) return; // future: visible in matrix but not counted
       if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
       else { const k = statusKey(s); counts[k] = (counts[k] || 0) + 1; }
     });
@@ -529,11 +532,13 @@
   }
 
   // ── Summary tooltip HTML ──
-  function summaryTooltip(statuses) {
+  function summaryTooltip(statuses, dates) {
+    const todayStr = new Date().toISOString().split('T')[0];
     const counts = { av:0, pa:0, in:0, si:0, na:0, ab:0 };
     let mins = 0;
-    statuses.forEach(s => {
+    statuses.forEach((s, i) => {
       if (!s) return;
+      if (dates && dates[i] > todayStr) return;
       if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
       else { const k = statusKey(s); if (k in counts) counts[k]++; }
     });
@@ -560,7 +565,7 @@
       return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
     });
     const sumCell = row.querySelector('.col-sum');
-    if (sumCell) sumCell.innerHTML = summary(statuses);
+    if (sumCell) sumCell.innerHTML = summary(statuses, MC_DATES);
   }
 
   // ── Render header ──
@@ -624,7 +629,7 @@
           <td class="col-player"><div class="av-pl"><div class="av-pl-av">${initials}</div><div style="min-width:0;flex:1"><div class="av-pl-name">${name}</div><div class="av-pl-meta"><span class="av-pl-pos ${posKey}">${posKey.toUpperCase()}</span></div></div></div></td>
           <td class="col-num"><span class="av-num">${p.number || ''}</span></td>
           ${cells}
-          <td class="col-sum">${summary(statuses)}</td>
+          <td class="col-sum">${summary(statuses, MC_DATES)}</td>
         </tr>`;
       });
     });
@@ -876,7 +881,7 @@
       if (!ent) return (todayIdx >= 0 && i > todayIdx) ? null : (injuredIds.has(pid) ? 'unavailable' : 'available');
       return ent.minutes > 0 ? 'match:' + ent.minutes : (ent.status || 'available');
     });
-    const html = summaryTooltip(statuses);
+    const html = summaryTooltip(statuses, MC_DATES);
     if (!html) return;
     tip.innerHTML = html;
     tip.style.display = 'block';
