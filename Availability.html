@@ -52,6 +52,12 @@
   .av-kpi-stack { display:flex; gap:3px; margin-top:10px; height:6px; border-radius:3px; overflow:hidden; background:var(--cm-bg-sunk); }
   .av-kpi-stack .seg { height:100%; }
 
+  /* KPI player list ----- */
+  .kpi-pl-list { display:flex; flex-direction:column; gap:1px; margin-top:2px; }
+  .kpi-pl-list span { font:500 12px/1.5 var(--cm-font-sans); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .kpi-pl-more { color:var(--cm-accent) !important; cursor:pointer; font-weight:600 !important; }
+  .kpi-pl-more:hover { opacity:0.75; }
+
   /* Toolbar above matrix ----- */
   .av-toolbar {
     display:flex; align-items:center; gap:10px; flex-wrap:wrap;
@@ -636,6 +642,18 @@
     document.getElementById('avBody').innerHTML = html;
   }
 
+  // ── KPI player name list: first 3 visible, "+N more" expands the rest ──
+  function playerListHTML(names) {
+    if (!names.length) return '';
+    const top = names.slice(0, 3);
+    const rest = names.slice(3);
+    const items = top.map(n => `<span>${n}</span>`).join('');
+    const more = rest.length
+      ? `<span class="kpi-pl-more" data-rest="${rest.map(n => n.replace(/"/g,'&quot;')).join('|')}">+${rest.length} more</span>`
+      : '';
+    return `<div class="kpi-pl-list">${items}${more}</div>`;
+  }
+
   // ── Render KPIs ──
   // yesterdayByPlayer: { [player_id]: { status } } | null (null = no data, hide delta)
   function renderKPIs(players, avMap, todayStr, yesterdayByPlayer) {
@@ -644,7 +662,8 @@
     players.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
       const s = e?.status || 'available';
-      const name = [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
+      // "Nombre Apellido" — first name + first surname only
+      const name = `${p.first_name || ''} ${(p.last_name || '').split(' ')[0]}`.trim();
       if (s === 'available' || s === 'partial' || s === 'limited') avCount++;
       else if (s === 'injured' || s === 'unavailable') { inCount++; inPlayers.push(name); }
       else if (s === 'sick') { siCount++; siPlayers.push(name); }
@@ -655,9 +674,9 @@
     el('kpiAvailInjury')  && (el('kpiAvailInjury').textContent  = inCount || '—');
     el('kpiAvailIllness') && (el('kpiAvailIllness').textContent = siCount || '—');
     el('kpiAvailNat')     && (el('kpiAvailNat').textContent     = naCount || '—');
-    el('kpiInjuryDetail')  && (el('kpiInjuryDetail').textContent  = inPlayers.join(' · ')  || '');
-    el('kpiIllnessDetail') && (el('kpiIllnessDetail').textContent = siPlayers.join(' · ')  || '');
-    el('kpiNatDetail')     && (el('kpiNatDetail').textContent     = naPlayers.join(' · ')  || '');
+    el('kpiInjuryDetail')  && (el('kpiInjuryDetail').innerHTML  = playerListHTML(inPlayers));
+    el('kpiIllnessDetail') && (el('kpiIllnessDetail').innerHTML = playerListHTML(siPlayers));
+    el('kpiNatDetail')     && (el('kpiNatDetail').innerHTML     = playerListHTML(naPlayers));
 
     // Delta vs yesterday — only show if yesterday has availability records
     if (yesterdayByPlayer !== null) {
@@ -1015,6 +1034,21 @@
     matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
     updated.forEach(pid => updateRowSummary(pid));
     updateBulk();
+  });
+
+  // ── "+N more" expand in KPI player lists ──
+  document.querySelector('.av-kpis').addEventListener('click', e => {
+    const more = e.target.closest('.kpi-pl-more');
+    if (!more) return;
+    const rest = more.dataset.rest ? more.dataset.rest.split('|') : [];
+    const list = more.closest('.kpi-pl-list');
+    if (!list) return;
+    rest.forEach(n => {
+      const span = document.createElement('span');
+      span.textContent = n;
+      list.insertBefore(span, more);
+    });
+    more.remove();
   });
 
   // Filter pills
