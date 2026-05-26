@@ -490,9 +490,12 @@
   let CLUB_ID    = null;
   let MC_DATES   = [];
   let todayIdx   = -1;
-  let avMap      = {};        // player_id|date → availability row — shared across init + handlers
-  let players    = [];        // current club players
-  let injuredIds = new Set(); // player IDs with active injury
+  let avMap             = {};   // player_id|date → availability row — shared across init + handlers
+  let players           = [];   // current club players
+  let injuredIds        = new Set(); // player IDs with active injury
+  let todayStr          = '';   // YYYY-MM-DD, set in init()
+  let yesterdayByPlayer = null; // { [player_id]: row } for delta KPI
+  let _realtimeSub      = null; // Supabase realtime channel
 
   const DAY_LTR   = ['S','M','T','W','T','F','S'];
   const POS_NORM  = { GK:'gk', GOALKEEPER:'gk', CB:'cb', SW:'cb', DEFENDER:'cb', CENTRE_BACK:'cb', CENTERBACK:'cb', FB:'fb', RB:'fb', LB:'fb', RWB:'fb', LWB:'fb', FULLBACK:'fb', MF:'mf', CM:'mf', CDM:'mf', CAM:'mf', DM:'mf', AM:'mf', MIDFIELDER:'mf', WG:'wg', RW:'wg', LW:'wg', RM:'wg', LM:'wg', WINGER:'wg', ST:'st', CF:'st', SS:'st', FW:'st', FORWARD:'st', STRIKER:'st' };
@@ -654,9 +657,9 @@
     return `<div class="kpi-pl-list">${items}${more}</div>`;
   }
 
-  // ── Render KPIs ──
-  // yesterdayByPlayer: { [player_id]: { status } } | null (null = no data, hide delta)
-  function renderKPIs(players, avMap, todayStr, yesterdayByPlayer) {
+  // ── KPI calculation + DOM update — reads from module-level state ──
+  // Call any time avMap or players changes for today's date.
+  function recalcKPIs() {
     let avCount = 0, inCount = 0, siCount = 0, naCount = 0;
     const inPlayers = [], siPlayers = [], naPlayers = [];
     players.forEach(p => {
@@ -766,7 +769,7 @@
     }
     window.getClub().then(c => { if (c) window.applyClubTheme(); });
 
-    const todayStr     = new Date().toISOString().split('T')[0];
+    todayStr           = new Date().toISOString().split('T')[0];
     const yesterdayStr = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     let mcStart, mcEnd;
 
@@ -843,7 +846,7 @@
     avMap      = {};
     (availData || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
     injuredIds = new Set((injuriesData || []).map(r => r.player_id));
-    const yesterdayByPlayer = yesterdayData
+    yesterdayByPlayer = yesterdayData
       ? Object.fromEntries(yesterdayData.map(r => [r.player_id, r]))
       : null;
 
@@ -867,9 +870,40 @@
     el('avMcPickerDates') && (el('avMcPickerDates').textContent = ` ${mcStart} → ${mcEnd}`);
 
     renderMatrix(players, avMap, injuredIds);
-    renderKPIs(players, avMap, todayStr, yesterdayByPlayer);
+    recalcKPIs();
     updateBulk(); // hide bulk bar (starts with is-on in HTML)
+
+    // ── Realtime subscription ──
+    if (_realtimeSub) window.sb.removeChannel(_realtimeSub);
+    _realtimeSub = window.sb
+      .channel('av-club-' + CLUB_ID)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'availability',
+        filter: `club_id=eq.${CLUB_ID}`
+      }, ({ eventType, new: newRow, old: oldRow }) => {
+        const row  = eventType === 'DELETE' ? oldRow : newRow;
+        const date = row?.date;
+        if (!date || !MC_DATES.includes(date)) return; // ignore dates outside current MC
+
+        if (eventType === 'DELETE') {
+          delete avMap[oldRow.player_id + '|' + oldRow.date];
+        } else {
+          avMap[newRow.player_id + '|' + newRow.date] = newRow;
+        }
+
+        updateRowSummary(row.player_id);
+        if (date === todayStr) recalcKPIs();
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') console.log('[Availability] realtime subscribed for club', CLUB_ID);
+      });
   }
+
+  window.addEventListener('beforeunload', () => {
+    if (_realtimeSub) window.sb.removeChannel(_realtimeSub);
+  });
 
   init();
 
@@ -993,6 +1027,7 @@
       });
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
       updated.forEach(pid => updateRowSummary(pid));
+      recalcKPIs();
       updateBulk();
     });
   });
@@ -1013,6 +1048,7 @@
     });
     matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
     updated.forEach(pid => updateRowSummary(pid));
+    recalcKPIs();
     updateBulk();
   });
 
@@ -1033,6 +1069,7 @@
     });
     matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));
     updated.forEach(pid => updateRowSummary(pid));
+    recalcKPIs();
     updateBulk();
   });
 
