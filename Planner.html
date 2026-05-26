@@ -598,21 +598,6 @@
   .pl-lib-tag.t-focus    { background:var(--cm-bg); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
   .pl-lib-tag.t-md       { background:var(--cm-bg); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
 
-  /* === PRINT STYLES === */
-  #pl-print-sheet { display: none; }
-  @media print {
-    body > *:not(#pl-print-sheet) { display: none !important; }
-    #pl-print-sheet { display: block !important; padding: 20px; font-family: sans-serif; color: #000; }
-    .pl-print-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; border-bottom: 2px solid #222; padding-bottom: 12px; }
-    .pl-print-logo { width: 56px; height: 56px; object-fit: contain; }
-    .pl-print-title { font-size: 22px; font-weight: 700; margin: 0; }
-    .pl-print-canvas { width: 100%; border-radius: 8px; border: 1px solid #ddd; margin: 16px 0; display: block; }
-    .pl-print-meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-    .pl-print-meta-cell { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; }
-    .pl-print-meta-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #777; margin-bottom: 4px; }
-    .pl-print-meta-value { font-size: 14px; font-weight: 600; }
-  }
-
   /* Preview floating card */
   .pl-lib-preview {
     position:fixed; z-index:200; pointer-events:none;
@@ -993,9 +978,6 @@
     </section>
   </main>
 </div>
-
-<!-- Print sheet (populated by JS, visible only during print) -->
-<div id="pl-print-sheet"><div id="pl-print-content"></div></div>
 
 <!-- Share modal -->
 <div id="plShareModal">
@@ -2245,39 +2227,78 @@
   document.getElementById('plSaveBtn')?.addEventListener('click', saveExercise);
 
   // ── Print ────────────────────────────────────────────────────────
-  document.getElementById('plPrintBtn')?.addEventListener('click', () => {
-    const exName   = document.getElementById('plExName')?.value || 'Exercise';
-    const canvasImg = fc.toDataURL({ format: 'png', multiplier: 2 });
-    const players  = document.getElementById('plExPlayers')?.value  || '—';
-    const width    = document.getElementById('plExWidth')?.value;
-    const height   = document.getElementById('plExHeight')?.value;
-    const duration = document.getElementById('plExDuration')?.value;
-    const mdRaw    = document.getElementById('plExMatchDay')?.value;
-    const mdStr    = (mdRaw !== '' && mdRaw != null) ? `MD${parseInt(mdRaw) >= 0 ? '+' : ''}${mdRaw}` : '—';
-    const fieldStr = (width && height) ? `${width}×${height} m` : '—';
-    const INT_LABEL = { LOW:'Low', MEDIUM:'Medium', HIGH:'High', VERY_HIGH:'Very High' };
-    const intensityStr  = currentIntensity ? (INT_LABEL[currentIntensity] || currentIntensity) : '—';
-    const focusStr      = currentFocus.length ? currentFocus.join(', ') : '—';
-    const gameTypeStr   = currentGameTypeOn ? (currentGameType || 'On') : '—';
-    const orientStr     = currentManualOrient ? (ORIENT_META[currentManualOrient]?.label || currentManualOrient) : '—';
-    const logoHtml      = club?.logo_url ? `<img class="pl-print-logo" src="${club.logo_url}" alt="Club logo">` : '';
-    document.getElementById('pl-print-content').innerHTML = `
-      <div class="pl-print-header">
-        ${logoHtml}
-        <h1 class="pl-print-title">${exName}</h1>
-      </div>
-      <img class="pl-print-canvas" src="${canvasImg}" alt="Exercise canvas">
-      <div class="pl-print-meta-grid">
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Players</div><div class="pl-print-meta-value">${players}</div></div>
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Dimensions</div><div class="pl-print-meta-value">${fieldStr}</div></div>
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Duration</div><div class="pl-print-meta-value">${duration ? duration + ' min' : '—'}</div></div>
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Match Day</div><div class="pl-print-meta-value">${mdStr}</div></div>
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Orientation</div><div class="pl-print-meta-value">${orientStr}</div></div>
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Intensity</div><div class="pl-print-meta-value">${intensityStr}</div></div>
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Focus</div><div class="pl-print-meta-value">${focusStr}</div></div>
-        <div class="pl-print-meta-cell"><div class="pl-print-meta-label">Game Type</div><div class="pl-print-meta-value">${gameTypeStr}</div></div>
-      </div>`;
-    window.print();
+  document.getElementById('plPrintBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('plPrintBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader" style="font-size:14px"></i>Preparing…';
+    try {
+      const snapshot = await html2canvas(fieldEl, {
+        useCORS: true, allowTaint: true, scale: 2, backgroundColor: '#1a472a',
+        ignoreElements: el =>
+          el.id === 'plPolyDoneBar' || el.id === 'plPropBar' ||
+          el.id === 'plPlayerNumInput' || el.classList?.contains('pl-field-fab') ||
+          el.classList?.contains('pl-field-tag')
+      });
+      const imageData = snapshot.toDataURL('image/png');
+
+      const exName   = document.getElementById('plExName')?.value || 'Exercise';
+      const players  = document.getElementById('plExPlayers')?.value || '—';
+      const width    = document.getElementById('plExWidth')?.value;
+      const height   = document.getElementById('plExHeight')?.value;
+      const duration = document.getElementById('plExDuration')?.value;
+      const mdRaw    = document.getElementById('plExMatchDay')?.value;
+      const mdStr    = (mdRaw !== '' && mdRaw != null) ? `MD${parseInt(mdRaw) >= 0 ? '+' : ''}${mdRaw}` : '—';
+      const fieldStr = (width && height) ? `${width}×${height} m` : '—';
+      const INT_LABEL = { LOW:'Low', MEDIUM:'Medium', HIGH:'High', VERY_HIGH:'Very High' };
+      const intensityStr = currentIntensity ? (INT_LABEL[currentIntensity] || currentIntensity) : '—';
+      const focusStr     = currentFocus.length ? currentFocus.join(', ') : '—';
+      const gameTypeStr  = currentGameTypeOn ? (currentGameType || 'On') : '—';
+      const orientStr    = currentManualOrient ? (ORIENT_META[currentManualOrient]?.label || currentManualOrient) : '—';
+      const logoHtml     = club?.logo_url ? `<img src="${club.logo_url}" style="height:48px;object-fit:contain" alt="Club logo">` : '';
+
+      const pw = window.open('', '_blank');
+      if (!pw) { alert('Allow pop-ups to use Print.'); return; }
+      pw.document.write(`<!DOCTYPE html><html><head>
+        <title>${exName}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: sans-serif; color: #111; background: #fff; }
+          .header { display: flex; align-items: center; justify-content: space-between;
+                    padding: 16px 20px; border-bottom: 2px solid #222; }
+          .header h1 { font-size: 20px; font-weight: 700; }
+          .field-img { width: 100%; display: block; }
+          .meta { display: grid; grid-template-columns: repeat(4, 1fr);
+                  gap: 8px; padding: 16px 20px; }
+          .meta-item { border: 1px solid #ddd; border-radius: 6px; padding: 8px 10px; }
+          .meta-label { font-size: 9px; text-transform: uppercase; letter-spacing: .06em;
+                        color: #888; margin-bottom: 4px; }
+          .meta-value { font-size: 14px; font-weight: 600; }
+          @media print { button { display: none !important; } }
+        </style>
+      </head><body>
+        <div class="header">
+          <h1>${exName}</h1>
+          ${logoHtml}
+        </div>
+        <img class="field-img" src="${imageData}" alt="Exercise field">
+        <div class="meta">
+          <div class="meta-item"><div class="meta-label">Players</div><div class="meta-value">${players}</div></div>
+          <div class="meta-item"><div class="meta-label">Dimensions</div><div class="meta-value">${fieldStr}</div></div>
+          <div class="meta-item"><div class="meta-label">Duration</div><div class="meta-value">${duration ? duration + ' min' : '—'}</div></div>
+          <div class="meta-item"><div class="meta-label">Match Day</div><div class="meta-value">${mdStr}</div></div>
+          <div class="meta-item"><div class="meta-label">Orientation</div><div class="meta-value">${orientStr}</div></div>
+          <div class="meta-item"><div class="meta-label">Intensity</div><div class="meta-value">${intensityStr}</div></div>
+          <div class="meta-item"><div class="meta-label">Focus</div><div class="meta-value">${focusStr}</div></div>
+          <div class="meta-item"><div class="meta-label">Game Type</div><div class="meta-value">${gameTypeStr}</div></div>
+        </div>
+      </body></html>`);
+      pw.document.close();
+      pw.focus();
+      setTimeout(() => { pw.print(); pw.close(); }, 500);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-printer" style="font-size:14px"></i>Print';
+    }
   });
 
   // ── Initial load ─────────────────────────────────────────────────
