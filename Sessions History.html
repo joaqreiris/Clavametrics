@@ -132,6 +132,45 @@
   .sh-pgr button .ti{font-size:13px}
 
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
+
+  /* Grid view */
+  .sh-grid-wrap{padding:14px}
+  .sh-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+  .sh-card{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:14px;cursor:pointer;transition:box-shadow 120ms}
+  .sh-card:hover{box-shadow:var(--cm-shadow-2)}
+  .sh-card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .sh-card-date{font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .sh-card-title{font:600 13.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px}
+  .sh-card-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .sh-card-row{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--cm-border-soft)}
+
+  /* Calendar view */
+  .sh-cal-wrap{padding:14px}
+  .sh-cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .sh-cal-nav h3{flex:1;text-align:center;font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .sh-cal-hdr{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px}
+  .sh-cal-dh{text-align:center;font:500 10.5px/1 var(--cm-font-sans);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);padding:4px 0}
+  .sh-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .sh-cal-day{min-height:76px;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:4px;padding:4px}
+  .sh-cal-day.other-month{opacity:0.3}
+  .sh-cal-day.today .sh-cal-dn{background:var(--cm-accent);color:var(--cm-fg-on-accent);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+  .sh-cal-dn{font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);display:inline-block;padding:2px;margin-bottom:2px}
+  .sh-cal-evt{border-radius:3px;padding:2px 5px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:100%;display:block;border:1px solid var(--cm-border-strong)}
+  .sh-cal-evt:hover{opacity:0.8}
+
+  /* Compare modal */
+  .sh-compare-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:center;justify-content:center}
+  .sh-compare-box{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-3);width:min(94vw,960px);max-height:85vh;overflow:hidden;display:flex;flex-direction:column}
+  .sh-compare-head{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--cm-border);flex-shrink:0}
+  .sh-compare-head h2{flex:1;font:600 16px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .sh-compare-body{padding:16px;overflow-y:auto;flex:1}
+  .sh-compare-selectors{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .sh-compare-selectors select{flex:1;min-width:180px;padding:6px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface);color:var(--cm-fg);font:var(--cm-body-sm);outline:none}
+  .sh-compare-selectors select:focus{border-color:var(--cm-accent)}
+  .sh-compare-table{width:100%;border-collapse:collapse;font:var(--cm-body-sm)}
+  .sh-compare-table th{padding:8px 12px;background:var(--cm-bg-soft);font:500 11px/1 var(--cm-font-sans);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);text-align:left;border:1px solid var(--cm-border-soft)}
+  .sh-compare-table td{padding:8px 12px;border:1px solid var(--cm-border-soft);color:var(--cm-fg);vertical-align:top}
+  .sh-compare-table tr:nth-child(even) td{background:var(--cm-bg-soft)}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
@@ -153,9 +192,9 @@
       <header class="sh-head">
         <div><h1>Sessions history</h1><div class="ctx"><strong id="shTotalCount">—</strong> sessions logged · filtered by date, type, search</div></div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-chart-bar" style="font-size:14px"></i>Compare sessions</button>
-          <button class="cm-btn is-primary is-sm" href="Daily%20Planning.html"><i class="ti ti-plus" style="font-size:14px"></i>New session</button>
+          <button class="cm-btn is-outline is-sm" onclick="exportCSV()"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
+          <button class="cm-btn is-outline is-sm" data-compare onclick="openCompare()"><i class="ti ti-chart-bar" style="font-size:14px"></i>Compare sessions</button>
+          <button class="cm-btn is-primary is-sm" data-new-session onclick="goNewSession()"><i class="ti ti-plus" style="font-size:14px"></i>New session</button>
         </div>
       </header>
 
@@ -164,7 +203,7 @@
         <div class="sh-kpi"><div class="l"><i class="ti ti-clock"></i>Hours on pitch</div><div class="v" id="kpiHours">—</div><div class="t" id="kpiHoursTrend">—</div></div>
         <div class="sh-kpi"><div class="l"><i class="ti ti-activity"></i>Avg session load</div><div class="v" id="kpiAvgLoad">—</div><div class="t" id="kpiLoadTrend">—</div></div>
         <div class="sh-kpi"><div class="l"><i class="ti ti-target-arrow"></i>Compliance</div><div class="v">—<sub>%</sub></div><div class="t">planned ↔ delivered</div></div>
-        <div class="sh-kpi"><div class="l"><i class="ti ti-users"></i>Avg attendance</div><div class="v" id="kpiAttendance">—</div><div class="t">squad participation</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-users"></i>Avg attendance</div><div class="v" id="kpiAttendance">—</div><div class="t" id="kpiAttTrend">squad participation</div></div>
       </div>
 
       <div class="sh-layout">
@@ -185,37 +224,37 @@
           </div>
 
           <h4>MD position</h4>
-          <div class="sh-chips">
-            <button class="sh-chip">MD−5</button>
-            <button class="sh-chip is-on">MD−4</button>
-            <button class="sh-chip is-on">MD−3</button>
-            <button class="sh-chip is-on">MD−2</button>
-            <button class="sh-chip is-on">MD−1</button>
-            <button class="sh-chip">MD</button>
-            <button class="sh-chip is-on">MD+1</button>
-            <button class="sh-chip">MD+2</button>
+          <div class="sh-chips" id="mdChips">
+            <button class="sh-chip" data-md="MD-5">MD−5</button>
+            <button class="sh-chip" data-md="MD-4">MD−4</button>
+            <button class="sh-chip" data-md="MD-3">MD−3</button>
+            <button class="sh-chip" data-md="MD-2">MD−2</button>
+            <button class="sh-chip" data-md="MD-1">MD−1</button>
+            <button class="sh-chip" data-md="MD0">MD</button>
+            <button class="sh-chip" data-md="MD+1">MD+1</button>
+            <button class="sh-chip" data-md="MD+2">MD+2</button>
           </div>
 
           <h4>Session type</h4>
           <div id="shOrientFilters"><!-- populated by renderOrientFilters() --></div>
 
           <h4>Focus</h4>
-          <div class="sh-chips">
-            <button class="sh-chip is-on">Tactical</button>
-            <button class="sh-chip is-on">Physical</button>
-            <button class="sh-chip is-on">Technical</button>
-            <button class="sh-chip">Individual</button>
-            <button class="sh-chip">Positional</button>
+          <div class="sh-chips" id="focusChips">
+            <button class="sh-chip" data-focus="Tactical">Tactical</button>
+            <button class="sh-chip" data-focus="Physical">Physical</button>
+            <button class="sh-chip" data-focus="Technical">Technical</button>
+            <button class="sh-chip" data-focus="Individual">Individual</button>
+            <button class="sh-chip" data-focus="Positional">Positional</button>
           </div>
 
 <!-- Type (SSG/MSG/LSG) removed — no DB column in training_sessions -->
 
           <h4>Load band</h4>
-          <div class="sh-chips">
-            <button class="sh-chip is-on">Low</button>
-            <button class="sh-chip is-on">Moderate</button>
-            <button class="sh-chip is-on">High</button>
-            <button class="sh-chip">Peak</button>
+          <div class="sh-chips" id="bandChips">
+            <button class="sh-chip" data-band="low">Low</button>
+            <button class="sh-chip" data-band="moderate">Moderate</button>
+            <button class="sh-chip" data-band="high">High</button>
+            <button class="sh-chip" data-band="peak">Peak</button>
           </div>
         </aside>
 
@@ -237,7 +276,7 @@
             <span class="lbl" style="margin-left:auto"><strong id="shFilterCount" style="color:var(--cm-fg-strong)">—</strong> match filters</span>
           </div>
 
-          <div style="max-height:760px;overflow-y:auto">
+          <div id="shListView" style="max-height:760px;overflow-y:auto">
           <table class="sh-tbl">
             <thead>
               <tr>
@@ -256,7 +295,26 @@
           </table>
           </div>
 
-          <div class="sh-foot">
+          <div id="shGridView" style="display:none;max-height:760px;overflow-y:auto">
+            <div class="sh-grid-wrap"><div class="sh-grid" id="shGridItems"></div></div>
+          </div>
+
+          <div id="shCalView" style="display:none">
+            <div class="sh-cal-wrap" id="shCalWrap">
+              <div class="sh-cal-nav">
+                <button id="shCalPrev" class="cm-icon-btn"><i class="ti ti-chevron-left"></i></button>
+                <h3 class="sh-cal-title"></h3>
+                <button id="shCalNext" class="cm-icon-btn"><i class="ti ti-chevron-right"></i></button>
+              </div>
+              <div class="sh-cal-hdr">
+                <div class="sh-cal-dh">Su</div><div class="sh-cal-dh">Mo</div><div class="sh-cal-dh">Tu</div>
+                <div class="sh-cal-dh">We</div><div class="sh-cal-dh">Th</div><div class="sh-cal-dh">Fr</div><div class="sh-cal-dh">Sa</div>
+              </div>
+              <div class="sh-cal-grid" id="shCalGrid"></div>
+            </div>
+          </div>
+
+          <div class="sh-foot" id="shFoot">
             <span id="footCount">Loading…</span>
             <span class="grow"></span>
             <span class="sh-pgr" id="paginationRoot"></span>
@@ -273,6 +331,26 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
+<!-- Compare Sessions modal -->
+<div id="shCompareModal" class="sh-compare-overlay" style="display:none">
+  <div class="sh-compare-box">
+    <div class="sh-compare-head">
+      <h2><i class="ti ti-chart-bar" style="font-size:16px;margin-right:6px"></i>Compare Sessions</h2>
+      <button class="cm-icon-btn" onclick="closeCompare()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sh-compare-body">
+      <div class="sh-compare-selectors">
+        <select id="shCmp1" onchange="renderCompare()"><option value="">— Session 1 —</option></select>
+        <select id="shCmp2" onchange="renderCompare()"><option value="">— Session 2 —</option></select>
+        <select id="shCmp3" onchange="renderCompare()"><option value="">— Session 3 (optional) —</option></select>
+      </div>
+      <table class="sh-compare-table" id="shCmpTable">
+        <tr><td colspan="4" style="text-align:center;color:var(--cm-fg-muted);padding:24px">Select sessions above to compare</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
@@ -284,68 +362,114 @@
   const PAGE_SIZE = 15;
   let allSessions = [], filteredSessions = [], currentPage = 0;
   let activeDays = 30, searchText = '';
+  let activeView = 'list';
+  let calendarMonth = new Date();
+  let microcycles = [];
+  let totalActivePlayers = 0;
+  let activeMdPos    = new Set();
+  let activeFocusSet = new Set();
+  let activeBandSet  = new Set();
 
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MONTHS      = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAYS_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
   const FOCUS_MAP = { Tactical:'tactical', Physical:'physical', Technical:'technical', Match:'tactical', Recovery:'individual', Conditioning:'physical', Gym:'physical' };
   const ORIENT_MAP = {
-    Tactical:    { cls:'dur',   label:'Duration'       },
-    Physical:    { cls:'spd',   label:'Speed'          },
-    Match:       { cls:'ten',   label:'Match'          },
-    Recovery:    { cls:'rec',   label:'Recovery'       },
-    Gym:         { cls:'ten',   label:'Muscle tension' },
-    Conditioning:{ cls:'act',   label:'Activation'     },
-    Technical:   { cls:'intro', label:'Introductory'   }
+    Tactical:    { cls:'dur',  label:'Duration'       },
+    Physical:    { cls:'spd',  label:'Speed'          },
+    Match:       { cls:'ten',  label:'Match'          },
+    Recovery:    { cls:'rec',  label:'Recovery'       },
+    Gym:         { cls:'ten',  label:'Muscle tension' },
+    Conditioning:{ cls:'act',  label:'Activation'     },
+    Technical:   { cls:'intro',label:'Introductory'   },
   };
+  const FOCUS_TYPES = {
+    Tactical:   ['tactical','match'],
+    Physical:   ['conditioning','gym'],
+    Technical:  ['technical'],
+    Individual: ['recovery'],
+    Positional: ['other'],
+  };
+  const BAND_RANGES = { low:[0,300], moderate:[300,600], high:[600,900], peak:[900,Infinity] };
 
+  function getSeasonStart() {
+    const now = new Date(); const y = now.getFullYear(); const m = now.getMonth();
+    return new Date(m >= 6 ? y : y - 1, 6, 1); // July 1
+  }
+
+  function computeMdPos(sessionDate) {
+    if (!microcycles.length) return null;
+    const sd = new Date(sessionDate + 'T00:00:00');
+    for (const mc of microcycles) {
+      if (!mc.match_date) continue;
+      const start = new Date(mc.start_date + 'T00:00:00');
+      const end   = new Date(mc.end_date   + 'T00:00:00');
+      if (sd >= start && sd <= end) {
+        const diff = Math.round((sd - new Date(mc.match_date + 'T00:00:00')) / 86400000);
+        if (diff === 0) return 'MD0';
+        return diff < 0 ? `MD${diff}` : `MD+${diff}`;
+      }
+    }
+    return null;
+  }
+
+  function avgLoad(s) {
+    if (s.rpe?.length) {
+      const total = s.rpe.reduce((t, r) => t + (r.load || 0), 0);
+      return Math.round(total / s.rpe.length);
+    }
+    if (s.estimated_rpe && s.duration) return s.estimated_rpe * s.duration;
+    return null;
+  }
+
+  function getBand(load) {
+    if (load == null) return null;
+    if (load < 300)  return 'low';
+    if (load < 600)  return 'moderate';
+    if (load < 900)  return 'high';
+    return 'peak';
+  }
+
+  // ── Boot ──
   async function boot() {
     if (!await window.requireAuth()) return;
     window.applyClubTheme();
     const clubId = await window.getClubId();
     if (!clubId) return;
+    const [mcRes, plRes] = await Promise.all([
+      window.sb.from('microcycles').select('id,start_date,end_date,match_date').eq('club_id', clubId).order('start_date'),
+      window.sb.from('players').select('id', { count:'exact', head:true }).eq('club_id', clubId).neq('status','inactive')
+    ]);
+    microcycles = mcRes.data || [];
+    totalActivePlayers = plRes.count || 0;
     await loadSessions(clubId);
   }
 
   async function loadSessions(clubId) {
     const { data, error } = await window.sb
       .from('training_sessions')
-      .select('id,club_id,session_date,title,notes,session_type,duration, rpe(rpe, duration, load)')
+      .select('id,club_id,session_date,title,notes,session_type,duration,estimated_rpe,rpe(rpe,duration,load)')
       .eq('club_id', clubId)
       .order('session_date', { ascending: false });
     if (error) { console.error(error); return; }
-    allSessions = data || [];
+    allSessions = (data || []).map(s => ({ ...s, _mdPos: computeMdPos(s.session_date) }));
     renderOrientFilters();
-    const tc = document.getElementById('shTotalCount');
-    if (tc) tc.textContent = allSessions.length;
     applyFilters();
   }
 
-  function avgLoad(s) {
-    if (!s.rpe?.length) return 0;
-    return Math.round(s.rpe.reduce((t, r) => t + (r.load || 0), 0) / s.rpe.length);
-  }
-
-  const ORIENT_BY_TYPE = {
-    Tactical:    { cls:'dur',   label:'Duration' },
-    Physical:    { cls:'spd',   label:'Speed' },
-    Match:       { cls:'ten',   label:'Match' },
-    Recovery:    { cls:'rec',   label:'Recovery' },
-    Gym:         { cls:'ten',   label:'Muscle tension' },
-    Conditioning:{ cls:'act',   label:'Activation' },
-    Technical:   { cls:'intro', label:'Introductory' },
-  };
-
+  // ── Filters ──
   function renderOrientFilters() {
     const container = document.getElementById('shOrientFilters');
     if (!container) return;
     const counts = {};
-    allSessions.forEach(s => { const t = s.session_type || 'Other'; counts[t] = (counts[t] || 0) + 1; });
+    allSessions.forEach(s => { const t = s.session_type || 'Other'; counts[t] = (counts[t]||0)+1; });
     if (!Object.keys(counts).length) {
       container.innerHTML = '<span style="color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">No sessions yet</span>';
       return;
     }
     container.innerHTML = Object.entries(counts).map(([type, n]) => {
-      const o = ORIENT_BY_TYPE[type] || { cls:'act', label: type };
+      const o = ORIENT_MAP[type] || { cls:'act', label: type };
       return `<div class="sh-opt is-on" data-st="${type}">
         <span class="cb"></span>
         <span class="sh-orient" style="margin-right:2px"><span class="d ${o.cls}"></span></span>
@@ -356,72 +480,133 @@
       el.addEventListener('click', () => { el.classList.toggle('is-on'); applyFilters(); }));
   }
 
-  function renderActiveChips() {
-    const el = document.getElementById('shActiveChips');
-    if (!el) return;
-    const chips = [];
-    if (activeDays) chips.push(`${activeDays}d`);
-    const activeTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')]
-      .map(e => { const t = e.dataset.st; return ORIENT_BY_TYPE[t]?.label || t; });
-    if (activeTypes.length && activeTypes.length < Object.keys(ORIENT_BY_TYPE).length + 1)
-      chips.push(activeTypes.join(' · '));
-    el.innerHTML = chips.map(c =>
-      `<span class="sh-active-chip">${c} <i class="ti ti-x" style="font-size:11px"></i></span>`
-    ).join('');
-  }
-
   function applyFilters() {
     const q = searchText.toLowerCase().trim();
-    const cutoff = activeDays ? new Date(Date.now() - activeDays * 864e5) : null;
-    const activeTypes = new Set(
-      [...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')]
-        .map(el => el.dataset.st).filter(Boolean)
-    );
+    let startDate = null;
+    if (activeDays === -1) startDate = getSeasonStart();
+    else if (activeDays > 0) startDate = new Date(Date.now() - activeDays * 864e5);
+
+    const activeTypes = new Set([...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')].map(el => el.dataset.st).filter(Boolean));
+
     filteredSessions = allSessions.filter(s => {
-      if (cutoff && new Date(s.session_date) < cutoff) return false;
-      if (q && !`${s.title || ''} ${s.notes || ''}`.toLowerCase().includes(q)) return false;
+      if (startDate && new Date(s.session_date + 'T00:00:00') < startDate) return false;
+      if (q && !`${s.title||''} ${s.notes||''}`.toLowerCase().includes(q)) return false;
       if (activeTypes.size > 0 && !activeTypes.has(s.session_type || 'Other')) return false;
+      if (activeFocusSet.size > 0) {
+        const st = (s.session_type||'').toLowerCase();
+        if (![...activeFocusSet].some(f => (FOCUS_TYPES[f]||[]).includes(st))) return false;
+      }
+      if (activeBandSet.size > 0) {
+        const band = getBand(avgLoad(s));
+        if (!activeBandSet.has(band || 'low')) return false;
+      }
+      if (activeMdPos.size > 0 && !activeMdPos.has(s._mdPos)) return false;
       return true;
     });
+
     currentPage = 0;
-    const fc = document.getElementById('shFilterCount');
-    if (fc) fc.textContent = filteredSessions.length;
+    const fc = document.getElementById('shFilterCount'); if (fc) fc.textContent = filteredSessions.length;
+    const tc = document.getElementById('shTotalCount');  if (tc) tc.textContent = allSessions.length;
     renderActiveChips();
     updateKPIs();
-    renderTable();
+    renderView();
     renderFooter();
   }
 
   function updateKPIs() {
-    const n = filteredSessions.length;
-    const hrs = +(filteredSessions.reduce((s, x) => s + (x.duration || 0), 0) / 60).toFixed(1);
-    const loads = filteredSessions.map(s => avgLoad(s)).filter(Boolean);
-    const avgLd = loads.length ? Math.round(loads.reduce((s, l) => s + l, 0) / loads.length) : null;
-    document.getElementById('kpiSessions').textContent = n;
+    const yearStart = new Date(new Date().getFullYear(), 0, 1);
+    const ytd = allSessions.filter(s => new Date(s.session_date + 'T00:00:00') >= yearStart).length;
+    const n   = filteredSessions.length;
+    const hrs = +(filteredSessions.reduce((acc, x) => acc + (x.duration||0), 0) / 60).toFixed(1);
+
+    let totalLoad = 0, loadCount = 0;
+    filteredSessions.forEach(s => {
+      const l = avgLoad(s);
+      if (l != null) { totalLoad += l; loadCount++; }
+    });
+    const avgLd = loadCount ? Math.round(totalLoad / loadCount) : null;
+
+    const sessWithRpe = filteredSessions.filter(s => s.rpe?.length > 0);
+    let avgAtt = null;
+    if (sessWithRpe.length && totalActivePlayers > 0) {
+      avgAtt = Math.round(sessWithRpe.reduce((t, s) => t + s.rpe.length, 0) / sessWithRpe.length / totalActivePlayers * 100);
+    }
+
+    document.getElementById('kpiSessions').textContent = ytd;
     document.getElementById('kpiHours').innerHTML = `${hrs}<sub>h</sub>`;
     document.getElementById('kpiAvgLoad').innerHTML = avgLd != null ? `${avgLd}<sub>AU</sub>` : '—';
-    document.getElementById('kpiSessionsTrend').textContent = n ? `${n} sessions in range` : 'No sessions';
-    document.getElementById('kpiHoursTrend').textContent = n ? `avg ${hrs ? Math.round(hrs / n * 60) : 0} min/session` : '—';
+    document.getElementById('kpiSessionsTrend').textContent = `${ytd} sessions this year`;
+    document.getElementById('kpiHoursTrend').textContent = n ? `avg ${hrs ? Math.round(hrs/n*60) : 0} min/session` : '—';
     document.getElementById('kpiLoadTrend').textContent = avgLd != null ? 'avg across players' : 'No RPE data';
+    document.getElementById('kpiAttendance').innerHTML = avgAtt != null ? `${avgAtt}<sub>%</sub>` : '—';
+    document.getElementById('kpiAttTrend').textContent = avgAtt != null ? `${sessWithRpe.length} sessions w/ data` : 'No RPE data';
   }
 
+  function renderActiveChips() {
+    const el = document.getElementById('shActiveChips'); if (!el) return;
+    const chips = [];
+    if (activeDays === -1) chips.push({ label:'Season', key:'date' });
+    else if (activeDays > 0) chips.push({ label:`Last ${activeDays}d`, key:'date' });
+    const onTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')];
+    const allTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt')];
+    if (onTypes.length && onTypes.length < allTypes.length)
+      chips.push({ label: onTypes.map(e => ORIENT_MAP[e.dataset.st]?.label || e.dataset.st).join(' · '), key:'type' });
+    if (activeFocusSet.size > 0 && activeFocusSet.size < 5) chips.push({ label:[...activeFocusSet].join(' · '), key:'focus' });
+    if (activeBandSet.size  > 0 && activeBandSet.size  < 4) chips.push({ label:[...activeBandSet].join(' · '), key:'band' });
+    if (activeMdPos.size    > 0) chips.push({ label:[...activeMdPos].join(' · '), key:'md' });
+    el.innerHTML = chips.map(c =>
+      `<span class="sh-active-chip" data-key="${c.key}">${c.label} <i class="ti ti-x" style="font-size:11px"></i></span>`
+    ).join('');
+    el.querySelectorAll('.sh-active-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const k = chip.dataset.key;
+        if (k === 'date')  { activeDays = 30; document.querySelectorAll('#dateChips .sh-chip').forEach(c => c.classList.remove('is-on')); document.querySelector('#dateChips [data-days="30"]')?.classList.add('is-on'); }
+        if (k === 'type')  document.querySelectorAll('#shOrientFilters .sh-opt').forEach(e => e.classList.add('is-on'));
+        if (k === 'focus') { activeFocusSet.clear(); document.querySelectorAll('[data-focus]').forEach(c => c.classList.remove('is-on')); }
+        if (k === 'band')  { activeBandSet.clear();  document.querySelectorAll('[data-band]').forEach(c => c.classList.remove('is-on')); }
+        if (k === 'md')    { activeMdPos.clear();    document.querySelectorAll('[data-md]').forEach(c => c.classList.remove('is-on')); }
+        applyFilters();
+      });
+    });
+  }
+
+  // ── View routing ──
+  function renderView() {
+    document.getElementById('shListView').style.display = activeView === 'list' ? '' : 'none';
+    document.getElementById('shGridView').style.display = activeView === 'grid' ? '' : 'none';
+    document.getElementById('shCalView').style.display  = activeView === 'cal'  ? '' : 'none';
+    document.getElementById('shFoot').style.display     = activeView === 'cal'  ? 'none' : '';
+    if (activeView === 'list') renderTable();
+    else if (activeView === 'grid') renderGrid();
+    else renderCalendar();
+  }
+
+  // ── List view ──
   function rowHTML(s) {
-    const dt = new Date(s.session_date);
+    const dt = new Date(s.session_date + 'T00:00:00');
     const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
-    const dayStr = DAYS_SHORT[dt.getDay()];
-    const type = s.session_type || 'Other';
+    const dayStr  = DAYS_SHORT[dt.getDay()];
+    const type    = s.session_type || 'Other';
     const focusCls = FOCUS_MAP[type] || 'tactical';
-    const orient = ORIENT_MAP[type] || { cls:'act', label: type };
-    const load = avgLoad(s);
-    const pct = load ? Math.min(100, Math.round(load / 9)) : 0;
-    const band = load >= 600 ? 'high' : load >= 300 ? 'med' : 'low';
-    const durHTML = s.duration != null ? `${s.duration}<span style="color:var(--cm-fg-muted)">′</span>` : '—';
-    const loadHTML = load
-      ? `<span class="sh-load"><span class="bar"><span class="f ${band}" style="width:${pct}%"></span></span><span class="v">${load}</span></span>`
+    const orient   = ORIENT_MAP[type] || { cls:'act', label: type };
+    const load  = avgLoad(s);
+    const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
+    const band  = getBand(load);
+    const bandCls = band === 'moderate' ? 'med' : (band || 'low');
+    const durHTML  = s.duration != null ? `${s.duration}<span style="color:var(--cm-fg-muted)">′</span>` : '—';
+    const loadHTML = load != null
+      ? `<span class="sh-load"><span class="bar"><span class="f ${bandCls}" style="width:${pct}%"></span></span><span class="v">${load}</span></span>`
       : `<span style="color:var(--cm-fg-muted)">—</span>`;
+    const mdLabel = s._mdPos || '—';
+    const mdCls   = s._mdPos === 'MD0' ? 'md0' : (s._mdPos?.startsWith('MD+') ? 'recovery' : '');
+    const attCount = s.rpe?.length;
+    const attCls   = attCount && totalActivePlayers && attCount >= totalActivePlayers ? ' full' : attCount ? ' partial' : '';
+    const attHTML  = attCount
+      ? `<span class="sh-att${attCls}"><i class="ti ti-users"></i>${attCount}</span>`
+      : `<span class="sh-att"><i class="ti ti-users"></i>—</span>`;
     return `<tr data-id="${s.id}">
       <td><div class="sh-date"><span class="d">${dateStr}</span><span class="day">${dayStr}</span></div></td>
-      <td><span class="sh-md">—</span></td>
+      <td><span class="sh-md ${mdCls}">${mdLabel}</span></td>
       <td>
         <div class="sh-title">${s.title || '(untitled)'}</div>
         ${s.notes ? `<div class="sh-sub">${s.notes}</div>` : ''}
@@ -430,7 +615,7 @@
       <td><span class="sh-orient"><span class="d ${orient.cls}"></span>${orient.label}</span></td>
       <td>${durHTML}</td>
       <td>${loadHTML}</td>
-      <td><span class="sh-att"><i class="ti ti-users"></i>—</span></td>
+      <td>${attHTML}</td>
       <td><div class="sh-actions">
         <button title="Open" onclick="openSess(event)"><i class="ti ti-external-link"></i></button>
         <button title="Copy" onclick="dupSess(event)"><i class="ti ti-copy"></i></button>
@@ -440,7 +625,7 @@
 
   function renderTable() {
     const tbody = document.getElementById('sessionsBody');
-    const slice = filteredSessions.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+    const slice = filteredSessions.slice(currentPage * PAGE_SIZE, (currentPage+1) * PAGE_SIZE);
     if (!slice.length) {
       tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--cm-fg-muted)">No sessions match the current filters</td></tr>`;
       return;
@@ -448,11 +633,105 @@
     tbody.innerHTML = slice.map(rowHTML).join('');
     tbody.querySelectorAll('tr[data-id]').forEach(row => row.addEventListener('click', e => {
       if (e.target.closest('button')) return;
-      window.location.href = 'Daily Planning.html';
+      const sess = allSessions.find(s => s.id === row.dataset.id);
+      if (sess) window.location.href = `Daily Planning.html?date=${sess.session_date}`;
     }));
   }
 
+  // ── Grid view ──
+  function renderGrid() {
+    const container = document.getElementById('shGridItems'); if (!container) return;
+    const slice = filteredSessions.slice(currentPage * PAGE_SIZE, (currentPage+1) * PAGE_SIZE);
+    if (!slice.length) {
+      container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--cm-fg-muted)">No sessions match the current filters</div>`;
+      return;
+    }
+    container.innerHTML = slice.map(s => {
+      const dt = new Date(s.session_date + 'T00:00:00');
+      const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+      const dayStr  = DAYS_SHORT[dt.getDay()];
+      const type    = s.session_type || 'Other';
+      const focusCls = FOCUS_MAP[type] || 'tactical';
+      const orient   = ORIENT_MAP[type] || { cls:'act', label: type };
+      const load  = avgLoad(s);
+      const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
+      const band  = getBand(load);
+      const bandCls = band === 'moderate' ? 'med' : (band || 'low');
+      const attCount = s.rpe?.length;
+      return `<div class="sh-card" data-id="${s.id}">
+        <div class="sh-card-top">
+          <span class="sh-card-date">${dayStr}, ${dateStr}</span>
+          <span class="sh-tag ${focusCls}" style="margin-left:auto">${type}</span>
+        </div>
+        <div class="sh-card-title">${s.title || '(untitled)'}</div>
+        <div class="sh-card-meta">
+          <span class="sh-orient"><span class="d ${orient.cls}"></span>${orient.label}</span>
+          ${s._mdPos ? `<span class="sh-md" style="font-size:10px">${s._mdPos}</span>` : ''}
+        </div>
+        <div class="sh-card-row">
+          <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${s.duration != null ? s.duration + '′' : '—'}</span>
+          ${load != null ? `<span class="sh-load"><span class="bar"><span class="f ${bandCls}" style="width:${pct}%"></span></span><span class="v">${load} AU</span></span>` : '<span style="color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-mono)">—</span>'}
+          ${attCount ? `<span class="sh-att partial"><i class="ti ti-users"></i>${attCount}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.sh-card[data-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        const sess = allSessions.find(s => s.id === card.dataset.id);
+        if (sess) window.location.href = `Daily Planning.html?date=${sess.session_date}`;
+      });
+    });
+  }
+
+  // ── Calendar view ──
+  function renderCalendar() {
+    const grid = document.getElementById('shCalGrid'); if (!grid) return;
+    const titleEl = document.querySelector('.sh-cal-title');
+    const year = calendarMonth.getFullYear(), month = calendarMonth.getMonth();
+    if (titleEl) titleEl.textContent = `${MONTHS_FULL[month]} ${year}`;
+
+    const sessMap = {};
+    filteredSessions.forEach(s => { if (!sessMap[s.session_date]) sessMap[s.session_date] = []; sessMap[s.session_date].push(s); });
+
+    const firstDay   = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date().toISOString().split('T')[0];
+    const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+    let html = '';
+
+    for (let i = 0; i < totalCells; i++) {
+      const cellDay = i - firstDay + 1;
+      const inMonth = cellDay >= 1 && cellDay <= daysInMonth;
+      const dateStr = inMonth ? `${year}-${String(month+1).padStart(2,'0')}-${String(cellDay).padStart(2,'0')}` : '';
+      const isToday = dateStr === today;
+      const sessions = inMonth ? (sessMap[dateStr] || []) : [];
+      let displayDay = cellDay;
+      if (!inMonth) {
+        displayDay = cellDay < 1
+          ? new Date(year, month, cellDay).getDate()
+          : new Date(year, month+1, cellDay-daysInMonth).getDate();
+      }
+      html += `<div class="sh-cal-day${!inMonth?' other-month':''}${isToday?' today':''}">
+        <span class="sh-cal-dn">${displayDay}</span>`;
+      sessions.forEach(s => {
+        const focusCls = FOCUS_MAP[s.session_type] || 'tactical';
+        html += `<div class="sh-cal-evt sh-tag ${focusCls}" data-id="${s.id}" title="${s.title||s.session_type||'Session'}">${s.title||s.session_type||'Session'}</div>`;
+      });
+      html += '</div>';
+    }
+    grid.innerHTML = html;
+    grid.querySelectorAll('.sh-cal-evt[data-id]').forEach(el => {
+      el.addEventListener('click', e => {
+        e.stopPropagation();
+        const sess = allSessions.find(s => s.id === el.dataset.id);
+        if (sess) window.location.href = `Daily Planning.html?date=${sess.session_date}`;
+      });
+    });
+  }
+
+  // ── Footer / pagination ──
   function renderFooter() {
+    if (activeView === 'cal') return;
     const total = filteredSessions.length;
     const start = currentPage * PAGE_SIZE;
     const shown = Math.min(PAGE_SIZE, total - start);
@@ -460,12 +739,11 @@
     document.getElementById('footCount').innerHTML =
       `Showing <strong>${shown}</strong> of <strong>${total}</strong> filtered sessions · ${allSessions.length} total`;
     const pgr = document.getElementById('paginationRoot');
-    let h = `<button ${currentPage === 0 ? 'disabled' : ''} onclick="goPage(${currentPage-1})"><i class="ti ti-chevron-left"></i></button>`;
-    const rs = Math.max(0, Math.min(currentPage - 2, pages - 5));
-    for (let i = rs; i < Math.min(rs + 5, pages); i++) {
-      h += `<button class="${i === currentPage ? 'is-on' : ''}" onclick="goPage(${i})">${i+1}</button>`;
-    }
-    h += `<button ${currentPage >= pages - 1 ? 'disabled' : ''} onclick="goPage(${currentPage+1})"><i class="ti ti-chevron-right"></i></button>`;
+    let h = `<button ${currentPage===0?'disabled':''} onclick="goPage(${currentPage-1})"><i class="ti ti-chevron-left"></i></button>`;
+    const rs = Math.max(0, Math.min(currentPage-2, pages-5));
+    for (let i = rs; i < Math.min(rs+5, pages); i++)
+      h += `<button class="${i===currentPage?'is-on':''}" onclick="goPage(${i})">${i+1}</button>`;
+    h += `<button ${currentPage>=pages-1?'disabled':''} onclick="goPage(${currentPage+1})"><i class="ti ti-chevron-right"></i></button>`;
     pgr.innerHTML = h;
   }
 
@@ -473,52 +751,194 @@
     const pages = Math.ceil(filteredSessions.length / PAGE_SIZE);
     if (p < 0 || p >= pages) return;
     currentPage = p;
-    renderTable();
+    if (activeView === 'list') renderTable();
+    else if (activeView === 'grid') renderGrid();
     renderFooter();
   }
 
-  function openSess(e) { e.stopPropagation(); window.location.href = 'Daily Planning.html'; }
+  // ── Row actions ──
+  function openSess(e) {
+    e.stopPropagation();
+    const row = e.target.closest('tr[data-id]'); if (!row) return;
+    const sess = allSessions.find(s => s.id === row.dataset.id);
+    if (sess) window.location.href = `Daily Planning.html?date=${sess.session_date}`;
+  }
+
   async function dupSess(e) {
     e.stopPropagation();
-    const row = e.target.closest('tr[data-id]');
-    if (!row) return;
-    const sess = allSessions.find(s => s.id === row.dataset.id);
-    if (!sess) return;
-    const btn = e.currentTarget;
-    btn.disabled = true;
+    const row = e.target.closest('tr[data-id]'); if (!row) return;
+    const sess = allSessions.find(s => s.id === row.dataset.id); if (!sess) return;
+    const btn = e.currentTarget; btn.disabled = true;
     const { error } = await window.sb.from('training_sessions').insert({
-      club_id:      sess.club_id,
-      session_date: sess.session_date,
-      title:        `Copy of ${sess.title || 'Untitled'}`,
-      notes:        sess.notes,
-      session_type: sess.session_type,
-      duration:     sess.duration,
+      club_id: sess.club_id, session_date: sess.session_date,
+      title: `Copy of ${sess.title||'Untitled'}`, notes: sess.notes,
+      session_type: sess.session_type, duration: sess.duration,
     });
-    if (error) { alert('Error duplicating session: ' + error.message); btn.disabled = false; return; }
+    if (error) { alert('Error: ' + error.message); btn.disabled = false; return; }
     btn.innerHTML = '<i class="ti ti-check"></i>';
     setTimeout(() => location.reload(), 800);
   }
 
-  // Date chips — exclusive selection
+  // ── Export CSV ──
+  function exportCSV() {
+    const headers = ['date','md_position','session_name','focus','orientation','duration_min','load_au','rpe_entries'];
+    const rows = filteredSessions.map(s => {
+      const load = avgLoad(s);
+      const orient = ORIENT_MAP[s.session_type]?.label || s.session_type || '';
+      return [
+        s.session_date, s._mdPos||'',
+        (s.title||'').replace(/,/g,';'), s.session_type||'',
+        orient, s.duration||'', load!=null?load:'', s.rpe?.length||''
+      ].join(',');
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type:'text/csv' }));
+    const a = document.createElement('a');
+    const rangeLabel = activeDays===-1 ? 'season' : activeDays>0 ? `${activeDays}d` : 'all';
+    a.href = url; a.download = `sessions_${rangeLabel}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  // ── Compare Sessions ──
+  function openCompare() {
+    const modal = document.getElementById('shCompareModal'); if (!modal) return;
+    modal.style.display = 'flex';
+    const opts = filteredSessions.map(s => {
+      const dt = new Date(s.session_date + 'T00:00:00');
+      const label = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()} — ${s.title||s.session_type||'Untitled'}`;
+      return `<option value="${s.id}">${label}</option>`;
+    }).join('');
+    const empty1 = '<option value="">— Session 1 —</option>';
+    const empty2 = '<option value="">— Session 2 —</option>';
+    const empty3 = '<option value="">— Session 3 (optional) —</option>';
+    document.getElementById('shCmp1').innerHTML = empty1 + opts;
+    document.getElementById('shCmp2').innerHTML = empty2 + opts;
+    document.getElementById('shCmp3').innerHTML = empty3 + opts;
+    renderCompare();
+  }
+
+  function closeCompare() {
+    const modal = document.getElementById('shCompareModal'); if (modal) modal.style.display = 'none';
+  }
+
+  function renderCompare() {
+    const ids = ['shCmp1','shCmp2','shCmp3'].map(id => document.getElementById(id)?.value).filter(Boolean);
+    const sessions = ids.map(id => allSessions.find(s => s.id === id)).filter(Boolean);
+    const table = document.getElementById('shCmpTable'); if (!table) return;
+    if (!sessions.length) {
+      table.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--cm-fg-muted);padding:24px">Select sessions above to compare</td></tr>';
+      return;
+    }
+    const ROWS = [
+      ['Date',        s => s.session_date],
+      ['MD Position', s => s._mdPos||'—'],
+      ['Type',        s => s.session_type||'—'],
+      ['Duration',    s => s.duration!=null ? `${s.duration} min` : '—'],
+      ['Orientation', s => ORIENT_MAP[s.session_type]?.label||s.session_type||'—'],
+      ['Load (AU)',   s => { const l=avgLoad(s); return l!=null?`${l} AU`:'—'; }],
+      ['RPE entries', s => s.rpe?.length||'—'],
+      ['Notes',       s => s.notes||'—'],
+    ];
+    const headerCols = sessions.map(s => {
+      const dt = new Date(s.session_date + 'T00:00:00');
+      return `<th>${dt.getDate()} ${MONTHS[dt.getMonth()]} — ${s.title||s.session_type||'Untitled'}</th>`;
+    }).join('');
+    const rowsHtml = ROWS.map(([label, fn]) =>
+      `<tr><th style="text-align:left;width:130px">${label}</th>${sessions.map(s=>`<td>${fn(s)}</td>`).join('')}</tr>`
+    ).join('');
+    table.innerHTML = `<tr><th></th>${headerCols}</tr>${rowsHtml}`;
+  }
+
+  // ── New Session ──
+  function goNewSession() {
+    const today = new Date().toISOString().split('T')[0];
+    window.location.href = `Daily Planning.html?date=${today}&openCreate=1`;
+  }
+
+  // ── Event listeners ──
+
+  // Date chips
   document.querySelectorAll('#dateChips .sh-chip[data-days]').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('#dateChips .sh-chip[data-days]').forEach(c => c.classList.remove('is-on'));
       chip.classList.add('is-on');
-      activeDays = parseInt(chip.dataset.days, 10);
+      const days = parseInt(chip.dataset.days, 10);
+      activeDays = days === 0 ? -1 : days;
       applyFilters();
     });
   });
 
-  // View seg (list/grid/calendar) — visual only, switching not yet implemented
+  // Focus chips
+  document.querySelectorAll('[data-focus]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('is-on');
+      const f = chip.dataset.focus;
+      chip.classList.contains('is-on') ? activeFocusSet.add(f) : activeFocusSet.delete(f);
+      applyFilters();
+    });
+  });
 
-  document.querySelectorAll('.sh-seg button').forEach(b => b.addEventListener('click', () => {
-    b.parentElement.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
-    b.classList.add('is-on');
-  }));
+  // Load band chips
+  document.querySelectorAll('[data-band]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('is-on');
+      const b = chip.dataset.band;
+      chip.classList.contains('is-on') ? activeBandSet.add(b) : activeBandSet.delete(b);
+      applyFilters();
+    });
+  });
 
-  document.getElementById('searchInput').addEventListener('input', e => {
-    searchText = e.target.value;
+  // MD position chips
+  document.querySelectorAll('[data-md]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('is-on');
+      const md = chip.dataset.md;
+      chip.classList.contains('is-on') ? activeMdPos.add(md) : activeMdPos.delete(md);
+      applyFilters();
+    });
+  });
+
+  // Clear all filters
+  document.querySelector('.sh-filter h4 .clear')?.addEventListener('click', () => {
+    activeDays = 30; searchText = '';
+    activeFocusSet.clear(); activeBandSet.clear(); activeMdPos.clear();
+    document.querySelectorAll('#dateChips .sh-chip').forEach(c => c.classList.remove('is-on'));
+    document.querySelector('#dateChips [data-days="30"]')?.classList.add('is-on');
+    document.querySelectorAll('[data-focus],[data-band],[data-md]').forEach(c => c.classList.remove('is-on'));
+    document.querySelectorAll('#shOrientFilters .sh-opt').forEach(e => e.classList.add('is-on'));
+    document.getElementById('searchInput').value = '';
     applyFilters();
+  });
+
+  // View switcher
+  document.querySelectorAll('.sh-seg button').forEach((b, i) => {
+    const views = ['list','grid','cal'];
+    b.addEventListener('click', () => {
+      b.parentElement.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
+      b.classList.add('is-on');
+      activeView = views[i];
+      currentPage = 0;
+      renderView();
+      renderFooter();
+    });
+  });
+
+  // Search
+  document.getElementById('searchInput').addEventListener('input', e => { searchText = e.target.value; applyFilters(); });
+
+  // Calendar nav
+  document.getElementById('shCalPrev')?.addEventListener('click', () => {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()-1, 1);
+    renderCalendar();
+  });
+  document.getElementById('shCalNext')?.addEventListener('click', () => {
+    calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth()+1, 1);
+    renderCalendar();
+  });
+
+  // Close compare on overlay click
+  document.getElementById('shCompareModal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeCompare();
   });
 
   boot();

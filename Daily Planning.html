@@ -1103,6 +1103,10 @@ async function dpExportPDF() {
 
   await loadDay(initDate);
 
+  if (new URLSearchParams(window.location.search).get('openCreate') === '1') {
+    await dpAutoSaveSession();
+  }
+
   document.getElementById('dpNavPrev').addEventListener('click', () => loadDay(_dpAddDays(_dpCurrentDate, -1)));
   document.getElementById('dpNavNext').addEventListener('click', () => loadDay(_dpAddDays(_dpCurrentDate, 1)));
   document.getElementById('dpDateInput').addEventListener('change', e => { if (e.target.value) loadDay(e.target.value); });
