@@ -63,6 +63,11 @@
     _clubIdPromise = null; _clubPromise = null; _profilePromise = null;
   };
 
+  window.setClubLogo = function (url) {
+    if (_club) _club.logo_url = url;
+    document.dispatchEvent(new CustomEvent('clublogochanged', { detail: { logo_url: url } }));
+  };
+
   window.requireAuth = async function (redirectTo = 'Login.html') {
     const { data: { session } } = await window.sb.auth.getSession();
     if (!session) {

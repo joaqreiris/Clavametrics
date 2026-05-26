@@ -197,6 +197,30 @@
     });
   }
 
+  // ── LOGO HELPER ──────────────────────────────────────────────
+  const _MARK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg>`;
+
+  function applyLogoToMark(markEl, logoUrl) {
+    if (logoUrl) {
+      markEl.style.background = 'transparent';
+      const img = document.createElement('img');
+      img.src = logoUrl;
+      img.alt = '';
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;border-radius:5px';
+      img.onerror = () => { markEl.style.background = ''; markEl.innerHTML = _MARK_SVG; };
+      markEl.innerHTML = '';
+      markEl.appendChild(img);
+    } else {
+      markEl.style.background = '';
+      markEl.innerHTML = _MARK_SVG;
+    }
+  }
+
+  document.addEventListener('clublogochanged', e => {
+    const markEl = document.querySelector('.hub-brand .mark');
+    if (markEl) applyLogoToMark(markEl, e.detail.logo_url);
+  });
+
   // ── LOAD USER/CLUB DATA ──────────────────────────────────────
   async function loadData() {
     const [profile, club] = await Promise.all([
@@ -213,10 +237,7 @@
     if (nameEl && club?.name)         nameEl.textContent = club.name;
     if (teamLabelEl && profile?.club_role) teamLabelEl.textContent = profile.club_role;
     const markEl = document.querySelector('.hub-brand .mark');
-    if (markEl && club?.logo_url) {
-      markEl.style.background = 'transparent';
-      markEl.innerHTML = `<img src="${club.logo_url}" alt="${club.name || ''}" style="width:100%;height:100%;object-fit:contain;border-radius:5px">`;
-    }
+    if (markEl) applyLogoToMark(markEl, club?.logo_url);
     if (profile) {
       const full     = profile.full_name || '';
       const initials = full.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '–';
