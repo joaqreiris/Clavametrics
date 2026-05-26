@@ -9,6 +9,7 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -481,6 +482,21 @@
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
+  /* Draggable player pills in Available panel */
+  #plAvailPills .avail-pill {
+    display:inline-flex; align-items:center; gap:5px;
+    padding:4px 8px; border-radius:6px;
+    border:1px solid var(--cm-border); background:var(--cm-bg-soft);
+    color:var(--cm-fg-strong); font:600 10px/1 var(--cm-font-mono);
+    cursor:grab; user-select:none; transition:all 120ms;
+  }
+  #plAvailPills .avail-pill:hover:not(.is-placed) { border-color:var(--cm-accent); }
+  #plAvailPills .avail-pill.is-placed { opacity:0.3; cursor:not-allowed; }
+  #plAvailPills .avail-pill .avail-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  #plAvailPills .avail-pill.is-success .avail-dot { background:var(--cm-success); }
+  #plAvailPills .avail-pill.is-warning .avail-dot { background:var(--cm-warning); }
+  #plAvailPills .avail-pill.is-danger  .avail-dot { background:var(--cm-danger); }
+
   /* === Toggle buttons (intensity / focus / game type) === */
   .pl-toggle-row { display:flex; gap:4px; flex-wrap:wrap; }
   .pl-toggle-btn {
@@ -710,7 +726,18 @@
           <div class="pl-form-row cols-2" style="margin-bottom:10px">
             <div class="pl-form-field">
               <label class="pl-form-label">Match Day</label>
-              <input type="number" class="pl-form-input" id="plExMatchDay" placeholder="e.g. -3" min="-7" max="7">
+              <select class="pl-form-input" id="plExMatchDay">
+                <option value="">—</option>
+                <option value="-5">MD−5</option>
+                <option value="-4">MD−4</option>
+                <option value="-3">MD−3</option>
+                <option value="-2">MD−2</option>
+                <option value="-1">MD−1</option>
+                <option value="0">MD</option>
+                <option value="1">MD+1</option>
+                <option value="2">MD+2</option>
+                <option value="3">MD+3</option>
+              </select>
             </div>
             <div class="pl-form-field">
               <label class="pl-form-label">Intensity</label>
@@ -726,14 +753,14 @@
           <div class="pl-form-field" style="margin-bottom:10px">
             <label class="pl-form-label">Focus</label>
             <div class="pl-toggle-row" id="plFocusBtns">
-              <button class="pl-toggle-btn" data-focus="Táctico">Táctico</button>
+              <button class="pl-toggle-btn" data-focus="Táctico">Tactical</button>
               <button class="pl-toggle-btn" data-focus="Individual">Individual</button>
-              <button class="pl-toggle-btn" data-focus="Físico">Físico</button>
+              <button class="pl-toggle-btn" data-focus="Físico">Physical</button>
             </div>
           </div>
 
           <div class="pl-form-field" style="margin-bottom:10px">
-            <label class="pl-form-label">Tipo de juego</label>
+            <label class="pl-form-label">Game type</label>
             <div class="pl-switch-row" style="margin-bottom:6px">
               <label class="pl-switch">
                 <input type="checkbox" id="plGameTypeToggle">
@@ -810,10 +837,10 @@
           <span class="stat" id="plCanvasStat">No exercise selected</span>
           <div style="flex:1"></div>
           <div class="group">
-            <button title="Zoom out"><i class="ti ti-zoom-out"></i></button>
-            <button class="is-on">100%</button>
-            <button title="Zoom in"><i class="ti ti-zoom-in"></i></button>
-            <button title="Fit"><i class="ti ti-arrows-maximize"></i></button>
+            <button id="plZoomOut" title="Zoom out"><i class="ti ti-zoom-out"></i></button>
+            <button id="plZoomPct" style="min-width:46px">100%</button>
+            <button id="plZoomIn" title="Zoom in"><i class="ti ti-zoom-in"></i></button>
+            <button id="plZoomFit" title="Fit"><i class="ti ti-arrows-maximize"></i></button>
           </div>
           <div class="sep"></div>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Export</button>
@@ -958,13 +985,19 @@
       <button id="plShareClose" style="background:none;border:0;cursor:pointer;color:var(--cm-fg-muted);padding:4px;display:flex;align-items:center"><i class="ti ti-x" style="font-size:16px"></i></button>
     </div>
     <div class="modal-body">
-      <div class="share-link-box">
-        <input type="text" id="plShareLinkInput" readonly placeholder="Current page URL">
-        <button class="cm-btn is-outline is-sm" id="plShareCopyBtn"><i class="ti ti-copy" style="font-size:13px"></i>Copy</button>
+      <div class="share-row" id="plShareChatBtn">
+        <i class="ti ti-message-share"></i>
+        <div>
+          <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg)">Share in team chat</div>
+          <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Send exercise card to group channel</div>
+        </div>
       </div>
       <div class="share-row" id="plSharePngBtn">
         <i class="ti ti-photo-down"></i>
-        <span>Download canvas as PNG</span>
+        <div>
+          <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg)">Download PNG</div>
+          <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Export field with all elements as image</div>
+        </div>
       </div>
     </div>
   </div>
@@ -998,21 +1031,37 @@
 
   const pillData = hasAvail
     ? players.filter(p => { const s = availMap[p.id]; return !s || s === 'av' || s === 'pa'; })
-        .map(p => ({ label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
-    : players.map(p => ({ label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
+        .map(p => ({ id:p.id, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
+    : players.map(p => ({ id:p.id, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
 
-  const headEl   = document.getElementById('plAvailHead');
-  const pillsEl  = document.getElementById('plAvailPills');
-  if (headEl)  headEl.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
-  if (pillsEl) {
-    const SHOW = 8;
-    const renderPills = all => pillData.slice(0, all ? pillData.length : SHOW)
-      .map(p => `<span class="cm-pill ${p.cls}"><span class="cm-dot"></span>${p.label}</span>`).join('');
-    const extra = pillData.length - SHOW;
-    pillsEl.innerHTML = renderPills(false) +
-      (extra > 0 ? `<button id="plAvailMore" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);padding:3px 6px;background:none;border:none;cursor:pointer">+${extra} more</button>` : '');
-    document.getElementById('plAvailMore')?.addEventListener('click', () => { pillsEl.innerHTML = renderPills(true); });
+  const _placedPlayerIds = new Set();
+  let activeTeam = 't1';
+
+  const headEl  = document.getElementById('plAvailHead');
+  const pillsEl = document.getElementById('plAvailPills');
+
+  function renderAvailPills() {
+    if (headEl) headEl.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
+    if (!pillsEl) return;
+    pillsEl.innerHTML = pillData.map(p => {
+      const placed = _placedPlayerIds.has(p.id);
+      return `<div class="avail-pill ${p.cls}${placed ? ' is-placed' : ''}"
+        draggable="${!placed}"
+        data-player-id="${p.id}"
+        data-player-label="${p.lastName}">
+        <span class="avail-dot"></span>${p.label}
+      </div>`;
+    }).join('');
+    pillsEl.querySelectorAll('.avail-pill:not(.is-placed)').forEach(pill => {
+      pill.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', JSON.stringify({
+          id: pill.dataset.playerId, label: pill.dataset.playerLabel
+        }));
+      });
+    });
   }
+  renderAvailPills();
 
   // ── Fabric.js canvas init ───────────────────────────────────────
   await new Promise(r => requestAnimationFrame(r));
@@ -1182,6 +1231,49 @@
       }, opts);
     } else { _build(); }
   }
+
+  function addNamedPlayer(team, lastName, playerId, x, y) {
+    const color = teamColors[team] || '#15803D';
+    const tc    = teamText[team] || '#fff';
+    const label = (lastName || '?').substring(0, 7).toUpperCase();
+    const circle = new fabric.Circle({ radius:20, fill:color, stroke:'rgba(255,255,255,0.85)', strokeWidth:2.5, originX:'center', originY:'center' });
+    const text   = new fabric.Text(label, { fontSize:9, fontWeight:'700', fontFamily:'monospace', fill:tc, originX:'center', originY:'center' });
+    const grp    = new fabric.Group([circle, text], {
+      left:x, top:y, originX:'center', originY:'center',
+      _type:'player', _team:team, _playerId:playerId
+    });
+    _placedPlayerIds.add(playerId);
+    fc.add(grp); fc.setActiveObject(grp); fc.renderAll();
+    renderAvailPills();
+  }
+
+  // Track active team from dock buttons
+  ['Team1','Team2','Team3','Team4'].forEach((title, i) => {
+    document.querySelector(`#plTeamGrp .pl-dock-btn[title="${title}"]`)
+      ?.addEventListener('click', () => { activeTeam = `t${i+1}`; });
+  });
+
+  // Drag-and-drop from Available panel to canvas
+  fieldEl.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  fieldEl.addEventListener('drop', e => {
+    e.preventDefault();
+    let data;
+    try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
+    if (!data?.id) return;
+    if (_placedPlayerIds.has(data.id)) return;
+    const rect = fieldEl.getBoundingClientRect();
+    const zoom = fc.getZoom();
+    const vpt  = fc.viewportTransform;
+    const cx = (e.clientX - rect.left - vpt[4]) / zoom;
+    const cy = (e.clientY - rect.top  - vpt[5]) / zoom;
+    addNamedPlayer(activeTeam, data.label, data.id, cx, cy);
+  });
+
+  // When a player token is removed from canvas, re-enable in Available
+  fc.on('object:removed', e => {
+    const pid = e.target?._playerId;
+    if (pid) { _placedPlayerIds.delete(pid); renderAvailPills(); }
+  });
 
   function _editPlayerLabel(grp, newLabel) {
     const textObj = grp._objects?.find(o => o.type === 'text');
@@ -1684,9 +1776,7 @@
 
   // ── Share modal ─────────────────────────────────────────────────
   document.getElementById('plShareBtn')?.addEventListener('click',()=>{
-    const modal=document.getElementById('plShareModal'); if(!modal)return;
-    document.getElementById('plShareLinkInput').value=window.location.href;
-    modal.style.display='flex';
+    document.getElementById('plShareModal').style.display='flex';
   });
   document.getElementById('plShareClose')?.addEventListener('click',()=>{
     document.getElementById('plShareModal').style.display='none';
@@ -1694,17 +1784,61 @@
   document.getElementById('plShareModal')?.addEventListener('click',e=>{
     if(e.target===e.currentTarget)e.currentTarget.style.display='none';
   });
-  document.getElementById('plShareCopyBtn')?.addEventListener('click',async()=>{
-    await navigator.clipboard.writeText(document.getElementById('plShareLinkInput').value).catch(()=>{});
-    const b=document.getElementById('plShareCopyBtn');
-    b.innerHTML='<i class="ti ti-check" style="font-size:13px;color:var(--cm-success)"></i>Copied';
-    setTimeout(()=>{b.innerHTML='<i class="ti ti-copy" style="font-size:13px"></i>Copy';},1500);
+
+  document.getElementById('plShareChatBtn')?.addEventListener('click', async () => {
+    if (!currentExerciseId) { alert('Select or create an exercise first.'); return; }
+    const ex = exercises.find(e => e.id === currentExerciseId);
+    if (!ex) return;
+    const btn = document.getElementById('plShareChatBtn');
+    btn.style.opacity = '0.6';
+    const mdStr = ex.match_day != null ? `MD${ex.match_day >= 0 ? '+' : ''}${ex.match_day}` : null;
+    const INT_LABEL = { LOW:'Low', MEDIUM:'Medium', HIGH:'High', VERY_HIGH:'Very High' };
+    const lines = [`📋 *${ex.name || 'Untitled'}*`];
+    if (ex.players_count)  lines.push(`• Players: ${ex.players_count}`);
+    if (ex.field_width && ex.field_height) lines.push(`• Field: ${ex.field_width}×${ex.field_height} m`);
+    if (ex.duration)       lines.push(`• Duration: ${ex.duration} min`);
+    if (mdStr)             lines.push(`• Match Day: ${mdStr}`);
+    if (ex.intensity)      lines.push(`• Intensity: ${INT_LABEL[ex.intensity] || ex.intensity}`);
+    if (ex.series)         lines.push(`• Series: ${ex.series}`);
+    const content = lines.join('\n');
+    const { error } = await window.sb.from('messages').insert({
+      club_id:      clubId,
+      sender_id:    profile?.id || null,
+      sender_name:  profile?.full_name || profile?.email || 'Planner',
+      content,
+      message_type: 'exercise',
+      recipient_id: null
+    });
+    btn.style.opacity = '';
+    if (error) { alert('Error sharing: ' + error.message); return; }
+    document.getElementById('plShareModal').style.display = 'none';
+    const toast = Object.assign(document.createElement('div'), {
+      textContent: 'Shared in team chat',
+      style: 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--cm-success);color:#fff;padding:8px 16px;border-radius:8px;font:600 13px/1 var(--cm-font-sans);z-index:9999;pointer-events:none'
+    });
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
   });
-  document.getElementById('plSharePngBtn')?.addEventListener('click',()=>{
-    const dataURL=fc.toDataURL({format:'png',multiplier:2});
-    const a=document.createElement('a');
-    a.href=dataURL; a.download=(document.getElementById('plExName')?.value||'exercise')+'.png'; a.click();
-    document.getElementById('plShareModal').style.display='none';
+
+  document.getElementById('plSharePngBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('plSharePngBtn');
+    btn.style.opacity = '0.6';
+    document.getElementById('plShareModal').style.display = 'none';
+    try {
+      const canvas = await html2canvas(fieldEl, {
+        useCORS: true, allowTaint: true, scale: 2, backgroundColor: '#1a472a',
+        ignoreElements: el => el.id === 'plPolyDoneBar' || el.id === 'plPropBar' || el.id === 'plPlayerNumInput' || el.classList?.contains('pl-field-fab') || el.classList?.contains('pl-field-tag')
+      });
+      const link = document.createElement('a');
+      link.download = (document.getElementById('plExName')?.value || 'exercise') + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch(err) {
+      console.error('PNG export error:', err);
+      alert('Export failed. Try downloading manually.');
+    } finally {
+      btn.style.opacity = '';
+    }
   });
 
   // ── Fullscreen dock ─────────────────────────────────────────────
@@ -1717,6 +1851,31 @@
     else{_dockParent?.insertBefore(_dockEl,_dockSibling);}
     const {width,height}=fieldEl.getBoundingClientRect();
     fc.setWidth(width);fc.setHeight(height);fc.renderAll();
+  });
+
+  // ── Zoom ────────────────────────────────────────────────────────
+  const MIN_ZOOM = 0.5, MAX_ZOOM = 2.0;
+  function updateZoomDisplay() {
+    const el = document.getElementById('plZoomPct');
+    if (el) el.textContent = Math.round(fc.getZoom() * 100) + '%';
+  }
+  function applyZoom(newZoom, point) {
+    newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newZoom));
+    if (point) fc.zoomToPoint(point, newZoom);
+    else fc.setZoom(newZoom);
+    updateZoomDisplay();
+  }
+  fieldEl.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.1 : -0.1;
+    const rect = fieldEl.getBoundingClientRect();
+    const point = new fabric.Point(e.clientX - rect.left, e.clientY - rect.top);
+    applyZoom(fc.getZoom() + delta, point);
+  }, { passive: false });
+  document.getElementById('plZoomIn')?.addEventListener('click', () => applyZoom(fc.getZoom() + 0.1));
+  document.getElementById('plZoomOut')?.addEventListener('click', () => applyZoom(fc.getZoom() - 0.1));
+  document.getElementById('plZoomFit')?.addEventListener('click', () => {
+    fc.setZoom(1); fc.absolutePan(new fabric.Point(0, 0)); updateZoomDisplay();
   });
 
   // ── Exercise library state ───────────────────────────────────────

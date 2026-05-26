@@ -273,10 +273,10 @@
             </button>
           </div>
 
-          <!-- Orientación -->
+          <!-- Orientation -->
           <div class="sl-acc">
             <div class="sl-acc-h is-open" data-acc="orient">
-              <span class="l">Orientación</span>
+              <span class="l">Orientation</span>
               <span class="ct" id="ctOrientAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
@@ -288,10 +288,10 @@
             </div>
           </div>
 
-          <!-- Intensidad -->
+          <!-- Intensity -->
           <div class="sl-acc">
             <div class="sl-acc-h" data-acc="intensity">
-              <span class="l">Intensidad</span>
+              <span class="l">Intensity</span>
               <span class="ct" id="ctIntAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
@@ -311,6 +311,8 @@
               <i class="ti ti-chevron-down"></i>
             </div>
             <div class="sl-acc-b" id="accMatchday">
+              <div class="sl-opt" data-group="matchday" data-val="-5"><span class="cb"></span><span class="lbl">MD−5</span><span class="ct" id="cntMdM5">—</span></div>
+              <div class="sl-opt" data-group="matchday" data-val="-4"><span class="cb"></span><span class="lbl">MD−4</span><span class="ct" id="cntMdM4">—</span></div>
               <div class="sl-opt" data-group="matchday" data-val="-3"><span class="cb"></span><span class="lbl">MD−3</span><span class="ct" id="cntMdM3">—</span></div>
               <div class="sl-opt" data-group="matchday" data-val="-2"><span class="cb"></span><span class="lbl">MD−2</span><span class="ct" id="cntMdM2">—</span></div>
               <div class="sl-opt" data-group="matchday" data-val="-1"><span class="cb"></span><span class="lbl">MD−1</span><span class="ct" id="cntMdM1">—</span></div>
@@ -321,10 +323,10 @@
             </div>
           </div>
 
-          <!-- Tipo de juego -->
+          <!-- Game type -->
           <div class="sl-acc">
             <div class="sl-acc-h" data-acc="gametype">
-              <span class="l">Tipo de juego</span>
+              <span class="l">Game type</span>
               <span class="ct" id="ctGtAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
@@ -332,21 +334,21 @@
               <div class="sl-opt" data-group="gametype" data-val="SSG"><span class="cb"></span><span class="lbl">SSG</span><span class="ct" id="cntSSG">—</span></div>
               <div class="sl-opt" data-group="gametype" data-val="MSG"><span class="cb"></span><span class="lbl">MSG</span><span class="ct" id="cntMSG">—</span></div>
               <div class="sl-opt" data-group="gametype" data-val="LSG"><span class="cb"></span><span class="lbl">LSG</span><span class="ct" id="cntLSG">—</span></div>
-              <div class="sl-opt" data-group="gametype" data-val="NONE"><span class="cb"></span><span class="lbl">Sin tipo</span><span class="ct" id="cntGtNone">—</span></div>
+              <div class="sl-opt" data-group="gametype" data-val="NONE"><span class="cb"></span><span class="lbl">None</span><span class="ct" id="cntGtNone">—</span></div>
             </div>
           </div>
 
-          <!-- Foco -->
+          <!-- Focus -->
           <div class="sl-acc">
             <div class="sl-acc-h" data-acc="focus">
-              <span class="l">Foco</span>
+              <span class="l">Focus</span>
               <span class="ct" id="ctFocAcc"></span>
               <i class="ti ti-chevron-down"></i>
             </div>
             <div class="sl-acc-b" id="accFocus">
-              <div class="sl-opt" data-group="focus" data-val="Táctico"><span class="cb"></span><span class="lbl">Táctico</span><span class="ct" id="cntFocTac">—</span></div>
+              <div class="sl-opt" data-group="focus" data-val="Táctico"><span class="cb"></span><span class="lbl">Tactical</span><span class="ct" id="cntFocTac">—</span></div>
               <div class="sl-opt" data-group="focus" data-val="Individual"><span class="cb"></span><span class="lbl">Individual</span><span class="ct" id="cntFocInd">—</span></div>
-              <div class="sl-opt" data-group="focus" data-val="Físico"><span class="cb"></span><span class="lbl">Físico</span><span class="ct" id="cntFocFis">—</span></div>
+              <div class="sl-opt" data-group="focus" data-val="Físico"><span class="cb"></span><span class="lbl">Physical</span><span class="ct" id="cntFocFis">—</span></div>
             </div>
           </div>
 
@@ -475,7 +477,7 @@
     const c = {
       ACTIVATION:0, STRENGTH:0, VELOCITY:0, ENDURANCE:0,
       LOW:0, MEDIUM:0, HIGH:0, VERY_HIGH:0,
-      '-3':0, '-2':0, '-1':0, '0':0, '1':0, '2':0, '3':0,
+      '-5':0, '-4':0, '-3':0, '-2':0, '-1':0, '0':0, '1':0, '2':0, '3':0,
       SSG:0, MSG:0, LSG:0, NONE_GT:0,
       Táctico:0, Individual:0, Físico:0,
     };
@@ -508,6 +510,8 @@
     set('cntIntMed', c.MEDIUM      || '');
     set('cntIntHigh',c.HIGH        || '');
     set('cntIntVH',  c.VERY_HIGH   || '');
+    set('cntMdM5',   c['-5']       || '');
+    set('cntMdM4',   c['-4']       || '');
     set('cntMdM3',   c['-3']       || '');
     set('cntMdM2',   c['-2']       || '');
     set('cntMdM1',   c['-1']       || '');
@@ -632,7 +636,7 @@
       { l:'Work',      v: ex.work_time || '—' },
       { l:'Rest',      v: ex.rest_time || '—' },
       { l:'Intensity', v: ex.intensity ? INT_LABEL[ex.intensity] : '—' },
-      { l:'Orientación', v: meta ? meta.label : '—' },
+      { l:'Orientation', v: meta ? meta.label : '—' },
     ];
     document.getElementById('prevGrid').innerHTML = cells.map(c =>
       `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`
