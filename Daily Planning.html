@@ -92,6 +92,19 @@
   .dp-player.away{background:#eff6ff;border-color:#bfdbfe;color:#1e40af}
   .dp-player.away .num{background:#3b82f6;color:#fff}
   .dp-player.away .reason{color:#1e40af}
+  .dp-player.injured{background:#fee2e2;border-color:#fca5a5;color:#7f1d1d}
+  .dp-player.injured .num{background:#dc2626;color:#fff}
+  .dp-player.injured .reason{color:#7f1d1d}
+  .dp-player.sick{background:#fdf4ff;border-color:#e9d5ff;color:#581c87}
+  .dp-player.sick .num{background:#a855f7;color:#fff}
+  .dp-player.sick .reason{color:#581c87}
+
+  /* Status change dropdown */
+  .dp-status-menu{position:fixed;z-index:800;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-2);padding:4px;display:none;min-width:148px}
+  .dp-status-menu.is-open{display:block}
+  .dp-status-opt{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg)}
+  .dp-status-opt:hover{background:var(--cm-bg-soft)}
+  .dp-status-opt .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
   /* Group rows */
   .dp-pl-group{display:flex;align-items:center;gap:8px;margin:6px 0 8px}
@@ -203,6 +216,10 @@
     .dp-player.partial .num{ background:#d97706 !important }
     .dp-player.away{ background:#eff6ff !important; border-color:#bfdbfe !important; color:#1e40af !important }
     .dp-player.away .num{ background:#3b82f6 !important }
+    .dp-player.injured{ background:#fee2e2 !important; border-color:#fca5a5 !important; color:#7f1d1d !important }
+    .dp-player.injured .num{ background:#dc2626 !important }
+    .dp-player.sick{ background:#fdf4ff !important; border-color:#e9d5ff !important; color:#581c87 !important }
+    .dp-player.sick .num{ background:#a855f7 !important }
     .dp-player.partial .pos{ background:#7c2d12 !important }
     .dp-squad-summary{ padding:5px 10px; font-size:10px; background:#f8f8f8; border-top:1px solid #ddd }
     .dp-squad-summary .sep{ height:12px }
@@ -346,6 +363,8 @@
           <button class="dp-squad-pill" data-filter="available"><span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">—</span></button>
           <button class="dp-squad-pill" data-filter="partial"><span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">—</span></button>
           <button class="dp-squad-pill" data-filter="unavailable"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">—</span></button>
+          <button class="dp-squad-pill" data-filter="injured"><span class="dot" style="background:#dc2626"></span>Injured <span class="ct">—</span></button>
+          <button class="dp-squad-pill" data-filter="sick"><span class="dot" style="background:#a855f7"></span>Sick <span class="ct">—</span></button>
           <button class="dp-squad-pill" data-filter="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away <span class="ct">—</span></button>
         </div>
         <div class="dp-card-b" id="dpSquadBody" style="padding:14px 16px 4px">
@@ -477,6 +496,101 @@ function _dpAddDays(dateStr, n) {
   return d.toISOString().split('T')[0];
 }
 
+const _DP_POS_GROUP = {
+  GK:{l:'GK',o:0}, CB:{l:'DEF',o:1}, LB:{l:'DEF',o:1}, RB:{l:'DEF',o:1}, FB:{l:'DEF',o:1},
+  DM:{l:'MID',o:2}, CM:{l:'MID',o:2}, MF:{l:'MID',o:2},
+  WG:{l:'ATT',o:3}, ST:{l:'ATT',o:3}, CF:{l:'ATT',o:3}
+};
+const _DP_POS_DISP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', DM:'DM', CM:'MF', MF:'MF', WG:'WG', ST:'ST', CF:'CF' };
+
+function dpRenderSquad(avMap) {
+  function chip(p) {
+    const av = avMap[p.id], inj = _dpInjMap[p.id];
+    const pos  = (p.position || '').toUpperCase();
+    const posD = _DP_POS_DISP[pos] || pos;
+    const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
+    const num = p.number ?? '—';
+    let cls = '', reason = '';
+    if (inj) { cls = 'partial'; reason = inj.body_area || inj.injury_type || 'inj'; }
+    if      (av?.status === 'away')      { cls = 'away';      reason = av.notes || 'away'; }
+    else if (av?.status === 'unavailable'){ cls = 'unavailable'; reason = av.notes || 'out'; }
+    else if (av?.status === 'injured')   { cls = 'injured';   reason = av.notes || 'inj'; }
+    else if (av?.status === 'sick')      { cls = 'sick';      reason = av.notes || 'sick'; }
+    else if (av?.status === 'partial' || av?.status === 'limited') {
+      if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; }
+    }
+    return `<span class="dp-player${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}</span>`;
+  }
+
+  const groups = {};
+  _dpPlayers.forEach(p => {
+    const g = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
+    if (!groups[g.l]) groups[g.l] = { o: g.o, list: [] };
+    groups[g.l].list.push(p);
+  });
+  document.getElementById('dpSquadBody').innerHTML = Object.entries(groups)
+    .sort((a,b) => a[1].o - b[1].o)
+    .map(([lbl, {list}]) =>
+      `<div class="dp-pl-group"><span class="l">${lbl}</span><span class="l-line"></span></div><div class="dp-players">${list.map(chip).join('')}</div>`
+    ).join('');
+
+  let avCt = 0, partCt = 0, unCt = 0, awayCt = 0, injCt = 0, sickCt = 0;
+  _dpPlayers.forEach(p => {
+    const av = avMap[p.id], inj = _dpInjMap[p.id];
+    if      (av?.status === 'away')       awayCt++;
+    else if (av?.status === 'unavailable') unCt++;
+    else if (av?.status === 'injured')     injCt++;
+    else if (av?.status === 'sick')        sickCt++;
+    else if (inj || av?.status === 'partial' || av?.status === 'limited') partCt++;
+    else avCt++;
+  });
+  const total = _dpPlayers.length;
+
+  document.getElementById('dpSquadCt').textContent = `${avCt + partCt} of ${total}`;
+
+  const awayNotes = _dpPlayers.filter(p => avMap[p.id]?.status === 'away' && avMap[p.id]?.notes).map(p => avMap[p.id].notes);
+  const awayDesc  = awayNotes.length ? ` (${[...new Set(awayNotes)].join(' + ')})` : '';
+  document.getElementById('dpSquadSummary').innerHTML =
+    `<span><strong>${avCt + partCt}</strong> of ${total} available</span>` +
+    `<span class="sep"></span><span><strong style="color:var(--cm-warning)">${partCt}</strong> partial</span>` +
+    `<span class="sep"></span><span><strong style="color:var(--cm-danger)">${unCt}</strong> out</span>` +
+    (injCt  ? `<span class="sep"></span><span><strong style="color:#dc2626">${injCt}</strong> injured</span>` : '') +
+    (sickCt ? `<span class="sep"></span><span><strong style="color:#a855f7">${sickCt}</strong> sick</span>` : '') +
+    `<span class="sep"></span><span><strong style="color:var(--cm-info,#3b82f6)">${awayCt}</strong> away${awayDesc}</span>`;
+
+  document.querySelectorAll('.dp-squad-pill').forEach(p => {
+    const f = p.dataset.filter;
+    if      (f === 'all')        p.innerHTML = `All <span class="ct">${total}</span>`;
+    else if (f === 'available')  p.innerHTML = `<span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">${avCt}</span>`;
+    else if (f === 'partial')    p.innerHTML = `<span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">${partCt}</span>`;
+    else if (f === 'unavailable')p.innerHTML = `<span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">${unCt}</span>`;
+    else if (f === 'injured')    p.innerHTML = `<span class="dot" style="background:#dc2626"></span>Injured <span class="ct">${injCt}</span>`;
+    else if (f === 'sick')       p.innerHTML = `<span class="dot" style="background:#a855f7"></span>Sick <span class="ct">${sickCt}</span>`;
+    else if (f === 'away')       p.innerHTML = `<span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away <span class="ct">${awayCt}</span>`;
+  });
+
+  // Re-apply active filter after re-render
+  const activeFilter = document.querySelector('.dp-squad-pill.is-on')?.dataset.filter || 'all';
+  if (activeFilter !== 'all') {
+    document.querySelectorAll('#dpSquadBody .dp-player').forEach(el => {
+      el.style.display = (el.dataset.status === activeFilter) ? '' : 'none';
+    });
+  }
+}
+
+async function dpChangeStatus(playerId, newStatus) {
+  const { error } = await window.sb.from('availability').upsert({
+    player_id: playerId,
+    date:      _dpCurrentDate,
+    status:    newStatus,
+    club_id:   _dpClubId
+  }, { onConflict: 'player_id,date' });
+  if (error) { console.error('availability upsert:', error); return; }
+  if (!_dpAvMap[playerId]) _dpAvMap[playerId] = { player_id: playerId, date: _dpCurrentDate, club_id: _dpClubId };
+  _dpAvMap[playerId].status = newStatus;
+  dpRenderSquad(_dpAvMap);
+}
+
 async function loadDay(dateStr) {
   _dpCurrentDate = dateStr;
   const fmt = _dpFmt(dateStr);
@@ -523,65 +637,7 @@ async function loadDay(dateStr) {
   (availRes.data || []).forEach(a => { avMap[a.player_id] = a; });
   _dpAvMap = avMap;
 
-  const POS_GROUP = {
-    GK:{l:'GK',o:0}, CB:{l:'DEF',o:1}, LB:{l:'DEF',o:1}, RB:{l:'DEF',o:1}, FB:{l:'DEF',o:1},
-    DM:{l:'MID',o:2}, CM:{l:'MID',o:2}, MF:{l:'MID',o:2},
-    WG:{l:'ATT',o:3}, ST:{l:'ATT',o:3}, CF:{l:'ATT',o:3}
-  };
-  const POS_DISP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', DM:'DM', CM:'MF', MF:'MF', WG:'WG', ST:'ST', CF:'CF' };
-
-  function chip(p) {
-    const av = avMap[p.id], inj = _dpInjMap[p.id];
-    const pos = (p.position || '').toUpperCase();
-    const posD = POS_DISP[pos] || pos;
-    const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
-    const num = p.number ?? '—';
-    let cls = '', reason = '';
-    if (inj) { cls = 'partial'; reason = inj.body_area || inj.injury_type || 'inj'; }
-    if (av?.status === 'away') { cls = 'away'; reason = av.notes || 'away'; }
-    else if (av?.status === 'unavailable') { cls = 'unavailable'; reason = av.notes || 'out'; }
-    else if (av?.status === 'partial' || av?.status === 'limited') { if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; } }
-    return `<span class="dp-player${cls ? ' '+cls : ''}" data-status="${cls||'available'}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}</span>`;
-  }
-
-  const groups = {};
-  _dpPlayers.forEach(p => {
-    const g = POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
-    if (!groups[g.l]) groups[g.l] = { o: g.o, list: [] };
-    groups[g.l].list.push(p);
-  });
-
-  document.getElementById('dpSquadBody').innerHTML = Object.entries(groups)
-    .sort((a,b) => a[1].o - b[1].o)
-    .map(([lbl, {list}]) =>
-      `<div class="dp-pl-group"><span class="l">${lbl}</span><span class="l-line"></span></div><div class="dp-players">${list.map(chip).join('')}</div>`
-    ).join('');
-
-  let avCt = 0, partCt = 0, unCt = 0, awayCt = 0;
-  _dpPlayers.forEach(p => {
-    const av = avMap[p.id], inj = _dpInjMap[p.id];
-    if (av?.status === 'away') awayCt++;
-    else if (av?.status === 'unavailable') unCt++;
-    else if (inj || av?.status === 'partial' || av?.status === 'limited') partCt++;
-    else avCt++;
-  });
-  const total = _dpPlayers.length;
-
-  document.getElementById('dpSquadCt').textContent = `${avCt + partCt} of ${total}`;
-
-  const awayNotes = _dpPlayers.filter(p => avMap[p.id]?.status === 'away' && avMap[p.id]?.notes).map(p => avMap[p.id].notes);
-  const awayDesc = awayNotes.length ? ` (${[...new Set(awayNotes)].join(' + ')})` : '';
-  document.getElementById('dpSquadSummary').innerHTML =
-    `<span><strong>${avCt + partCt}</strong> of ${total} available</span><span class="sep"></span><span><strong style="color:var(--cm-warning)">${partCt}</strong> partial</span><span class="sep"></span><span><strong style="color:var(--cm-danger)">${unCt}</strong> out</span><span class="sep"></span><span><strong style="color:var(--cm-info,#3b82f6)">${awayCt}</strong> away${awayDesc}</span>`;
-
-  document.querySelectorAll('.dp-squad-pill').forEach(p => {
-    const f = p.dataset.filter;
-    if (f === 'all') p.innerHTML = `All <span class="ct">${total}</span>`;
-    else if (f === 'available') p.innerHTML = `<span class="dot" style="background:var(--cm-success)"></span>Available <span class="ct">${avCt}</span>`;
-    else if (f === 'partial') p.innerHTML = `<span class="dot" style="background:var(--cm-warning)"></span>Partial <span class="ct">${partCt}</span>`;
-    else if (f === 'unavailable') p.innerHTML = `<span class="dot" style="background:var(--cm-danger)"></span>Unavailable <span class="ct">${unCt}</span>`;
-    else if (f === 'away') p.innerHTML = `<span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away <span class="ct">${awayCt}</span>`;
-  });
+  dpRenderSquad(avMap);
 
   const withAdapt = (adaptRes.data || []).filter(t => t.adaptation || t.coach_adaptation || t.has_adaptation);
   if (withAdapt.length) {
@@ -1077,6 +1133,47 @@ async function dpExportPDF() {
       el.style.display = (f === 'all' || el.dataset.status === f) ? '' : 'none';
     });
   }));
+
+  // ── Status change dropdown ────────────────────────────────────────
+  let _dpStatusTarget = null;
+  const _dpStatusMenu = document.getElementById('dpStatusMenu');
+
+  document.getElementById('dpSquadBody').addEventListener('click', e => {
+    const chip = e.target.closest('.dp-player[data-pid]');
+    if (!chip) return;
+    _dpStatusTarget = chip.dataset.pid;
+    const r = chip.getBoundingClientRect();
+    _dpStatusMenu.style.top  = (r.bottom + window.scrollY + 6) + 'px';
+    _dpStatusMenu.style.left = r.left + 'px';
+    _dpStatusMenu.classList.add('is-open');
+    e.stopPropagation();
+  });
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#dpStatusMenu')) {
+      _dpStatusMenu.classList.remove('is-open');
+      _dpStatusTarget = null;
+    }
+  });
+
+  _dpStatusMenu.querySelectorAll('.dp-status-opt').forEach(opt => {
+    opt.addEventListener('click', async () => {
+      if (!_dpStatusTarget) return;
+      const newStatus = opt.dataset.s;
+      _dpStatusMenu.classList.remove('is-open');
+      await dpChangeStatus(_dpStatusTarget, newStatus);
+      _dpStatusTarget = null;
+    });
+  });
 </script>
+
+<div id="dpStatusMenu" class="dp-status-menu">
+  <div class="dp-status-opt" data-s="available"><span class="dot" style="background:var(--cm-success)"></span>Available</div>
+  <div class="dp-status-opt" data-s="partial"><span class="dot" style="background:var(--cm-warning)"></span>Partial</div>
+  <div class="dp-status-opt" data-s="injured"><span class="dot" style="background:#dc2626"></span>Injured</div>
+  <div class="dp-status-opt" data-s="sick"><span class="dot" style="background:#a855f7"></span>Sick</div>
+  <div class="dp-status-opt" data-s="unavailable"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable</div>
+  <div class="dp-status-opt" data-s="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away</div>
+</div>
 </body>
 </html>
