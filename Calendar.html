@@ -984,6 +984,7 @@ let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'al
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 let _ribbonMeta = null; // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
 let _matchSessions = []; // calendar_events with type='match'
+let _monthEvts = []; // full session objects for month view click handlers
 const TODAY = new Date().toISOString().split('T')[0];
 
 const EVT_ICONS = {
@@ -1709,17 +1710,22 @@ async function renderMonthView() {
 
   const { data: sessions } = await fetchAllEvents(monthStart, monthEnd);
 
+  _monthEvts = [];
   const sessMap = {};
   (sessions || []).forEach(s => {
     const d = (s.session_date || '').split('T')[0];
     if (!sessMap[d]) sessMap[d] = [];
     sessMap[d].push(s);
+    _monthEvts.push(s);
   });
   _allMCs.forEach(mc => {
     if (!mc.match_date || mc.match_date < monthStart || mc.match_date > monthEnd) return;
     if (!sessMap[mc.match_date]) sessMap[mc.match_date] = [];
-    if (!sessMap[mc.match_date].find(s => s.session_type === 'match'))
-      sessMap[mc.match_date].push({ id:'mc-'+mc.id, title:`vs ${mc.rival||'Match'}`, session_type:'match' });
+    if (!sessMap[mc.match_date].find(s => s.session_type === 'match')) {
+      const evt = { id:'mc-'+mc.id, title:`vs ${mc.rival||'Match'}`, session_type:'match', session_date:mc.match_date, source:'mc', _mc:mc };
+      sessMap[mc.match_date].push(evt);
+      _monthEvts.push(evt);
+    }
   });
 
   const firstDay = new Date(y, m, 1).getDay();
@@ -1743,12 +1749,24 @@ async function renderMonthView() {
         const cat = focusToClass(s.session_type);
         const bg2 = EVT_BG[cat]  || EVT_BG.training;
         const cl2 = EVT_CLR[cat] || EVT_CLR.training;
-        return `<div style="margin-bottom:2px;padding:2px 5px;border-radius:3px;background:${bg2};color:${cl2};font:600 10.5px/1.3 var(--cm-font-sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title||s.session_type}</div>`;
+        return `<div onclick="handleMonthEvtClick('${s.id}')" style="cursor:pointer;margin-bottom:2px;padding:2px 5px;border-radius:3px;background:${bg2};color:${cl2};font:600 10.5px/1.3 var(--cm-font-sans);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title||s.session_type}</div>`;
       }).join('')}
     </div>`;
   }
   html += '</div>';
   document.getElementById('calMonthGrid').innerHTML = html;
+}
+
+function handleMonthEvtClick(sid) {
+  const s = _monthEvts.find(e => e.id === sid);
+  if (!s) return;
+  const cls = focusToClass(s.session_type);
+  if (cls === 'gym') { window.location.href = `Gym Planner.html?date=${s.session_date}`; return; }
+  if (cls !== 'match' && cls !== 'recovery' && cls !== 'travel' && cls !== 'meeting' && cls !== 'evaluation' && cls !== 'video') {
+    window.location.href = `Daily Planning.html?date=${s.session_date}`; return;
+  }
+  if (s._mc) { openMcModal(s._mc); return; }
+  openEvtModal(s);
 }
 
 document.getElementById('calMonthPrev').addEventListener('click', () => {

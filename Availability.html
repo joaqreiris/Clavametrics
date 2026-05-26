@@ -374,17 +374,17 @@
         <div class="av-kpi">
           <div class="av-kpi-l"><i class="ti ti-bandage"></i>Active injuries</div>
           <div class="av-kpi-v" id="kpiAvailInjury">2</div>
-          <div class="av-kpi-t"><span class="av-kpi-d up" style="color:var(--cm-success)"><i class="ti ti-arrow-down-right"></i>−1</span><span>Bocanegra MD-4 · Carrasco MD-1</span></div>
+          <div class="av-kpi-t"><span id="kpiInjuryDetail" style="color:var(--cm-fg-muted)"></span></div>
         </div>
         <div class="av-kpi">
           <div class="av-kpi-l"><i class="ti ti-virus"></i>Illness</div>
-          <div class="av-kpi-v" id="kpiAvailIllness">1</div>
-          <div class="av-kpi-t"><span style="color:var(--cm-fg-muted)">Villalba · back Thu</span></div>
+          <div class="av-kpi-v" id="kpiAvailIllness">—</div>
+          <div class="av-kpi-t"><span id="kpiIllnessDetail" style="color:var(--cm-fg-muted)"></span></div>
         </div>
         <div class="av-kpi">
           <div class="av-kpi-l"><i class="ti ti-flag"></i>National-team duty</div>
-          <div class="av-kpi-v" id="kpiAvailNat">1</div>
-          <div class="av-kpi-t"><span style="color:var(--cm-fg-muted)">Tévez · Argentina U-20</span></div>
+          <div class="av-kpi-v" id="kpiAvailNat">—</div>
+          <div class="av-kpi-t"><span id="kpiNatDetail" style="color:var(--cm-fg-muted)"></span></div>
         </div>
       </div>
 
@@ -492,7 +492,7 @@
 
   // ── Helpers ──
   // Maps full DB status values → abbreviated CSS class keys (visual only)
-  const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'in', away:'na' };
+  const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'in', away:'na', injured:'in', sick:'si' };
   function statusKey(s) { return STATUS_CSS[s] || s; }
 
   function dotEl(s) { return `<span class="av-cell-dot ${statusKey(s)}"></span>`; }
@@ -574,20 +574,26 @@
   }
 
   // ── Render KPIs ──
-  function renderKPIs(players, avMap, injuredIds, todayStr) {
+  function renderKPIs(players, avMap, todayStr) {
     let avCount = 0, inCount = 0, siCount = 0, naCount = 0;
+    const inPlayers = [], siPlayers = [], naPlayers = [];
     players.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
-      const s = e?.status || (injuredIds.has(p.id) ? 'unavailable' : 'available');
+      const s = e?.status || 'available';
+      const name = [(p.last_name || '').toUpperCase(), p.first_name || ''].filter(Boolean).join(' ');
       if (s === 'available' || s === 'partial' || s === 'limited') avCount++;
-      else if (s === 'unavailable') inCount++;
-      else if (s === 'away') naCount++;
+      else if (s === 'injured' || s === 'unavailable') { inCount++; inPlayers.push(name); }
+      else if (s === 'sick') { siCount++; siPlayers.push(name); }
+      else if (s === 'away') { naCount++; naPlayers.push(name); }
     });
     const el = id => document.getElementById(id);
     el('kpiAvail')        && (el('kpiAvail').innerHTML = `${avCount} <sub>/ ${players.length}</sub>`);
     el('kpiAvailInjury')  && (el('kpiAvailInjury').textContent  = inCount);
     el('kpiAvailIllness') && (el('kpiAvailIllness').textContent = siCount);
     el('kpiAvailNat')     && (el('kpiAvailNat').textContent     = naCount);
+    el('kpiInjuryDetail')  && (el('kpiInjuryDetail').textContent  = inPlayers.join(' · ')  || '');
+    el('kpiIllnessDetail') && (el('kpiIllnessDetail').textContent = siPlayers.join(' · ')  || '');
+    el('kpiNatDetail')     && (el('kpiNatDetail').textContent     = naPlayers.join(' · ')  || '');
   }
 
   // ── Save cell to Supabase ──
@@ -638,10 +644,12 @@
     renderHeader();
 
     const [playersRes, availRes, injuriesRes] = await Promise.all([
-      window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID).order('last_name'),
+      window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID).order('last_name').catch(() => ({ data: [] })),
       window.sb.from('availability').select('player_id, date, status, minutes').eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd).catch(() => ({ data: [] })),
-      window.sb.from('injuries').select('player_id').eq('club_id', CLUB_ID).eq('status', 'active')
+      window.sb.from('injuries').select('player_id').eq('club_id', CLUB_ID).eq('status', 'active').catch(() => ({ data: [] }))
     ]);
+
+    if (playersRes.error) console.error('Availability: players query failed', playersRes.error);
 
     const players    = playersRes.data || [];
     const avMap      = {};
@@ -649,7 +657,7 @@
     const injuredIds = new Set((injuriesRes.data || []).map(r => r.player_id));
 
     renderMatrix(players, avMap, injuredIds);
-    renderKPIs(players, avMap, injuredIds, todayStr);
+    renderKPIs(players, avMap, todayStr);
   }
 
   init();
@@ -689,7 +697,7 @@
   });
 
   // Bulk bar status buttons — CSS keys stay abbreviated; DB values are full names
-  const BULK_STATUS = { av:'available', pa:'partial', in:'unavailable', si:'unavailable', na:'unavailable' };
+  const BULK_STATUS = { av:'available', pa:'partial', in:'injured', si:'sick', na:'away' };
   Object.entries(BULK_STATUS).forEach(([cssKey, fullStatus]) => {
     const btn = document.querySelector(`.av-bulk-btn.${cssKey}`);
     if (!btn) return;
