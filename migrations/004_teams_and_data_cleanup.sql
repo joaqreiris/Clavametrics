@@ -51,10 +51,11 @@ BEGIN
   RAISE NOTICE 'Availability huérfanos eliminados: %', v_count;
 
   -- 1d. Eliminar availability de jugadores que no pertenecen al club correcto
+  -- (availability.player_id es TEXT, players.id es UUID — se castea)
   DELETE FROM public.availability a
   WHERE NOT EXISTS (
     SELECT 1 FROM public.players p
-    WHERE p.id = a.player_id
+    WHERE p.id = a.player_id::uuid
       AND p.club_id = a.club_id
   );
   GET DIAGNOSTICS v_count = ROW_COUNT;
