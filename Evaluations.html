@@ -455,6 +455,33 @@
   .tr-chart-h .right { margin-left:auto; display:flex; gap:6px; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* ── Modals ── */
+  .ev-overlay { position:fixed;inset:0;background:rgba(8,10,12,.52);backdrop-filter:blur(4px);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity 180ms; }
+  .ev-overlay.is-open { opacity:1;pointer-events:auto; }
+  .ev-modal { background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-2);width:600px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;transform:translateY(8px);transition:transform 180ms; }
+  .ev-overlay.is-open .ev-modal { transform:translateY(0); }
+  .ev-modal.w-sm { width:460px; }
+  .ev-modal.w-md { width:520px; }
+  .ev-mh { display:flex;align-items:flex-start;gap:12px;padding:18px 20px;border-bottom:1px solid var(--cm-border); }
+  .ev-mh-info { flex:1; }
+  .ev-mh-title { font:600 16px/1.2 var(--cm-font-sans);letter-spacing:-.01em;color:var(--cm-fg-strong); }
+  .ev-mh-sub { font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px; }
+  .ev-mb { flex:1;overflow-y:auto;padding:16px 20px 20px; }
+  .ev-frow { display:flex;flex-direction:column;gap:4px;margin-bottom:10px; }
+  .ev-fl { font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted); }
+  .ev-finput { width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none; }
+  .ev-finput:focus { border-color:var(--cm-accent); }
+  textarea.ev-finput { height:auto;padding:8px 10px; }
+  .ev-f2 { display:grid;grid-template-columns:1fr 1fr;gap:10px; }
+  .ev-range { width:100%;height:4px;accent-color:var(--cm-accent);cursor:pointer; }
+  .ev-range-row { display:flex;align-items:center;gap:8px; }
+  .ev-range-val { font:700 16px/1 var(--cm-font-mono);color:var(--cm-fg-strong);min-width:22px;text-align:right; }
+  .ev-result-row { display:grid;grid-template-columns:90px 1fr 90px 110px;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--cm-border-soft); }
+  .ev-result-row .dt { font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted); }
+  .ev-result-row .nt { font:500 11.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted); }
+  .ev-result-row .vl { font:700 14px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:right; }
+  .ev-result-row .ac { display:flex;gap:4px;justify-content:flex-end; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
@@ -680,9 +707,9 @@
           <div class="ctx"><strong>27 players</strong> · 24 evaluated this quarter · avg score <strong>7.2 / 10</strong> · next round opens <strong>Jun 1</strong></div>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export report</button>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>Templates</button>
-          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New evaluation</button>
+          <button class="cm-btn is-outline is-sm" onclick="exportCSV()"><i class="ti ti-file-export" style="font-size:14px"></i>Export report</button>
+          <button class="cm-btn is-outline is-sm" onclick="switchToTemplates()"><i class="ti ti-template" style="font-size:14px"></i>Templates</button>
+          <button class="cm-btn is-primary is-sm" onclick="openNewEvalModal()"><i class="ti ti-plus" style="font-size:14px"></i>New evaluation</button>
         </div>
       </header>
 
@@ -804,26 +831,24 @@
 
         <!-- ============ INDIVIDUAL PROFILE ============ -->
         <div class="pt-view" data-view="ind">
-          <!-- shown when user clicks Individual profile -->
           <div class="pt-prof">
+            <div style="padding:10px 14px;border-bottom:1px solid var(--cm-border-soft);display:flex;align-items:center;gap:10px;background:var(--cm-surface)">
+              <label style="font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);white-space:nowrap">Player</label>
+              <select id="indProfSelect" class="ev-finput" style="flex:1;height:32px" onchange="loadIndividualProfile(this.value)">
+                <option value="">Select player…</option>
+              </select>
+            </div>
             <div class="pt-prof-head">
-              <div class="pt-pav" style="width:48px;height:48px;font-size:15px">FD</div>
+              <div class="pt-pav" id="indProfAv" style="width:48px;height:48px;font-size:15px;color:var(--cm-fg-faint)">?</div>
               <div style="flex:1">
-                <h2 style="font:600 20px/1.15 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong)">Felipe Domínguez · #10</h2>
-                <div style="font:500 12px/1.4 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px">MF · 26 y · 175 cm · 74.5 kg · 8 tests in last 6 months</div>
+                <h2 id="indProfName" style="font:600 20px/1.15 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-muted)">Select a player</h2>
+                <div id="indProfMeta" style="font:500 12px/1.4 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:4px">—</div>
               </div>
-              <div class="pt-attentions">
-                <span class="pt-att warn"><i class="ti ti-alert-triangle"></i>SL-CMJ asymmetry 11%</span>
-                <span class="pt-att info"><i class="ti ti-apple"></i>Nutrition referral</span>
-              </div>
+              <div class="pt-attentions" id="indProfAttentions"></div>
             </div>
 
-            <div class="pt-prof-grid">
-              <!-- KPIs strip -->
-              <div class="pt-prof-kpi"><div class="l">Lower-body power</div><div class="v high">52.0<small>W/kg</small></div><div class="d up">↑ +5%</div></div>
-              <div class="pt-prof-kpi"><div class="l">Top speed</div><div class="v">8.4<small>m/s</small></div><div class="d up">↑ +0.2</div></div>
-              <div class="pt-prof-kpi"><div class="l">VO₂max</div><div class="v high">58.1<small>ml/kg/min</small></div><div class="d up">↑ +1.4</div></div>
-              <div class="pt-prof-kpi"><div class="l">Body fat</div><div class="v">9.4<small>%</small></div><div class="d down">↓ −0.6</div></div>
+            <div class="pt-prof-grid" id="indProfKpis">
+              <div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Select a player above to load their profile</div>
             </div>
 
             <div class="pt-prof-charts">
@@ -894,42 +919,9 @@
               </div>
             </div>
 
-            <!-- Latest test results table -->
-            <div class="pt-prof-table-card">
-              <div class="pt-chart-h"><h4>Latest results · last 6 months</h4><span class="sub">8 tests</span><div class="right"><button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button></div></div>
-              <table class="pt-prof-table">
-                <thead><tr><th>Test</th><th>Date</th><th class="num">Result</th><th class="num">Δ</th><th>vs MF</th><th>Status</th><th></th></tr></thead>
-                <tbody>
-                  <tr><td><strong>CMJ height</strong></td><td>12 May</td><td class="num">42.1 cm</td><td class="num good">+1.6</td><td><div class="zbar"><span class="zpin" style="left:72%"></span></div></td><td><span class="zt good">Good</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                  <tr><td><strong>Sprint 30m</strong></td><td>10 May</td><td class="num">4.21 s</td><td class="num good">−0.05</td><td><div class="zbar"><span class="zpin" style="left:78%"></span></div></td><td><span class="zt good">Top 25%</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                  <tr><td><strong>30-15 IFT</strong></td><td>03 May</td><td class="num">19.0 km/h</td><td class="num good">+0.5</td><td><div class="zbar"><span class="zpin" style="left:80%"></span></div></td><td><span class="zt good">Excellent</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                  <tr><td><strong>VBT · back squat</strong></td><td>02 May</td><td class="num">0.78 m/s</td><td class="num good">+0.04</td><td><div class="zbar"><span class="zpin" style="left:70%"></span></div></td><td><span class="zt good">Good</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                  <tr><td><strong>SL-CMJ · LSI</strong></td><td>28 Apr</td><td class="num">11%</td><td class="num warn">+2</td><td><div class="zbar"><span class="zpin warn" style="left:28%"></span></div></td><td><span class="zt warn">Asymmetry · attention</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                  <tr><td><strong>Body composition</strong></td><td>20 Apr</td><td class="num">9.4% fat</td><td class="num good">−0.6</td><td><div class="zbar"><span class="zpin" style="left:60%"></span></div></td><td><span class="zt info">Referral to nutrition</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                  <tr><td><strong>FMS</strong></td><td>15 Apr</td><td class="num">16 /21</td><td class="num flat">±0</td><td><div class="zbar"><span class="zpin" style="left:55%"></span></div></td><td><span class="zt">Within range</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                  <tr><td><strong>Nordic hamstring</strong></td><td>10 Apr</td><td class="num">8 reps</td><td class="num flat">±0</td><td><div class="zbar"><span class="zpin" style="left:50%"></span></div></td><td><span class="zt">Monitoring</span></td><td><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></td></tr>
-                </tbody>
-              </table>
-            </div>
+            <!-- Latest test results table (populated by renderIndTable) -->
+            <div class="pt-prof-table-card" id="indProfTableCard"></div>
 
-            <!-- Attentions & referrals -->
-            <div class="pt-prof-attentions">
-              <div class="pt-att-card warn">
-                <div class="pt-att-h"><i class="ti ti-alert-triangle"></i><strong>Attention</strong><span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">28 Apr</span></div>
-                <div class="pt-att-b">Single-leg CMJ LSI 11% — inter-limb asymmetry above 10% threshold. Recommend 4-week unilateral strength block + Nordic progression.</div>
-                <div class="pt-att-actions"><button class="cm-btn is-outline is-sm">Assign to Physio</button><button class="cm-btn is-ghost is-sm">Dismiss</button></div>
-              </div>
-              <div class="pt-att-card info">
-                <div class="pt-att-h"><i class="ti ti-apple"></i><strong>Referral · Nutrition</strong><span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">20 Apr</span></div>
-                <div class="pt-att-b">Body fat trending down (−1.2% in 12 weeks). Lean-mass maintenance check requested by F. Torres (nutritionist).</div>
-                <div class="pt-att-actions"><button class="cm-btn is-outline is-sm">Open in Nutrition</button><button class="cm-btn is-ghost is-sm">Mark reviewed</button></div>
-              </div>
-              <div class="pt-att-card good">
-                <div class="pt-att-h"><i class="ti ti-trending-up"></i><strong>Positive trend</strong><span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">12 May</span></div>
-                <div class="pt-att-b">CMJ height +3.3 cm over 6 months. Reactive strength index rose from 1.96 → 2.28. Continue current power block.</div>
-                <div class="pt-att-actions"><button class="cm-btn is-ghost is-sm">View block</button></div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -937,16 +929,9 @@
         <div class="pt-view" data-view="grp">
           <div class="pt-grp-grid">
             <div class="pt-grp-card">
-              <div class="pt-chart-h"><h4>Squad ranking · CMJ</h4><span class="sub">8 starters · MF role baseline 40 cm</span><div class="right"><button class="pt-mini-pill is-on">CMJ</button><button class="pt-mini-pill">Sprint 30m</button><button class="pt-mini-pill">VO₂</button></div></div>
-              <div class="pt-rank">
-                <div class="pt-rank-row"><span class="ax">1</span><span class="pt-rank-bar"><span class="pt-rank-fill" style="width:96%">R. Vega · #7 · WG</span></span><span class="pt-rank-v">46.2</span></div>
-                <div class="pt-rank-row"><span class="ax">2</span><span class="pt-rank-bar"><span class="pt-rank-fill" style="width:88%">F. Domínguez · #10 · MF</span></span><span class="pt-rank-v">42.1</span></div>
-                <div class="pt-rank-row"><span class="ax">3</span><span class="pt-rank-bar"><span class="pt-rank-fill med" style="width:82%">S. Rivas · #9 · ST</span></span><span class="pt-rank-v">39.5</span></div>
-                <div class="pt-rank-row"><span class="ax">4</span><span class="pt-rank-bar"><span class="pt-rank-fill med" style="width:78%">M. Paredes · #8 · MF</span></span><span class="pt-rank-v">38.4</span></div>
-                <div class="pt-rank-row"><span class="ax">5</span><span class="pt-rank-bar"><span class="pt-rank-fill med" style="width:72%">T. López · #11 · WG</span></span><span class="pt-rank-v">36.2</span></div>
-                <div class="pt-rank-row"><span class="ax">6</span><span class="pt-rank-bar"><span class="pt-rank-fill low" style="width:62%">R. Sosa · #6 · CB</span></span><span class="pt-rank-v">33.1</span></div>
-                <div class="pt-rank-row"><span class="ax">7</span><span class="pt-rank-bar"><span class="pt-rank-fill low" style="width:58%">N. Ferreyra · #22 · CB</span></span><span class="pt-rank-v">31.4</span></div>
-                <div class="pt-rank-row"><span class="ax">8</span><span class="pt-rank-bar"><span class="pt-rank-fill low" style="width:54%">E. Galarza · #1 · GK</span></span><span class="pt-rank-v">29.8</span></div>
+              <div class="pt-chart-h"><h4 id="squadChartTitle">Squad ranking · CMJ</h4><span class="sub" id="squadChartSub"></span><div class="right" id="squadCompPills"><button class="pt-mini-pill is-on">CMJ</button><button class="pt-mini-pill">Sprint splits</button><button class="pt-mini-pill">30-15 IFT</button><button class="pt-mini-pill">Yo-Yo IR1</button></div></div>
+              <div class="pt-rank" id="squadRankList">
+                <div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading…</div>
               </div>
             </div>
             <div class="pt-grp-card">
@@ -975,21 +960,11 @@
                 </g>
               </svg>
             </div>
-            <div class="pt-grp-card pt-grp-full">
-              <div class="pt-chart-h"><h4>Squad heatmap · all physical tests</h4><span class="sub">Z-scores vs role baseline · 8 starters × 8 tests</span><div class="right"><button class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i>Sort</button></div></div>
-              <table class="pt-heatmap">
-                <thead><tr><th class="pl">Player</th><th>CMJ</th><th>Sprint 30m</th><th>VO₂</th><th>VBT squat</th><th>SL-CMJ</th><th>RSA</th><th>FMS</th><th>Nordic</th></tr></thead>
-                <tbody>
-                  <tr><td class="pl">R. Vega · #7</td><td><span class="hc high">+2.3</span></td><td><span class="hc mhigh">+1.7</span></td><td><span class="hc warn">+0.9</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc mhigh">+1.5</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+1.0</span></td></tr>
-                  <tr><td class="pl">F. Domínguez · #10</td><td><span class="hc warn">+1.2</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc mhigh">+1.4</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc low">−0.6</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc neu">+0.2</span></td><td><span class="hc neu">+0.4</span></td></tr>
-                  <tr><td class="pl">S. Rivas · #9</td><td><span class="hc warn">+0.7</span></td><td><span class="hc mhigh">+1.6</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc neu">+0.2</span></td></tr>
-                  <tr><td class="pl">M. Paredes · #8</td><td><span class="hc warn">+0.6</span></td><td><span class="hc neu">+0.2</span></td><td><span class="hc warn">+1.0</span></td><td><span class="hc neu">+0.6</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+0.9</span></td><td><span class="hc warn">+0.8</span></td></tr>
-                  <tr><td class="pl">T. López · #11</td><td><span class="hc neu">+0.5</span></td><td><span class="hc warn">+1.1</span></td><td><span class="hc neu">+0.6</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+1.0</span></td><td><span class="hc mhigh">+1.4</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.3</span></td></tr>
-                  <tr><td class="pl">R. Sosa · #6</td><td><span class="hc low">−0.5</span></td><td><span class="hc mlow">−0.8</span></td><td><span class="hc neu">+0.3</span></td><td><span class="hc warn">+0.8</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc low">−0.5</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc warn">+1.0</span></td></tr>
-                  <tr><td class="pl">N. Ferreyra · #22</td><td><span class="hc low">−0.3</span></td><td><span class="hc mlow">−0.6</span></td><td><span class="hc neu">+0.1</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.5</span></td><td><span class="hc low">−0.3</span></td><td><span class="hc neu">+0.4</span></td><td><span class="hc neu">+0.6</span></td></tr>
-                  <tr><td class="pl">E. Galarza · #1</td><td><span class="hc vlow">−2.1</span></td><td><span class="hc vlow">−1.9</span></td><td><span class="hc mlow">−0.7</span></td><td><span class="hc vlow">−1.6</span></td><td><span class="hc mlow">−0.7</span></td><td><span class="hc vlow">−2.1</span></td><td><span class="hc neu">+0.6</span></td><td><span class="hc low">−0.5</span></td></tr>
-                </tbody>
-              </table>
+            <div class="pt-grp-card pt-grp-full" id="squadHeatCard">
+              <div class="pt-chart-h"><h4>Squad overview · all test types</h4><span class="sub" id="squadHeatSub"></span></div>
+              <div id="squadHeatBody" style="padding:16px 0">
+                <div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading…</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1134,7 +1109,7 @@
             <div class="h-actions">
               <button class="cm-btn is-outline is-sm"><i class="ti ti-clock" style="font-size:14px"></i>History (12)</button>
               <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Share with player</button>
-              <button class="cm-btn is-primary is-sm"><i class="ti ti-edit" style="font-size:14px"></i>Open evaluation</button>
+              <button class="cm-btn is-primary is-sm" id="evOpenEvalBtn" onclick="openSubjModal()"><i class="ti ti-edit" style="font-size:14px"></i>Open evaluation</button>
             </div>
           </header>
 
@@ -1239,6 +1214,101 @@
     </div>
   </div>
 </aside>
+<!-- ========== MODAL: Test results ========== -->
+<div class="ev-overlay" id="testOvl" onclick="if(event.target===this)closeTestModal()">
+  <div class="ev-modal">
+    <div class="ev-mh">
+      <div class="ev-mh-info"><div class="ev-mh-title" id="testMTitle">Test results</div><div class="ev-mh-sub" id="testMSub"></div></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="cm-btn is-outline is-sm" id="testMLogBtn" onclick="openNewEvalModal()"><i class="ti ti-plus" style="font-size:13px"></i>Log result</button>
+        <button class="cm-icon-btn" onclick="closeTestModal()"><i class="ti ti-x"></i></button>
+      </div>
+    </div>
+    <div class="ev-mb">
+      <div class="ev-frow"><label class="ev-fl">Filter by player</label>
+        <select id="testMPlayer" class="ev-finput" onchange="loadTestResults()"><option value="">All players</option></select></div>
+      <div id="testMContent" style="padding:12px 0"><div style="padding:24px;text-align:center;color:var(--cm-fg-muted)">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MODAL: New / Edit evaluation ========== -->
+<div class="ev-overlay" id="evalOvl" onclick="if(event.target===this)closeEvalModal()">
+  <div class="ev-modal w-sm">
+    <div class="ev-mh">
+      <div class="ev-mh-info"><div class="ev-mh-title" id="evalMTitle">New evaluation</div><div class="ev-mh-sub">Physical test result</div></div>
+      <button class="cm-icon-btn" onclick="closeEvalModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="ev-mb">
+      <form id="evalForm" onsubmit="saveEval(event)">
+        <input type="hidden" id="evalEditId">
+        <div class="ev-frow"><label class="ev-fl">Player</label>
+          <select id="evalPlayer" class="ev-finput" required><option value="">Select player…</option></select></div>
+        <div class="ev-frow"><label class="ev-fl">Test type</label>
+          <input id="evalType" class="ev-finput" list="evalTypeList" placeholder="e.g. CMJ, Sprint splits…" required autocomplete="off">
+          <datalist id="evalTypeList"><option value="CMJ"><option value="Squat jump"><option value="Drop jump"><option value="Broad jump"><option value="SL-CMJ + LSI"><option value="Sprint splits"><option value="505 COD"><option value="Illinois agility"><option value="RSA · 6×30m"><option value="30-15 IFT"><option value="Yo-Yo IR1"><option value="Yo-Yo IR2"><option value="Cooper 12-min"><option value="VBT · back squat"><option value="VBT · bench press"><option value="VBT · hip thrust"><option value="1RM bench"><option value="Nordic hamstring"><option value="Isokinetic H:Q"><option value="FMS"><option value="Ankle dorsiflexion"><option value="Sit &amp; reach"><option value="Body composition"><option value="BMI / RFM"></datalist>
+        </div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Value</label><input id="evalValue" type="number" step="any" class="ev-finput" required></div>
+          <div class="ev-frow"><label class="ev-fl">Unit</label><input id="evalUnit" class="ev-finput" placeholder="cm, s, kg…"></div>
+        </div>
+        <div class="ev-frow"><label class="ev-fl">Date</label><input id="evalDate" type="date" class="ev-finput" required></div>
+        <div class="ev-frow"><label class="ev-fl">Notes</label><textarea id="evalNotes" class="ev-finput" rows="2"></textarea></div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button type="submit" class="cm-btn is-primary" style="flex:1">Save result</button>
+          <button type="button" class="cm-btn is-outline" onclick="closeEvalModal()" style="flex:1">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MODAL: Subjective evaluation ========== -->
+<div class="ev-overlay" id="subjOvl" onclick="if(event.target===this)closeSubjModal()">
+  <div class="ev-modal w-md">
+    <div class="ev-mh">
+      <div class="ev-mh-info"><div class="ev-mh-title">Subjective evaluation</div><div class="ev-mh-sub">Technical · Tactical · Physical · Mental</div></div>
+      <button class="cm-icon-btn" onclick="closeSubjModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="ev-mb">
+      <form id="subjForm" onsubmit="saveSubjEval(event)">
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Player</label>
+            <select id="subjPlayer" class="ev-finput" required><option value="">Select player…</option></select></div>
+          <div class="ev-frow"><label class="ev-fl">Date</label><input id="subjDate" type="date" class="ev-finput" required></div>
+        </div>
+        <div style="margin:4px 0 10px;font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Scores (1–10)</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl"><i class="ti ti-ball-football"></i> Technical</label>
+            <div class="ev-range-row"><input id="subjTech" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+          <div class="ev-frow"><label class="ev-fl"><i class="ti ti-tournament"></i> Tactical</label>
+            <div class="ev-range-row"><input id="subjTact" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+          <div class="ev-frow"><label class="ev-fl"><i class="ti ti-run"></i> Physical</label>
+            <div class="ev-range-row"><input id="subjPhys" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+          <div class="ev-frow"><label class="ev-fl"><i class="ti ti-brain"></i> Mental</label>
+            <div class="ev-range-row"><input id="subjMent" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+        </div>
+        <div class="ev-frow"><label class="ev-fl">Notes</label><textarea id="subjNotes" class="ev-finput" rows="2"></textarea></div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button type="submit" class="cm-btn is-primary" style="flex:1">Save evaluation</button>
+          <button type="button" class="cm-btn is-outline" onclick="closeSubjModal()" style="flex:1">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MODAL: Round detail ========== -->
+<div class="ev-overlay" id="roundOvl" onclick="if(event.target===this)this.classList.remove('is-open')">
+  <div class="ev-modal">
+    <div class="ev-mh">
+      <div class="ev-mh-info"><div class="ev-mh-title" id="roundMTitle">Round details</div><div class="ev-mh-sub" id="roundMSub"></div></div>
+      <button class="cm-icon-btn" onclick="document.getElementById('roundOvl').classList.remove('is-open')"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="ev-mb" id="roundMBody"><div style="padding:24px;text-align:center;color:var(--cm-fg-muted)">Loading…</div></div>
+  </div>
+</div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -1250,235 +1320,531 @@
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 <script>
-  // ===== Supabase data layer =====
+  // ===== State =====
   const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const POS_MAP = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', LW:'wg', RW:'wg', MF:'mf', CM:'mf', DM:'mf', AM:'mf', ST:'st', CF:'st' };
   const POS_LABEL = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', LW:'LW', RW:'RW', MF:'MF', CM:'CM', DM:'DM', AM:'AM', ST:'ST', CF:'CF' };
 
   let allPlayers = [], selectedPlayerId = null, clubId = null;
+  let _currentTestType = '';
+  let _indPid = null;
+  let _squadCompTest = 'CMJ';
+  let _squadLoaded = false;
+  let _historyLoaded = false;
+  let currentPeriodMs = 180 * 86400000; // default 6 months
 
+  // ── Helpers ──
+  function escS(s) { return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+  function getPeriodCutoff() { return currentPeriodMs ? new Date(Date.now() - currentPeriodMs).toISOString().split('T')[0] : null; }
+  function fmtDelta(diff, u) {
+    if (diff > 0) return `<span style="color:var(--cm-success);font:600 12px/1 var(--cm-font-mono)">+${diff}${u?' '+u:''}</span>`;
+    if (diff < 0) return `<span style="color:var(--cm-danger);font:600 12px/1 var(--cm-font-mono)">${diff}${u?' '+u:''}</span>`;
+    return `<span style="color:var(--cm-fg-faint);font:600 12px/1 var(--cm-font-mono)">±0</span>`;
+  }
+
+  // ── Boot ──
   async function boot() {
     if (!await window.requireAuth()) return;
-    const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
-    if (club) window.applyClubTheme();
+    await Promise.all([window.getProfile(), window.getClub()]);
+    window.applyClubTheme();
     clubId = await window.getClubId();
     if (!clubId) return;
     await Promise.all([loadRoster(), loadKPIs()]);
   }
 
+  // ── Roster (populates subjective left panel + all player selects) ──
   async function loadRoster() {
     const { data } = await window.sb.from('players')
       .select('id, first_name, last_name, position')
-      .eq('club_id', clubId)
-      .order('last_name');
+      .eq('club_id', clubId).order('last_name');
     allPlayers = data || [];
     renderRoster();
-    document.getElementById('kpiEvQuarter').innerHTML = `— <sub>/ ${allPlayers.length}</sub>`;
+    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    ['evalPlayer','subjPlayer','testMPlayer','indProfSelect'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = (id === 'testMPlayer' ? '<option value="">All players</option>' : '<option value="">Select player…</option>') + opts;
+    });
   }
 
   async function loadKPIs() {
-    const cutoff = new Date(Date.now() - 90 * 864e5).toISOString().split('T')[0];
-    const { data } = await window.sb.from('evaluations')
-      .select('player_id')
-      .eq('club_id', clubId)
-      .gte('test_date', cutoff);
+    const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
+    const { data } = await window.sb.from('evaluations').select('player_id').eq('club_id', clubId).gte('test_date', cutoff);
     const unique = new Set((data || []).map(e => e.player_id)).size;
-    document.getElementById('kpiEvQuarter').innerHTML = `${unique} <sub>/ ${allPlayers.length || '—'}</sub>`;
+    const el = document.getElementById('kpiEvQuarter');
+    if (el) el.innerHTML = `${unique} <sub>/ ${allPlayers.length || '—'}</sub>`;
   }
 
   function renderRoster() {
     const list = document.getElementById('evRosterList');
-    if (!allPlayers.length) {
-      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players found</div>';
-      return;
-    }
-    list.innerHTML = '<div class="ev-list-grp">All players</div>' +
-      allPlayers.map(p => {
-        const name = `${p.first_name} ${p.last_name}`;
-        const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
-        const pos = p.position || '';
-        const posCls = POS_MAP[pos] || 'mf';
-        const posLabel = POS_LABEL[pos] || pos;
-        return `<div class="ev-row" data-pid="${p.id}" onclick="selectPlayer('${p.id}')">
-          <div class="av tn">${init}</div>
-          <div class="info"><div class="name">${name}</div><div class="meta"><span class="pos ${posCls}">${posLabel}</span></div></div>
-          <div class="score-box"><div class="score-v">—</div></div>
-        </div>`;
-      }).join('');
+    if (!list) return;
+    if (!allPlayers.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No players found</div>'; return; }
+    list.innerHTML = '<div class="ev-list-grp">All players</div>' + allPlayers.map(p => {
+      const name = `${p.first_name} ${p.last_name}`;
+      const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
+      const posCls = POS_MAP[p.position] || 'mf';
+      const posLabel = POS_LABEL[p.position] || p.position || '—';
+      return `<div class="ev-row" data-pid="${p.id}" onclick="selectPlayer('${p.id}')">
+        <div class="av tn">${init}</div>
+        <div class="info"><div class="name">${name}</div><div class="meta"><span class="pos ${posCls}">${posLabel}</span></div></div>
+        <div class="score-box"><div class="score-v">—</div></div>
+      </div>`;
+    }).join('');
   }
 
+  // ── Subjective view: select player from roster ──
   async function selectPlayer(pid) {
     selectedPlayerId = pid;
     document.querySelectorAll('#evRosterList .ev-row').forEach(r => r.classList.toggle('is-on', r.dataset.pid === pid));
     const p = allPlayers.find(x => x.id === pid);
     if (p) {
-      const name = `${p.first_name} ${p.last_name}`;
-      const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
-      document.getElementById('evDetailAv').textContent = init;
-      document.getElementById('evDetailName').textContent = name;
-      document.getElementById('evDetailMeta').innerHTML = `<span>${p.position || '—'}</span>`;
+      document.getElementById('evDetailAv').textContent = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
+      document.getElementById('evDetailName').textContent = `${p.first_name} ${p.last_name}`;
+      document.getElementById('evDetailMeta').innerHTML = `<span class="badge">${p.position || '—'}</span>`;
     }
-    const { data } = await window.sb.from('evaluations')
-      .select('evaluation_type, test_date, value, unit, notes')
-      .eq('player_id', pid)
-      .eq('club_id', clubId)
-      .order('test_date', { ascending: false })
-      .limit(10);
-    renderTimeline(data || []);
-  }
-
-  function renderTimeline(evals) {
-    const tl = document.getElementById('evTimeline');
     const ph = document.getElementById('evDetailPlaceholder');
     if (ph) ph.style.display = 'none';
+    const cutoff = getPeriodCutoff();
+    let q = window.sb.from('evaluations')
+      .select('id, evaluation_type, test_date, value, unit, notes')
+      .eq('player_id', pid).eq('club_id', clubId)
+      .order('test_date', { ascending: false });
+    if (cutoff) q = q.gte('test_date', cutoff);
+    const { data } = await q.limit(30);
+    renderTimeline(data || [], pid);
+  }
+
+  function renderTimeline(evals, pid) {
+    const tl = document.getElementById('evTimeline');
+    if (!tl) return;
     if (!evals.length) {
-      tl.innerHTML = '<h3>Evaluation history</h3><div style="padding:24px 0;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No evaluations recorded yet for this player</div>';
+      tl.innerHTML = `<h3>Evaluation history</h3><div style="padding:24px 0;text-align:center;color:var(--cm-fg-muted)">No evaluations in this period<br>
+        <button class="cm-btn is-outline is-sm" style="margin-top:10px" onclick="openNewEvalModal()"><i class="ti ti-plus" style="font-size:13px"></i>Log first result</button></div>`;
       return;
     }
     const rows = evals.map((e, i) => {
-      const dt = new Date(e.test_date);
-      const mon = MONTHS_SHORT[dt.getMonth()];
-      const day = dt.getDate();
-      const prev = evals[i + 1];
-      let deltaHTML = '<div class="ev-tl-delta flat">±0</div>';
-      if (prev && prev.evaluation_type === e.evaluation_type) {
-        const diff = +(e.value - prev.value).toFixed(2);
-        if (diff > 0) deltaHTML = `<div class="ev-tl-delta up"><i class="ti ti-arrow-up-right"></i>+${diff}</div>`;
-        else if (diff < 0) deltaHTML = `<div class="ev-tl-delta down"><i class="ti ti-arrow-down-right"></i>${diff}</div>`;
+      const dt = new Date(e.test_date + 'T00:00:00');
+      const prev = evals.find((x, j) => j > i && x.evaluation_type === e.evaluation_type);
+      let deltaHTML = '<div class="ev-tl-delta flat">—</div>';
+      if (prev) {
+        const d = +(e.value - prev.value).toFixed(2);
+        if (d > 0) deltaHTML = `<div class="ev-tl-delta up"><i class="ti ti-arrow-up-right"></i>+${d}</div>`;
+        else if (d < 0) deltaHTML = `<div class="ev-tl-delta down"><i class="ti ti-arrow-down-right"></i>${d}</div>`;
+        else deltaHTML = '<div class="ev-tl-delta flat">±0</div>';
       }
-      return `<div class="ev-tl-row">
-        <div class="ev-tl-date"><div class="m">${mon}</div><div class="d">${day}</div></div>
-        <div class="ev-tl-info"><div class="title">${e.evaluation_type}</div><div class="meta">${e.notes || 'Physical test'}</div></div>
-        <div class="ev-tl-score">${e.value} <sub>${e.unit || ''}</sub></div>
+      return `<div class="ev-tl-row" style="cursor:pointer" onclick="openEditEval('${e.id}','${escS(e.evaluation_type)}','${e.test_date}','${e.value}','${escS(e.unit||'')}','${escS(e.notes||'')}','${pid}')">
+        <div class="ev-tl-date"><div class="m">${MONTHS_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div>
+        <div class="ev-tl-info"><div class="title">${e.evaluation_type}</div><div class="meta">${e.notes || '—'}</div></div>
+        <div class="ev-tl-score">${e.value}<sub>${e.unit ? ' '+e.unit : ''}</sub></div>
         ${deltaHTML}
       </div>`;
     }).join('');
-    const ph = document.getElementById('evDetailPlaceholder');
-    if (ph) ph.style.display = 'none';
     tl.innerHTML = '<h3>Evaluation history</h3>' + rows;
   }
 
-  boot();
+  // ── Test detail modal (catalog buttons) ──
+  function openTestModal(label) {
+    _currentTestType = label;
+    document.getElementById('testMTitle').textContent = label;
+    document.getElementById('testMSub').textContent = 'Loading…';
+    document.getElementById('testMContent').innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
+    document.getElementById('testMLogBtn').onclick = () => openNewEvalModal(label);
+    document.getElementById('testOvl').classList.add('is-open');
+    loadTestResults();
+  }
+  function closeTestModal() { document.getElementById('testOvl').classList.remove('is-open'); }
 
-  // ===== UI interactions =====
-
-  // ── Unified tab switcher ──
-  const VIEWS = { phys: '.pt-wrap', subj: '#subjView', trends: '#trendsView', squad: '#squadView', history: '#historyView', templates: '#templatesView' };
-  document.querySelectorAll('#evTabs .ev-tab').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('#evTabs .ev-tab').forEach(o => o.classList.remove('is-on'));
-    b.classList.add('is-on');
-    const v = b.dataset.view;
-    Object.entries(VIEWS).forEach(([key, sel]) => {
-      const el = document.querySelector(sel);
-      if (el) el.style.display = (key === v) ? '' : 'none';
+  async function loadTestResults() {
+    if (!clubId || !_currentTestType) return;
+    const pidFilter = document.getElementById('testMPlayer').value;
+    let q = window.sb.from('evaluations')
+      .select('id, player_id, test_date, value, unit, notes, players!player_id(first_name, last_name)')
+      .eq('club_id', clubId).eq('evaluation_type', _currentTestType)
+      .order('test_date', { ascending: false });
+    if (pidFilter) q = q.eq('player_id', pidFilter);
+    const { data } = await q.limit(100);
+    const content = document.getElementById('testMContent');
+    if (!data || !data.length) {
+      document.getElementById('testMSub').textContent = 'No results yet';
+      content.innerHTML = `<div style="padding:32px;text-align:center;color:var(--cm-fg-muted)">
+        <i class="ti ti-clipboard-x" style="font-size:28px;display:block;margin-bottom:8px;color:var(--cm-fg-faint)"></i>No results for this test yet.<br>
+        <button class="cm-btn is-outline is-sm" style="margin-top:12px" onclick="openNewEvalModal('${escS(_currentTestType)}')"><i class="ti ti-plus" style="font-size:13px"></i>Log first result</button></div>`;
+      return;
+    }
+    document.getElementById('testMSub').textContent = `${data.length} result${data.length===1?'':'s'}`;
+    const byPlayer = {};
+    data.forEach(e => {
+      const pName = e.players ? `${e.players.first_name} ${e.players.last_name}` : '—';
+      if (!byPlayer[e.player_id]) byPlayer[e.player_id] = { name: pName, results: [] };
+      byPlayer[e.player_id].results.push(e);
     });
-    if (v === 'squad')     loadSquadOverview();
-    if (v === 'history')   loadEvalHistory();
-    if (v === 'templates') renderTemplates();
-  }));
+    content.innerHTML = Object.entries(byPlayer).map(([pid, pd]) => {
+      const latest = pd.results[0], prev = pd.results[1];
+      let deltaHTML = '';
+      if (prev) { const d = +(latest.value - prev.value).toFixed(2); deltaHTML = fmtDelta(d); }
+      const histRows = pd.results.map(r => `
+        <div class="ev-result-row">
+          <span class="dt">${r.test_date}</span>
+          <span class="nt">${r.notes || '—'}</span>
+          <span class="vl">${r.value}${r.unit ? ' '+r.unit : ''}</span>
+          <span class="ac">
+            <button class="cm-btn is-outline is-sm" onclick="openEditEval('${r.id}','${escS(_currentTestType)}','${r.test_date}','${r.value}','${escS(r.unit||'')}','${escS(r.notes||'')}','${pid}')">Edit</button>
+            <button class="cm-btn is-ghost is-sm" style="color:var(--cm-danger)" onclick="deleteEval('${r.id}','${pid}')">Delete</button>
+          </span>
+        </div>`).join('');
+      return `<div style="margin-bottom:12px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="width:30px;height:30px;border-radius:50%;background:var(--cm-accent-soft);color:var(--cm-accent);display:flex;align-items:center;justify-content:center;font:700 11px/1 var(--cm-font-sans)">${(pd.name[0]||'?').toUpperCase()}</div>
+          <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1">${pd.name}</span>
+          <span style="font:700 17px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${latest.value}${latest.unit?' '+latest.unit:''}</span>
+          ${deltaHTML}
+        </div>${histRows}</div>`;
+    }).join('');
+  }
 
-  // ── Squad overview ──
-  let _squadLoaded = false;
+  // ── New / Edit evaluation modal ──
+  function openNewEvalModal(prefillType, prefillPid) {
+    document.getElementById('evalMTitle').textContent = 'New evaluation';
+    document.getElementById('evalEditId').value = '';
+    document.getElementById('evalType').value = prefillType || '';
+    document.getElementById('evalDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('evalValue').value = '';
+    document.getElementById('evalUnit').value = '';
+    document.getElementById('evalNotes').value = '';
+    document.getElementById('evalPlayer').value = prefillPid || selectedPlayerId || '';
+    document.getElementById('evalOvl').classList.add('is-open');
+  }
+  function openEditEval(id, type, date, value, unit, notes, pid) {
+    document.getElementById('evalMTitle').textContent = 'Edit evaluation';
+    document.getElementById('evalEditId').value = id;
+    document.getElementById('evalType').value = type;
+    document.getElementById('evalDate').value = date;
+    document.getElementById('evalValue').value = value;
+    document.getElementById('evalUnit').value = unit;
+    document.getElementById('evalNotes').value = notes;
+    document.getElementById('evalPlayer').value = pid || '';
+    document.getElementById('evalOvl').classList.add('is-open');
+  }
+  function closeEvalModal() { document.getElementById('evalOvl').classList.remove('is-open'); }
+
+  async function saveEval(e) {
+    e.preventDefault();
+    const playerId = document.getElementById('evalPlayer').value;
+    const evalType = document.getElementById('evalType').value.trim();
+    const value = parseFloat(document.getElementById('evalValue').value);
+    const unit = document.getElementById('evalUnit').value.trim();
+    const testDate = document.getElementById('evalDate').value;
+    const notes = document.getElementById('evalNotes').value.trim();
+    const editId = document.getElementById('evalEditId').value;
+    if (!playerId || !evalType || isNaN(value) || !testDate) return;
+    const payload = { player_id: playerId, club_id: clubId, evaluation_type: evalType, value, unit: unit || null, test_date: testDate, notes: notes || null };
+    let error;
+    if (editId) ({ error } = await window.sb.from('evaluations').update(payload).eq('id', editId));
+    else ({ error } = await window.sb.from('evaluations').insert(payload));
+    if (error) { alert('Error: ' + error.message); return; }
+    closeEvalModal();
+    _squadLoaded = false; _historyLoaded = false;
+    loadKPIs();
+    if (selectedPlayerId === playerId) selectPlayer(playerId);
+    if (_currentTestType === evalType && document.getElementById('testOvl').classList.contains('is-open')) loadTestResults();
+    if (_indPid === playerId) loadIndividualProfile(playerId);
+  }
+
+  async function deleteEval(id, pid) {
+    if (!confirm('Delete this result?')) return;
+    const { error } = await window.sb.from('evaluations').delete().eq('id', id);
+    if (error) { alert('Error: ' + error.message); return; }
+    _squadLoaded = false; _historyLoaded = false;
+    if (document.getElementById('testOvl').classList.contains('is-open')) loadTestResults();
+    if (selectedPlayerId === pid) selectPlayer(pid);
+    if (_indPid === pid) loadIndividualProfile(pid);
+  }
+
+  // ── Subjective evaluation modal ──
+  function openSubjModal() {
+    document.getElementById('subjPlayer').value = selectedPlayerId || '';
+    document.getElementById('subjDate').value = new Date().toISOString().split('T')[0];
+    ['subjTech','subjTact','subjPhys','subjMent'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = 5; el.nextElementSibling.textContent = '5'; }
+    });
+    document.getElementById('subjNotes').value = '';
+    document.getElementById('subjOvl').classList.add('is-open');
+  }
+  function closeSubjModal() { document.getElementById('subjOvl').classList.remove('is-open'); }
+
+  async function saveSubjEval(e) {
+    e.preventDefault();
+    const playerId = document.getElementById('subjPlayer').value;
+    const date = document.getElementById('subjDate').value;
+    const tech = +document.getElementById('subjTech').value;
+    const tact = +document.getElementById('subjTact').value;
+    const phys = +document.getElementById('subjPhys').value;
+    const ment = +document.getElementById('subjMent').value;
+    const notes = document.getElementById('subjNotes').value.trim();
+    if (!playerId || !date) return;
+    const tag = `Technical:${tech} Tactical:${tact} Physical:${phys} Mental:${ment}${notes?' | '+notes:''}`;
+    const rows = [
+      { player_id:playerId, club_id:clubId, evaluation_type:'Technical',  value:tech, unit:'/10', test_date:date, notes:tag },
+      { player_id:playerId, club_id:clubId, evaluation_type:'Tactical',   value:tact, unit:'/10', test_date:date, notes:tag },
+      { player_id:playerId, club_id:clubId, evaluation_type:'Physical',   value:phys, unit:'/10', test_date:date, notes:tag },
+      { player_id:playerId, club_id:clubId, evaluation_type:'Mental',     value:ment, unit:'/10', test_date:date, notes:tag },
+    ];
+    const { error } = await window.sb.from('evaluations').insert(rows);
+    if (error) { alert('Error: ' + error.message); return; }
+    closeSubjModal();
+    _squadLoaded = false; _historyLoaded = false;
+    loadKPIs();
+    if (selectedPlayerId === playerId) selectPlayer(playerId);
+  }
+
+  // ── Individual Profile ──
+  async function loadIndividualProfile(pid) {
+    if (!pid || !clubId) return;
+    _indPid = pid;
+    const p = allPlayers.find(x => x.id === pid);
+    if (p) {
+      document.getElementById('indProfAv').textContent = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
+      document.getElementById('indProfName').textContent = `${p.first_name} ${p.last_name}`;
+      document.getElementById('indProfMeta').textContent = `${p.position || '—'}`;
+      document.getElementById('indProfName').style.color = 'var(--cm-fg-strong)';
+    }
+    const cutoff = getPeriodCutoff();
+    let q = window.sb.from('evaluations')
+      .select('id, evaluation_type, test_date, value, unit, notes')
+      .eq('player_id', pid).eq('club_id', clubId)
+      .order('test_date', { ascending: false });
+    if (cutoff) q = q.gte('test_date', cutoff);
+    const { data } = await q.limit(200);
+    const evals = data || [];
+    // Group by type
+    const byType = {};
+    evals.forEach(e => { if (!byType[e.evaluation_type]) byType[e.evaluation_type] = []; byType[e.evaluation_type].push(e); });
+    // KPIs: latest per test type (up to 4)
+    const kpiGrid = document.getElementById('indProfKpis');
+    const entries = Object.entries(byType).slice(0, 4);
+    kpiGrid.innerHTML = entries.length ? entries.map(([type, results]) => {
+      const latest = results[0], prev = results[1];
+      let dCls = '', dTxt = '';
+      if (prev) { const d = +(latest.value - prev.value).toFixed(2); dCls = d>0?'up':d<0?'down':''; dTxt = d>0?`↑ +${d}`:d<0?`↓ ${d}`:''; }
+      return `<div class="pt-prof-kpi">
+        <div class="l">${type}</div>
+        <div class="v${dCls==='up'?' high':''}">${latest.value}<small>${latest.unit?' '+latest.unit:''}</small></div>
+        ${dTxt ? `<div class="d ${dCls}">${dTxt}</div>` : `<div class="d" style="color:var(--cm-fg-muted)">${latest.test_date}</div>`}
+      </div>`;
+    }).join('') : '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--cm-fg-muted)">No evaluations recorded yet</div>';
+    // Table
+    const card = document.getElementById('indProfTableCard');
+    if (!evals.length) {
+      card.innerHTML = `<div class="pt-chart-h"><h4>Latest results</h4></div>
+        <div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No results yet<br>
+        <button class="cm-btn is-outline is-sm" style="margin-top:10px" onclick="openNewEvalModal()"><i class="ti ti-plus" style="font-size:13px"></i>Log result</button></div>`;
+    } else {
+      const tbody = Object.entries(byType).map(([type, results]) => {
+        const l = results[0], pv = results[1];
+        let dCls = '', dVal = '±0';
+        if (pv) { const d = +(l.value - pv.value).toFixed(2); dCls = d>0?'good':d<0?'warn':'flat'; dVal = d>0?'+'+d:String(d); }
+        return `<tr>
+          <td><strong>${type}</strong></td>
+          <td>${l.test_date}</td>
+          <td class="num">${l.value}${l.unit?' '+l.unit:''}</td>
+          <td class="num ${dCls}">${dVal}</td>
+          <td></td><td></td>
+          <td><button class="cm-icon-btn" title="Edit" onclick="openEditEval('${l.id}','${escS(type)}','${l.test_date}','${l.value}','${escS(l.unit||'')}','${escS(l.notes||'')}','${pid}')"><i class="ti ti-edit"></i></button>
+              <button class="cm-icon-btn" title="Delete" style="color:var(--cm-danger)" onclick="deleteEval('${l.id}','${pid}')"><i class="ti ti-trash"></i></button></td>
+        </tr>`;
+      }).join('');
+      card.innerHTML = `<div class="pt-chart-h"><h4>Latest results</h4><span class="sub">${evals.length} entries</span>
+        <div class="right"><button class="cm-btn is-outline is-sm" onclick="exportCSV('${pid}')"><i class="ti ti-file-export" style="font-size:13px"></i>Export</button></div></div>
+        <table class="pt-prof-table"><thead><tr><th>Test</th><th>Date</th><th class="num">Result</th><th class="num">Δ</th><th></th><th></th><th></th></tr></thead><tbody>${tbody}</tbody></table>`;
+    }
+  }
+
+  // ── Squad Comparison ──
+  async function loadSquadComparison(testType) {
+    _squadCompTest = testType || _squadCompTest;
+    const rankEl = document.getElementById('squadRankList');
+    const heatEl = document.getElementById('squadHeatBody');
+    if (!rankEl || !clubId) return;
+    rankEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
+    document.getElementById('squadChartTitle').textContent = `Squad ranking · ${_squadCompTest}`;
+    // Ranking for selected test
+    const { data: rankData } = await window.sb.from('evaluations')
+      .select('player_id, value, unit, test_date, players!player_id(first_name, last_name, position)')
+      .eq('club_id', clubId).eq('evaluation_type', _squadCompTest)
+      .order('test_date', { ascending: false });
+    const byPlayer = {};
+    (rankData || []).forEach(e => {
+      if (!byPlayer[e.player_id]) {
+        const p = e.players || {};
+        byPlayer[e.player_id] = { name: p.first_name ? `${p.first_name[0]}. ${p.last_name}` : '—', pos: p.position || '', value: e.value, unit: e.unit };
+      }
+    });
+    const sorted = Object.entries(byPlayer).map(([pid, d]) => ({pid,...d})).sort((a,b) => b.value - a.value);
+    document.getElementById('squadChartSub').textContent = `${sorted.length} player${sorted.length===1?'':'s'}`;
+    rankEl.innerHTML = sorted.length ? sorted.map((r, i) => {
+      const max = sorted[0].value;
+      const pct = max > 0 ? Math.round(r.value / max * 100) : 0;
+      const cls = pct > 85 ? '' : pct > 65 ? 'med' : 'low';
+      return `<div class="pt-rank-row" style="cursor:pointer" title="View profile" onclick="openIndFromSquad('${r.pid}')">
+        <span class="ax">${i+1}</span>
+        <span class="pt-rank-bar"><span class="pt-rank-fill ${cls}" style="width:${pct}%">${r.name} · ${r.pos}</span></span>
+        <span class="pt-rank-v">${r.value}${r.unit?' '+r.unit:''}</span>
+      </div>`;
+    }).join('') : '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No results for this test yet</div>';
+    // Heatmap: all types per player
+    if (!heatEl) return;
+    const { data: heatData } = await window.sb.from('evaluations')
+      .select('player_id, evaluation_type, value, unit, test_date, players!player_id(first_name, last_name)')
+      .eq('club_id', clubId).order('test_date', { ascending: false });
+    const heatByP = {};
+    (heatData||[]).forEach(e => {
+      if (!heatByP[e.player_id]) { const p = e.players||{}; heatByP[e.player_id] = { name: p.first_name?`${p.first_name} ${p.last_name}`:'—', tests:{} }; }
+      if (!heatByP[e.player_id].tests[e.evaluation_type]) heatByP[e.player_id].tests[e.evaluation_type] = { v: e.value, u: e.unit };
+    });
+    const types = [...new Set((heatData||[]).map(e => e.evaluation_type))].slice(0, 8);
+    const heatRows = Object.values(heatByP);
+    document.getElementById('squadHeatSub').textContent = `${heatRows.length} players · ${types.length} test types`;
+    if (heatRows.length) {
+      heatEl.innerHTML = `<table class="pt-heatmap"><thead><tr><th class="pl">Player</th>${types.map(t=>`<th>${t}</th>`).join('')}</tr></thead>
+        <tbody>${heatRows.map(r => `<tr><td class="pl">${r.name}</td>${types.map(t => {
+          const v = r.tests[t];
+          return v ? `<td><span class="hc warn">${v.v}${v.u?' '+v.u:''}</span></td>` : `<td><span class="hc neu">—</span></td>`;
+        }).join('')}</tr>`).join('')}</tbody></table>`;
+    } else { heatEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No data yet</div>'; }
+  }
+
+  function openIndFromSquad(pid) {
+    document.querySelectorAll('.pt-segs .pt-seg').forEach((b,i) => b.classList.toggle('is-on', i===1));
+    document.querySelectorAll('.pt-view').forEach(v => v.classList.toggle('is-on', v.dataset.view === 'ind'));
+    const sel = document.getElementById('indProfSelect');
+    if (sel) { sel.value = pid; loadIndividualProfile(pid); }
+  }
+
+  // ── Squad Overview tab ──
   async function loadSquadOverview() {
     if (_squadLoaded) return;
     const grid = document.getElementById('squadViewGrid');
     if (!clubId) return;
     const { data } = await window.sb.from('evaluations')
       .select('player_id, evaluation_type, value, unit, test_date, players!player_id(first_name, last_name, position)')
-      .eq('club_id', clubId)
-      .order('test_date', { ascending: false });
+      .eq('club_id', clubId).order('test_date', { ascending: false });
     const byPlayer = {};
-    (data || []).forEach(e => {
-      if (!byPlayer[e.player_id]) {
-        const p = e.players || {};
-        byPlayer[e.player_id] = {
-          name: p.first_name ? `${p.first_name} ${p.last_name}` : '—',
-          position: p.position || '',
-          tests: {}, latest: e.test_date
-        };
-      }
-      if (!byPlayer[e.player_id].tests[e.evaluation_type])
-        byPlayer[e.player_id].tests[e.evaluation_type] = `${e.value}${e.unit ? ' ' + e.unit : ''}`;
+    (data||[]).forEach(e => {
+      if (!byPlayer[e.player_id]) { const p=e.players||{}; byPlayer[e.player_id]={ name:p.first_name?`${p.first_name} ${p.last_name}`:'—', position:p.position||'', tests:{}, latest:e.test_date }; }
+      if (!byPlayer[e.player_id].tests[e.evaluation_type]) byPlayer[e.player_id].tests[e.evaluation_type]=`${e.value}${e.unit?' '+e.unit:''}`;
     });
     const rows = Object.values(byPlayer);
     document.getElementById('squadViewSub').textContent = `${rows.length} players`;
-    if (!rows.length) {
-      grid.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No evaluations recorded yet</div>';
-      return;
-    }
-    const allTypes = [...new Set((data||[]).map(e => e.evaluation_type))].slice(0, 5);
-    grid.innerHTML = `<table style="width:100%;border-collapse:collapse">
-      <thead><tr style="background:var(--cm-bg-soft)">
-        <th style="text-align:left;padding:9px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">Player</th>
-        <th style="text-align:left;padding:9px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">Pos</th>
-        <th style="text-align:left;padding:9px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">Last test</th>
-        ${allTypes.map(t => `<th style="text-align:right;padding:9px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">${t}</th>`).join('')}
-      </tr></thead>
-      <tbody>${rows.map(r => `<tr>
+    if (!rows.length) { grid.innerHTML='<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No evaluations recorded yet</div>'; return; }
+    const allTypes = [...new Set((data||[]).map(e=>e.evaluation_type))].slice(0,5);
+    const th = `<th style="text-align:left;padding:9px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">`;
+    grid.innerHTML = `<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cm-bg-soft)">
+      ${th}Player</th>${th}Pos</th>${th}Last</th>${allTypes.map(t=>`${th.replace('left','right')}${t}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(r=>`<tr>
         <td style="padding:10px 14px;font:500 13.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);border-bottom:1px solid var(--cm-border-soft)">${r.name}</td>
         <td style="padding:10px 14px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border-soft)">${r.position||'—'}</td>
         <td style="padding:10px 14px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border-soft)">${r.latest||'—'}</td>
-        ${allTypes.map(t => `<td style="padding:10px 14px;text-align:right;font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg);border-bottom:1px solid var(--cm-border-soft)">${r.tests[t]||'—'}</td>`).join('')}
-      </tr>`).join('')}</tbody>
-    </table>`;
+        ${allTypes.map(t=>`<td style="padding:10px 14px;text-align:right;font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg);border-bottom:1px solid var(--cm-border-soft)">${r.tests[t]||'—'}</td>`).join('')}
+      </tr>`).join('')}</tbody></table>`;
     _squadLoaded = true;
   }
 
-  // ── Round history ──
-  let _historyLoaded = false;
+  // ── Round History ──
   async function loadEvalHistory() {
     if (_historyLoaded) return;
     const list = document.getElementById('historyViewList');
     if (!clubId) return;
     const { data } = await window.sb.from('evaluations')
-      .select('test_date, player_id, evaluation_type')
-      .eq('club_id', clubId)
+      .select('test_date, player_id, evaluation_type').eq('club_id', clubId)
       .order('test_date', { ascending: false });
     const byDate = {};
-    (data || []).forEach(e => {
-      const d = e.test_date;
-      if (!byDate[d]) byDate[d] = { players: new Set(), types: new Set() };
-      byDate[d].players.add(e.player_id);
-      byDate[d].types.add(e.evaluation_type);
-    });
+    (data||[]).forEach(e => { if (!byDate[e.test_date]) byDate[e.test_date]={players:new Set(),types:new Set()}; byDate[e.test_date].players.add(e.player_id); byDate[e.test_date].types.add(e.evaluation_type); });
     const rounds = Object.entries(byDate);
     document.getElementById('historyViewSub').textContent = `${rounds.length} rounds`;
-    if (!rounds.length) {
-      list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No evaluations recorded yet</div>';
-      return;
-    }
+    if (!rounds.length) { list.innerHTML='<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No evaluations recorded yet</div>'; return; }
     list.innerHTML = rounds.map(([date, d]) => {
       const dt = new Date(date+'T00:00:00');
-      const fmt = dt.toLocaleDateString([], { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+      const fmt = dt.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',year:'numeric'});
       const types = [...d.types].join(' · ');
-      return `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:14px 16px;display:flex;align-items:center;gap:16px">
+      return `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);padding:14px 16px;display:flex;align-items:center;gap:16px;cursor:pointer" onclick="openRoundDetail('${date}')">
         <div style="font:600 28px/1 var(--cm-font-mono);color:var(--cm-fg-strong);min-width:36px;text-align:center">${dt.getDate()}</div>
         <div style="border-left:1px solid var(--cm-border);height:36px;margin:0 4px"></div>
-        <div style="flex:1">
-          <div style="font:500 13.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${fmt}</div>
-          <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">${types||'—'}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font:600 16px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${d.players.size}</div>
-          <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">players</div>
-        </div>
+        <div style="flex:1"><div style="font:500 13.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${fmt}</div><div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">${types||'—'}</div></div>
+        <div style="text-align:right"><div style="font:600 16px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${d.players.size}</div><div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">players</div></div>
+        <i class="ti ti-chevron-right" style="color:var(--cm-fg-faint)"></i>
       </div>`;
     }).join('');
     _historyLoaded = true;
   }
 
+  // ── Round detail modal ──
+  async function openRoundDetail(date) {
+    document.getElementById('roundOvl').classList.add('is-open');
+    document.getElementById('roundMTitle').textContent = new Date(date+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    document.getElementById('roundMSub').textContent = 'Loading…';
+    document.getElementById('roundMBody').innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
+    const { data } = await window.sb.from('evaluations')
+      .select('player_id, evaluation_type, value, unit, notes, players!player_id(first_name, last_name)')
+      .eq('club_id', clubId).eq('test_date', date).order('evaluation_type');
+    if (!data || !data.length) { document.getElementById('roundMBody').innerHTML='<div style="padding:24px;text-align:center;color:var(--cm-fg-muted)">No data for this date</div>'; return; }
+    document.getElementById('roundMSub').textContent = `${new Set(data.map(e=>e.player_id)).size} players · ${new Set(data.map(e=>e.evaluation_type)).size} tests`;
+    const byType = {};
+    data.forEach(e => { if (!byType[e.evaluation_type]) byType[e.evaluation_type]=[]; byType[e.evaluation_type].push(e); });
+    document.getElementById('roundMBody').innerHTML = Object.entries(byType).map(([type, results]) =>
+      `<div style="margin-bottom:14px">
+        <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">${type}</div>
+        ${results.map(r => { const p=r.players||{}; const name=p.first_name?`${p.first_name} ${p.last_name}`:'—';
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:7px;margin-bottom:4px">
+            <span style="font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);flex:1">${name}</span>
+            <span style="font:700 14px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${r.value}${r.unit?' '+r.unit:''}</span>
+            ${r.notes?`<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${r.notes}</span>`:''}
+          </div>`; }).join('')}
+      </div>`).join('');
+  }
+
+  // ── Trends (real SVG line chart) ──
+  async function loadTrends(testType, pid) {
+    if (!clubId) return;
+    let q = window.sb.from('evaluations')
+      .select('player_id, test_date, value, unit, players!player_id(first_name, last_name)')
+      .eq('club_id', clubId).eq('evaluation_type', testType)
+      .order('test_date', { ascending: true }).limit(100);
+    if (pid) q = q.eq('player_id', pid);
+    const { data } = await q;
+    if (!data || !data.length) return;
+    const trChart = document.querySelector('.tr-chart-card');
+    if (!trChart) return;
+    const h4 = trChart.querySelector('.tr-chart-h h4');
+    const sub = trChart.querySelector('.tr-chart-h .sub');
+    if (h4) h4.textContent = testType;
+    if (sub) sub.textContent = `${data.length} data point${data.length===1?'':'s'}`;
+    const svg = trChart.querySelector('svg');
+    if (!svg) return;
+    const vals = data.map(d => +d.value);
+    const minV = Math.min(...vals), maxV = Math.max(...vals), range = maxV - minV || 1;
+    const W=800, H=290, pl=50, pr=20, pt=40, pb=40, gW=W-pl-pr, gH=H-pt-pb, n=data.length;
+    const pts = data.map((d,i) => ({ x: pl+(n===1?gW/2:i/(n-1)*gW), y: pt+gH-(d.value-minV)/range*gH, v:d.value, date:d.test_date }));
+    const pathD = pts.map((p,i)=>`${i?'L':'M'} ${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const grid = [0,1,2,3].map(i => { const yV=minV+(maxV-minV)*i/3, y=pt+gH-(yV-minV)/range*gH; return `<line x1="${pl}" y1="${y.toFixed(1)}" x2="${W-pr}" y2="${y.toFixed(1)}" stroke="var(--cm-border-soft)" stroke-width="1"/><text x="${pl-6}" y="${(y+4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--cm-fg-muted)">${yV.toFixed(1)}</text>`; }).join('');
+    const step = Math.max(1, Math.floor(n/5));
+    const xLbls = pts.filter((_,i)=>i%step===0||i===n-1).map(p=>`<text x="${p.x.toFixed(1)}" y="${(pt+gH+16).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--cm-fg-muted)">${p.date}</text>`).join('');
+    const dots = pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2"/>`).join('');
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    svg.innerHTML = `<g>${grid}</g><path d="${pathD} L${pts[pts.length-1].x.toFixed(1)},${(pt+gH).toFixed(1)} L${pts[0].x.toFixed(1)},${(pt+gH).toFixed(1)} Z" fill="var(--cm-accent)" opacity=".1"/><path d="${pathD}" fill="none" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><g>${dots}</g><g>${xLbls}</g>`;
+  }
+
   // ── Templates ──
   const EVAL_TEMPLATES = [
-    { name:'CMJ battery', icon:'ti-rocket', types:['CMJ','Squat jump','Drop jump','SL-CMJ'], desc:'4 jump tests · power & asymmetry profile' },
-    { name:'Speed & agility', icon:'ti-bolt', types:['Sprint 10m','Sprint 30m','Agility T-test'], desc:'Linear speed + change of direction' },
+    { name:'CMJ battery', icon:'ti-rocket', types:['CMJ','Squat jump','Drop jump','SL-CMJ + LSI'], desc:'4 jump tests · power & asymmetry profile' },
+    { name:'Speed & agility', icon:'ti-bolt', types:['Sprint splits','505 COD','Illinois agility'], desc:'Linear speed + change of direction' },
     { name:'Aerobic capacity', icon:'ti-heart-rate-monitor', types:['Yo-Yo IR1','30-15 IFT'], desc:'Maximal aerobic speed & VO₂ estimation' },
-    { name:'Strength baseline', icon:'ti-barbell', types:['Back squat 1RM','Nordic hamstring','VBT benchpress'], desc:'Maximal & eccentric strength' },
-    { name:'Mobility & FMS', icon:'ti-activity', types:['FMS total','Hip mobility','Ankle dorsiflexion'], desc:'Movement quality screening' },
-    { name:'Full fitness profile', icon:'ti-clipboard-check', types:['CMJ','Sprint 30m','Yo-Yo IR1','Back squat 1RM','FMS total'], desc:'5 key metrics — quarterly benchmark' },
+    { name:'Strength baseline', icon:'ti-barbell', types:['VBT · back squat','Nordic hamstring','1RM bench'], desc:'Maximal & eccentric strength' },
+    { name:'Mobility & FMS', icon:'ti-activity', types:['FMS','Ankle dorsiflexion','Sit & reach'], desc:'Movement quality screening' },
+    { name:'Full fitness profile', icon:'ti-clipboard-check', types:['CMJ','Sprint splits','Yo-Yo IR1','VBT · back squat','FMS'], desc:'5 key metrics — quarterly benchmark' },
   ];
   function renderTemplates() {
     const grid = document.getElementById('templatesGrid');
-    if (grid.children.length) return;
+    if (!grid || grid.children.length) return;
     grid.innerHTML = EVAL_TEMPLATES.map(t => `
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:16px;display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;align-items:center;gap:10px">
@@ -1486,26 +1852,87 @@
           <div style="font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${t.name}</div>
         </div>
         <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${t.desc}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px">${t.types.map(ty => `<span style="display:inline-flex;height:20px;padding:0 7px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:4px;font:500 11px/20px var(--cm-font-mono);color:var(--cm-fg-muted)">${ty}</span>`).join('')}</div>
-        <button class="cm-btn is-outline is-sm" onclick="alert('Start evaluation session with: ${t.name}\\n\\nTests: ${t.types.join(', ')}\\n\\nThis will pre-fill the import template.')"><i class="ti ti-player-play" style="font-size:13px"></i>Use template</button>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">${t.types.map(ty=>`<span style="display:inline-flex;height:20px;padding:0 7px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:4px;font:500 11px/20px var(--cm-font-mono);color:var(--cm-fg-muted)">${ty}</span>`).join('')}</div>
+        <button class="cm-btn is-outline is-sm" onclick="openNewEvalModal('${escS(t.types[0])}')"><i class="ti ti-player-play" style="font-size:13px"></i>Use template</button>
       </div>`).join('');
   }
 
-  // ── Physical tests sub-tabs ──
+  // ── Export CSV ──
+  function exportCSV(filterPid) {
+    if (!clubId) return;
+    const cutoff = getPeriodCutoff();
+    let q = window.sb.from('evaluations')
+      .select('test_date, evaluation_type, value, unit, notes, players!player_id(first_name, last_name, position)')
+      .eq('club_id', clubId).order('test_date', { ascending: false });
+    if (cutoff) q = q.gte('test_date', cutoff);
+    if (filterPid) q = q.eq('player_id', filterPid);
+    q.then(({ data }) => {
+      if (!data || !data.length) { alert('No data to export'); return; }
+      const today = new Date().toISOString().split('T')[0];
+      const hdr = 'player,position,test,date,result,unit,notes\n';
+      const rows = data.map(e => { const p=e.players||{}; return [`${p.first_name||''} ${p.last_name||''}`.trim(), p.position||'', e.evaluation_type, e.test_date, e.value, e.unit||'', (e.notes||'').replace(/,/g,' ')].join(','); }).join('\n');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([hdr+rows],{type:'text/csv'}));
+      a.download = `evaluations_${today}.csv`; a.click();
+    });
+  }
+
+  // ── Switch to templates tab ──
+  function switchToTemplates() {
+    document.querySelectorAll('#evTabs .ev-tab').forEach(t => t.classList.toggle('is-on', t.dataset.view==='templates'));
+    Object.entries({phys:'.pt-wrap',subj:'#subjView',trends:'#trendsView',squad:'#squadView',history:'#historyView',templates:'#templatesView'}).forEach(([k,sel]) => {
+      const el = document.querySelector(sel); if (el) el.style.display = k==='templates' ? '' : 'none';
+    });
+    renderTemplates();
+  }
+
+  // ── Tab switcher ──
+  const VIEWS = { phys:'.pt-wrap', subj:'#subjView', trends:'#trendsView', squad:'#squadView', history:'#historyView', templates:'#templatesView' };
+  document.querySelectorAll('#evTabs .ev-tab').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#evTabs .ev-tab').forEach(o => o.classList.remove('is-on'));
+    b.classList.add('is-on');
+    const v = b.dataset.view;
+    Object.entries(VIEWS).forEach(([key,sel]) => { const el=document.querySelector(sel); if (el) el.style.display=(key===v)?'':'none'; });
+    if (v==='squad')     loadSquadOverview();
+    if (v==='history')   loadEvalHistory();
+    if (v==='templates') renderTemplates();
+  }));
+
+  // ── Physical sub-tabs ──
   document.querySelectorAll('.pt-segs .pt-seg').forEach((b, i) => b.addEventListener('click', () => {
     document.querySelectorAll('.pt-segs .pt-seg').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
     const views = ['cat','ind','grp'];
-    document.querySelectorAll('.pt-view').forEach(v => v.classList.toggle('is-on', v.dataset.view === views[i]));
+    document.querySelectorAll('.pt-view').forEach(v => v.classList.toggle('is-on', v.dataset.view===views[i]));
+    if (i===1) { // Individual profile
+      const pid = document.getElementById('indProfSelect')?.value || (allPlayers[0]?.id);
+      if (pid) { if (document.getElementById('indProfSelect')) document.getElementById('indProfSelect').value = pid; loadIndividualProfile(pid); }
+    }
+    if (i===2) loadSquadComparison(_squadCompTest);
   }));
-  document.querySelectorAll('.pt-cat-list .pt-test').forEach(t => t.addEventListener('click', () => {
-    document.querySelectorAll('.pt-cat-list .pt-test').forEach(o => o.classList.remove('is-on'));
-    t.classList.add('is-on');
+
+  // ── Catalog test buttons ──
+  document.querySelectorAll('.pt-btn:not(.pt-btn-add)').forEach(btn => {
+    const label = btn.querySelector('.b-l')?.textContent?.trim();
+    if (label) btn.addEventListener('click', () => openTestModal(label));
+  });
+  document.querySelector('.pt-btn-add')?.addEventListener('click', () => openNewEvalModal());
+
+  // ── Squad comparison pills ──
+  document.querySelectorAll('#squadCompPills .pt-mini-pill').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('#squadCompPills .pt-mini-pill').forEach(o => o.classList.remove('is-on'));
+    p.classList.add('is-on');
+    loadSquadComparison(p.textContent.trim());
   }));
-  document.querySelectorAll('.ev-period .ev-pchip').forEach(p => p.addEventListener('click', () => p.classList.toggle('is-on')));
-  // Trends pick toggles
-  document.querySelectorAll('.tr-pick .opt, .tr-chips .tr-chip').forEach(el => el.addEventListener('click', () => el.classList.toggle('is-on')));
-  // Import drawer
+
+  // ── Trends controls ──
+  document.querySelectorAll('.tr-pick .opt').forEach(opt => opt.addEventListener('click', () => {
+    document.querySelectorAll('.tr-pick .opt').forEach(o => o.classList.remove('is-on'));
+    opt.classList.add('is-on');
+    loadTrends(opt.textContent.trim(), null);
+  }));
+  document.querySelectorAll('.tr-chips .tr-chip').forEach(el => el.addEventListener('click', () => el.classList.toggle('is-on')));
+
+  // ── Import drawer ──
   const ptImpDrawer = document.getElementById('ptImpDrawer');
   const ptImpOverlay = document.getElementById('ptImpOverlay');
   const openImp = () => { ptImpDrawer.classList.add('is-open'); ptImpOverlay.classList.add('is-open'); };
@@ -1517,6 +1944,8 @@
     document.querySelectorAll('.pt-provider').forEach(o => o.classList.remove('is-active'));
     p.classList.add('is-active');
   }));
+
+  boot();
 
 </script>
 </body>
