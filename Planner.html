@@ -612,6 +612,49 @@
   .pl-lib-preview-cell .l { font:500 8px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:2px; }
   .pl-lib-preview-cell .v { font:600 12px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .pl-lib-preview-tags { display:flex; gap:3px; flex-wrap:wrap; margin-top:7px; }
+
+  /* === Dropdown toolbar === */
+  .pl-drop-grp { position:relative; }
+  .pl-drop-btn {
+    display:flex; align-items:center; gap:5px;
+    height:36px; padding:0 10px;
+    border-radius:7px; border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft); color:var(--cm-fg);
+    cursor:pointer; font:500 11px/1 var(--cm-font-sans);
+    white-space:nowrap; transition:border-color 120ms, background 120ms;
+  }
+  .pl-drop-btn:hover { border-color:var(--cm-border-strong); background:var(--cm-surface); }
+  .pl-drop-btn.is-on { border-color:var(--cm-accent); background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .pl-drop-btn .ti { font-size:15px; }
+  .pl-drop-btn svg { width:15px; height:15px; }
+  .pl-drop-lbl { font:500 11px/1 var(--cm-font-sans); }
+  .pl-drop-caret { font-size:10px; color:var(--cm-fg-muted); transition:transform 200ms; margin-left:1px; }
+  .pl-drop-btn.is-open .pl-drop-caret { transform:rotate(180deg); }
+  .pl-drop-menu {
+    display:none; position:fixed;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:9px; padding:4px; min-width:170px;
+    z-index:9100; box-shadow:var(--cm-shadow-2);
+    flex-direction:column; gap:1px;
+  }
+  .pl-drop-menu.is-open { display:flex; }
+  .pl-drop-opt {
+    display:flex; align-items:center; gap:8px;
+    width:100%; padding:7px 10px; border:0;
+    border-radius:6px; background:none; cursor:pointer;
+    font:500 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted);
+    text-align:left; white-space:nowrap; transition:background 80ms, color 80ms;
+  }
+  .pl-drop-opt:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .pl-drop-opt.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .pl-drop-opt .ti { font-size:14px; flex-shrink:0; }
+  .pl-drop-opt svg { width:16px; height:16px; flex-shrink:0; }
+  .pl-drop-team-row { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; transition:background 80ms; }
+  .pl-drop-team-row:hover { background:var(--cm-bg-soft); }
+  .pl-drop-team-row .pl-dock-btn { width:28px; height:28px; flex-shrink:0; border-radius:50%; }
+  .pl-drop-team-name { flex:1; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .pl-drop-team-row .pl-team-swatch { width:20px; height:18px; border-radius:4px; cursor:pointer; display:block; border:1px solid rgba(0,0,0,0.15); }
+  .pl-drop-sep { height:1px; background:var(--cm-border-soft); margin:3px 4px; }
 </style>
 </head>
 <body class="cm">
@@ -908,92 +951,152 @@
         </div>
 
         <div class="pl-dock">
-          <div class="pl-dock-grp" id="plTeamGrp">
-            <span class="lbl">Teams</span>
-            <div class="pl-team-wrap">
-              <button class="pl-dock-btn" title="Team1"><span class="p t1"></span></button>
-              <input type="color" class="pl-team-swatch" id="plTeamColor1" value="#15803D" title="Team A color">
-            </div>
-            <div class="pl-team-wrap">
-              <button class="pl-dock-btn" title="Team2"><span class="p t2"></span></button>
-              <input type="color" class="pl-team-swatch" id="plTeamColor2" value="#1D4ED8" title="Team B color">
-            </div>
-            <div class="pl-team-wrap" id="plTeamWrap3" style="display:none">
-              <button class="pl-dock-btn" title="Team3"><span class="p t3"></span></button>
-              <input type="color" class="pl-team-swatch" id="plTeamColor3" value="#FACC15" title="Team C color">
-            </div>
-            <div class="pl-team-wrap" id="plTeamWrap4" style="display:none">
-              <button class="pl-dock-btn" title="Team4"><span class="p t4"></span></button>
-              <input type="color" class="pl-team-swatch" id="plTeamColor4" value="#E5E7EB" title="Team D color">
-            </div>
-            <button id="plAddTeamBtn" style="width:26px;height:26px;border-radius:6px;border:1px dashed var(--cm-border-strong);background:none;cursor:pointer;font-size:16px;color:var(--cm-fg-muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-bottom:7px" title="Add team">+</button>
-          </div>
-          <div class="pl-dock-grp">
-            <span class="lbl">Objects</span>
-            <button class="pl-dock-btn" title="Ball"><i class="ti ti-ball-football"></i></button>
-            <button class="pl-dock-btn" title="Cone">
-              <svg viewBox="0 0 24 24" width="18" height="18"><polygon points="12,3 21,21 3,21" fill="#f97316" stroke="#c2600a" stroke-width="1.5" stroke-linejoin="round"/><rect x="5" y="18.5" width="14" height="2.5" rx="1" fill="#fbbf24"/></svg>
+
+          <!-- TEAMS dropdown -->
+          <div class="pl-dock-grp pl-drop-grp" id="plTeamGrp">
+            <button class="pl-drop-btn" data-menu="plDropTeamsMenu">
+              <i class="ti ti-users"></i>
+              <span class="pl-drop-lbl">Teams</span>
+              <i class="ti ti-chevron-up pl-drop-caret"></i>
             </button>
-            <button class="pl-dock-btn" title="Pole"><i class="ti ti-bookmark"></i></button>
-            <button class="pl-dock-btn" title="Barrier">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <circle cx="5"  cy="6.5" r="2.4"/><rect x="3.5"  y="10" width="3" height="8" rx="1.2"/>
-                <circle cx="12" cy="6.5" r="2.4"/><rect x="10.5" y="10" width="3" height="8" rx="1.2"/>
-                <circle cx="19" cy="6.5" r="2.4"/><rect x="17.5" y="10" width="3" height="8" rx="1.2"/>
-              </svg>
-            </button>
-            <button class="pl-dock-btn" title="Goal"><i class="ti ti-target"></i></button>
-            <button class="pl-dock-btn" title="Mannequin"><i class="ti ti-walk"></i></button>
-          </div>
-          <div class="pl-dock-grp">
-            <span class="lbl">Lines</span>
-            <button class="pl-dock-btn" title="Pass">
-              <svg viewBox="0 0 24 24" fill="none"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            </button>
-            <button class="pl-dock-btn is-on" title="Run">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            </button>
-            <button class="pl-dock-btn" title="Dribble">
-              <svg viewBox="0 0 24 24" fill="none"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
-            </button>
-            <button class="pl-dock-btn" title="Curve">
-              <svg viewBox="0 0 24 24" fill="none"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
-            </button>
-          </div>
-          <div class="pl-dock-grp">
-            <span class="lbl">Zones</span>
-            <button class="pl-dock-btn" title="Rectangle"><i class="ti ti-rectangle"></i></button>
-            <button class="pl-dock-btn" title="Circle"><i class="ti ti-circle"></i></button>
-            <div class="pl-poly-wrap">
-              <button class="pl-dock-btn" title="Polygon" id="plPolyBtn"><i class="ti ti-polygon"></i></button>
-              <div class="pl-poly-menu" id="plPolyMenu" style="display:none">
-                <button class="pl-poly-opt" data-shape="triangle">▲ Triangle</button>
-                <button class="pl-poly-opt" data-shape="diamond">◆ Diamond</button>
-                <button class="pl-poly-opt" data-shape="pentagon">⬠ Pentagon</button>
-                <button class="pl-poly-opt" data-shape="hexagon">⬡ Hexagon</button>
-                <button class="pl-poly-opt" data-shape="free">✏ Free</button>
+            <div class="pl-drop-menu" id="plDropTeamsMenu">
+              <div class="pl-drop-team-row">
+                <button class="pl-dock-btn" title="Team1"><span class="p t1"></span></button>
+                <span class="pl-drop-team-name">Team A</span>
+                <input type="color" class="pl-team-swatch" id="plTeamColor1" value="#15803D" title="Team A color">
               </div>
+              <div class="pl-drop-team-row">
+                <button class="pl-dock-btn" title="Team2"><span class="p t2"></span></button>
+                <span class="pl-drop-team-name">Team B</span>
+                <input type="color" class="pl-team-swatch" id="plTeamColor2" value="#1D4ED8" title="Team B color">
+              </div>
+              <div class="pl-drop-team-row" id="plTeamWrap3" style="display:none">
+                <button class="pl-dock-btn" title="Team3"><span class="p t3"></span></button>
+                <span class="pl-drop-team-name">Team C</span>
+                <input type="color" class="pl-team-swatch" id="plTeamColor3" value="#FACC15" title="Team C color">
+              </div>
+              <div class="pl-drop-team-row" id="plTeamWrap4" style="display:none">
+                <button class="pl-dock-btn" title="Team4"><span class="p t4"></span></button>
+                <span class="pl-drop-team-name">Team D</span>
+                <input type="color" class="pl-team-swatch" id="plTeamColor4" value="#E5E7EB" title="Team D color">
+              </div>
+              <div class="pl-drop-sep"></div>
+              <button id="plAddTeamBtn" class="pl-drop-opt" style="justify-content:center">
+                <i class="ti ti-plus"></i>Add team
+              </button>
             </div>
           </div>
-          <div class="pl-dock-grp">
-            <span class="lbl">Text</span>
-            <button class="pl-dock-btn" title="Label"><i class="ti ti-typography"></i></button>
-            <button class="pl-dock-btn" title="Number"><i class="ti ti-123"></i></button>
-          </div>
-          <div class="pl-dock-grp">
-            <span class="lbl">Crests</span>
-            <button class="pl-dock-btn" title="HomeCrest" id="plDockHomeCrest">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
-                <path d="M12 3 L20 6 L20 13 Q20 18 12 21 Q4 18 4 13 L4 6 Z"/>
-                <text x="12" y="15.5" text-anchor="middle" font-size="7" font-weight="700" stroke="none" fill="currentColor">H</text>
-              </svg>
+
+          <!-- OBJECTS dropdown -->
+          <div class="pl-dock-grp pl-drop-grp">
+            <button class="pl-drop-btn" data-menu="plDropObjectsMenu">
+              <i class="ti ti-ball-football"></i>
+              <span class="pl-drop-lbl">Objects</span>
+              <i class="ti ti-chevron-up pl-drop-caret"></i>
             </button>
-            <button class="pl-dock-btn" title="RivalCrest" id="plDockRivalCrest">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="3 2">
-                <path d="M12 3 L20 6 L20 13 Q20 18 12 21 Q4 18 4 13 L4 6 Z"/>
-              </svg>
-            </button>
+            <div class="pl-drop-menu" id="plDropObjectsMenu">
+              <button class="pl-dock-btn pl-drop-opt" title="Ball"><i class="ti ti-ball-football"></i><span>Ball</span></button>
+              <button class="pl-dock-btn pl-drop-opt" title="Cone">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0"><polygon points="12,3 21,21 3,21" fill="#f97316" stroke="#c2600a" stroke-width="1.5" stroke-linejoin="round"/><rect x="5" y="18.5" width="14" height="2.5" rx="1" fill="#fbbf24"/></svg>
+                <span>Cone</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="Pole"><i class="ti ti-bookmark"></i><span>Pole</span></button>
+              <button class="pl-dock-btn pl-drop-opt" title="Barrier">
+                <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex-shrink:0" fill="currentColor">
+                  <circle cx="5" cy="6.5" r="2.4"/><rect x="3.5" y="10" width="3" height="8" rx="1.2"/>
+                  <circle cx="12" cy="6.5" r="2.4"/><rect x="10.5" y="10" width="3" height="8" rx="1.2"/>
+                  <circle cx="19" cy="6.5" r="2.4"/><rect x="17.5" y="10" width="3" height="8" rx="1.2"/>
+                </svg>
+                <span>Barrier</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="Goal"><i class="ti ti-target"></i><span>Goal</span></button>
+              <button class="pl-dock-btn pl-drop-opt" title="Mannequin"><i class="ti ti-walk"></i><span>Mannequin</span></button>
+            </div>
           </div>
+
+          <!-- LINES dropdown -->
+          <div class="pl-dock-grp pl-drop-grp">
+            <button class="pl-drop-btn" data-menu="plDropLinesMenu">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <span class="pl-drop-lbl">Lines</span>
+              <i class="ti ti-chevron-up pl-drop-caret"></i>
+            </button>
+            <div class="pl-drop-menu" id="plDropLinesMenu">
+              <button class="pl-dock-btn pl-drop-opt" title="Pass">
+                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span>Solid straight</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt is-on" title="Run">
+                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span>Solid curve</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="Dribble">
+                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
+                <span>Dashed straight</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="Curve">
+                <svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><path d="M2 18 Q12 4 22 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/></svg>
+                <span>Dashed curve</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- ZONES dropdown -->
+          <div class="pl-dock-grp pl-drop-grp">
+            <button class="pl-drop-btn" data-menu="plDropZonesMenu">
+              <i class="ti ti-rectangle"></i>
+              <span class="pl-drop-lbl">Zones</span>
+              <i class="ti ti-chevron-up pl-drop-caret"></i>
+            </button>
+            <div class="pl-drop-menu" id="plDropZonesMenu">
+              <button class="pl-dock-btn pl-drop-opt" title="Rectangle"><i class="ti ti-rectangle"></i><span>Rectangle</span></button>
+              <button class="pl-dock-btn pl-drop-opt" title="Circle"><i class="ti ti-circle"></i><span>Circle / Ellipse</span></button>
+              <div class="pl-drop-sep"></div>
+              <button class="pl-drop-opt" data-shape="triangle"><i class="ti ti-triangle"></i><span>Triangle zone</span></button>
+              <button class="pl-drop-opt" data-shape="diamond"><span style="font-size:13px;line-height:1;flex-shrink:0">&#9670;</span><span>Diamond</span></button>
+              <button class="pl-drop-opt" data-shape="pentagon"><span style="font-size:13px;line-height:1;flex-shrink:0">&#11040;</span><span>Pentagon</span></button>
+              <button class="pl-drop-opt" data-shape="hexagon"><span style="font-size:13px;line-height:1;flex-shrink:0">&#11041;</span><span>Hexagon</span></button>
+              <button class="pl-drop-opt" data-shape="free"><i class="ti ti-pencil"></i><span>Free polygon</span></button>
+            </div>
+          </div>
+
+          <!-- TEXT dropdown -->
+          <div class="pl-dock-grp pl-drop-grp">
+            <button class="pl-drop-btn" data-menu="plDropTextMenu">
+              <i class="ti ti-typography"></i>
+              <span class="pl-drop-lbl">Text</span>
+              <i class="ti ti-chevron-up pl-drop-caret"></i>
+            </button>
+            <div class="pl-drop-menu" id="plDropTextMenu">
+              <button class="pl-dock-btn pl-drop-opt" title="Label"><i class="ti ti-typography"></i><span>Text</span></button>
+              <button class="pl-dock-btn pl-drop-opt" title="Number"><i class="ti ti-123"></i><span>Number</span></button>
+            </div>
+          </div>
+
+          <!-- CRESTS dropdown -->
+          <div class="pl-dock-grp pl-drop-grp">
+            <button class="pl-drop-btn" data-menu="plDropCrestsMenu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3 L20 6 L20 13 Q20 18 12 21 Q4 18 4 13 L4 6 Z"/></svg>
+              <span class="pl-drop-lbl">Crests</span>
+              <i class="ti ti-chevron-up pl-drop-caret"></i>
+            </button>
+            <div class="pl-drop-menu" id="plDropCrestsMenu">
+              <button class="pl-dock-btn pl-drop-opt" title="HomeCrest" id="plDockHomeCrest">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" style="width:16px;height:16px;flex-shrink:0">
+                  <path d="M12 3 L20 6 L20 13 Q20 18 12 21 Q4 18 4 13 L4 6 Z"/>
+                  <text x="12" y="15.5" text-anchor="middle" font-size="7" font-weight="700" stroke="none" fill="currentColor">H</text>
+                </svg>
+                <span>Home crest</span>
+              </button>
+              <button class="pl-dock-btn pl-drop-opt" title="RivalCrest" id="plDockRivalCrest">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-dasharray="3 2" style="width:16px;height:16px;flex-shrink:0">
+                  <path d="M12 3 L20 6 L20 13 Q20 18 12 21 Q4 18 4 13 L4 6 Z"/>
+                </svg>
+                <span>Rival crest</span>
+              </button>
+            </div>
+          </div>
+
           <div style="flex:1"></div>
           <span class="stat" id="plObjStat" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
             <strong style="color:var(--cm-fg);font-weight:600">0</strong> objects
@@ -1507,6 +1610,7 @@
     fc.add(d.grp); fc.setActiveObject(d.grp); fc.renderAll();
     setTool('select');
     document.querySelectorAll('.pl-dock-btn').forEach(b=>b.classList.remove('is-on'));
+    document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(b=>b.classList.remove('is-on'));
   }
 
   fc.on('mouse:down', e => {
@@ -1816,35 +1920,83 @@
     else fieldEl.requestFullscreen?.();
   });
 
-  // Dock visual single-select per group
-  document.querySelectorAll('.pl-dock-grp').forEach(g=>g.querySelectorAll('.pl-dock-btn').forEach(b=>b.addEventListener('click',()=>{
-    g.querySelectorAll('.pl-dock-btn').forEach(o=>o.classList.remove('is-on')); b.classList.add('is-on');
-  })));
+  // ── Dropdown toolbar ────────────────────────────────────────────
+  const _dropMenus = document.querySelectorAll('.pl-drop-menu');
 
-  // ── Polygon shape dropdown ───────────────────────────────────────
-  const _polyBtn=document.getElementById('plPolyBtn');
-  const _polyMenu=document.getElementById('plPolyMenu');
-  _polyBtn?.addEventListener('click',e=>{
-    e.stopPropagation();
-    if(_polyMenu.style.display!=='none'){_polyMenu.style.display='none';return;}
-    const r=_polyBtn.getBoundingClientRect();
-    _polyMenu.style.left=(r.left+r.width/2)+'px';
-    _polyMenu.style.top=(r.top-4)+'px';
-    _polyMenu.style.transform='translateX(-50%) translateY(-100%)';
-    _polyMenu.style.display='';
-  });
-  document.querySelectorAll('.pl-poly-opt').forEach(opt=>{
-    opt.addEventListener('click',e=>{
-      e.stopPropagation(); _polyMenu.style.display='none';
-      const s=opt.dataset.shape;
-      if(s==='triangle')addRegularPolygon(3);
-      else if(s==='diamond')addRegularPolygon(4);
-      else if(s==='pentagon')addRegularPolygon(5);
-      else if(s==='hexagon')addRegularPolygon(6);
-      else if(s==='free'){_polyPoints=[];currentTool='free_polygon';fc.selection=false;fc.defaultCursor='crosshair';fc.hoverCursor='crosshair';document.getElementById('plPolyDoneBar')?.classList.add('is-active');}
+  // Toggle menus on trigger click
+  document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const menu = document.getElementById(btn.dataset.menu);
+      if (!menu) return;
+      const wasOpen = menu.classList.contains('is-open');
+      _dropMenus.forEach(m => m.classList.remove('is-open'));
+      document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(b => b.classList.remove('is-open'));
+      if (!wasOpen) {
+        const rect = btn.getBoundingClientRect();
+        const menuMinW = 170;
+        menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - menuMinW - 8)) + 'px';
+        menu.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+        menu.classList.add('is-open');
+        btn.classList.add('is-open');
+      }
     });
   });
-  document.addEventListener('click',()=>{if(_polyMenu)_polyMenu.style.display='none';});
+
+  // Close all menus on outside click
+  document.addEventListener('click', () => {
+    _dropMenus.forEach(m => m.classList.remove('is-open'));
+    document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(b => b.classList.remove('is-open'));
+  });
+
+  // Prevent color swatch clicks from closing the Teams menu
+  document.querySelectorAll('.pl-drop-menu .pl-team-swatch').forEach(inp => {
+    inp.addEventListener('click', e => e.stopPropagation());
+  });
+
+  // Per-group single-select for Objects, Lines, Zones, Text, Crests (close menu on pick)
+  document.querySelectorAll('.pl-dock-grp:not(#plTeamGrp)').forEach(g => {
+    g.querySelectorAll('.pl-dock-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        g.querySelectorAll('.pl-dock-btn').forEach(o => o.classList.remove('is-on'));
+        b.classList.add('is-on');
+        document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(d => d.classList.remove('is-on'));
+        const dropBtn = g.querySelector('.pl-drop-btn[data-menu]');
+        if (dropBtn) dropBtn.classList.add('is-on');
+        _dropMenus.forEach(m => m.classList.remove('is-open'));
+        document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(d => d.classList.remove('is-open'));
+      });
+    });
+  });
+
+  // Teams group: single-select but keep menu open (user may also adjust color)
+  document.getElementById('plTeamGrp')?.querySelectorAll('.pl-dock-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.getElementById('plTeamGrp')?.querySelectorAll('.pl-dock-btn').forEach(o => o.classList.remove('is-on'));
+      b.classList.add('is-on');
+    });
+  });
+
+  // Polygon shapes in Zones dropdown (data-shape buttons, no pl-dock-btn class)
+  document.querySelectorAll('#plDropZonesMenu [data-shape]').forEach(opt => {
+    opt.addEventListener('click', e => {
+      e.stopPropagation();
+      _dropMenus.forEach(m => m.classList.remove('is-open'));
+      document.querySelectorAll('.pl-drop-btn[data-menu]').forEach(d => { d.classList.remove('is-open'); d.classList.remove('is-on'); });
+      const zonesDropBtn = opt.closest('.pl-dock-grp')?.querySelector('.pl-drop-btn[data-menu]');
+      if (zonesDropBtn) zonesDropBtn.classList.add('is-on');
+      const s = opt.dataset.shape;
+      if (s === 'triangle') addRegularPolygon(3);
+      else if (s === 'diamond') addRegularPolygon(4);
+      else if (s === 'pentagon') addRegularPolygon(5);
+      else if (s === 'hexagon') addRegularPolygon(6);
+      else if (s === 'free') {
+        _polyPoints = []; currentTool = 'free_polygon';
+        fc.selection = false; fc.defaultCursor = 'crosshair'; fc.hoverCursor = 'crosshair';
+        document.getElementById('plPolyDoneBar')?.classList.add('is-active');
+      }
+    });
+  });
 
   // ── Free polygon Done / Cancel ───────────────────────────────────
   document.getElementById('plPolyDoneBtn')?.addEventListener('click', e => { e.stopPropagation(); _finishFreePolygon(); });
