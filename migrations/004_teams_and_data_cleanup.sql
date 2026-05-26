@@ -16,6 +16,7 @@ DO $$
 DECLARE
   real_club UUID;
   fake_club UUID := 'c3740000-0000-0000-0000-000000000001';
+  v_count   INT;
 BEGIN
   -- El club real es el que tiene profiles (usuarios reales)
   SELECT DISTINCT p.club_id INTO real_club
@@ -33,21 +34,21 @@ BEGIN
   UPDATE public.players
   SET club_id = real_club
   WHERE club_id = fake_club;
-
-  RAISE NOTICE 'Jugadores migrados: %', ROW_COUNT;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RAISE NOTICE 'Jugadores migrados: %', v_count;
 
   -- 1b. Migrar availability del club falso al real
   UPDATE public.availability
   SET club_id = real_club
   WHERE club_id = fake_club;
-
-  RAISE NOTICE 'Availability migrados: %', ROW_COUNT;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RAISE NOTICE 'Availability migrados: %', v_count;
 
   -- 1c. Eliminar availability huérfanos (club_id no existe en clubs)
   DELETE FROM public.availability
   WHERE club_id NOT IN (SELECT id FROM public.clubs);
-
-  RAISE NOTICE 'Availability huérfanos eliminados: %', ROW_COUNT;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RAISE NOTICE 'Availability huérfanos eliminados: %', v_count;
 
   -- 1d. Eliminar availability de jugadores que no pertenecen al club correcto
   DELETE FROM public.availability a
@@ -56,8 +57,8 @@ BEGIN
     WHERE p.id = a.player_id
       AND p.club_id = a.club_id
   );
-
-  RAISE NOTICE 'Availability cross-club eliminados: %', ROW_COUNT;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RAISE NOTICE 'Availability cross-club eliminados: %', v_count;
 
 END $$;
 
