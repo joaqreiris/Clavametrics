@@ -365,10 +365,7 @@
     <button class="cm-icon-btn" onclick="closeDetailPanel()" title="Close"><i class="ti ti-x"></i></button>
   </div>
   <div class="sh-det-body" id="shDetBody"></div>
-  <div class="sh-det-foot">
-    <button class="cm-btn is-primary is-sm" id="shDetEditBtn"><i class="ti ti-pencil" style="font-size:13px"></i>Edit session</button>
-    <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>Close</button>
-  </div>
+  <div class="sh-det-foot" id="shDetFoot"><!-- populated by openDetailPanel() --></div>
 </div>
 
 <!-- Compare Sessions modal -->
@@ -980,26 +977,32 @@
   function openDetailPanel(sessId) {
     const sess = allSessions.find(s => s.id === sessId);
     if (!sess) return;
-
-    // Gym sessions → Gym Planner by date
-    if (sess.session_type === 'gym') {
-      window.location.href = `Gym Planner.html?date=${sess.session_date}`;
-      return;
-    }
-
     _detailSessId = sessId;
+    const isGym = sess.session_type === 'gym';
+
+    // Dynamic footer buttons per session type
+    const foot = document.getElementById('shDetFoot');
+    if (foot) {
+      if (isGym) {
+        foot.innerHTML = `
+          <button class="cm-btn is-primary is-sm" id="shDetGymBtn"><i class="ti ti-barbell" style="font-size:13px"></i>Open in Gym Planner</button>
+          <button class="cm-btn is-outline is-sm" id="shDetEditDetailsBtn"><i class="ti ti-pencil" style="font-size:13px"></i>Edit details</button>
+          <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>Close</button>`;
+        document.getElementById('shDetGymBtn')?.addEventListener('click', () => { window.location.href = `Gym Planner.html?date=${sess.session_date}`; });
+        document.getElementById('shDetEditDetailsBtn')?.addEventListener('click', () => openDetailEditMode(sessId));
+      } else {
+        foot.innerHTML = `
+          <button class="cm-btn is-primary is-sm" id="shDetEditBtn"><i class="ti ti-pencil" style="font-size:13px"></i>Edit session</button>
+          <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>Close</button>`;
+        document.getElementById('shDetEditBtn')?.addEventListener('click', () => { closeDetailPanel(); window.location.href = `Daily Planning.html?date=${sess.session_date}`; });
+      }
+    }
 
     // Title — editable inline
     const titleEl = document.getElementById('shDetTitle');
     titleEl.textContent = sess.title || sess.session_type || 'Untitled';
     titleEl.contentEditable = 'false';
     document.getElementById('shDetHint').style.display = 'none';
-
-    // Edit session button
-    const editBtn = document.getElementById('shDetEditBtn');
-    if (editBtn) {
-      editBtn.onclick = () => { closeDetailPanel(); window.location.href = `Daily Planning.html?date=${sess.session_date}`; };
-    }
 
     // Inline name click-to-edit
     titleEl.onclick = () => {
@@ -1042,30 +1045,35 @@
   }
 
   function renderDetailMeta(sess) {
-    const load  = avgLoad(sess);
-    const band  = getBand(load);
+    const isGym   = sess.session_type === 'gym';
+    const load    = avgLoad(sess);
+    const band    = getBand(load);
     const bandLabel = { low:'Low', moderate:'Moderate', high:'High', peak:'Peak' }[band] || '—';
-    const dt    = new Date(sess.session_date + 'T00:00:00');
+    const dt      = new Date(sess.session_date + 'T00:00:00');
     const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
     const dayStr  = DAYS_SHORT[dt.getDay()];
     const type    = sess.session_type || '—';
     const orient  = ORIENT_MAP[type] || { label: type };
     const attCount = sess.rpe?.length;
-    const attPct = (attCount && totalActivePlayers) ? ` (${Math.round(attCount/totalActivePlayers*100)}%)` : '';
+    const attPct  = (attCount && totalActivePlayers) ? ` (${Math.round(attCount/totalActivePlayers*100)}%)` : '';
+    const row3 = isGym
+      ? `<div class="sh-det-m"><div class="l">Category</div><div class="v">Gym</div></div>
+         <div class="sh-det-m"><div class="l">Muscle focus</div><div class="v" id="shDetMuscleFocus">—</div></div>`
+      : `<div class="sh-det-m"><div class="l">Type</div><div class="v">${type}</div></div>
+         <div class="sh-det-m"><div class="l">Orientation</div><div class="v">${orient.label}</div></div>`;
     document.getElementById('shDetBody').innerHTML = `
       <div class="sh-det-meta">
         <div class="sh-det-m"><div class="l">Date</div><div class="v">${dayStr}, ${dateStr}</div></div>
         <div class="sh-det-m"><div class="l">MD Position</div><div class="v">${sess._mdPos || '—'}</div></div>
-        <div class="sh-det-m"><div class="l">Type</div><div class="v">${type}</div></div>
-        <div class="sh-det-m"><div class="l">Orientation</div><div class="v">${orient.label}</div></div>
+        ${row3}
         <div class="sh-det-m"><div class="l">Duration</div><div class="v">${sess.duration != null ? sess.duration + ' min' : '—'}</div></div>
-        <div class="sh-det-m"><div class="l">Load</div><div class="v">${load != null ? load + ' AU' : '—'}<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${load != null ? bandLabel : ''}</span></div></div>
+        <div class="sh-det-m"><div class="l">Load (AU)</div><div class="v">${load != null ? load + ' AU' : '—'}<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${load != null ? bandLabel : ''}</span></div></div>
         <div class="sh-det-m"><div class="l">Est. RPE</div><div class="v">${sess.estimated_rpe ? sess.estimated_rpe + '/10' : '—'}</div></div>
-        <div class="sh-det-m"><div class="l">Attendance</div><div class="v">${attCount ? attCount + ' players' + attPct : '—'}</div></div>
+        <div class="sh-det-m"><div class="l">${isGym ? 'Volume' : 'Attendance'}</div><div class="v" id="shDetVolumeAtt">${isGym ? '—' : (attCount ? attCount + ' players' + attPct : '—')}</div></div>
       </div>
-      ${sess.notes ? `<div class="sh-det-sec"><h3>Notes</h3><div style="font:var(--cm-body-sm);color:var(--cm-fg);line-height:1.5;background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px">${sess.notes}</div></div>` : ''}
+      ${sess.notes ? `<div class="sh-det-sec"><h3>Notes / Objective</h3><div style="font:var(--cm-body-sm);color:var(--cm-fg);line-height:1.5;background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px">${sess.notes}</div></div>` : ''}
       <div class="sh-det-sec">
-        <h3>Exercises</h3>
+        <h3>${isGym ? 'Gym exercises' : 'Exercises'}</h3>
         <div id="shDetExList"><div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)"><i class="ti ti-loader sh-spin"></i> Loading…</div></div>
       </div>`;
   }
@@ -1082,55 +1090,86 @@
   async function loadDetailExercises(sess) {
     const exList = document.getElementById('shDetExList');
     if (!exList || !shClubId) return;
+    const isGym = sess.session_type === 'gym';
 
     const { data, error } = await window.sb
       .from('session_exercises')
-      .select('id,name,phase,duration,intensity,notes,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+      .select('id,name,phase,duration,intensity,notes,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description,muscle_group)')
       .eq('club_id', shClubId)
       .eq('session_id', sess.id)
       .order('position');
 
     if (error || !data?.length) {
-      exList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises added to this session</div>';
+      const gymBtn = isGym ? `<button class="cm-btn is-sm is-outline" style="margin-top:12px" onclick="window.location.href='Gym Planner.html?date=${sess.session_date}'"><i class="ti ti-barbell" style="font-size:13px"></i>Open in Gym Planner</button>` : '';
+      exList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises recorded for this session${gymBtn}</div>`;
       return;
     }
 
-    // Fetch planner exercise details for focus, game_type, match_day
-    const plannerIds = data.filter(e => e.planner_exercise_id).map(e => e.planner_exercise_id);
-    const plannerMap = {};
-    if (plannerIds.length) {
-      const { data: pEx } = await window.sb.from('exercises')
-        .select('id,orientation,focus,intensity,game_type,game_type_enabled,match_day')
-        .in('id', plannerIds);
-      (pEx || []).forEach(ex => { plannerMap[ex.id] = ex; });
+    if (isGym) {
+      // Gym summary: muscle groups + total volume + duration
+      const muscles = [...new Set(data.map(e => e.gym_exercises?.muscle_group).filter(Boolean))];
+      const totalDur = data.reduce((s, e) => s + (e.duration || 0), 0);
+      const mfEl = document.getElementById('shDetMuscleFocus');
+      if (mfEl) mfEl.textContent = muscles.length ? muscles.slice(0, 3).join(', ') + (muscles.length > 3 ? ' +more' : '') : '—';
+      const volEl = document.getElementById('shDetVolumeAtt');
+      if (volEl) volEl.textContent = `${data.length} exercises · ${totalDur || '—'} min`;
+    } else {
+      // Fetch planner exercise details for focus, game_type, match_day
+      const plannerIds = data.filter(e => e.planner_exercise_id).map(e => e.planner_exercise_id);
+      const plannerMap = {};
+      if (plannerIds.length) {
+        const { data: pEx } = await window.sb.from('exercises')
+          .select('id,orientation,focus,intensity,game_type,game_type_enabled,match_day')
+          .in('id', plannerIds);
+        (pEx || []).forEach(ex => { plannerMap[ex.id] = ex; });
+      }
+      exList._plannerMap = plannerMap;
     }
 
     exList.innerHTML = data.map(ex => {
-      const pData   = ex.planner_exercise_id ? (plannerMap[ex.planner_exercise_id] || {}) : {};
+      const pData   = ex.planner_exercise_id ? (exList._plannerMap?.[ex.planner_exercise_id] || {}) : {};
       const name    = ex.name || ex.gym_exercises?.name || '—';
       const dur     = ex.duration ? `${ex.duration}′` : null;
+      const intens  = ex.intensity || pData.intensity || null;
+
+      if (isGym) {
+        // Gym exercise card
+        const muscle  = ex.gym_exercises?.muscle_group || null;
+        const cat     = ex.gym_exercises?.category || null;
+        const desc    = ex.notes || ex.gym_exercises?.description || null;
+        const badges = [
+          muscle ? `<span class="sh-tag physical" style="font-size:10px">${muscle}</span>` : '',
+          cat    ? `<span class="sh-tag tactical" style="font-size:10px">${cat}</span>`    : '',
+          intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${intens}</span>` : '',
+        ].filter(Boolean).join('');
+        return `<div class="sh-det-ex">
+          <div class="sh-det-ex-name">${name}</div>
+          <div class="sh-det-ex-meta">
+            ${dur ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${dur}</span>` : ''}
+            ${badges}
+          </div>
+          ${desc ? `<div style="margin-top:6px;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${desc}</div>` : ''}
+        </div>`;
+      }
+
+      // Field/planner exercise card
       const players = ex.players_count ? `${ex.players_count} pl` : null;
       const dims    = (ex.field_width && ex.field_height) ? `${ex.field_width}×${ex.field_height}m` : null;
       const orient  = ex.calc_orientation || pData.orientation;
       const orientLabel = _DET_ORIENT_LABEL[orient] || null;
       const focus   = pData.focus || null;
-      const intens  = ex.intensity || pData.intensity || null;
-      const gtEnabled = pData.game_type_enabled;
-      const gameType  = gtEnabled ? pData.game_type : null;
-      const mDay    = pData.match_day || null;
-      const isGym   = !!ex.gym_exercises;
-      const cat     = ex.gym_exercises?.category || null;
-
+      const gameType = pData.game_type_enabled ? pData.game_type : null;
+      const mDay   = pData.match_day || null;
+      const cat    = ex.gym_exercises?.category || null;
       const metaItems = [dur, players, dims].filter(Boolean).join(' <span style="color:var(--cm-border-strong);margin:0 2px">·</span> ');
       const badges = [
         orientLabel ? `<span class="sh-tag tactical" style="font-size:10px">${orientLabel}</span>` : '',
         intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${intens}</span>` : '',
-        focus  ? `<span class="sh-tag ${_DET_FOCUS_TAG[focus]  ||'tactical'}"    style="font-size:10px">${focus}</span>`  : '',
+        focus  ? `<span class="sh-tag ${_DET_FOCUS_TAG[focus]||'tactical'}" style="font-size:10px">${focus}</span>` : '',
         gameType ? `<span class="sh-tag ${_DET_GAME_TAG[gameType]||'positional'}" style="font-size:10px">${gameType}</span>` : '',
-        isGym && cat ? `<span class="sh-tag physical" style="font-size:10px">${cat}</span>` : '',
-        mDay   ? `<span class="sh-tag individual" style="font-size:10px">${mDay}</span>` : '',
+        cat ? `<span class="sh-tag physical" style="font-size:10px">${cat}</span>` : '',
+        mDay ? `<span class="sh-tag individual" style="font-size:10px">${mDay}</span>` : '',
       ].filter(Boolean).join('');
-
       return `<div class="sh-det-ex">
         <div class="sh-det-ex-name">${name}</div>
         <div class="sh-det-ex-meta">
@@ -1139,6 +1178,79 @@
         </div>
       </div>`;
     }).join('');
+  }
+
+  // ── Detail inline edit mode ──
+  const _LBL = 'font:500 10.5px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px';
+  const _INP = 'width:100%;height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box';
+
+  function openDetailEditMode(sessId) {
+    const sess = allSessions.find(s => s.id === sessId);
+    if (!sess) return;
+    const rpeOpts = [1,2,3,4,5,6,7,8,9,10].map(n =>
+      `<option value="${n}"${sess.estimated_rpe == n ? ' selected' : ''}>${n}</option>`).join('');
+    document.getElementById('shDetBody').innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label style="${_LBL}">Session name</label>
+          <input id="shEditTitle" type="text" value="${(sess.title||'').replace(/"/g,'&quot;')}" placeholder="Session name…" style="${_INP}">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="${_LBL}">Date</label>
+            <input id="shEditDate" type="date" value="${sess.session_date}" style="${_INP}">
+          </div>
+          <div>
+            <label style="${_LBL}">Duration (min)</label>
+            <input id="shEditDuration" type="number" min="1" max="360" value="${sess.duration||''}" placeholder="60" style="${_INP}">
+          </div>
+        </div>
+        <div>
+          <label style="${_LBL}">Est. RPE (1–10)</label>
+          <select id="shEditRpe" style="${_INP.replace('height:34px','height:34px;padding:0 8px')}">
+            <option value="">—</option>${rpeOpts}
+          </select>
+        </div>
+        <div>
+          <label style="${_LBL}">Notes / Objective</label>
+          <textarea id="shEditNotes" rows="4" placeholder="Session objective, context, instructions…"
+            style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box;resize:vertical">${sess.notes||''}</textarea>
+        </div>
+      </div>`;
+    const foot = document.getElementById('shDetFoot');
+    if (foot) {
+      foot.innerHTML = `
+        <button class="cm-btn is-primary is-sm" id="shDetSaveBtn"><i class="ti ti-check" style="font-size:13px"></i>Save</button>
+        <button class="cm-btn is-outline is-sm" id="shDetCancelBtn"><i class="ti ti-arrow-left" style="font-size:13px"></i>Cancel</button>`;
+      document.getElementById('shDetSaveBtn')?.addEventListener('click', () => saveDetailEdit(sessId));
+      document.getElementById('shDetCancelBtn')?.addEventListener('click', () => openDetailPanel(sessId));
+    }
+  }
+
+  async function saveDetailEdit(sessId) {
+    const sess = allSessions.find(s => s.id === sessId);
+    if (!sess) return;
+    const TYPE_DEFAULTS = { tactical:'Tactical', conditioning:'Conditioning', gym:'Gym', match:'Match', recovery:'Recovery', other:'Training' };
+    const titleVal    = document.getElementById('shEditTitle')?.value?.trim();
+    const dateVal     = document.getElementById('shEditDate')?.value || sess.session_date;
+    const durationVal = parseInt(document.getElementById('shEditDuration')?.value) || null;
+    const rpeVal      = parseInt(document.getElementById('shEditRpe')?.value) || null;
+    const notesVal    = document.getElementById('shEditNotes')?.value?.trim() || null;
+    const title       = titleVal || TYPE_DEFAULTS[sess.session_type] || 'Training';
+    const saveBtn = document.getElementById('shDetSaveBtn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="ti ti-loader sh-spin" style="font-size:13px"></i>Saving…'; }
+    const { error } = await window.sb.from('training_sessions')
+      .update({ title, session_date: dateVal, duration: durationVal, estimated_rpe: rpeVal, notes: notesVal })
+      .eq('id', sessId).eq('club_id', shClubId);
+    if (error) { alert('Error saving: ' + error.message); if (saveBtn) saveBtn.disabled = false; return; }
+    // Update in-memory record
+    Object.assign(sess, { title, session_date: dateVal, duration: durationVal, estimated_rpe: rpeVal, notes: notesVal, _mdPos: computeMdPos(dateVal) });
+    // Update panel title
+    const titleEl = document.getElementById('shDetTitle');
+    if (titleEl) titleEl.textContent = title;
+    // Back to read-only + refresh list
+    openDetailPanel(sessId);
+    renderView();
   }
 
   // Close panel with Escape key
