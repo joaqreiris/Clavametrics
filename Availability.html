@@ -362,8 +362,8 @@
       <div class="av-kpis">
         <div class="av-kpi">
           <div class="av-kpi-l"><i class="ti ti-circle-check"></i>Available today</div>
-          <div class="av-kpi-v" id="kpiAvail">22 <sub>/ 27</sub></div>
-          <div class="av-kpi-t"><span class="av-kpi-d up"><i class="ti ti-arrow-up-right"></i>+1</span><span>vs yesterday</span></div>
+          <div class="av-kpi-v" id="kpiAvail">— <sub>/ —</sub></div>
+          <div class="av-kpi-t" id="kpiAvailDeltaRow" style="display:none"><span class="av-kpi-d" id="kpiAvailDelta"></span><span>vs yesterday</span></div>
           <div class="av-kpi-stack">
             <span class="seg" style="background:var(--cm-success);flex:22"></span>
             <span class="seg" style="background:var(--cm-warning);flex:3"></span>
@@ -373,7 +373,7 @@
         </div>
         <div class="av-kpi">
           <div class="av-kpi-l"><i class="ti ti-bandage"></i>Active injuries</div>
-          <div class="av-kpi-v" id="kpiAvailInjury">2</div>
+          <div class="av-kpi-v" id="kpiAvailInjury">—</div>
           <div class="av-kpi-t"><span id="kpiInjuryDetail" style="color:var(--cm-fg-muted)"></span></div>
         </div>
         <div class="av-kpi">
@@ -580,7 +580,8 @@
   }
 
   // ── Render KPIs ──
-  function renderKPIs(players, avMap, todayStr) {
+  // yesterdayByPlayer: { [player_id]: { status } } | null (null = no data, hide delta)
+  function renderKPIs(players, avMap, todayStr, yesterdayByPlayer) {
     let avCount = 0, inCount = 0, siCount = 0, naCount = 0;
     const inPlayers = [], siPlayers = [], naPlayers = [];
     players.forEach(p => {
@@ -594,12 +595,30 @@
     });
     const el = id => document.getElementById(id);
     el('kpiAvail')        && (el('kpiAvail').innerHTML = `${avCount} <sub>/ ${players.length}</sub>`);
-    el('kpiAvailInjury')  && (el('kpiAvailInjury').textContent  = inCount);
-    el('kpiAvailIllness') && (el('kpiAvailIllness').textContent = siCount);
-    el('kpiAvailNat')     && (el('kpiAvailNat').textContent     = naCount);
+    el('kpiAvailInjury')  && (el('kpiAvailInjury').textContent  = inCount || '—');
+    el('kpiAvailIllness') && (el('kpiAvailIllness').textContent = siCount || '—');
+    el('kpiAvailNat')     && (el('kpiAvailNat').textContent     = naCount || '—');
     el('kpiInjuryDetail')  && (el('kpiInjuryDetail').textContent  = inPlayers.join(' · ')  || '');
     el('kpiIllnessDetail') && (el('kpiIllnessDetail').textContent = siPlayers.join(' · ')  || '');
     el('kpiNatDetail')     && (el('kpiNatDetail').textContent     = naPlayers.join(' · ')  || '');
+
+    // Delta vs yesterday — only show if yesterday has availability records
+    if (yesterdayByPlayer !== null) {
+      let avYest = 0;
+      players.forEach(p => {
+        const s = yesterdayByPlayer[p.id]?.status || 'available';
+        if (s === 'available' || s === 'partial' || s === 'limited') avYest++;
+      });
+      const delta = avCount - avYest;
+      const deltaRow = el('kpiAvailDeltaRow');
+      const deltaEl  = el('kpiAvailDelta');
+      if (deltaRow) deltaRow.style.display = '';
+      if (deltaEl) {
+        const dir = delta >= 0 ? 'up' : 'down';
+        deltaEl.className = `av-kpi-d ${delta >= 0 ? 'up' : 'down'}`;
+        deltaEl.innerHTML = `<i class="ti ti-arrow-${dir}-right"></i>${delta >= 0 ? '+' : ''}${delta}`;
+      }
+    }
   }
 
   // ── Save cell to Supabase ──
@@ -619,7 +638,8 @@
     if (!CLUB_ID) { console.error('[Availability] CLUB_ID is null — profile may be missing or club_id not set'); return; }
     window.getClub().then(c => { if (c) window.applyClubTheme(); });
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr     = new Date().toISOString().split('T')[0];
+    const yesterdayStr = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     let mcStart, mcEnd;
 
     // Try active microcycle from Supabase
@@ -656,10 +676,11 @@
 
     renderHeader();
 
-    const [playersRes, availRes, injuriesRes] = await Promise.all([
-      window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID).order('last_name'),
+    const [playersRes, availRes, injuriesRes, yesterdayRes] = await Promise.all([
+      window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID).order('last_name').catch(e => { console.error('[Availability] players query error:', e); return { data: [] }; }),
       window.sb.from('availability').select('player_id, date, status, minutes').eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd).catch(() => ({ data: [] })),
-      window.sb.from('injuries').select('player_id').eq('club_id', CLUB_ID).eq('status', 'active').catch(() => ({ data: [] }))
+      window.sb.from('injuries').select('player_id').eq('club_id', CLUB_ID).eq('status', 'active').catch(() => ({ data: [] })),
+      window.sb.from('availability').select('player_id, status').eq('club_id', CLUB_ID).eq('date', yesterdayStr).catch(() => ({ data: null }))
     ]);
 
     console.log('[Availability] players result — count:', playersRes.data?.length, '| error:', playersRes.error?.message || null);
@@ -669,6 +690,10 @@
     const avMap      = {};
     (availRes.data || []).forEach(r => { avMap[r.player_id + '|' + r.date] = r; });
     const injuredIds = new Set((injuriesRes.data || []).map(r => r.player_id));
+    // null means yesterday had no records → hide delta; {} means records exist but 0 available
+    const yesterdayByPlayer = yesterdayRes.data
+      ? Object.fromEntries(yesterdayRes.data.map(r => [r.player_id, r]))
+      : null;
 
     // Update header + toolbar with real counts
     const posCounts = { gk:0, cb:0, fb:0, mf:0, wg:0, st:0 };
@@ -686,7 +711,7 @@
     el('avMcPickerDates') && (el('avMcPickerDates').textContent = ` ${mcStart} → ${mcEnd}`);
 
     renderMatrix(players, avMap, injuredIds);
-    renderKPIs(players, avMap, todayStr);
+    renderKPIs(players, avMap, todayStr, yesterdayByPlayer);
   }
 
   init();
