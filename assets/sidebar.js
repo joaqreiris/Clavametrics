@@ -128,7 +128,7 @@
           </svg>
         </div>
         <div class="body">
-          <div class="name" id="sideClubName">ClavaMetrics</div>
+          <div class="name" id="sideClubName"></div>
           <div class="club">First team · 2025/26</div>
         </div>
         <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>

@@ -241,13 +241,13 @@
       <header class="dp-head">
         <div>
           <h1>Daily planning</h1>
-          <div class="ctx"><span class="save-dot"></span>Autosaved 14 s ago · Pablo Fierro</div>
+          <div class="ctx"><span class="save-dot"></span>Autosaved · <span id="dpUserName">…</span></div>
         </div>
         <div class="meta">
           <div class="dp-pager"><button id="dpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="dpPagerLabel"><i class="ti ti-calendar-event"></i>Fri 16 May<span class="sub">MD−2</span></span><button id="dpNavNext"><i class="ti ti-chevron-right"></i></button></div>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF</button>
-          <button class="cm-btn is-primary is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Publish</button>
+          <button class="cm-btn is-outline is-sm" onclick="dpPrint()"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
+          <button class="cm-btn is-outline is-sm" onclick="dpExportPDF()"><i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF</button>
+          <button class="cm-btn is-primary is-sm" id="dpPublishBtn" onclick="dpPublish()"><i class="ti ti-share-2" style="font-size:14px"></i>Publish</button>
         </div>
       </header>
 
@@ -263,7 +263,7 @@
             <div class="dp-f"><label>Start time</label><input type="time" id="dpStartTime"></div>
             <div class="dp-f"><label>End time</label><input type="time" id="dpEndTime"></div>
             <div class="dp-f"><label>Microcycle</label>
-              <select><option>MC 14 · vs Atlético (home)</option><option>MC 15 · vs River (away)</option></select>
+              <select id="dpMicrocycle"><option value="">— Loading… —</option></select>
             </div>
             <div class="dp-f"><label>Type</label>
               <select id="dpSessionType">
@@ -279,7 +279,7 @@
               <select><option>Introductory</option><option>Activation</option><option>Muscle tension</option><option selected>Speed</option><option>Duration</option><option>Recovery</option></select>
             </div>
             <div class="dp-f"><label>Focus</label>
-              <select><option>Tactical</option><option selected>Physical</option><option>Technical</option><option>Individual</option><option>Positional</option></select>
+              <select id="dpFocus"><option value="tactical">Tactical</option><option value="individual">Individual</option><option value="physical" selected>Physical</option><option value="sectorial">Sectorial</option></select>
             </div>
             <div class="dp-f"><label>Match day</label>
               <select><option>— Not a match day —</option><option>MD−5</option><option>MD−4</option><option>MD−3</option><option selected>MD−2</option><option>MD−1</option><option>MD</option><option>MD+1</option><option>MD+2</option></select>
@@ -347,18 +347,15 @@
       <div class="dp-card">
         <div class="dp-card-h">
           <h3>Activation</h3>
-          <span class="ct">15 min</span>
+          <span class="ct" id="dpActCt">—</span>
           <div class="right" style="gap:8px">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
-            <input type="number" value="15" style="width:50px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none">
+            <input type="number" id="dpActDuration" min="0" max="120" style="width:50px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—">
           </div>
         </div>
         <div class="dp-card-b">
-          <div class="dp-act-strip">
-            <div class="dp-act-pill"><input value="Foam roll + dynamic stretch"><span class="min">5′</span><button class="x"><i class="ti ti-x"></i></button></div>
-            <div class="dp-act-pill"><input value="Passing rondo 8v2"><span class="min">6′</span><button class="x"><i class="ti ti-x"></i></button></div>
-            <div class="dp-act-pill"><input value="Sprint primer · 3×20m"><span class="min">4′</span><button class="x"><i class="ti ti-x"></i></button></div>
-            <button class="dp-act-add"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>
+          <div class="dp-act-strip" id="dpActStrip">
+            <!-- Populated by loadActivationActivities() -->
           </div>
         </div>
       </div>
@@ -438,7 +435,7 @@
 
 <script>
 let _dpClubId = null, _dpPlayers = [], _dpInjMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
-let _libExercises = [];
+let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 
 // Orientation helpers for Planner exercises
 function _dpCalcOrientFromM2(m2) {
@@ -472,15 +469,26 @@ async function loadDay(dateStr) {
   const subLabel = dateStr === today ? 'today' : '';
   document.getElementById('dpDateInput').value = dateStr;
   document.getElementById('dpCrumbDate').textContent = fmt;
-  document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${subLabel ? `<span class="sub">${subLabel}</span>` : ''}`;
+
+  // Match microcycle for this date
+  const mc = _dpMicrocycles.find(m => m.start_date <= dateStr && dateStr <= m.end_date);
+  const mcSel = document.getElementById('dpMicrocycle');
+  if (mcSel) {
+    mcSel.innerHTML = _dpMicrocycles.length
+      ? _dpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${m.name}${m.rival ? ` · vs ${m.rival}` : ''}</option>`).join('')
+      : '<option value="">— No microcycles —</option>';
+  }
+  const mcLabel = mc ? mc.name : '';
+  document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : subLabel ? `<span class="sub">${subLabel}</span>` : ''}`;
 
   const [availRes, adaptRes, sessRes] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: [] })),
     window.sb.from('treatments').select('id,player_id,date,type,notes,adaptation,zones, players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: null })),
-    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle().catch(() => ({ data: null }))
+    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle().catch(() => ({ data: null }))
   ]);
 
   _dpCurrentSessionId = sessRes.data?.id || null;
+  _dpPublished = sessRes.data?.published || false;
   const sess = sessRes.data;
   if (sess) {
     const st = document.getElementById('dpStartTime'); if (st) st.value = sess.session_time || '';
@@ -491,7 +499,8 @@ async function loadDay(dateStr) {
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = '';
   }
-  await loadSessionExercises(_dpCurrentSessionId);
+  _dpUpdatePublishBtn();
+  await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
 
   const avMap = {};
   (availRes.data || []).forEach(a => { avMap[a.player_id] = a; });
@@ -788,24 +797,125 @@ async function saveManualExercise() {
   if (!error) { closeManualExModal(); await loadSessionExercises(_dpCurrentSessionId); }
 }
 
+// ── Activation activities ──
+async function loadActivationActivities(sessionId) {
+  const strip = document.getElementById('dpActStrip');
+  const ctEl  = document.getElementById('dpActCt');
+  const durEl = document.getElementById('dpActDuration');
+  if (!sessionId) {
+    strip.innerHTML = '<button class="dp-act-add" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
+    if (ctEl) ctEl.textContent = '0 min';
+    if (durEl) durEl.value = '';
+    return;
+  }
+  const { data } = await window.sb.from('session_exercises')
+    .select('id,name,duration').eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
+  const acts = data || [];
+  const total = acts.reduce((s, a) => s + (a.duration || 0), 0);
+  if (ctEl) ctEl.textContent = total ? `${total} min` : '—';
+  if (durEl) durEl.value = total || '';
+  strip.innerHTML = acts.map(a =>
+    `<div class="dp-act-pill">
+      <input value="${(a.name||'').replace(/"/g,'&quot;')}" onblur="dpActSave('${a.id}',this.value)">
+      <span class="min">${a.duration ? a.duration + '′' : '—'}</span>
+      <button class="x" onclick="dpActDelete('${a.id}')"><i class="ti ti-x"></i></button>
+    </div>`
+  ).join('') + '<button class="dp-act-add" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
+}
+
+async function dpActAdd() {
+  if (!_dpCurrentSessionId) { alert('No session for this date. Create a training session first.'); return; }
+  const pos = document.querySelectorAll('#dpActStrip .dp-act-pill').length;
+  const { error } = await window.sb.from('session_exercises').insert({
+    club_id: _dpClubId, session_id: _dpCurrentSessionId,
+    name: 'New activity', phase: 'activation', duration: 5, position: pos
+  });
+  if (!error) await loadActivationActivities(_dpCurrentSessionId);
+}
+
+async function dpActSave(id, name) {
+  await window.sb.from('session_exercises').update({ name }).eq('id', id).eq('club_id', _dpClubId);
+}
+
+async function dpActDelete(id) {
+  const { error } = await window.sb.from('session_exercises').delete().eq('id', id).eq('club_id', _dpClubId);
+  if (!error) await loadActivationActivities(_dpCurrentSessionId);
+}
+
+// ── Publish ──
+function _dpUpdatePublishBtn() {
+  const btn = document.getElementById('dpPublishBtn');
+  if (!btn) return;
+  if (_dpPublished) {
+    btn.innerHTML = '<i class="ti ti-circle-check" style="font-size:14px"></i>Published';
+    btn.classList.remove('is-primary'); btn.classList.add('is-success');
+  } else {
+    btn.innerHTML = '<i class="ti ti-share-2" style="font-size:14px"></i>Publish';
+    btn.classList.remove('is-success'); btn.classList.add('is-primary');
+  }
+}
+
+async function dpPublish() {
+  if (!_dpCurrentSessionId) { alert('No training session for this date.'); return; }
+  const next = !_dpPublished;
+  const { error } = await window.sb.from('training_sessions')
+    .update({ published: next }).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
+  if (!error) { _dpPublished = next; _dpUpdatePublishBtn(); }
+  else console.warn('Publish error (column may not exist yet):', error.message);
+}
+
+// ── Print ──
+function dpPrint() { window.print(); }
+
+// ── Export PDF ──
+async function dpExportPDF() {
+  const btn = document.querySelector('[onclick="dpExportPDF()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  try {
+    const { default: html2canvas } = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.min.js');
+    const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+    const el = document.querySelector('.dp-doc');
+    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = (canvas.height * pdfW) / canvas.width;
+    let y = 0, pageH = pdf.internal.pageSize.getHeight();
+    while (y < pdfH) {
+      if (y > 0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, -y, pdfW, pdfH);
+      y += pageH;
+    }
+    pdf.save(`${_dpCurrentDate}_daily-plan.pdf`);
+  } catch (e) {
+    console.error('PDF error:', e);
+    alert('PDF export failed. Try using Print → Save as PDF instead.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF'; }
+  }
+}
+
 (async () => {
   if (!await requireAuth()) return;
   const clubId = await getClubId();
   _dpClubId = clubId;
   const [profile, club] = await Promise.all([getProfile(), getClub()]);
-  const userEmail = (await window.sb.auth.getSession()).data.session?.user?.email || '';
 
   if (club) await applyClubTheme();
 
+  const nameEl = document.getElementById('dpUserName');
+  if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
+
   const today = new Date().toISOString().split('T')[0];
 
-  const [playersRes, injuriesRes] = await Promise.all([
+  const [playersRes, injuriesRes, mcRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
-    window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active')
+    window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
+    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away').eq('club_id', clubId).order('start_date')
   ]);
 
   _dpPlayers = playersRes.data || [];
-  if (!_dpPlayers.length) return;
+  _dpMicrocycles = mcRes.data || [];
   (injuriesRes.data || []).forEach(i => { _dpInjMap[i.player_id] = i; });
 
   await loadDay(today);
