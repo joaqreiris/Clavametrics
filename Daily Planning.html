@@ -287,6 +287,7 @@
         </div>
         <div class="dp-card-b">
           <div class="dp-fg">
+            <div class="dp-f col-4"><label>Session name</label><input type="text" id="dpSessionTitle" placeholder="e.g. Tactical — Defensive organization"></div>
             <div class="dp-f"><label>Date</label><input type="date" id="dpDateInput" value="2026-05-16"></div>
             <div class="dp-f"><label>Start time</label><input type="time" id="dpStartTime"></div>
             <div class="dp-f"><label>End time</label><input type="time" id="dpEndTime"></div>
@@ -619,12 +620,15 @@ async function loadDay(dateStr) {
   _dpCurrentSessionId = sessRes.data?.id || null;
   _dpPublished = sessRes.data?.published || false;
   const sess = sessRes.data;
+  const titleInput = document.getElementById('dpSessionTitle');
   if (sess) {
+    if (titleInput) titleInput.value = sess.title || '';
     const st = document.getElementById('dpStartTime'); if (st) st.value = sess.session_time || '';
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = sess.session_type || '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = sess.notes || '';
     const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = sess.estimated_rpe || '';
   } else {
+    if (titleInput) titleInput.value = '';
     const st = document.getElementById('dpStartTime'); if (st) st.value = '';
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = '';
@@ -914,12 +918,15 @@ async function saveManualExercise() {
 
 // ── Session info autosave ──
 async function dpAutoSaveSession() {
-  const date  = _dpCurrentDate;
-  const title = _dpFmt(date);
+  const date = _dpCurrentDate;
+  const TYPE_DEFAULTS = { tactical:'Tactical', conditioning:'Conditioning', gym:'Gym', match:'Match', recovery:'Recovery', other:'Training' };
+  const typeVal = document.getElementById('dpSessionType')?.value || 'tactical';
+  const nameVal = document.getElementById('dpSessionTitle')?.value?.trim();
+  const title   = nameVal || TYPE_DEFAULTS[typeVal] || 'Training';
   const payload = {
     title,
     session_date: date,
-    session_type:  document.getElementById('dpSessionType')?.value || 'tactical',
+    session_type: typeVal,
     session_time:  document.getElementById('dpStartTime')?.value  || null,
     notes:         document.getElementById('dpNotes')?.value?.trim() || null,
     estimated_rpe: parseInt(document.getElementById('dpEstRpe')?.value) || null,
@@ -1112,7 +1119,7 @@ async function dpExportPDF() {
   document.getElementById('dpDateInput').addEventListener('change', e => { if (e.target.value) loadDay(e.target.value); });
 
   // Autosave session info with debounce on field changes
-  ['dpStartTime','dpSessionType','dpFocus','dpNotes','dpEstRpe'].forEach(id => {
+  ['dpSessionTitle','dpStartTime','dpSessionType','dpFocus','dpNotes','dpEstRpe'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('change', dpQueueSave);

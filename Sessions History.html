@@ -158,6 +158,29 @@
   .sh-cal-evt{border-radius:3px;padding:2px 5px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer;margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:100%;display:block;border:1px solid var(--cm-border-strong)}
   .sh-cal-evt:hover{opacity:0.8}
 
+  /* Detail panel */
+  .sh-det-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:none}
+  .sh-det-panel{position:fixed;right:0;top:0;bottom:0;width:min(520px,96vw);background:var(--cm-surface);border-left:1px solid var(--cm-border);box-shadow:-4px 0 24px rgba(0,0,0,.18);z-index:101;display:flex;flex-direction:column;transform:translateX(100%);transition:transform 260ms ease}
+  .sh-det-panel.is-open{transform:translateX(0)}
+  .sh-det-head{display:flex;align-items:flex-start;gap:8px;padding:16px 18px;border-bottom:1px solid var(--cm-border);flex-shrink:0;position:sticky;top:0;background:var(--cm-surface);z-index:1}
+  .sh-det-title{font:600 17px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer;word-break:break-word;padding-bottom:2px;border-bottom:2px solid transparent;transition:border-color 120ms;outline:none;min-height:22px}
+  .sh-det-title:hover{border-bottom-color:var(--cm-border-strong)}
+  .sh-det-title[contenteditable=true]{border-bottom-color:var(--cm-accent);background:var(--cm-accent-soft);border-radius:4px 4px 0 0;padding:2px 6px}
+  .sh-det-hint{font:500 10px/1 var(--cm-font-mono);color:var(--cm-accent);margin-top:4px;display:none}
+  .sh-det-body{flex:1;overflow-y:auto;padding:18px}
+  .sh-det-meta{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:18px}
+  .sh-det-m{background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px}
+  .sh-det-m .l{font:500 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:4px}
+  .sh-det-m .v{font:600 13px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .sh-det-sec{margin-bottom:18px}
+  .sh-det-sec h3{font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:10px}
+  .sh-det-ex{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:6px;padding:10px 12px;margin-bottom:6px}
+  .sh-det-ex-name{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px}
+  .sh-det-ex-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;row-gap:4px}
+  .sh-det-foot{display:flex;gap:8px;padding:14px 18px;border-top:1px solid var(--cm-border);flex-shrink:0;background:var(--cm-surface)}
+  @keyframes sh-spin{to{transform:rotate(360deg)}}
+  .sh-spin{display:inline-block;animation:sh-spin .8s linear infinite}
+
   /* Compare modal */
   .sh-compare-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:center;justify-content:center}
   .sh-compare-box{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-3);width:min(94vw,960px);max-height:85vh;overflow:hidden;display:flex;flex-direction:column}
@@ -331,6 +354,23 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
+<!-- Session detail panel -->
+<div id="shDetOverlay" class="sh-det-overlay" onclick="closeDetailPanel()"></div>
+<div id="shDetPanel" class="sh-det-panel">
+  <div class="sh-det-head">
+    <div style="flex:1">
+      <div id="shDetTitle" class="sh-det-title" contenteditable="false"></div>
+      <div id="shDetHint" class="sh-det-hint">↵ Enter or Tab to save · Esc to cancel</div>
+    </div>
+    <button class="cm-icon-btn" onclick="closeDetailPanel()" title="Close"><i class="ti ti-x"></i></button>
+  </div>
+  <div class="sh-det-body" id="shDetBody"></div>
+  <div class="sh-det-foot">
+    <button class="cm-btn is-primary is-sm" id="shDetEditBtn"><i class="ti ti-pencil" style="font-size:13px"></i>Edit session</button>
+    <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>Close</button>
+  </div>
+</div>
+
 <!-- Compare Sessions modal -->
 <div id="shCompareModal" class="sh-compare-overlay" style="display:none">
   <div class="sh-compare-box">
@@ -363,6 +403,8 @@
   let allSessions = [], filteredSessions = [], currentPage = 0;
   let activeDays = 30, searchText = '';
   let activeView = 'list';
+  let shClubId = null;
+  let _detailSessId = null;
   let calendarMonth = new Date();
   let microcycles = [];
   let totalActivePlayers = 0;
@@ -437,6 +479,7 @@
     window.applyClubTheme();
     const clubId = await window.getClubId();
     if (!clubId) return;
+    shClubId = clubId;
     const [mcRes, plRes] = await Promise.all([
       window.sb.from('microcycles').select('id,start_date,end_date,match_date').eq('club_id', clubId).order('start_date'),
       window.sb.from('players').select('id', { count:'exact', head:true }).eq('club_id', clubId).neq('status','inactive')
@@ -633,8 +676,7 @@
     tbody.innerHTML = slice.map(rowHTML).join('');
     tbody.querySelectorAll('tr[data-id]').forEach(row => row.addEventListener('click', e => {
       if (e.target.closest('button')) return;
-      const sess = allSessions.find(s => s.id === row.dataset.id);
-      if (sess) window.location.href = `Daily Planning.html?date=${sess.session_date}`;
+      openDetailPanel(row.dataset.id);
     }));
   }
 
@@ -676,10 +718,7 @@
       </div>`;
     }).join('');
     container.querySelectorAll('.sh-card[data-id]').forEach(card => {
-      card.addEventListener('click', () => {
-        const sess = allSessions.find(s => s.id === card.dataset.id);
-        if (sess) window.location.href = `Daily Planning.html?date=${sess.session_date}`;
-      });
+      card.addEventListener('click', () => openDetailPanel(card.dataset.id));
     });
   }
 
@@ -721,11 +760,7 @@
     }
     grid.innerHTML = html;
     grid.querySelectorAll('.sh-cal-evt[data-id]').forEach(el => {
-      el.addEventListener('click', e => {
-        e.stopPropagation();
-        const sess = allSessions.find(s => s.id === el.dataset.id);
-        if (sess) window.location.href = `Daily Planning.html?date=${sess.session_date}`;
-      });
+      el.addEventListener('click', e => { e.stopPropagation(); openDetailPanel(el.dataset.id); });
     });
   }
 
@@ -940,6 +975,174 @@
   document.getElementById('shCompareModal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) closeCompare();
   });
+
+  // ── Detail panel ──
+  function openDetailPanel(sessId) {
+    const sess = allSessions.find(s => s.id === sessId);
+    if (!sess) return;
+
+    // Gym sessions → Gym Planner by date
+    if (sess.session_type === 'gym') {
+      window.location.href = `Gym Planner.html?date=${sess.session_date}`;
+      return;
+    }
+
+    _detailSessId = sessId;
+
+    // Title — editable inline
+    const titleEl = document.getElementById('shDetTitle');
+    titleEl.textContent = sess.title || sess.session_type || 'Untitled';
+    titleEl.contentEditable = 'false';
+    document.getElementById('shDetHint').style.display = 'none';
+
+    // Edit session button
+    const editBtn = document.getElementById('shDetEditBtn');
+    if (editBtn) {
+      editBtn.onclick = () => { closeDetailPanel(); window.location.href = `Daily Planning.html?date=${sess.session_date}`; };
+    }
+
+    // Inline name click-to-edit
+    titleEl.onclick = () => {
+      if (titleEl.contentEditable === 'true') return;
+      titleEl.contentEditable = 'true';
+      titleEl.focus();
+      document.getElementById('shDetHint').style.display = 'block';
+      const range = document.createRange(); range.selectNodeContents(titleEl);
+      window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+    };
+    titleEl.onkeydown = e => {
+      if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
+      if (e.key === 'Escape') { titleEl.textContent = sess.title || sess.session_type || 'Untitled'; titleEl.blur(); }
+    };
+    titleEl.onblur = async () => {
+      titleEl.contentEditable = 'false';
+      document.getElementById('shDetHint').style.display = 'none';
+      const newTitle = titleEl.textContent.trim();
+      if (!newTitle || newTitle === (sess.title || sess.session_type || 'Untitled')) return;
+      await window.sb.from('training_sessions').update({ title: newTitle }).eq('id', sessId).eq('club_id', shClubId);
+      sess.title = newTitle; // update in-memory
+      renderView(); // refresh list/grid
+    };
+
+    // Render metadata + exercises
+    renderDetailMeta(sess);
+
+    // Show panel
+    document.getElementById('shDetOverlay').style.display = 'block';
+    document.getElementById('shDetPanel').classList.add('is-open');
+
+    // Load exercises async
+    loadDetailExercises(sess);
+  }
+
+  function closeDetailPanel() {
+    document.getElementById('shDetPanel')?.classList.remove('is-open');
+    document.getElementById('shDetOverlay').style.display = 'none';
+    _detailSessId = null;
+  }
+
+  function renderDetailMeta(sess) {
+    const load  = avgLoad(sess);
+    const band  = getBand(load);
+    const bandLabel = { low:'Low', moderate:'Moderate', high:'High', peak:'Peak' }[band] || '—';
+    const dt    = new Date(sess.session_date + 'T00:00:00');
+    const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+    const dayStr  = DAYS_SHORT[dt.getDay()];
+    const type    = sess.session_type || '—';
+    const orient  = ORIENT_MAP[type] || { label: type };
+    const attCount = sess.rpe?.length;
+    const attPct = (attCount && totalActivePlayers) ? ` (${Math.round(attCount/totalActivePlayers*100)}%)` : '';
+    document.getElementById('shDetBody').innerHTML = `
+      <div class="sh-det-meta">
+        <div class="sh-det-m"><div class="l">Date</div><div class="v">${dayStr}, ${dateStr}</div></div>
+        <div class="sh-det-m"><div class="l">MD Position</div><div class="v">${sess._mdPos || '—'}</div></div>
+        <div class="sh-det-m"><div class="l">Type</div><div class="v">${type}</div></div>
+        <div class="sh-det-m"><div class="l">Orientation</div><div class="v">${orient.label}</div></div>
+        <div class="sh-det-m"><div class="l">Duration</div><div class="v">${sess.duration != null ? sess.duration + ' min' : '—'}</div></div>
+        <div class="sh-det-m"><div class="l">Load</div><div class="v">${load != null ? load + ' AU' : '—'}<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${load != null ? bandLabel : ''}</span></div></div>
+        <div class="sh-det-m"><div class="l">Est. RPE</div><div class="v">${sess.estimated_rpe ? sess.estimated_rpe + '/10' : '—'}</div></div>
+        <div class="sh-det-m"><div class="l">Attendance</div><div class="v">${attCount ? attCount + ' players' + attPct : '—'}</div></div>
+      </div>
+      ${sess.notes ? `<div class="sh-det-sec"><h3>Notes</h3><div style="font:var(--cm-body-sm);color:var(--cm-fg);line-height:1.5;background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px">${sess.notes}</div></div>` : ''}
+      <div class="sh-det-sec">
+        <h3>Exercises</h3>
+        <div id="shDetExList"><div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)"><i class="ti ti-loader sh-spin"></i> Loading…</div></div>
+      </div>`;
+  }
+
+  const _DET_ORIENT_LABEL = {
+    ACTIVATION:'Activation', STRENGTH:'Strength', VELOCITY:'Velocity',
+    ENDURANCE:'Endurance', RECOVERY:'Recovery', TACTICAL:'Tactical',
+    dur:'Duration', spd:'Speed', ten:'Tension', rec:'Recovery', act:'Activation', intro:'Introductory'
+  };
+  const _DET_INTENSITY_TAG = { Low:'individual', Medium:'technical', High:'physical', 'Very High':'physical' };
+  const _DET_FOCUS_TAG = { tactical:'tactical', physical:'physical', individual:'individual', sectorial:'positional' };
+  const _DET_GAME_TAG = { SSG:'positional', MSG:'tactical', LSG:'technical' };
+
+  async function loadDetailExercises(sess) {
+    const exList = document.getElementById('shDetExList');
+    if (!exList || !shClubId) return;
+
+    const { data, error } = await window.sb
+      .from('session_exercises')
+      .select('id,name,phase,duration,intensity,notes,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+      .eq('club_id', shClubId)
+      .eq('session_id', sess.id)
+      .order('position');
+
+    if (error || !data?.length) {
+      exList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises added to this session</div>';
+      return;
+    }
+
+    // Fetch planner exercise details for focus, game_type, match_day
+    const plannerIds = data.filter(e => e.planner_exercise_id).map(e => e.planner_exercise_id);
+    const plannerMap = {};
+    if (plannerIds.length) {
+      const { data: pEx } = await window.sb.from('exercises')
+        .select('id,orientation,focus,intensity,game_type,game_type_enabled,match_day')
+        .in('id', plannerIds);
+      (pEx || []).forEach(ex => { plannerMap[ex.id] = ex; });
+    }
+
+    exList.innerHTML = data.map(ex => {
+      const pData   = ex.planner_exercise_id ? (plannerMap[ex.planner_exercise_id] || {}) : {};
+      const name    = ex.name || ex.gym_exercises?.name || '—';
+      const dur     = ex.duration ? `${ex.duration}′` : null;
+      const players = ex.players_count ? `${ex.players_count} pl` : null;
+      const dims    = (ex.field_width && ex.field_height) ? `${ex.field_width}×${ex.field_height}m` : null;
+      const orient  = ex.calc_orientation || pData.orientation;
+      const orientLabel = _DET_ORIENT_LABEL[orient] || null;
+      const focus   = pData.focus || null;
+      const intens  = ex.intensity || pData.intensity || null;
+      const gtEnabled = pData.game_type_enabled;
+      const gameType  = gtEnabled ? pData.game_type : null;
+      const mDay    = pData.match_day || null;
+      const isGym   = !!ex.gym_exercises;
+      const cat     = ex.gym_exercises?.category || null;
+
+      const metaItems = [dur, players, dims].filter(Boolean).join(' <span style="color:var(--cm-border-strong);margin:0 2px">·</span> ');
+      const badges = [
+        orientLabel ? `<span class="sh-tag tactical" style="font-size:10px">${orientLabel}</span>` : '',
+        intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${intens}</span>` : '',
+        focus  ? `<span class="sh-tag ${_DET_FOCUS_TAG[focus]  ||'tactical'}"    style="font-size:10px">${focus}</span>`  : '',
+        gameType ? `<span class="sh-tag ${_DET_GAME_TAG[gameType]||'positional'}" style="font-size:10px">${gameType}</span>` : '',
+        isGym && cat ? `<span class="sh-tag physical" style="font-size:10px">${cat}</span>` : '',
+        mDay   ? `<span class="sh-tag individual" style="font-size:10px">${mDay}</span>` : '',
+      ].filter(Boolean).join('');
+
+      return `<div class="sh-det-ex">
+        <div class="sh-det-ex-name">${name}</div>
+        <div class="sh-det-ex-meta">
+          ${metaItems ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${metaItems}</span>` : ''}
+          ${badges}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Close panel with Escape key
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _detailSessId) closeDetailPanel(); });
 
   boot();
 </script>
