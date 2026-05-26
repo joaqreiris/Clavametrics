@@ -1017,7 +1017,7 @@ function showCalToast(msg) {
 }
 
 // ── Render grid (continuous view — all MC days in one scrollable row) ──────────────
-let _dragId = null, _dragDate = null;
+let _dragId = null, _dragDate = null, _dropTargetId = null;
 
 function renderGrid() {
   const mc = _allMCs[_mcIdx];
@@ -1121,58 +1121,56 @@ function renderGrid() {
   });
 
   // Drag & drop within same day
-  const _ph = document.createElement('div');
-  _ph.className = 'mc-evt-placeholder';
-
-  function _removePh() { if (_ph.parentNode) _ph.parentNode.removeChild(_ph); }
-
+  // Reorder logic runs in dragend (not drop) to avoid the placeholder
+  // blocking the drop target and silently swallowing the event.
   grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
     el.addEventListener('dragstart', e => {
-      _dragId   = el.dataset.id;
-      _dragDate = el.dataset.date;
+      _dragId       = el.dataset.id;
+      _dragDate     = el.dataset.date;
+      _dropTargetId = null;
       el.classList.add('is-dragging');
       document.body.classList.add('is-dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', _dragId);
     });
 
-    el.addEventListener('dragend', () => {
-      el.classList.remove('is-dragging');
-      document.body.classList.remove('is-dragging');
-      _removePh();
-      grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
-    });
-
     el.addEventListener('dragover', e => {
       e.preventDefault();
       if (el.dataset.id === _dragId) return;
+      _dropTargetId = el.dataset.id;
       el.classList.add('drag-over');
-      if (_ph.nextSibling !== el) el.parentNode.insertBefore(_ph, el);
     });
 
     el.addEventListener('dragleave', e => {
-      if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over');
+      if (!el.contains(e.relatedTarget)) {
+        el.classList.remove('drag-over');
+        if (_dropTargetId === el.dataset.id) _dropTargetId = null;
+      }
     });
 
-    el.addEventListener('drop', e => {
-      e.preventDefault();
-      _removePh();
-      grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
-      if (!_dragId || el.dataset.id === _dragId) return;
+    el.addEventListener('drop', e => e.preventDefault());
 
-      const draggedSess = _sessions.find(s => s.id === _dragId);
-      const targetSess  = _sessions.find(s => s.id === el.dataset.id);
+    el.addEventListener('dragend', () => {
+      el.classList.remove('is-dragging');
+      document.body.classList.remove('is-dragging');
+      grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+
+      const srcId = _dragId, tgtId = _dropTargetId;
+      _dragId = null; _dragDate = null; _dropTargetId = null;
+
+      if (!srcId || !tgtId || srcId === tgtId) return;
+
+      const draggedSess = _sessions.find(s => s.id === srcId);
+      const targetSess  = _sessions.find(s => s.id === tgtId);
       if (!draggedSess || !targetSess || draggedSess.session_date !== targetSess.session_date) return;
 
       const dateStr = draggedSess.session_date;
       const dayEvts = _sessions.filter(s => s.session_date === dateStr);
-
-      // Snapshot for rollback
       const snapshot = dayEvts.map(s => ({ id: s.id, sort_order: s.sort_order }));
 
-      const dragIdx = dayEvts.findIndex(s => s.id === _dragId);
-      const dropIdx = dayEvts.findIndex(s => s.id === el.dataset.id);
-      if (dragIdx === -1 || dropIdx === -1) return;
+      const dragIdx = dayEvts.findIndex(s => s.id === srcId);
+      const dropIdx = dayEvts.findIndex(s => s.id === tgtId);
+      if (dragIdx === -1 || dropIdx === -1 || dragIdx === dropIdx) return;
 
       // Optimistic reorder
       dayEvts.splice(dragIdx, 1);
@@ -1186,7 +1184,6 @@ function renderGrid() {
         return (a.sort_order || 0) - (b.sort_order || 0);
       });
 
-      _dragId = null; _dragDate = null;
       renderGrid();
 
       // Persist — revert on failure
