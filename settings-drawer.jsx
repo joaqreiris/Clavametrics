@@ -90,6 +90,26 @@ function initSettings() {
   return s;
 }
 
+/* ── Notification toast (rendered globally by SettingsHost) ── */
+const NotificationToast = ({ notif, onDismiss }) => {
+  React.useEffect(() => {
+    const t = setTimeout(onDismiss, 4000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="cm-toast" onClick={() => { if (notif.link) window.location.href = notif.link; onDismiss(); }}>
+      <i className="ti ti-bell cm-toast-icon"></i>
+      <div className="cm-toast-body">
+        <div className="cm-toast-title">{notif.title}</div>
+        {notif.body && <div className="cm-toast-sub">{notif.body}</div>}
+      </div>
+      <button className="cm-toast-x" onClick={(e) => { e.stopPropagation(); onDismiss(); }}>
+        <i className="ti ti-x"></i>
+      </button>
+    </div>
+  );
+};
+
 const BillingPanel = () => {
   const [club, setClub] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -134,12 +154,24 @@ const BillingPanel = () => {
   </>;
 };
 
-const SettingsDrawer = ({ open, onClose, profile }) => {
+const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsChange }) => {
   const [s, setS]       = React.useState(initSettings);
   const [tab, setTab]   = React.useState("appearance");
   const [resetConfirm, setResetConfirm] = React.useState(false);
 
-  React.useEffect(() => { _apply(s); saveSettings(s); }, [s]);
+  // Apply locally + persist localStorage + notify host for Supabase save
+  React.useEffect(() => { _apply(s); saveSettings(s); onSettingsChange && onSettingsChange(s); }, [s]);
+  // Merge Supabase settings when received from host (e.g. after cross-device change)
+  React.useEffect(() => {
+    if (!supabaseSettings) return;
+    setS(prev => { const m = { ...prev, ...supabaseSettings }; _apply(m); saveSettings(m); return m; });
+  }, [supabaseSettings]);
+  // ESC to close
+  React.useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose(); };
+    if (open) document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [open]);
   // Lock scroll
   React.useEffect(() => {
     if (!open) return;
@@ -379,7 +411,7 @@ const SettingsDrawer = ({ open, onClose, profile }) => {
         </div>
 
         <footer className="sd-foot">
-          <span><i className="ti ti-device-floppy"></i>Saved automatically to this device</span>
+          <span><i className="ti ti-cloud"></i>Saved to cloud &amp; this device</span>
         </footer>
       </aside>
     </>
@@ -550,31 +582,161 @@ const SD_CSS = `
   .sd-billing-row { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--cm-border-soft); }
   .sd-billing-row:last-child { border-bottom:0; }
   .sd-billing-val { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+
+  /* Notification toasts */
+  .cm-notif-stack { position:fixed; top:20px; right:20px; z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  .cm-toast {
+    pointer-events:auto;
+    display:flex; align-items:flex-start; gap:10px;
+    padding:14px 14px 14px 14px;
+    min-width:280px; max-width:380px;
+    background:var(--cm-bg); border:1px solid var(--cm-border);
+    border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,0.18);
+    cursor:pointer;
+    animation:cm-toast-in 220ms cubic-bezier(.2,.7,.2,1);
+  }
+  .cm-toast:hover { background:var(--cm-bg-soft); }
+  .cm-toast-icon { font-size:16px; color:var(--cm-accent); flex-shrink:0; margin-top:2px; }
+  .cm-toast-body { flex:1; min-width:0; }
+  .cm-toast-title { font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .cm-toast-sub { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:3px; }
+  .cm-toast-x { flex-shrink:0; width:22px; height:22px; border:none; background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:5px; }
+  .cm-toast-x:hover { background:var(--cm-bg-sunk); }
+  .cm-toast-x .ti { font-size:12px; }
+  @keyframes cm-toast-in { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
 `;
 
-window.SettingsDrawer = SettingsDrawer;
-window.openCMSettings = null;  // set by mountSettingsHost
+window.SettingsDrawer  = SettingsDrawer;
+window.openCMSettings  = null;
 window.initCMSettings  = initSettings;
 
-function SettingsHost() {
-  const [open, setOpen]       = React.useState(false);
-  const [profile, setProfile] = React.useState(null);
+function updateBellBadge(count) {
+  const btn = document.querySelector('[title="Notifications"],[aria-label="Notifications"]');
+  if (!btn) return;
+  let badge = btn.querySelector('.cm-bell-badge');
+  if (count <= 0) { badge && badge.remove(); return; }
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.className = 'cm-bell-badge';
+    Object.assign(badge.style, {
+      position:'absolute', top:'3px', right:'3px',
+      width:'7px', height:'7px', borderRadius:'50%',
+      background:'var(--cm-danger,#DC2626)', pointerEvents:'none',
+    });
+    btn.style.position = 'relative';
+    btn.appendChild(badge);
+  }
+}
 
+function SettingsHost() {
+  const [open, setOpen]             = React.useState(false);
+  const [profile, setProfile]       = React.useState(null);
+  const [userId, setUserId]         = React.useState(null);
+  const [supabaseSettings, setSbS]  = React.useState(null);
+  const [notifPopups, setPopups]    = React.useState([]);
+  const saveTimer  = React.useRef(null);
+  const channelRef = React.useRef(null);
+
+  // On mount: get user, load Supabase settings, subscribe to realtime notifications
+  React.useEffect(() => {
+    if (!window.sb) return;
+    window.sb.auth.getSession().then(({ data }) => {
+      const uid = data?.session?.user?.id;
+      if (!uid) return;
+      setUserId(uid);
+
+      // Load appearance + notification settings from Supabase
+      window.sb.from('profiles')
+        .select('settings, notification_settings')
+        .eq('id', uid)
+        .single()
+        .then(({ data: row }) => {
+          if (!row) return;
+          const sbSettings = {
+            ...(row.settings || {}),
+            notif: row.notification_settings || {},
+          };
+          if (Object.keys(row.settings || {}).length > 0 || Object.keys(row.notification_settings || {}).length > 0) {
+            setSbS(sbSettings);
+          }
+        });
+
+      // Count existing unread notifications
+      window.sb.from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', uid)
+        .eq('read', false)
+        .then(({ count }) => { if (count > 0) updateBellBadge(count); });
+
+      // Subscribe to new notifications via realtime
+      channelRef.current = window.sb
+        .channel('cm-notif-' + uid)
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'notifications',
+          filter: `user_id=eq.${uid}`,
+        }, (payload) => {
+          const n = payload.new;
+          const id = Date.now() + Math.random();
+          setPopups(prev => [...prev, { ...n, _popupId: id }]);
+          // Increment bell badge
+          const btn = document.querySelector('[title="Notifications"],[aria-label="Notifications"]');
+          const cur = btn ? parseInt(btn.dataset.unread || '0', 10) : 0;
+          if (btn) btn.dataset.unread = cur + 1;
+          updateBellBadge(cur + 1);
+        })
+        .subscribe();
+    });
+    return () => {
+      channelRef.current && window.sb.removeChannel(channelRef.current);
+    };
+  }, []);
+
+  // Expose open function globally
   React.useEffect(() => {
     window.openCMSettings = () => setOpen(true);
     return () => { window.openCMSettings = null; };
   }, []);
 
+  // Load profile on first open
   React.useEffect(() => {
     if (!open || profile) return;
     window.getProfile && window.getProfile().then(p => setProfile(p));
   }, [open]);
 
-  return <SettingsDrawer open={open} onClose={() => setOpen(false)} profile={profile} />;
+  // Debounced Supabase save whenever settings change in the drawer
+  function handleSettingsChange(s) {
+    if (!userId || !window.sb) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const { notif, ...appearance } = s;
+      window.sb.from('profiles').update({
+        settings: appearance,
+        notification_settings: notif || {},
+      }).eq('id', userId);
+    }, 800);
+  }
+
+  function dismissPopup(popupId) {
+    setPopups(prev => prev.filter(p => p._popupId !== popupId));
+  }
+
+  return <>
+    <SettingsDrawer
+      open={open}
+      onClose={() => setOpen(false)}
+      profile={profile}
+      supabaseSettings={supabaseSettings}
+      onSettingsChange={handleSettingsChange}
+    />
+    <div className="cm-notif-stack">
+      {notifPopups.map(n => (
+        <NotificationToast key={n._popupId} notif={n} onDismiss={() => dismissPopup(n._popupId)} />
+      ))}
+    </div>
+  </>;
 }
 
 (function mount() {
-  // Apply persisted settings (or page defaults) on load \u2014 before paint.
   initSettings();
   const target = document.getElementById("settings-host") || (() => {
     const d = document.createElement("div");
@@ -583,7 +745,6 @@ function SettingsHost() {
     return d;
   })();
   ReactDOM.createRoot(target).render(<SettingsHost />);
-  // Auto-wire any element with [data-open-settings]
   document.addEventListener("click", (e) => {
     const t = e.target.closest("[data-open-settings]");
     if (t) { e.preventDefault(); window.openCMSettings && window.openCMSettings(); }
