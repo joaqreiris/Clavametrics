@@ -539,8 +539,8 @@ async function loadDay(dateStr) {
     let cls = '', reason = '';
     if (inj) { cls = 'partial'; reason = inj.body_area || inj.injury_type || 'inj'; }
     if (av?.status === 'away') { cls = 'away'; reason = av.notes || 'away'; }
-    else if (av?.status === 'un' || av?.status === 'unavailable') { cls = 'unavailable'; reason = av.notes || 'out'; }
-    else if (av?.status === 'pa' || av?.status === 'partial' || av?.status === 'limited') { if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; } }
+    else if (av?.status === 'unavailable') { cls = 'unavailable'; reason = av.notes || 'out'; }
+    else if (av?.status === 'partial' || av?.status === 'limited') { if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; } }
     return `<span class="dp-player${cls ? ' '+cls : ''}" data-status="${cls||'available'}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}</span>`;
   }
 
@@ -561,8 +561,8 @@ async function loadDay(dateStr) {
   _dpPlayers.forEach(p => {
     const av = avMap[p.id], inj = _dpInjMap[p.id];
     if (av?.status === 'away') awayCt++;
-    else if (av?.status === 'un' || av?.status === 'unavailable') unCt++;
-    else if (inj || av?.status === 'pa' || av?.status === 'partial' || av?.status === 'limited') partCt++;
+    else if (av?.status === 'unavailable') unCt++;
+    else if (inj || av?.status === 'partial' || av?.status === 'limited') partCt++;
     else avCt++;
   });
   const total = _dpPlayers.length;
@@ -901,8 +901,8 @@ function dpPrintRoster() {
     const inj = _dpInjMap[p.id];
     let status = 'Available';
     if (av?.status === 'away') status = 'Away';
-    else if (av?.status === 'un' || av?.status === 'unavailable') status = 'Out';
-    else if (inj || av?.status === 'pa' || av?.status === 'partial' || av?.status === 'limited') status = 'Partial';
+    else if (av?.status === 'unavailable') status = 'Out';
+    else if (inj || av?.status === 'partial' || av?.status === 'limited') status = 'Partial';
     const pos = POS_DISP[(p.position||'').toUpperCase()] || (p.position||'—').toUpperCase();
     return `<tr><td>${p.number ?? '—'}</td><td>${p.first_name || ''} ${p.last_name || ''}</td><td>${pos}</td><td>${status}</td></tr>`;
   }).join('');

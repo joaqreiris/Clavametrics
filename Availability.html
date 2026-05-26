@@ -491,7 +491,11 @@
   const POS_ICONS  = { gk:'shield', cb:'wall', fb:'arrow-bar-both', mf:'circles-relation', wg:'flame', st:'target' };
 
   // ── Helpers ──
-  function dotEl(s) { return `<span class="av-cell-dot ${s}"></span>`; }
+  // Maps full DB status values → abbreviated CSS class keys (visual only)
+  const STATUS_CSS = { available:'av', partial:'pa', limited:'pa', unavailable:'in', away:'na' };
+  function statusKey(s) { return STATUS_CSS[s] || s; }
+
+  function dotEl(s) { return `<span class="av-cell-dot ${statusKey(s)}"></span>`; }
 
   function cellHTML(status, dayIdx, pid, date) {
     const isFuture = todayIdx >= 0 && dayIdx > todayIdx;
@@ -512,7 +516,7 @@
     statuses.forEach(s => {
       if (!s) return;
       if (s.startsWith('match:')) { mins += parseInt(s.split(':')[1], 10); counts.av++; }
-      else counts[s] = (counts[s] || 0) + 1;
+      else { const k = statusKey(s); counts[k] = (counts[k] || 0) + 1; }
     });
     const segs = ['av','pa','in','si','na','ab'].filter(k => counts[k] > 0)
       .map(k => `<span class="s ${k}" style="flex:${counts[k]}"></span>`).join('');
@@ -554,8 +558,8 @@
         const posKey   = POS_NORM[p.position] || 'mf';
         const statuses = MC_DATES.map(date => {
           const e = avMap[p.id + '|' + date];
-          if (!e) return injuredIds.has(p.id) ? 'in' : 'av';
-          return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'av');
+          if (!e) return injuredIds.has(p.id) ? 'unavailable' : 'available';
+          return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
         });
         const cells = statuses.map((s, i) => cellHTML(s, i, p.id, MC_DATES[i])).join('');
         html += `<tr>
@@ -574,11 +578,10 @@
     let avCount = 0, inCount = 0, siCount = 0, naCount = 0;
     players.forEach(p => {
       const e = avMap[p.id + '|' + todayStr];
-      const s = e?.status || (injuredIds.has(p.id) ? 'in' : 'av');
-      if (s === 'av' || s === 'pa') avCount++;
-      else if (s === 'in') inCount++;
-      else if (s === 'si') siCount++;
-      else if (s === 'na') naCount++;
+      const s = e?.status || (injuredIds.has(p.id) ? 'unavailable' : 'available');
+      if (s === 'available' || s === 'partial' || s === 'limited') avCount++;
+      else if (s === 'unavailable') inCount++;
+      else if (s === 'away') naCount++;
     });
     const el = id => document.getElementById(id);
     el('kpiAvail')        && (el('kpiAvail').innerHTML = `${avCount} <sub>/ ${players.length}</sub>`);
@@ -685,17 +688,18 @@
     }
   });
 
-  // Bulk bar status buttons
-  ['av','pa','in','si','na'].forEach(status => {
-    const btn = document.querySelector(`.av-bulk-btn.${status}`);
+  // Bulk bar status buttons — CSS keys stay abbreviated; DB values are full names
+  const BULK_STATUS = { av:'available', pa:'partial', in:'unavailable', si:'unavailable', na:'unavailable' };
+  Object.entries(BULK_STATUS).forEach(([cssKey, fullStatus]) => {
+    const btn = document.querySelector(`.av-bulk-btn.${cssKey}`);
     if (!btn) return;
     btn.addEventListener('click', () => {
       matrix.querySelectorAll('td.cell.is-selected').forEach(td => {
         const { pid, date } = td.dataset;
         if (pid && date) {
-          td.innerHTML = dotEl(status);
+          td.innerHTML = dotEl(fullStatus);
           td.className = 'cell';
-          saveAvailability(pid, date, status);
+          saveAvailability(pid, date, fullStatus);
         }
       });
       matrix.querySelectorAll('td.cell.is-selected').forEach(c => c.classList.remove('is-selected'));

@@ -1028,10 +1028,10 @@
     .select('player_id,status').eq('club_id', clubId).eq('date', today);
   const availMap = Object.fromEntries((availRes.data||[]).map(a => [a.player_id, a.status]));
   const hasAvail = (availRes.data||[]).length > 0;
-  const statusClass = { av:'is-success', pa:'is-warning', in:'is-danger', si:'is-danger' };
+  const statusClass = { available:'is-success', partial:'is-warning', limited:'is-warning', unavailable:'is-danger', away:'is-warning' };
 
   const pillData = hasAvail
-    ? players.filter(p => { const s = availMap[p.id]; return !s || s === 'av' || s === 'pa'; })
+    ? players.filter(p => { const s = availMap[p.id]; return !s || s === 'available' || s === 'partial' || s === 'limited'; })
         .map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
     : players.map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
 
