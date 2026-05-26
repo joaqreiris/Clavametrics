@@ -279,6 +279,12 @@
   .mc-evt.recovery .ti { color:var(--cm-success); }
   .mc-evt.travel    { background:var(--cm-warning-bg);border-color:var(--cm-warning-bd); color:#7C2D12; }
   .mc-evt.travel .ti { color:var(--cm-warning); }
+  .mc-evt.meeting   { background:#EFF6FF; border-color:#BFDBFE; color:#1E3A8A; }
+  .mc-evt.meeting .ti { color:#3B82F6; }
+  .mc-evt.evaluation{ background:#F0FDF4; border-color:#BBF7D0; color:#14532D; }
+  .mc-evt.evaluation .ti { color:#22C55E; }
+  .mc-evt.video     { background:#F8FAFC; border-color:#CBD5E1; color:#334155; }
+  .mc-evt.video .ti { color:#64748B; }
   .mc-evt.day-off { font-style:italic; color:var(--cm-fg-faint); border:1px dashed var(--cm-border); background:transparent; }
 
   /* === Right rail cards === */
@@ -732,12 +738,14 @@
         <div class="sq-modal-field">
           <label for="calEvtF_type">Type</label>
           <select id="calEvtF_type">
-            <option value="tactical">Tactical</option>
-            <option value="conditioning">Conditioning</option>
-            <option value="gym">Gym</option>
-            <option value="match">Match</option>
-            <option value="recovery">Recovery</option>
-            <option value="travel">Travel</option>
+            <option value="tactical">⚽ Training (field)</option>
+            <option value="gym">🏋 Gym</option>
+            <option value="match">🔴 Match</option>
+            <option value="recovery">💚 Recovery</option>
+            <option value="travel">✈️ Travel</option>
+            <option value="meeting">👥 Meeting</option>
+            <option value="evaluation">📋 Evaluation</option>
+            <option value="video">🖥 Video session</option>
             <option value="other">Other</option>
           </select>
         </div>
@@ -759,6 +767,7 @@
     </div>
     <div class="sq-modal-foot">
       <button class="cm-btn is-danger is-sm" id="calEvtDelete" style="display:none"><i class="ti ti-trash" style="font-size:13px"></i>Delete</button>
+      <a id="calEvtPlanLink" href="#" style="display:none;align-items:center;gap:5px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-accent);text-decoration:none"><i class="ti ti-external-link" style="font-size:13px"></i><span id="calEvtPlanLinkLabel">Open in planning</span></a>
       <div class="grow"></div>
       <span id="calEvtSaving" style="display:none;font:var(--cm-meta);color:var(--cm-fg-muted)">Saving…</span>
       <button class="cm-btn is-ghost is-sm" id="calEvtCancel">Cancel</button>
@@ -900,15 +909,22 @@ let _ribbonMeta = null; // { ribbonStart, totalMs } — set by renderSeasonRibbo
 let _matchSessions = []; // training_sessions with session_type='match' from DB
 const TODAY = new Date().toISOString().split('T')[0];
 
-const EVT_ICONS = { training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football', recovery:'ti-heart-rate-monitor', travel:'ti-plane' };
+const EVT_ICONS = {
+  training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football',
+  recovery:'ti-heart-rate-monitor', travel:'ti-plane',
+  meeting:'ti-users', evaluation:'ti-clipboard-list', video:'ti-device-desktop'
+};
 function focusToClass(focus) {
   if (!focus) return 'training';
   const f = focus.toLowerCase();
-  if (f === 'match')    return 'match';
-  if (f === 'gym')      return 'gym';
-  if (f === 'recovery') return 'recovery';
-  if (f === 'travel')   return 'travel';
-  return 'training';
+  if (f === 'match')             return 'match';
+  if (f === 'gym')               return 'gym';
+  if (f === 'recovery')          return 'recovery';
+  if (f === 'travel')            return 'travel';
+  if (f === 'meeting')           return 'meeting';
+  if (f === 'evaluation')        return 'evaluation';
+  if (f === 'video' || f === 'video-session' || f === 'video_session') return 'video';
+  return 'training'; // tactical, conditioning, other, training
 }
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -1065,6 +1081,29 @@ function openEvtModal(session, defaultDate) {
   document.getElementById('calEvtF_notes').value = session?.notes || '';
   document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
   document.getElementById('calEvtSaving').style.display = 'none';
+
+  // Planning link
+  const planLink  = document.getElementById('calEvtPlanLink');
+  const planLabel = document.getElementById('calEvtPlanLinkLabel');
+  if (session && planLink) {
+    const date = session.session_date;
+    const cls  = focusToClass(session.session_type);
+    if (cls === 'gym') {
+      planLink.href = `Gym Planner.html?date=${date}`;
+      planLabel.textContent = 'Open in Gym Planner';
+    } else if (!['match','travel','meeting','evaluation','video'].includes(cls)) {
+      planLink.href = `Daily Planning.html?date=${date}`;
+      planLabel.textContent = 'Open in Daily Planning';
+    } else {
+      planLink.style.display = 'none';
+    }
+    if (['gym','training'].includes(cls) || !['match','travel','meeting','evaluation','video'].includes(cls)) {
+      planLink.style.display = 'inline-flex';
+    }
+  } else if (planLink) {
+    planLink.style.display = 'none';
+  }
+
   document.getElementById('calEvtBackdrop').classList.add('is-open');
   document.getElementById('calEvtF_title').focus();
 }
@@ -1114,6 +1153,11 @@ document.getElementById('calEvtSave').addEventListener('click', saveEvt);
 document.getElementById('calEvtDelete').addEventListener('click', deleteEvt);
 document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeEvtModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });
+
+// Reload sessions when user returns to this tab (sync changes from Daily/Gym Planning)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && typeof loadSessions === 'function') loadSessions();
+});
 
 // ── New Microcycle modal ──────────────────────────────────────
 function openMcModal(existingMc) {

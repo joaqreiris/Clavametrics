@@ -590,7 +590,11 @@ const CAT_LABEL = { physical:'Physical', tactical:'Tactical', technical:'Technic
 async function loadSessionExercises(sessionId) {
   const grid = document.getElementById('dpExGrid');
   if (!sessionId) {
-    grid.innerHTML = '<div style="padding:32px 20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)"><i class="ti ti-calendar-off" style="font-size:24px;display:block;margin-bottom:8px;color:var(--cm-fg-faint)"></i>No training session for this date.<br>Create one in <a href="Sessions History.html" style="color:var(--cm-accent);text-decoration:none">Sessions</a> first.</div>';
+    grid.innerHTML = `<div style="padding:32px 20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">
+      <i class="ti ti-calendar-off" style="font-size:24px;display:block;margin-bottom:8px;color:var(--cm-fg-faint)"></i>
+      No session for this date.
+      <div style="margin-top:12px"><button class="cm-btn is-primary is-sm" onclick="dpAutoSaveSession()"><i class="ti ti-plus" style="font-size:13px"></i>Create session</button></div>
+    </div>`;
     updateTotalsBar([], 0);
     return;
   }
@@ -797,6 +801,30 @@ async function saveManualExercise() {
   if (!error) { closeManualExModal(); await loadSessionExercises(_dpCurrentSessionId); }
 }
 
+// ── Session info autosave ──
+async function dpAutoSaveSession() {
+  const date  = _dpCurrentDate;
+  const title = document.getElementById('dpDateInput')?.value ? _dpFmt(date) : date;
+  const payload = {
+    title:        title,
+    session_date: date,
+    session_type: document.getElementById('dpSessionType')?.value || 'tactical',
+    session_time: document.getElementById('dpStartTime')?.value  || null,
+    notes:        document.getElementById('dpNotes')?.value?.trim() || null,
+    club_id:      _dpClubId
+  };
+  if (_dpCurrentSessionId) {
+    await window.sb.from('training_sessions').update(payload).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
+  } else {
+    const { data } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+    if (data?.id) {
+      _dpCurrentSessionId = data.id;
+      await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
+      _dpUpdatePublishBtn();
+    }
+  }
+}
+
 // ── Activation activities ──
 async function loadActivationActivities(sessionId) {
   const strip = document.getElementById('dpActStrip');
@@ -906,7 +934,9 @@ async function dpExportPDF() {
   const nameEl = document.getElementById('dpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
 
-  const today = new Date().toISOString().split('T')[0];
+  const urlDate = new URLSearchParams(window.location.search).get('date');
+  const today   = new Date().toISOString().split('T')[0];
+  const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
 
   const [playersRes, injuriesRes, mcRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
@@ -918,11 +948,18 @@ async function dpExportPDF() {
   _dpMicrocycles = mcRes.data || [];
   (injuriesRes.data || []).forEach(i => { _dpInjMap[i.player_id] = i; });
 
-  await loadDay(today);
+  await loadDay(initDate);
 
   document.getElementById('dpNavPrev').addEventListener('click', () => loadDay(_dpAddDays(_dpCurrentDate, -1)));
   document.getElementById('dpNavNext').addEventListener('click', () => loadDay(_dpAddDays(_dpCurrentDate, 1)));
   document.getElementById('dpDateInput').addEventListener('change', e => { if (e.target.value) loadDay(e.target.value); });
+
+  // Autosave session info on field changes (create session if needed)
+  ['dpStartTime','dpSessionType','dpFocus','dpNotes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', dpAutoSaveSession);
+  });
 })().catch(console.error);
 </script>
 
