@@ -335,6 +335,197 @@
     .sq-head { flex-direction: column; align-items: flex-start; }
     .sq-head .meta { margin-left: 0; }
   }
+
+  /* ── Lineup tab ─────────────────────────────────────────── */
+  .sq-lineup-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .sq-lineup-layout { display:flex; gap:18px; align-items:flex-start; }
+  .sq-lineup-field-col { flex:0 0 auto; width:min(100%, 380px); }
+  .sq-lineup-history-col {
+    flex:1; min-width:180px; max-width:380px;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden;
+  }
+  .sq-lineup-history-head {
+    padding:10px 14px; font:500 11px/1 var(--cm-font-sans);
+    letter-spacing:.08em; text-transform:uppercase;
+    color:var(--cm-fg-muted); border-bottom:1px solid var(--cm-border);
+    background:var(--cm-bg-soft);
+  }
+  .sq-lineup-history-list { overflow-y:auto; max-height:640px; }
+  .sq-lineup-history-item {
+    display:flex; flex-direction:column; gap:2px;
+    padding:10px 14px; border-bottom:1px solid var(--cm-border-soft);
+    cursor:pointer; transition:background var(--cm-dur-1);
+  }
+  .sq-lineup-history-item:hover { background:var(--cm-bg-soft); }
+  .sq-lineup-history-item:last-child { border-bottom:0; }
+  .sq-lineup-hi-title { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sq-lineup-hi-meta  { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+  /* Field */
+  .sq-field-wrap { display:flex; flex-direction:column; gap:12px; }
+  .sq-field {
+    position:relative;
+    background-color:#2d7a2d;
+    background-image:repeating-linear-gradient(
+      to bottom,
+      transparent 0px, transparent 48px,
+      rgba(0,0,0,0.07) 48px, rgba(0,0,0,0.07) 96px
+    );
+    border:3px solid rgba(255,255,255,0.85);
+    border-radius:8px;
+    aspect-ratio:65/100;
+    overflow:visible;
+    min-height:520px;
+  }
+  .sq-field-center-line {
+    position:absolute; left:5%; right:5%; top:50%;
+    height:2px; background:rgba(255,255,255,0.55);
+    transform:translateY(-1px); pointer-events:none;
+  }
+  .sq-field-center-circle {
+    position:absolute; left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    width:26%; aspect-ratio:1;
+    border:2px solid rgba(255,255,255,0.55);
+    border-radius:50%; pointer-events:none;
+  }
+  .sq-field-center-dot {
+    position:absolute; left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    width:7px; height:7px; border-radius:50%;
+    background:rgba(255,255,255,0.65); pointer-events:none;
+  }
+  .sq-field-penalty {
+    position:absolute; left:20.5%; right:20.5%;
+    height:16%; border:2px solid rgba(255,255,255,0.55);
+    pointer-events:none;
+  }
+  .sq-field-penalty-top { top:0; border-top:0; border-radius:0 0 4px 4px; }
+  .sq-field-penalty-bot { bottom:0; border-bottom:0; border-radius:4px 4px 0 0; }
+  .sq-field-goal {
+    position:absolute; left:37%; right:37%;
+    height:5.5%; border:2px solid rgba(255,255,255,0.4);
+    pointer-events:none;
+  }
+  .sq-field-goal-top { top:0; border-top:0; }
+  .sq-field-goal-bot { bottom:0; border-bottom:0; }
+
+  /* Position dots */
+  .sq-pos-dot {
+    position:absolute;
+    width:44px; height:44px;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    border:2px solid rgba(255,255,255,0.75);
+    background:rgba(0,0,0,0.38);
+    cursor:pointer;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    transition:transform 120ms ease, border-color 120ms ease;
+    z-index:10;
+  }
+  .sq-pos-dot:hover { transform:translate(-50%,-50%) scale(1.12); border-color:rgba(255,255,255,1); }
+  .sq-pos-dot.is-filled { background:var(--cm-accent); border-color:rgba(255,255,255,0.9); }
+  .sq-pos-dot-label {
+    font:700 9px/1 var(--cm-font-mono); color:rgba(255,255,255,0.85);
+    letter-spacing:.04em; text-transform:uppercase; pointer-events:none;
+  }
+  .sq-pos-dot.is-filled .sq-pos-dot-label { display:none; }
+  .sq-pos-dot-num {
+    font:700 14px/1 var(--cm-font-mono); color:#fff;
+    display:none; pointer-events:none;
+  }
+  .sq-pos-dot.is-filled .sq-pos-dot-num { display:block; }
+  .sq-pos-dot-name {
+    position:absolute; top:calc(100% + 4px);
+    width:72px; text-align:center;
+    font:700 9.5px/1.25 var(--cm-font-sans); color:#fff;
+    text-shadow:0 1px 3px rgba(0,0,0,0.85);
+    display:none; pointer-events:none;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .sq-pos-dot.is-filled .sq-pos-dot-name { display:block; }
+
+  /* Subs */
+  .sq-subs-label {
+    font:500 11px/1 var(--cm-font-sans); letter-spacing:.08em;
+    text-transform:uppercase; color:var(--cm-fg-muted);
+  }
+  .sq-subs-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .sq-sub-slot { display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; }
+  .sq-sub-dot {
+    width:40px; height:40px; border-radius:50%;
+    border:2px dashed var(--cm-border-strong);
+    background:var(--cm-bg-soft);
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color 120ms ease;
+  }
+  .sq-sub-slot:hover .sq-sub-dot { border-color:var(--cm-accent); border-style:solid; }
+  .sq-sub-dot.is-filled { background:var(--cm-accent-soft); border:2px solid var(--cm-accent); }
+  .sq-sub-dot-inner {
+    font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+    pointer-events:none;
+  }
+  .sq-sub-dot.is-filled .sq-sub-dot-inner { color:var(--cm-accent); }
+  .sq-sub-name {
+    font:500 10px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted);
+    text-align:center; max-width:44px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  /* Player picker popup */
+  .sq-picker {
+    position:fixed; z-index:600;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-3);
+    width:228px; overflow:hidden;
+  }
+  .sq-picker input {
+    width:100%; padding:8px 10px;
+    border:0; border-bottom:1px solid var(--cm-border);
+    background:var(--cm-bg-soft); color:var(--cm-fg);
+    font:var(--cm-body-sm); outline:none;
+  }
+  .sq-picker-list { max-height:260px; overflow-y:auto; }
+  .sq-picker-item {
+    display:flex; align-items:center; gap:8px;
+    padding:8px 10px; cursor:pointer; transition:background var(--cm-dur-1);
+    font:var(--cm-body-sm);
+  }
+  .sq-picker-item:hover { background:var(--cm-bg-soft); }
+  .sq-picker-item.is-clear { color:var(--cm-danger); }
+  .sq-picker-item-num {
+    width:26px; height:26px; border-radius:6px; flex-shrink:0;
+    background:var(--cm-bg-sunk); border:1px solid var(--cm-border);
+    display:flex; align-items:center; justify-content:center;
+    font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-strong);
+  }
+  .sq-picker-item-name {
+    font:500 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;
+  }
+  .sq-picker-item-pos {
+    font:500 10px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted);
+  }
+  /* Share options */
+  .sq-share-opt {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 12px; border-radius:var(--cm-r-3);
+    border:1px solid var(--cm-border); cursor:pointer; margin-bottom:6px;
+    transition:border-color 120ms ease, background 120ms ease;
+  }
+  .sq-share-opt:hover { border-color:var(--cm-accent); }
+  .sq-share-opt.is-on { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .sq-share-opt .ti { font-size:18px; color:var(--cm-fg-muted); }
+  .sq-share-opt-name { font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .sq-share-opt-sub  { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+  @media (max-width:768px) {
+    .sq-lineup-layout { flex-direction:column; }
+    .sq-lineup-field-col { width:100%; }
+    .sq-lineup-history-col { max-width:100%; }
+  }
 </style>
 </head>
 <body class="cm">
@@ -396,6 +587,7 @@
           <button class="sq-seg is-on"><i class="ti ti-list-details"></i>List <span class="ct" id="sqListCt">27</span></button>
           <button class="sq-seg"><i class="ti ti-layout-grid"></i>Cards</button>
           <button class="sq-seg"><i class="ti ti-binary-tree-2"></i>Depth chart</button>
+          <button class="sq-seg"><i class="ti ti-layout-board"></i>Lineup</button>
         </div>
 
         <div class="grow"></div>
@@ -455,6 +647,61 @@
       <!-- Depth chart view -->
       <div id="sqDepthView" style="display:none">
         <div class="sq-depth" id="sqDepthChart"></div>
+      </div>
+
+      <!-- Lineup view -->
+      <div id="sqLineupView" style="display:none">
+        <!-- Toolbar -->
+        <div class="sq-lineup-bar">
+          <label style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Formation</label>
+          <select id="sqLFormation" class="cm-select is-sm" style="min-width:120px">
+            <option>4-3-3</option>
+            <option>4-4-2</option>
+            <option>4-2-3-1</option>
+            <option>3-5-2</option>
+            <option>5-3-2</option>
+            <option>4-5-1</option>
+            <option>3-4-3</option>
+            <option>4-1-4-1</option>
+            <option>5-4-1</option>
+            <option>4-3-2-1</option>
+          </select>
+          <div class="grow"></div>
+          <button class="cm-btn is-outline is-sm" id="sqLShareBtn"><i class="ti ti-message-share" style="font-size:13px"></i>Share</button>
+          <button class="cm-btn is-outline is-sm" id="sqLExportBtn"><i class="ti ti-download" style="font-size:13px"></i>Export PNG</button>
+          <button class="cm-btn is-outline is-sm" id="sqLPrintBtn"><i class="ti ti-printer" style="font-size:13px"></i>Print</button>
+          <button class="cm-btn is-primary is-sm" id="sqLSaveBtn"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save lineup</button>
+        </div>
+
+        <!-- Two-column layout -->
+        <div class="sq-lineup-layout">
+          <div class="sq-lineup-field-col">
+            <div id="sqLFieldWrap" class="sq-field-wrap">
+              <!-- Pitch -->
+              <div id="sqLField" class="sq-field">
+                <div class="sq-field-center-line"></div>
+                <div class="sq-field-center-circle"></div>
+                <div class="sq-field-center-dot"></div>
+                <div class="sq-field-penalty sq-field-penalty-top"></div>
+                <div class="sq-field-penalty sq-field-penalty-bot"></div>
+                <div class="sq-field-goal sq-field-goal-top"></div>
+                <div class="sq-field-goal sq-field-goal-bot"></div>
+                <div id="sqLPositions"></div>
+              </div>
+              <!-- Subs -->
+              <div class="sq-subs-label">Substitutes</div>
+              <div id="sqLSubs" class="sq-subs-row"></div>
+            </div>
+          </div>
+
+          <!-- History panel -->
+          <div class="sq-lineup-history-col">
+            <div class="sq-lineup-history-head">Saved lineups</div>
+            <div id="sqLHistory" class="sq-lineup-history-list">
+              <div style="padding:20px;color:var(--cm-fg-muted);font:var(--cm-meta);text-align:center">No saved lineups yet.</div>
+            </div>
+          </div>
+        </div>
       </div>
 
     </section>
@@ -606,6 +853,56 @@
 
 <div class="sq-toast" id="sqToast"></div>
 
+<!-- Player picker (floating) -->
+<div id="sqLPicker" class="sq-picker" style="display:none">
+  <input id="sqLPickerSearch" placeholder="Search player…" autocomplete="off">
+  <div id="sqLPickerList" class="sq-picker-list"></div>
+</div>
+
+<!-- Lineup save modal -->
+<div class="sq-modal-backdrop" id="sqLSaveModal">
+  <div class="sq-modal" style="width:400px" role="dialog" aria-modal="true">
+    <div class="sq-modal-head">
+      <h2>Save lineup</h2>
+      <button class="sq-modal-close" id="sqLSaveClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <div class="sq-modal-field">
+        <label for="sqLTitle">Title</label>
+        <input type="text" id="sqLTitle" placeholder="e.g. vs Real Madrid — Home">
+      </div>
+      <div class="sq-modal-field">
+        <label for="sqLMatch">Match (optional)</label>
+        <select id="sqLMatch"><option value="">— No match —</option></select>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <button class="cm-btn is-ghost is-sm" id="sqLSaveCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqLSaveConfirm">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lineup share modal -->
+<div class="sq-modal-backdrop" id="sqLShareModal">
+  <div class="sq-modal" style="width:380px" role="dialog" aria-modal="true">
+    <div class="sq-modal-head">
+      <h2>Share in chat</h2>
+      <button class="sq-modal-close" id="sqLShareClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:0 0 10px">Select a channel or person:</p>
+      <div id="sqLShareList"></div>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <button class="cm-btn is-ghost is-sm" id="sqLShareCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqLShareConfirm">Send</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Position → display config
 const POS_CFG = {
@@ -622,24 +919,25 @@ const POS_CFG = {
   CDM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
   CM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
   MF:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  LM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  RM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
+  LM:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  RM:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
   CAM: { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
   AM:  { group:'Midfielders',        icon:'ti-circles-relation',  css:'mf', pill:'MF', order:2 },
-  WG:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  LW:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  RW:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
-  ST:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
-  CF:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
-  SS:  { group:'Wingers & Forwards', icon:'ti-flame',             css:'st', pill:'ST', order:3 },
+  WG:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  LW:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  RW:  { group:'Wingers',            icon:'ti-flame',             css:'wg', pill:'WG', order:3 },
+  ST:  { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
+  CF:  { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
+  SS:  { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
+  '9': { group:'Forwards',           icon:'ti-target-arrow',      css:'st', pill:'ST', order:4 },
   // Full names (from DB)
-  GOALKEEPER:  { group:'Goalkeepers',        icon:'ti-shield',           css:'gk', pill:'GK', order:0 },
-  DEFENDER:    { group:'Defenders',          icon:'ti-wall',             css:'cb', pill:'CB', order:1 },
-  MIDFIELDER:  { group:'Midfielders',        icon:'ti-circles-relation', css:'mf', pill:'MF', order:2 },
-  FORWARD:     { group:'Wingers & Forwards', icon:'ti-flame',            css:'st', pill:'ST', order:3 },
-  WINGER:      { group:'Wingers & Forwards', icon:'ti-flame',            css:'wg', pill:'WG', order:3 },
+  GOALKEEPER:  { group:'Goalkeepers', icon:'ti-shield',           css:'gk', pill:'GK', order:0 },
+  DEFENDER:    { group:'Defenders',   icon:'ti-wall',             css:'cb', pill:'CB', order:1 },
+  MIDFIELDER:  { group:'Midfielders', icon:'ti-circles-relation', css:'mf', pill:'MF', order:2 },
+  FORWARD:     { group:'Forwards',    icon:'ti-target-arrow',     css:'st', pill:'ST', order:4 },
+  WINGER:      { group:'Wingers',     icon:'ti-flame',            css:'wg', pill:'WG', order:3 },
 };
-const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers & Forwards','Other'];
+const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers','Forwards','Other'];
 
 function calcAge(dob) {
   if (!dob) return '—';
@@ -661,6 +959,7 @@ let _searchQ = '';
 let _editingId = null;
 let _currentClubId = null;
 let _currentClubName = '';
+let _currentClubLogoUrl = '';
 
 function renderTable() {
   const tbody = document.getElementById('sqTbody');
@@ -821,6 +1120,7 @@ async function reloadPlayers() {
   if (club) {
     window.applyClubTheme();
     _currentClubName = club.name || '';
+    _currentClubLogoUrl = club.logo_url || '';
     const crumb = document.getElementById('sqCrumbClub');
     if (crumb) crumb.textContent = club.name;
   }
@@ -881,6 +1181,7 @@ async function reloadPlayers() {
 })();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
@@ -1033,11 +1334,17 @@ async function reloadPlayers() {
 
   function setView(view) {
     _activeView = view;
-    document.querySelector('.sq-table-wrap').style.display  = view === 'list'  ? '' : 'none';
-    document.getElementById('sqCardsView').style.display    = view === 'cards' ? '' : 'none';
-    document.getElementById('sqDepthView').style.display    = view === 'depth' ? '' : 'none';
-    if (view === 'cards') renderCards();
-    if (view === 'depth') renderDepthChart();
+    document.querySelector('.sq-table-wrap').style.display   = view === 'list'   ? '' : 'none';
+    document.getElementById('sqCardsView').style.display     = view === 'cards'  ? '' : 'none';
+    document.getElementById('sqDepthView').style.display     = view === 'depth'  ? '' : 'none';
+    document.getElementById('sqLineupView').style.display    = view === 'lineup' ? '' : 'none';
+    if (view === 'cards')  renderCards();
+    if (view === 'depth')  renderDepthChart();
+    if (view === 'lineup') {
+      renderLineupField();
+      renderLineSubs();
+      if (!_lHistoryLoaded) { _lHistoryLoaded = true; loadLineupHistory(); loadMatchEvents(); }
+    }
   }
 
   function getFiltered() {
@@ -1091,11 +1398,12 @@ async function reloadPlayers() {
     const container = document.getElementById('sqDepthChart');
     if (!container) return;
     const lines = [
-      { label: 'Goalkeepers',        groups: ['Goalkeepers'] },
-      { label: 'Defenders',          groups: ['Defenders'] },
-      { label: 'Midfielders',        groups: ['Midfielders'] },
-      { label: 'Wingers & Forwards', groups: ['Wingers & Forwards'] },
-      { label: 'Other',              groups: ['Other'] },
+      { label: 'Goalkeepers', groups: ['Goalkeepers'] },
+      { label: 'Defenders',   groups: ['Defenders'] },
+      { label: 'Midfielders', groups: ['Midfielders'] },
+      { label: 'Wingers',     groups: ['Wingers'] },
+      { label: 'Forwards',    groups: ['Forwards'] },
+      { label: 'Other',       groups: ['Other'] },
     ];
     const byGroup = {};
     GROUPS_ORDER.forEach(g => byGroup[g] = []);
@@ -1142,7 +1450,7 @@ async function reloadPlayers() {
       s.addEventListener('click', () => {
         group.querySelectorAll('.sq-seg').forEach(o => o.classList.remove('is-on'));
         s.classList.add('is-on');
-        const views = ['list', 'cards', 'depth'];
+        const views = ['list', 'cards', 'depth', 'lineup'];
         setView(views[i] || 'list');
       });
     });
@@ -1274,6 +1582,540 @@ async function reloadPlayers() {
   document.getElementById('sqImportCancel')?.addEventListener('click', closeImportModal);
   document.getElementById('sqImportConfirm')?.addEventListener('click', confirmImport);
   document.getElementById('sqImportBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeImportModal(); });
+
+  // ── Lineup tab ─────────────────────────────────────────────────
+
+  // Formation slot definitions: id, label, x%, y%, compatible positions
+  const LINEUP_FORMATIONS = {
+    '4-3-3': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LB',  x:15, y:72, label:'LB',  compat:['LB','FB','WB','LWB'] },
+      { id:'CB1', x:35, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:65, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RB',  x:85, y:72, label:'RB',  compat:['RB','FB','WB','RWB'] },
+      { id:'CM1', x:28, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:50, y:50, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM3', x:72, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'LW',  x:15, y:22, label:'LW',  compat:['LW','WG','LM','RW','RM'] },
+      { id:'ST',  x:50, y:14, label:'ST',  compat:['ST','CF','SS'] },
+      { id:'RW',  x:85, y:22, label:'RW',  compat:['RW','WG','RM','LW','LM'] },
+    ],
+    '4-4-2': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LB',  x:15, y:72, label:'LB',  compat:['LB','FB','WB','LWB'] },
+      { id:'CB1', x:35, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:65, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RB',  x:85, y:72, label:'RB',  compat:['RB','FB','WB','RWB'] },
+      { id:'LM',  x:12, y:50, label:'LM',  compat:['LM','LW','WG','CM','MF'] },
+      { id:'CM1', x:38, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:62, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'RM',  x:88, y:50, label:'RM',  compat:['RM','RW','WG','CM','MF'] },
+      { id:'ST1', x:35, y:18, label:'ST',  compat:['ST','CF','SS','LW','RW','WG'] },
+      { id:'ST2', x:65, y:18, label:'ST',  compat:['ST','CF','SS','LW','RW','WG'] },
+    ],
+    '4-2-3-1': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LB',  x:15, y:72, label:'LB',  compat:['LB','FB','WB','LWB'] },
+      { id:'CB1', x:35, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:65, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RB',  x:85, y:72, label:'RB',  compat:['RB','FB','WB','RWB'] },
+      { id:'DM1', x:35, y:58, label:'DM',  compat:['DM','CDM','CM','MF'] },
+      { id:'DM2', x:65, y:58, label:'DM',  compat:['DM','CDM','CM','MF'] },
+      { id:'LW',  x:18, y:38, label:'LW',  compat:['LW','WG','LM','RW','RM'] },
+      { id:'CAM', x:50, y:36, label:'CAM', compat:['CAM','AM','CM','MF'] },
+      { id:'RW',  x:82, y:38, label:'RW',  compat:['RW','WG','RM','LW','LM'] },
+      { id:'ST',  x:50, y:16, label:'ST',  compat:['ST','CF','SS'] },
+    ],
+    '3-5-2': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'CB1', x:27, y:74, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:50, y:76, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB3', x:73, y:74, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'LWB', x:9,  y:54, label:'LWB', compat:['LWB','LB','WB','FB','LW','LM'] },
+      { id:'CM1', x:30, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:50, y:50, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM3', x:70, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'RWB', x:91, y:54, label:'RWB', compat:['RWB','RB','WB','FB','RW','RM'] },
+      { id:'ST1', x:35, y:18, label:'ST',  compat:['ST','CF','SS','LW','RW','WG'] },
+      { id:'ST2', x:65, y:18, label:'ST',  compat:['ST','CF','SS','LW','RW','WG'] },
+    ],
+    '5-3-2': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LWB', x:9,  y:72, label:'LWB', compat:['LWB','LB','WB','FB','LW','LM'] },
+      { id:'CB1', x:27, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:50, y:77, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB3', x:73, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RWB', x:91, y:72, label:'RWB', compat:['RWB','RB','WB','FB','RW','RM'] },
+      { id:'CM1', x:28, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:50, y:50, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM3', x:72, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'ST1', x:35, y:18, label:'ST',  compat:['ST','CF','SS','LW','RW','WG'] },
+      { id:'ST2', x:65, y:18, label:'ST',  compat:['ST','CF','SS','LW','RW','WG'] },
+    ],
+    '4-5-1': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LB',  x:15, y:72, label:'LB',  compat:['LB','FB','WB','LWB'] },
+      { id:'CB1', x:35, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:65, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RB',  x:85, y:72, label:'RB',  compat:['RB','FB','WB','RWB'] },
+      { id:'LM',  x:9,  y:50, label:'LM',  compat:['LM','LW','WG','CM','MF'] },
+      { id:'CM1', x:28, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:50, y:50, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM3', x:72, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'RM',  x:91, y:50, label:'RM',  compat:['RM','RW','WG','CM','MF'] },
+      { id:'ST',  x:50, y:16, label:'ST',  compat:['ST','CF','SS'] },
+    ],
+    '3-4-3': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'CB1', x:27, y:74, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:50, y:76, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB3', x:73, y:74, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'LM',  x:12, y:52, label:'LM',  compat:['LM','LW','WG','CM','MF'] },
+      { id:'CM1', x:36, y:54, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:64, y:54, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'RM',  x:88, y:52, label:'RM',  compat:['RM','RW','WG','CM','MF'] },
+      { id:'LW',  x:15, y:20, label:'LW',  compat:['LW','WG','LM','RW','RM'] },
+      { id:'ST',  x:50, y:14, label:'ST',  compat:['ST','CF','SS'] },
+      { id:'RW',  x:85, y:20, label:'RW',  compat:['RW','WG','RM','LW','LM'] },
+    ],
+    '4-1-4-1': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LB',  x:15, y:72, label:'LB',  compat:['LB','FB','WB','LWB'] },
+      { id:'CB1', x:35, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:65, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RB',  x:85, y:72, label:'RB',  compat:['RB','FB','WB','RWB'] },
+      { id:'DM',  x:50, y:58, label:'DM',  compat:['DM','CDM','CM','MF'] },
+      { id:'LM',  x:11, y:44, label:'LM',  compat:['LM','LW','WG','CM','MF'] },
+      { id:'CM1', x:33, y:43, label:'CM',  compat:['CM','MF','AM','CAM'] },
+      { id:'CM2', x:67, y:43, label:'CM',  compat:['CM','MF','AM','CAM'] },
+      { id:'RM',  x:89, y:44, label:'RM',  compat:['RM','RW','WG','CM','MF'] },
+      { id:'ST',  x:50, y:16, label:'ST',  compat:['ST','CF','SS'] },
+    ],
+    '5-4-1': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LWB', x:9,  y:72, label:'LWB', compat:['LWB','LB','WB','FB','LW','LM'] },
+      { id:'CB1', x:27, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:50, y:77, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB3', x:73, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RWB', x:91, y:72, label:'RWB', compat:['RWB','RB','WB','FB','RW','RM'] },
+      { id:'LM',  x:15, y:50, label:'LM',  compat:['LM','LW','WG','CM','MF'] },
+      { id:'CM1', x:36, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:64, y:52, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'RM',  x:85, y:50, label:'RM',  compat:['RM','RW','WG','CM','MF'] },
+      { id:'ST',  x:50, y:16, label:'ST',  compat:['ST','CF','SS'] },
+    ],
+    '4-3-2-1': [
+      { id:'GK',  x:50, y:88, label:'GK',  compat:['GK'] },
+      { id:'LB',  x:15, y:72, label:'LB',  compat:['LB','FB','WB','LWB'] },
+      { id:'CB1', x:35, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'CB2', x:65, y:75, label:'CB',  compat:['CB','LB','RB','FB'] },
+      { id:'RB',  x:85, y:72, label:'RB',  compat:['RB','FB','WB','RWB'] },
+      { id:'CM1', x:28, y:55, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM2', x:50, y:53, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'CM3', x:72, y:55, label:'CM',  compat:['CM','MF','DM','CDM','AM','CAM'] },
+      { id:'SS1', x:33, y:36, label:'SS',  compat:['SS','CF','ST','WG','LW','RW'] },
+      { id:'SS2', x:67, y:36, label:'SS',  compat:['SS','CF','ST','WG','LW','RW'] },
+      { id:'ST',  x:50, y:18, label:'ST',  compat:['ST','CF','SS'] },
+    ],
+  };
+
+  // Lineup state
+  let _lFormation = '4-3-3';
+  let _lAssigned  = {};           // slotId → player
+  let _lSubs      = new Array(7).fill(null); // 7 sub slots
+  let _lPickerTarget  = null;
+  let _lShareRecipient = null;
+  let _lMatches   = [];
+  let _lSavedLineups = [];
+  let _lHistoryLoaded = false;
+  let _clubMembers = [];
+
+  function _lGetAssignedIds() {
+    const ids = new Set();
+    Object.values(_lAssigned).forEach(p => p && ids.add(p.id));
+    _lSubs.forEach(p => p && ids.add(p.id));
+    return ids;
+  }
+
+  function renderLineupField() {
+    const container = document.getElementById('sqLPositions');
+    if (!container) return;
+    const slots = LINEUP_FORMATIONS[_lFormation] || [];
+    container.innerHTML = slots.map(slot => {
+      const player = _lAssigned[slot.id];
+      const name   = player ? (player.last_name || player.first_name || '').toUpperCase() : '';
+      return `<div class="sq-pos-dot${player ? ' is-filled' : ''}" data-slot="${slot.id}"
+                   style="left:${slot.x}%;top:${slot.y}%">
+        <span class="sq-pos-dot-label">${slot.label}</span>
+        <span class="sq-pos-dot-num">${player ? (player.number || '?') : ''}</span>
+        <span class="sq-pos-dot-name">${name}</span>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.sq-pos-dot').forEach(dot => {
+      dot.addEventListener('click', e => {
+        e.stopPropagation();
+        openLPicker({ type:'pos', id:dot.dataset.slot }, dot);
+      });
+    });
+  }
+
+  function renderLineSubs() {
+    const container = document.getElementById('sqLSubs');
+    if (!container) return;
+    container.innerHTML = _lSubs.map((player, i) => {
+      const filled = !!player;
+      const num    = filled ? (player.number || '?') : (i + 1);
+      const name   = filled ? (player.last_name || player.first_name || '').toUpperCase() : 'SUB';
+      return `<div class="sq-sub-slot" data-sub="${i}">
+        <div class="sq-sub-dot${filled ? ' is-filled' : ''}">
+          <span class="sq-sub-dot-inner">${num}</span>
+        </div>
+        <div class="sq-sub-name">${name}</div>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.sq-sub-slot').forEach(slot => {
+      slot.addEventListener('click', e => {
+        e.stopPropagation();
+        openLPicker({ type:'sub', id:parseInt(slot.dataset.sub) }, slot.querySelector('.sq-sub-dot'));
+      });
+    });
+  }
+
+  function openLPicker(target, anchorEl) {
+    _lPickerTarget = target;
+    const excluded = _lGetAssignedIds();
+    // Un-exclude the current occupant so they can be re-selected
+    const current = target.type === 'pos' ? _lAssigned[target.id] : _lSubs[target.id];
+    if (current) excluded.delete(current.id);
+
+    const compat = target.type === 'pos'
+      ? (LINEUP_FORMATIONS[_lFormation]?.find(s => s.id === target.id)?.compat || [])
+      : null;
+
+    renderLPickerList('', compat, excluded, target);
+
+    const picker = document.getElementById('sqLPicker');
+    picker.style.display = '';
+    const rect = anchorEl.getBoundingClientRect();
+    const left = Math.min(rect.right + 8, window.innerWidth - 240);
+    const top  = Math.max(8, Math.min(rect.top - 10, window.innerHeight - 320));
+    picker.style.left = left + 'px';
+    picker.style.top  = top  + 'px';
+    document.getElementById('sqLPickerSearch').value = '';
+    document.getElementById('sqLPickerSearch').focus();
+  }
+
+  function renderLPickerList(q, compat, excluded, target) {
+    let players = _allPlayers.filter(p => !excluded.has(p.id));
+    if (compat) {
+      players.sort((a, b) => {
+        const ac = compat.includes((a.position || '').toUpperCase()) ? 0 : 1;
+        const bc = compat.includes((b.position || '').toUpperCase()) ? 0 : 1;
+        return ac - bc || (a.number || 99) - (b.number || 99);
+      });
+    } else {
+      players.sort((a, b) => (a.number || 99) - (b.number || 99));
+    }
+    if (q) {
+      const ql = q.toLowerCase();
+      players = players.filter(p => {
+        const nm = ((p.first_name || '') + ' ' + (p.last_name || '')).toLowerCase();
+        return nm.includes(ql) || String(p.number || '').includes(ql);
+      });
+    }
+    const hasCurrent = target.type === 'pos' ? !!_lAssigned[target.id] : !!_lSubs[target.id];
+    const list = document.getElementById('sqLPickerList');
+    list.innerHTML =
+      (hasCurrent ? `<div class="sq-picker-item is-clear" data-action="clear"><i class="ti ti-x" style="font-size:12px;margin-right:4px"></i>Clear position</div>` : '') +
+      (players.map(p => {
+        const nm = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+        const pos = (p.position || '').toUpperCase();
+        const dim = compat && !compat.includes(pos) ? 'opacity:0.5;' : '';
+        return `<div class="sq-picker-item" data-player-id="${p.id}" style="${dim}">
+          <div class="sq-picker-item-num">${p.number || '—'}</div>
+          <div style="min-width:0">
+            <div class="sq-picker-item-name">${nm || '—'}</div>
+            <div class="sq-picker-item-pos">${p.position || '—'}</div>
+          </div>
+        </div>`;
+      }).join('') || '<div style="padding:12px;color:var(--cm-fg-muted);font:var(--cm-meta);text-align:center">No players found</div>');
+
+    list.querySelectorAll('.sq-picker-item').forEach(item => {
+      item.addEventListener('click', () => {
+        if (item.dataset.action === 'clear') {
+          if (_lPickerTarget.type === 'pos') delete _lAssigned[_lPickerTarget.id];
+          else _lSubs[_lPickerTarget.id] = null;
+        } else {
+          const player = _allPlayers.find(p => p.id === item.dataset.playerId);
+          if (!player) return;
+          if (_lPickerTarget.type === 'pos') _lAssigned[_lPickerTarget.id] = player;
+          else _lSubs[_lPickerTarget.id] = player;
+        }
+        closeLPicker();
+        renderLineupField();
+        renderLineSubs();
+      });
+    });
+  }
+
+  function closeLPicker() {
+    const p = document.getElementById('sqLPicker');
+    if (p) p.style.display = 'none';
+    _lPickerTarget = null;
+  }
+
+  // Close picker on outside click
+  document.addEventListener('click', () => closeLPicker());
+  document.getElementById('sqLPicker')?.addEventListener('click', e => e.stopPropagation());
+  document.getElementById('sqLPickerSearch')?.addEventListener('input', e => {
+    if (!_lPickerTarget) return;
+    const excluded = _lGetAssignedIds();
+    const current = _lPickerTarget.type === 'pos' ? _lAssigned[_lPickerTarget.id] : _lSubs[_lPickerTarget.id];
+    if (current) excluded.delete(current.id);
+    const compat = _lPickerTarget.type === 'pos'
+      ? (LINEUP_FORMATIONS[_lFormation]?.find(s => s.id === _lPickerTarget.id)?.compat || [])
+      : null;
+    renderLPickerList(e.target.value, compat, excluded, _lPickerTarget);
+  });
+
+  // Formation change
+  document.getElementById('sqLFormation')?.addEventListener('change', e => {
+    _lFormation = e.target.value;
+    _lAssigned = {};
+    renderLineupField();
+  });
+
+  // Print
+  document.getElementById('sqLPrintBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('sqLPrintBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader" style="font-size:13px"></i>…';
+    try {
+      const fieldWrap = document.getElementById('sqLFieldWrap');
+      const canvas = await html2canvas(fieldWrap, { useCORS:true, allowTaint:true, scale:2, backgroundColor:'#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const filledSubs = _lSubs.filter(Boolean);
+      const subsHtml = filledSubs.length
+        ? '<ol style="padding-left:20px;font-size:14px;line-height:1.9">' +
+          filledSubs.map(p => `<li>#${p.number||'?'} ${((p.first_name||'') + ' ' + (p.last_name||'')).trim()} <small>(${p.position||'?'})</small></li>`).join('') +
+          '</ol>' : '';
+      const logoHtml = _currentClubLogoUrl ? `<img src="${_currentClubLogoUrl}" style="height:42px;object-fit:contain" alt="">` : '';
+      const pw = window.open('', '_blank');
+      if (!pw) { showToast('Allow pop-ups to print.'); return; }
+      pw.document.write(`<!DOCTYPE html><html><head>
+        <title>Lineup · ${_lFormation}</title>
+        <style>
+          *{box-sizing:border-box;margin:0;padding:0}
+          body{font-family:sans-serif;color:#111;background:#fff}
+          .hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:2px solid #222}
+          .hdr h1{font-size:18px;font-weight:700}
+          .field-img{width:100%;max-width:480px;display:block;margin:16px auto}
+          .subs{padding:0 20px 20px}
+          .subs h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:8px}
+          @media print{button{display:none!important}}
+        </style>
+      </head><body>
+        <div class="hdr"><h1>Lineup · ${_lFormation}</h1>${logoHtml}</div>
+        <img class="field-img" src="${imgData}" alt="Lineup">
+        ${filledSubs.length ? '<div class="subs"><h2>Substitutes</h2>' + subsHtml + '</div>' : ''}
+      </body></html>`);
+      pw.document.close(); pw.focus();
+      setTimeout(() => { pw.print(); pw.close(); }, 500);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-printer" style="font-size:13px"></i>Print';
+    }
+  });
+
+  // Export PNG
+  document.getElementById('sqLExportBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('sqLExportBtn');
+    btn.disabled = true;
+    try {
+      const fieldWrap = document.getElementById('sqLFieldWrap');
+      const canvas = await html2canvas(fieldWrap, { useCORS:true, allowTaint:true, scale:2, backgroundColor:'#ffffff' });
+      const link = Object.assign(document.createElement('a'), {
+        download: `lineup_${_lFormation}_${new Date().toISOString().split('T')[0]}.png`,
+        href: canvas.toDataURL('image/png'),
+      });
+      link.click();
+    } finally { btn.disabled = false; }
+  });
+
+  // Share in chat
+  let _lClubMembersLoaded = false;
+  async function loadClubMembers() {
+    if (_lClubMembersLoaded) return;
+    const { data } = await window.sb.from('profiles')
+      .select('id,full_name,email')
+      .eq('club_id', _currentClubId);
+    _clubMembers = data || [];
+    _lClubMembersLoaded = true;
+  }
+
+  document.getElementById('sqLShareBtn')?.addEventListener('click', async () => {
+    await loadClubMembers();
+    _lShareRecipient = 'group';
+    const authUser = (await window.sb.auth.getUser()).data?.user;
+    const listEl = document.getElementById('sqLShareList');
+    const opts = [
+      { id:'group', name:'Club channel', sub:'Visible to all members', icon:'ti-users' },
+      ..._clubMembers
+        .filter(m => m.id !== authUser?.id)
+        .map(m => ({ id:m.id, name:m.full_name||m.email||'Member', sub:'Direct message', icon:'ti-user' })),
+    ];
+    listEl.innerHTML = opts.map(o =>
+      `<div class="sq-share-opt${o.id === 'group' ? ' is-on' : ''}" data-recipient="${o.id}">
+        <i class="ti ${o.icon}"></i>
+        <div><div class="sq-share-opt-name">${o.name}</div><div class="sq-share-opt-sub">${o.sub}</div></div>
+      </div>`
+    ).join('');
+    listEl.querySelectorAll('.sq-share-opt').forEach(opt => {
+      opt.addEventListener('click', () => {
+        listEl.querySelectorAll('.sq-share-opt').forEach(o => o.classList.remove('is-on'));
+        opt.classList.add('is-on');
+        _lShareRecipient = opt.dataset.recipient;
+      });
+    });
+    document.getElementById('sqLShareModal').classList.add('is-open');
+  });
+
+  document.getElementById('sqLShareConfirm')?.addEventListener('click', async () => {
+    const btn = document.getElementById('sqLShareConfirm');
+    btn.disabled = true;
+    try {
+      const slots = LINEUP_FORMATIONS[_lFormation] || [];
+      const starters = slots.map(s => _lAssigned[s.id]).filter(Boolean);
+      const subsArr  = _lSubs.filter(Boolean);
+      const starterStr = starters.map(p => `#${p.number||'?'} ${p.last_name||p.first_name||''}`).join(', ');
+      const subStr     = subsArr.map(p => `#${p.number||'?'} ${p.last_name||p.first_name||''}`).join(', ');
+      const content = `⚽ Lineup · ${_lFormation}\n` +
+        `Starters (${starters.length}): ${starterStr || '—'}` +
+        (subStr ? `\nSubs: ${subStr}` : '');
+      const authUser = (await window.sb.auth.getUser()).data?.user;
+      const profile  = await window.getProfile();
+      const { error } = await window.sb.from('messages').insert({
+        club_id:      _currentClubId,
+        sender_id:    authUser?.id,
+        sender_name:  profile?.full_name || profile?.email || 'Squad',
+        content,
+        message_type: 'lineup',
+        recipient_id: _lShareRecipient === 'group' ? null : _lShareRecipient,
+      });
+      if (error) { showToast('Error sharing: ' + error.message); return; }
+      document.getElementById('sqLShareModal').classList.remove('is-open');
+      showToast('Lineup shared in chat.');
+    } finally { btn.disabled = false; }
+  });
+
+  document.getElementById('sqLShareClose')?.addEventListener('click',  () => document.getElementById('sqLShareModal').classList.remove('is-open'));
+  document.getElementById('sqLShareCancel')?.addEventListener('click', () => document.getElementById('sqLShareModal').classList.remove('is-open'));
+  document.getElementById('sqLShareModal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('is-open'); });
+
+  // Save lineup
+  document.getElementById('sqLSaveBtn')?.addEventListener('click', async () => {
+    await loadMatchEvents();
+    document.getElementById('sqLTitle').value = '';
+    document.getElementById('sqLSaveModal').classList.add('is-open');
+    document.getElementById('sqLTitle').focus();
+  });
+
+  document.getElementById('sqLSaveConfirm')?.addEventListener('click', async () => {
+    const btn = document.getElementById('sqLSaveConfirm');
+    btn.disabled = true;
+    try {
+      const title   = document.getElementById('sqLTitle').value.trim();
+      const matchId = document.getElementById('sqLMatch').value || null;
+      const authUser = (await window.sb.auth.getUser()).data?.user;
+      const playersJson = {};
+      Object.entries(_lAssigned).forEach(([k, v]) => { if (v) playersJson[k] = v.id; });
+      const subsJson = _lSubs.map(p => p?.id || null);
+      const { error } = await window.sb.from('lineups').insert({
+        club_id:    _currentClubId,
+        match_id:   matchId,
+        formation:  _lFormation,
+        players:    playersJson,
+        subs:       subsJson,
+        title:      title || null,
+        created_by: authUser?.id,
+      });
+      if (error) { showToast('Error saving: ' + error.message); return; }
+      document.getElementById('sqLSaveModal').classList.remove('is-open');
+      showToast('Lineup saved.');
+      loadLineupHistory();
+    } finally { btn.disabled = false; }
+  });
+
+  document.getElementById('sqLSaveClose')?.addEventListener('click',  () => document.getElementById('sqLSaveModal').classList.remove('is-open'));
+  document.getElementById('sqLSaveCancel')?.addEventListener('click', () => document.getElementById('sqLSaveModal').classList.remove('is-open'));
+  document.getElementById('sqLSaveModal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('is-open'); });
+
+  // History
+  async function loadLineupHistory() {
+    const { data } = await window.sb.from('lineups')
+      .select('id,formation,title,created_at,match_id')
+      .eq('club_id', _currentClubId)
+      .order('created_at', { ascending:false })
+      .limit(30);
+    _lSavedLineups = data || [];
+    renderLineupHistory();
+  }
+
+  function renderLineupHistory() {
+    const container = document.getElementById('sqLHistory');
+    if (!container) return;
+    if (!_lSavedLineups.length) {
+      container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:var(--cm-meta);text-align:center">No saved lineups yet.</div>';
+      return;
+    }
+    container.innerHTML = _lSavedLineups.map(l => {
+      const date = new Date(l.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'2-digit' });
+      return `<div class="sq-lineup-history-item" data-lineup-id="${l.id}">
+        <div class="sq-lineup-hi-title">${l.title || l.formation}</div>
+        <div class="sq-lineup-hi-meta">${l.formation} · ${date}</div>
+      </div>`;
+    }).join('');
+    container.querySelectorAll('.sq-lineup-history-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const { data } = await window.sb.from('lineups').select('*').eq('id', item.dataset.lineupId).single();
+        if (!data) return;
+        _lFormation = data.formation;
+        document.getElementById('sqLFormation').value = _lFormation;
+        _lAssigned = {};
+        if (data.players) {
+          Object.entries(data.players).forEach(([slotId, playerId]) => {
+            const p = _allPlayers.find(x => x.id === playerId);
+            if (p) _lAssigned[slotId] = p;
+          });
+        }
+        _lSubs = (data.subs || []).map(id => id ? (_allPlayers.find(x => x.id === id) || null) : null);
+        while (_lSubs.length < 7) _lSubs.push(null);
+        renderLineupField();
+        renderLineSubs();
+        showToast('Lineup loaded.');
+      });
+    });
+  }
+
+  // Load matches for save dropdown
+  async function loadMatchEvents() {
+    if (_lMatches.length > 0) return;
+    const { data } = await window.sb.from('calendar_events')
+      .select('id,title,start_date')
+      .eq('club_id', _currentClubId)
+      .eq('type', 'match')
+      .order('start_date', { ascending:false })
+      .limit(40);
+    _lMatches = data || [];
+    const sel = document.getElementById('sqLMatch');
+    if (sel && _lMatches.length) {
+      sel.innerHTML = '<option value="">— No match —</option>' +
+        _lMatches.map(m => {
+          const d = new Date(m.start_date).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+          return `<option value="${m.id}">${m.title || 'Match'} · ${d}</option>`;
+        }).join('');
+    }
+  }
 </script>
 </body>
 </html>
