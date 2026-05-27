@@ -12,8 +12,6 @@
 <style>
   body.cm { background: var(--cm-bg); }
 
-  /* Shared shell */
-
   /* Topbar */
   .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
   .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
@@ -47,12 +45,7 @@
   .inj-kpi-sp { position:absolute; right:14px; top:14px; width:84px; height:36px; color:var(--cm-fg-faint); }
 
   /* Toolbar */
-  .inj-toolbar {
-    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-    background:var(--cm-surface); border:1px solid var(--cm-border);
-    border-radius:var(--cm-r-4); padding:10px 12px; box-shadow:var(--cm-shadow-1);
-    margin-bottom:14px;
-  }
+  .inj-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:10px 12px; box-shadow:var(--cm-shadow-1); margin-bottom:14px; }
   .inj-segs { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); gap:2px; }
   .inj-seg { padding:0 12px; height:30px; display:inline-flex; align-items:center; gap:6px; border-radius:5px; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; border:0; background:transparent; }
   .inj-seg:hover { color:var(--cm-fg); }
@@ -100,61 +93,38 @@
   .inj-fact-v { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .inj-fact-v small { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
 
-  .inj-severity {
-    display:inline-flex; align-items:center; gap:6px; padding:0 10px; height:24px; border-radius:999px;
-    font:600 11.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase;
-  }
+  .inj-severity { display:inline-flex; align-items:center; gap:6px; padding:0 10px; height:24px; border-radius:999px; font:600 11.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; }
   .inj-severity .d { width:7px; height:7px; border-radius:50%; }
   .inj-severity.minor    { background:var(--cm-warning-bg); color:var(--cm-warning); }
   .inj-severity.minor .d { background:var(--cm-warning); }
   .inj-severity.moderate { background:rgba(232,88,12,0.10); color:#C2410C; }
   .inj-severity.moderate .d { background:#EA580C; }
   .inj-severity.severe   { background:var(--cm-danger-bg); color:var(--cm-danger); }
-  .inj-severity.severe .d   { background:var(--cm-danger); }
+  .inj-severity.severe .d { background:var(--cm-danger); }
 
-  .inj-row-actions { display:flex; gap:6px; }
+  .inj-row-actions { display:flex; gap:6px; align-items:center; }
 
   /* Phase timeline */
-  .inj-timeline {
-    display:grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap:6px;
-    margin-bottom:12px;
-  }
-  .tl-phase {
-    background:var(--cm-bg-soft);
-    border:1px solid var(--cm-border);
-    border-radius:8px;
-    padding:9px 10px 10px;
-    position:relative;
-  }
+  .inj-timeline { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:12px; }
+  .tl-phase { background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; padding:9px 10px 10px; position:relative; cursor:pointer; transition:box-shadow .1s; user-select:none; }
+  .tl-phase:not(.done):hover { box-shadow:0 0 0 2px var(--cm-accent); }
   .tl-phase .h { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
   .tl-phase .h .ti { font-size:13px; color:var(--cm-fg-muted); }
   .tl-phase .h .ph { font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; color:var(--cm-fg-muted); }
   .tl-phase .l { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
   .tl-phase .s { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:3px; }
-
-  .tl-phase.done {
-    background:var(--cm-success-bg);
-    border-color:var(--cm-success-bd);
-  }
+  .tl-phase.done { background:var(--cm-success-bg); border-color:var(--cm-success-bd); }
   .tl-phase.done .h .ti { color:var(--cm-success); }
   .tl-phase.done .h .ph { color:var(--cm-success); }
   .tl-phase.done .l { color:#14532D; }
   .tl-phase.done .s { color:var(--cm-success); }
-
-  .tl-phase.active {
-    background:var(--cm-accent-soft);
-    border-color:var(--cm-accent);
-    border-width:1.5px;
-    box-shadow:0 0 0 3px var(--cm-focus-ring);
-  }
+  .tl-phase.active { background:var(--cm-accent-soft); border-color:var(--cm-accent); border-width:1.5px; box-shadow:0 0 0 3px var(--cm-focus-ring); }
   .tl-phase.active .h .ti { color:var(--cm-accent); }
   .tl-phase.active .h .ph { color:var(--cm-accent); }
   .tl-phase.active .l { color:var(--cm-fg-strong); }
   .tl-phase.active .s { color:var(--cm-accent); }
 
-  /* progress bar across timeline */
+  /* progress bar */
   .inj-progress-row { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
   .inj-progress-l { font:500 11px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
   .inj-progress-bar { flex:1; height:5px; background:var(--cm-bg-sunk); border-radius:3px; overflow:hidden; position:relative; }
@@ -164,141 +134,126 @@
   .inj-progress-r { font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg); }
 
   /* Trend / RTP */
-  .inj-rtp {
-    display:grid; grid-template-columns:1fr 1fr; gap:10px;
-    background:var(--cm-bg-soft);
-    border:1px solid var(--cm-border-soft);
-    border-radius:8px;
-    padding:10px 12px;
-    margin-top:10px;
-  }
+  .inj-rtp { display:grid; grid-template-columns:1fr 1fr; gap:10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:8px; padding:10px 12px; margin-top:10px; }
   .inj-rtp .b { display:flex; align-items:center; gap:8px; }
-  .inj-rtp .ic {
-    width:28px; height:28px;
-    background:var(--cm-surface);
-    border:1px solid var(--cm-border);
-    border-radius:7px;
-    display:flex; align-items:center; justify-content:center;
-    color:var(--cm-fg-muted);
-    flex-shrink:0;
-  }
+  .inj-rtp .ic { width:28px; height:28px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:7px; display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); flex-shrink:0; }
   .inj-rtp .ic .ti { font-size:14px; }
   .inj-rtp .l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
   .inj-rtp .v { font:600 13px/1.1 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:2px; }
   .inj-rtp .v.warn { color:var(--cm-warning); }
   .inj-rtp .v.good { color:var(--cm-success); }
 
-  /* Doctor signature row */
-  .inj-foot { display:flex; align-items:center; gap:10px; margin-top:10px; font:var(--cm-meta); color:var(--cm-fg-muted); }
-  .inj-foot .who { display:flex; align-items:center; gap:6px; }
-  .inj-foot .who .av { width:18px; height:18px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; font:600 9px/1 var(--cm-font-sans); color:var(--cm-fg); }
-  .inj-foot .who span { font-weight:500; color:var(--cm-fg); }
-  .inj-foot .grow { flex:1; }
-  .inj-foot a { color:var(--cm-fg); text-decoration:none; font-weight:500; }
-  .inj-foot a:hover { color:var(--cm-fg-strong); border-bottom:1px solid var(--cm-fg-muted); }
-
-  /* === Right rail body map (uses real anatomy PNGs) === */
+  /* Body map rail */
   .rail-bodymap-wrap { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:16px; }
-  .body-figure {
-    background:var(--cm-bg-soft);
-    border:1px solid var(--cm-border-soft);
-    border-radius:10px;
-    padding:14px 12px 10px;
-    display:flex; flex-direction:column; align-items:center;
-    gap:8px;
-  }
-  .body-stage {
-    position:relative;
-    width:100%;
-    max-width:300px;
-    aspect-ratio: 1 / 2;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .body-img {
-    width:100%; height:100%;
-    object-fit:contain;
-    display:block;
-  }
-  [data-theme="dark"] .body-img {
-    /* Brighten anatomy on dark surfaces — original art is dark slate on white */
-    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92);
-    mix-blend-mode:normal;
-  }
-  .body-hotspots {
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    pointer-events:none;
-  }
+  .body-figure { background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:10px; padding:14px 12px 10px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .body-stage { position:relative; width:100%; max-width:300px; aspect-ratio:1/2; display:flex; align-items:center; justify-content:center; }
+  .body-img { width:100%; height:100%; object-fit:contain; display:block; }
+  [data-theme="dark"] .body-img { filter:invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92); mix-blend-mode:normal; }
+  .body-hotspots { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
   .body-figure .lbl { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
-
-  .body-sex-toggle {
-    display:inline-flex; gap:2px; padding:3px;
-    background:var(--cm-bg-soft); border:1px solid var(--cm-border);
-    border-radius:7px;
-  }
-  .body-sex-toggle button {
-    border:0; background:transparent;
-    padding:0 10px; height:26px;
-    border-radius:5px;
-    font:500 12px/1 var(--cm-font-sans);
-    color:var(--cm-fg-muted);
-    cursor:pointer;
-    display:inline-flex; align-items:center; gap:5px;
-  }
+  .body-sex-toggle { display:inline-flex; gap:2px; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:7px; }
+  .body-sex-toggle button { border:0; background:transparent; padding:0 10px; height:26px; border-radius:5px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
   .body-sex-toggle button .ti { font-size:13px; }
   .body-sex-toggle button:hover { color:var(--cm-fg); }
-  .body-sex-toggle button.is-on {
-    background:var(--cm-surface); color:var(--cm-fg-strong);
-    box-shadow:var(--cm-shadow-1);
-  }
-
-  .hot {
-    fill:var(--cm-danger);
-    stroke:var(--cm-surface);
-    stroke-width:2;
-  }
+  .body-sex-toggle button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  .hot { fill:var(--cm-danger); stroke:var(--cm-surface); stroke-width:2; }
   .hot.warn { fill:var(--cm-warning); }
+  .hot.mild { fill:#EA580C; }
   .hot.pulse { animation:pulse 2.4s ease-in-out infinite; }
-  @keyframes pulse {
-    0%, 100% { opacity:1; }
-    50%      { opacity:0.55; }
-  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
 
-  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
-  @media (max-width: 768px) {
-    .hub-topbar { padding-left: 56px; }
-    .inj-page { padding: 16px 12px 48px; }
-    .inj-toolbar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .inj-kpis { grid-template-columns: repeat(2, 1fr) !important; }
-    .inj-grid { grid-template-columns: 1fr !important; }
+  /* Type breakdown */
+  .type-bars { display:flex; flex-direction:column; gap:8px; }
+  .type-row { display:flex; align-items:center; gap:10px; font:500 12px/1 var(--cm-font-sans); }
+  .type-row .l { width:100px; color:var(--cm-fg-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .type-row .b { flex:1; height:6px; background:var(--cm-bg-sunk); border-radius:3px; overflow:hidden; }
+  .type-row .bf { height:100%; border-radius:3px; display:block; }
+  .type-row .v { width:24px; text-align:right; font:600 12px/1 var(--cm-font-mono); color:var(--cm-fg); }
+
+  /* Closed rows */
+  .closed-row { display:flex; align-items:center; gap:10px; padding:10px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .closed-row:last-child { border-bottom:0; }
+  .closed-row .av { width:28px; height:28px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); color:var(--cm-fg); flex-shrink:0; }
+  .closed-row .body { flex:1; min-width:0; }
+  .closed-row .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .closed-row .meta { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .closed-row .days { font:600 13px/1 var(--cm-font-mono); color:var(--cm-fg); flex-shrink:0; }
+  .closed-row .days sub { font-size:10px; color:var(--cm-fg-muted); }
+  .closed-row .ok { display:inline-flex; align-items:center; gap:4px; padding:0 8px; height:20px; border-radius:4px; background:var(--cm-success-bg); color:var(--cm-success); font:600 10.5px/1 var(--cm-font-mono); flex-shrink:0; }
+
+  /* Context menu */
+  .inj-ctx-wrap { position:relative; display:inline-flex; }
+  .inj-ctx-dd { position:absolute; right:0; top:calc(100% + 4px); min-width:176px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.12); z-index:120; overflow:hidden; display:none; }
+  .inj-ctx-dd.is-open { display:block; }
+  .inj-ctx-item { display:flex; flex-direction:row; align-items:center; gap:8px; padding:8px 12px; font:500 14px/1 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; border:0; background:transparent; width:100%; text-align:left; white-space:nowrap; }
+  .inj-ctx-item:hover { background:var(--cm-bg-soft); }
+  .inj-ctx-item.is-danger { color:var(--cm-danger); }
+  .inj-ctx-item svg { flex-shrink:0; color:var(--cm-fg-muted); }
+  .inj-ctx-item.is-danger svg { color:var(--cm-danger); }
+
+  /* Body region dropdown */
+  .inj-region-wrap { position:relative; display:inline-flex; }
+  .inj-region-dd { position:absolute; right:0; top:calc(100% + 6px); min-width:200px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.12); z-index:100; overflow:hidden; display:none; max-height:280px; overflow-y:auto; }
+  .inj-region-dd.is-open { display:block; }
+  .inj-dd-item { display:flex; align-items:center; padding:8px 12px; font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; border:0; background:transparent; width:100%; text-align:left; white-space:nowrap; }
+  .inj-dd-item:hover { background:var(--cm-bg-soft); }
+  .inj-dd-item.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); }
+
+  /* Body area selector in modal */
+  .inj-body-sel { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px; }
+  .inj-body-fig { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .inj-body-fig .lbl { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .inj-body-stage { position:relative; width:80px; height:160px; }
+  .inj-body-stage img { width:100%; height:100%; object-fit:contain; display:block; }
+  .inj-body-stage svg { position:absolute; inset:0; width:100%; height:100%; }
+  .bz { fill:transparent; stroke:transparent; cursor:pointer; transition:fill .1s; }
+  .bz:hover { fill:rgba(99,102,241,.18); stroke:var(--cm-accent); stroke-width:1; }
+  .bz.is-sel { fill:rgba(99,102,241,.28); stroke:var(--cm-accent); stroke-width:1.5; }
+
+  /* Modal shared */
+  .inj-modal-ov { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; align-items:flex-start; justify-content:center; padding-top:48px; overflow-y:auto; }
+  .inj-modal-ov.is-open { display:flex; }
+  .inj-modal-box { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:14px; width:min(600px,96vw); margin-bottom:40px; display:flex; flex-direction:column; }
+  .inj-modal-h { display:flex; align-items:center; gap:12px; padding:18px 20px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .inj-modal-h h3 { font:600 17px/1 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; }
+  .inj-modal-h button { width:28px; height:28px; border-radius:7px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .inj-modal-body { padding:18px 20px; display:flex; flex-direction:column; gap:13px; }
+  .inj-modal-foot { padding:14px 20px; border-top:1px solid var(--cm-border-soft); display:flex; gap:8px; justify-content:flex-end; }
+  .inj-2col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .inj-3col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+
+  #tweaks-root { position:fixed; bottom:16px; right:16px; z-index:1000; }
+  @media (max-width:768px) {
+    .hub-topbar { padding-left:56px; }
+    .inj-page { padding:16px 12px 48px; }
+    .inj-toolbar { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .inj-kpis { grid-template-columns:repeat(2,1fr) !important; }
+    .inj-grid { grid-template-columns:1fr !important; }
+    .inj-row-top { grid-template-columns:1fr auto; }
+    .inj-fact:nth-child(2), .inj-fact:nth-child(3) { display:none; }
   }
-  @media (max-width: 480px) {
-    .inj-kpis { grid-template-columns: 1fr !important; }
-  }
+  @media (max-width:480px) { .inj-kpis { grid-template-columns:1fr !important; } }
 </style>
 </head>
 <body class="cm">
 
 <div class="hub-shell" data-screen-label="08 Injuries">
-
-  <!-- Sidebar -->
   <div id="hub-side-root"></div>
 
   <main class="hub-main">
 
     <div class="hub-topbar">
       <div class="hub-crumb">
-        <i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span>
+        <i class="ti ti-home"></i><span>Medical</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Injuries</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search by player, body region, type…" aria-label="Search by player, body region or injury type">
+        <input id="injSearch" placeholder="Search player, body area, type…" aria-label="Search injuries">
       </div>
       <div class="actions">
-        <button class="cm-icon-btn" title="Notifications" aria-label="Notifications"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn" title="Help" aria-label="Help"><i class="ti ti-help"></i></button>
-        <button class="cm-icon-btn" title="Settings" aria-label="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -307,7 +262,7 @@
       <header class="inj-head">
         <div>
           <h1>Injuries</h1>
-          <div class="ctx" id="injCtx"><strong>2 active</strong> · 1 expected back this week · <strong>Days lost MTD</strong> 42</div>
+          <div class="ctx" id="injCtx"><strong>— active</strong> · loading…</div>
         </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export report</button>
@@ -315,140 +270,103 @@
         </div>
       </header>
 
-      <!-- KPI strip -->
+      <!-- KPIs -->
       <div class="inj-kpis">
         <div class="inj-kpi">
           <div class="inj-kpi-l"><i class="ti ti-bandage"></i>Active cases</div>
-          <div class="inj-kpi-v" id="kpiInjActive">2</div>
-          <div class="inj-kpi-t">
-            <span class="inj-kpi-d up"><i class="ti ti-arrow-down-right"></i>−1</span>
-            <span>vs last microcycle</span>
-          </div>
+          <div class="inj-kpi-v" id="kpiInjActive">—</div>
+          <div class="inj-kpi-t" id="kpiActiveT"><span>Loading…</span></div>
           <svg class="inj-kpi-sp" viewBox="0 0 84 36" preserveAspectRatio="none">
-            <polyline points="0,8 14,12 28,10 42,14 56,16 70,18 84,22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <polyline points="0,28 14,22 28,24 42,18 56,16 70,12 84,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </div>
         <div class="inj-kpi">
           <div class="inj-kpi-l"><i class="ti ti-clock"></i>Days lost MTD</div>
           <div class="inj-kpi-v" id="kpiDaysLost">— <sub>days</sub></div>
-          <div class="inj-kpi-t">
-            <span class="inj-kpi-d down"><i class="ti ti-arrow-up-right"></i>+8</span>
-            <span>across 3 players</span>
-          </div>
+          <div class="inj-kpi-t" id="kpiDaysT"><span>Across active injuries</span></div>
         </div>
         <div class="inj-kpi">
           <div class="inj-kpi-l"><i class="ti ti-target-arrow"></i>Avg time to RTP</div>
-          <div class="inj-kpi-v">18 <sub>days</sub></div>
-          <div class="inj-kpi-t">
-            <span class="inj-kpi-d up"><i class="ti ti-arrow-down-right"></i>−4</span>
-            <span>vs season avg</span>
-          </div>
+          <div class="inj-kpi-v" id="kpiAvgRTP">— <sub>days</sub></div>
+          <div class="inj-kpi-t"><span>Resolved injuries</span></div>
         </div>
         <div class="inj-kpi">
           <div class="inj-kpi-l"><i class="ti ti-flame"></i>Re-injury rate</div>
-          <div class="inj-kpi-v">8% <sub>3-mo</sub></div>
-          <div class="inj-kpi-t">
-            <span style="color:var(--cm-success);font:600 12px/1 var(--cm-font-mono)">Within target band</span>
-          </div>
+          <div class="inj-kpi-v" id="kpiReinjury">—% <sub>3-mo</sub></div>
+          <div class="inj-kpi-t"><span>Same player + area</span></div>
         </div>
       </div>
 
       <!-- Toolbar -->
       <div class="inj-toolbar">
         <div class="inj-segs">
-          <button class="inj-seg is-on"><i class="ti ti-activity-heartbeat"></i>Active<span class="ct">2</span></button>
-          <button class="inj-seg"><i class="ti ti-progress"></i>Returning<span class="ct">1</span></button>
-          <button class="inj-seg"><i class="ti ti-check"></i>Resolved<span class="ct">14</span></button>
+          <button class="inj-seg is-on" data-tab="active"><i class="ti ti-activity-heartbeat"></i>Active<span class="ct">—</span></button>
+          <button class="inj-seg" data-tab="returning"><i class="ti ti-progress"></i>Returning<span class="ct">—</span></button>
+          <button class="inj-seg" data-tab="resolved"><i class="ti ti-check"></i>Resolved<span class="ct">—</span></button>
         </div>
         <div style="width:1px;height:24px;background:var(--cm-border)"></div>
-        <button class="inj-pill is-on">All<span class="ct">2</span></button>
-        <button class="inj-pill"><span class="dot" style="background:var(--cm-warning)"></span>Minor<span class="ct">0</span></button>
-        <button class="inj-pill"><span class="dot" style="background:#EA580C"></span>Moderate<span class="ct">1</span></button>
-        <button class="inj-pill"><span class="dot" style="background:var(--cm-danger)"></span>Severe<span class="ct">1</span></button>
+        <button class="inj-pill is-on" data-sev="all">All<span class="ct">—</span></button>
+        <button class="inj-pill" data-sev="minor"><span class="dot" style="background:var(--cm-warning)"></span>Minor<span class="ct">—</span></button>
+        <button class="inj-pill" data-sev="moderate"><span class="dot" style="background:#EA580C"></span>Moderate<span class="ct">—</span></button>
+        <button class="inj-pill" data-sev="severe"><span class="dot" style="background:var(--cm-danger)"></span>Severe<span class="ct">—</span></button>
         <div class="grow"></div>
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i>Body region</button>
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-sort-descending-2" style="font-size:14px"></i>Sort: severity</button>
+        <div class="inj-region-wrap">
+          <button class="cm-btn is-outline is-sm" id="btnBodyRegion"><i class="ti ti-filter" style="font-size:14px"></i>Body region</button>
+          <div class="inj-region-dd" id="bodyRegionDd"></div>
+        </div>
+        <button class="cm-btn is-outline is-sm" id="btnSort"><i class="ti ti-sort-descending-2" style="font-size:14px"></i>Sort: severity</button>
       </div>
 
-      <!-- Two-column grid -->
+      <!-- Grid -->
       <div class="inj-grid">
 
-        <!-- LEFT: Active injury list -->
+        <!-- LEFT: injury list -->
         <div class="inj-card" id="injCardActive">
           <div class="inj-card-h">
-            <h3>Active cases</h3>
-            <span class="sub">2 players · open</span>
+            <h3>Injury cases</h3>
+            <span class="sub" id="injListSub">—</span>
             <div class="right">
               <button class="cm-icon-btn"><i class="ti ti-arrows-sort"></i></button>
-              <button class="cm-icon-btn"><i class="ti ti-columns-3"></i></button>
             </div>
           </div>
-
           <div id="injListBody" style="padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading injuries…</div>
-
         </div>
 
         <!-- RIGHT rail -->
         <div style="display:flex;flex-direction:column;gap:14px">
 
           <!-- Body map -->
-          <div class="inj-card">
+          <div class="inj-card" id="bodyMapCard">
             <div class="inj-card-h">
               <h3>Squad body map</h3>
-              <span class="sub">last 30 days · 6 incidents</span>
+              <span class="sub" id="bodyMapSub">active injuries</span>
               <div class="right">
                 <div class="body-sex-toggle" id="bodySex">
                   <button data-sex="male" class="is-on"><i class="ti ti-gender-male"></i>Male</button>
                   <button data-sex="female"><i class="ti ti-gender-female"></i>Female</button>
                 </div>
-                <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
               </div>
             </div>
-            <div class="rail-bodymap-wrap" id="bodyMapWrap">
-
-              <!-- ====== ANTERIOR ====== -->
+            <div class="rail-bodymap-wrap">
               <div class="body-figure">
                 <div class="body-stage">
-                  <img class="body-img" id="bodyAnt" src="assets/body-male-front.png" alt="Anterior view">
-                  <svg class="body-hotspots" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
-                    <!-- Bocanegra right adductor / upper thigh (subject right → viewer left on anterior) -->
-                    <circle cx="40" cy="115" r="3.6" class="hot pulse"/>
-                    <text x="40" y="116.6" text-anchor="middle" font-family="Geist Mono, monospace" font-size="4.2" font-weight="600" fill="#fff">2</text>
-                    <!-- Carrasco left ankle (subject left → viewer right) -->
-                    <circle cx="61" cy="187" r="2.9" class="hot warn pulse"/>
-                    <text x="61" y="188.4" text-anchor="middle" font-family="Geist Mono, monospace" font-size="3.8" font-weight="600" fill="#fff">1</text>
-                    <!-- Resolved markers -->
-                    <circle cx="60" cy="108" r="2.2" fill="var(--cm-fg-muted)" opacity="0.55"/>
-                    <circle cx="40" cy="98" r="2.2" fill="var(--cm-fg-muted)" opacity="0.55"/>
-                  </svg>
+                  <img class="body-img" id="bodyAnt" src="assets/body-male-front.png" alt="Anterior">
+                  <svg class="body-hotspots" id="svgAnt" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet"></svg>
                 </div>
                 <span class="lbl">Anterior</span>
               </div>
-
-              <!-- ====== POSTERIOR ====== -->
               <div class="body-figure">
                 <div class="body-stage">
-                  <img class="body-img" id="bodyPost" src="assets/body-male-back.png" alt="Posterior view">
-                  <svg class="body-hotspots" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
-                    <!-- Bocanegra hamstring (subject right → viewer right on posterior) -->
-                    <circle cx="60" cy="123" r="3.6" class="hot pulse"/>
-                    <text x="60" y="124.5" text-anchor="middle" font-family="Geist Mono, monospace" font-size="4.2" font-weight="600" fill="#fff">2</text>
-                    <!-- Lower back (resolved) -->
-                    <circle cx="50" cy="78"  r="2.2" fill="var(--cm-fg-muted)" opacity="0.55"/>
-                    <!-- Glute (resolved) -->
-                    <circle cx="42" cy="105" r="2.2" fill="var(--cm-fg-muted)" opacity="0.55"/>
-                    <!-- Calf (resolved) -->
-                    <circle cx="59" cy="163" r="2.2" fill="var(--cm-fg-muted)" opacity="0.55"/>
-                  </svg>
+                  <img class="body-img" id="bodyPost" src="assets/body-male-back.png" alt="Posterior">
+                  <svg class="body-hotspots" id="svgPost" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet"></svg>
                 </div>
                 <span class="lbl">Posterior</span>
               </div>
-
             </div>
             <div style="padding:0 16px 14px;display:flex;align-items:center;gap:14px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);flex-wrap:wrap">
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-danger)"></span>Active · severe</span>
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-warning)"></span>Active · moderate</span>
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:var(--cm-fg-muted);opacity:0.55"></span>Resolved</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-danger)"></span>Severe</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#EA580C"></span>Moderate</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-warning)"></span>Minor</span>
             </div>
           </div>
 
@@ -456,26 +374,19 @@
           <div class="inj-card">
             <div class="inj-card-h">
               <h3>Type breakdown</h3>
-              <span class="sub">season to date · 16</span>
+              <span class="sub" id="typeBreakSub">season to date</span>
               <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="inj-card-b" id="injTypeBreakdown">
-              <div class="type-bars">
-                <div class="type-row"><span class="l">Muscle strain</span><span class="b"><span class="bf" style="width:62%;background:var(--cm-danger)"></span></span><span class="v">6</span></div>
-                <div class="type-row"><span class="l">Ligament</span><span class="b"><span class="bf" style="width:38%;background:#EA580C"></span></span><span class="v">4</span></div>
-                <div class="type-row"><span class="l">Contusion</span><span class="b"><span class="bf" style="width:30%;background:var(--cm-warning)"></span></span><span class="v">3</span></div>
-                <div class="type-row"><span class="l">Tendon</span><span class="b"><span class="bf" style="width:18%;background:var(--cm-info)"></span></span><span class="v">2</span></div>
-                <div class="type-row"><span class="l">Other</span><span class="b"><span class="bf" style="width:8%;background:var(--cm-neutral)"></span></span><span class="v">1</span></div>
-              </div>
+              <div style="text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:12px 0">Loading…</div>
             </div>
           </div>
 
-          <!-- Recent closed -->
+          <!-- Recently resolved -->
           <div class="inj-card">
             <div class="inj-card-h">
               <h3>Recently resolved</h3>
-              <span class="sub" id="injResolvedSub">last 30 days</span>
-              <div class="right"><button class="cm-icon-btn"><i class="ti ti-arrow-up-right"></i></button></div>
+              <span class="sub" id="injResolvedSub">—</span>
             </div>
             <div id="injResolved" style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center">Loading…</div>
           </div>
@@ -487,19 +398,20 @@
   </main>
 </div>
 
-<!-- Tweaks + Settings -->
-<!-- Log Injury Modal -->
-<div id="modalLogInj" role="dialog" aria-modal="true" aria-labelledby="modalLogInjTitle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:flex-start;justify-content:center;padding-top:60px;overflow-y:auto">
-  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:16px;padding:28px;width:520px;max-width:96vw;margin-bottom:40px">
-    <h3 id="modalLogInjTitle" style="font:600 18px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:20px">Log injury</h3>
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div class="cm-field"><label class="cm-label" for="logPlayer">Player</label><select id="logPlayer" class="cm-input"><option value="">Select player…</option></select></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="cm-field"><label class="cm-label" for="logType">Injury type</label><input id="logType" class="cm-input" placeholder="e.g. Hamstring strain"></div>
-        <div class="cm-field"><label class="cm-label" for="logArea">Body area</label><input id="logArea" class="cm-input" placeholder="e.g. Right thigh"></div>
+<!-- ═══════════════════ LOG / EDIT INJURY MODAL ═══════════════════ -->
+<div class="inj-modal-ov" id="modalLogInj">
+  <div class="inj-modal-box">
+    <div class="inj-modal-h">
+      <h3 id="modalLogInjTitle">Log injury</h3>
+      <button onclick="closeLogModal()" title="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="inj-modal-body">
+      <div class="inj-2col">
+        <div class="cm-field"><label class="cm-label" for="logPlayer">Player *</label><select id="logPlayer" class="cm-input"><option value="">Select player…</option></select></div>
+        <div class="cm-field"><label class="cm-label" for="logType">Injury type *</label><input id="logType" class="cm-input" placeholder="e.g. Hamstring strain"></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="cm-field"><label class="cm-label" for="logSev">Severity</label>
+      <div class="inj-3col">
+        <div class="cm-field"><label class="cm-label" for="logSev">Severity *</label>
           <select id="logSev" class="cm-input">
             <option value="">Select…</option>
             <option value="minor">Minor</option>
@@ -507,27 +419,123 @@
             <option value="severe">Severe</option>
           </select>
         </div>
-        <div class="cm-field"><label class="cm-label" for="logStart">Start date</label><input id="logStart" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="logStart">Start date *</label><input id="logStart" type="date" class="cm-input"></div>
         <div class="cm-field"><label class="cm-label" for="logReturn">Est. return</label><input id="logReturn" type="date" class="cm-input"></div>
       </div>
-      <div class="cm-field"><label class="cm-label" for="logNotes">Notes</label><textarea id="logNotes" class="cm-input" rows="2" placeholder="Mechanism, context…"></textarea></div>
+      <div class="inj-2col">
+        <div class="cm-field"><label class="cm-label" for="logMechanism">Mechanism</label>
+          <select id="logMechanism" class="cm-input">
+            <option value="">Select…</option>
+            <option value="contact">Contact</option>
+            <option value="non-contact">Non-contact</option>
+            <option value="overuse">Overuse</option>
+            <option value="training">Training load</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="cm-field">
+          <label class="cm-label" for="logAreaSel">Body area</label>
+          <select id="logAreaSel" class="cm-input">
+            <option value="">Select area…</option>
+            <optgroup label="Head &amp; Neck"><option>Head</option><option>Neck</option></optgroup>
+            <optgroup label="Upper body"><option>Right Shoulder</option><option>Left Shoulder</option><option>Right Arm</option><option>Left Arm</option><option>Right Elbow</option><option>Left Elbow</option><option>Right Wrist</option><option>Left Wrist</option><option>Chest</option><option>Upper Back</option><option>Abdomen</option><option>Lower Back</option></optgroup>
+            <optgroup label="Hip &amp; Groin"><option>Groin</option><option>Right Hip</option><option>Left Hip</option><option>Right Glute</option><option>Left Glute</option></optgroup>
+            <optgroup label="Thigh"><option>Right Thigh</option><option>Left Thigh</option><option>Right Adductor</option><option>Left Adductor</option><option>Right Hamstring</option><option>Left Hamstring</option></optgroup>
+            <optgroup label="Knee"><option>Right Knee</option><option>Left Knee</option></optgroup>
+            <optgroup label="Lower leg"><option>Right Shin</option><option>Left Shin</option><option>Right Calf</option><option>Left Calf</option><option>Right Achilles</option><option>Left Achilles</option></optgroup>
+            <optgroup label="Ankle &amp; Foot"><option>Right Ankle</option><option>Left Ankle</option><option>Right Foot</option><option>Left Foot</option></optgroup>
+          </select>
+        </div>
+      </div>
+
+      <!-- Visual body selector -->
+      <div>
+        <div class="cm-label" style="margin-bottom:6px">Click area on body map to select</div>
+        <div class="inj-body-sel">
+          <div class="inj-body-fig">
+            <div class="inj-body-stage">
+              <img src="assets/body-male-front.png" alt="Anterior">
+              <svg viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet" id="formMapAnt">
+                <rect class="bz" data-area="Head"           x="42" y="2"   width="16" height="14" rx="3"/>
+                <rect class="bz" data-area="Neck"           x="44" y="16"  width="12" height="9"  rx="2"/>
+                <rect class="bz" data-area="Right Shoulder" x="20" y="25"  width="18" height="16" rx="3"/>
+                <rect class="bz" data-area="Left Shoulder"  x="62" y="25"  width="18" height="16" rx="3"/>
+                <rect class="bz" data-area="Chest"          x="33" y="32"  width="34" height="20" rx="3"/>
+                <rect class="bz" data-area="Right Arm"      x="17" y="42"  width="14" height="24" rx="3"/>
+                <rect class="bz" data-area="Left Arm"       x="69" y="42"  width="14" height="24" rx="3"/>
+                <rect class="bz" data-area="Abdomen"        x="36" y="52"  width="28" height="20" rx="3"/>
+                <rect class="bz" data-area="Groin"          x="40" y="72"  width="20" height="12" rx="3"/>
+                <rect class="bz" data-area="Right Hip"      x="26" y="82"  width="18" height="16" rx="3"/>
+                <rect class="bz" data-area="Left Hip"       x="56" y="82"  width="18" height="16" rx="3"/>
+                <rect class="bz" data-area="Right Thigh"    x="31" y="98"  width="16" height="28" rx="3"/>
+                <rect class="bz" data-area="Left Thigh"     x="53" y="98"  width="16" height="28" rx="3"/>
+                <rect class="bz" data-area="Right Adductor" x="34" y="98"  width="13" height="22" rx="3"/>
+                <rect class="bz" data-area="Left Adductor"  x="53" y="98"  width="13" height="22" rx="3"/>
+                <rect class="bz" data-area="Right Knee"     x="32" y="126" width="14" height="14" rx="3"/>
+                <rect class="bz" data-area="Left Knee"      x="54" y="126" width="14" height="14" rx="3"/>
+                <rect class="bz" data-area="Right Shin"     x="33" y="140" width="12" height="26" rx="3"/>
+                <rect class="bz" data-area="Left Shin"      x="55" y="140" width="12" height="26" rx="3"/>
+                <rect class="bz" data-area="Right Ankle"    x="33" y="166" width="12" height="14" rx="3"/>
+                <rect class="bz" data-area="Left Ankle"     x="55" y="166" width="12" height="14" rx="3"/>
+                <rect class="bz" data-area="Right Foot"     x="32" y="180" width="14" height="16" rx="3"/>
+                <rect class="bz" data-area="Left Foot"      x="54" y="180" width="14" height="16" rx="3"/>
+              </svg>
+            </div>
+            <span class="lbl" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Anterior</span>
+          </div>
+          <div class="inj-body-fig">
+            <div class="inj-body-stage">
+              <img src="assets/body-male-back.png" alt="Posterior">
+              <svg viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet" id="formMapPost">
+                <rect class="bz" data-area="Head"            x="42" y="2"   width="16" height="14" rx="3"/>
+                <rect class="bz" data-area="Neck"            x="44" y="16"  width="12" height="9"  rx="2"/>
+                <rect class="bz" data-area="Right Shoulder"  x="20" y="25"  width="18" height="16" rx="3"/>
+                <rect class="bz" data-area="Left Shoulder"   x="62" y="25"  width="18" height="16" rx="3"/>
+                <rect class="bz" data-area="Upper Back"      x="32" y="28"  width="36" height="26" rx="3"/>
+                <rect class="bz" data-area="Lower Back"      x="35" y="54"  width="30" height="20" rx="3"/>
+                <rect class="bz" data-area="Right Glute"     x="30" y="74"  width="20" height="22" rx="3"/>
+                <rect class="bz" data-area="Left Glute"      x="50" y="74"  width="20" height="22" rx="3"/>
+                <rect class="bz" data-area="Right Hamstring" x="31" y="96"  width="16" height="28" rx="3"/>
+                <rect class="bz" data-area="Left Hamstring"  x="53" y="96"  width="16" height="28" rx="3"/>
+                <rect class="bz" data-area="Right Knee"      x="32" y="124" width="14" height="14" rx="3"/>
+                <rect class="bz" data-area="Left Knee"       x="54" y="124" width="14" height="14" rx="3"/>
+                <rect class="bz" data-area="Right Calf"      x="33" y="138" width="12" height="26" rx="3"/>
+                <rect class="bz" data-area="Left Calf"       x="55" y="138" width="12" height="26" rx="3"/>
+                <rect class="bz" data-area="Right Achilles"  x="34" y="164" width="10" height="14" rx="3"/>
+                <rect class="bz" data-area="Left Achilles"   x="56" y="164" width="10" height="14" rx="3"/>
+                <rect class="bz" data-area="Right Foot"      x="32" y="178" width="14" height="18" rx="3"/>
+                <rect class="bz" data-area="Left Foot"       x="54" y="178" width="14" height="18" rx="3"/>
+              </svg>
+            </div>
+            <span class="lbl" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Posterior</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cm-field"><label class="cm-label" for="logNotes">Notes / mechanism details</label><textarea id="logNotes" class="cm-input" rows="2" placeholder="Mechanism, context, initial assessment…"></textarea></div>
     </div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+    <div class="inj-modal-foot">
       <button class="cm-btn is-ghost" onclick="closeLogModal()">Cancel</button>
-      <button class="cm-btn is-primary" onclick="saveInjury()"><i class="ti ti-check" style="font-size:14px"></i>Save</button>
+      <button class="cm-btn is-primary" onclick="saveInjury()"><i class="ti ti-check" style="font-size:14px"></i>Save injury</button>
     </div>
   </div>
 </div>
 
-<!-- Discharge Modal -->
-<div id="modalDischarge" role="dialog" aria-modal="true" aria-labelledby="modalDischargeTitle" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center">
-  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:16px;padding:28px;width:400px;max-width:96vw">
-    <h3 id="modalDischargeTitle" style="font:600 18px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">Discharge player</h3>
-    <p id="disInfo" style="color:var(--cm-fg-muted);font:var(--cm-body-sm);margin-bottom:20px"></p>
-    <div class="cm-field" style="margin-bottom:20px"><label class="cm-label" for="disDate">Return date</label><input id="disDate" type="date" class="cm-input"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
+<!-- ═══════════════════ DISCHARGE MODAL ═══════════════════ -->
+<div class="inj-modal-ov" id="modalDischarge">
+  <div class="inj-modal-box" style="max-width:420px">
+    <div class="inj-modal-h">
+      <h3>Discharge player</h3>
+      <button onclick="closeDischarge()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="inj-modal-body">
+      <p id="disInfo" style="color:var(--cm-fg-muted);font:var(--cm-body-sm);margin:0"></p>
+      <div class="cm-field"><label class="cm-label" for="disDate">Return date</label><input id="disDate" type="date" class="cm-input"></div>
+      <div class="cm-field"><label class="cm-label" for="disNotes">Discharge notes</label><textarea id="disNotes" class="cm-input" rows="2" placeholder="Final assessment, restrictions…"></textarea></div>
+    </div>
+    <div class="inj-modal-foot">
       <button class="cm-btn is-ghost" onclick="closeDischarge()">Cancel</button>
-      <button class="cm-btn is-primary" onclick="confirmDischarge()"><i class="ti ti-check" style="font-size:14px"></i>Confirm</button>
+      <button class="cm-btn is-primary" style="background:var(--cm-success);border-color:var(--cm-success)" onclick="confirmDischarge()"><i class="ti ti-check" style="font-size:14px"></i>Confirm discharge</button>
     </div>
   </div>
 </div>
@@ -536,195 +544,463 @@
 <div id="settings-host"></div>
 
 <script>
+// ═══════════════ STATE ═══════════════
+let _allInjuries = [], _phasesMap = {}, _players = [], _playersMap = {};
+let _currentTab = 'active', _currentSev = 'all', _currentSort = 'severity', _currentRegion = null;
+let _editingInjuryId = null, _dischargeId = null;
+let _clubId = null, _profile = null;
+
+// ═══════════════ BODY AREA COORDINATES (for squad map) ═══════════════
+const BODY_COORDS = {
+  'head':             { ant:[50,10],  post:[50,10]  },
+  'neck':             { ant:[50,21],  post:[50,21]  },
+  'chest':            { ant:[50,46],  post:null       },
+  'upper back':       { ant:null,     post:[50,41]  },
+  'abdomen':          { ant:[50,62],  post:null       },
+  'lower back':       { ant:null,     post:[50,65]  },
+  'groin':            { ant:[50,78],  post:null       },
+  'right shoulder':   { ant:[29,32],  post:[71,32]  },
+  'left shoulder':    { ant:[71,32],  post:[29,32]  },
+  'shoulder':         { ant:[50,32],  post:[50,32]  },
+  'right arm':        { ant:[26,52],  post:[74,52]  },
+  'left arm':         { ant:[74,52],  post:[26,52]  },
+  'right elbow':      { ant:[24,63],  post:[76,63]  },
+  'left elbow':       { ant:[76,63],  post:[24,63]  },
+  'right wrist':      { ant:[22,73],  post:[78,73]  },
+  'left wrist':       { ant:[78,73],  post:[22,73]  },
+  'right hip':        { ant:[37,90],  post:[63,90]  },
+  'left hip':         { ant:[63,90],  post:[37,90]  },
+  'hip':              { ant:[50,90],  post:[50,90]  },
+  'right glute':      { ant:null,     post:[38,100] },
+  'left glute':       { ant:null,     post:[62,100] },
+  'glute':            { ant:null,     post:[50,100] },
+  'right thigh':      { ant:[39,113], post:null      },
+  'left thigh':       { ant:[61,113], post:null      },
+  'thigh':            { ant:[50,113], post:null      },
+  'right adductor':   { ant:[42,110], post:null      },
+  'left adductor':    { ant:[58,110], post:null      },
+  'adductor':         { ant:[50,110], post:null      },
+  'right hamstring':  { ant:null,     post:[39,118] },
+  'left hamstring':   { ant:null,     post:[61,118] },
+  'hamstring':        { ant:null,     post:[50,118] },
+  'right knee':       { ant:[39,137], post:[39,137] },
+  'left knee':        { ant:[61,137], post:[61,137] },
+  'knee':             { ant:[50,137], post:[50,137] },
+  'right calf':       { ant:null,     post:[39,157] },
+  'left calf':        { ant:null,     post:[61,157] },
+  'calf':             { ant:null,     post:[50,157] },
+  'right shin':       { ant:[39,154], post:null      },
+  'left shin':        { ant:[61,154], post:null      },
+  'shin':             { ant:[50,154], post:null      },
+  'right achilles':   { ant:null,     post:[39,169] },
+  'left achilles':    { ant:null,     post:[61,169] },
+  'achilles':         { ant:null,     post:[50,169] },
+  'right ankle':      { ant:[39,180], post:[39,180] },
+  'left ankle':       { ant:[61,180], post:[61,180] },
+  'ankle':            { ant:[50,180], post:[50,180] },
+  'right foot':       { ant:[39,193], post:[39,193] },
+  'left foot':        { ant:[61,193], post:[61,193] },
+  'foot':             { ant:[50,193], post:[50,193] },
+};
+
+function getBodyCoords(area) {
+  if (!area) return null;
+  const k = area.toLowerCase().trim();
+  if (BODY_COORDS[k]) return BODY_COORDS[k];
+  for (const [key, val] of Object.entries(BODY_COORDS)) {
+    if (k.includes(key) || key.includes(k)) return val;
+  }
+  return null;
+}
+
+// ═══════════════ PHASE CONSTANTS ═══════════════
+const PHASE_NAMES = ['Acute', 'Sub-acute', 'Return to running', 'Return to training', 'Return to play'];
+const PHASE_DURATIONS = { minor:[3,5,7,10,14], moderate:[5,10,14,21,28], severe:[7,14,21,35,42] };
+const PHASE_ICONS = ['ti-first-aid-kit','ti-activity','ti-run','ti-ball-football','ti-trophy'];
+
+function buildPhases(injuryId, startDate, severity) {
+  const durs = PHASE_DURATIONS[severity] || PHASE_DURATIONS.moderate;
+  const phases = []; let cumDays = 0;
+  durs.forEach((dur, idx) => {
+    const phStart = new Date(startDate); phStart.setDate(phStart.getDate() + cumDays);
+    const phEnd   = new Date(phStart);   phEnd.setDate(phEnd.getDate() + dur);
+    phases.push({
+      injury_id: injuryId, phase_number: idx + 1, phase_name: PHASE_NAMES[idx],
+      start_date: phStart.toISOString().split('T')[0],
+      end_date:   phEnd.toISOString().split('T')[0],
+      status: idx === 0 ? 'in_progress' : 'pending',
+    });
+    cumDays += dur;
+  });
+  return phases;
+}
+
+// ═══════════════ BOOT ═══════════════
 (async () => {
   const ok = await window.requireAuth();
   if (!ok) return;
-
-  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
-  const clubId = await window.getClubId();
-
+  [_profile] = await Promise.all([window.getProfile()]);
+  const club = await window.getClub();
+  _clubId = await window.getClubId();
   if (club) window.applyClubTheme();
 
-  // Load data
-  const [injRes, playersRes] = await Promise.all([
-    window.sb.from('injuries').select('id,player_id,injury_type,body_area,severity,status,start_date,expected_return,notes').eq('club_id', clubId).order('start_date', { ascending: false }),
-    window.sb.from('players').select('id,first_name,last_name,position,number').eq('club_id', clubId).neq('status','inactive')
-  ]);
+  // Load players
+  const { data: pData } = await window.sb.from('players')
+    .select('id,first_name,last_name,position,number')
+    .eq('club_id', _clubId).neq('status','inactive').order('last_name');
+  _players = pData || [];
+  _playersMap = Object.fromEntries(_players.map(p => [p.id, p]));
+  populatePlayerSelect('logPlayer');
 
-  const injuries = injRes.data || [];
-  const players  = playersRes.data || [];
-  const playersMap = Object.fromEntries(players.map(p => [p.id, p]));
+  await loadAll();
 
-  // Populate Log modal player select
-  const logPlayer = document.getElementById('logPlayer');
-  if (logPlayer) {
-    players.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = `${`${p.first_name} ${p.last_name}`.trim()}${p.number ? ' · #' + p.number : ''}`;
-      logPlayer.appendChild(opt);
-    });
-  }
+  // ── Event wiring ──
+  // Tab segments
+  document.querySelectorAll('.inj-seg').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.inj-seg').forEach(o => o.classList.remove('is-on'));
+    btn.classList.add('is-on');
+    _currentTab = btn.dataset.tab;
+    applyFilters();
+  }));
 
-  const active   = injuries.filter(i => i.status === 'active');
-  const recovery = injuries.filter(i => i.status === 'recovery');
-  const cleared  = injuries.filter(i => i.status === 'cleared');
+  // Severity pills
+  document.querySelectorAll('.inj-pill').forEach(p => p.addEventListener('click', () => {
+    document.querySelectorAll('.inj-pill').forEach(o => o.classList.remove('is-on'));
+    p.classList.add('is-on');
+    _currentSev = p.dataset.sev || 'all';
+    applyFilters();
+  }));
 
-  // Compute days lost MTD (reused by KPI + header)
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  let daysLost = 0;
-  active.forEach(i => {
-    const start = new Date(i.start_date); start.setHours(0, 0, 0, 0);
-    const from  = start < firstOfMonth ? firstOfMonth : start;
-    daysLost   += Math.max(0, Math.round((today - from) / 86400000));
+  // Sort toggle
+  const SORT_OPTS = ['severity','date','days'];
+  const SORT_LBLS = ['Sort: severity','Sort: date','Sort: days'];
+  let _si = 0;
+  document.getElementById('btnSort')?.addEventListener('click', () => {
+    _si = (_si + 1) % 3;
+    _currentSort = SORT_OPTS[_si];
+    document.getElementById('btnSort').innerHTML = `<i class="ti ti-sort-descending-2" style="font-size:14px"></i>${SORT_LBLS[_si]}`;
+    applyFilters();
   });
 
-  // Update KPI strip
-  const kpiEl = document.getElementById('kpiInjActive');
-  if (kpiEl) kpiEl.textContent = active.length;
-
-  const kpiDaysEl = document.getElementById('kpiDaysLost');
-  if (kpiDaysEl) kpiDaysEl.innerHTML = `${daysLost} <sub>days</sub>`;
-
-  const ctxEl = document.getElementById('injCtx');
-  if (ctxEl) {
-    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7);
-    const backSoon = recovery.filter(i => {
-      if (!i.expected_return) return false;
-      const d = new Date(i.expected_return); d.setHours(0, 0, 0, 0);
-      return d >= today && d <= nextWeek;
-    }).length;
-    ctxEl.innerHTML = `<strong>${active.length} active</strong> · ${backSoon} expected back this week · <strong>Days lost MTD</strong> ${daysLost}`;
-  }
-
-  // Segment counts
-  document.querySelectorAll('.inj-segs .inj-seg').forEach((btn, i) => {
-    const counts = [active.length, recovery.length, cleared.length];
-    const ct = btn.querySelector('.ct');
-    if (ct) ct.textContent = counts[i] ?? '';
+  // Body region dropdown
+  document.getElementById('btnBodyRegion')?.addEventListener('click', e => {
+    e.stopPropagation();
+    document.getElementById('bodyRegionDd')?.classList.toggle('is-open');
+  });
+  document.addEventListener('click', () => {
+    document.getElementById('bodyRegionDd')?.classList.remove('is-open');
+    document.querySelectorAll('.inj-ctx-dd').forEach(d => d.classList.remove('is-open'));
   });
 
-  // Type breakdown (right rail)
-  const typeBreakdownEl = document.getElementById('injTypeBreakdown');
-  if (typeBreakdownEl) {
-    const typeCounts = {};
-    injuries.forEach(i => { const t = i.injury_type || 'Other'; typeCounts[t] = (typeCounts[t] || 0) + 1; });
-    const sorted = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const maxCount = sorted[0]?.[1] || 1;
-    const BAR_COLORS = ['var(--cm-danger)', '#EA580C', 'var(--cm-warning)', 'var(--cm-info)', 'var(--cm-neutral)'];
-    typeBreakdownEl.innerHTML = `<div class="type-bars">${
-      sorted.map(([type, count], idx) => {
-        const pct = Math.round((count / maxCount) * 80) + 20;
-        return `<div class="type-row"><span class="l">${type}</span><span class="b"><span class="bf" style="width:${pct}%;background:${BAR_COLORS[idx] || 'var(--cm-neutral)'}"></span></span><span class="v">${count}</span></div>`;
-      }).join('')
-    }</div>`;
-  }
+  // Search
+  document.getElementById('injSearch')?.addEventListener('input', () => applyFilters());
 
-  // Recently resolved (right rail)
-  const resolvedEl = document.getElementById('injResolved');
-  const resolvedSubEl = document.getElementById('injResolvedSub');
-  if (resolvedEl) {
-    const recent = cleared.slice(0, 5);
-    if (resolvedSubEl) resolvedSubEl.textContent = `${cleared.length} total · last 30 days`;
-    if (!recent.length) {
-      resolvedEl.style.cssText = 'color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center';
-      resolvedEl.textContent = 'No resolved injuries yet.';
-    } else {
-      resolvedEl.style.cssText = '';
-      resolvedEl.innerHTML = recent.map(i => {
-        const p = playersMap[i.player_id];
-        const pName = p ? `${p.first_name} ${p.last_name}`.trim() : 'Unknown';
-        const initials = pName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-        const start    = i.start_date    ? new Date(i.start_date)    : null;
-        const returned = i.expected_return ? new Date(i.expected_return) : null;
-        const days = (start && returned) ? Math.max(0, Math.round((returned - start) / 86400000)) : '—';
-        const retStr = returned ? returned.toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '—';
-        return `<div class="closed-row">
-          <div class="av">${initials}</div>
-          <div class="body">
-            <div class="name">${pName} · ${i.injury_type || '—'}</div>
-            <div class="meta">Returned ${retStr}</div>
-          </div>
-          <span class="days">${days}<sub>d</sub></span>
-          <span class="ok"><i class="ti ti-check"></i>RTP</span>
-        </div>`;
-      }).join('');
+  // Event delegation: context menu + phase toggle on injury list
+  document.getElementById('injListBody')?.addEventListener('click', async e => {
+    // Context menu toggle button
+    const ctxBtn = e.target.closest('.inj-ctx-btn');
+    if (ctxBtn) {
+      e.stopPropagation();
+      const id = ctxBtn.dataset.id;
+      const dd = document.getElementById('ctx-' + id);
+      const wasOpen = dd?.classList.contains('is-open');
+      document.querySelectorAll('.inj-ctx-dd').forEach(d => d.classList.remove('is-open'));
+      if (!wasOpen && dd) dd.classList.add('is-open');
+      return;
     }
-  }
+    // Context menu item
+    const ctxItem = e.target.closest('.inj-ctx-item[data-action]');
+    if (ctxItem) {
+      e.stopPropagation();
+      document.querySelectorAll('.inj-ctx-dd').forEach(d => d.classList.remove('is-open'));
+      const action = ctxItem.dataset.action;
+      const id = ctxItem.dataset.id;
+      if (action === 'edit')             { openEditInjury(id); }
+      else if (action === 'add-treatment') {
+        const inj = _allInjuries.find(i => i.id === id);
+        window.location.href = 'Physio.html' + (inj?.player_id ? '?player=' + inj.player_id : '');
+      }
+      else if (action === 'view-treats') {
+        const inj = _allInjuries.find(i => i.id === id);
+        window.location.href = 'Physio.html' + (inj?.player_id ? '?player=' + inj.player_id : '');
+      }
+      else if (action === 'delete')       { await deleteInjury(id); }
+      return;
+    }
+    // Phase tile click
+    const ph = e.target.closest('.tl-phase[data-phase-id]');
+    if (ph) { await togglePhase(ph.dataset.phaseId, ph.dataset.injId); }
+  });
 
-  renderInjuries(active, playersMap, 'active');
-
-  // Tab switching
-  const TAB_LABELS = ['active', 'returning', 'cleared'];
-  document.querySelectorAll('.inj-segs .inj-seg').forEach((btn, i) => {
-    btn.addEventListener('click', () => {
-      const groups = [active, recovery, cleared];
-      renderInjuries(groups[i], playersMap, TAB_LABELS[i]);
+  // Body area map clicks in modal
+  ['formMapAnt','formMapPost'].forEach(svgId => {
+    document.getElementById(svgId)?.addEventListener('click', e => {
+      const zone = e.target.closest('.bz');
+      if (!zone) return;
+      const area = zone.dataset.area;
+      document.getElementById('logAreaSel').value = area;
+      // Highlight across both SVGs
+      document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
+        z.classList.toggle('is-sel', z.dataset.area === area);
+      });
     });
+  });
+
+  // Sync body area select → highlight map
+  document.getElementById('logAreaSel')?.addEventListener('change', function() {
+    document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
+      z.classList.toggle('is-sel', z.dataset.area === this.value);
+    });
+  });
+
+  // Sex toggle for body map
+  document.getElementById('bodySex')?.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-sex]');
+    if (!btn) return;
+    document.querySelectorAll('#bodySex button').forEach(b => b.classList.remove('is-on'));
+    btn.classList.add('is-on');
+    const s = btn.dataset.sex;
+    document.getElementById('bodyAnt').src  = 'assets/body-' + s + '-front.png';
+    document.getElementById('bodyPost').src = 'assets/body-' + s + '-back.png';
   });
 })();
 
-// ── Card renderer ────────────────────────────────────────────────────────────
+// ═══════════════ LOAD ═══════════════
+async function loadAll() {
+  const { data, error } = await window.sb.from('injuries')
+    .select('*, players:player_id(first_name,last_name,number,position)')
+    .eq('club_id', _clubId)
+    .order('start_date', { ascending: false });
+  if (error) { console.error('[Injuries]', error); return; }
+  _allInjuries = data || [];
 
-function injCard(inj, player) {
-  const name     = player ? `${player.first_name} ${player.last_name}`.trim() : 'Unknown Player';
-  const pos      = player ? player.position  : '';
-  const jersey   = player ? (player.number ? ' · #' + player.number : '') : '';
-  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  if (_allInjuries.length) {
+    try {
+      const { data: phs } = await window.sb.from('injury_phases')
+        .select('*').in('injury_id', _allInjuries.map(i => i.id)).order('phase_number');
+      _phasesMap = {};
+      (phs || []).forEach(p => { (_phasesMap[p.injury_id] = _phasesMap[p.injury_id] || []).push(p); });
+    } catch(_) { /* table may not exist yet */ }
+  }
 
-  const start    = inj.start_date    ? new Date(inj.start_date)    : new Date();
-  const expected = inj.expected_return ? new Date(inj.expected_return) : null;
+  updateKPIs();
+  updateTabCounts();
+  applyFilters();
+  renderBodyMap();
+  renderTypeBreakdown();
+  renderRecentlyResolved();
+  renderBodyRegionFilter();
+}
+
+// ═══════════════ KPIs ═══════════════
+function updateKPIs() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const firstMo = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  const active = _allInjuries.filter(i => i.status === 'active');
+  document.getElementById('kpiInjActive').textContent = active.length;
+
+  // Days lost MTD
+  let daysLost = 0;
+  _allInjuries.forEach(i => {
+    const s = new Date(i.start_date); s.setHours(0,0,0,0);
+    const e = i.returned_date ? new Date(i.returned_date) : today; e.setHours(0,0,0,0);
+    const from = s < firstMo ? firstMo : s;
+    const to   = e > today   ? today   : e;
+    if (from <= to) daysLost += Math.round((to - from) / 86400000);
+  });
+  document.getElementById('kpiDaysLost').innerHTML = `${daysLost} <sub>days</sub>`;
+
+  // Avg RTP
+  const resolved = _allInjuries.filter(i => i.status === 'resolved' && i.returned_date && i.start_date);
+  const avgRTP = resolved.length
+    ? Math.round(resolved.reduce((s, i) => s + Math.max(0, Math.round((new Date(i.returned_date) - new Date(i.start_date)) / 86400000)), 0) / resolved.length)
+    : null;
+  document.getElementById('kpiAvgRTP').innerHTML = avgRTP != null ? `${avgRTP} <sub>days</sub>` : '— <sub>days</sub>';
+
+  // Re-injury rate (same player + same body_area, prior injury exists in last 90d)
+  const ninety = new Date(today); ninety.setDate(today.getDate() - 90);
+  const recent = _allInjuries.filter(i => new Date(i.start_date) >= ninety);
+  const reInj  = recent.filter(i =>
+    _allInjuries.some(o => o.id !== i.id && o.player_id === i.player_id &&
+      (o.body_area || '').toLowerCase() === (i.body_area || '').toLowerCase() &&
+      new Date(o.start_date) < new Date(i.start_date))
+  ).length;
+  const rate = recent.length ? Math.round(reInj / recent.length * 100) : 0;
+  document.getElementById('kpiReinjury').innerHTML = `${rate}% <sub>3-mo</sub>`;
+
+  // Context header
+  const nextWk = new Date(today); nextWk.setDate(today.getDate() + 7);
+  const soon = _allInjuries.filter(i => {
+    if (!i.expected_return) return false;
+    const d = new Date(i.expected_return); d.setHours(0,0,0,0);
+    return d >= today && d <= nextWk;
+  }).length;
+  const ctxEl = document.getElementById('injCtx');
+  if (ctxEl) ctxEl.innerHTML = `<strong>${active.length} active</strong> · ${soon} expected back this week · <strong>Days lost MTD</strong> ${daysLost}`;
+}
+
+// ═══════════════ DERIVED: RETURNING ═══════════════
+function isReturning(inj) {
+  if (inj.status !== 'active') return false;
+  const phs = _phasesMap[inj.id];
+  if (phs && phs.length) {
+    const cur = phs.find(p => p.status === 'in_progress');
+    return cur ? cur.phase_number >= 4 : false;
+  }
+  // Fallback: estimate from date progress
+  if (!inj.start_date || !inj.expected_return) return false;
+  const pct = Math.min(100, Math.round(
+    (new Date() - new Date(inj.start_date)) /
+    (new Date(inj.expected_return) - new Date(inj.start_date)) * 100
+  ));
+  return pct >= 60;
+}
+
+function updateTabCounts() {
+  const active    = _allInjuries.filter(i => i.status === 'active');
+  const returning = active.filter(i => isReturning(i));
+  const resolved  = _allInjuries.filter(i => i.status === 'resolved');
+  const counts = { active: active.length, returning: returning.length, resolved: resolved.length };
+  document.querySelectorAll('.inj-seg').forEach(btn => {
+    const ct = btn.querySelector('.ct');
+    if (ct) ct.textContent = counts[btn.dataset.tab] ?? '';
+  });
+  // Update pill counts for current tab
+  const inTab = _allInjuries.filter(i => matchesTab(i));
+  document.querySelectorAll('.inj-pill').forEach(p => {
+    const sev = p.dataset.sev;
+    const ct  = p.querySelector('.ct');
+    if (!ct) return;
+    ct.textContent = sev === 'all' ? inTab.length : inTab.filter(i => i.severity === sev).length;
+  });
+  document.getElementById('injListSub').textContent =
+    `${counts[_currentTab] ?? 0} player${(counts[_currentTab] ?? 0) !== 1 ? 's' : ''} · ${_currentTab}`;
+}
+
+function matchesTab(inj) {
+  if (_currentTab === 'active')    return inj.status === 'active' && !isReturning(inj);
+  if (_currentTab === 'returning') return isReturning(inj);
+  if (_currentTab === 'resolved')  return inj.status === 'resolved';
+  return true;
+}
+
+// ═══════════════ FILTER + SORT + RENDER ═══════════════
+function applyFilters() {
+  let list = _allInjuries.filter(i => matchesTab(i));
+  if (_currentSev !== 'all') list = list.filter(i => i.severity === _currentSev);
+  if (_currentRegion) list = list.filter(i => (i.body_area || '').toLowerCase() === _currentRegion.toLowerCase());
+
+  const q = document.getElementById('injSearch')?.value?.trim().toLowerCase();
+  if (q) list = list.filter(i => {
+    const pl = i.players || _playersMap[i.player_id] || {};
+    const name = `${pl.first_name || ''} ${pl.last_name || ''}`.toLowerCase();
+    return name.includes(q) || (i.injury_type || '').toLowerCase().includes(q) || (i.body_area || '').toLowerCase().includes(q);
+  });
+
+  const SORD = { severe:0, moderate:1, minor:2 };
+  if (_currentSort === 'severity') list.sort((a,b) => (SORD[a.severity]??3) - (SORD[b.severity]??3));
+  else if (_currentSort === 'date') list.sort((a,b) => new Date(b.start_date) - new Date(a.start_date));
+  else if (_currentSort === 'days') {
+    const now = new Date();
+    list.sort((a,b) => (now - new Date(b.start_date)) - (now - new Date(a.start_date)));
+  }
+
+  renderInjuries(list);
+  updateTabCounts();
+}
+
+function renderInjuries(list) {
+  const body = document.getElementById('injListBody');
+  if (!body) return;
+  if (!list.length) {
+    body.style.cssText = 'padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)';
+    body.textContent = 'No injuries in this category.';
+    return;
+  }
+  body.style.cssText = '';
+  body.innerHTML = list.map(inj => injCard(inj)).join('');
+}
+
+// ═══════════════ CARD RENDERER ═══════════════
+function injCard(inj) {
+  const pl  = inj.players || _playersMap[inj.player_id] || {};
+  const name     = `${pl.first_name || ''} ${pl.last_name || ''}`.trim() || 'Unknown Player';
+  const initials = name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
+  const pos      = pl.position || '';
+  const jersey   = pl.number ? ' · #' + pl.number : '';
+
   const today    = new Date(); today.setHours(0,0,0,0);
-  start.setHours(0,0,0,0);
-
-  const totalDays = expected ? Math.max(1, Math.round((expected - start) / 86400000)) : null;
-  const elapsed   = Math.max(0, Math.round((today - start) / 86400000));
-  const pct       = expected ? Math.min(100, Math.round((elapsed / totalDays) * 100)) : 0;
-
-  const fmtDate = d => d ? d.toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '—';
+  const start    = inj.start_date ? new Date(inj.start_date) : new Date(); start.setHours(0,0,0,0);
+  const expected = inj.expected_return ? new Date(inj.expected_return) : null;
+  const elapsed  = Math.max(0, Math.round((today - start) / 86400000));
+  const totalD   = expected ? Math.max(1, Math.round((expected - start) / 86400000)) : null;
+  const pct      = totalD ? Math.min(100, Math.round(elapsed / totalD * 100)) : 0;
   const daysLeft = expected ? Math.max(0, Math.round((expected - today) / 86400000)) : null;
+  const fmtDate  = d => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '—';
 
-  const sevClass = { minor: 'minor', moderate: 'moderate', severe: 'severe' }[inj.severity] || 'moderate';
-  const sevLabel = inj.severity ? (inj.severity.charAt(0).toUpperCase() + inj.severity.slice(1)) : '—';
+  const sevClass = { minor:'minor', moderate:'moderate', severe:'severe' }[inj.severity] || 'moderate';
+  const sevLabel = inj.severity ? inj.severity.charAt(0).toUpperCase() + inj.severity.slice(1) : '—';
 
-  // Simple 5-phase timeline derived from total duration
-  const phases = [
-    { icon: 'ti-first-aid-kit', label: 'Acute',              days: 0.15 },
-    { icon: 'ti-activity',      label: 'Sub-acute',          days: 0.25 },
-    { icon: 'ti-run',           label: 'Return to running',  days: 0.25 },
-    { icon: 'ti-ball-football', label: 'Return to training', days: 0.20 },
-    { icon: 'ti-trophy',        label: 'Return to play',     days: 0.15 },
-  ];
-  let cumulative = 0;
-  const tlHtml = phases.map((ph, idx) => {
-    const phDays = totalDays ? Math.round(ph.days * totalDays) : null;
-    cumulative += (ph.days * 100);
-    const isDone   = pct >= cumulative;
-    const isActive = !isDone && pct >= (cumulative - ph.days * 100);
-    const cls      = isDone ? 'done' : isActive ? 'active' : '';
-    const phEnd    = expected && phDays ? fmtDate(new Date(start.getTime() + (cumulative / 100) * totalDays * 86400000)) : '';
-    const statusTxt = isDone ? `${phEnd} — done` : isActive ? `In progress · day ${elapsed}` : phEnd ? `est. ${phEnd}` : '';
-    const icon = isDone ? 'ti-check' : ph.icon;
-    return `<div class="tl-phase ${cls}">
-      <div class="h"><i class="ti ${icon}"></i><span class="ph">Phase ${idx + 1}</span></div>
-      <div class="l">${ph.label}</div>
-      <div class="s">${statusTxt}</div>
-    </div>`;
-  }).join('');
+  // Phase timeline
+  const phasesDB = _phasesMap[inj.id];
+  let tlHtml = '';
+  if (phasesDB && phasesDB.length) {
+    tlHtml = phasesDB.map((ph, idx) => {
+      const cls = ph.status === 'done' ? 'done' : ph.status === 'in_progress' ? 'active' : '';
+      const icon = ph.status === 'done' ? 'ti-check' : PHASE_ICONS[idx] || 'ti-circle';
+      const dateTxt = ph.end_date ? fmtDate(ph.end_date) : '';
+      const sTxt = ph.status === 'done' ? 'Completed'
+        : ph.status === 'in_progress' ? `In progress · day ${elapsed}`
+        : dateTxt ? `est. ${dateTxt}` : 'Pending';
+      return `<div class="tl-phase ${cls}" data-phase-id="${ph.id}" data-inj-id="${inj.id}" title="Click to advance">
+        <div class="h"><i class="ti ${icon}"></i><span class="ph">Phase ${ph.phase_number}</span></div>
+        <div class="l">${ph.phase_name}</div>
+        <div class="s">${sTxt}</div>
+      </div>`;
+    }).join('');
+  } else {
+    // Derived phases (no DB phases yet)
+    let cum = 0;
+    tlHtml = PHASE_NAMES.map((name, idx) => {
+      const frac = [0.15,0.25,0.25,0.20,0.15][idx];
+      cum += frac * 100;
+      const isDone   = pct >= cum;
+      const isActive = !isDone && pct >= (cum - frac * 100);
+      const cls  = isDone ? 'done' : isActive ? 'active' : '';
+      const icon = isDone ? 'ti-check' : PHASE_ICONS[idx];
+      const sTxt = isDone ? 'Completed' : isActive ? `In progress · day ${elapsed}` : totalD ? `est. ${fmtDate(new Date(start.getTime() + (cum/100)*totalD*86400000))}` : '';
+      return `<div class="tl-phase ${cls}">
+        <div class="h"><i class="ti ${icon}"></i><span class="ph">Phase ${idx+1}</span></div>
+        <div class="l">${name}</div>
+        <div class="s">${sTxt}</div>
+      </div>`;
+    }).join('');
+  }
 
-  const status = inj.status || 'active';
-  const dischargeBtn = status === 'active' || status === 'recovery'
-    ? `<button class="cm-btn is-outline is-sm" onclick="openDischarge('${inj.id}')"><i class="ti ti-check" style="font-size:14px"></i>Discharge</button>`
+  // RTP progress fill class
+  const fillCls = pct < 40 ? '' : pct < 70 ? 'warn' : 'danger';
+  // Done phases count for progress
+  const donePct = phasesDB ? Math.round(phasesDB.filter(p => p.status === 'done').length / phasesDB.length * 100) : pct;
+
+  const canDischarge = inj.status === 'active';
+  const dischargeBtn = canDischarge
+    ? `<button class="cm-btn is-outline is-sm" style="color:var(--cm-success);border-color:var(--cm-success)" onclick="openDischarge('${inj.id}')"><i class="ti ti-check" style="font-size:14px"></i>Discharge</button>`
     : '';
+
+  // Context menu SVG icons
+  const svgPencil  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5-10.5a2.828 2.828 0 1 0-4-4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg>`;
+  const svgSteth   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4a2 2 0 0 1 2-2h1a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/><path d="M6 8a6 6 0 0 0 6 6"/><path d="M16 10a4 4 0 0 1 4 4v1a3 3 0 0 1-6 0v-1a4 4 0 0 1 4-4"/></svg>`;
+  const svgList    = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h11"/><path d="M9 12h11"/><path d="M9 19h11"/><path d="M5 5v.01"/><path d="M5 12v.01"/><path d="M5 19v.01"/></svg>`;
+  const svgTrash   = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/><path d="M9 7v-3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/></svg>`;
 
   return `<div class="inj-row" data-inj-id="${inj.id}">
     <div class="inj-row-top">
       <div class="inj-player">
-        <div class="inj-av${status === 'active' ? ' tinted' : ''}">${initials}</div>
+        <div class="inj-av${inj.status === 'active' ? ' tinted' : ''}">${initials}</div>
         <div>
           <div class="name">${name}</div>
-          <div class="meta"><span class="inj-pos cb">${pos}</span>${jersey}</div>
+          <div class="meta">${pos ? `<span class="inj-pos cb">${pos}</span>` : ''}${jersey}</div>
         </div>
       </div>
       <div class="inj-fact">
@@ -737,7 +1013,15 @@ function injCard(inj, player) {
       </div>
       <div class="inj-row-actions">
         ${dischargeBtn}
-        <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+        <div class="inj-ctx-wrap">
+          <button class="cm-icon-btn inj-ctx-btn" data-id="${inj.id}" title="Options"><i class="ti ti-dots"></i></button>
+          <div class="inj-ctx-dd" id="ctx-${inj.id}">
+            <button class="inj-ctx-item" data-action="edit" data-id="${inj.id}">${svgPencil}<span>Edit</span></button>
+            <button class="inj-ctx-item" data-action="add-treatment" data-id="${inj.id}">${svgSteth}<span>Add treatment</span></button>
+            <button class="inj-ctx-item" data-action="view-treats" data-id="${inj.id}">${svgList}<span>View treatments</span></button>
+            <button class="inj-ctx-item is-danger" data-action="delete" data-id="${inj.id}">${svgTrash}<span>Delete</span></button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -745,18 +1029,18 @@ function injCard(inj, player) {
 
     <div class="inj-progress-row">
       <span class="inj-progress-l">RTP progress</span>
-      <span class="inj-progress-bar"><span class="inj-progress-fill" style="width:${pct}%"></span></span>
-      <span class="inj-progress-r">${pct}%</span>
+      <span class="inj-progress-bar"><span class="inj-progress-fill ${fillCls}" style="width:${phasesDB ? donePct : pct}%"></span></span>
+      <span class="inj-progress-r">${phasesDB ? donePct : pct}%</span>
     </div>
 
     <div class="inj-rtp">
       <div class="b">
         <div class="ic"><i class="ti ti-calendar-event"></i></div>
-        <div><div class="l">Injury date</div><div class="v">${fmtDate(start)}</div></div>
+        <div><div class="l">Injury date</div><div class="v">${fmtDate(inj.start_date)}</div></div>
       </div>
       <div class="b">
         <div class="ic" style="color:var(--cm-warning);background:var(--cm-warning-bg);border-color:var(--cm-warning-bd)"><i class="ti ti-target"></i></div>
-        <div><div class="l">Est. return to play</div><div class="v warn">${expected ? fmtDate(expected) + (daysLeft !== null ? ' · ' + daysLeft + ' days' : '') : '—'}</div></div>
+        <div><div class="l">Est. return</div><div class="v warn">${expected ? fmtDate(expected) + (daysLeft != null ? ' · ' + daysLeft + 'd' : '') : '—'}</div></div>
       </div>
       <div class="b">
         <div class="ic"><i class="ti ti-clock"></i></div>
@@ -764,157 +1048,317 @@ function injCard(inj, player) {
       </div>
       <div class="b">
         <div class="ic"><i class="ti ti-notes"></i></div>
-        <div><div class="l">Notes</div><div class="v">${inj.notes ? inj.notes.slice(0, 60) + (inj.notes.length > 60 ? '…' : '') : '—'}</div></div>
+        <div><div class="l">Notes</div><div class="v">${inj.notes ? inj.notes.slice(0,60) + (inj.notes.length > 60 ? '…':'') : '—'}</div></div>
       </div>
     </div>
   </div>`;
 }
 
-function renderInjuries(list, playersMap, label = 'open') {
-  const container = document.getElementById('injCardActive');
-  if (!container) return;
+// ═══════════════ BODY MAP ═══════════════
+function renderBodyMap() {
+  const active = _allInjuries.filter(i => i.status === 'active');
+  const SCOLOR = { severe:'var(--cm-danger)', moderate:'#EA580C', minor:'var(--cm-warning)' };
+  const today  = new Date();
 
-  // Update header sub text
-  const sub = container.querySelector('.inj-card-h .sub');
-  if (sub) sub.textContent = `${list.length} player${list.length !== 1 ? 's' : ''} · ${label}`;
+  let antHtml = '', postHtml = '';
+  active.forEach(inj => {
+    const pl    = inj.players || _playersMap[inj.player_id] || {};
+    const pName = `${pl.first_name || ''} ${pl.last_name || ''}`.trim();
+    const days  = inj.start_date ? Math.round((today - new Date(inj.start_date)) / 86400000) : '?';
+    const tip   = `${pName} · ${inj.injury_type || inj.body_area || '?'} · ${days}d`;
+    const color = SCOLOR[inj.severity] || '#EA580C';
+    const coords = getBodyCoords(inj.body_area);
+    if (!coords) return;
+    const dot = (cx, cy) =>
+      `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5" class="hot pulse"><title>${tip}</title></circle>`;
+    if (coords.ant)  antHtml  += dot(...coords.ant);
+    if (coords.post) postHtml += dot(...coords.post);
+  });
 
-  // Update body only
-  let body = document.getElementById('injListBody');
-  if (!body) {
-    body = document.createElement('div');
-    body.id = 'injListBody';
-    container.appendChild(body);
-  }
+  document.getElementById('svgAnt').innerHTML  = antHtml;
+  document.getElementById('svgPost').innerHTML = postHtml;
+  document.getElementById('bodyMapSub').textContent = `${active.length} active · all time`;
+}
 
-  if (list.length === 0) {
-    body.style.cssText = 'padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)';
-    body.textContent = 'No injuries in this category.';
+// ═══════════════ TYPE BREAKDOWN ═══════════════
+function renderTypeBreakdown() {
+  const el = document.getElementById('injTypeBreakdown');
+  if (!el) return;
+  const counts = {};
+  _allInjuries.forEach(i => { const t = i.injury_type || 'Other'; counts[t] = (counts[t]||0)+1; });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5);
+  const maxC   = sorted[0]?.[1] || 1;
+  const COLORS = ['var(--cm-danger)','#EA580C','var(--cm-warning)','var(--cm-info)','var(--cm-neutral)'];
+  document.getElementById('typeBreakSub').textContent = `${_allInjuries.length} total · all time`;
+  el.innerHTML = `<div class="type-bars">${sorted.map(([t,c],i) =>
+    `<div class="type-row"><span class="l">${t}</span><span class="b"><span class="bf" style="width:${Math.round(c/maxC*80)+20}%;background:${COLORS[i]||'var(--cm-neutral)'}"></span></span><span class="v">${c}</span></div>`
+  ).join('')}</div>`;
+}
+
+// ═══════════════ RECENTLY RESOLVED ═══════════════
+function renderRecentlyResolved() {
+  const el   = document.getElementById('injResolved');
+  const sub  = document.getElementById('injResolvedSub');
+  const list = _allInjuries.filter(i => i.status === 'resolved').slice(0,6);
+  if (sub) sub.textContent = `${_allInjuries.filter(i=>i.status==='resolved').length} total`;
+  if (!el) return;
+  if (!list.length) {
+    el.style.cssText = 'color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center';
+    el.textContent = 'No resolved injuries yet.';
     return;
   }
-
-  body.style.cssText = '';
-  body.innerHTML = list.map(inj => injCard(inj, playersMap[inj.player_id])).join('');
+  el.style.cssText = '';
+  el.innerHTML = list.map(i => {
+    const pl   = i.players || _playersMap[i.player_id] || {};
+    const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'Unknown';
+    const initials = pName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const days  = (i.start_date && i.returned_date)
+      ? Math.max(0, Math.round((new Date(i.returned_date) - new Date(i.start_date)) / 86400000))
+      : '—';
+    const retDate = i.returned_date ? new Date(i.returned_date).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) : '—';
+    return `<div class="closed-row">
+      <div class="av">${initials}</div>
+      <div class="body">
+        <div class="name">${pName} · ${i.injury_type || '—'}</div>
+        <div class="meta">Returned ${retDate}</div>
+      </div>
+      <span class="days">${days}<sub>d</sub></span>
+      <span class="ok"><i class="ti ti-check"></i>RTP</span>
+    </div>`;
+  }).join('');
 }
 
-// ── Log Injury Modal ─────────────────────────────────────────────────────────
+// ═══════════════ BODY REGION FILTER ═══════════════
+function renderBodyRegionFilter() {
+  const dd   = document.getElementById('bodyRegionDd');
+  if (!dd) return;
+  const areas = [...new Set(_allInjuries.map(i => i.body_area).filter(Boolean))].sort();
+  dd.innerHTML = `<button class="inj-dd-item is-on" data-area="">All regions</button>` +
+    areas.map(a => `<button class="inj-dd-item" data-area="${a}">${a}</button>`).join('');
+  dd.addEventListener('click', e => {
+    const btn = e.target.closest('.inj-dd-item');
+    if (!btn) return;
+    dd.querySelectorAll('.inj-dd-item').forEach(b => b.classList.remove('is-on'));
+    btn.classList.add('is-on');
+    _currentRegion = btn.dataset.area || null;
+    dd.classList.remove('is-open');
+    applyFilters();
+  });
+}
 
+// ═══════════════ PLAYER SELECT ═══════════════
+function populatePlayerSelect(selId) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select player…</option>';
+  _players.forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = `${p.first_name} ${p.last_name}`.trim() + (p.number ? ' · #' + p.number : '');
+    sel.appendChild(o);
+  });
+}
+
+// ═══════════════ LOG MODAL ═══════════════
 function openLogModal() {
-  const m = document.getElementById('modalLogInj');
-  if (m) {
-    m.style.display = 'flex';
-    document.getElementById('logStart').value = new Date().toISOString().split('T')[0];
-    requestAnimationFrame(() => document.getElementById('logPlayer')?.focus());
-  }
+  _editingInjuryId = null;
+  document.getElementById('modalLogInjTitle').textContent = 'Log injury';
+  document.getElementById('logPlayer').value    = '';
+  document.getElementById('logType').value      = '';
+  document.getElementById('logAreaSel').value   = '';
+  document.getElementById('logSev').value       = '';
+  document.getElementById('logStart').value     = new Date().toISOString().split('T')[0];
+  document.getElementById('logReturn').value    = '';
+  document.getElementById('logMechanism').value = '';
+  document.getElementById('logNotes').value     = '';
+  document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => z.classList.remove('is-sel'));
+  document.getElementById('modalLogInj').classList.add('is-open');
 }
+
+function openEditInjury(id) {
+  const inj = _allInjuries.find(i => i.id === id);
+  if (!inj) return;
+  _editingInjuryId = id;
+  document.getElementById('modalLogInjTitle').textContent = 'Edit injury';
+  const pl = inj.players || _playersMap[inj.player_id] || {};
+  document.getElementById('logPlayer').value    = inj.player_id || '';
+  document.getElementById('logType').value      = inj.injury_type || '';
+  document.getElementById('logAreaSel').value   = inj.body_area || '';
+  document.getElementById('logSev').value       = inj.severity || '';
+  document.getElementById('logStart').value     = inj.start_date || '';
+  document.getElementById('logReturn').value    = inj.expected_return || '';
+  document.getElementById('logMechanism').value = inj.mechanism || '';
+  document.getElementById('logNotes').value     = inj.notes || '';
+  // Highlight on map
+  const area = inj.body_area || '';
+  document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
+    z.classList.toggle('is-sel', z.dataset.area === area);
+  });
+  document.getElementById('modalLogInj').classList.add('is-open');
+}
+
 function closeLogModal() {
-  const m = document.getElementById('modalLogInj');
-  if (m) m.style.display = 'none';
+  document.getElementById('modalLogInj').classList.remove('is-open');
 }
 
 async function saveInjury() {
-  const get = id => document.getElementById(id)?.value?.trim();
-  const player_id = get('logPlayer');
-  const injury_type = get('logType');
-  const body_area   = get('logArea');
-  const severity    = get('logSev');
-  const start_date  = get('logStart');
-  const expected_return = get('logReturn') || null;
-  const notes       = get('logNotes') || null;
+  const g = id => document.getElementById(id)?.value?.trim();
+  const player_id       = g('logPlayer');
+  const injury_type     = g('logType');
+  const body_area       = g('logAreaSel');
+  const severity        = g('logSev');
+  const start_date      = g('logStart');
+  const expected_return = g('logReturn') || null;
+  const mechanism       = g('logMechanism') || null;
+  const notes           = g('logNotes')  || null;
 
   if (!player_id || !injury_type || !severity || !start_date) {
-    alert('Please fill in all required fields.');
+    alert('Please fill in Player, Injury type, Severity and Start date.');
     return;
   }
 
-  const clubId = await window.getClubId();
-  const { error } = await window.sb.from('injuries').insert({
-    player_id, club_id: clubId,
-    injury_type, body_area, severity,
-    start_date, expected_return, notes,
-    status: 'active'
-  });
+  const payload = { player_id, injury_type, body_area: body_area || null, severity, start_date, expected_return, mechanism, notes };
 
-  if (error) { alert('Error saving injury: ' + error.message); return; }
+  if (_editingInjuryId) {
+    const { error } = await window.sb.from('injuries').update(payload).eq('id', _editingInjuryId);
+    if (error) { alert('Error updating: ' + error.message); return; }
+    const idx = _allInjuries.findIndex(i => i.id === _editingInjuryId);
+    if (idx >= 0) Object.assign(_allInjuries[idx], payload);
+  } else {
+    const { data: newInj, error } = await window.sb.from('injuries')
+      .insert({ ...payload, club_id: _clubId, status: 'active', created_by: _profile?.id || null })
+      .select('*, players:player_id(first_name,last_name,number,position)').single();
+    if (error) { alert('Error saving: ' + error.message); return; }
+
+    // Auto-create phases
+    try {
+      const phases = buildPhases(newInj.id, start_date, severity);
+      const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
+      if (insertedPhs) _phasesMap[newInj.id] = insertedPhs;
+    } catch(e) { console.warn('[Injuries] phases insert failed:', e.message); }
+
+    _allInjuries.unshift(newInj);
+  }
+
   closeLogModal();
-  window.location.reload();
+  updateKPIs();
+  updateTabCounts();
+  applyFilters();
+  renderBodyMap();
+  renderTypeBreakdown();
+  renderRecentlyResolved();
+  renderBodyRegionFilter();
 }
 
-// ── Discharge Modal ──────────────────────────────────────────────────────────
-
-let _dischargeId = null;
-
+// ═══════════════ DISCHARGE ═══════════════
 function openDischarge(id) {
   _dischargeId = id;
-  const m = document.getElementById('modalDischarge');
-  if (!m) return;
-
-  // Find the row to show player name in info
-  const row = document.querySelector(`[data-inj-id="${id}"]`);
-  const pName = row ? row.querySelector('.inj-player .name')?.textContent : '';
+  const inj  = _allInjuries.find(i => i.id === id);
+  const pl   = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
+  const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
   const info = document.getElementById('disInfo');
-  if (info) info.textContent = pName ? `Clearing injury record for ${pName}.` : 'Confirm discharge.';
-
-  document.getElementById('disDate').value = new Date().toISOString().split('T')[0];
-  m.style.display = 'flex';
+  if (info) info.textContent = pName ? `Clearing injury for ${pName} (${inj.injury_type || 'injury'}).` : 'Confirm discharge.';
+  document.getElementById('disDate').value  = new Date().toISOString().split('T')[0];
+  document.getElementById('disNotes').value = '';
+  document.getElementById('modalDischarge').classList.add('is-open');
 }
 function closeDischarge() {
   _dischargeId = null;
-  const m = document.getElementById('modalDischarge');
-  if (m) m.style.display = 'none';
+  document.getElementById('modalDischarge').classList.remove('is-open');
 }
 
 async function confirmDischarge() {
   if (!_dischargeId) return;
   const returnDate = document.getElementById('disDate')?.value || new Date().toISOString().split('T')[0];
+  const disNotes   = document.getElementById('disNotes')?.value?.trim() || null;
+
+  const inj   = _allInjuries.find(i => i.id === _dischargeId);
+  const notes = disNotes
+    ? ((inj?.notes ? inj.notes + '\n\n' : '') + `[Discharge ${returnDate}] ${disNotes}`)
+    : (inj?.notes || null);
 
   const { error } = await window.sb.from('injuries').update({
-    status: 'cleared',
-    expected_return: returnDate
+    status: 'resolved', returned_date: returnDate, notes
   }).eq('id', _dischargeId);
+  if (error) { alert('Error: ' + error.message); return; }
 
-  if (error) { alert('Error discharging: ' + error.message); return; }
+  // Mark all phases done
+  const phs = _phasesMap[_dischargeId];
+  if (phs && phs.length) {
+    const ids = phs.map(p => p.id);
+    await window.sb.from('injury_phases').update({ status: 'done' }).in('id', ids);
+    phs.forEach(p => { p.status = 'done'; });
+  }
+
+  // Revert future availability rows to 'available'
+  try {
+    if (inj?.player_id) {
+      await window.sb.from('availability').update({ status: 'available' })
+        .eq('player_id', inj.player_id).eq('club_id', _clubId).gte('date', returnDate);
+    }
+  } catch(_) { /* availability table may differ */ }
+
+  // Update local state
+  if (inj) { inj.status = 'resolved'; inj.returned_date = returnDate; if (notes) inj.notes = notes; }
+
   closeDischarge();
-  window.location.reload();
+  updateKPIs();
+  updateTabCounts();
+  applyFilters();
+  renderBodyMap();
+  renderRecentlyResolved();
+}
+
+// ═══════════════ PHASE TOGGLE ═══════════════
+async function togglePhase(phaseId, injuryId) {
+  const phs = _phasesMap[injuryId];
+  if (!phs) return;
+  const ph = phs.find(p => p.id === phaseId);
+  if (!ph || ph.status === 'done') return;
+
+  const newStatus = ph.status === 'in_progress' ? 'done' : 'in_progress';
+  ph.status = newStatus;
+  if (newStatus === 'done') {
+    const next = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'pending');
+    if (next) next.status = 'in_progress';
+  }
+
+  applyFilters(); // re-render optimistically
+
+  await window.sb.from('injury_phases').update({ status: newStatus }).eq('id', phaseId);
+  if (newStatus === 'done') {
+    const nextPh = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'in_progress');
+    if (nextPh) await window.sb.from('injury_phases').update({ status: 'in_progress' }).eq('id', nextPh.id);
+  }
+}
+
+// ═══════════════ DELETE ═══════════════
+async function deleteInjury(id) {
+  const inj  = _allInjuries.find(i => i.id === id);
+  const pl   = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
+  const name = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'this injury';
+  if (!confirm(`Delete injury for ${name}? This cannot be undone.`)) return;
+  const { error } = await window.sb.from('injuries').delete().eq('id', id);
+  if (error) { alert('Error: ' + error.message); return; }
+  _allInjuries = _allInjuries.filter(i => i.id !== id);
+  delete _phasesMap[id];
+  updateKPIs();
+  updateTabCounts();
+  applyFilters();
+  renderBodyMap();
+  renderTypeBreakdown();
+  renderRecentlyResolved();
+  renderBodyRegionFilter();
 }
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme:"hybrid", accent:"green" };</script>
 <script type="text/babel" src="settings-drawer.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
-
-<script>
-  document.querySelectorAll('.inj-segs').forEach(g => g.querySelectorAll('.inj-seg').forEach(s => s.addEventListener('click', () => {
-    g.querySelectorAll('.inj-seg').forEach(o => o.classList.remove('is-on'));
-    s.classList.add('is-on');
-  })));
-  document.querySelectorAll('.inj-toolbar .inj-pill').forEach(p => p.addEventListener('click', () => {
-    document.querySelectorAll('.inj-toolbar .inj-pill').forEach(o => o.classList.remove('is-on'));
-    p.classList.add('is-on');
-  }));
-</script>
-
-
-<script>
-  // Sex toggle for body map
-  const bodySex = document.getElementById('bodySex');
-  const bodyAnt = document.getElementById('bodyAnt');
-  const bodyPost = document.getElementById('bodyPost');
-  if (bodySex && bodyAnt && bodyPost) {
-    bodySex.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-sex]');
-      if (!btn) return;
-      bodySex.querySelectorAll('button').forEach(b => b.classList.remove('is-on'));
-      btn.classList.add('is-on');
-      const s = btn.dataset.sex;
-      bodyAnt.src = 'assets/body-' + s + '-front.png';
-      bodyPost.src = 'assets/body-' + s + '-back.png';
-    });
-  }
-</script>
 
 </body>
 </html>
