@@ -123,7 +123,7 @@
   .ph-notify input[type=checkbox] { accent-color:var(--cm-accent); width:16px; height:16px; cursor:pointer; flex-shrink:0; }
   .ph-notify label { font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; flex:1; }
 
-  .ph-actions { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); border-radius:0 0 var(--cm-r-4) var(--cm-r-4); }
+  .ph-actions { display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); border-radius:0 0 var(--cm-r-4) var(--cm-r-4); }
   .ph-actions .grow { flex:1; }
 
   /* Filters */
@@ -676,8 +676,7 @@ let _selectedZones = new Set();
              injuries(injury_type, body_part)`)
     .eq('club_id', _clubId)
     .gte('date', monthAgo)
-    .order('date', { ascending: false })
-    .catch(() => ({ data: [] }));
+    .order('date', { ascending: false });
 
   if (tErr) console.warn('[physio] treatments error:', tErr.message);
   _allTreatments = treatments || [];
@@ -777,8 +776,7 @@ document.getElementById('phPlayerSelect').addEventListener('change', async funct
     .select('id,injury_type,body_part,injury_date')
     .eq('player_id', pid)
     .or(`actual_return.is.null,actual_return.gte.${today}`)
-    .order('injury_date', { ascending: false })
-    .catch(() => ({ data: [] }));
+    .order('injury_date', { ascending: false });
 
   if (!injuries?.length) {
     injSel.innerHTML = '<option value="">—</option>';
@@ -917,12 +915,12 @@ async function saveTreatment(andNew) {
 
   // Notify coaches if checked and adaptation text exists
   if (notify && adaptTxt && saved?.id) {
-    await sendCoachNotifications(saved.id, pid, adaptTxt);
+    try { await sendCoachNotifications(saved.id, pid, adaptTxt); } catch(e) { console.warn('[Physio] coach notif error:', e); }
   }
 
   // Urgent worsening notification (regardless of notify checkbox)
   if (status === 'worsening') {
-    await sendWorseningNotification(pid);
+    try { await sendWorseningNotification(pid); } catch(e) { console.warn('[Physio] worsening notif error:', e); }
   }
 
   btn.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i> Saved!';
@@ -942,7 +940,10 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
   const todayFmt   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const ops = [
-    window.sb.from('treatments').update({ adaptation_sent_at: new Date().toISOString() }).eq('id', treatmentId).catch(console.warn),
+    (async () => {
+      const { error } = await window.sb.from('treatments').update({ adaptation_sent_at: new Date().toISOString() }).eq('id', treatmentId);
+      if (error) console.warn(error);
+    })(),
   ];
 
   if (coachStaff.length) {
@@ -954,15 +955,21 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
       body:    adaptText,
       link:    '/Daily Planning.html',
     }));
-    ops.push(window.sb.from('notifications').insert(notifications).catch(console.warn));
+    ops.push((async () => {
+      const { error } = await window.sb.from('notifications').insert(notifications);
+      if (error) console.warn(error);
+    })());
   }
 
   // Auto-message to club chat
-  ops.push(window.sb.from('messages').insert({
-    club_id:   _clubId,
-    sender_id: _profile?.id,
-    content:   `Adaptation for ${playerName} next session:\n${adaptText}\n— ${physioName} · ${todayFmt}`,
-  }).catch(console.warn));
+  ops.push((async () => {
+    const { error } = await window.sb.from('messages').insert({
+      club_id:   _clubId,
+      sender_id: _profile?.id,
+      content:   `Adaptation for ${playerName} next session:\n${adaptText}\n— ${physioName} · ${todayFmt}`,
+    });
+    if (error) console.warn(error);
+  })());
 
   await Promise.all(ops);
 }
@@ -984,13 +991,19 @@ async function sendWorseningNotification(playerId) {
       body:    `${playerName}'s condition is worsening. Review treatment plan.`,
       link:    '/Physio.html',
     }));
-    ops.push(window.sb.from('notifications').insert(notifications).catch(console.warn));
+    ops.push((async () => {
+      const { error } = await window.sb.from('notifications').insert(notifications);
+      if (error) console.warn(error);
+    })());
   }
-  ops.push(window.sb.from('messages').insert({
-    club_id:   _clubId,
-    sender_id: _profile?.id,
-    content:   `${playerName} — Negative evolution in treatment.\n— ${physioName} · ${todayFmt}`,
-  }).catch(console.warn));
+  ops.push((async () => {
+    const { error } = await window.sb.from('messages').insert({
+      club_id:   _clubId,
+      sender_id: _profile?.id,
+      content:   `${playerName} — Negative evolution in treatment.\n— ${physioName} · ${todayFmt}`,
+    });
+    if (error) console.warn(error);
+  })());
 
   await Promise.all(ops);
 }
@@ -1026,13 +1039,19 @@ async function registerClearance() {
       body:    `${playerName} alta médica confirmada · ${todayFmt}`,
       link:    '/Daily Planning.html',
     }));
-    ops.push(window.sb.from('notifications').insert(notifications).catch(console.warn));
+    ops.push((async () => {
+      const { error } = await window.sb.from('notifications').insert(notifications);
+      if (error) console.warn(error);
+    })());
   }
-  ops.push(window.sb.from('messages').insert({
-    club_id:   _clubId,
-    sender_id: _profile?.id,
-    content:   `${playerName} cleared — available for training · ${todayFmt}\n— ${physioName}`,
-  }).catch(console.warn));
+  ops.push((async () => {
+    const { error } = await window.sb.from('messages').insert({
+      club_id:   _clubId,
+      sender_id: _profile?.id,
+      content:   `${playerName} cleared — available for training · ${todayFmt}\n— ${physioName}`,
+    });
+    if (error) console.warn(error);
+  })());
 
   await Promise.all(ops);
   alert(`${playerName} cleared successfully.`);
@@ -1239,8 +1258,7 @@ async function openTemplates() {
     .from('treatment_templates')
     .select('*')
     .eq('club_id', _clubId)
-    .order('created_at', { ascending: false })
-    .catch(() => ({ data: [] }));
+    .order('created_at', { ascending: false });
   _allTemplates = tmpls || [];
   renderTemplates();
 }
@@ -1361,8 +1379,7 @@ async function loadPlayerHistory() {
              injuries(injury_type, body_part)`)
     .eq('club_id', _clubId)
     .eq('player_id', pid)
-    .order('date', { ascending: false })
-    .catch(() => ({ data: [] }));
+    .order('date', { ascending: false });
 
   if (!hist?.length) {
     content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No treatment history found for this player.</div>';
