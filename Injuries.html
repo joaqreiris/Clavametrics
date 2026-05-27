@@ -452,6 +452,44 @@
         </div>
       </div>
 
+      <!-- BAMIC section — shown only for muscular injuries -->
+      <div id="bamicSection" style="display:none">
+        <div class="inj-2col">
+          <div class="cm-field">
+            <label class="cm-label" for="logBamic">BAMIC Grade (Pollock 2014)</label>
+            <select id="logBamic" class="cm-input">
+              <option value="">Not classified</option>
+              <optgroup label="Grade 0 — No structural injury">
+                <option value="0a">0a — No structural injury (pain, normal MRI)</option>
+                <option value="0b">0b — DOMS (generalized soreness, normal/DOMS MRI)</option>
+              </optgroup>
+              <optgroup label="Grade 1 — Mild (&lt;10% CSA)">
+                <option value="1a">1a — Mild myofascial</option>
+                <option value="1b">1b — Mild musculotendinous</option>
+                <option value="1c">1c — Mild intratendinous ⚠ elevated re-injury risk</option>
+              </optgroup>
+              <optgroup label="Grade 2 — Moderate (10–50% CSA)">
+                <option value="2a">2a — Moderate myofascial</option>
+                <option value="2b">2b — Moderate musculotendinous</option>
+                <option value="2c">2c — Moderate intratendinous ⚠ high re-injury risk</option>
+              </optgroup>
+              <optgroup label="Grade 3 — Extensive (&gt;50% CSA)">
+                <option value="3a">3a — Extensive myofascial</option>
+                <option value="3b">3b — Extensive musculotendinous</option>
+                <option value="3c">3c — Extensive intratendinous ⚠ very high re-injury risk</option>
+              </optgroup>
+              <optgroup label="Grade 4 — Complete tear">
+                <option value="4">4 — Complete tear (muscular or tendinous)</option>
+              </optgroup>
+            </select>
+          </div>
+          <div id="bamicAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
+            <strong style="margin-bottom:3px">⚠ Intratendinous injury</strong>
+            Elevated re-injury risk. Extended rehabilitation recommended.
+          </div>
+        </div>
+      </div>
+
       <!-- Visual body selector -->
       <div>
         <div class="cm-label" style="margin-bottom:6px">Click area on body map to select</div>
@@ -703,7 +741,81 @@ function getProtocol(injuryType) {
   return PROTOCOLS.generic;
 }
 
-function buildPhases(injuryId, startDate, severity, injuryType) {
+// ═══════════════ BAMIC CLASSIFICATION (Pollock 2014, 2016) ═══════════════
+const _BAMIC_LONG  = ['Acute','Regeneration','Functional','Return to running','Return to training','Return to play'];
+const _BAMIC_SHORT = ['Acute','Return to training','Return to play'];
+
+const BAMIC_PROTOCOLS = {
+  '0a': { phases:_BAMIC_SHORT, ends:[2,3,5] },
+  '0b': { phases:_BAMIC_SHORT, ends:[2,3,5] },
+  '1a': { phases:_BAMIC_LONG,  ends:[3,6,10,12,14,15] },
+  '1b': { phases:_BAMIC_LONG,  ends:[4,8,14,17,19,21] },
+  '1c': { phases:_BAMIC_LONG,  ends:[5,10,18,24,30,35], intratendinous:true },
+  '2a': { phases:_BAMIC_LONG,  ends:[5,10,18,22,26,28] },
+  '2b': { phases:_BAMIC_LONG,  ends:[6,13,23,28,33,35] },
+  '2c': { phases:_BAMIC_LONG,  ends:[10,20,36,44,52,56], intratendinous:true },
+  '3a': { phases:_BAMIC_LONG,  ends:[8,17,28,34,39,42] },
+  '3b': { phases:_BAMIC_LONG,  ends:[12,24,42,51,57,63] },
+  '3c': { phases:_BAMIC_LONG,  ends:[16,32,56,68,76,84], intratendinous:true },
+  '4':  { phases:_BAMIC_LONG,  ends:[14,28,56,70,84,105], surgical:true },
+};
+
+const BAMIC_CRITERIA_BY_PHASE = {
+  'Acute':              [{id:'a1',label:'No pain at rest'},{id:'a2',label:'Swelling controlled'},{id:'a3',label:'Normal gait pattern'}],
+  'Regeneration':       [{id:'rg1',label:'Pain-free passive ROM'},{id:'rg2',label:'No palpation pain at injury site'},{id:'rg3',label:'Satisfactory tissue tone on palpation'}],
+  'Functional':         [{id:'fn1',label:'Isokinetic strength ≥60% vs contralateral'},{id:'fn2',label:'Pain-free cycling / aquatic exercise'},{id:'fn3',label:'Core and hip stability exercises completed'}],
+  'Return to running':  [{id:'rr1',label:'Pain-free running at 8 km/h'},{id:'rr2',label:'No swelling post-exercise'},{id:'rr3',label:'Full passive ROM'}],
+  'Return to training': [{id:'rt1',label:'Full training without restrictions'},{id:'rt2',label:'Strength symmetry >80%'},{id:'rt3',label:'No pain on palpation'}],
+  'Return to play':     [{id:'rp1',label:'Asymmetry <10% in isokinetic testing'},{id:'rp2',label:'Successful completion of sport-specific drills'},{id:'rp3',label:'Psychological readiness confirmed'}],
+};
+
+const BAMIC_CRITERIA_EXTRA_34 = [
+  {id:'ex1',label:'Isokinetic strength ≥90% symmetry'},
+  {id:'ex2',label:'Single-leg hop test ≥90%'},
+  {id:'ex3',label:'Sprint mechanics assessment passed'},
+];
+
+function isMuscular(t) {
+  return /muscle|strain|tear|hamstring|quad|calf|adductor|groin|biceps femoris|rectus femoris/i.test(t || '');
+}
+
+function getBamicCriteria(phaseName, grade) {
+  const base     = BAMIC_CRITERIA_BY_PHASE[phaseName] || [];
+  const advanced = ['Return to running','Return to training','Return to play'];
+  const isHigh   = grade === '4' || /^3/.test(grade);
+  return (isHigh && advanced.includes(phaseName)) ? [...base, ...BAMIC_CRITERIA_EXTRA_34] : base;
+}
+
+const _BAMIC_PHASE_TYPES = {
+  'Acute':'acute','Regeneration':'subacute','Functional':'strength',
+  'Return to running':'running','Return to training':'training','Return to play':'competition',
+};
+
+function buildBamicPhases(injuryId, startDate, grade) {
+  const proto = BAMIC_PROTOCOLS[grade];
+  if (!proto) return null;
+  return proto.phases.map((name, idx) => {
+    const prevEnd = idx === 0 ? 0 : proto.ends[idx - 1];
+    const thisEnd = proto.ends[idx];
+    const phStart = new Date(startDate); phStart.setDate(phStart.getDate() + prevEnd);
+    const phEnd   = new Date(startDate); phEnd.setDate(phEnd.getDate() + thisEnd);
+    const items   = getBamicCriteria(name, grade);
+    return {
+      injury_id: injuryId, phase_number: idx + 1, phase_name: name,
+      phase_type: _BAMIC_PHASE_TYPES[name] || 'generic',
+      criteria: items.map(c => c.label).join('; '),
+      criteria_items: items,
+      start_date: phStart.toISOString().split('T')[0],
+      end_date:   phEnd.toISOString().split('T')[0],
+      status: idx === 0 ? 'in_progress' : 'pending',
+    };
+  });
+}
+
+function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade) {
+  if (bamicGrade && BAMIC_PROTOCOLS[bamicGrade]) {
+    return buildBamicPhases(injuryId, startDate, bamicGrade);
+  }
   const proto = getProtocol(injuryType);
   const sev   = severity || 'moderate';
   const durs  = proto.durations[sev] || proto.durations.severe || proto.durations.moderate;
@@ -840,6 +952,22 @@ function buildPhases(injuryId, startDate, severity, injuryType) {
     document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
       z.classList.toggle('is-sel', z.dataset.area === this.value);
     });
+  });
+
+  // Show BAMIC section when injury type is muscular
+  document.getElementById('logType')?.addEventListener('input', function() {
+    const show = isMuscular(this.value);
+    document.getElementById('bamicSection').style.display = show ? '' : 'none';
+    if (!show) {
+      document.getElementById('logBamic').value = '';
+      document.getElementById('bamicAlert').style.display = 'none';
+    }
+  });
+
+  // Show intratendinous alert when grade ends in 'c'
+  document.getElementById('logBamic')?.addEventListener('change', function() {
+    document.getElementById('bamicAlert').style.display =
+      this.value.endsWith('c') ? 'flex' : 'none';
   });
 
   // Sex toggle for body map
@@ -1279,6 +1407,9 @@ function openLogModal() {
   document.getElementById('logReturn').value    = '';
   document.getElementById('logMechanism').value = '';
   document.getElementById('logNotes').value     = '';
+  document.getElementById('logBamic').value     = '';
+  document.getElementById('bamicSection').style.display = 'none';
+  document.getElementById('bamicAlert').style.display   = 'none';
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => z.classList.remove('is-sel'));
   document.getElementById('modalLogInj').classList.add('is-open');
 }
@@ -1297,6 +1428,10 @@ function openEditInjury(id) {
   document.getElementById('logReturn').value    = inj.expected_return || '';
   document.getElementById('logMechanism').value = inj.mechanism || '';
   document.getElementById('logNotes').value     = inj.notes || '';
+  document.getElementById('logBamic').value     = inj.bamic_grade || '';
+  const _showBamic = isMuscular(inj.injury_type || '');
+  document.getElementById('bamicSection').style.display = _showBamic ? '' : 'none';
+  document.getElementById('bamicAlert').style.display   = _showBamic && (inj.bamic_grade || '').endsWith('c') ? 'flex' : 'none';
   // Highlight on map
   const area = inj.body_area || '';
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
@@ -1319,13 +1454,14 @@ async function saveInjury() {
   const expected_return = g('logReturn') || null;
   const mechanism       = g('logMechanism') || null;
   const notes           = g('logNotes')  || null;
+  const bamic_grade     = g('logBamic')  || null;
 
   if (!player_id || !injury_type || !severity || !start_date) {
     alert('Please fill in Player, Injury type, Severity and Start date.');
     return;
   }
 
-  const payload = { player_id, injury_type, body_area: body_area || null, severity, start_date, expected_return, mechanism, notes };
+  const payload = { player_id, injury_type, body_area: body_area || null, severity, start_date, expected_return, mechanism, notes, bamic_grade };
 
   if (_editingInjuryId) {
     const { error } = await window.sb.from('injuries').update(payload).eq('id', _editingInjuryId);
@@ -1340,7 +1476,7 @@ async function saveInjury() {
 
     // Auto-create phases
     try {
-      const phases = buildPhases(newInj.id, start_date, severity, injury_type);
+      const phases = buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade);
       const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
       if (insertedPhs) _phasesMap[newInj.id] = insertedPhs;
     } catch(e) { console.warn('[Injuries] phases insert failed:', e.message); }
