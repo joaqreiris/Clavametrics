@@ -1217,14 +1217,16 @@ function renderTasks(tasks) {
       .order('session_time', { ascending: true })
       .limit(1)
       .maybeSingle(),
-    window.sb.from('treatments')
-      .select('id, player_id, date, adaptation, adaptation_notes, notify_coaches, adaptation_sent_at, physio_id, players(first_name, last_name), profiles!physio_id(full_name)')
-      .eq('club_id', clubId)
-      .eq('notify_coaches', true)
-      .gte('date', date14)
-      .order('date', { ascending: false })
-      .limit(5)
-      .catch(() => ({ data: [] })),
+    (async () => {
+      const { data, error } = await window.sb.from('treatments')
+        .select('id, player_id, date, adaptation, adaptation_notes, notify_coaches, adaptation_sent_at, physio_id, players(first_name, last_name), profiles!physio_id(full_name)')
+        .eq('club_id', clubId)
+        .eq('notify_coaches', true)
+        .gte('date', date14)
+        .order('date', { ascending: false })
+        .limit(5);
+      return error ? { data: [] } : { data };
+    })(),
     window.sb.from('injuries')
       .select('player_id, returned_date, body_area, players(first_name, last_name)')
       .eq('club_id', clubId)
@@ -1328,22 +1330,26 @@ function renderTasks(tasks) {
     const d14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const d7  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const [newTreat, newCleared] = await Promise.all([
-      window.sb.from('treatments')
-        .select('id, player_id, date, adaptation, adaptation_notes, notify_coaches, adaptation_sent_at, physio_id, players(first_name, last_name), profiles!physio_id(full_name)')
-        .eq('club_id', clubId)
-        .eq('notify_coaches', true)
-        .gte('date', d14)
-        .order('date', { ascending: false })
-        .limit(5)
-        .catch(() => ({ data: [] })),
-      window.sb.from('injuries')
-        .select('player_id, returned_date, body_area, players(first_name, last_name), profiles!created_by(full_name, role)')
-        .eq('club_id', clubId)
-        .eq('status', 'cleared')
-        .gte('returned_date', d7)
-        .order('returned_date', { ascending: false })
-        .limit(3)
-        .catch(() => ({ data: [] })),
+      (async () => {
+        const { data, error } = await window.sb.from('treatments')
+          .select('id, player_id, date, adaptation, adaptation_notes, notify_coaches, adaptation_sent_at, physio_id, players(first_name, last_name), profiles!physio_id(full_name)')
+          .eq('club_id', clubId)
+          .eq('notify_coaches', true)
+          .gte('date', d14)
+          .order('date', { ascending: false })
+          .limit(5);
+        return error ? { data: [] } : { data };
+      })(),
+      (async () => {
+        const { data, error } = await window.sb.from('injuries')
+          .select('player_id, returned_date, body_area, players(first_name, last_name), profiles!created_by(full_name, role)')
+          .eq('club_id', clubId)
+          .eq('status', 'cleared')
+          .gte('returned_date', d7)
+          .order('returned_date', { ascending: false })
+          .limit(3);
+        return error ? { data: [] } : { data };
+      })(),
     ]);
     const c = window._hubActCache;
     renderActivity(c.sess, c.inj, c.gps, c.wellness, c.squad, newTreat.data, newCleared.data);
