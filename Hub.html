@@ -856,12 +856,14 @@ document.querySelectorAll('.task').forEach(el => {
     saveBtn.textContent = 'Saving…';
 
     const { error } = await window.sb.from('tasks').insert({
-      club_id:    clubId,
-      assigned_to: userId,
+      club_id:          clubId,
+      assigned_to:      userId,
+      created_by:       userId,
+      created_by_name:  window._hubProfileName || null,
       title,
-      priority:   document.getElementById('atPriority').value,
-      status:     'open',
-      due_date:   dueInput.value || null,
+      priority:         document.getElementById('atPriority').value,
+      status:           'open',
+      due_date:         dueInput.value || null,
     });
 
     if (error) {
@@ -874,6 +876,18 @@ document.querySelectorAll('.task').forEach(el => {
     showHubToast('Task added');
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save task';
+
+    const _cid = window._hubClubId, _uid = window._hubUserId;
+    if (_cid && _uid) {
+      const { data: refreshed } = await window.sb.from('tasks')
+        .select('id, title, priority, status, due_date, created_by_name')
+        .eq('club_id', _cid)
+        .or(`assigned_to.eq.${_uid},created_by.eq.${_uid}`)
+        .neq('status', 'cancelled')
+        .order('due_date', { ascending: true })
+        .limit(10);
+      if (refreshed) renderTasks(refreshed);
+    }
   });
 })();
 
@@ -1063,7 +1077,7 @@ function renderTasks(tasks) {
   const priorityColor = { urgent: 'var(--cm-danger)', high: 'var(--cm-danger)', medium: 'var(--cm-warning)', low: 'var(--cm-fg-muted)' };
   const priorityLabel = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' };
 
-  const pending = tasks.filter(t => t.status !== 'done').length;
+  const pending = tasks.filter(t => t.status !== 'done' && t.status !== 'completed').length;
   const countEl = document.getElementById('btnAddTask').closest('.section-header')?.querySelector('.count');
   if (countEl) countEl.textContent = pending;
 
@@ -1077,7 +1091,7 @@ function renderTasks(tasks) {
   }
 
   tasks.forEach(task => {
-    const isDone = task.status === 'done';
+    const isDone = task.status === 'done' || task.status === 'completed';
     const color = priorityColor[task.priority] || 'var(--cm-fg-muted)';
     const label = priorityLabel[task.priority] || task.priority || '';
     const from  = task.created_by_name ? ` · from ${task.created_by_name}` : '';
@@ -1092,11 +1106,13 @@ function renderTasks(tasks) {
       </div>
       <div class="when">${formatDue(task.due_date)}</div>`;
     const check = el.querySelector('.check');
-    function toggle() {
+    async function toggle() {
+      const nowDone = !el.classList.contains('is-done');
       el.classList.toggle('is-done');
-      check.setAttribute('aria-checked', el.classList.contains('is-done') ? 'true' : 'false');
+      check.setAttribute('aria-checked', nowDone ? 'true' : 'false');
+      await window.sb.from('tasks').update({ status: nowDone ? 'completed' : 'open' }).eq('id', task.id);
     }
-    check.addEventListener('click', toggle);
+    check.addEventListener('click', () => toggle());
     check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
     container.appendChild(el);
   });
@@ -1125,6 +1141,7 @@ function renderTasks(tasks) {
   }
 
   if (club) await window.applyClubTheme();
+  window._hubProfileName = profile?.full_name || null;
 
   // KPIs
   if (!clubId) return;
@@ -1154,7 +1171,7 @@ function renderTasks(tasks) {
       ? window.sb.from('tasks')
           .select('id, title, priority, status, due_date, created_by_name')
           .eq('club_id', clubId)
-          .eq('assigned_to', userId)
+          .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
           .neq('status', 'cancelled')
           .order('due_date', { ascending: true })
           .limit(10)
@@ -1175,12 +1192,11 @@ function renderTasks(tasks) {
       .order('created_at', { ascending: false })
       .limit(3),
     window.sb.from('injuries')
-      .select('body_area, injury_type, start_date, created_at, players!inner(first_name, last_name), profiles!created_by(full_name, role)')
+      .select('body_area, injury_type, start_date, created_at, players!inner(first_name, last_name)')
       .eq('club_id', clubId)
       .gte('start_date', date14)
       .order('start_date', { ascending: false })
-      .limit(3)
-      .catch(() => ({ data: [] })),
+      .limit(3),
     window.sb.from('gps_reports')
       .select('session_id, created_at, training_sessions!inner(title, session_date)')
       .eq('club_id', clubId)
@@ -1210,14 +1226,15 @@ function renderTasks(tasks) {
       .limit(5)
       .catch(() => ({ data: [] })),
     window.sb.from('injuries')
-      .select('player_id, returned_date, body_area, players(first_name, last_name), profiles!created_by(full_name, role)')
+      .select('player_id, returned_date, body_area, players(first_name, last_name)')
       .eq('club_id', clubId)
       .eq('status', 'cleared')
       .gte('returned_date', date7)
       .order('returned_date', { ascending: false })
-      .limit(3)
-      .catch(() => ({ data: [] })),
+      .limit(3),
   ]);
+
+  console.log('recent activity result:', { sessActRes, injActRes, gpsActRes, treatActRes, clearActRes });
 
   if (!squadRes.error && squadRes.count !== null) {
     document.getElementById('kpiSquad').innerHTML = `${squadRes.count} <sub>players</sub>`;

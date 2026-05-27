@@ -359,7 +359,7 @@
                 <div id="viewFront">
                   <img class="body-img" src="assets/body-male-front.png" alt="Anterior">
                   <svg class="body-overlay" id="svgFront" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet">
-                    <ellipse class="mzone" data-z="Neck"       cx="50" cy="19" rx="5"   ry="4"/>
+                    <ellipse class="mzone" data-z="Neck"       cx="50" cy="26" rx="5"   ry="4"/>
                     <ellipse class="mzone" data-z="L Shoulder" cx="30" cy="34" rx="6.5" ry="6"/>
                     <ellipse class="mzone" data-z="R Shoulder" cx="70" cy="34" rx="6.5" ry="6"/>
                     <ellipse class="mzone" data-z="L Pec"      cx="40" cy="44" rx="7"   ry="6"/>
@@ -620,20 +620,21 @@ let _selectedZones = new Set();
   document.getElementById('phDateInput').value = today;
 
   // Load players ordered by last_name; filter inactive client-side to avoid null != issues
-  const { data: players } = await window.sb
+  console.log('club_id en Treatments:', _clubId);
+  const { data: players, error: playersErr } = await window.sb
     .from('players')
     .select('id,first_name,last_name,number,position,status')
     .eq('club_id', _clubId)
-    .order('last_name')
-    .catch(() => ({ data: [] }));
+    .order('last_name');
+  console.log('players result:', players, playersErr);
   _allPlayers = (players || []).filter(p => p.status !== 'inactive');
 
   // Load staff/physio (profiles for the club)
-  const { data: staff } = await window.sb
+  const { data: staff, error: staffErr } = await window.sb
     .from('profiles')
     .select('id,full_name,role')
-    .eq('club_id', _clubId)
-    .catch(() => ({ data: [] }));
+    .eq('club_id', _clubId);
+  if (staffErr) console.error('[physio] staff error:', staffErr);
   _allStaff = staff || [];
 
   // Populate player selects
@@ -960,7 +961,7 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
   ops.push(window.sb.from('messages').insert({
     club_id:   _clubId,
     sender_id: _profile?.id,
-    content:   `📋 Adaptation for ${playerName} next session:\n${adaptText}\n— ${physioName} · ${todayFmt}`,
+    content:   `Adaptation for ${playerName} next session:\n${adaptText}\n— ${physioName} · ${todayFmt}`,
   }).catch(console.warn));
 
   await Promise.all(ops);
@@ -1021,7 +1022,7 @@ async function registerClearance() {
       user_id: s.id,
       club_id: _clubId,
       type:    'physio_clearance',
-      title:   `✅ ${playerName} cleared — available for training`,
+      title:   `${playerName} cleared — available for training`,
       body:    `${playerName} alta médica confirmada · ${todayFmt}`,
       link:    '/Daily Planning.html',
     }));
@@ -1030,7 +1031,7 @@ async function registerClearance() {
   ops.push(window.sb.from('messages').insert({
     club_id:   _clubId,
     sender_id: _profile?.id,
-    content:   `✅ ${playerName} cleared — available for training · ${todayFmt}\n— ${physioName}`,
+    content:   `${playerName} cleared — available for training · ${todayFmt}\n— ${physioName}`,
   }).catch(console.warn));
 
   await Promise.all(ops);
