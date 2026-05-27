@@ -627,6 +627,19 @@
           oninput="updatePhaseCompleteBtn()"></textarea>
       </div>
 
+      <!-- Revert confirmation (shown when user clicks Revert status) -->
+      <div id="phRevertSection" style="display:none;flex-direction:column;gap:8px;padding:12px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.2);border-radius:8px">
+        <div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-danger)" id="phRevertLabel">Revert phase status</div>
+        <div class="cm-field" style="margin:0">
+          <label class="cm-label" for="phRevertReason">Reason for reverting <span style="color:var(--cm-danger)">*</span></label>
+          <textarea id="phRevertReason" class="cm-input" rows="2" placeholder="Clinical reason for reverting this phase status…"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="cm-btn is-ghost is-sm" onclick="cancelRevert()">Cancel</button>
+          <button class="cm-btn is-sm" style="background:var(--cm-danger);border-color:var(--cm-danger);color:#fff" onclick="confirmRevert()"><i class="ti ti-check" style="font-size:13px"></i>Confirm revert</button>
+        </div>
+      </div>
+
       <!-- Notes -->
       <div class="cm-field">
         <label class="cm-label" for="phModalNotes">Physiotherapist notes</label>
@@ -644,6 +657,7 @@
       </div>
     </div>
     <div class="inj-modal-foot">
+      <button class="cm-btn is-ghost" id="phBtnRevert" onclick="openRevertSection()" style="display:none;margin-right:auto;color:var(--cm-danger)"><i class="ti ti-arrow-back-up" style="font-size:13px"></i>Revert status</button>
       <button class="cm-btn is-ghost" onclick="closePhaseModal()">Cancel</button>
       <button class="cm-btn is-outline" id="phBtnInProgress" onclick="savePhaseStatus('in_progress')">Mark as in progress</button>
       <button class="cm-btn is-primary" id="phBtnComplete" onclick="savePhaseStatus('done')" disabled>Mark as complete</button>
@@ -973,6 +987,9 @@ function openPhaseModal(phaseId, injId) {
   const isDone = ph.status === 'done';
   document.getElementById('phBtnInProgress').style.display = (ph.status === 'pending') ? '' : 'none';
   document.getElementById('phBtnComplete').style.display   = isDone ? 'none' : '';
+  document.getElementById('phBtnRevert').style.display     = (ph.status !== 'pending') ? '' : 'none';
+  document.getElementById('phRevertSection').style.display = 'none';
+  document.getElementById('phRevertReason').value          = '';
 
   document.getElementById('modalPhase').classList.add('is-open');
 }
@@ -1313,14 +1330,18 @@ function isReturning(inj) {
 }
 
 function hasReinjuryRisk(inj) {
-  if (!inj.body_area || !inj.start_date) return false;
+  return !!getPriorInjury(inj);
+}
+
+function getPriorInjury(inj) {
+  if (!inj.body_area || !inj.start_date) return null;
   const injStart = new Date(inj.start_date);
   const ninety   = new Date(injStart); ninety.setDate(injStart.getDate() - 90);
-  return _allInjuries.some(o =>
+  return _allInjuries.find(o =>
     o.id !== inj.id && o.player_id === inj.player_id &&
     (o.body_area || '').toLowerCase() === inj.body_area.toLowerCase() &&
     new Date(o.start_date) >= ninety && new Date(o.start_date) < injStart
-  );
+  ) || null;
 }
 
 function updateTabCounts() {
@@ -1497,7 +1518,12 @@ function injCard(inj) {
         </div>
       </div>
     </div>
-    ${hasReinjuryRisk(inj) ? `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>High re-injury risk — review rehabilitation protocol</span></div>` : ''}
+    ${(() => {
+    const prior = getPriorInjury(inj);
+    if (!prior) return '';
+    const days = Math.round((new Date(inj.start_date) - new Date(prior.start_date)) / 86400000);
+    return `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>Re-injury — previous ${prior.injury_type || inj.injury_type || 'injury'} (${prior.body_area || inj.body_area || ''}) ${days}d ago. Extended protocol recommended.</span></div>`;
+  })()}
     <div class="inj-timeline">${tlHtml}</div>
 
     <div class="inj-progress-row">
@@ -1788,6 +1814,67 @@ async function confirmDischarge() {
   applyFilters();
   renderBodyMap();
   renderRecentlyResolved();
+}
+
+// ═══════════════ PHASE REVERT ═══════════════
+function openRevertSection() {
+  const phs = _phasesMap[_phaseModalInjId];
+  const ph  = phs?.find(p => p.id === _phaseModalPhaseId);
+  if (!ph) return;
+  const fromLabel = ph.status === 'done' ? 'Completed → In progress' : 'In progress → Pending';
+  document.getElementById('phRevertLabel').textContent     = `Revert: ${fromLabel}`;
+  document.getElementById('phRevertReason').value          = '';
+  document.getElementById('phRevertSection').style.display = 'flex';
+  document.getElementById('phBtnRevert').style.display     = 'none';
+  document.getElementById('phBtnComplete').style.display   = 'none';
+  document.getElementById('phBtnInProgress').style.display = 'none';
+}
+
+function cancelRevert() {
+  document.getElementById('phRevertSection').style.display = 'none';
+  const phs = _phasesMap[_phaseModalInjId];
+  const ph  = phs?.find(p => p.id === _phaseModalPhaseId);
+  if (!ph) return;
+  const isDone = ph.status === 'done';
+  document.getElementById('phBtnRevert').style.display     = (ph.status !== 'pending') ? '' : 'none';
+  document.getElementById('phBtnInProgress').style.display = (ph.status === 'pending') ? '' : 'none';
+  document.getElementById('phBtnComplete').style.display   = isDone ? 'none' : '';
+}
+
+async function confirmRevert() {
+  const reason = document.getElementById('phRevertReason').value.trim();
+  if (!reason) { alert('Please enter a reason for reverting.'); return; }
+
+  const phs = _phasesMap[_phaseModalInjId];
+  const ph  = phs?.find(p => p.id === _phaseModalPhaseId);
+  if (!ph) return;
+
+  const fromStatus = ph.status;
+  const toStatus   = fromStatus === 'done' ? 'in_progress' : 'pending';
+
+  const revert_log = Array.isArray(ph.revert_log) ? [...ph.revert_log] : [];
+  revert_log.push({ from: fromStatus, to: toStatus, reason, by: _profile?.id || null, at: new Date().toISOString() });
+
+  const upd = { status: toStatus, revert_log };
+  if (fromStatus === 'done')     upd.actual_end   = null;
+  if (toStatus   === 'pending')  upd.actual_start = null;
+
+  // Capture next phase before mutating
+  const nextPh = (fromStatus === 'done')
+    ? phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'in_progress')
+    : null;
+
+  Object.assign(ph, upd);
+  if (nextPh) { nextPh.status = 'pending'; nextPh.actual_start = null; }
+
+  closePhaseModal();
+  applyFilters();
+
+  await window.sb.from('injury_phases').update(upd).eq('id', _phaseModalPhaseId);
+  if (nextPh) {
+    await window.sb.from('injury_phases')
+      .update({ status: 'pending', actual_start: null }).eq('id', nextPh.id);
+  }
 }
 
 // ═══════════════ PHASE TOGGLE ═══════════════
