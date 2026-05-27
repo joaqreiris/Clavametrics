@@ -1127,6 +1127,7 @@ function renderTasks(tasks) {
   const clubId = await window.getClubId();
   if (!clubId) { window.location.replace('Onboarding.html'); return; }
   window._hubClubId = clubId;
+  console.log('[Hub] club_id:', clubId);
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
 
@@ -1149,6 +1150,7 @@ function renderTasks(tasks) {
   const { data: { session: _s } } = await window.sb.auth.getSession();
   const userId = _s?.user?.id ?? null;
   window._hubUserId = userId;
+  console.log('[Hub] user_id:', userId);
 
   const today = new Date().toISOString().split('T')[0];
   const _todayMidnight = new Date(); _todayMidnight.setHours(0, 0, 0, 0);
@@ -1172,9 +1174,8 @@ function renderTasks(tasks) {
           .select('id, title, priority, status, due_date, created_by_name')
           .eq('club_id', clubId)
           .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
-          .neq('status', 'cancelled')
+          .in('status', ['open', 'in_progress'])
           .order('due_date', { ascending: true })
-          .limit(10)
       : Promise.resolve({ data: [], error: null }),
     window.sb.from('availability').select('status')
       .eq('club_id', clubId).eq('date', today),
@@ -1236,7 +1237,15 @@ function renderTasks(tasks) {
       .limit(3),
   ]);
 
-  console.log('recent activity result:', { sessActRes, injActRes, gpsActRes, treatActRes, clearActRes });
+  console.log('[Hub] activity sessActRes:', sessActRes.data, sessActRes.error);
+  console.log('[Hub] activity injActRes:', injActRes.data, injActRes.error);
+  console.log('[Hub] activity treatActRes:', treatActRes.data, treatActRes.error);
+  console.log('[Hub] activity clearActRes:', clearActRes.data, clearActRes.error);
+  // Diagnostic: simplified sessions query to isolate club_id / RLS issues
+  const { data: _dSess, error: _dSessErr } = await window.sb
+    .from('training_sessions').select('id, title, created_at')
+    .eq('club_id', clubId).order('created_at', { ascending: false }).limit(5);
+  console.log('[Hub] sessions for activity:', _dSess, _dSessErr);
 
   if (!squadRes.error && squadRes.count !== null) {
     document.getElementById('kpiSquad').innerHTML = `${squadRes.count} <sub>players</sub>`;
@@ -1260,6 +1269,7 @@ function renderTasks(tasks) {
     document.getElementById('wellnessSub').textContent = 'Could not load';
   }
 
+  console.log('[Hub] tasks:', tasksRes.data, tasksRes.error);
   if (!tasksRes.error) renderTasks(tasksRes.data ?? []);
 
   let acwrWarningCount = 0;
@@ -1342,7 +1352,7 @@ function renderTasks(tasks) {
       })(),
       (async () => {
         const { data, error } = await window.sb.from('injuries')
-          .select('player_id, returned_date, body_area, players(first_name, last_name), profiles!created_by(full_name, role)')
+          .select('player_id, returned_date, body_area, players(first_name, last_name)')
           .eq('club_id', clubId)
           .eq('status', 'cleared')
           .gte('returned_date', d7)
