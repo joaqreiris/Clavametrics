@@ -666,33 +666,33 @@
               <h3>Publish state</h3>
               <span class="sub">who sees this MC</span>
               <div class="right">
-                <button class="cm-btn is-ghost is-sm">Manage <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
+                <button class="cm-btn is-ghost is-sm" id="calPubManageBtn">Manage <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
               </div>
             </div>
             <div style="padding:12px 16px 16px">
               <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
                 <div style="width:28px;height:28px;border-radius:7px;background:var(--cm-success-bg);color:var(--cm-success);display:flex;align-items:center;justify-content:center;border:1px solid var(--cm-success-bd)"><i class="ti ti-users" style="font-size:14px"></i></div>
                 <div style="flex:1">
-                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="calSquadCt">Players · 27</div>
+                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="calSquadCt">Players · —</div>
                   <div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">Visible via mobile</div>
                 </div>
-                <span class="cm-pill is-success"><span class="cm-dot"></span>Published</span>
+                <button class="cm-pill" id="calPubBadgePlayers" style="cursor:pointer;border:none;background:none;padding:0"><span class="cm-dot"></span><span id="calPubLabelPlayers">Draft</span></button>
               </div>
               <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--cm-border-soft)">
                 <div style="width:28px;height:28px;border-radius:7px;background:var(--cm-success-bg);color:var(--cm-success);display:flex;align-items:center;justify-content:center;border:1px solid var(--cm-success-bd)"><i class="ti ti-stethoscope" style="font-size:14px"></i></div>
                 <div style="flex:1">
-                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">Medical · 4</div>
+                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="calPubMedCt">Medical · —</div>
                   <div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">Full access</div>
                 </div>
-                <span class="cm-pill is-success"><span class="cm-dot"></span>Published</span>
+                <button class="cm-pill" id="calPubBadgeMedical" style="cursor:pointer;border:none;background:none;padding:0"><span class="cm-dot"></span><span id="calPubLabelMedical">Draft</span></button>
               </div>
               <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--cm-border-soft)">
                 <div style="width:28px;height:28px;border-radius:7px;background:var(--cm-warning-bg);color:var(--cm-warning);display:flex;align-items:center;justify-content:center;border:1px solid var(--cm-warning-bd)"><i class="ti ti-eye" style="font-size:14px"></i></div>
                 <div style="flex:1">
-                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">Club board · 6</div>
+                  <div style="font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="calPubBoardCt">Club board · —</div>
                   <div style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">Read-only summary</div>
                 </div>
-                <span class="cm-pill is-warning"><span class="cm-dot"></span>Draft</span>
+                <button class="cm-pill" id="calPubBadgeBoard" style="cursor:pointer;border:none;background:none;padding:0"><span class="cm-dot"></span><span id="calPubLabelBoard">Draft</span></button>
               </div>
             </div>
           </div>
@@ -980,6 +980,7 @@ let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new D
 let _ribbonMeta = null; // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
 let _matchSessions = []; // calendar_events with type='match'
 let _monthEvts = []; // full session objects for month view click handlers
+let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
 const TODAY = new Date().toISOString().split('T')[0];
 
 const EVT_ICONS = {
@@ -1011,6 +1012,89 @@ function showCalToast(msg) {
   t.textContent = msg; t.classList.add('is-show');
   setTimeout(() => t.classList.remove('is-show'), 2800);
 }
+
+// ── Publish state ────────────────────────────────────────────────
+function _pubBadgeEl(group) { return document.getElementById('calPubBadge' + group.charAt(0).toUpperCase() + group.slice(1)); }
+function _pubLabelEl(group) { return document.getElementById('calPubLabel' + group.charAt(0).toUpperCase() + group.slice(1)); }
+
+function renderPublishState() {
+  const mc = _allMCs[_mcIdx];
+  if (!mc) return;
+  const groups = [
+    { key: 'players', field: 'publish_players' },
+    { key: 'medical', field: 'publish_medical' },
+    { key: 'board',   field: 'publish_board'   },
+  ];
+  for (const { key, field } of groups) {
+    const published = !!mc[field];
+    const badge = _pubBadgeEl(key);
+    const label = _pubLabelEl(key);
+    if (!badge || !label) continue;
+    badge.className = 'cm-pill ' + (published ? 'is-success' : 'is-warning');
+    badge.style.cursor = 'pointer';
+    label.textContent = published ? 'Published' : 'Draft';
+  }
+}
+
+async function togglePublishGroup(group) {
+  const mc = _allMCs[_mcIdx];
+  if (!mc) return;
+  const field = { players: 'publish_players', medical: 'publish_medical', board: 'publish_board' }[group];
+  if (!field) return;
+  const next = !mc[field];
+  const patch = { [field]: next };
+  if (next && !mc.published_at) patch.published_at = new Date().toISOString();
+  const { error } = await window.sb.from('microcycles').update(patch).eq('id', mc.id);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  mc[field] = next;
+  if (patch.published_at) mc.published_at = patch.published_at;
+  renderPublishState();
+  showCalToast(`${group.charAt(0).toUpperCase() + group.slice(1)} ${next ? 'published' : 'set to draft'}.`);
+}
+
+// Badge click handlers
+document.getElementById('calPubBadgePlayers').addEventListener('click', () => togglePublishGroup('players'));
+document.getElementById('calPubBadgeMedical').addEventListener('click', () => togglePublishGroup('medical'));
+document.getElementById('calPubBadgeBoard').addEventListener('click', () => togglePublishGroup('board'));
+
+// ── Manage modal ─────────────────────────────────────────────────
+const _PUB_CFG_DEFAULTS = {
+  players_type: true, players_time: true, players_duration: true, players_location: true,
+  medical_physio: true, medical_injury_status: true, medical_load: true,
+  board_sessions: true, board_load: true, board_match: true,
+};
+const _PUB_CFG_KEYS = Object.keys(_PUB_CFG_DEFAULTS);
+
+function openPubManageModal() {
+  const mc = _allMCs[_mcIdx];
+  const cfg = Object.assign({}, _PUB_CFG_DEFAULTS, mc?.publish_config || {});
+  for (const k of _PUB_CFG_KEYS) {
+    const el = document.getElementById('calPubCfg_' + k);
+    if (el && !el.disabled) el.checked = !!cfg[k];
+  }
+  document.getElementById('calPubManageBackdrop').classList.add('is-open');
+}
+
+async function savePubManageModal() {
+  const mc = _allMCs[_mcIdx];
+  if (!mc) return;
+  const cfg = {};
+  for (const k of _PUB_CFG_KEYS) {
+    const el = document.getElementById('calPubCfg_' + k);
+    cfg[k] = el && !el.disabled ? el.checked : false;
+  }
+  const { error } = await window.sb.from('microcycles').update({ publish_config: cfg }).eq('id', mc.id);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  mc.publish_config = cfg;
+  document.getElementById('calPubManageBackdrop').classList.remove('is-open');
+  showCalToast('Visibility settings saved.');
+}
+
+document.getElementById('calPubManageBtn').addEventListener('click', openPubManageModal);
+document.getElementById('calPubManageClose').addEventListener('click', () => document.getElementById('calPubManageBackdrop').classList.remove('is-open'));
+document.getElementById('calPubManageCancel').addEventListener('click', () => document.getElementById('calPubManageBackdrop').classList.remove('is-open'));
+document.getElementById('calPubManageSave').addEventListener('click', savePubManageModal);
+document.getElementById('calPubManageBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) document.getElementById('calPubManageBackdrop').classList.remove('is-open'); });
 
 // ── Render grid (continuous view — all MC days in one scrollable row) ──────────────
 let _dragId = null, _dragDate = null, _dropTargetId = null;
@@ -1044,6 +1128,9 @@ function renderGrid() {
   const totalMin = _sessions.reduce((a, s) => a + (s.duration || 0), 0);
   document.getElementById('calMcDuration').innerHTML = totalMin ? `${Math.round(totalMin/60)}h <small>${totalMin % 60 ? (totalMin % 60) + 'min' : ''}</small>` : '—';
   document.getElementById('calMcLength').innerHTML = `${totalDays}<small>days</small>`;
+
+  // Publish state panel
+  renderPublishState();
 
   // Top bar MC heading
   const mcName = mc.name || 'Microcycle';
@@ -1564,7 +1651,7 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
   showCalToast(wasEdit ? 'Microcycle updated.' : 'Microcycle created.');
 
   const { data: mcs } = await window.sb.from('microcycles')
-    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium')
+    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium,publish_players,publish_medical,publish_board,published_at,publish_config')
     .eq('club_id', _clubId)
     .order('start_date', { ascending: false });
   _allMCs = mcs || [];
@@ -2408,16 +2495,22 @@ async function showImportPreview(fixtures) {
   if (club) window.applyClubTheme();
 
   // Counts
-  const [playersRes, injRes] = await Promise.all([
+  const [playersRes, injRes, medRes, boardRes] = await Promise.all([
     window.sb.from('players').select('id', { count: 'exact', head: true }).eq('club_id', _clubId),
     window.sb.from('injuries').select('id', { count: 'exact', head: true }).eq('club_id', _clubId),
+    window.sb.from('profiles').select('id', { count: 'exact', head: true }).eq('club_id', _clubId).eq('role', 'medical'),
+    window.sb.from('profiles').select('id', { count: 'exact', head: true }).eq('club_id', _clubId).eq('role', 'board'),
   ]);
+  _pubMedCount   = medRes.count   ?? 0;
+  _pubBoardCount = boardRes.count ?? 0;
   const el1 = document.getElementById('sideInjCount'); if (el1) el1.textContent = injRes.count || '';
   const el2 = document.getElementById('calSquadCt');   if (el2) el2.textContent = `Players · ${playersRes.count ?? 0}`;
+  const el3 = document.getElementById('calPubMedCt');  if (el3) el3.textContent = `Medical · ${_pubMedCount}`;
+  const el4 = document.getElementById('calPubBoardCt'); if (el4) el4.textContent = `Club board · ${_pubBoardCount}`;
 
   // Load all MCs ordered by start_date asc for ribbon
   const { data: mcs } = await window.sb.from('microcycles')
-    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium')
+    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium,publish_players,publish_medical,publish_board,published_at,publish_config')
     .eq('club_id', _clubId)
     .order('start_date', { ascending: false });
 
@@ -2478,6 +2571,86 @@ async function showImportPreview(fixtures) {
   if (newEvtBtn) newEvtBtn.addEventListener('click', () => openEvtModal(null));
 })().catch(console.error);
 </script>
+
+<!-- Publish Manage modal -->
+<div class="sq-modal-backdrop" id="calPubManageBackdrop">
+  <div class="sq-modal" role="dialog" aria-modal="true" style="max-width:480px">
+    <div class="sq-modal-head">
+      <h2>Manage visibility</h2>
+      <button class="sq-modal-close" id="calPubManageClose" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body" style="padding:0">
+
+      <!-- Players -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--cm-border)">
+        <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <i class="ti ti-users" style="font-size:15px;color:var(--cm-success)"></i>Players — visible fields
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_players_type" style="accent-color:var(--cm-primary)"> Session type
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_players_time" style="accent-color:var(--cm-primary)"> Start time
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_players_duration" style="accent-color:var(--cm-primary)"> Duration
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_players_location" style="accent-color:var(--cm-primary)"> Location / venue
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted)">
+            <input type="checkbox" id="calPubCfg_players_exercises" style="accent-color:var(--cm-primary)" disabled> Exercises (always hidden)
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted)">
+            <input type="checkbox" id="calPubCfg_players_notes" style="accent-color:var(--cm-primary)" disabled> Tactical notes (always hidden)
+          </label>
+        </div>
+      </div>
+
+      <!-- Medical -->
+      <div style="padding:16px 20px;border-bottom:1px solid var(--cm-border)">
+        <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <i class="ti ti-stethoscope" style="font-size:15px;color:var(--cm-info)"></i>Medical — access level
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_medical_physio" style="accent-color:var(--cm-primary)"> Physio adaptations
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_medical_injury_status" style="accent-color:var(--cm-primary)"> Injury status
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_medical_load" style="accent-color:var(--cm-primary)"> Load data (planned AU)
+          </label>
+        </div>
+      </div>
+
+      <!-- Club board -->
+      <div style="padding:16px 20px">
+        <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <i class="ti ti-eye" style="font-size:15px;color:var(--cm-warning)"></i>Club board — summary metrics
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_board_sessions" style="accent-color:var(--cm-primary)"> Total sessions count
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_board_load" style="accent-color:var(--cm-primary)"> Total load (AU)
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font:500 13px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+            <input type="checkbox" id="calPubCfg_board_match" style="accent-color:var(--cm-primary)"> Match schedule
+          </label>
+        </div>
+      </div>
+
+    </div>
+    <div class="sq-modal-foot" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--cm-border)">
+      <button class="cm-btn is-ghost is-sm" id="calPubManageCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="calPubManageSave">Save settings</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

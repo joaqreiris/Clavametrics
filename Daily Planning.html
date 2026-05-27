@@ -1064,8 +1064,42 @@ async function dpPublish() {
   const next = !_dpPublished;
   const { error } = await window.sb.from('training_sessions')
     .update({ published: next }).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
-  if (!error) { _dpPublished = next; _dpUpdatePublishBtn(); }
-  else console.warn('Publish error (column may not exist yet):', error.message);
+  if (error) { console.warn('Publish error (column may not exist yet):', error.message); return; }
+  _dpPublished = next;
+  _dpUpdatePublishBtn();
+
+  // When publishing, also update the microcycle publish state
+  if (next) {
+    const mc = _dpMicrocycles.find(m => m.start_date <= _dpCurrentDate && _dpCurrentDate <= m.end_date);
+    if (mc) {
+      const profile = await window.getProfile();
+      const mcPatch = { publish_players: true, publish_medical: true };
+      if (!mc.published_at) mcPatch.published_at = new Date().toISOString();
+      if (profile?.id) mcPatch.published_by = profile.id;
+      const { error: mcErr } = await window.sb.from('microcycles').update(mcPatch).eq('id', mc.id);
+      if (!mcErr) {
+        mc.publish_players = true;
+        mc.publish_medical = true;
+        if (mcPatch.published_at) mc.published_at = mcPatch.published_at;
+      }
+
+      // Notify all players in the club
+      const dateFmt = new Date(_dpCurrentDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+      const { data: playerProfiles } = await window.sb.from('profiles')
+        .select('id').eq('club_id', _dpClubId).eq('role', 'player');
+      if (playerProfiles?.length) {
+        const notifications = playerProfiles.map(p => ({
+          user_id: p.id,
+          club_id: _dpClubId,
+          type:    'training_plan_published',
+          title:   `Training plan available — ${dateFmt}`,
+          body:    'Your training plan has been published. Check the app for details.',
+          link:    'Calendar.html',
+        }));
+        await window.sb.from('notifications').insert(notifications).catch(e => console.warn('Notify error:', e.message));
+      }
+    }
+  }
 }
 
 // ── Print ──
@@ -1120,7 +1154,7 @@ async function dpExportPDF() {
   const [playersRes, injuriesRes, mcRes, adaptRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
-    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away').eq('club_id', clubId).order('start_date'),
+    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,publish_players,publish_medical,published_at').eq('club_id', clubId).order('start_date'),
     window.sb.from('treatments')
       .select('player_id, adaptation, adaptation_notes, adaptation_sent_at, date')
       .eq('club_id', clubId)
