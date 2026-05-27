@@ -203,10 +203,9 @@
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
-  /* Treatment card dropdown menu */
-  .ph-tc-menu { position:relative; }
-  .ph-tc-dropdown { position:absolute; right:0; left:auto; top:calc(100% + 2px); min-width:160px; width:auto; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.12); z-index:9999; overflow:visible; display:none; }
-  .ph-tc-dropdown.is-open { display:block; }
+  /* Treatment card dropdown menu — portal rendered at body level */
+  #ph-portal-menu { position:fixed; min-width:160px; width:auto; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.15); z-index:9999; overflow:hidden; display:none; }
+  #ph-portal-menu.is-open { display:block; }
   .ph-tc-dd-item { display:flex; flex-direction:row; align-items:center; gap:10px; padding:8px 16px 8px 12px; font:500 14px/1 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; border:0; background:transparent; width:100%; text-align:left; white-space:nowrap; }
   .ph-tc-dd-item:hover { background:var(--cm-bg-soft); }
   .ph-tc-dd-item.is-danger { color:var(--cm-danger); }
@@ -237,6 +236,14 @@
 </style>
 </head>
 <body class="cm">
+
+<!-- Treatment card dropdown portal — rendered outside any overflow:hidden container -->
+<div id="ph-portal-menu">
+  <button class="ph-tc-dd-item" data-action="edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg><span>Edit</span></button>
+  <button class="ph-tc-dd-item" data-action="duplicate"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/></svg><span>Duplicate</span></button>
+  <button class="ph-tc-dd-item" data-action="notes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"/><path d="M9 13l6 0"/><path d="M9 17l6 0"/></svg><span>View notes</span></button>
+  <button class="ph-tc-dd-item is-danger" data-action="delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg><span>Delete</span></button>
+</div>
 
 <div class="hub-shell" data-screen-label="19 Physio">
   <div id="hub-side-root"></div>
@@ -963,38 +970,61 @@ function showNotesFull(t) {
 }
 function closeNotesModal() { document.getElementById('phNotesOverlay').classList.remove('is-open'); }
 
-// Event delegation for treatment card menus
+// Treatment card dropdown — portal pattern (renders at body level, never clipped by overflow:hidden)
+const _phPortal = document.getElementById('ph-portal-menu');
+let   _phPortalTid = null;
+
+function _phClosePortal() {
+  _phPortal.classList.remove('is-open');
+  _phPortalTid = null;
+}
+
+function _phOpenPortal(menuBtn, tid) {
+  const rect = menuBtn.getBoundingClientRect();
+  _phPortal.style.top   = (rect.bottom + 4) + 'px';
+  _phPortal.style.right = (window.innerWidth - rect.right) + 'px';
+  _phPortal.style.left  = 'auto';
+  _phPortalTid = tid;
+  _phPortal.classList.add('is-open');
+}
+
 document.getElementById('phListBody').addEventListener('click', e => {
   const menuBtn = e.target.closest('.ph-tc-menu-btn');
   if (menuBtn) {
-    const menu = menuBtn.closest('.ph-tc-menu');
-    const dd   = menu.querySelector('.ph-tc-dropdown');
-    document.querySelectorAll('.ph-tc-dropdown.is-open').forEach(d => { if (d !== dd) d.classList.remove('is-open'); });
-    dd.classList.toggle('is-open');
+    const tid = menuBtn.closest('.ph-tcard')?.dataset.tid;
+    if (_phPortal.classList.contains('is-open') && _phPortalTid === tid) {
+      _phClosePortal();
+    } else {
+      _phOpenPortal(menuBtn, tid);
+    }
     e.stopPropagation();
     return;
   }
+});
+
+_phPortal.addEventListener('click', e => {
   const ddItem = e.target.closest('.ph-tc-dd-item');
-  if (ddItem) {
-    const menu  = ddItem.closest('.ph-tc-menu');
-    const card  = ddItem.closest('.ph-tcard');
-    const tid   = card?.dataset.tid;
-    const action = ddItem.dataset.action;
-    menu.querySelector('.ph-tc-dropdown').classList.remove('is-open');
-    if (!tid) return;
-    const t = _treatMap.get(tid);
-    if (!t) return;
-    if (action === 'edit')      openEditTreatment(t);
-    if (action === 'duplicate') openEditTreatment(t, true);
-    if (action === 'delete')    deleteTreatment(tid);
-    if (action === 'notes')     showNotesFull(t);
-    return;
-  }
-  document.querySelectorAll('.ph-tc-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+  if (!ddItem) return;
+  const action = ddItem.dataset.action;
+  const tid    = _phPortalTid;
+  _phClosePortal();
+  if (!tid) return;
+  const t = _treatMap.get(tid);
+  if (!t) return;
+  if (action === 'edit')      openEditTreatment(t);
+  if (action === 'duplicate') openEditTreatment(t, true);
+  if (action === 'delete')    deleteTreatment(tid);
+  if (action === 'notes')     showNotesFull(t);
+  e.stopPropagation();
 });
-document.addEventListener('click', () => {
-  document.querySelectorAll('.ph-tc-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+
+document.addEventListener('click', e => {
+  if (!_phPortal.classList.contains('is-open')) return;
+  if (!_phPortal.contains(e.target)) _phClosePortal();
 });
+
+document.getElementById('phListBody').addEventListener('scroll', _phClosePortal, { passive: true });
+window.addEventListener('scroll', _phClosePortal, { passive: true });
 
 // ══════════════════════════════════════════════════════
 // SAVE TREATMENT
@@ -1287,14 +1317,8 @@ function renderList(list) {
           ${t.notes ? `<div class="notes">${t.notes.length > 100 ? t.notes.slice(0,100) + '…' : t.notes}</div>` : ''}
           ${hasAdapt ? `<div class="adapt-box"><i class="ti ti-flag-2"></i><span><strong>Adaptation</strong> · ${adaptText}</span></div>` : ''}
         </div>
-        <div class="card-actions ph-tc-menu">
+        <div class="card-actions">
           <button class="ph-tc-menu-btn" title="Options"><i class="ti ti-dots-vertical"></i></button>
-          <div class="ph-tc-dropdown">
-            <button class="ph-tc-dd-item" data-action="edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg><span>Edit</span></button>
-            <button class="ph-tc-dd-item" data-action="duplicate"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/></svg><span>Duplicate</span></button>
-            <button class="ph-tc-dd-item" data-action="notes"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"/><path d="M9 13l6 0"/><path d="M9 17l6 0"/></svg><span>View notes</span></button>
-            <button class="ph-tc-dd-item is-danger" data-action="delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg><span>Delete</span></button>
-          </div>
         </div>
       </div>`;
     }).join('');
