@@ -205,9 +205,9 @@
 
   /* Treatment card dropdown menu */
   .ph-tc-menu { position:relative; }
-  .ph-tc-dropdown { position:absolute; right:0; top:calc(100% + 2px); min-width:160px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.12); z-index:120; overflow:hidden; display:none; }
+  .ph-tc-dropdown { position:absolute; right:0; top:calc(100% + 2px); min-width:160px; width:auto; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,.12); z-index:9999; overflow:visible; display:none; }
   .ph-tc-dropdown.is-open { display:block; }
-  .ph-tc-dd-item { display:flex; flex-direction:row; align-items:center; gap:8px; padding:8px 12px; font:500 14px/1 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; border:0; background:transparent; width:100%; text-align:left; white-space:nowrap; }
+  .ph-tc-dd-item { display:flex; flex-direction:row; align-items:center; gap:10px; padding:8px 16px 8px 12px; font:500 14px/1 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; border:0; background:transparent; width:100%; text-align:left; white-space:nowrap; }
   .ph-tc-dd-item:hover { background:var(--cm-bg-soft); }
   .ph-tc-dd-item.is-danger { color:var(--cm-danger); }
   .ph-tc-dd-item svg { flex-shrink:0; color:var(--cm-fg-muted); }
@@ -971,6 +971,14 @@ document.getElementById('phListBody').addEventListener('click', e => {
     const dd   = menu.querySelector('.ph-tc-dropdown');
     document.querySelectorAll('.ph-tc-dropdown.is-open').forEach(d => { if (d !== dd) d.classList.remove('is-open'); });
     dd.classList.toggle('is-open');
+    if (dd.classList.contains('is-open')) {
+      const btnRect = menuBtn.getBoundingClientRect();
+      if (btnRect.right + 160 > window.innerWidth) {
+        dd.style.left = 'auto'; dd.style.right = '0';
+      } else {
+        dd.style.left = ''; dd.style.right = '0';
+      }
+    }
     e.stopPropagation();
     return;
   }
