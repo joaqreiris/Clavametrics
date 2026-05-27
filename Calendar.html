@@ -187,7 +187,7 @@
   }
 
   /* === Main grid: daily plan (flex) + fixed right rail === */
-  .cal-grid { display:grid; grid-template-columns:1fr 320px; gap:14px; }
+  .cal-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:14px; }
   @media (max-width:1200px){ .cal-grid { grid-template-columns:1fr; } .cal-kpis { grid-template-columns:repeat(2,1fr); } }
 
   .cal-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
@@ -198,13 +198,11 @@
 
   /* === MC daily strip (7-14 day grid) === */
   .mc-days {
-    display: flex;
-    flex-direction: row;
+    display: grid;
+    grid-template-columns: repeat(7, 160px);
     overflow-x: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--cm-border) transparent;
-    gap: 0;
-    padding: 0;
   }
   .mc-days::-webkit-scrollbar { height: 6px; }
   .mc-days::-webkit-scrollbar-track { background: transparent; }
@@ -213,8 +211,6 @@
     width: 160px;
     min-width: 160px;
     max-width: 160px;
-    flex-shrink: 0;
-    flex-grow: 0;
     border-right: 1px solid var(--cm-border-soft);
     border-top: 1px solid var(--cm-border-soft);
     padding: 10px 12px 12px;
@@ -224,6 +220,7 @@
     position: relative;
   }
   .mc-day:last-child { border-right: 0; }
+  .mc-day:nth-child(7n) { border-right: 0; }
   .mc-day-head {
     display:flex; align-items:baseline; gap:6px; margin-bottom:8px;
   }
@@ -300,7 +297,7 @@
   .mc-evt.day-off { font-style:italic; color:var(--cm-fg-faint); border:1px dashed var(--cm-border); background:transparent; }
 
   /* === Right rail cards === */
-  .cal-rail { display:flex; flex-direction:column; gap:14px; }
+  .cal-rail { display:flex; flex-direction:column; gap:14px; width:280px; min-width:280px; max-width:280px; flex-shrink:0; }
 
   /* Upcoming events list */
   .upcoming-row { display:grid; grid-template-columns:36px 1fr auto; gap:10px; padding:11px 16px; border-bottom:1px solid var(--cm-border-soft); align-items:center; cursor:pointer; }
@@ -437,6 +434,9 @@
   .sq-modal-foot .grow { flex:1; }
   .sq-toast { position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--cm-fg-strong);color:var(--cm-bg);border-radius:var(--cm-r-3);padding:8px 16px;font:500 13px/1 var(--cm-font-sans);z-index:500;opacity:0;pointer-events:none;transition:opacity 200ms,transform 200ms; }
   .sq-toast.is-show { opacity:1;transform:translateX(-50%) translateY(0); }
+  /* Prevent page-level horizontal scroll — only mc-days scrolls horizontally */
+  .hub-main { overflow-x: hidden; }
+
   @media (max-width: 768px) {
     .hub-topbar { padding-left: 56px; }
     .cal-page { padding: 16px 12px 48px; }
@@ -444,6 +444,7 @@
     .cal-filter-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
     .cal-kpis { grid-template-columns: repeat(2, 1fr) !important; }
     .mc-day { width: 140px; min-width: 140px; max-width: 140px; }
+    .mc-days { grid-template-columns: repeat(7, 140px); }
   }
 </style>
 </head>
