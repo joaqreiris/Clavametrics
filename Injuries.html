@@ -237,6 +237,19 @@
     .inj-fact:nth-child(2), .inj-fact:nth-child(3) { display:none; }
   }
   @media (max-width:480px) { .inj-kpis { grid-template-columns:1fr !important; } }
+
+  /* Phase detail modal */
+  .ph-criteria-list { display:flex; flex-direction:column; gap:7px; margin-top:8px; }
+  .ph-criterion { display:flex; align-items:flex-start; gap:10px; padding:8px 10px; border-radius:7px; border:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); cursor:pointer; user-select:none; transition:border-color .1s, background .1s; }
+  .ph-criterion:hover { border-color:var(--cm-border); }
+  .ph-criterion.is-checked { background:var(--cm-success-bg); border-color:var(--cm-success-bd); }
+  .ph-criterion input[type=checkbox] { margin-top:1px; accent-color:var(--cm-success); width:15px; height:15px; flex-shrink:0; cursor:pointer; }
+  .ph-criterion .lbl { font:500 13px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
+  .ph-criterion.is-checked .lbl { color:var(--cm-success); text-decoration:line-through; }
+  .ph-status-badge { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:4px; font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; }
+  .ph-status-badge.pending { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); }
+  .ph-status-badge.in_progress { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .ph-status-badge.done { background:var(--cm-success-bg); color:var(--cm-success); }
 </style>
 </head>
 <body class="cm">
@@ -582,6 +595,62 @@
   </div>
 </div>
 
+<!-- ═══════════════════ PHASE DETAIL MODAL ═══════════════════ -->
+<div class="inj-modal-ov" id="modalPhase">
+  <div class="inj-modal-box" style="width:min(640px,96vw)">
+    <div class="inj-modal-h">
+      <div style="flex:1;min-width:0">
+        <h3 id="phModalTitle">Phase</h3>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span id="phModalStatusBadge" class="ph-status-badge"></span>
+          <span id="phModalDates" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"></span>
+        </div>
+      </div>
+      <button onclick="closePhaseModal()" title="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="inj-modal-body">
+
+      <!-- Physiological description -->
+      <div id="phModalDesc" style="padding:10px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:8px;font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)"></div>
+
+      <!-- Criteria checkboxes -->
+      <div>
+        <div class="cm-label">Progression criteria</div>
+        <div id="phModalCriteria" class="ph-criteria-list"></div>
+      </div>
+
+      <!-- Override justification (shown when criteria not all met) -->
+      <div id="phModalOverride" style="display:none">
+        <label class="cm-label" for="phOverrideReason">Override justification <span style="color:var(--cm-danger)">*</span></label>
+        <textarea id="phOverrideReason" class="cm-input" rows="2"
+          placeholder="Clinical justification for advancing without all criteria met…"
+          oninput="updatePhaseCompleteBtn()"></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div class="cm-field">
+        <label class="cm-label" for="phModalNotes">Physiotherapist notes</label>
+        <textarea id="phModalNotes" class="cm-input" rows="2" placeholder="Progress notes, clinical observations…"></textarea>
+      </div>
+
+      <!-- Dates grid -->
+      <div class="inj-2col">
+        <div class="cm-field"><label class="cm-label">Est. start</label><input id="phModalEstStart" type="date" class="cm-input" style="opacity:0.7" readonly></div>
+        <div class="cm-field"><label class="cm-label">Est. end</label><input id="phModalEstEnd" type="date" class="cm-input" style="opacity:0.7" readonly></div>
+      </div>
+      <div class="inj-2col">
+        <div class="cm-field"><label class="cm-label">Actual start</label><input id="phModalActStart" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label">Actual end</label><input id="phModalActEnd" type="date" class="cm-input"></div>
+      </div>
+    </div>
+    <div class="inj-modal-foot">
+      <button class="cm-btn is-ghost" onclick="closePhaseModal()">Cancel</button>
+      <button class="cm-btn is-outline" id="phBtnInProgress" onclick="savePhaseStatus('in_progress')">Mark as in progress</button>
+      <button class="cm-btn is-primary" id="phBtnComplete" onclick="savePhaseStatus('done')" disabled>Mark as complete</button>
+    </div>
+  </div>
+</div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -590,6 +659,7 @@
 let _allInjuries = [], _phasesMap = {}, _players = [], _playersMap = {};
 let _currentTab = 'active', _currentSev = 'all', _currentSort = 'severity', _currentRegion = null;
 let _editingInjuryId = null, _dischargeId = null;
+let _phaseModalPhaseId = null, _phaseModalInjId = null;
 let _clubId = null, _profile = null;
 
 // ═══════════════ BODY AREA COORDINATES (for squad map) ═══════════════
@@ -836,6 +906,173 @@ function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade) {
   return phases;
 }
 
+// ═══════════════ PHASE DESCRIPTIONS ═══════════════
+const PHASE_DESCRIPTIONS = {
+  'Acute':              'Inflammatory phase: vascular and cellular response to tissue damage. Goal is pain and swelling control with tissue protection.',
+  'Regeneration':       'Proliferative phase: fibroblasts deposit collagen. Controlled loading stimulates organized scar tissue. Passive ROM and soft-tissue work.',
+  'Functional':         'Early remodeling: collagen cross-linking increases tensile strength. Progressive resistance training and neuromuscular activation.',
+  'Return to running':  'Sport-specific loading: progressive running protocol testing tissue tolerance to impact. Monitor for swelling and soreness post-session.',
+  'Return to training': 'Full team training integration: sport-specific drills, change of direction, and contact if applicable. Strength symmetry assessed.',
+  'Return to play':     'Competition clearance: final functional testing, psychological readiness, and medical sign-off before return to competitive match play.',
+  'Return to competition': 'Competition clearance: final functional testing, psychological readiness, and medical sign-off before return to competitive match play.',
+  'Sub-acute':          'Subacute phase: acute inflammation resolves. Progressive mobility, proprioception, and early strengthening introduced.',
+  'Strengthening':      'Progressive resistance targeting key muscle groups. Closed and open-chain exercises with controlled overload.',
+  'Neuromuscular':      'Proprioception and dynamic stability training. Single-leg balance, perturbation training, and plyometric foundations.',
+  'Post-op acute':      'Immediate post-operative phase: wound healing, edema management, neuromuscular inhibition addressed.',
+  'Early rehab':        'Restore normal gait and basic ROM. Quad activation and closed-chain exercises under pain and effusion control.',
+  'Sport-specific':     'High-speed running, cutting, deceleration, and sport-specific movements under fatigue.',
+  'Isometric loading':  'Isometric contractions at long muscle length reduce tendon pain and maintain strength during the acute phase.',
+  'Isotonic loading':   'Slow, heavy resistance through full range. Progressive overload without provoking tendon pain.',
+  'Energy storage':     'Plyometric and reactive exercises loading the stretch-shortening cycle of the tendon.',
+  'Running mechanics':  'Progressive running reintroduction with gait analysis. Biomechanical faults corrected before increasing volume.',
+  'Immobilization':     'Fracture stabilization. Non-weight bearing to allow cortical bridging and callus formation.',
+  'Partial loading':    'Progressive weight bearing as callus allows. Controlled axial loading stimulates bone remodeling.',
+  'Full loading':       'Full weight bearing and impact activities confirmed by radiological and clinical assessment.',
+  'Conditioning':       'Cardiovascular fitness and muscle strength restoration after prolonged immobilization.',
+  'Reconditioning':     'Systematic restoration of strength, flexibility, and cardiovascular fitness baseline.',
+};
+
+// ═══════════════ PHASE MODAL ═══════════════
+function openPhaseModal(phaseId, injId) {
+  const phs = _phasesMap[injId];
+  if (!phs) return;
+  const ph = phs.find(p => p.id === phaseId);
+  if (!ph) return;
+
+  _phaseModalPhaseId = phaseId;
+  _phaseModalInjId   = injId;
+
+  // Header
+  document.getElementById('phModalTitle').textContent = `Phase ${ph.phase_number} — ${ph.phase_name}`;
+  const badge = document.getElementById('phModalStatusBadge');
+  badge.className = `ph-status-badge ${ph.status}`;
+  badge.textContent = ph.status === 'in_progress' ? 'In progress' : ph.status === 'done' ? 'Completed' : 'Pending';
+
+  const fmtD = d => d ? new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '—';
+  document.getElementById('phModalDates').textContent = `Est. ${fmtD(ph.start_date)} → ${fmtD(ph.end_date)}`;
+
+  // Description
+  document.getElementById('phModalDesc').textContent =
+    PHASE_DESCRIPTIONS[ph.phase_name] || 'Rehabilitation phase. Follow clinical criteria for progression.';
+
+  // Criteria
+  renderPhaseCriteria(ph);
+
+  // Notes + dates
+  document.getElementById('phModalNotes').value    = ph.notes        || '';
+  document.getElementById('phModalEstStart').value = ph.start_date   || '';
+  document.getElementById('phModalEstEnd').value   = ph.end_date     || '';
+  document.getElementById('phModalActStart').value = ph.actual_start || '';
+  document.getElementById('phModalActEnd').value   = ph.actual_end   || '';
+
+  // Override hidden
+  document.getElementById('phModalOverride').style.display = 'none';
+  document.getElementById('phOverrideReason').value        = '';
+
+  // Button visibility
+  const isDone = ph.status === 'done';
+  document.getElementById('phBtnInProgress').style.display = (ph.status === 'pending') ? '' : 'none';
+  document.getElementById('phBtnComplete').style.display   = isDone ? 'none' : '';
+
+  document.getElementById('modalPhase').classList.add('is-open');
+}
+
+function closePhaseModal() {
+  _phaseModalPhaseId = null;
+  _phaseModalInjId   = null;
+  document.getElementById('modalPhase').classList.remove('is-open');
+}
+
+function renderPhaseCriteria(ph) {
+  const container = document.getElementById('phModalCriteria');
+  const completed = ph.criteria_completed || {};
+
+  let items = [];
+  if (Array.isArray(ph.criteria_items) && ph.criteria_items.length) {
+    items = ph.criteria_items;
+  } else if (ph.criteria) {
+    items = ph.criteria.split(';').map((s,i) => ({id:`c${i}`,label:s.trim()})).filter(c=>c.label);
+  }
+
+  if (!items.length) {
+    container.innerHTML = '<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:4px 0">No specific criteria defined for this phase.</div>';
+    document.getElementById('phBtnComplete').disabled = false;
+    return;
+  }
+
+  container.innerHTML = items.map(item => {
+    const checked = !!completed[item.id];
+    return `<label class="ph-criterion${checked?' is-checked':''}" data-item-id="${item.id}">
+      <input type="checkbox"${checked?' checked':''} onchange="onCriterionChange(this,'${item.id}')">
+      <span class="lbl">${item.label}</span>
+    </label>`;
+  }).join('');
+
+  updatePhaseCompleteBtn();
+}
+
+function onCriterionChange(checkbox, itemId) {
+  checkbox.closest('.ph-criterion')?.classList.toggle('is-checked', checkbox.checked);
+  updatePhaseCompleteBtn();
+}
+
+function updatePhaseCompleteBtn() {
+  const boxes    = [...document.querySelectorAll('#phModalCriteria input[type=checkbox]')];
+  const allMet   = boxes.length === 0 || boxes.every(c => c.checked);
+  const override = (document.getElementById('phOverrideReason')?.value?.trim() || '') !== '';
+  document.getElementById('phModalOverride').style.display = (!allMet) ? '' : 'none';
+  if (allMet) document.getElementById('phOverrideReason').value = '';
+  document.getElementById('phBtnComplete').disabled = !(allMet || override);
+}
+
+async function savePhaseStatus(status) {
+  const phs = _phasesMap[_phaseModalInjId];
+  const ph  = phs?.find(p => p.id === _phaseModalPhaseId);
+  if (!ph) return;
+
+  const todayStr     = new Date().toISOString().split('T')[0];
+  const notes        = document.getElementById('phModalNotes').value.trim() || null;
+  const actStart     = document.getElementById('phModalActStart').value || null;
+  const actEnd       = document.getElementById('phModalActEnd').value   || null;
+  const overrideText = document.getElementById('phOverrideReason')?.value?.trim() || null;
+
+  // Collect criteria_completed from checkboxes
+  const boxes = [...document.querySelectorAll('#phModalCriteria input[type=checkbox]')];
+  const criteria_completed = {};
+  boxes.forEach(cb => {
+    const id = cb.closest('.ph-criterion')?.dataset?.itemId;
+    if (id) criteria_completed[id] = cb.checked;
+  });
+
+  const upd = { status, notes, criteria_completed };
+  if (status === 'done') {
+    upd.actual_end   = actEnd || todayStr;
+    upd.completed_by = _profile?.id || null;
+    if (overrideText) upd.notes = (notes ? notes + '\n[Override] ' : '[Override] ') + overrideText;
+  }
+  if (status === 'in_progress') {
+    upd.actual_start = actStart || todayStr;
+  }
+
+  // Optimistic update
+  Object.assign(ph, upd);
+  if (status === 'done') {
+    const next = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'pending');
+    if (next) { next.status = 'in_progress'; next.actual_start = todayStr; }
+  }
+
+  closePhaseModal();
+  applyFilters();
+
+  // Persist
+  await window.sb.from('injury_phases').update(upd).eq('id', _phaseModalPhaseId);
+  if (status === 'done') {
+    const nextPh = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'in_progress');
+    if (nextPh) await window.sb.from('injury_phases')
+      .update({status:'in_progress', actual_start:todayStr}).eq('id', nextPh.id);
+  }
+}
+
 // ═══════════════ BOOT ═══════════════
 (async () => {
   const ok = await window.requireAuth();
@@ -928,9 +1165,9 @@ function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade) {
       else if (action === 'delete')       { await deleteInjury(id); }
       return;
     }
-    // Phase tile click
+    // Phase tile click → open detail modal
     const ph = e.target.closest('.tl-phase[data-phase-id]');
-    if (ph) { await togglePhase(ph.dataset.phaseId, ph.dataset.injId); }
+    if (ph) { openPhaseModal(ph.dataset.phaseId, ph.dataset.injId); return; }
   });
 
   // Body area map clicks in modal
