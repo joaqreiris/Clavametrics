@@ -14,36 +14,33 @@ CREATE TABLE IF NOT EXISTS lineups (
 -- RLS
 ALTER TABLE lineups ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Club members can read lineups"   ON lineups;
+DROP POLICY IF EXISTS "Club members can insert lineups" ON lineups;
+DROP POLICY IF EXISTS "Club members can update lineups" ON lineups;
+DROP POLICY IF EXISTS "Club members can delete lineups" ON lineups;
+
 CREATE POLICY "Club members can read lineups"
   ON lineups FOR SELECT
   USING (
-    club_id IN (
-      SELECT club_id FROM profiles WHERE id = auth.uid()
-    )
+    club_id IN (SELECT club_id FROM profiles WHERE id = auth.uid())
   );
 
 CREATE POLICY "Club members can insert lineups"
   ON lineups FOR INSERT
   WITH CHECK (
-    club_id IN (
-      SELECT club_id FROM profiles WHERE id = auth.uid()
-    )
+    club_id IN (SELECT club_id FROM profiles WHERE id = auth.uid())
   );
 
 CREATE POLICY "Club members can update lineups"
   ON lineups FOR UPDATE
   USING (
-    club_id IN (
-      SELECT club_id FROM profiles WHERE id = auth.uid()
-    )
+    club_id IN (SELECT club_id FROM profiles WHERE id = auth.uid())
   );
 
 CREATE POLICY "Club members can delete lineups"
   ON lineups FOR DELETE
   USING (
-    club_id IN (
-      SELECT club_id FROM profiles WHERE id = auth.uid()
-    )
+    club_id IN (SELECT club_id FROM profiles WHERE id = auth.uid())
   );
 
 -- Index for fast history queries
