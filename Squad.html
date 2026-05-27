@@ -438,12 +438,12 @@
   }
   .sq-pos-dot.is-filled .sq-pos-dot-num { display:block; }
   .sq-pos-dot-name {
-    position:absolute; top:calc(100% + 4px);
-    width:72px; text-align:center;
-    font:700 9.5px/1.25 var(--cm-font-sans); color:#fff;
-    text-shadow:0 1px 3px rgba(0,0,0,0.85);
+    position:absolute; top:calc(100% + 5px);
+    width:80px; text-align:center;
+    font:600 11px/1.3 var(--cm-font-sans); color:#fff;
+    text-shadow:0 1px 3px rgba(0,0,0,0.9);
     display:none; pointer-events:none;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    white-space:normal; word-break:break-word;
   }
   .sq-pos-dot.is-filled .sq-pos-dot-name { display:block; }
 
@@ -520,6 +520,78 @@
   .sq-share-opt .ti { font-size:18px; color:var(--cm-fg-muted); }
   .sq-share-opt-name { font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .sq-share-opt-sub  { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+  /* Match header */
+  .sq-match-header {
+    display:flex; align-items:center; gap:4px; flex-wrap:wrap;
+    padding:7px 10px; margin-bottom:8px;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-3); font:500 12px/1 var(--cm-font-sans);
+  }
+  .sq-match-label { color:var(--cm-fg-muted); font-weight:700; white-space:nowrap; }
+  .sq-match-sep { color:var(--cm-border-strong); }
+  .sq-match-input {
+    height:26px; padding:0 6px; min-width:0;
+    border:1px solid transparent; border-radius:var(--cm-r-2);
+    background:transparent; color:var(--cm-fg);
+    font:500 12px/1 var(--cm-font-sans); outline:none;
+  }
+  .sq-match-input:hover { border-color:var(--cm-border); background:var(--cm-bg-soft); }
+  .sq-match-input:focus { border-color:var(--cm-accent); background:var(--cm-bg-soft); }
+  .sq-match-select {
+    height:26px; padding:0 4px;
+    border:1px solid transparent; border-radius:var(--cm-r-2);
+    background:transparent; color:var(--cm-fg);
+    font:500 12px/1 var(--cm-font-sans); outline:none; cursor:pointer;
+  }
+  .sq-match-select:hover, .sq-match-select:focus { border-color:var(--cm-border); background:var(--cm-bg-soft); }
+  .sq-match-toggle {
+    height:22px; padding:0 7px; border-radius:4px;
+    border:1px solid var(--cm-border); background:transparent;
+    color:var(--cm-fg-muted); font:500 11px/1 var(--cm-font-sans); cursor:pointer;
+    transition:background 80ms, color 80ms, border-color 80ms;
+  }
+  .sq-match-toggle.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:var(--cm-accent); }
+
+  /* Field watermarks */
+  .sq-field-wm {
+    position:absolute; left:18%; right:18%;
+    background-size:contain; background-repeat:no-repeat; background-position:center;
+    pointer-events:none; z-index:1;
+  }
+  .sq-field-wm-home { top:62%; bottom:3%; }
+  .sq-field-wm-rival { top:3%; bottom:62%; }
+  .sq-field.is-flipped .sq-field-wm-home { top:3%; bottom:62%; }
+  .sq-field.is-flipped .sq-field-wm-rival { top:62%; bottom:3%; }
+
+  /* Rival crest add button */
+  .sq-field-rival-add {
+    position:absolute; left:50%; top:17%; transform:translate(-50%,-50%);
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    z-index:8; background:transparent; border:0; cursor:pointer;
+    color:rgba(255,255,255,0.3); padding:6px; transition:color 120ms;
+  }
+  .sq-field-rival-add:hover { color:rgba(255,255,255,0.7); }
+  .sq-field-rival-add .ti { font-size:18px; }
+  .sq-field-rival-add span { font:500 8px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; }
+
+  /* Rival remove button */
+  .sq-field-rival-remove {
+    position:absolute; left:50%; transform:translateX(-50%);
+    z-index:12; width:20px; height:20px; border-radius:50%;
+    background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.5);
+    color:#fff; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:background 120ms;
+  }
+  .sq-field-rival-remove:hover { background:rgba(220,38,38,0.75); }
+  .sq-field-rival-remove .ti { font-size:10px; }
+
+  /* Opacity slider row */
+  .sq-opacity-row {
+    display:flex; align-items:center; gap:8px;
+    font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+  }
+  .sq-opacity-row input[type=range] { flex:1; max-width:100px; accent-color:var(--cm-accent); cursor:pointer; }
 
   @media (max-width:768px) {
     .sq-lineup-layout { flex-direction:column; }
@@ -666,6 +738,7 @@
             <option>5-4-1</option>
             <option>4-3-2-1</option>
           </select>
+          <button class="cm-icon-btn" id="sqLFlipBtn" title="Flip orientation"><i class="ti ti-rotate-2"></i></button>
           <div class="grow"></div>
           <button class="cm-btn is-outline is-sm" id="sqLShareBtn"><i class="ti ti-message-share" style="font-size:13px"></i>Share</button>
           <button class="cm-btn is-outline is-sm" id="sqLExportBtn"><i class="ti ti-download" style="font-size:13px"></i>Export PNG</button>
@@ -677,6 +750,29 @@
         <div class="sq-lineup-layout">
           <div class="sq-lineup-field-col">
             <div id="sqLFieldWrap" class="sq-field-wrap">
+              <!-- Match header -->
+              <div id="sqLMatchHeader" class="sq-match-header">
+                <span class="sq-match-label">vs</span>
+                <input id="sqLOpponent" class="sq-match-input" placeholder="Rival" style="width:110px">
+                <span class="sq-match-sep">·</span>
+                <button class="sq-match-toggle is-on" data-val="home">Home</button>
+                <button class="sq-match-toggle" data-val="away">Away</button>
+                <button class="sq-match-toggle" data-val="neutral">Neutral</button>
+                <span class="sq-match-sep">·</span>
+                <input id="sqLMatchDate" class="sq-match-input" type="date" style="width:128px">
+                <input id="sqLMatchTime" class="sq-match-input" type="time" style="width:86px">
+                <span class="sq-match-sep">·</span>
+                <input id="sqLLocation" class="sq-match-input" placeholder="Stadium" style="width:130px">
+                <span class="sq-match-sep">·</span>
+                <select id="sqLCompetition" class="sq-match-select">
+                  <option value="">Competition</option>
+                  <option value="league">Liga</option>
+                  <option value="cup">Copa</option>
+                  <option value="international">Internacional</option>
+                  <option value="friendly">Amistoso</option>
+                </select>
+              </div>
+
               <!-- Pitch -->
               <div id="sqLField" class="sq-field">
                 <div class="sq-field-center-line"></div>
@@ -686,8 +782,31 @@
                 <div class="sq-field-penalty sq-field-penalty-bot"></div>
                 <div class="sq-field-goal sq-field-goal-top"></div>
                 <div class="sq-field-goal sq-field-goal-bot"></div>
+                <!-- Watermarks -->
+                <div id="sqLClubWm" class="sq-field-wm sq-field-wm-home" style="display:none"></div>
+                <div id="sqLRivalWm" class="sq-field-wm sq-field-wm-rival" style="display:none"></div>
+                <!-- Rival crest add -->
+                <button id="sqLAddRivalBtn" class="sq-field-rival-add" title="Add rival crest">
+                  <i class="ti ti-shield-plus"></i>
+                  <span>Rival crest</span>
+                </button>
+                <!-- Rival crest remove -->
+                <button id="sqLRemoveRivalBtn" class="sq-field-rival-remove" style="display:none" title="Remove rival crest">
+                  <i class="ti ti-x"></i>
+                </button>
+                <input type="file" id="sqLRivalFile" accept="image/*" style="display:none">
+                <!-- Positions -->
                 <div id="sqLPositions"></div>
               </div>
+
+              <!-- Rival opacity slider (shown only when crest is loaded) -->
+              <div id="sqLOpacityRow" class="sq-opacity-row" style="display:none">
+                <i class="ti ti-adjustments" style="font-size:13px"></i>
+                <span>Rival opacity</span>
+                <input type="range" id="sqLRivalOpacity" min="5" max="30" value="12">
+                <span id="sqLRivalOpacityVal" style="font:500 11px/1 var(--cm-font-mono);min-width:28px">12%</span>
+              </div>
+
               <!-- Subs -->
               <div class="sq-subs-label">Substitutes</div>
               <div id="sqLSubs" class="sq-subs-row"></div>
@@ -1343,7 +1462,11 @@ async function reloadPlayers() {
     if (view === 'lineup') {
       renderLineupField();
       renderLineSubs();
-      if (!_lHistoryLoaded) { _lHistoryLoaded = true; loadLineupHistory(); loadMatchEvents(); }
+      renderClubLogo();
+      if (!_lHistoryLoaded) {
+        _lHistoryLoaded = true;
+        loadLineupHistory(); loadMatchEvents(); loadNextMatch();
+      }
     }
   }
 
@@ -1729,6 +1852,18 @@ async function reloadPlayers() {
   let _lSavedLineups = [];
   let _lHistoryLoaded = false;
   let _clubMembers = [];
+  let _lFlipped   = false;
+  let _lRivalCrestUrl = null;    // object URL or remote URL
+  let _lRivalOpacity  = 0.12;
+  let _lMatchNextLoaded = false;
+  let _lMatchData = { opponent:'', homeAway:'home', date:'', time:'', location:'', competition:'' };
+
+  // Title-case first surname component
+  function _lDisplayName(p) {
+    const s = (p.last_name || p.first_name || '').trim();
+    const first = s.split(/\s+/)[0] || '';
+    return first ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase() : '';
+  }
 
   function _lGetAssignedIds() {
     const ids = new Set();
@@ -1743,9 +1878,10 @@ async function reloadPlayers() {
     const slots = LINEUP_FORMATIONS[_lFormation] || [];
     container.innerHTML = slots.map(slot => {
       const player = _lAssigned[slot.id];
-      const name   = player ? (player.last_name || player.first_name || '').toUpperCase() : '';
+      const name   = player ? _lDisplayName(player) : '';
+      const effY   = _lFlipped ? (100 - slot.y) : slot.y;
       return `<div class="sq-pos-dot${player ? ' is-filled' : ''}" data-slot="${slot.id}"
-                   style="left:${slot.x}%;top:${slot.y}%">
+                   style="left:${slot.x}%;top:${effY}%">
         <span class="sq-pos-dot-label">${slot.label}</span>
         <span class="sq-pos-dot-num">${player ? (player.number || '?') : ''}</span>
         <span class="sq-pos-dot-name">${name}</span>
@@ -1765,7 +1901,7 @@ async function reloadPlayers() {
     container.innerHTML = _lSubs.map((player, i) => {
       const filled = !!player;
       const num    = filled ? (player.number || '?') : (i + 1);
-      const name   = filled ? (player.last_name || player.first_name || '').toUpperCase() : 'SUB';
+      const name   = filled ? _lDisplayName(player) : 'SUB';
       return `<div class="sq-sub-slot" data-sub="${i}">
         <div class="sq-sub-dot${filled ? ' is-filled' : ''}">
           <span class="sq-sub-dot-inner">${num}</span>
@@ -1878,6 +2014,139 @@ async function reloadPlayers() {
     renderLPickerList(e.target.value, compat, excluded, _lPickerTarget);
   });
 
+  // ── Club logo watermark ────────────────────────────────────────
+  function renderClubLogo() {
+    const el = document.getElementById('sqLClubWm');
+    if (!el) return;
+    if (_currentClubLogoUrl) {
+      el.style.backgroundImage = `url(${_currentClubLogoUrl})`;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  // ── Rival crest ────────────────────────────────────────────────
+  function updateRivalZone() {
+    const wm     = document.getElementById('sqLRivalWm');
+    const addBtn = document.getElementById('sqLAddRivalBtn');
+    const rmBtn  = document.getElementById('sqLRemoveRivalBtn');
+    const row    = document.getElementById('sqLOpacityRow');
+    const field  = document.getElementById('sqLField');
+    if (!wm) return;
+    const topPos = _lFlipped ? 'auto' : '17%';
+    const botPos = _lFlipped ? '17%'  : 'auto';
+    if (addBtn) { addBtn.style.top = topPos; addBtn.style.bottom = botPos; }
+    if (rmBtn)  {
+      const rTop = _lFlipped ? 'auto' : '5%';
+      const rBot = _lFlipped ? '5%'   : 'auto';
+      rmBtn.style.top = rTop; rmBtn.style.bottom = rBot;
+    }
+    if (_lRivalCrestUrl) {
+      wm.style.backgroundImage = `url(${_lRivalCrestUrl})`;
+      wm.style.opacity = _lRivalOpacity;
+      wm.style.display = '';
+      if (addBtn) addBtn.style.display = 'none';
+      if (rmBtn)  rmBtn.style.display  = '';
+      if (row)    row.style.display    = '';
+    } else {
+      wm.style.backgroundImage = '';
+      wm.style.display = 'none';
+      if (addBtn) addBtn.style.display = '';
+      if (rmBtn)  rmBtn.style.display  = 'none';
+      if (row)    row.style.display    = 'none';
+    }
+  }
+
+  document.getElementById('sqLAddRivalBtn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    document.getElementById('sqLRivalFile')?.click();
+  });
+  document.getElementById('sqLRivalFile')?.addEventListener('change', e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (_lRivalCrestUrl && _lRivalCrestUrl.startsWith('blob:')) URL.revokeObjectURL(_lRivalCrestUrl);
+    _lRivalCrestUrl = URL.createObjectURL(file);
+    updateRivalZone();
+    e.target.value = '';
+  });
+  document.getElementById('sqLRemoveRivalBtn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    if (_lRivalCrestUrl && _lRivalCrestUrl.startsWith('blob:')) URL.revokeObjectURL(_lRivalCrestUrl);
+    _lRivalCrestUrl = null;
+    updateRivalZone();
+  });
+  document.getElementById('sqLRivalOpacity')?.addEventListener('input', e => {
+    _lRivalOpacity = parseInt(e.target.value) / 100;
+    const wm = document.getElementById('sqLRivalWm');
+    if (wm) wm.style.opacity = _lRivalOpacity;
+    const valEl = document.getElementById('sqLRivalOpacityVal');
+    if (valEl) valEl.textContent = e.target.value + '%';
+  });
+
+  // ── Flip orientation ───────────────────────────────────────────
+  document.getElementById('sqLFlipBtn')?.addEventListener('click', () => {
+    _lFlipped = !_lFlipped;
+    document.getElementById('sqLField')?.classList.toggle('is-flipped', _lFlipped);
+    document.getElementById('sqLFlipBtn')?.classList.toggle('is-on', _lFlipped);
+    renderLineupField();
+    updateRivalZone();
+  });
+
+  // ── Match header ───────────────────────────────────────────────
+  document.querySelectorAll('.sq-match-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sq-match-toggle').forEach(b => b.classList.remove('is-on'));
+      btn.classList.add('is-on');
+      _lMatchData.homeAway = btn.dataset.val;
+    });
+  });
+  ['sqLOpponent','sqLMatchDate','sqLMatchTime','sqLLocation'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', e => {
+      const map = { sqLOpponent:'opponent', sqLMatchDate:'date', sqLMatchTime:'time', sqLLocation:'location' };
+      _lMatchData[map[id]] = e.target.value;
+    });
+  });
+  document.getElementById('sqLCompetition')?.addEventListener('change', e => {
+    _lMatchData.competition = e.target.value;
+  });
+
+  // ── Load next match from calendar_events ──────────────────────
+  async function loadNextMatch() {
+    if (_lMatchNextLoaded || !_currentClubId) return;
+    _lMatchNextLoaded = true;
+    const today = new Date().toISOString().split('T')[0];
+    const { data } = await window.sb.from('calendar_events')
+      .select('id,title,opponent,home_away,date,start_time,location,competition')
+      .eq('club_id', _currentClubId)
+      .eq('type', 'match')
+      .gte('date', today)
+      .order('date', { ascending:true })
+      .limit(1);
+    const ev = data?.[0];
+    if (ev) {
+      _lMatchData.matchId    = ev.id;
+      _lMatchData.opponent   = ev.opponent || (ev.title || '').replace(/^vs\s*/i,'');
+      _lMatchData.homeAway   = ev.home_away || 'home';
+      _lMatchData.date       = ev.date || '';
+      _lMatchData.time       = ev.start_time ? ev.start_time.slice(0,5) : '';
+      _lMatchData.location   = ev.location || '';
+      _lMatchData.competition= ev.competition || '';
+      _populateMatchHeader();
+    }
+  }
+
+  function _populateMatchHeader() {
+    const { opponent, homeAway, date, time, location, competition } = _lMatchData;
+    const get = id => document.getElementById(id);
+    if (get('sqLOpponent')) get('sqLOpponent').value = opponent;
+    if (get('sqLMatchDate')) get('sqLMatchDate').value = date;
+    if (get('sqLMatchTime')) get('sqLMatchTime').value = time;
+    if (get('sqLLocation')) get('sqLLocation').value = location;
+    if (get('sqLCompetition')) get('sqLCompetition').value = competition;
+    document.querySelectorAll('.sq-match-toggle').forEach(b => b.classList.toggle('is-on', b.dataset.val === (homeAway || 'home')));
+  }
+
   // Formation change
   document.getElementById('sqLFormation')?.addEventListener('change', e => {
     _lFormation = e.target.value;
@@ -1899,11 +2168,14 @@ async function reloadPlayers() {
         ? '<ol style="padding-left:20px;font-size:14px;line-height:1.9">' +
           filledSubs.map(p => `<li>#${p.number||'?'} ${((p.first_name||'') + ' ' + (p.last_name||'')).trim()} <small>(${p.position||'?'})</small></li>`).join('') +
           '</ol>' : '';
-      const logoHtml = _currentClubLogoUrl ? `<img src="${_currentClubLogoUrl}" style="height:42px;object-fit:contain" alt="">` : '';
+      const logoHtml  = _currentClubLogoUrl ? `<img src="${_currentClubLogoUrl}" style="height:42px;object-fit:contain" alt="">` : '';
+      const oppoStr   = _lMatchData.opponent ? `vs ${_lMatchData.opponent}` : '';
+      const dateStr   = _lMatchData.date ? new Date(_lMatchData.date + 'T12:00:00').toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '';
+      const matchLine = [oppoStr, _lMatchData.homeAway || '', dateStr, _lMatchData.time, _lMatchData.location].filter(Boolean).join(' · ');
       const pw = window.open('', '_blank');
       if (!pw) { showToast('Allow pop-ups to print.'); return; }
       pw.document.write(`<!DOCTYPE html><html><head>
-        <title>Lineup · ${_lFormation}</title>
+        <title>Lineup · ${oppoStr || _lFormation}</title>
         <style>
           *{box-sizing:border-box;margin:0;padding:0}
           body{font-family:sans-serif;color:#111;background:#fff}
@@ -1915,7 +2187,7 @@ async function reloadPlayers() {
           @media print{button{display:none!important}}
         </style>
       </head><body>
-        <div class="hdr"><h1>Lineup · ${_lFormation}</h1>${logoHtml}</div>
+        <div class="hdr"><div><h1>${oppoStr || 'Lineup'} · ${_lFormation}</h1>${matchLine ? `<div style="font-size:12px;color:#666;margin-top:4px">${matchLine}</div>` : ''}</div>${logoHtml}</div>
         <img class="field-img" src="${imgData}" alt="Lineup">
         ${filledSubs.length ? '<div class="subs"><h2>Substitutes</h2>' + subsHtml + '</div>' : ''}
       </body></html>`);
@@ -1934,8 +2206,9 @@ async function reloadPlayers() {
     try {
       const fieldWrap = document.getElementById('sqLFieldWrap');
       const canvas = await html2canvas(fieldWrap, { useCORS:true, allowTaint:true, scale:2, backgroundColor:'#ffffff' });
+      const rivalSlug = _lMatchData.opponent ? '_vs_' + _lMatchData.opponent.replace(/[^a-zA-Z0-9]/g,'_').toLowerCase() : '';
       const link = Object.assign(document.createElement('a'), {
-        download: `lineup_${_lFormation}_${new Date().toISOString().split('T')[0]}.png`,
+        download: `lineup${rivalSlug}_${_lFormation}_${new Date().toISOString().split('T')[0]}.png`,
         href: canvas.toDataURL('image/png'),
       });
       link.click();
@@ -2030,15 +2303,38 @@ async function reloadPlayers() {
       const playersJson = {};
       Object.entries(_lAssigned).forEach(([k, v]) => { if (v) playersJson[k] = v.id; });
       const subsJson = _lSubs.map(p => p?.id || null);
-      const { error } = await window.sb.from('lineups').insert({
-        club_id:    _currentClubId,
-        match_id:   matchId,
-        formation:  _lFormation,
-        players:    playersJson,
-        subs:       subsJson,
-        title:      title || null,
-        created_by: authUser?.id,
-      });
+
+      // Upload rival crest if it's a local blob URL
+      let rivalCrestUrl = null;
+      if (_lRivalCrestUrl && _lRivalCrestUrl.startsWith('blob:')) {
+        try {
+          const resp = await fetch(_lRivalCrestUrl);
+          const blob = await resp.blob();
+          const ext  = blob.type.split('/')[1] || 'png';
+          const path = `rivals/${_currentClubId}/${Date.now()}.${ext}`;
+          const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, blob, { contentType: blob.type, upsert:false });
+          if (!upErr) {
+            const { data: urlData } = window.sb.storage.from('player-photos').getPublicUrl(path);
+            rivalCrestUrl = urlData?.publicUrl || null;
+          }
+        } catch(e) { console.warn('Rival crest upload failed:', e); }
+      } else if (_lRivalCrestUrl) {
+        rivalCrestUrl = _lRivalCrestUrl;
+      }
+
+      const payload = {
+        club_id:          _currentClubId,
+        match_id:         matchId || _lMatchData.matchId || null,
+        formation:        _lFormation,
+        players:          playersJson,
+        subs:             subsJson,
+        title:            title || null,
+        created_by:       authUser?.id,
+        match_data:       Object.keys(_lMatchData).some(k => k !== 'matchId' && _lMatchData[k]) ? _lMatchData : null,
+        rival_crest_url:  rivalCrestUrl,
+      };
+
+      const { error } = await window.sb.from('lineups').insert(payload);
       if (error) { showToast('Error saving: ' + error.message); return; }
       document.getElementById('sqLSaveModal').classList.remove('is-open');
       showToast('Lineup saved.');
@@ -2090,8 +2386,17 @@ async function reloadPlayers() {
         }
         _lSubs = (data.subs || []).map(id => id ? (_allPlayers.find(x => x.id === id) || null) : null);
         while (_lSubs.length < 7) _lSubs.push(null);
+        // Restore match data
+        if (data.match_data) {
+          Object.assign(_lMatchData, data.match_data);
+          _populateMatchHeader();
+        }
+        // Restore rival crest
+        if (_lRivalCrestUrl && _lRivalCrestUrl.startsWith('blob:')) URL.revokeObjectURL(_lRivalCrestUrl);
+        _lRivalCrestUrl = data.rival_crest_url || null;
         renderLineupField();
         renderLineSubs();
+        updateRivalZone();
         showToast('Lineup loaded.');
       });
     });
@@ -2101,17 +2406,17 @@ async function reloadPlayers() {
   async function loadMatchEvents() {
     if (_lMatches.length > 0) return;
     const { data } = await window.sb.from('calendar_events')
-      .select('id,title,start_date')
+      .select('id,title,date')
       .eq('club_id', _currentClubId)
       .eq('type', 'match')
-      .order('start_date', { ascending:false })
+      .order('date', { ascending:false })
       .limit(40);
     _lMatches = data || [];
     const sel = document.getElementById('sqLMatch');
     if (sel && _lMatches.length) {
       sel.innerHTML = '<option value="">— No match —</option>' +
         _lMatches.map(m => {
-          const d = new Date(m.start_date).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+          const d = new Date(m.date + 'T12:00:00').toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
           return `<option value="${m.id}">${m.title || 'Match'} · ${d}</option>`;
         }).join('');
     }
