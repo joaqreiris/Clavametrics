@@ -105,7 +105,7 @@
   .inj-row-actions { display:flex; gap:6px; align-items:center; }
 
   /* Phase timeline */
-  .inj-timeline { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:12px; }
+  .inj-timeline { display:grid; grid-template-columns:repeat(auto-fill, minmax(85px, 1fr)); gap:6px; margin-bottom:12px; }
   .tl-phase { background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; padding:9px 10px 10px; position:relative; cursor:pointer; transition:box-shadow .1s; user-select:none; }
   .tl-phase:not(.done):hover { box-shadow:0 0 0 2px var(--cm-accent); }
   .tl-phase .h { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
@@ -123,6 +123,10 @@
   .tl-phase.active .h .ph { color:var(--cm-accent); }
   .tl-phase.active .l { color:var(--cm-fg-strong); }
   .tl-phase.active .s { color:var(--cm-accent); }
+  .tl-phase .cr { font:500 10px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:4px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .tl-phase.active .cr { color:var(--cm-accent); opacity:0.8; }
+  .tl-phase.done .cr { color:var(--cm-success); opacity:0.7; }
+  .inj-reinjury-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:4px; background:rgba(220,38,38,0.10); color:var(--cm-danger); font:600 10.5px/1 var(--cm-font-mono); }
 
   /* progress bar */
   .inj-progress-row { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
@@ -613,19 +617,104 @@ function getBodyCoords(area) {
   return null;
 }
 
-// ═══════════════ PHASE CONSTANTS ═══════════════
-const PHASE_NAMES = ['Acute', 'Sub-acute', 'Return to running', 'Return to training', 'Return to play'];
-const PHASE_DURATIONS = { minor:[3,5,7,10,14], moderate:[5,10,14,21,28], severe:[7,14,21,35,42] };
-const PHASE_ICONS = ['ti-first-aid-kit','ti-activity','ti-run','ti-ball-football','ti-trophy'];
+// ═══════════════ EVIDENCE-BASED PHASE PROTOCOLS ═══════════════
+// Based on: Mueller-Wohlfahrt 2012, Askling 2013, UEFA Injury Study, ACL-RSI criteria
+const PHASE_TYPE_ICONS = {
+  acute:'ti-first-aid-kit', subacute:'ti-activity', strength:'ti-barbell',
+  neuromuscular:'ti-brain', running:'ti-run', training:'ti-ball-football', competition:'ti-trophy'
+};
 
-function buildPhases(injuryId, startDate, severity) {
-  const durs = PHASE_DURATIONS[severity] || PHASE_DURATIONS.moderate;
+const PROTOCOLS = {
+  muscle: {
+    phases:[
+      {name:'Acute',type:'acute',criteria:'No pain at rest; swelling controlled; normal gait'},
+      {name:'Regeneration',type:'subacute',criteria:'Pain-free passive ROM; no palpation pain'},
+      {name:'Functional',type:'strength',criteria:'Isokinetic strength ≥ 60% vs contralateral; pain-free cycling'},
+      {name:'Return to running',type:'running',criteria:'Pain-free running at 8 km/h; no limp'},
+      {name:'Return to training',type:'training',criteria:'Full training without restriction; sprints pain-free'},
+      {name:'Return to competition',type:'competition',criteria:'Asymmetry < 10% in strength tests; physio clearance'},
+    ],
+    durations:{minor:[5,8,12,16,20,22],moderate:[8,14,21,28,35,42],severe:[14,21,35,49,63,70]},
+  },
+  ligament: {
+    phases:[
+      {name:'Acute',type:'acute',criteria:'Pain and swelling controlled; protected weight bearing'},
+      {name:'Sub-acute',type:'subacute',criteria:'Full range of motion; pain-free ADL'},
+      {name:'Strengthening',type:'strength',criteria:'Eccentric strength ≥ 70%; proprioception restored'},
+      {name:'Functional',type:'running',criteria:'Change of direction pain-free; jogging unrestricted'},
+      {name:'Return to training',type:'training',criteria:'Full team training without restriction'},
+      {name:'Return to competition',type:'competition',criteria:'Strength symmetry ≥ 90%; functional tests passed'},
+    ],
+    durations:{minor:[3,5,7,10,12,14],moderate:[5,10,14,21,28,35],severe:[10,21,35,49,63,77]},
+  },
+  acl: {
+    phases:[
+      {name:'Post-op acute',type:'acute',criteria:'Full extension achieved; swelling < 1 cm; no quad inhibition'},
+      {name:'Early rehab',type:'subacute',criteria:'Normal gait; flexion ≥ 120°; no effusion'},
+      {name:'Strengthening',type:'strength',criteria:'Quad strength ≥ 60%; closed-chain exercises pain-free'},
+      {name:'Neuromuscular',type:'neuromuscular',criteria:'Single-leg balance > 20 s; hop symmetry ≥ 70%'},
+      {name:'Return to running',type:'running',criteria:'Continuous jogging 20 min; no swelling post-activity'},
+      {name:'Sport-specific',type:'training',criteria:'Cutting / pivoting pain-free; plyometrics completed'},
+      {name:'Return to competition',type:'competition',criteria:'Strength symmetry ≥ 90% (hop test); ACL-RSI ≥ 65; no effusion'},
+    ],
+    durations:{severe:[14,42,84,150,210,270,300]},
+  },
+  tendon: {
+    phases:[
+      {name:'Isometric loading',type:'acute',criteria:'Pain ≤ 3/10 NRS during isometric holds'},
+      {name:'Isotonic loading',type:'subacute',criteria:'Pain ≤ 3/10; 3×15 slow tempo completed'},
+      {name:'Energy storage',type:'strength',criteria:'Plyometrics pain-free; no morning stiffness'},
+      {name:'Running mechanics',type:'running',criteria:'Progressive running load without pain spike'},
+      {name:'Return to training',type:'training',criteria:'Full training load tolerated'},
+      {name:'Return to competition',type:'competition',criteria:'VISA score ≥ 90; symmetric loading'},
+    ],
+    durations:{minor:[7,14,21,28,35,42],moderate:[7,14,28,42,56,70],severe:[14,28,56,84,112,140]},
+  },
+  bone: {
+    phases:[
+      {name:'Immobilization',type:'acute',criteria:'Imaging confirms alignment; non-weight bearing'},
+      {name:'Partial loading',type:'subacute',criteria:'Callus visible on imaging; partial weight bearing tolerated'},
+      {name:'Full loading',type:'strength',criteria:'Full weight bearing pain-free; normal gait'},
+      {name:'Conditioning',type:'running',criteria:'Cardiovascular fitness restored; no bone pain'},
+      {name:'Return to training',type:'training',criteria:'Impact activities tolerated; team training completed'},
+      {name:'Return to competition',type:'competition',criteria:'Radiological union confirmed; functional tests passed'},
+    ],
+    durations:{minor:[14,21,28,35,42,49],moderate:[21,35,49,56,70,84],severe:[42,56,84,112,140,168]},
+  },
+  generic: {
+    phases:[
+      {name:'Acute',type:'acute',criteria:'Pain and swelling controlled; protected rest'},
+      {name:'Sub-acute',type:'subacute',criteria:'ROM restored; pain-free at rest'},
+      {name:'Reconditioning',type:'strength',criteria:'Strength and flexibility baseline restored'},
+      {name:'Return to running',type:'running',criteria:'Jogging and running pain-free'},
+      {name:'Return to training',type:'training',criteria:'Full team training completed'},
+    ],
+    durations:{minor:[3,5,7,10,14],moderate:[5,10,14,21,28],severe:[7,14,21,35,42]},
+  },
+};
+
+function getProtocol(injuryType) {
+  const t = (injuryType || '').toLowerCase();
+  if (/acl|cruciate/.test(t))                                  return PROTOCOLS.acl;
+  if (/muscle|strain|tear|hamstring|quad|calf|adductor|groin/.test(t)) return PROTOCOLS.muscle;
+  if (/ligament|sprain|ankle|mcl|lcl/.test(t))                return PROTOCOLS.ligament;
+  if (/tendon|tendinop|achilles|patellar/.test(t))             return PROTOCOLS.tendon;
+  if (/bone|fracture|stress/.test(t))                          return PROTOCOLS.bone;
+  return PROTOCOLS.generic;
+}
+
+function buildPhases(injuryId, startDate, severity, injuryType) {
+  const proto = getProtocol(injuryType);
+  const sev   = severity || 'moderate';
+  const durs  = proto.durations[sev] || proto.durations.severe || proto.durations.moderate;
   const phases = []; let cumDays = 0;
-  durs.forEach((dur, idx) => {
+  proto.phases.forEach((ph, idx) => {
+    const dur     = durs[idx] !== undefined ? durs[idx] : durs[durs.length - 1];
     const phStart = new Date(startDate); phStart.setDate(phStart.getDate() + cumDays);
     const phEnd   = new Date(phStart);   phEnd.setDate(phEnd.getDate() + dur);
     phases.push({
-      injury_id: injuryId, phase_number: idx + 1, phase_name: PHASE_NAMES[idx],
+      injury_id: injuryId, phase_number: idx + 1, phase_name: ph.name,
+      phase_type: ph.type, criteria: ph.criteria,
       start_date: phStart.toISOString().split('T')[0],
       end_date:   phEnd.toISOString().split('T')[0],
       status: idx === 0 ? 'in_progress' : 'pending',
@@ -846,15 +935,27 @@ function isReturning(inj) {
   const phs = _phasesMap[inj.id];
   if (phs && phs.length) {
     const cur = phs.find(p => p.status === 'in_progress');
-    return cur ? cur.phase_number >= 4 : false;
+    if (!cur) return false;
+    const returnTypes = new Set(['running','training','competition','neuromuscular']);
+    return returnTypes.has(cur.phase_type) || cur.phase_number >= phs.length - 1;
   }
-  // Fallback: estimate from date progress
   if (!inj.start_date || !inj.expected_return) return false;
   const pct = Math.min(100, Math.round(
     (new Date() - new Date(inj.start_date)) /
     (new Date(inj.expected_return) - new Date(inj.start_date)) * 100
   ));
   return pct >= 60;
+}
+
+function hasReinjuryRisk(inj) {
+  if (!inj.body_area || !inj.start_date) return false;
+  const injStart = new Date(inj.start_date);
+  const ninety   = new Date(injStart); ninety.setDate(injStart.getDate() - 90);
+  return _allInjuries.some(o =>
+    o.id !== inj.id && o.player_id === inj.player_id &&
+    (o.body_area || '').toLowerCase() === inj.body_area.toLowerCase() &&
+    new Date(o.start_date) >= ninety && new Date(o.start_date) < injStart
+  );
 }
 
 function updateTabCounts() {
@@ -946,42 +1047,49 @@ function injCard(inj) {
   const phasesDB = _phasesMap[inj.id];
   let tlHtml = '';
   if (phasesDB && phasesDB.length) {
-    tlHtml = phasesDB.map((ph, idx) => {
-      const cls = ph.status === 'done' ? 'done' : ph.status === 'in_progress' ? 'active' : '';
-      const icon = ph.status === 'done' ? 'ti-check' : PHASE_ICONS[idx] || 'ti-circle';
+    tlHtml = phasesDB.map(ph => {
+      const cls     = ph.status === 'done' ? 'done' : ph.status === 'in_progress' ? 'active' : '';
+      const icon    = ph.status === 'done' ? 'ti-check' : (PHASE_TYPE_ICONS[ph.phase_type] || 'ti-circle');
       const dateTxt = ph.end_date ? fmtDate(ph.end_date) : '';
-      const sTxt = ph.status === 'done' ? 'Completed'
-        : ph.status === 'in_progress' ? `In progress · day ${elapsed}`
+      const todayD  = new Date(); todayD.setHours(0,0,0,0);
+      const estEnd  = ph.end_date ? new Date(ph.end_date) : null;
+      const ahead   = ph.status === 'in_progress' && estEnd && todayD < estEnd;
+      const sTxt    = ph.status === 'done' ? 'Completed'
+        : ph.status === 'in_progress' ? `Day ${elapsed}${ahead ? ' · ahead' : ''}`
         : dateTxt ? `est. ${dateTxt}` : 'Pending';
-      return `<div class="tl-phase ${cls}" data-phase-id="${ph.id}" data-inj-id="${inj.id}" title="Click to advance">
-        <div class="h"><i class="ti ${icon}"></i><span class="ph">Phase ${ph.phase_number}</span></div>
+      const crTxt   = ph.criteria ? ph.criteria.slice(0,52) + (ph.criteria.length > 52 ? '…' : '') : '';
+      const tipAttr = ph.criteria ? ` title="${ph.criteria.replace(/"/g,'&quot;')}"` : ' title="Click to advance"';
+      return `<div class="tl-phase ${cls}" data-phase-id="${ph.id}" data-inj-id="${inj.id}"${tipAttr}>
+        <div class="h"><i class="ti ${icon}"></i><span class="ph">Ph.${ph.phase_number}</span></div>
         <div class="l">${ph.phase_name}</div>
         <div class="s">${sTxt}</div>
+        ${crTxt ? `<div class="cr">${crTxt}</div>` : ''}
       </div>`;
     }).join('');
   } else {
-    // Derived phases (no DB phases yet)
-    let cum = 0;
-    tlHtml = PHASE_NAMES.map((name, idx) => {
-      const frac = [0.15,0.25,0.25,0.20,0.15][idx];
-      cum += frac * 100;
-      const isDone   = pct >= cum;
-      const isActive = !isDone && pct >= (cum - frac * 100);
+    // Derived phases using protocol for this injury type
+    const proto = getProtocol(inj.injury_type);
+    tlHtml = proto.phases.map((ph, idx) => {
+      const cumEnd   = (idx + 1) / proto.phases.length * 100;
+      const cumStart = idx / proto.phases.length * 100;
+      const isDone   = pct >= cumEnd;
+      const isActive = !isDone && pct >= cumStart;
       const cls  = isDone ? 'done' : isActive ? 'active' : '';
-      const icon = isDone ? 'ti-check' : PHASE_ICONS[idx];
-      const sTxt = isDone ? 'Completed' : isActive ? `In progress · day ${elapsed}` : totalD ? `est. ${fmtDate(new Date(start.getTime() + (cum/100)*totalD*86400000))}` : '';
+      const icon = isDone ? 'ti-check' : (PHASE_TYPE_ICONS[ph.type] || 'ti-circle');
+      const sTxt = isDone ? 'Completed' : isActive ? `Day ${elapsed}` : totalD ? `est. ${fmtDate(new Date(start.getTime() + (cumEnd/100)*totalD*86400000))}` : '';
       return `<div class="tl-phase ${cls}">
-        <div class="h"><i class="ti ${icon}"></i><span class="ph">Phase ${idx+1}</span></div>
-        <div class="l">${name}</div>
+        <div class="h"><i class="ti ${icon}"></i><span class="ph">Ph.${idx+1}</span></div>
+        <div class="l">${ph.name}</div>
         <div class="s">${sTxt}</div>
       </div>`;
     }).join('');
   }
 
-  // RTP progress fill class
-  const fillCls = pct < 40 ? '' : pct < 70 ? 'warn' : 'danger';
-  // Done phases count for progress
-  const donePct = phasesDB ? Math.round(phasesDB.filter(p => p.status === 'done').length / phasesDB.length * 100) : pct;
+  // RTP progress
+  const fillCls   = pct < 40 ? '' : pct < 70 ? 'warn' : 'danger';
+  const donePct   = phasesDB ? Math.round(phasesDB.filter(p => p.status === 'done').length / phasesDB.length * 100) : pct;
+  const rtpDate   = phasesDB ? (phasesDB[phasesDB.length-1]?.end_date || null) : (inj.expected_return || null);
+  const daysToRTP = (rtpDate && inj.status === 'active') ? Math.max(0, Math.round((new Date(rtpDate) - today) / 86400000)) : null;
 
   const canDischarge = inj.status === 'active';
   const dischargeBtn = canDischarge
@@ -1024,13 +1132,13 @@ function injCard(inj) {
         </div>
       </div>
     </div>
-
+    ${hasReinjuryRisk(inj) ? `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>High re-injury risk — review rehabilitation protocol</span></div>` : ''}
     <div class="inj-timeline">${tlHtml}</div>
 
     <div class="inj-progress-row">
       <span class="inj-progress-l">RTP progress</span>
       <span class="inj-progress-bar"><span class="inj-progress-fill ${fillCls}" style="width:${phasesDB ? donePct : pct}%"></span></span>
-      <span class="inj-progress-r">${phasesDB ? donePct : pct}%</span>
+      <span class="inj-progress-r">${phasesDB ? donePct : pct}%${daysToRTP != null ? ` · <span style="font-size:10.5px;color:var(--cm-fg-muted)">~${daysToRTP}d</span>` : ''}</span>
     </div>
 
     <div class="inj-rtp">
@@ -1232,7 +1340,7 @@ async function saveInjury() {
 
     // Auto-create phases
     try {
-      const phases = buildPhases(newInj.id, start_date, severity);
+      const phases = buildPhases(newInj.id, start_date, severity, injury_type);
       const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
       if (insertedPhs) _phasesMap[newInj.id] = insertedPhs;
     } catch(e) { console.warn('[Injuries] phases insert failed:', e.message); }
@@ -1316,19 +1424,34 @@ async function togglePhase(phaseId, injuryId) {
   const ph = phs.find(p => p.id === phaseId);
   if (!ph || ph.status === 'done') return;
 
-  const newStatus = ph.status === 'in_progress' ? 'done' : 'in_progress';
-  ph.status = newStatus;
-  if (newStatus === 'done') {
-    const next = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'pending');
-    if (next) next.status = 'in_progress';
+  // Warn if advancing before estimated end date
+  if (ph.status === 'in_progress') {
+    const todayW  = new Date(); todayW.setHours(0,0,0,0);
+    const estEnd  = ph.end_date ? new Date(ph.end_date) : null;
+    if (estEnd && todayW < estEnd) {
+      const daysEarly   = Math.round((estEnd - todayW) / 86400000);
+      const criteriaMsg = ph.criteria ? `\n\nCriteria to meet:\n"${ph.criteria}"` : '';
+      if (!confirm(`Advancing ${daysEarly} day${daysEarly !== 1 ? 's' : ''} ahead of expected timeline.${criteriaMsg}\n\nConfirm criteria met?`)) return;
+    }
   }
 
-  applyFilters(); // re-render optimistically
+  const todayStr  = new Date().toISOString().split('T')[0];
+  const newStatus = ph.status === 'in_progress' ? 'done' : 'in_progress';
+  ph.status = newStatus;
+  if (newStatus === 'done') ph.actual_end = todayStr;
+  if (newStatus === 'done') {
+    const next = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'pending');
+    if (next) { next.status = 'in_progress'; next.actual_start = todayStr; }
+  }
 
-  await window.sb.from('injury_phases').update({ status: newStatus }).eq('id', phaseId);
+  applyFilters();
+
+  const upd = { status: newStatus };
+  if (newStatus === 'done') upd.actual_end = todayStr;
+  await window.sb.from('injury_phases').update(upd).eq('id', phaseId);
   if (newStatus === 'done') {
     const nextPh = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'in_progress');
-    if (nextPh) await window.sb.from('injury_phases').update({ status: 'in_progress' }).eq('id', nextPh.id);
+    if (nextPh) await window.sb.from('injury_phases').update({ status: 'in_progress', actual_start: todayStr }).eq('id', nextPh.id);
   }
 }
 
