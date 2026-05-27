@@ -979,7 +979,7 @@ async function sendWorseningNotification(playerId) {
       user_id: s.id,
       club_id: _clubId,
       type:    'physio_worsening',
-      title:   `⚠️ ${playerName} — Negative evolution in treatment`,
+      title:   `${playerName} — Negative evolution in treatment`,
       body:    `${playerName}'s condition is worsening. Review treatment plan.`,
       link:    '/Physio.html',
     }));
@@ -988,7 +988,7 @@ async function sendWorseningNotification(playerId) {
   ops.push(window.sb.from('messages').insert({
     club_id:   _clubId,
     sender_id: _profile?.id,
-    content:   `⚠️ ${playerName} — Negative evolution in treatment.\n— ${physioName} · ${todayFmt}`,
+    content:   `${playerName} — Negative evolution in treatment.\n— ${physioName} · ${todayFmt}`,
   }).catch(console.warn));
 
   await Promise.all(ops);
