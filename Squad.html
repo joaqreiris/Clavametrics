@@ -445,6 +445,30 @@
     white-space:normal; word-break:break-word;
   }
   .sq-pos-dot.is-filled .sq-pos-dot-name { display:block; }
+  /* Photo inside token */
+  .sq-pos-dot-photo {
+    position:absolute; inset:2px; border-radius:50%;
+    overflow:hidden; pointer-events:none; z-index:1;
+  }
+  .sq-pos-dot-photo img { width:100%; height:100%; object-fit:cover; display:block; }
+  .sq-pos-dot-photo .sq-pos-dot-initials {
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+    font:700 13px/1 var(--cm-font-mono); color:#fff; background:var(--cm-accent);
+  }
+  /* With photo: number as small badge */
+  .sq-pos-dot.has-photo .sq-pos-dot-num {
+    position:absolute; bottom:-3px; right:-3px;
+    width:18px; height:18px; border-radius:50%;
+    background:rgba(0,0,0,0.82); border:1.5px solid rgba(255,255,255,0.5);
+    font-size:9px; line-height:18px; text-align:center; z-index:3;
+  }
+  /* Sub dot photo */
+  .sq-sub-dot-photo {
+    position:absolute; inset:2px; border-radius:50%;
+    overflow:hidden; pointer-events:none; z-index:1;
+  }
+  .sq-sub-dot-photo img { width:100%; height:100%; object-fit:cover; display:block; }
+  .sq-sub-dot { position:relative; }
 
   /* Subs */
   .sq-subs-label {
@@ -1903,6 +1927,15 @@ async function reloadPlayers() {
     return ids;
   }
 
+  function _lPhotoInner(player) {
+    if (!player) return '';
+    const initials = [player.first_name, player.last_name].map(s => (s||'')[0]||'').join('').toUpperCase() || '?';
+    if (player.photo_url) {
+      return `<div class="sq-pos-dot-photo"><img src="${player.photo_url}" alt="" crossorigin="anonymous"></div>`;
+    }
+    return `<div class="sq-pos-dot-photo"><span class="sq-pos-dot-initials">${initials}</span></div>`;
+  }
+
   function renderLineupField() {
     const container = document.getElementById('sqLPositions');
     if (!container) return;
@@ -1911,9 +1944,11 @@ async function reloadPlayers() {
       const player = _lAssigned[slot.id];
       const name   = player ? _lDisplayName(player) : '';
       const effY   = _lFlipped ? (100 - slot.y) : slot.y;
-      return `<div class="sq-pos-dot${player ? ' is-filled' : ''}" data-slot="${slot.id}"
+      const hasPhoto = !!player;
+      return `<div class="sq-pos-dot${player ? ' is-filled' : ''}${hasPhoto ? ' has-photo' : ''}" data-slot="${slot.id}"
                    style="left:${slot.x}%;top:${effY}%">
         <span class="sq-pos-dot-label">${slot.label}</span>
+        ${player ? _lPhotoInner(player) : ''}
         <span class="sq-pos-dot-num">${player ? (player.number || '?') : ''}</span>
         <span class="sq-pos-dot-name">${name}</span>
       </div>`;
@@ -1926,6 +1961,15 @@ async function reloadPlayers() {
     });
   }
 
+  function _lSubPhotoInner(player) {
+    if (!player) return '';
+    const initials = [player.first_name, player.last_name].map(s => (s||'')[0]||'').join('').toUpperCase() || '?';
+    if (player.photo_url) {
+      return `<div class="sq-sub-dot-photo"><img src="${player.photo_url}" alt="" crossorigin="anonymous"></div>`;
+    }
+    return `<div class="sq-sub-dot-photo" style="background:var(--cm-accent-soft);display:flex;align-items:center;justify-content:center"><span style="font:700 10px/1 var(--cm-font-mono);color:var(--cm-accent)">${initials}</span></div>`;
+  }
+
   function renderLineSubs() {
     const container = document.getElementById('sqLSubs');
     if (!container) return;
@@ -1935,7 +1979,8 @@ async function reloadPlayers() {
       const name   = filled ? _lDisplayName(player) : 'SUB';
       return `<div class="sq-sub-slot" data-sub="${i}">
         <div class="sq-sub-dot${filled ? ' is-filled' : ''}">
-          <span class="sq-sub-dot-inner">${num}</span>
+          ${filled ? _lSubPhotoInner(player) : ''}
+          <span class="sq-sub-dot-inner" style="${filled && player.photo_url ? 'position:absolute;bottom:-2px;right:-2px;background:rgba(0,0,0,0.75);border-radius:50%;width:15px;height:15px;font-size:8px;line-height:15px;text-align:center;z-index:2' : ''}">${num}</span>
         </div>
         <div class="sq-sub-name">${name}</div>
       </div>`;
@@ -2375,39 +2420,87 @@ async function reloadPlayers() {
     btn.disabled = true;
     btn.innerHTML = '<i class="ti ti-loader" style="font-size:13px"></i>…';
     try {
-      const fieldWrap = document.getElementById('sqLFieldWrap');
-      const canvas = await html2canvas(fieldWrap, { useCORS:true, allowTaint:true, scale:2, backgroundColor:'#ffffff' });
+      // Capture only the pitch (tokens + crests, no controls)
+      const fieldEl = document.getElementById('sqLField');
+      const canvas  = await html2canvas(fieldEl, { useCORS:true, allowTaint:true, scale:2, backgroundColor:'#2d7a2d' });
       const imgData = canvas.toDataURL('image/png');
-      const filledSubs = _lSubs.filter(Boolean);
-      const subsHtml = filledSubs.length
-        ? '<ol style="padding-left:20px;font-size:14px;line-height:1.9">' +
-          filledSubs.map(p => `<li>#${p.number||'?'} ${((p.first_name||'') + ' ' + (p.last_name||'')).trim()} <small>(${p.position||'?'})</small></li>`).join('') +
-          '</ol>' : '';
-      const logoHtml  = _currentClubLogoUrl ? `<img src="${_currentClubLogoUrl}" style="height:42px;object-fit:contain" alt="">` : '';
-      const oppoStr   = _lMatchData.opponent ? `vs ${_lMatchData.opponent}` : '';
-      const dateStr   = _lMatchData.date ? new Date(_lMatchData.date + 'T12:00:00').toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '';
-      const matchLine = [oppoStr, _lMatchData.homeAway || '', dateStr, _lMatchData.time, _lMatchData.location].filter(Boolean).join(' · ');
+
+      // Match metadata
+      const { opponent, homeAway, date, time, location, competition } = _lMatchData;
+      const oppoStr  = opponent ? `vs ${opponent}` : '';
+      const dateStr  = date ? new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '';
+      const haLabel  = homeAway === 'away' ? 'Away' : homeAway === 'neutral' ? 'Neutral' : homeAway ? 'Home' : '';
+      const compLabels = { league:'League', cup:'Cup', international:'International', friendly:'Friendly' };
+      const compLabel  = compLabels[competition] || competition || '';
+      const metaParts  = [oppoStr, haLabel, _lFormation, dateStr, time, location].filter(Boolean);
+
+      // Player lists
+      const starters  = Object.values(_lAssigned).filter(Boolean)
+        .sort((a,b) => (a.number||99) - (b.number||99));
+      const filledSubs = _lSubs.filter(Boolean)
+        .sort((a,b) => (a.number||99) - (b.number||99));
+
+      const starterRows = starters.map((p, i) =>
+        `<tr><td class="pn">${p.number||'?'}</td><td class="pl">${((p.last_name||p.first_name)||'').trim()}</td><td class="pp">${p.position||''}</td></tr>`
+      ).join('');
+      const subRows = filledSubs.map(p =>
+        `<tr><td class="pn">${p.number||'?'}</td><td class="pl">${((p.last_name||p.first_name)||'').trim()}</td><td class="pp">${p.position||''}</td></tr>`
+      ).join('');
+
+      const logoHtml = _currentClubLogoUrl
+        ? `<img src="${_currentClubLogoUrl}" style="width:18mm;height:18mm;object-fit:contain;flex-shrink:0" alt="" crossorigin="anonymous">`
+        : '';
+
       const pw = window.open('', '_blank');
       if (!pw) { showToast('Allow pop-ups to print.'); return; }
       pw.document.write(`<!DOCTYPE html><html><head>
+        <meta charset="utf-8">
         <title>Lineup · ${oppoStr || _lFormation}</title>
         <style>
           *{box-sizing:border-box;margin:0;padding:0}
-          body{font-family:sans-serif;color:#111;background:#fff}
-          .hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:2px solid #222}
-          .hdr h1{font-size:18px;font-weight:700}
-          .field-img{width:100%;max-width:480px;display:block;margin:16px auto}
-          .subs{padding:0 20px 20px}
-          .subs h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:8px}
-          @media print{button{display:none!important}}
+          @page{size:A4 portrait;margin:8mm}
+          body{font-family:sans-serif;color:#111;background:#fff;width:194mm}
+          /* Header */
+          .hdr{display:flex;align-items:center;gap:10px;padding-bottom:7px;border-bottom:2px solid #111;margin-bottom:9px}
+          .hdr-center{flex:1;text-align:center}
+          .hdr-title{font-size:12pt;font-weight:700;line-height:1.2}
+          .hdr-meta{font-size:8pt;color:#555;margin-top:3px}
+          .hdr-comp{font-size:8pt;color:#555;text-align:right;min-width:24mm;white-space:nowrap}
+          /* Body */
+          .body{display:flex;gap:8mm;align-items:flex-start}
+          .field-col{flex:0 0 105mm}
+          .field-img{width:105mm;display:block;border-radius:4px}
+          /* Player list */
+          .list-col{flex:1;min-width:0}
+          .sec-title{font-size:7pt;text-transform:uppercase;letter-spacing:.07em;color:#888;font-weight:700;margin-bottom:4px}
+          table{width:100%;border-collapse:collapse;margin-bottom:10px}
+          tr{border-bottom:1px solid #eee}
+          td{padding:2.5px 3px;vertical-align:middle}
+          .pn{font-size:8pt;font-weight:700;width:18px;color:#333}
+          .pl{font-size:8.5pt;font-weight:500}
+          .pp{font-size:7pt;color:#888;text-align:right}
+          @media print{button,select,input{display:none!important}}
         </style>
       </head><body>
-        <div class="hdr"><div><h1>${oppoStr || 'Lineup'} · ${_lFormation}</h1>${matchLine ? `<div style="font-size:12px;color:#666;margin-top:4px">${matchLine}</div>` : ''}</div>${logoHtml}</div>
-        <img class="field-img" src="${imgData}" alt="Lineup">
-        ${filledSubs.length ? '<div class="subs"><h2>Substitutes</h2>' + subsHtml + '</div>' : ''}
+        <div class="hdr">
+          ${logoHtml}
+          <div class="hdr-center">
+            <div class="hdr-title">${metaParts.join(' · ') || 'Lineup'}</div>
+          </div>
+          <div class="hdr-comp">${compLabel}</div>
+        </div>
+        <div class="body">
+          <div class="field-col">
+            <img class="field-img" src="${imgData}" alt="Lineup">
+          </div>
+          <div class="list-col">
+            ${starterRows ? `<div class="sec-title">Starters</div><table>${starterRows}</table>` : ''}
+            ${subRows     ? `<div class="sec-title">Substitutes</div><table>${subRows}</table>`  : ''}
+          </div>
+        </div>
       </body></html>`);
       pw.document.close(); pw.focus();
-      setTimeout(() => { pw.print(); pw.close(); }, 500);
+      setTimeout(() => { pw.print(); pw.close(); }, 600);
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="ti ti-printer" style="font-size:13px"></i>Print';
