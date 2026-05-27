@@ -91,6 +91,27 @@
 .cm-toast-desc{font:500 12px/1.3 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);margin-top:2px}
 .cm-toast-x{width:22px;height:22px;border:0;background:transparent;color:var(--cm-fg-muted,#6b7280);cursor:pointer;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}
 .cm-toast-x:hover{background:var(--cm-bg-soft,#f4f4f5)}
+/* Chat notifications */
+.cm-cb{position:relative;display:inline-flex}
+.cm-cbadge{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;background:#DC2626;color:#fff;border-radius:8px;font:700 10px/16px monospace;text-align:center;display:none;pointer-events:none;z-index:1}
+.cm-cp{position:absolute;right:0;top:calc(100% + 8px);width:340px;max-height:440px;background:var(--cm-surface,#fff);border:1px solid var(--cm-border,#e5e7eb);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+.cm-cp.is-open{display:flex}
+.cm-cp-h{display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--cm-border,#e5e7eb);flex-shrink:0}
+.cm-cp-h .ttl{font:600 13px/1 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111);flex:1}
+.cm-cp-sect-lbl{font:500 10px/1 var(--cm-font-mono,monospace);letter-spacing:.08em;text-transform:uppercase;color:var(--cm-fg-muted,#6b7280);padding:10px 14px 4px}
+.cm-ci{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;text-decoration:none;transition:background .1s;background:transparent;border:0;width:100%;text-align:left}
+.cm-ci:hover{background:var(--cm-bg-soft,#f4f4f5)}
+.cm-ci-av{width:28px;height:28px;border-radius:50%;background:rgba(99,102,241,.1);color:#4f46e5;display:flex;align-items:center;justify-content:center;font:600 11px/1 var(--cm-font-sans,sans-serif);flex-shrink:0}
+.cm-ci-av.grp{border-radius:8px}
+.cm-ci-body{flex:1;min-width:0}
+.cm-ci-name{font:600 12.5px/1.2 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111);display:flex;justify-content:space-between;align-items:center;gap:4px}
+.cm-ci-name .time{font:400 10.5px/1 var(--cm-font-mono,monospace);color:var(--cm-fg-faint,#9ca3af);flex-shrink:0}
+.cm-ci-preview{font:500 11.5px/1.3 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-ci-count{min-width:18px;height:18px;border-radius:999px;background:var(--cm-accent,#6366f1);color:#fff;display:flex;align-items:center;justify-content:center;font:600 10px/1 var(--cm-font-mono,monospace);padding:0 4px;flex-shrink:0}
+.cm-cp-empty{padding:28px 16px;text-align:center;font:500 13px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280)}
+.cm-cp-foot{padding:10px 14px;border-top:1px solid var(--cm-border,#e5e7eb);display:flex;justify-content:center;flex-shrink:0}
+.cm-cp-foot a{font:600 12px/1 var(--cm-font-sans,sans-serif);color:var(--cm-accent,#6366f1);text-decoration:none;padding:6px 12px;border-radius:6px}
+.cm-cp-foot a:hover{background:var(--cm-bg-soft,#f4f4f5)}
     `;
     document.head.appendChild(s);
   }
@@ -467,12 +488,187 @@
       .subscribe();
   }
 
+  // ── CHAT NOTIFICATIONS ────────────────────────────────────────
+  let _chatUnread = {};
+
+  function _escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _updateChatBadge() {
+    const badge = document.getElementById('cm-cbadge');
+    if (!badge) return;
+    const total = Object.values(_chatUnread).reduce((s, v) => s + v.count, 0);
+    badge.textContent = total > 9 ? '9+' : total;
+    badge.style.display = total > 0 ? 'block' : 'none';
+  }
+
+  function _renderChatPanel() {
+    const list = document.getElementById('cm-cp-list');
+    if (!list) return;
+    const entries = Object.entries(_chatUnread).sort((a, b) => (b[1].lastAt || '') > (a[1].lastAt || '') ? 1 : -1);
+    if (!entries.length) { list.innerHTML = '<div class="cm-cp-empty">No unread messages</div>'; return; }
+    const dmEntries = entries.filter(([k]) => k !== 'group');
+    const grpEntry  = entries.find(([k]) => k === 'group');
+    let html = '';
+    if (dmEntries.length) {
+      html += `<div class="cm-cp-sect-lbl">Direct messages</div>`;
+      for (const [, d] of dmEntries) {
+        const ini = (d.senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+        html += `<button class="cm-ci" data-chat-nav="1">
+          <div class="cm-ci-av">${_escHtml(ini)}</div>
+          <div class="cm-ci-body">
+            <div class="cm-ci-name"><span>${_escHtml(d.senderName || 'Unknown')}</span><span class="time">${_relTime(d.lastAt)}</span></div>
+            <div class="cm-ci-preview">${_escHtml((d.lastMsg || '').slice(0,40))}</div>
+          </div>
+          <div class="cm-ci-count">${d.count > 9 ? '9+' : d.count}</div>
+        </button>`;
+      }
+    }
+    if (grpEntry) {
+      const d = grpEntry[1];
+      html += `<div class="cm-cp-sect-lbl">Team channel</div>`;
+      html += `<button class="cm-ci" data-chat-nav="1">
+        <div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="cm-ci-body">
+          <div class="cm-ci-name"><span># team</span><span class="time">${_relTime(d.lastAt)}</span></div>
+          <div class="cm-ci-preview">${d.senderName ? _escHtml(d.senderName)+': ' : ''}${_escHtml((d.lastMsg||'').slice(0,40))}</div>
+        </div>
+        <div class="cm-ci-count">${d.count > 9 ? '9+' : d.count}</div>
+      </button>`;
+    }
+    list.innerHTML = html;
+  }
+
+  function _showChatToast(msg, senderName) {
+    const root = document.getElementById('cm-toast-root');
+    if (!root) return;
+    const ini = (senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+    const isGroup = !msg.recipient_id;
+    const t = document.createElement('div');
+    t.className = 'cm-toast';
+    t.style.cursor = 'pointer';
+    t.innerHTML = `
+      <div class="cm-toast-ico" style="background:rgba(99,102,241,.12);color:#4f46e5;border-radius:50%;font:600 11px/1 var(--cm-font-sans,sans-serif)">${_escHtml(ini)}</div>
+      <div class="cm-toast-body">
+        <div class="cm-toast-ttl">${_escHtml(senderName || 'Message')}${isGroup ? ' · #team' : ''}</div>
+        <div class="cm-toast-desc">${_escHtml((msg.content || '').slice(0,60))}</div>
+      </div>
+      <button class="cm-toast-x" aria-label="Dismiss"><i class="ti ti-x"></i></button>`;
+    t.querySelector('.cm-toast-x').addEventListener('click', e => { e.stopPropagation(); t.remove(); });
+    t.addEventListener('click', () => { t.remove(); window.location.href = 'Chat%20%26%20Tasks.html'; });
+    root.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  async function _initChatNotif() {
+    let attempts = 0;
+    while (!window.sb && attempts < 20) { await new Promise(r => setTimeout(r, 200)); attempts++; }
+    if (!window.sb) return;
+    const { data: { user } } = await window.sb.auth.getUser();
+    if (!user) return;
+    const { data: profile } = await window.sb.from('profiles').select('club_id').eq('id', user.id).single();
+    const clubId = profile?.club_id;
+    if (!clubId) return;
+
+    // Inject chat button before the bell
+    const bellBtn = [...document.querySelectorAll('.cm-icon-btn')].find(b => b.querySelector('.ti-bell'));
+    if (!bellBtn) return;
+    const chatBtn = document.createElement('button');
+    chatBtn.className = 'cm-icon-btn';
+    chatBtn.title = 'Messages';
+    chatBtn.setAttribute('aria-label', 'Messages');
+    chatBtn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+    const wrap = document.createElement('div');
+    wrap.className = 'cm-cb';
+    bellBtn.parentNode.insertBefore(wrap, bellBtn);
+    wrap.appendChild(chatBtn);
+    const badge = document.createElement('span');
+    badge.id = 'cm-cbadge';
+    badge.className = 'cm-cbadge';
+    wrap.appendChild(badge);
+    const panel = document.createElement('div');
+    panel.id = 'cm-cp';
+    panel.className = 'cm-cp';
+    panel.innerHTML = `
+      <div class="cm-cp-h"><span class="ttl">Messages</span></div>
+      <div id="cm-cp-list" style="overflow-y:auto;flex:1;max-height:360px"></div>
+      <div class="cm-cp-foot"><a href="Chat%20%26%20Tasks.html">Open Chat</a></div>`;
+    wrap.appendChild(panel);
+
+    // Expose mark-read for Chat & Tasks to call
+    window.cmChatMarkRead = key => {
+      delete _chatUnread[key];
+      _updateChatBadge();
+      _renderChatPanel();
+    };
+
+    // Initial unread counts
+    const [{ data: reads }, { data: recentMsgs }] = await Promise.all([
+      window.sb.from('channel_reads').select('channel_key,last_read_at').eq('user_id', user.id).eq('club_id', clubId),
+      window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name')
+        .eq('club_id', clubId).neq('sender_id', user.id)
+        .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+        .order('created_at', { ascending: false }).limit(200)
+    ]);
+    const readMap = {};
+    (reads || []).forEach(r => { readMap[r.channel_key] = r.last_read_at; });
+    for (const msg of (recentMsgs || [])) {
+      const isGroup = !msg.recipient_id;
+      if (!isGroup && msg.recipient_id !== user.id) continue;
+      const key = isGroup ? 'group' : msg.sender_id;
+      const lr = readMap[key];
+      if (lr && msg.created_at <= lr) continue;
+      if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '' };
+      _chatUnread[key].count += 1;
+      if (!_chatUnread[key].lastAt || msg.created_at > _chatUnread[key].lastAt) {
+        _chatUnread[key].lastMsg    = msg.content || '';
+        _chatUnread[key].lastAt     = msg.created_at;
+        _chatUnread[key].senderName = msg.sender_name || '';
+      }
+    }
+    _renderChatPanel();
+    _updateChatBadge();
+
+    // Realtime
+    window.sb.channel(`cm-chat-notif-${clubId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${clubId}` }, payload => {
+        const msg = payload.new;
+        if (!msg || msg.sender_id === user.id) return;
+        const isGroup = !msg.recipient_id;
+        if (!isGroup && msg.recipient_id !== user.id) return;
+        const key = isGroup ? 'group' : msg.sender_id;
+        if (!_chatUnread[key]) _chatUnread[key] = { count: 0, lastMsg: '', lastAt: '', senderName: '' };
+        _chatUnread[key].count += 1;
+        _chatUnread[key].lastMsg    = msg.content || '';
+        _chatUnread[key].lastAt     = msg.created_at;
+        _chatUnread[key].senderName = msg.sender_name || '';
+        _updateChatBadge();
+        _renderChatPanel();
+        _showChatToast(msg, msg.sender_name || 'Unknown');
+      })
+      .subscribe();
+
+    chatBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      panel.classList.toggle('is-open');
+      document.getElementById('cm-np')?.classList.remove('is-open');
+    });
+    document.addEventListener('click', e => {
+      if (!wrap.contains(e.target)) panel.classList.remove('is-open');
+    });
+    panel.addEventListener('click', e => {
+      if (e.target.closest('[data-chat-nav]')) window.location.href = 'Chat%20%26%20Tasks.html';
+    });
+  }
+
   // ── BOOT ─────────────────────────────────────────────────────
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); _initNotifications(); });
+    document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); _initNotifications(); _initChatNotif(); });
   } else {
     inject();
     loadData();
     _initNotifications();
+    _initChatNotif();
   }
 })();

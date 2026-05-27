@@ -872,6 +872,12 @@ async function selectConv(id) {
   if (activeConv === id) return;
   activeConv = id;
   if (id !== 'group') { delete dmUnread[id]; updateUnreadBadge(); }
+  const channelKey = id === 'group' ? 'group' : id;
+  window.cmChatMarkRead?.(channelKey);
+  window.sb?.from('channel_reads').upsert({
+    user_id: currentUser.id, channel_key: channelKey, club_id: currentUser.clubId,
+    last_read_at: new Date().toISOString()
+  }, { onConflict: 'user_id,channel_key,club_id' });
   renderedIds.clear();
   messages = [];
   document.getElementById('chatBody').innerHTML = '<div style="text-align:center;padding:48px;color:var(--cm-fg-muted)">Loading…</div>';
