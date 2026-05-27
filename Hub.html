@@ -924,7 +924,7 @@ function renderBadgesAndStats({ injuryCount, acwrWarningCount, notAvailableCount
     modDP.textContent = todaySession.session_time.slice(0, 5) + ' today';
 }
 
-function renderGreetSub(microcycle, session, today) {
+function renderGreetSub(microcycle, session, today, nextMatch) {
   const el = document.getElementById('greetSub');
   if (!el) return;
   const parts = [];
@@ -933,6 +933,15 @@ function renderGreetSub(microcycle, session, today) {
     if (microcycle.match_date) {
       const diff = Math.round((new Date(microcycle.match_date) - new Date(today)) / 86400000);
       parts.push(diff === 0 ? 'MD' : diff > 0 ? `MD-${diff}` : `MD+${Math.abs(diff)}`);
+    }
+  }
+  // If current MC has no match_date, show nearest upcoming match as context
+  if (!microcycle?.match_date && nextMatch?.rival) {
+    const diff = Math.round((new Date(nextMatch.date) - new Date(today)) / 86400000);
+    if (diff >= 0) {
+      const ha = nextMatch.homeAway === 'away' ? 'Away' : nextMatch.homeAway === 'neutral' ? 'Neutral' : nextMatch.homeAway ? 'Home' : '';
+      const countdown = diff === 0 ? 'MD' : `in ${diff}d`;
+      parts.push(`Next: vs ${nextMatch.rival}${ha ? ' · ' + ha : ''} · ${countdown}`);
     }
   }
   if (session) {
@@ -1329,7 +1338,21 @@ function renderTasks(tasks) {
     clearActRes.data
   );
 
-  renderGreetSub(mcRes.data, todaySessionRes.data, today);
+  // Nearest upcoming match from both calendar_events and microcycles
+  const [_nextEvtRes, _nextMcRes] = await Promise.all([
+    window.sb.from('calendar_events')
+      .select('date,opponent,title,home_away').eq('club_id', clubId).eq('type', 'match')
+      .gte('date', today).order('date', { ascending: true }).limit(1).maybeSingle(),
+    window.sb.from('microcycles')
+      .select('rival,match_date,home_away').eq('club_id', clubId)
+      .not('match_date', 'is', null).not('rival', 'is', null)
+      .gte('match_date', today).order('match_date', { ascending: true }).limit(1).maybeSingle(),
+  ]);
+  const _nm1 = _nextEvtRes.data  ? { date: _nextEvtRes.data.date,       rival: _nextEvtRes.data.opponent || (_nextEvtRes.data.title||'').replace(/^vs\s*/i,''), homeAway: _nextEvtRes.data.home_away  } : null;
+  const _nm2 = _nextMcRes.data   ? { date: _nextMcRes.data.match_date,  rival: _nextMcRes.data.rival,                                                           homeAway: _nextMcRes.data.home_away  } : null;
+  const _hubNextMatch = _nm1 && _nm2 ? (_nm1.date <= _nm2.date ? _nm1 : _nm2) : (_nm1 || _nm2);
+
+  renderGreetSub(mcRes.data, todaySessionRes.data, today, _hubNextMatch);
 
   // Real-time: refresh activity when a treatment is saved or injury is cleared
   async function _hubRefreshActivity() {

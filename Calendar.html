@@ -1185,8 +1185,14 @@ function renderGrid() {
   document.getElementById('calWeekLabel').innerHTML =
     `<i class="ti ti-calendar-event"></i>${totalDays}<span class="yr" style="margin-left:4px">days</span>`;
 
-  // Summary row
-  if (mc.rival) document.getElementById('calMcTarget').innerHTML = `${mc.rival}<small>${mc.home_away ? ' · '+mc.home_away : ''}</small>`;
+  // Summary row — rival: use MC's own, or fall back to a calendar_event match in this MC's date range
+  const _calEvtInMc = !mc.rival
+    ? _matchSessions.find(s => s.session_date >= mc.start_date && s.session_date <= mc.end_date)
+    : null;
+  const _targetRival = mc.rival || (_calEvtInMc ? (_calEvtInMc.opponent || (_calEvtInMc.title||'').replace(/^vs\s*/i,'')) : null);
+  const _targetHa    = mc.home_away || _calEvtInMc?.home_away || '';
+  const _calMcTargetEl = document.getElementById('calMcTarget');
+  if (_calMcTargetEl) _calMcTargetEl.innerHTML = _targetRival ? `${_targetRival}<small>${_targetHa ? ' · '+_targetHa : ''}</small>` : '—';
   const trainCt = _sessions.filter(s => focusToClass(s.session_type) === 'training').length;
   const gymCt   = _sessions.filter(s => focusToClass(s.session_type) === 'gym').length;
   document.getElementById('calMcSessions').innerHTML = `${trainCt}<small>field + ${gymCt} gym</small>`;

@@ -617,7 +617,10 @@ async function loadDay(dateStr) {
       ? _dpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${m.name}${m.rival ? ` · vs ${m.rival}` : ''}</option>`).join('')
       : '<option value="">— No microcycles —</option>';
   }
-  const mcLabel = mc ? mc.name : '';
+  const mcMdDiff = mc?.match_date ? Math.round((new Date(mc.match_date + 'T12:00:00') - new Date(dateStr + 'T12:00:00')) / 86400000) : null;
+  const mcMdLabel = mcMdDiff === null ? '' : mcMdDiff === 0 ? ' · MD' : mcMdDiff > 0 ? ` · MD−${mcMdDiff}` : ` · MD+${Math.abs(mcMdDiff)}`;
+  const mcRivalLabel = mc?.rival ? ` · vs ${mc.rival}` : '';
+  const mcLabel = mc ? (mc.name + mcMdLabel + mcRivalLabel) : '';
   document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : subLabel ? `<span class="sub">${subLabel}</span>` : ''}`;
 
   const [availRes, adaptRes, sessRes] = await Promise.all([
