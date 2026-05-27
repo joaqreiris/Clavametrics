@@ -515,12 +515,13 @@
       <div class="cal-ribbon-card">
         <div class="cal-ribbon-h">
           <h3>Season ribbon</h3>
-          <span class="sub">Aug 2025 → Jun 2026 · 32 microcycles</span>
+          <span class="sub" id="calRibbonSub">—</span>
           <div class="right">
+            <button class="cm-icon-btn" id="calSeasonSettingsBtn" title="Season settings"><i class="ti ti-settings-2"></i></button>
             <div class="cal-pager">
-              <button title="Previous"><i class="ti ti-chevron-left"></i></button>
-              <span class="label">2025/26 · 2nd half<span class="yr">Jan → Jun</span></span>
-              <button title="Next"><i class="ti ti-chevron-right"></i></button>
+              <button title="Previous period"><i class="ti ti-chevron-left"></i></button>
+              <span class="label" id="calRibbonPagerLabel" style="cursor:pointer;user-select:none" title="Click to jump to date range">—<span class="yr"></span></span>
+              <button title="Next period"><i class="ti ti-chevron-right"></i></button>
             </div>
             <div class="cal-segs">
               <button class="cal-seg"><i class="ti ti-calendar-month"></i>Month</button>
@@ -921,6 +922,43 @@
   </div>
 </div>
 
+<!-- Season Settings modal -->
+<div class="sq-modal-backdrop" id="calSeasonBackdrop">
+  <div class="sq-modal" style="width:480px" role="dialog" aria-modal="true">
+    <div class="sq-modal-head">
+      <h2>Season settings</h2>
+      <button class="sq-modal-close" id="calSeasonClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body" style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:5px">Season name</label>
+        <input id="calSeasonF_name" type="text" placeholder="e.g. 2025/26" style="width:100%;height:34px;padding:0 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body);outline:none;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:5px">Season start</label>
+          <input id="calSeasonF_start" type="date" style="width:100%;height:34px;padding:0 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:5px">Season end</label>
+          <input id="calSeasonF_end" type="date" style="width:100%;height:34px;padding:0 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body);outline:none;box-sizing:border-box">
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:5px">Competition / league</label>
+        <input id="calSeasonF_comp" type="text" placeholder="e.g. Liga Profesional" style="width:100%;height:34px;padding:0 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body);outline:none;box-sizing:border-box">
+      </div>
+      <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin:0">The ribbon will span the full season range even if some weeks have no microcycles yet.</p>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <span id="calSeasonSaving" style="display:none;font:var(--cm-meta);color:var(--cm-fg-muted)">Saving…</span>
+      <button class="cm-btn is-ghost is-sm" id="calSeasonCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="calSeasonSave">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Import Fixtures modal -->
 <div class="sq-modal-backdrop" id="calImportBackdrop">
   <div class="sq-modal" style="width:640px" role="dialog" aria-modal="true">
@@ -929,6 +967,24 @@
       <button class="sq-modal-close" id="calImportClose"><i class="ti ti-x"></i></button>
     </div>
     <div class="sq-modal-body">
+      <!-- Optional: set season dates while importing fixtures -->
+      <details id="calImportSeasonDetails" style="margin-bottom:12px;border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-3);padding:8px 12px">
+        <summary style="cursor:pointer;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);list-style:none;display:flex;align-items:center;gap:6px"><i class="ti ti-settings-2" style="font-size:13px"></i>Set season dates (optional)</summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:10px;margin-top:8px;border-top:1px solid var(--cm-border-soft)">
+          <div>
+            <label style="display:block;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">Season name</label>
+            <input id="calImportSeasonName" type="text" placeholder="2025/26" style="width:100%;height:30px;padding:0 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="display:block;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">Start date</label>
+            <input id="calImportSeasonStart" type="date" style="width:100%;height:30px;padding:0 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="display:block;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">End date</label>
+            <input id="calImportSeasonEnd" type="date" style="width:100%;height:30px;padding:0 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;box-sizing:border-box">
+          </div>
+        </div>
+      </details>
       <div class="cal-import-tabs">
         <button class="cal-import-tab is-on" data-tab="paste"><i class="ti ti-clipboard-text" style="font-size:13px"></i>Paste text</button>
         <button class="cal-import-tab" data-tab="csv"><i class="ti ti-file-spreadsheet" style="font-size:13px"></i>Upload CSV</button>
@@ -978,7 +1034,8 @@
 // ── State ──────────────────────────────────────────────────────
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editEvtSource = null, _editMcId = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
-let _ribbonMeta = null; // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
+let _ribbonMeta = null;     // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
+let _seasonSettings = null; // { season_start, season_end, season_name, competition } from club_settings
 let _matchSessions = []; // calendar_events with type='match'
 let _monthEvts = []; // full session objects for month view click handlers
 let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
@@ -1717,7 +1774,7 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
       const { totalMs } = _ribbonMeta;
       const ribbonEl = rb.querySelector('.cal-ribbon');
       const totalW = (ribbonEl ? ribbonEl.scrollWidth : rb.scrollWidth) || 1;
-      const monthPx = (61 * 86400000 / totalMs) * totalW; // 2 months
+      const monthPx = (91 * 86400000 / totalMs) * totalW; // ~3 months
       rb.scrollBy({ left: i === 0 ? -monthPx : monthPx, behavior: 'smooth' });
     });
   });
@@ -1735,9 +1792,111 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
       const visEnd   = new Date(ribbonStart.getTime() + ((rb.scrollLeft + rb.clientWidth) / totalW) * totalMs);
       const sy = visStart.getFullYear(), ey = visEnd.getFullYear();
       const yr = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
-      const pagerLabel = document.querySelector('.cal-ribbon-h .cal-pager .label');
+      const pagerLabel = document.getElementById('calRibbonPagerLabel');
       if (pagerLabel) pagerLabel.innerHTML = `${yr}<span class="yr">${MONTHS_SHORT[visStart.getMonth()]} → ${MONTHS_SHORT[visEnd.getMonth()]}</span>`;
     }, 40);
+  });
+})();
+
+// ── Season Settings modal ─────────────────────────────────────
+(function() {
+  const openSeason = () => {
+    document.getElementById('calSeasonF_name').value  = _seasonSettings?.season_name  || '';
+    document.getElementById('calSeasonF_start').value = _seasonSettings?.season_start || '';
+    document.getElementById('calSeasonF_end').value   = _seasonSettings?.season_end   || '';
+    document.getElementById('calSeasonF_comp').value  = _seasonSettings?.competition  || '';
+    document.getElementById('calSeasonSaving').style.display = 'none';
+    document.getElementById('calSeasonSave').disabled = false;
+    document.getElementById('calSeasonBackdrop').classList.add('is-open');
+    document.getElementById('calSeasonF_name').focus();
+  };
+  const closeSeason = () => document.getElementById('calSeasonBackdrop').classList.remove('is-open');
+
+  document.getElementById('calSeasonSettingsBtn').addEventListener('click', openSeason);
+  document.getElementById('calSeasonClose').addEventListener('click', closeSeason);
+  document.getElementById('calSeasonCancel').addEventListener('click', closeSeason);
+  document.getElementById('calSeasonBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeSeason(); });
+
+  document.getElementById('calSeasonSave').addEventListener('click', async () => {
+    const name  = document.getElementById('calSeasonF_name').value.trim();
+    const start = document.getElementById('calSeasonF_start').value;
+    const end   = document.getElementById('calSeasonF_end').value;
+    const comp  = document.getElementById('calSeasonF_comp').value.trim();
+    if (start && end && end < start) { showCalToast('End date must be after start date.'); return; }
+
+    const saving  = document.getElementById('calSeasonSaving');
+    const saveBtn = document.getElementById('calSeasonSave');
+    saving.style.display = 'inline'; saveBtn.disabled = true;
+
+    const { error } = await window.sb.from('club_settings').upsert({
+      club_id:      _clubId,
+      module_key:   'season',
+      enabled:      true,
+      season_name:  name  || null,
+      season_start: start || null,
+      season_end:   end   || null,
+      competition:  comp  || null,
+    }, { onConflict: 'club_id,module_key' });
+
+    saving.style.display = 'none'; saveBtn.disabled = false;
+    if (error) { showCalToast('Error: ' + error.message); return; }
+
+    _seasonSettings = { season_name: name||null, season_start: start||null, season_end: end||null, competition: comp||null };
+    closeSeason();
+    showCalToast('Season settings saved.');
+    renderSeasonRibbon(_allMCs, _matchSessions);
+  });
+})();
+
+// ── Ribbon pager label → date range jump ─────────────────────
+(function() {
+  let _rangePop = null;
+  const closeRangePop = () => { if (_rangePop) { _rangePop.remove(); _rangePop = null; } };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRangePop(); });
+
+  document.getElementById('calRibbonPagerLabel').addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (_rangePop) { closeRangePop(); return; }
+
+    const rect = this.getBoundingClientRect();
+    const pop = document.createElement('div');
+    pop.style.cssText = `position:fixed;top:${rect.bottom+6}px;left:${rect.left}px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:0 8px 24px rgba(0,0,0,.14);z-index:200;padding:14px 16px;width:280px`;
+    pop.innerHTML = `
+      <div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:10px">Jump to date range</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <label style="display:block;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">From</label>
+          <input id="calRangeFrom" type="date" style="width:100%;height:30px;padding:0 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="display:block;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">To</label>
+          <input id="calRangeTo" type="date" style="width:100%;height:30px;padding:0 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;box-sizing:border-box">
+        </div>
+      </div>
+      <button id="calRangeJump" class="cm-btn is-primary is-sm" style="width:100%">Show this range</button>
+    `;
+    document.body.appendChild(pop);
+    _rangePop = pop;
+
+    pop.querySelector('#calRangeJump').addEventListener('click', () => {
+      const from = pop.querySelector('#calRangeFrom').value;
+      const to   = pop.querySelector('#calRangeTo').value;
+      if (!from || !to || to < from) { showCalToast('Select a valid date range.'); return; }
+      const rb = document.querySelector('.cal-ribbon-body');
+      if (!rb || !_ribbonMeta) return;
+      const { ribbonStart, totalMs } = _ribbonMeta;
+      const ribbonEl = rb.querySelector('.cal-ribbon');
+      const totalW = ribbonEl?.scrollWidth || rb.scrollWidth;
+      const fromPct = (new Date(from + 'T00:00:00') - ribbonStart) / totalMs;
+      rb.scrollTo({ left: Math.max(0, fromPct * totalW), behavior: 'smooth' });
+      closeRangePop();
+    });
+
+    setTimeout(() => {
+      document.addEventListener('click', function closer(ev) {
+        if (!pop.contains(ev.target)) { closeRangePop(); document.removeEventListener('click', closer); }
+      });
+    }, 0);
   });
 })();
 
@@ -1950,17 +2109,32 @@ function compLabel(cls) {
 }
 
 // ── Season Ribbon ─────────────────────────────────────────────
+async function loadSeasonSettings() {
+  if (!_clubId) return;
+  const { data } = await window.sb
+    .from('club_settings')
+    .select('season_start,season_end,season_name,competition')
+    .eq('club_id', _clubId)
+    .eq('module_key', 'season')
+    .maybeSingle();
+  _seasonSettings = data || null;
+}
+
 function renderSeasonRibbon(mcs, extraMatches) {
   extraMatches = extraMatches || _matchSessions;
   if (!mcs.length) return;
 
   const ordered = mcs.slice().sort((a, b) => a.start_date > b.start_date ? 1 : -1);
-  // Pad range: start of month 1mo before first MC, end of month 1mo after last MC
   const firstMcStart = new Date(ordered[0].start_date + 'T00:00:00');
   const lastMcEnd    = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
-  const ribbonStart  = new Date(firstMcStart.getFullYear(), firstMcStart.getMonth() - 1, 1);
-  const ribbonEnd    = new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 2, 0);
-  const totalMs      = ribbonEnd - ribbonStart;
+  // Start exactly at first MC (or season_start if configured) — no empty leading space
+  const ribbonStart = _seasonSettings?.season_start
+    ? new Date(_seasonSettings.season_start + 'T00:00:00')
+    : firstMcStart;
+  const ribbonEnd = _seasonSettings?.season_end
+    ? new Date(_seasonSettings.season_end + 'T00:00:00')
+    : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
+  const totalMs = ribbonEnd - ribbonStart;
   if (totalMs <= 0) return;
 
   // Expose metadata for pager scroll
@@ -2019,16 +2193,18 @@ function renderSeasonRibbon(mcs, extraMatches) {
   }
 
   // Update pager label and ribbon subtitle
-  const pagerLabel = document.querySelector('.cal-ribbon-h .cal-pager .label');
+  const pagerLabel = document.getElementById('calRibbonPagerLabel');
   if (pagerLabel) {
     const sy = ribbonStart.getFullYear(), ey = ribbonEnd.getFullYear();
-    const seasonLabel = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
+    const autoLabel = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
+    const seasonLabel = _seasonSettings?.season_name || autoLabel;
     const sMo = MONTHS_SHORT[ribbonStart.getMonth()], eMo = MONTHS_SHORT[ribbonEnd.getMonth()];
     pagerLabel.innerHTML = `${seasonLabel}<span class="yr">${sMo} → ${eMo}</span>`;
   }
-  const ribbonSub = document.querySelector('.cal-ribbon-h .sub');
+  const ribbonSub = document.getElementById('calRibbonSub');
   if (ribbonSub) {
-    ribbonSub.textContent = `${MONTHS_SHORT[ribbonStart.getMonth()]} ${ribbonStart.getFullYear()} → ${MONTHS_SHORT[ribbonEnd.getMonth()]} ${ribbonEnd.getFullYear()} · ${mcs.length} microcycles`;
+    const compPart = _seasonSettings?.competition ? ` · ${_seasonSettings.competition}` : '';
+    ribbonSub.textContent = `${MONTHS_SHORT[ribbonStart.getMonth()]} ${ribbonStart.getFullYear()} → ${MONTHS_SHORT[ribbonEnd.getMonth()]} ${ribbonEnd.getFullYear()} · ${mcs.length} microcycles${compPart}`;
   }
 
   // MC bars
@@ -2401,6 +2577,10 @@ async function showImportPreview(fixtures) {
     document.getElementById('calImportPreview').style.display = 'none';
     document.getElementById('calImportConfirm').style.display = 'none';
     document.getElementById('calImportSaving').style.display = 'none';
+    // Pre-fill season fields from existing settings
+    document.getElementById('calImportSeasonName').value  = _seasonSettings?.season_name  || '';
+    document.getElementById('calImportSeasonStart').value = _seasonSettings?.season_start || '';
+    document.getElementById('calImportSeasonEnd').value   = _seasonSettings?.season_end   || '';
     backdrop.classList.add('is-open');
     document.getElementById('calImportPasteArea').focus();
   };
@@ -2474,6 +2654,20 @@ async function showImportPreview(fixtures) {
     }
 
     saving.style.display = 'none'; confBtn.disabled = false;
+    // Save season dates if filled in
+    const importSeasonName  = document.getElementById('calImportSeasonName')?.value.trim();
+    const importSeasonStart = document.getElementById('calImportSeasonStart')?.value;
+    const importSeasonEnd   = document.getElementById('calImportSeasonEnd')?.value;
+    if (importSeasonName || importSeasonStart || importSeasonEnd) {
+      await window.sb.from('club_settings').upsert({
+        club_id: _clubId, module_key: 'season', enabled: true,
+        season_name:  importSeasonName  || null,
+        season_start: importSeasonStart || null,
+        season_end:   importSeasonEnd   || null,
+      }, { onConflict: 'club_id,module_key' });
+      _seasonSettings = { ..._seasonSettings, season_name: importSeasonName||null, season_start: importSeasonStart||null, season_end: importSeasonEnd||null };
+    }
+
     closeImport();
     showCalToast(`${_importParsed.length} fixture${_importParsed.length>1?'s':''} imported.`);
     // Reload match events and re-render ribbon + KPIs
@@ -2529,7 +2723,8 @@ async function showImportPreview(fixtures) {
     title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')
   }));
 
-  // Render ribbon and KPIs from real MC data + match sessions
+  // Load season config, then render ribbon and KPIs
+  await loadSeasonSettings();
   renderSeasonRibbon(_allMCs, _matchSessions);
   renderCalKPIs(_allMCs);
   renderUpcoming(); // async, loads sessions from DB
