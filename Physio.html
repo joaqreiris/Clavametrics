@@ -673,7 +673,7 @@ let _selectedZones = new Set();
              reason, physio_id, pain_pre, pain_post, player_status, notes, adaptation,
              adaptation_notes, adaptation_sent_at, notify_coaches, duration_min, zones,
              players(first_name, last_name, number, position),
-             injuries(injury_type, body_part)`)
+             injuries(injury_type, body_area)`)
     .eq('club_id', _clubId)
     .gte('date', monthAgo)
     .order('date', { ascending: false });
@@ -773,10 +773,10 @@ document.getElementById('phPlayerSelect').addEventListener('change', async funct
   const today = new Date().toISOString().slice(0, 10);
   const { data: injuries } = await window.sb
     .from('injuries')
-    .select('id,injury_type,body_part,injury_date')
+    .select('id,injury_type,body_area,start_date')
     .eq('player_id', pid)
     .or(`actual_return.is.null,actual_return.gte.${today}`)
-    .order('injury_date', { ascending: false });
+    .order('start_date', { ascending: false });
 
   if (!injuries?.length) {
     injSel.innerHTML = '<option value="">—</option>';
@@ -787,7 +787,7 @@ document.getElementById('phPlayerSelect').addEventListener('change', async funct
     noMsg.style.display   = 'none';
     injSel.innerHTML = '<option value="">— select injury —</option>' +
       injuries.map(i =>
-        `<option value="${i.id}">${i.injury_type}${i.body_part ? ' · ' + i.body_part : ''} (${i.injury_date})</option>`
+        `<option value="${i.id}">${i.injury_type}${i.body_area ? ' · ' + i.body_area : ''} (${i.start_date})</option>`
       ).join('');
   }
 });
@@ -1388,7 +1388,7 @@ async function loadPlayerHistory() {
     .from('treatments')
     .select(`id, date, session_time, treatment_type, modalities, type, reason, injury_id,
              pain_pre, pain_post, player_status, notes, adaptation_notes, adaptation, duration_min,
-             injuries(injury_type, body_part)`)
+             injuries(injury_type, body_area)`)
     .eq('club_id', _clubId)
     .eq('player_id', pid)
     .order('date', { ascending: false });
