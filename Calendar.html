@@ -1071,6 +1071,10 @@ function showCalToast(msg) {
   setTimeout(() => t.classList.remove('is-show'), 2800);
 }
 
+// Microcycle select fields — module-level so accessible from all listeners
+const MC_BASE_SELECT = 'id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium';
+const MC_FULL_SELECT = MC_BASE_SELECT + ',publish_players,publish_medical,publish_board,published_at,publish_config';
+
 // ── Publish state ────────────────────────────────────────────────
 function _pubBadgeEl(group) { return document.getElementById('calPubBadge' + group.charAt(0).toUpperCase() + group.slice(1)); }
 function _pubLabelEl(group) { return document.getElementById('calPubLabel' + group.charAt(0).toUpperCase() + group.slice(1)); }
@@ -1148,11 +1152,14 @@ async function savePubManageModal() {
   showCalToast('Visibility settings saved.');
 }
 
-document.getElementById('calPubManageBtn').addEventListener('click', openPubManageModal);
-document.getElementById('calPubManageClose').addEventListener('click', () => document.getElementById('calPubManageBackdrop').classList.remove('is-open'));
-document.getElementById('calPubManageCancel').addEventListener('click', () => document.getElementById('calPubManageBackdrop').classList.remove('is-open'));
-document.getElementById('calPubManageSave').addEventListener('click', savePubManageModal);
-document.getElementById('calPubManageBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) document.getElementById('calPubManageBackdrop').classList.remove('is-open'); });
+document.getElementById('calPubManageBtn')?.addEventListener('click', openPubManageModal);
+// Modal elements rendered after </script> — bind via delegation at DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('calPubManageClose')?.addEventListener('click', () => document.getElementById('calPubManageBackdrop')?.classList.remove('is-open'));
+  document.getElementById('calPubManageCancel')?.addEventListener('click', () => document.getElementById('calPubManageBackdrop')?.classList.remove('is-open'));
+  document.getElementById('calPubManageSave')?.addEventListener('click', savePubManageModal);
+  document.getElementById('calPubManageBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('is-open'); });
+});
 
 // ── Render grid (continuous view — all MC days in one scrollable row) ──────────────
 let _dragId = null, _dragDate = null, _dropTargetId = null;
@@ -1708,10 +1715,13 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
   closeMcModal();
   showCalToast(wasEdit ? 'Microcycle updated.' : 'Microcycle created.');
 
-  const { data: mcs } = await window.sb.from('microcycles')
-    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium,publish_players,publish_medical,publish_board,published_at,publish_config')
-    .eq('club_id', _clubId)
-    .order('start_date', { ascending: false });
+  let { data: mcs, error: mcRefetchErr } = await window.sb.from('microcycles')
+    .select(MC_FULL_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+  if (mcRefetchErr) {
+    const { data: mcsBase } = await window.sb.from('microcycles')
+      .select(MC_BASE_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+    mcs = mcsBase;
+  }
   _allMCs = mcs || [];
   renderSeasonRibbon(_allMCs);
   renderCalKPIs(_allMCs);
@@ -2703,11 +2713,15 @@ async function showImportPreview(fixtures) {
   const el3 = document.getElementById('calPubMedCt');  if (el3) el3.textContent = `Medical · ${_pubMedCount}`;
   const el4 = document.getElementById('calPubBoardCt'); if (el4) el4.textContent = `Club board · ${_pubBoardCount}`;
 
-  // Load all MCs ordered by start_date asc for ribbon
-  const { data: mcs } = await window.sb.from('microcycles')
-    .select('id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium,publish_players,publish_medical,publish_board,published_at,publish_config')
-    .eq('club_id', _clubId)
-    .order('start_date', { ascending: false });
+  // Load all MCs ordered by start_date desc for ribbon
+  let { data: mcs, error: mcLoadErr } = await window.sb.from('microcycles')
+    .select(MC_FULL_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+  if (mcLoadErr) {
+    // Fallback if publish columns not yet added (migration pending)
+    const { data: mcsBase } = await window.sb.from('microcycles')
+      .select(MC_BASE_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+    mcs = mcsBase;
+  }
 
   _allMCs = mcs || [];
 
