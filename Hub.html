@@ -943,7 +943,7 @@ function formatAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function renderActivity(sessions, injuries, gps, wellnessCount, squadCount) {
+function renderActivity(sessions, injuries, gps, wellnessCount, squadCount, treatments, cleared) {
   const feed = document.querySelector('.activity');
   if (!feed) return;
   feed.querySelectorAll('.activity-row:not(.is-header)').forEach(el => el.remove());
@@ -960,10 +960,32 @@ function renderActivity(sessions, injuries, gps, wellnessCount, squadCount) {
 
   (injuries || []).forEach(i => {
     const player = i.players ? `${i.players.first_name} ${i.players.last_name}` : 'Player';
+    const who  = i.profiles?.full_name || 'Medical staff';
+    const role = i.profiles?.role      || 'Medical';
     items.push({ icon: 'ti-bandage', color: 'var(--cm-danger)',
-      who: 'Medical staff', role: 'Medical',
+      who, role,
       what: `Logged injury · <span class="target">${player} · ${i.body_area}</span>`,
       ts: new Date(i.created_at || i.start_date).getTime() });
+  });
+
+  (treatments || []).forEach(t => {
+    const player = t.players ? `${t.players.first_name} ${t.players.last_name}` : 'Player';
+    const who  = t.profiles?.full_name || 'Physio';
+    const adapt = (t.adaptation || t.adaptation_notes || '').slice(0, 70);
+    items.push({ icon: 'ti-stethoscope', color: 'var(--cm-warning)',
+      who, role: 'Physio',
+      what: `Adaptation required · <span class="target">${player}</span>${adapt ? ` — ${adapt}${(t.adaptation || t.adaptation_notes || '').length > 70 ? '…' : ''}` : ''}`,
+      ts: new Date(t.adaptation_sent_at || t.date + 'T12:00:00').getTime() });
+  });
+
+  (cleared || []).forEach(c => {
+    const player = c.players ? `${c.players.first_name} ${c.players.last_name}` : 'Player';
+    const who  = c.profiles?.full_name || 'Medical staff';
+    const role = c.profiles?.role      || 'Medical';
+    items.push({ icon: 'ti-circle-check', color: 'var(--cm-success)',
+      who, role,
+      what: `<span class="target">${player}</span> cleared · available for training`,
+      ts: new Date((c.returned_date || '') + 'T12:00:00').getTime() });
   });
 
   if (gps?.length) {
@@ -1121,7 +1143,7 @@ function renderTasks(tasks) {
   const date14 = d14.toISOString().split('T')[0];
   const date7  = d7.toISOString().split('T')[0];
 
-  const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, sessActRes, injActRes, gpsActRes, mcRes, todaySessionRes] = await Promise.all([
+  const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, sessActRes, injActRes, gpsActRes, mcRes, todaySessionRes, treatActRes, clearActRes] = await Promise.all([
     window.sb.from('players').select('id', { count: 'exact', head: true })
       .eq('club_id', clubId),
     window.sb.from('injuries').select('status')
@@ -1153,11 +1175,12 @@ function renderTasks(tasks) {
       .order('created_at', { ascending: false })
       .limit(3),
     window.sb.from('injuries')
-      .select('body_area, injury_type, start_date, created_at, players!inner(first_name, last_name)')
+      .select('body_area, injury_type, start_date, created_at, players!inner(first_name, last_name), profiles!created_by(full_name, role)')
       .eq('club_id', clubId)
       .gte('start_date', date14)
       .order('start_date', { ascending: false })
-      .limit(3),
+      .limit(3)
+      .catch(() => ({ data: [] })),
     window.sb.from('gps_reports')
       .select('session_id, created_at, training_sessions!inner(title, session_date)')
       .eq('club_id', clubId)
@@ -1177,7 +1200,23 @@ function renderTasks(tasks) {
       .eq('session_date', today)
       .order('session_time', { ascending: true })
       .limit(1)
-      .maybeSingle()
+      .maybeSingle(),
+    window.sb.from('treatments')
+      .select('id, player_id, date, adaptation, adaptation_notes, notify_coaches, adaptation_sent_at, physio_id, players(first_name, last_name), profiles!physio_id(full_name)')
+      .eq('club_id', clubId)
+      .eq('notify_coaches', true)
+      .gte('date', date14)
+      .order('date', { ascending: false })
+      .limit(5)
+      .catch(() => ({ data: [] })),
+    window.sb.from('injuries')
+      .select('player_id, returned_date, body_area, players(first_name, last_name), profiles!created_by(full_name, role)')
+      .eq('club_id', clubId)
+      .eq('status', 'cleared')
+      .gte('returned_date', date7)
+      .order('returned_date', { ascending: false })
+      .limit(3)
+      .catch(() => ({ data: [] })),
   ]);
 
   if (!squadRes.error && squadRes.count !== null) {
@@ -1244,15 +1283,59 @@ function renderTasks(tasks) {
     todaySession:      todaySessionRes.data
   });
 
+  // Store for real-time refresh
+  window._hubActCache = {
+    sess:      sessActRes.data,
+    inj:       injActRes.data,
+    gps:       gpsActRes.data,
+    wellness:  wellnessRes.data?.length ?? 0,
+    squad:     squadRes.count ?? null,
+    treatments: treatActRes.data,
+    cleared:    clearActRes.data,
+  };
+
   renderActivity(
     sessActRes.data,
     injActRes.data,
     gpsActRes.data,
     wellnessRes.data?.length ?? 0,
-    squadRes.count ?? null
+    squadRes.count ?? null,
+    treatActRes.data,
+    clearActRes.data
   );
 
   renderGreetSub(mcRes.data, todaySessionRes.data, today);
+
+  // Real-time: refresh activity when a treatment is saved or injury is cleared
+  async function _hubRefreshActivity() {
+    const d14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const d7  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const [newTreat, newCleared] = await Promise.all([
+      window.sb.from('treatments')
+        .select('id, player_id, date, adaptation, adaptation_notes, notify_coaches, adaptation_sent_at, physio_id, players(first_name, last_name), profiles!physio_id(full_name)')
+        .eq('club_id', clubId)
+        .eq('notify_coaches', true)
+        .gte('date', d14)
+        .order('date', { ascending: false })
+        .limit(5)
+        .catch(() => ({ data: [] })),
+      window.sb.from('injuries')
+        .select('player_id, returned_date, body_area, players(first_name, last_name), profiles!created_by(full_name, role)')
+        .eq('club_id', clubId)
+        .eq('status', 'cleared')
+        .gte('returned_date', d7)
+        .order('returned_date', { ascending: false })
+        .limit(3)
+        .catch(() => ({ data: [] })),
+    ]);
+    const c = window._hubActCache;
+    renderActivity(c.sess, c.inj, c.gps, c.wellness, c.squad, newTreat.data, newCleared.data);
+  }
+
+  window.sb.channel('hub-physio-rt')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'treatments', filter: `club_id=eq.${clubId}` }, _hubRefreshActivity)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'injuries',   filter: `club_id=eq.${clubId}` }, _hubRefreshActivity)
+    .subscribe();
 })();
 </script>
 </body>

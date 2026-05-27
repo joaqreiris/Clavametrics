@@ -470,7 +470,7 @@
 <div id="settings-host"></div>
 
 <script>
-let _dpClubId = null, _dpPlayers = [], _dpInjMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
+let _dpClubId = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 
@@ -522,9 +522,14 @@ function dpRenderSquad(avMap) {
     else if (av?.status === 'partial' || av?.status === 'limited') {
       if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; }
     }
-    const hasAdapt = (window._dpAdaptPids || new Set()).has(p.id);
-    const adaptBadge = hasAdapt ? `<span title="Physio adaptation active" style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:3px;background:var(--cm-warning);color:#fff;font:700 9px/1 sans-serif;margin-left:2px;flex-shrink:0">⚠</span>` : '';
-    return `<span class="dp-player${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}${adaptBadge}</span>`;
+    const adaptEntry = _dpAdaptMap[p.id];
+    const injBadge   = _dpInjMap[p.id]
+      ? `<a href="Injuries.html" onclick="event.stopPropagation()" title="Active injury: ${(_dpInjMap[p.id].body_area || _dpInjMap[p.id].injury_type || 'injury')}" style="font-size:11px;text-decoration:none;line-height:1;opacity:0.9">🏥</a>`
+      : '';
+    const adaptBadge = adaptEntry
+      ? `<span title="${(adaptEntry.adaptation || adaptEntry.adaptation_notes || 'Adaptation active').replace(/"/g, "'")}" style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:2px;background:var(--cm-warning);color:#fff;font:700 9px/1 sans-serif;margin-left:2px;flex-shrink:0;vertical-align:middle">!</span>`
+      : '';
+    return `<span class="dp-player${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}${injBadge}${adaptBadge}</span>`;
   }
 
   const groups = {};
@@ -656,12 +661,12 @@ async function loadDay(dateStr) {
       const zones = Array.isArray(t.zones) ? t.zones : (t.zones ? t.zones.split(',').map(z=>z.trim()) : []);
       const adaptText = t.adaptation_notes || t.adaptation || '';
       const tt = t.treatment_type || 'rehab';
-      const ttBadge = tt === 'preventive' ? '🟢' : '🔴';
+      const ttDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${tt==='preventive'?'#16A34A':'#DC2626'};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>`;
       const mods = Array.isArray(t.modalities) ? t.modalities : (t.type ? (Array.isArray(t.type) ? t.type : [t.type]) : []);
       return `<div class="dp-physio-alert">
         <div class="av">${av2}</div>
         <div class="body">
-          <div class="name">${ttBadge} ${((pl.first_name||'')+' '+(pl.last_name||'')).trim()||'Unknown'} · #${pl.number??'—'} · ${pl.position||''}</div>
+          <div class="name">${ttDot}${((pl.first_name||'')+' '+(pl.last_name||'')).trim()||'Unknown'} · #${pl.number??'—'} · ${pl.position||''}</div>
           <div class="note">${adaptText}</div>
           ${mods.length ? `<div class="zones">${mods.map(m=>`<span class="z">${m}</span>`).join('')}</div>` : ''}
           ${zones.length ? `<div class="zones">${zones.map(z=>`<span class="z">${z}</span>`).join('')}</div>` : ''}
@@ -1109,15 +1114,28 @@ async function dpExportPDF() {
   const today   = new Date().toISOString().split('T')[0];
   const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
 
-  const [playersRes, injuriesRes, mcRes] = await Promise.all([
+  const yesterday7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const yesterday  = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const [playersRes, injuriesRes, mcRes, adaptRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
-    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away').eq('club_id', clubId).order('start_date')
+    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away').eq('club_id', clubId).order('start_date'),
+    window.sb.from('treatments')
+      .select('player_id, adaptation, adaptation_notes, adaptation_sent_at, date')
+      .eq('club_id', clubId)
+      .eq('notify_coaches', true)
+      .gte('adaptation_sent_at', yesterday7)
+      .gte('date', yesterday)
+      .order('adaptation_sent_at', { ascending: false })
+      .catch(() => ({ data: [] })),
   ]);
 
   _dpPlayers = playersRes.data || [];
   _dpMicrocycles = mcRes.data || [];
   (injuriesRes.data || []).forEach(i => { _dpInjMap[i.player_id] = i; });
+  // Keep most recent active adaptation per player
+  (adaptRes.data || []).forEach(t => { if (!_dpAdaptMap[t.player_id]) _dpAdaptMap[t.player_id] = t; });
 
   await loadDay(initDate);
 

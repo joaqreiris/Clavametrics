@@ -307,7 +307,7 @@
 
             <!-- REHAB: injury selector -->
             <div class="ph-cond" id="condRehab" data-for="rehab">
-              <div class="ph-cond-l">🔴 Rehabilitación</div>
+              <div class="ph-cond-l"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DC2626;margin-right:5px;vertical-align:middle"></span>Rehabilitation</div>
               <div class="ph-f" id="injuryFieldWrap">
                 <label>Active injury</label>
                 <select id="phInjurySelect">
@@ -321,7 +321,7 @@
 
             <!-- PREVENTIVE: reason + optional indicated_by -->
             <div class="ph-cond" id="condPrev" data-for="preventive" style="display:none">
-              <div class="ph-cond-l">🟢 Preventivo</div>
+              <div class="ph-cond-l"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16A34A;margin-right:5px;vertical-align:middle"></span>Preventive</div>
               <div class="ph-f">
                 <label>Reason</label>
                 <select id="phReasonSelect">
@@ -479,6 +479,7 @@
           </div>
 
           <div class="ph-actions">
+            <button id="phClearBtn" class="cm-btn is-outline is-sm" style="color:var(--cm-success);border-color:var(--cm-success)"><i class="ti ti-circle-check" style="font-size:14px"></i>Register clearance</button>
             <button id="phResetBtn" class="cm-btn is-outline is-sm"><i class="ti ti-refresh" style="font-size:14px"></i>Reset</button>
             <div class="grow"></div>
             <button id="phSaveNewBtn" class="cm-btn is-outline is-sm">Save &amp; new</button>
@@ -493,9 +494,9 @@
             <span class="sub" id="phListSub">—</span>
             <div class="right">
               <button class="ph-filter is-on" data-f="all">All <span class="ct" id="pfAll">—</span></button>
-              <button class="ph-filter" data-f="rehab">🔴 Rehab <span class="ct" id="pfRehab">—</span></button>
-              <button class="ph-filter" data-f="preventive">🟢 Prev <span class="ct" id="pfPrev">—</span></button>
-              <button class="ph-filter" data-f="adapt">⚠ Adapt <span class="ct" id="pfAdapt">—</span></button>
+              <button class="ph-filter" data-f="rehab"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#DC2626;flex-shrink:0"></span>Rehab <span class="ct" id="pfRehab">—</span></button>
+              <button class="ph-filter" data-f="preventive"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16A34A;flex-shrink:0"></span>Prev <span class="ct" id="pfPrev">—</span></button>
+              <button class="ph-filter" data-f="adapt"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--cm-warning);flex-shrink:0"></span>Adapt <span class="ct" id="pfAdapt">—</span></button>
             </div>
           </div>
           <div style="padding:8px 14px;border-bottom:1px solid var(--cm-border-soft);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -618,14 +619,14 @@ let _selectedZones = new Set();
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('phDateInput').value = today;
 
-  // Load players (ordered by last_name as requested)
+  // Load players ordered by last_name; filter inactive client-side to avoid null != issues
   const { data: players } = await window.sb
     .from('players')
-    .select('id,first_name,last_name,number,position,status,date_of_birth')
+    .select('id,first_name,last_name,number,position,status')
     .eq('club_id', _clubId)
-    .neq('status', 'inactive')
-    .order('last_name');
-  _allPlayers = players || [];
+    .order('last_name')
+    .catch(() => ({ data: [] }));
+  _allPlayers = (players || []).filter(p => p.status !== 'inactive');
 
   // Load staff/physio (profiles for the club)
   const { data: staff } = await window.sb
@@ -663,7 +664,7 @@ let _selectedZones = new Set();
     if ([...sel.options].some(o => o.value === _profile.id)) sel.value = _profile.id;
   }
 
-  // Load treatments (last 30 days)
+  // Load treatments (last 30 days) — catch column-not-found errors if migration not yet run
   const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const { data: treatments, error: tErr } = await window.sb
     .from('treatments')
@@ -675,7 +676,7 @@ let _selectedZones = new Set();
     .eq('club_id', _clubId)
     .gte('date', monthAgo)
     .order('date', { ascending: false })
-    .order('session_time', { ascending: false });
+    .catch(() => ({ data: [] }));
 
   if (tErr) console.warn('[physio] treatments error:', tErr.message);
   _allTreatments = treatments || [];
@@ -918,6 +919,11 @@ async function saveTreatment(andNew) {
     await sendCoachNotifications(saved.id, pid, adaptTxt);
   }
 
+  // Urgent worsening notification (regardless of notify checkbox)
+  if (status === 'worsening') {
+    await sendWorseningNotification(pid);
+  }
+
   btn.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i> Saved!';
   setTimeout(() => {
     btn.disabled = false;
@@ -930,28 +936,112 @@ async function saveTreatment(andNew) {
 async function sendCoachNotifications(treatmentId, playerId, adaptText) {
   const player = _allPlayers.find(p => p.id === playerId);
   const playerName = player ? `${player.first_name} ${player.last_name}` : 'Player';
+  const physioName = _profile?.full_name || 'Physio';
   const coachStaff = _allStaff.filter(s => /admin|coach|staff|head/i.test(s.role || ''));
-  if (!coachStaff.length) return;
+  const todayFmt   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const notifications = coachStaff.map(s => ({
-    user_id: s.id,
-    club_id: _clubId,
-    type:    'physio_adaptation',
-    title:   `⚠️ Adaptation required — ${playerName}`,
-    body:    adaptText,
-    link:    '/Daily Planning.html',
-  }));
-
-  // Mark adaptation_sent_at on the treatment
-  await Promise.all([
-    window.sb.from('notifications').insert(notifications).catch(console.warn),
+  const ops = [
     window.sb.from('treatments').update({ adaptation_sent_at: new Date().toISOString() }).eq('id', treatmentId).catch(console.warn),
-  ]);
+  ];
+
+  if (coachStaff.length) {
+    const notifications = coachStaff.map(s => ({
+      user_id: s.id,
+      club_id: _clubId,
+      type:    'physio_adaptation',
+      title:   `Adaptation required — ${playerName}`,
+      body:    adaptText,
+      link:    '/Daily Planning.html',
+    }));
+    ops.push(window.sb.from('notifications').insert(notifications).catch(console.warn));
+  }
+
+  // Auto-message to club chat
+  ops.push(window.sb.from('messages').insert({
+    club_id:   _clubId,
+    sender_id: _profile?.id,
+    content:   `📋 Adaptation for ${playerName} next session:\n${adaptText}\n— ${physioName} · ${todayFmt}`,
+  }).catch(console.warn));
+
+  await Promise.all(ops);
+}
+
+async function sendWorseningNotification(playerId) {
+  const player = _allPlayers.find(p => p.id === playerId);
+  const playerName = player ? `${player.first_name} ${player.last_name}` : 'Player';
+  const physioName = _profile?.full_name || 'Physio';
+  const todayFmt   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const medStaff   = _allStaff.filter(s => /admin|coach|staff|head|physio|medical/i.test(s.role || ''));
+
+  const ops = [];
+  if (medStaff.length) {
+    const notifications = medStaff.map(s => ({
+      user_id: s.id,
+      club_id: _clubId,
+      type:    'physio_worsening',
+      title:   `⚠️ ${playerName} — Negative evolution in treatment`,
+      body:    `${playerName}'s condition is worsening. Review treatment plan.`,
+      link:    '/Physio.html',
+    }));
+    ops.push(window.sb.from('notifications').insert(notifications).catch(console.warn));
+  }
+  ops.push(window.sb.from('messages').insert({
+    club_id:   _clubId,
+    sender_id: _profile?.id,
+    content:   `⚠️ ${playerName} — Negative evolution in treatment.\n— ${physioName} · ${todayFmt}`,
+  }).catch(console.warn));
+
+  await Promise.all(ops);
+}
+
+async function registerClearance() {
+  const pid = document.getElementById('phPlayerSelect').value;
+  if (!pid) { alert('Select a player first.'); return; }
+
+  const player = _allPlayers.find(p => p.id === pid);
+  const playerName = player ? `${player.first_name} ${player.last_name}` : 'Player';
+  if (!confirm(`Register medical clearance for ${playerName}? This will mark their active injuries as cleared.`)) return;
+
+  const today      = new Date().toISOString().split('T')[0];
+  const todayFmt   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const physioName = _profile?.full_name || 'Physio';
+
+  const { error } = await window.sb.from('injuries')
+    .update({ status: 'cleared', returned_date: today })
+    .eq('club_id', _clubId)
+    .eq('player_id', pid)
+    .eq('status', 'active');
+
+  if (error) { alert('Error registering clearance: ' + error.message); return; }
+
+  const allStaff = _allStaff.filter(s => /admin|coach|staff|head/i.test(s.role || ''));
+  const ops = [];
+  if (allStaff.length) {
+    const notifications = allStaff.map(s => ({
+      user_id: s.id,
+      club_id: _clubId,
+      type:    'physio_clearance',
+      title:   `✅ ${playerName} cleared — available for training`,
+      body:    `${playerName} alta médica confirmada · ${todayFmt}`,
+      link:    '/Daily Planning.html',
+    }));
+    ops.push(window.sb.from('notifications').insert(notifications).catch(console.warn));
+  }
+  ops.push(window.sb.from('messages').insert({
+    club_id:   _clubId,
+    sender_id: _profile?.id,
+    content:   `✅ ${playerName} cleared — available for training · ${todayFmt}\n— ${physioName}`,
+  }).catch(console.warn));
+
+  await Promise.all(ops);
+  alert(`${playerName} cleared successfully.`);
+  window.location.reload();
 }
 
 document.getElementById('phSaveBtn').addEventListener('click',    () => saveTreatment(false));
 document.getElementById('phSaveNewBtn').addEventListener('click', () => saveTreatment(true));
 document.getElementById('phResetBtn').addEventListener('click',   resetForm);
+document.getElementById('phClearBtn').addEventListener('click',   registerClearance);
 
 // ══════════════════════════════════════════════════════
 // RENDER LIST
@@ -984,8 +1074,8 @@ function renderList(list) {
       const av   = ((pl.first_name||'')[0]||'' + (pl.last_name||'')[0]||'').toUpperCase() || '?';
       const tt   = t.treatment_type || 'rehab';
       const badgeTxt = tt === 'rehab'
-        ? `🔴 REHAB${t.injuries?.injury_type ? ' · ' + t.injuries.injury_type : ''}`
-        : `🟢 PREV${t.reason ? ' · ' + t.reason : ''}`;
+        ? `REHAB${t.injuries?.injury_type ? ' · ' + t.injuries.injury_type : ''}`
+        : `PREV${t.reason ? ' · ' + t.reason : ''}`;
       const mods  = Array.isArray(t.modalities) ? t.modalities : (t.type ? (Array.isArray(t.type) ? t.type : [t.type]) : []);
       const zones = Array.isArray(t.zones) ? t.zones : (t.zones ? t.zones.split(',').map(z=>z.trim()) : []);
       const adaptText = t.adaptation_notes || t.adaptation || '';
@@ -1108,7 +1198,7 @@ async function exportWeek() {
     const rows = dayList.map(t => {
       const pl = t.players || {};
       const name = ((pl.first_name||'') + ' ' + (pl.last_name||'')).trim() || 'Unknown';
-      const tt = (t.treatment_type||'rehab') === 'rehab' ? '🔴 Rehab' : '🟢 Prev';
+      const tt = (t.treatment_type||'rehab') === 'rehab' ? 'Rehab' : 'Prev';
       const injOrReason = t.injuries?.injury_type || t.reason || '—';
       const mods = Array.isArray(t.modalities) ? t.modalities.join(', ') : (t.type||'—');
       const dur = t.duration_min ? t.duration_min + ' min' : '—';
@@ -1165,7 +1255,7 @@ function renderTemplates() {
     return `<div class="tmpl-card">
       <div class="tc-info">
         <div class="tc-title">${t.title}</div>
-        <div class="tc-sub">${t.treatment_type === 'preventive' ? '🟢 Preventive' : '🔴 Rehab'}${t.injury_type ? ' · ' + t.injury_type : ''} · ${t.duration_minutes ? t.duration_minutes + ' min' : '—'} · ${mods}</div>
+        <div class="tc-sub">${t.treatment_type === 'preventive' ? 'Preventive' : 'Rehab'}${t.injury_type ? ' · ' + t.injury_type : ''} · ${t.duration_minutes ? t.duration_minutes + ' min' : '—'} · ${mods}</div>
       </div>
       <div class="tc-actions">
         <button class="cm-btn is-outline is-sm" onclick="useTemplate('${t.id}')">Use</button>
@@ -1293,7 +1383,7 @@ async function loadPlayerHistory() {
   let html = '<div class="hist-sections">';
 
   if (rehab.length) {
-    html += `<div><div class="hist-sec-h">🔴 Rehabilitation (${rehab.length} sessions)</div>`;
+    html += `<div><div class="hist-sec-h" style="color:#B91C1C">Rehabilitation (${rehab.length} sessions)</div>`;
     for (const [, group] of Object.entries(byInjury)) {
       html += `<div style="margin-bottom:12px"><div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">${group.label}</div>`;
       // Pain sparkline
@@ -1315,7 +1405,7 @@ async function loadPlayerHistory() {
   }
 
   if (prev.length) {
-    html += `<div><div class="hist-sec-h">🟢 Preventive (${prev.length} sessions)</div>`;
+    html += `<div><div class="hist-sec-h" style="color:#15803D">Preventive (${prev.length} sessions)</div>`;
     prev.forEach(t => {
       const mods = Array.isArray(t.modalities) ? t.modalities.join(', ') : '—';
       html += `<div class="hist-card"><div class="hc-top">
