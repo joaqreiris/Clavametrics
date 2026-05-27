@@ -198,22 +198,32 @@
 
   /* === MC daily strip (7-14 day grid) === */
   .mc-days {
-    display:grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap:0;
-    padding:0;
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--cm-border) transparent;
+    gap: 0;
+    padding: 0;
   }
+  .mc-days::-webkit-scrollbar { height: 6px; }
+  .mc-days::-webkit-scrollbar-track { background: transparent; }
+  .mc-days::-webkit-scrollbar-thumb { background: var(--cm-border); border-radius: 3px; }
   .mc-day {
-    border-right:1px solid var(--cm-border-soft);
-    border-top:1px solid var(--cm-border-soft);
-    padding:10px 12px 12px;
-    min-height:170px;
-    background:var(--cm-surface);
-    display:flex; flex-direction:column;
-    position:relative;
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+    flex-shrink: 0;
+    flex-grow: 0;
+    border-right: 1px solid var(--cm-border-soft);
+    border-top: 1px solid var(--cm-border-soft);
+    padding: 10px 12px 12px;
+    min-height: 170px;
+    background: var(--cm-surface);
+    display: flex; flex-direction: column;
+    position: relative;
   }
-  .mc-day:nth-child(7n) { border-right:0; }
-  .mc-day:last-child { border-right:0; }
+  .mc-day:last-child { border-right: 0; }
   .mc-day-head {
     display:flex; align-items:baseline; gap:6px; margin-bottom:8px;
   }
@@ -327,19 +337,6 @@
   }
   .upcoming-time { font:600 13px/1 var(--cm-font-mono); color:var(--cm-fg); }
 
-  /* Continuous (scrollable) MC grid when totalDays > 7 */
-  .mc-days.is-scroll {
-    display: flex;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--cm-border) transparent;
-  }
-  .mc-days.is-scroll .mc-day {
-    min-width: 148px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--cm-border-soft);
-  }
-  .mc-days.is-scroll .mc-day:last-child { border-right: 0; }
 
   /* Drag & drop */
   .mc-evt[draggable="true"] { cursor: grab; user-select: none; }
@@ -445,11 +442,8 @@
     .cal-page { padding: 16px 12px 48px; }
     .cal-head { flex-wrap: wrap; gap: 8px; }
     .cal-filter-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
-    .mc-days { grid-template-columns: repeat(2, 1fr) !important; }
     .cal-kpis { grid-template-columns: repeat(2, 1fr) !important; }
-  }
-  @media (max-width: 480px) {
-    .mc-days { grid-template-columns: 1fr !important; }
+    .mc-day { width: 140px; min-width: 140px; max-width: 140px; }
   }
 </style>
 </head>
@@ -1062,9 +1056,7 @@ function renderGrid() {
   const headEl = document.getElementById('calHeadCtx');
   if (headEl) headEl.innerHTML = `<strong>${mcName}</strong>${headMdLabel}${headTarget}`;
 
-  // Grid layout: ≤7 days = single row; >7 days = wrap in rows of 7
   grid.className = 'mc-days';
-  grid.style.gridTemplateColumns = totalDays > 7 ? '' : `repeat(${totalDays}, 1fr)`;
 
   // Build all day columns
   let html = '';
@@ -1093,7 +1085,7 @@ function renderGrid() {
           const au = (s.duration && s.estimated_rpe) ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>` : '';
           return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" draggable="true">
             <i class="ti ${icon}"></i>
-            <span class="name">${s.title || s.session_type || cat}${dur}</span>${au}
+            <span class="name" title="${(s.title || s.session_type || cat) + dur}">${s.title || s.session_type || cat}${dur}</span>${au}
           </div>`;
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
 
