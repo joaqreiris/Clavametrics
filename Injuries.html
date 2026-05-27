@@ -1042,9 +1042,25 @@ function updatePhaseCompleteBtn() {
   document.getElementById('phBtnComplete').disabled = !(allMet || override);
 }
 
+async function updateAvailabilityForPhase(injId, phaseNum) {
+  const inj = _allInjuries.find(i => i.id === injId);
+  if (!inj?.player_id) return;
+  const todayStr = new Date().toISOString().split('T')[0];
+  const avStatus = phaseNum !== null && phaseNum >= 4 ? 'partial' : 'injured';
+  try {
+    await window.sb.from('availability')
+      .update({ status: avStatus })
+      .eq('player_id', inj.player_id)
+      .eq('club_id', _clubId)
+      .eq('date', todayStr);
+  } catch(e) { console.warn('[Injuries] availability sync failed:', e.message); }
+}
+
 async function savePhaseStatus(status) {
-  const phs = _phasesMap[_phaseModalInjId];
-  const ph  = phs?.find(p => p.id === _phaseModalPhaseId);
+  const phaseId = _phaseModalPhaseId; // capture before closePhaseModal clears globals
+  const injId   = _phaseModalInjId;
+  const phs     = _phasesMap[injId];
+  const ph      = phs?.find(p => p.id === phaseId);
   if (!ph) return;
 
   const todayStr     = new Date().toISOString().split('T')[0];
@@ -1082,12 +1098,15 @@ async function savePhaseStatus(status) {
   applyFilters();
 
   // Persist
-  await window.sb.from('injury_phases').update(upd).eq('id', _phaseModalPhaseId);
+  await window.sb.from('injury_phases').update(upd).eq('id', phaseId);
   if (status === 'done') {
     const nextPh = phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'in_progress');
     if (nextPh) await window.sb.from('injury_phases')
       .update({status:'in_progress', actual_start:todayStr}).eq('id', nextPh.id);
   }
+
+  // Sync availability: phases 1-3 → injured, phases 4-6 → partial
+  await updateAvailabilityForPhase(injId, getCurrentPhaseNumber(injId));
 }
 
 // ═══════════════ BOOT ═══════════════
@@ -1312,21 +1331,34 @@ function updateKPIs() {
 }
 
 // ═══════════════ DERIVED: RETURNING ═══════════════
-function isReturning(inj) {
-  if (inj.status !== 'active') return false;
-  const phs = _phasesMap[inj.id];
-  if (phs && phs.length) {
-    const cur = phs.find(p => p.status === 'in_progress');
-    if (!cur) return false;
-    const returnTypes = new Set(['running','training','competition','neuromuscular']);
-    return returnTypes.has(cur.phase_type) || cur.phase_number >= phs.length - 1;
+// Current phase: first in_progress, else last done, else 1
+function getCurrentPhaseNumber(injId) {
+  const phs = _phasesMap[injId];
+  if (!phs || !phs.length) return null;
+  const inProg = phs.find(p => p.status === 'in_progress');
+  if (inProg) return inProg.phase_number;
+  const lastDone = [...phs].filter(p => p.status === 'done')
+    .sort((a, b) => b.phase_number - a.phase_number)[0];
+  return lastDone ? lastDone.phase_number : 1;
+}
+
+// Classify injury into 'active' | 'returning' | 'resolved'
+// active   = status=active AND current phase 1-3 (Acute / Regeneration / Functional)
+// returning = status=active AND current phase 4-6 (Return to running/training/play)
+// resolved = status=resolved
+function getInjuryTab(inj) {
+  if (inj.status === 'resolved') return 'resolved';
+  const phNum = getCurrentPhaseNumber(inj.id);
+  if (phNum === null) {
+    // No phases → fall back to time-based estimate
+    if (!inj.start_date || !inj.expected_return) return 'active';
+    const pct = Math.min(100, Math.round(
+      (new Date() - new Date(inj.start_date)) /
+      (new Date(inj.expected_return) - new Date(inj.start_date)) * 100
+    ));
+    return pct >= 60 ? 'returning' : 'active';
   }
-  if (!inj.start_date || !inj.expected_return) return false;
-  const pct = Math.min(100, Math.round(
-    (new Date() - new Date(inj.start_date)) /
-    (new Date(inj.expected_return) - new Date(inj.start_date)) * 100
-  ));
-  return pct >= 60;
+  return phNum >= 4 ? 'returning' : 'active';
 }
 
 function hasReinjuryRisk(inj) {
@@ -1345,9 +1377,9 @@ function getPriorInjury(inj) {
 }
 
 function updateTabCounts() {
-  const active    = _allInjuries.filter(i => i.status === 'active');
-  const returning = active.filter(i => isReturning(i));
-  const resolved  = _allInjuries.filter(i => i.status === 'resolved');
+  const active    = _allInjuries.filter(i => getInjuryTab(i) === 'active');
+  const returning = _allInjuries.filter(i => getInjuryTab(i) === 'returning');
+  const resolved  = _allInjuries.filter(i => getInjuryTab(i) === 'resolved');
   const counts = { active: active.length, returning: returning.length, resolved: resolved.length };
   document.querySelectorAll('.inj-seg').forEach(btn => {
     const ct = btn.querySelector('.ct');
@@ -1366,10 +1398,7 @@ function updateTabCounts() {
 }
 
 function matchesTab(inj) {
-  if (_currentTab === 'active')    return inj.status === 'active' && !isReturning(inj);
-  if (_currentTab === 'returning') return isReturning(inj);
-  if (_currentTab === 'resolved')  return inj.status === 'resolved';
-  return true;
+  return getInjuryTab(inj) === _currentTab;
 }
 
 // ═══════════════ FILTER + SORT + RENDER ═══════════════
@@ -1428,6 +1457,12 @@ function injCard(inj) {
 
   const sevClass = { minor:'minor', moderate:'moderate', severe:'severe' }[inj.severity] || 'moderate';
   const sevLabel = inj.severity ? inj.severity.charAt(0).toUpperCase() + inj.severity.slice(1) : '—';
+
+  const _tab       = getInjuryTab(inj);
+  const _tabColor  = _tab === 'active' ? 'var(--cm-danger)' : _tab === 'returning' ? '#EA580C' : 'var(--cm-success)';
+  const _injPhs    = _phasesMap[inj.id];
+  const _allPhsDone = _injPhs?.length && _injPhs.every(p => p.status === 'done') && inj.status === 'active';
+  const _tabLabel  = _allPhsDone ? 'Pending discharge' : _tab === 'active' ? 'Active' : _tab === 'returning' ? 'Returning' : 'Resolved';
 
   // Phase timeline
   const phasesDB = _phasesMap[inj.id];
@@ -1494,7 +1529,7 @@ function injCard(inj) {
         <div class="inj-av${inj.status === 'active' ? ' tinted' : ''}">${initials}</div>
         <div>
           <div class="name">${name}</div>
-          <div class="meta">${pos ? `<span class="inj-pos cb">${pos}</span>` : ''}${jersey}</div>
+          <div class="meta"><span style="display:inline-flex;align-items:center;gap:3px;margin-right:6px"><span style="width:6px;height:6px;border-radius:50%;background:${_tabColor}"></span><span style="font:600 9.5px/1 var(--cm-font-mono);color:${_tabColor};text-transform:uppercase;letter-spacing:0.04em">${_tabLabel}</span></span>${pos ? `<span class="inj-pos cb">${pos}</span>` : ''}${jersey}</div>
         </div>
       </div>
       <div class="inj-fact">
@@ -1845,8 +1880,10 @@ async function confirmRevert() {
   const reason = document.getElementById('phRevertReason').value.trim();
   if (!reason) { alert('Please enter a reason for reverting.'); return; }
 
-  const phs = _phasesMap[_phaseModalInjId];
-  const ph  = phs?.find(p => p.id === _phaseModalPhaseId);
+  const phaseId = _phaseModalPhaseId; // capture before closePhaseModal clears globals
+  const injId   = _phaseModalInjId;
+  const phs     = _phasesMap[injId];
+  const ph      = phs?.find(p => p.id === phaseId);
   if (!ph) return;
 
   const fromStatus = ph.status;
@@ -1856,10 +1893,9 @@ async function confirmRevert() {
   revert_log.push({ from: fromStatus, to: toStatus, reason, by: _profile?.id || null, at: new Date().toISOString() });
 
   const upd = { status: toStatus, revert_log };
-  if (fromStatus === 'done')     upd.actual_end   = null;
-  if (toStatus   === 'pending')  upd.actual_start = null;
+  if (fromStatus === 'done')    upd.actual_end   = null;
+  if (toStatus   === 'pending') upd.actual_start = null;
 
-  // Capture next phase before mutating
   const nextPh = (fromStatus === 'done')
     ? phs.find(p => p.phase_number === ph.phase_number + 1 && p.status === 'in_progress')
     : null;
@@ -1870,11 +1906,14 @@ async function confirmRevert() {
   closePhaseModal();
   applyFilters();
 
-  await window.sb.from('injury_phases').update(upd).eq('id', _phaseModalPhaseId);
+  await window.sb.from('injury_phases').update(upd).eq('id', phaseId);
   if (nextPh) {
     await window.sb.from('injury_phases')
       .update({ status: 'pending', actual_start: null }).eq('id', nextPh.id);
   }
+
+  // Sync availability after revert
+  await updateAvailabilityForPhase(injId, getCurrentPhaseNumber(injId));
 }
 
 // ═══════════════ PHASE TOGGLE ═══════════════
