@@ -437,7 +437,7 @@
           </select>
         </div>
         <div class="cm-field"><label class="cm-label" for="logStart">Start date *</label><input id="logStart" type="date" class="cm-input"></div>
-        <div class="cm-field"><label class="cm-label" for="logReturn">Est. return</label><input id="logReturn" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="logReturn">Est. return</label><input id="logReturn" type="date" class="cm-input"><div id="logReturnHint" style="display:none;margin-top:4px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-accent)"></div></div>
       </div>
       <div class="inj-2col">
         <div class="cm-field"><label class="cm-label" for="logMechanism">Mechanism</label>
@@ -613,6 +613,11 @@
       <!-- Physiological description -->
       <div id="phModalDesc" style="padding:10px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:8px;font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)"></div>
 
+      <!-- ACL / early-advance warning banner -->
+      <div id="phModalAclWarn" style="display:none;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.2);border-radius:8px;font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
+        <i class="ti ti-alert-triangle" style="font-size:13px;margin-right:4px;vertical-align:-1px"></i><span id="phModalAclWarnText"></span>
+      </div>
+
       <!-- Criteria checkboxes -->
       <div>
         <div class="cm-label">Progression criteria</div>
@@ -674,6 +679,7 @@ let _allInjuries = [], _phasesMap = {}, _players = [], _playersMap = {};
 let _currentTab = 'active', _currentSev = 'all', _currentSort = 'severity', _currentRegion = null;
 let _editingInjuryId = null, _dischargeId = null;
 let _phaseModalPhaseId = null, _phaseModalInjId = null;
+let _returnManuallyEdited = false;
 let _clubId = null, _profile = null;
 
 // ═══════════════ BODY AREA COORDINATES (for squad map) ═══════════════
@@ -771,15 +777,75 @@ const PROTOCOLS = {
   },
   acl: {
     phases:[
-      {name:'Post-op acute',type:'acute',criteria:'Full extension achieved; swelling < 1 cm; no quad inhibition'},
-      {name:'Early rehab',type:'subacute',criteria:'Normal gait; flexion ≥ 120°; no effusion'},
-      {name:'Strengthening',type:'strength',criteria:'Quad strength ≥ 60%; closed-chain exercises pain-free'},
-      {name:'Neuromuscular',type:'neuromuscular',criteria:'Single-leg balance > 20 s; hop symmetry ≥ 70%'},
-      {name:'Return to running',type:'running',criteria:'Continuous jogging 20 min; no swelling post-activity'},
-      {name:'Sport-specific',type:'training',criteria:'Cutting / pivoting pain-free; plyometrics completed'},
-      {name:'Return to competition',type:'competition',criteria:'Strength symmetry ≥ 90% (hop test); ACL-RSI ≥ 65; no effusion'},
+      {name:'Post-op Acute',type:'acute',
+       criteria:'Full extension; swelling controlled; quad activation; ambulation; pain ≤3/10',
+       criteria_items:[
+         {id:'acl1_1',label:'Full knee extension achieved'},
+         {id:'acl1_2',label:'Swelling controlled (minimal effusion)'},
+         {id:'acl1_3',label:'Quad activation present (SLR without extension lag)'},
+         {id:'acl1_4',label:'Independent ambulation with/without crutches'},
+         {id:'acl1_5',label:'Pain ≤ 3/10 at rest'},
+       ]},
+      {name:'Early Rehab',type:'subacute',
+       criteria:'ROM 0-120°; normal gait; SLS >10s; no effusion; quad >60%',
+       criteria_items:[
+         {id:'acl2_1',label:'ROM 0-120° achieved'},
+         {id:'acl2_2',label:'Normal gait pattern without assistive device'},
+         {id:'acl2_3',label:'Single leg stance >10 seconds without trunk deviation'},
+         {id:'acl2_4',label:'No joint effusion post-exercise'},
+         {id:'acl2_5',label:'Quad strength >60% symmetry (handheld dynamometer)'},
+       ]},
+      {name:'Strengthening',type:'strength',
+       criteria:'Quad >70% LSI; hamstring >80% LSI; single leg squat; step down; no swelling',
+       criteria_items:[
+         {id:'acl3_1',label:'Quad strength >70% limb symmetry index (LSI)'},
+         {id:'acl3_2',label:'Hamstring strength >80% LSI'},
+         {id:'acl3_3',label:'Single leg squat — good form, no valgus collapse'},
+         {id:'acl3_4',label:'Step down test — controlled, pain-free'},
+         {id:'acl3_5',label:'No swelling after strengthening sessions'},
+       ]},
+      {name:'Neuromuscular',type:'neuromuscular',
+       criteria:'SLB >30s; Y-Balance <4cm; jump symmetry; no pain; ACL-RSI >50',
+       criteria_items:[
+         {id:'acl4_1',label:'Single leg balance >30s eyes closed'},
+         {id:'acl4_2',label:'Y-Balance test within 4cm side-to-side difference'},
+         {id:'acl4_3',label:'Double leg squat jump — symmetrical landing mechanics'},
+         {id:'acl4_4',label:'No pain or swelling with progressive loading'},
+         {id:'acl4_5',label:'Psychological readiness score (ACL-RSI) >50'},
+       ]},
+      {name:'Return to running',type:'running',
+       criteria:'Quad ≥80% LSI; hamstring ≥80% LSI; 20min run pain-free; no swelling; mechanics',
+       criteria_items:[
+         {id:'acl5_1',label:'Quad strength ≥80% LSI'},
+         {id:'acl5_2',label:'Hamstring strength ≥80% LSI'},
+         {id:'acl5_3',label:'Pain-free running at 8 km/h for 20 min'},
+         {id:'acl5_4',label:'No swelling post-running'},
+         {id:'acl5_5',label:'Running mechanics assessment passed'},
+       ]},
+      {name:'Sport-specific',type:'training',
+       criteria:'Quad ≥90% LSI; hop tests ≥90%; cutting drills; ACL-RSI >65',
+       criteria_items:[
+         {id:'acl6_1',label:'Quad strength ≥90% LSI'},
+         {id:'acl6_2',label:'Single leg hop test ≥90% LSI'},
+         {id:'acl6_3',label:'Triple hop test ≥90% LSI'},
+         {id:'acl6_4',label:'Crossover hop test ≥90% LSI'},
+         {id:'acl6_5',label:'Cutting and pivoting drills — pain-free'},
+         {id:'acl6_6',label:'Psychological readiness score (ACL-RSI) >65'},
+       ]},
+      {name:'Return to competition',type:'competition',
+       criteria:'All tests ≥90%; full training; agility; no valgus; ACL-RSI >65; medical clearance',
+       criteria_items:[
+         {id:'acl7_1',label:'Quad strength ≥90% LSI confirmed'},
+         {id:'acl7_2',label:'No swelling after full training session'},
+         {id:'acl7_3',label:'Full training participation without restrictions'},
+         {id:'acl7_4',label:'Agility T-test within normal range'},
+         {id:'acl7_5',label:'Landing mechanics — no valgus (video analysis)'},
+         {id:'acl7_6',label:'ACL-RSI score >65'},
+         {id:'acl7_7',label:'Medical staff clearance confirmed'},
+       ]},
     ],
-    durations:{severe:[14,42,84,150,210,270,300]},
+    // Incremental durations (days per phase): ends at days 14,42,84,150,210,270,300
+    durations:{severe:[14,28,42,66,60,60,30]},
   },
   tendon: {
     phases:[
@@ -859,6 +925,29 @@ const BAMIC_CRITERIA_EXTRA_34 = [
   {id:'ex3',label:'Sprint mechanics assessment passed'},
 ];
 
+// ═══════════════ ESTIMATED RETURN HELPERS ═══════════════
+const RTP_DAYS = {
+  '0a':4,'0b':7,'1a':15,'1b':21,'1c':35,
+  '2a':28,'2b':35,'2c':56,
+  '3a':42,'3b':63,'3c':84,'4':120,
+};
+
+function calcEstimatedReturn(startDate, bamicGrade, injuryType) {
+  if (!startDate) return null;
+  let days = null;
+  if (/acl|cruciate/i.test(injuryType || '')) days = 270;
+  else if (bamicGrade && RTP_DAYS[bamicGrade])  days = RTP_DAYS[bamicGrade];
+  if (!days) return null;
+  const d = new Date(startDate); d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function fmtHintDate(dateStr) {
+  return dateStr
+    ? new Date(dateStr).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
+    : '';
+}
+
 function isMuscular(t) {
   return /muscle|strain|tear|hamstring|quad|calf|adductor|groin|biceps femoris|rectus femoris/i.test(t || '');
 }
@@ -911,6 +1000,7 @@ function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade) {
     phases.push({
       injury_id: injuryId, phase_number: idx + 1, phase_name: ph.name,
       phase_type: ph.type, criteria: ph.criteria,
+      criteria_items: ph.criteria_items || null,
       start_date: phStart.toISOString().split('T')[0],
       end_date:   phEnd.toISOString().split('T')[0],
       status: idx === 0 ? 'in_progress' : 'pending',
@@ -933,7 +1023,9 @@ const PHASE_DESCRIPTIONS = {
   'Strengthening':      'Progressive resistance targeting key muscle groups. Closed and open-chain exercises with controlled overload.',
   'Neuromuscular':      'Proprioception and dynamic stability training. Single-leg balance, perturbation training, and plyometric foundations.',
   'Post-op acute':      'Immediate post-operative phase: wound healing, edema management, neuromuscular inhibition addressed.',
+  'Post-op Acute':      'Immediate post-operative phase: wound healing, edema management, neuromuscular inhibition. Weight bearing per surgical protocol.',
   'Early rehab':        'Restore normal gait and basic ROM. Quad activation and closed-chain exercises under pain and effusion control.',
+  'Early Rehab':        'Restore full ROM and normal gait pattern. Quad activation and closed-chain exercises under pain and effusion control.',
   'Sport-specific':     'High-speed running, cutting, deceleration, and sport-specific movements under fatigue.',
   'Isometric loading':  'Isometric contractions at long muscle length reduce tendon pain and maintain strength during the acute phase.',
   'Isotonic loading':   'Slow, heavy resistance through full range. Progressive overload without provoking tendon pain.',
@@ -968,6 +1060,25 @@ function openPhaseModal(phaseId, injId) {
   // Description
   document.getElementById('phModalDesc').textContent =
     PHASE_DESCRIPTIONS[ph.phase_name] || 'Rehabilitation phase. Follow clinical criteria for progression.';
+
+  // ACL protocol warnings
+  const injForPhase = _allInjuries.find(i => i.id === injId);
+  const isAcl       = /acl|cruciate/i.test(injForPhase?.injury_type || '');
+  const todayChk    = new Date(); todayChk.setHours(0,0,0,0);
+  const phEstEnd    = ph.end_date ? new Date(ph.end_date) : null;
+  const daysEarlyAcl = (ph.status === 'in_progress' && phEstEnd && todayChk < phEstEnd)
+    ? Math.round((phEstEnd - todayChk) / 86400000) : 0;
+  const aclWarnEl   = document.getElementById('phModalAclWarn');
+  const aclWarnTxt  = document.getElementById('phModalAclWarnText');
+  if (isAcl && ph.phase_number === 7) {
+    aclWarnTxt.textContent = 'ACL Return to competition requires medical staff final clearance. Ensure all functional tests passed.';
+    aclWarnEl.style.display = '';
+  } else if (isAcl && daysEarlyAcl > 0) {
+    aclWarnTxt.textContent = `Advancing ${daysEarlyAcl}d ahead of minimum timeline for ACL protocol. Confirm all criteria are met before proceeding.`;
+    aclWarnEl.style.display = '';
+  } else {
+    aclWarnEl.style.display = 'none';
+  }
 
   // Criteria
   renderPhaseCriteria(ph);
@@ -1241,6 +1352,31 @@ async function savePhaseStatus(status) {
   document.getElementById('logBamic')?.addEventListener('change', function() {
     document.getElementById('bamicAlert').style.display =
       this.value.endsWith('c') ? 'flex' : 'none';
+  });
+
+  // Auto-calculate expected return from BAMIC grade or ACL type
+  function autoFillReturn() {
+    if (_returnManuallyEdited) return;
+    const startDate  = document.getElementById('logStart')?.value;
+    const bamicGrade = document.getElementById('logBamic')?.value;
+    const injType    = document.getElementById('logType')?.value;
+    const est = calcEstimatedReturn(startDate, bamicGrade, injType);
+    const hintEl = document.getElementById('logReturnHint');
+    if (est) {
+      document.getElementById('logReturn').value = est;
+      const lbl = /acl|cruciate/i.test(injType||'') ? 'ACL protocol' : `BAMIC ${bamicGrade}`;
+      if (hintEl) { hintEl.textContent = `Auto-estimated: ${fmtHintDate(est)} — ${lbl}`; hintEl.style.display = ''; }
+    } else {
+      if (hintEl) hintEl.style.display = 'none';
+    }
+  }
+  document.getElementById('logStart')?.addEventListener('change', autoFillReturn);
+  document.getElementById('logBamic')?.addEventListener('change', autoFillReturn);
+  document.getElementById('logType')?.addEventListener('input', autoFillReturn);
+  document.getElementById('logReturn')?.addEventListener('input', () => {
+    _returnManuallyEdited = true;
+    const hintEl = document.getElementById('logReturnHint');
+    if (hintEl) hintEl.style.display = 'none';
   });
 
   // Sex toggle for body map
@@ -1708,6 +1844,8 @@ function openLogModal() {
   document.getElementById('logBamic').value     = '';
   document.getElementById('bamicSection').style.display = 'none';
   document.getElementById('bamicAlert').style.display   = 'none';
+  document.getElementById('logReturnHint').style.display = 'none';
+  _returnManuallyEdited = false;
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => z.classList.remove('is-sel'));
   document.getElementById('modalLogInj').classList.add('is-open');
 }
@@ -1730,6 +1868,8 @@ function openEditInjury(id) {
   const _showBamic = isMuscular(inj.injury_type || '');
   document.getElementById('bamicSection').style.display = _showBamic ? '' : 'none';
   document.getElementById('bamicAlert').style.display   = _showBamic && (inj.bamic_grade || '').endsWith('c') ? 'flex' : 'none';
+  document.getElementById('logReturnHint').style.display = 'none';
+  _returnManuallyEdited = !!(inj.expected_return); // don't overwrite existing return date
   // Highlight on map
   const area = inj.body_area || '';
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
