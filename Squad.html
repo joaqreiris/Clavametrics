@@ -555,14 +555,22 @@
 
   /* Field watermarks */
   .sq-field-wm {
-    position:absolute; left:18%; right:18%;
+    position:absolute;
     background-size:contain; background-repeat:no-repeat; background-position:center;
-    pointer-events:none; z-index:1;
+    pointer-events:auto; z-index:5; cursor:grab; box-sizing:border-box;
+    right:auto; bottom:auto;
   }
-  .sq-field-wm-home { top:62%; bottom:3%; }
-  .sq-field-wm-rival { top:3%; bottom:62%; }
-  .sq-field.is-flipped .sq-field-wm-home { top:3%; bottom:62%; }
-  .sq-field.is-flipped .sq-field-wm-rival { top:62%; bottom:3%; }
+  .sq-field-wm:active { cursor:grabbing; }
+  .sq-wm-corner {
+    position:absolute; width:10px; height:10px; z-index:6;
+    background:rgba(255,255,255,0.7); border:1px solid rgba(255,255,255,0.9);
+    border-radius:2px; opacity:0; transition:opacity 120ms;
+  }
+  .sq-field-wm:hover .sq-wm-corner { opacity:1; }
+  .sq-wm-corner.nw { top:-4px; left:-4px; cursor:nw-resize; }
+  .sq-wm-corner.ne { top:-4px; right:-4px; cursor:ne-resize; }
+  .sq-wm-corner.sw { bottom:-4px; left:-4px; cursor:sw-resize; }
+  .sq-wm-corner.se { bottom:-4px; right:-4px; cursor:se-resize; }
 
   /* Rival crest add button */
   .sq-field-rival-add {
@@ -575,23 +583,27 @@
   .sq-field-rival-add .ti { font-size:18px; }
   .sq-field-rival-add span { font:500 8px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; }
 
-  /* Rival remove button */
-  .sq-field-rival-remove {
-    position:absolute; left:50%; transform:translateX(-50%);
-    z-index:12; width:20px; height:20px; border-radius:50%;
-    background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.5);
-    color:#fff; display:flex; align-items:center; justify-content:center;
-    cursor:pointer; transition:background 120ms;
+  /* Crests control panel */
+  .sq-crests-panel {
+    display:flex; gap:16px; margin-top:8px; flex-wrap:wrap; align-items:flex-start;
+    padding:8px 10px; background:var(--cm-bg-soft); border-radius:6px;
+    border:1px solid var(--cm-border);
   }
-  .sq-field-rival-remove:hover { background:rgba(220,38,38,0.75); }
-  .sq-field-rival-remove .ti { font-size:10px; }
-
-  /* Opacity slider row */
-  .sq-opacity-row {
-    display:flex; align-items:center; gap:8px;
-    font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+  .sq-crest-section { display:flex; flex-direction:column; gap:4px; }
+  .sq-crest-section-head {
+    font:600 10px/1 var(--cm-font-sans); color:var(--cm-fg); letter-spacing:.04em;
+    text-transform:uppercase; display:flex; align-items:center; gap:5px;
   }
-  .sq-opacity-row input[type=range] { flex:1; max-width:100px; accent-color:var(--cm-accent); cursor:pointer; }
+  .sq-crest-ctrl { display:flex; align-items:center; gap:5px; }
+  .sq-crest-ctrl input[type=range] { flex:0 0 70px; accent-color:var(--cm-accent); cursor:pointer; }
+  .sq-crest-ctrl span { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); min-width:26px; }
+  .sq-crest-btn {
+    width:22px; height:22px; border-radius:4px; border:1px solid var(--cm-border);
+    background:var(--cm-bg-sunk); color:var(--cm-fg-muted); display:flex; align-items:center;
+    justify-content:center; cursor:pointer; transition:background 80ms, color 80ms; flex-shrink:0;
+  }
+  .sq-crest-btn:hover { background:var(--cm-surface); color:var(--cm-fg); }
+  .sq-crest-btn .ti { font-size:11px; }
 
   @media (max-width:768px) {
     .sq-lineup-layout { flex-direction:column; }
@@ -752,6 +764,10 @@
             <div id="sqLFieldWrap" class="sq-field-wrap">
               <!-- Match header -->
               <div id="sqLMatchHeader" class="sq-match-header">
+                <select id="sqLMatchSelect" class="sq-match-select" title="Select upcoming match" style="max-width:155px">
+                  <option value="custom">Custom match</option>
+                </select>
+                <span class="sq-match-sep">·</span>
                 <span class="sq-match-label">vs</span>
                 <input id="sqLOpponent" class="sq-match-input" placeholder="Rival" style="width:110px">
                 <span class="sq-match-sep">·</span>
@@ -773,6 +789,10 @@
                 </select>
               </div>
 
+              <div id="sqLMatchNote" style="display:none;padding:3px 2px 6px;font:var(--cm-meta);color:var(--cm-fg-muted)">
+                No upcoming matches · <a href="Calendar.html" style="color:var(--cm-accent)">Add in Calendar</a>
+              </div>
+
               <!-- Pitch -->
               <div id="sqLField" class="sq-field">
                 <div class="sq-field-center-line"></div>
@@ -790,21 +810,32 @@
                   <i class="ti ti-shield-plus"></i>
                   <span>Rival crest</span>
                 </button>
-                <!-- Rival crest remove -->
-                <button id="sqLRemoveRivalBtn" class="sq-field-rival-remove" style="display:none" title="Remove rival crest">
-                  <i class="ti ti-x"></i>
-                </button>
                 <input type="file" id="sqLRivalFile" accept="image/*" style="display:none">
                 <!-- Positions -->
                 <div id="sqLPositions"></div>
               </div>
 
-              <!-- Rival opacity slider (shown only when crest is loaded) -->
-              <div id="sqLOpacityRow" class="sq-opacity-row" style="display:none">
-                <i class="ti ti-adjustments" style="font-size:13px"></i>
-                <span>Rival opacity</span>
-                <input type="range" id="sqLRivalOpacity" min="5" max="30" value="12">
-                <span id="sqLRivalOpacityVal" style="font:500 11px/1 var(--cm-font-mono);min-width:28px">12%</span>
+              <!-- Crests control panel -->
+              <div id="sqLCrestsPanel" class="sq-crests-panel" style="display:none">
+                <div class="sq-crest-section" id="sqLHomeCrestSection" style="display:none">
+                  <div class="sq-crest-section-head"><i class="ti ti-shield" style="font-size:10px;color:var(--cm-accent)"></i>Home crest</div>
+                  <div class="sq-crest-ctrl">
+                    <input type="range" id="sqLClubOpacity" min="5" max="30" value="12">
+                    <span id="sqLClubOpacityVal">12%</span>
+                    <button class="sq-crest-btn" id="sqLClubRecentBtn" title="Reset position"><i class="ti ti-crosshair"></i></button>
+                    <button class="sq-crest-btn" id="sqLClubHideBtn" title="Toggle visibility"><i class="ti ti-eye"></i></button>
+                  </div>
+                </div>
+                <div class="sq-crest-section" id="sqLAwayCrestSection" style="display:none">
+                  <div class="sq-crest-section-head"><i class="ti ti-shield-half" style="font-size:10px;color:var(--cm-fg-muted)"></i>Away crest</div>
+                  <div class="sq-crest-ctrl">
+                    <input type="range" id="sqLRivalOpacity" min="5" max="30" value="12">
+                    <span id="sqLRivalOpacityVal">12%</span>
+                    <button class="sq-crest-btn" id="sqLRivalRecentBtn" title="Reset position"><i class="ti ti-crosshair"></i></button>
+                    <button class="sq-crest-btn" id="sqLRivalUploadBtn" title="Upload crest"><i class="ti ti-upload"></i></button>
+                    <button class="sq-crest-btn" id="sqLRemoveRivalBtn" title="Remove crest"><i class="ti ti-x"></i></button>
+                  </div>
+                </div>
               </div>
 
               <!-- Subs -->
@@ -1463,9 +1494,10 @@ async function reloadPlayers() {
       renderLineupField();
       renderLineSubs();
       renderClubLogo();
+      _initWmDragResize();
       if (!_lHistoryLoaded) {
         _lHistoryLoaded = true;
-        loadLineupHistory(); loadMatchEvents(); loadNextMatch();
+        loadLineupHistory(); loadMatchEvents(); loadUpcomingMatches();
       }
     }
   }
@@ -1855,8 +1887,12 @@ async function reloadPlayers() {
   let _lFlipped   = false;
   let _lRivalCrestUrl = null;    // object URL or remote URL
   let _lRivalOpacity  = 0.12;
-  let _lMatchNextLoaded = false;
-  let _lMatchData = { opponent:'', homeAway:'home', date:'', time:'', location:'', competition:'' };
+  let _lMatchData = { opponent:'', homeAway:'home', date:'', time:'', location:'', competition:'', matchId:null };
+  let _lClubWmPos     = null;    // {left,top,width,height} in %, null=default
+  let _lClubWmOpacity = 0.12;
+  let _lClubWmHidden  = false;
+  let _lRivalWmPos    = null;
+  let _lUpcomingMatches = [];
 
   // Title-case first surname component
   function _lDisplayName(p) {
@@ -2014,48 +2050,142 @@ async function reloadPlayers() {
     renderLPickerList(e.target.value, compat, excluded, _lPickerTarget);
   });
 
+  // ── Watermark helpers ─────────────────────────────────────────
+  function _wmDefaultPos(isHome) {
+    const atBottom = isHome ? !_lFlipped : _lFlipped;
+    return atBottom
+      ? { left:18, top:62, width:64, height:35 }
+      : { left:18, top:3,  width:64, height:35 };
+  }
+
+  function _applyWmPos(el, pos) {
+    el.style.left   = pos.left   + '%';
+    el.style.top    = pos.top    + '%';
+    el.style.width  = pos.width  + '%';
+    el.style.height = pos.height + '%';
+    el.style.right  = 'auto';
+    el.style.bottom = 'auto';
+  }
+
+  function _updateCrestsPanel() {
+    const panel = document.getElementById('sqLCrestsPanel');
+    if (!panel) return;
+    const hasHome = !!_currentClubLogoUrl;
+    const hasAway = !!_lRivalCrestUrl;
+    panel.style.display = (hasHome || hasAway) ? '' : 'none';
+    const homeSection = document.getElementById('sqLHomeCrestSection');
+    if (homeSection) homeSection.style.display = hasHome ? '' : 'none';
+    const awaySection = document.getElementById('sqLAwayCrestSection');
+    if (awaySection) awaySection.style.display = hasAway ? '' : 'none';
+    const hideBtn = document.getElementById('sqLClubHideBtn');
+    if (hideBtn) { const ic = hideBtn.querySelector('.ti'); if (ic) ic.className = `ti ${_lClubWmHidden ? 'ti-eye-off' : 'ti-eye'}`; }
+    const uploadBtn = document.getElementById('sqLRivalUploadBtn');
+    if (uploadBtn) uploadBtn.style.display = hasAway ? 'none' : '';
+  }
+
+  function _setupWmDragResize(elId, getPos, setPos) {
+    const el = document.getElementById(elId);
+    if (!el || el._wmDragReady) return;
+    el._wmDragReady = true;
+    const field = document.getElementById('sqLField');
+    ['nw','ne','sw','se'].forEach(dir => {
+      const h = document.createElement('div');
+      h.className = `sq-wm-corner ${dir}`;
+      el.appendChild(h);
+    });
+    let _drag = null;
+    el.querySelectorAll('.sq-wm-corner').forEach(handle => {
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        const dir = [...handle.classList].find(c => ['nw','ne','sw','se'].includes(c));
+        _drag = { mode:'resize', dir, startX:e.clientX, startY:e.clientY, startPos:{ ...getPos() } };
+      });
+    });
+    el.addEventListener('mousedown', e => {
+      if ([...e.target.classList].some(c => ['nw','ne','sw','se'].includes(c))) return;
+      e.preventDefault();
+      _drag = { mode:'drag', startX:e.clientX, startY:e.clientY, startPos:{ ...getPos() } };
+    });
+    document.addEventListener('mousemove', e => {
+      if (!_drag || !field) return;
+      const rect = field.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dx = (e.clientX - _drag.startX) / rect.width  * 100;
+      const dy = (e.clientY - _drag.startY) / rect.height * 100;
+      const p  = { ..._drag.startPos };
+      if (_drag.mode === 'drag') {
+        p.left = Math.max(0, Math.min(100 - p.width,  p.left + dx));
+        p.top  = Math.max(0, Math.min(100 - p.height, p.top  + dy));
+      } else {
+        const dir = _drag.dir;
+        if (dir.includes('e')) {
+          p.width = Math.min(100 - p.left, Math.max(10, p.width + dx));
+        } else {
+          const dw = Math.min(p.width - 10, dx);
+          p.left  = Math.max(0, p.left + dw);
+          p.width = p.width - dw;
+        }
+        if (dir.includes('s')) {
+          p.height = Math.min(100 - p.top, Math.max(10, p.height + dy));
+        } else {
+          const dh = Math.min(p.height - 10, dy);
+          p.top    = Math.max(0, p.top + dh);
+          p.height = p.height - dh;
+        }
+      }
+      setPos(p);
+      _applyWmPos(el, p);
+    });
+    document.addEventListener('mouseup', () => { _drag = null; });
+  }
+
+  function _initWmDragResize() {
+    _setupWmDragResize('sqLClubWm',
+      () => _lClubWmPos  || _wmDefaultPos(true),
+      (p) => { _lClubWmPos  = p; }
+    );
+    _setupWmDragResize('sqLRivalWm',
+      () => _lRivalWmPos || _wmDefaultPos(false),
+      (p) => { _lRivalWmPos = p; }
+    );
+  }
+
   // ── Club logo watermark ────────────────────────────────────────
   function renderClubLogo() {
     const el = document.getElementById('sqLClubWm');
     if (!el) return;
-    if (_currentClubLogoUrl) {
+    if (_currentClubLogoUrl && !_lClubWmHidden) {
       el.style.backgroundImage = `url(${_currentClubLogoUrl})`;
+      el.style.opacity = _lClubWmOpacity;
+      _applyWmPos(el, _lClubWmPos || _wmDefaultPos(true));
       el.style.display = '';
     } else {
       el.style.display = 'none';
     }
+    _updateCrestsPanel();
   }
 
   // ── Rival crest ────────────────────────────────────────────────
   function updateRivalZone() {
     const wm     = document.getElementById('sqLRivalWm');
     const addBtn = document.getElementById('sqLAddRivalBtn');
-    const rmBtn  = document.getElementById('sqLRemoveRivalBtn');
-    const row    = document.getElementById('sqLOpacityRow');
-    const field  = document.getElementById('sqLField');
     if (!wm) return;
-    const topPos = _lFlipped ? 'auto' : '17%';
-    const botPos = _lFlipped ? '17%'  : 'auto';
-    if (addBtn) { addBtn.style.top = topPos; addBtn.style.bottom = botPos; }
-    if (rmBtn)  {
-      const rTop = _lFlipped ? 'auto' : '5%';
-      const rBot = _lFlipped ? '5%'   : 'auto';
-      rmBtn.style.top = rTop; rmBtn.style.bottom = rBot;
-    }
     if (_lRivalCrestUrl) {
       wm.style.backgroundImage = `url(${_lRivalCrestUrl})`;
       wm.style.opacity = _lRivalOpacity;
+      _applyWmPos(wm, _lRivalWmPos || _wmDefaultPos(false));
       wm.style.display = '';
       if (addBtn) addBtn.style.display = 'none';
-      if (rmBtn)  rmBtn.style.display  = '';
-      if (row)    row.style.display    = '';
     } else {
       wm.style.backgroundImage = '';
       wm.style.display = 'none';
-      if (addBtn) addBtn.style.display = '';
-      if (rmBtn)  rmBtn.style.display  = 'none';
-      if (row)    row.style.display    = 'none';
+      if (addBtn) {
+        addBtn.style.display = '';
+        addBtn.style.top    = _lFlipped ? 'auto' : '17%';
+        addBtn.style.bottom = _lFlipped ? '17%'  : 'auto';
+      }
     }
+    _updateCrestsPanel();
   }
 
   document.getElementById('sqLAddRivalBtn')?.addEventListener('click', e => {
@@ -2082,6 +2212,40 @@ async function reloadPlayers() {
     if (wm) wm.style.opacity = _lRivalOpacity;
     const valEl = document.getElementById('sqLRivalOpacityVal');
     if (valEl) valEl.textContent = e.target.value + '%';
+  });
+  document.getElementById('sqLClubOpacity')?.addEventListener('input', e => {
+    _lClubWmOpacity = parseInt(e.target.value) / 100;
+    const el = document.getElementById('sqLClubWm');
+    if (el) el.style.opacity = _lClubWmOpacity;
+    const val = document.getElementById('sqLClubOpacityVal');
+    if (val) val.textContent = e.target.value + '%';
+  });
+  document.getElementById('sqLClubRecentBtn')?.addEventListener('click', () => {
+    _lClubWmPos = null;
+    const el = document.getElementById('sqLClubWm');
+    if (el && el.style.display !== 'none') _applyWmPos(el, _wmDefaultPos(true));
+  });
+  document.getElementById('sqLClubHideBtn')?.addEventListener('click', () => {
+    _lClubWmHidden = !_lClubWmHidden;
+    renderClubLogo();
+  });
+  document.getElementById('sqLRivalRecentBtn')?.addEventListener('click', () => {
+    _lRivalWmPos = null;
+    const el = document.getElementById('sqLRivalWm');
+    if (el && _lRivalCrestUrl) _applyWmPos(el, _wmDefaultPos(false));
+  });
+  document.getElementById('sqLRivalUploadBtn')?.addEventListener('click', () => {
+    document.getElementById('sqLRivalFile')?.click();
+  });
+  document.getElementById('sqLMatchSelect')?.addEventListener('change', e => {
+    const val = e.target.value;
+    if (val === 'custom') {
+      _lMatchData = { opponent:'', homeAway:'home', date:'', time:'', location:'', competition:'', matchId:null };
+      _populateMatchHeader();
+    } else {
+      const ev = _lUpcomingMatches.find(m => m.id === val);
+      if (ev) _applyMatchEvent(ev);
+    }
   });
 
   // ── Flip orientation ───────────────────────────────────────────
@@ -2111,10 +2275,10 @@ async function reloadPlayers() {
     _lMatchData.competition = e.target.value;
   });
 
-  // ── Load next match from calendar_events ──────────────────────
-  async function loadNextMatch() {
-    if (_lMatchNextLoaded || !_currentClubId) return;
-    _lMatchNextLoaded = true;
+  // ── Load upcoming matches dropdown ────────────────────────────
+  async function loadUpcomingMatches() {
+    if (_lUpcomingMatches.length > 0) return;
+    if (!_currentClubId) return;
     const today = new Date().toISOString().split('T')[0];
     const { data } = await window.sb.from('calendar_events')
       .select('id,title,opponent,home_away,date,start_time,location,competition')
@@ -2122,18 +2286,36 @@ async function reloadPlayers() {
       .eq('type', 'match')
       .gte('date', today)
       .order('date', { ascending:true })
-      .limit(1);
-    const ev = data?.[0];
-    if (ev) {
-      _lMatchData.matchId    = ev.id;
-      _lMatchData.opponent   = ev.opponent || (ev.title || '').replace(/^vs\s*/i,'');
-      _lMatchData.homeAway   = ev.home_away || 'home';
-      _lMatchData.date       = ev.date || '';
-      _lMatchData.time       = ev.start_time ? ev.start_time.slice(0,5) : '';
-      _lMatchData.location   = ev.location || '';
-      _lMatchData.competition= ev.competition || '';
-      _populateMatchHeader();
+      .limit(3);
+    _lUpcomingMatches = data || [];
+    const sel  = document.getElementById('sqLMatchSelect');
+    const note = document.getElementById('sqLMatchNote');
+    if (!_lUpcomingMatches.length) {
+      if (note) note.style.display = '';
+      return;
     }
+    if (note) note.style.display = 'none';
+    if (sel) {
+      sel.innerHTML = _lUpcomingMatches.map(ev => {
+        const rival = ev.opponent || (ev.title||'').replace(/^vs\s*/i,'') || 'TBD';
+        const d = new Date(ev.date + 'T12:00:00').toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+        const ha = ev.home_away === 'away' ? 'Away' : ev.home_away === 'neutral' ? 'Neutral' : 'Home';
+        return `<option value="${ev.id}">vs ${rival} · ${d} · ${ha}</option>`;
+      }).join('') + '<option value="custom">⚙ Custom match</option>';
+      _applyMatchEvent(_lUpcomingMatches[0]);
+      sel.value = _lUpcomingMatches[0].id;
+    }
+  }
+
+  function _applyMatchEvent(ev) {
+    _lMatchData.matchId     = ev.id;
+    _lMatchData.opponent    = ev.opponent || (ev.title || '').replace(/^vs\s*/i,'');
+    _lMatchData.homeAway    = ev.home_away || 'home';
+    _lMatchData.date        = ev.date || '';
+    _lMatchData.time        = ev.start_time ? ev.start_time.slice(0,5) : '';
+    _lMatchData.location    = ev.location || '';
+    _lMatchData.competition = ev.competition || '';
+    _populateMatchHeader();
   }
 
   function _populateMatchHeader() {
