@@ -862,7 +862,7 @@ document.querySelectorAll('.task').forEach(el => {
       created_by_name:  window._hubProfileName || null,
       title,
       priority:         document.getElementById('atPriority').value,
-      status:           'open',
+      status:           'pending',
       due_date:         dueInput.value || null,
     });
 
@@ -1077,7 +1077,7 @@ function renderTasks(tasks) {
   const priorityColor = { urgent: 'var(--cm-danger)', high: 'var(--cm-danger)', medium: 'var(--cm-warning)', low: 'var(--cm-fg-muted)' };
   const priorityLabel = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' };
 
-  const pending = tasks.filter(t => t.status !== 'done' && t.status !== 'completed').length;
+  const pending = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled').length;
   const countEl = document.getElementById('btnAddTask').closest('.section-header')?.querySelector('.count');
   if (countEl) countEl.textContent = pending;
 
@@ -1091,7 +1091,7 @@ function renderTasks(tasks) {
   }
 
   tasks.forEach(task => {
-    const isDone = task.status === 'done' || task.status === 'completed';
+    const isDone = task.status === 'done';
     const color = priorityColor[task.priority] || 'var(--cm-fg-muted)';
     const label = priorityLabel[task.priority] || task.priority || '';
     const from  = task.created_by_name ? ` · from ${task.created_by_name}` : '';
@@ -1110,7 +1110,7 @@ function renderTasks(tasks) {
       const nowDone = !el.classList.contains('is-done');
       el.classList.toggle('is-done');
       check.setAttribute('aria-checked', nowDone ? 'true' : 'false');
-      await window.sb.from('tasks').update({ status: nowDone ? 'completed' : 'open' }).eq('id', task.id);
+      await window.sb.from('tasks').update({ status: nowDone ? 'done' : 'pending' }).eq('id', task.id);
     }
     check.addEventListener('click', () => toggle());
     check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
@@ -1174,7 +1174,7 @@ function renderTasks(tasks) {
           .select('id, title, priority, status, due_date, created_by_name')
           .eq('club_id', clubId)
           .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
-          .in('status', ['open', 'in_progress'])
+          .in('status', ['pending', 'in_progress'])
           .order('due_date', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
     window.sb.from('availability').select('status')
