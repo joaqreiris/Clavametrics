@@ -633,22 +633,22 @@
   .pl-drop-menu {
     display:none; position:fixed;
     background:var(--cm-surface); border:1px solid var(--cm-border);
-    border-radius:9px; padding:4px; min-width:170px;
-    z-index:9100; box-shadow:var(--cm-shadow-2);
-    flex-direction:column; gap:1px;
+    border-radius:8px; padding:4px; width:200px;
+    z-index:9100; box-shadow:0 4px 16px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.08);
+    flex-direction:column; gap:0;
   }
   .pl-drop-menu.is-open { display:flex; }
   .pl-drop-opt {
-    display:flex; align-items:center; gap:8px;
-    width:100%; padding:7px 10px; border:0;
+    display:flex; align-items:center; gap:12px;
+    width:100%; height:40px; padding:0 16px; border:0; box-sizing:border-box;
     border-radius:6px; background:none; cursor:pointer;
-    font:500 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted);
+    font:500 14px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
     text-align:left; white-space:nowrap; transition:background 80ms, color 80ms;
   }
   .pl-drop-opt:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
   .pl-drop-opt.is-on { background:var(--cm-accent-soft); color:var(--cm-accent); }
-  .pl-drop-opt .ti { font-size:14px; flex-shrink:0; }
-  .pl-drop-opt svg { width:16px; height:16px; flex-shrink:0; }
+  .pl-drop-opt .ti { font-size:18px; flex-shrink:0; }
+  .pl-drop-opt svg { width:18px !important; height:18px !important; flex-shrink:0; }
   .pl-drop-team-row { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; transition:background 80ms; }
   .pl-drop-team-row:hover { background:var(--cm-bg-soft); }
   .pl-drop-team-row .pl-dock-btn { width:28px; height:28px; flex-shrink:0; border-radius:50%; }
@@ -936,6 +936,10 @@
               <span>Barrier color</span>
               <input type="color" id="plPropBarrierColor" value="#f59e0b" title="Barrier color">
             </div>
+            <div id="plPropGoalPost" style="display:none;align-items:center;gap:8px">
+              <span>Post color</span>
+              <input type="color" id="plPropGoalPostColor" value="#ffffff" title="Goal post color">
+            </div>
           </div>
 
           <div id="plPolyDoneBar">
@@ -1013,6 +1017,14 @@
                 <span>Barrier</span>
               </button>
               <button class="pl-dock-btn pl-drop-opt" title="Goal"><i class="ti ti-target"></i><span>Goal</span></button>
+              <button class="pl-dock-btn pl-drop-opt" title="GoalPost">
+                <svg viewBox="0 0 50 22" fill="none" style="width:18px;height:18px;flex-shrink:0">
+                  <polyline points="0,22 0,2 50,2 50,22" stroke="currentColor" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter"/>
+                  <line x1="0" y1="2" x2="50" y2="22" stroke="currentColor" stroke-width="1.2" opacity="0.4"/>
+                  <line x1="50" y1="2" x2="0" y2="22" stroke="currentColor" stroke-width="1.2" opacity="0.4"/>
+                </svg>
+                <span>Goal post</span>
+              </button>
               <button class="pl-dock-btn pl-drop-opt" title="Mannequin"><i class="ti ti-walk"></i><span>Mannequin</span></button>
             </div>
           </div>
@@ -1232,7 +1244,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_coneColor','_barrierColor','_team','_playerId'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_coneColor','_barrierColor','_goalpostColor','_team','_playerId'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -1470,6 +1482,15 @@
   function addGoal() {
     finishAdd(new fabric.Rect({ width:80, height:32, fill:'rgba(255,255,255,0.08)', stroke:'#fff', strokeWidth:3, rx:2, strokeUniform:true }), 'goal');
   }
+  function addGoalPost(color = '#ffffff') {
+    const W = 100, H = 40, T = 2.5;
+    const crossbar = new fabric.Rect({ width:W, height:T, fill:color, left:0, top:-(H/2), originX:'center', originY:'center' });
+    const postL    = new fabric.Rect({ width:T, height:H, fill:color, left:-(W/2), top:0,   originX:'center', originY:'center' });
+    const postR    = new fabric.Rect({ width:T, height:H, fill:color, left: W/2,   top:0,   originX:'center', originY:'center' });
+    const grp = new fabric.Group([postL, postR, crossbar]);
+    grp._goalpostColor = color;
+    finishAdd(grp, 'goalpost');
+  }
   function addMannequin() {
     const head = new fabric.Circle({ radius:6, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1.2, left:0, top:-22, originX:'center', originY:'center' });
     const body = new fabric.Rect({ width:14, height:20, fill:'#f59e0b', stroke:'#b45309', strokeWidth:1, rx:3, left:0, top:-2, originX:'center', originY:'center' });
@@ -1687,8 +1708,10 @@
   const _propZoneFill     = document.getElementById('plPropZoneFill');
   const _propZoneAlpha    = document.getElementById('plPropZoneAlpha');
   const _propZoneStroke   = document.getElementById('plPropZoneStroke');
-  const _propConeColor    = document.getElementById('plPropConeColor');
-  const _propBarrierColor = document.getElementById('plPropBarrierColor');
+  const _propConeColor      = document.getElementById('plPropConeColor');
+  const _propBarrierColor   = document.getElementById('plPropBarrierColor');
+  const _propGoalPostDiv    = document.getElementById('plPropGoalPost');
+  const _propGoalPostColor  = document.getElementById('plPropGoalPostColor');
 
   function _rgbaToHex(c) {
     if (!c) return '#22c55e';
@@ -1711,6 +1734,7 @@
     if (!_propBar||!obj) return;
     _propArrowDiv.style.display='none'; _propZoneDiv.style.display='none';
     _propConeDiv.style.display='none';  _propBarrierDiv.style.display='none';
+    _propGoalPostDiv.style.display='none';
     if (obj._type==='arrow') {
       const d=_arrowData.get(obj._arrowId); if (!d) return;
       _propArrowColor.value=d.color.length===7?d.color:'#FBBF24';
@@ -1726,6 +1750,9 @@
     } else if (obj._type==='barrier') {
       _propBarrierColor.value = obj._barrierColor || '#f59e0b';
       _propBarrierDiv.style.display='flex'; _propBar.style.display='flex';
+    } else if (obj._type==='goalpost') {
+      _propGoalPostColor.value = obj._goalpostColor || '#ffffff';
+      _propGoalPostDiv.style.display='flex'; _propBar.style.display='flex';
     } else {
       _propBar.style.display='none';
     }
@@ -1774,6 +1801,15 @@
     a.dirty = true; fc.renderAll();
   });
   _propBarrierColor?.addEventListener('change', () => pushHistory());
+
+  _propGoalPostColor?.addEventListener('input', () => {
+    const a = fc.getActiveObject(); if (!a || a._type !== 'goalpost') return;
+    const c = _propGoalPostColor.value;
+    a._goalpostColor = c;
+    a._objects?.forEach(o => { o.set({ fill: c }); });
+    a.dirty = true; fc.renderAll();
+  });
+  _propGoalPostColor?.addEventListener('change', () => pushHistory());
 
   fc.on('selection:created', ({selected}) => {
     const obj=selected?.[0];
@@ -1891,7 +1927,7 @@
     'Team1':() => addPlayer('t1'), 'Team2':() => addPlayer('t2'),
     'Team3':() => addPlayer('t3'), 'Team4':() => addPlayer('t4'),
     'Ball':()=>addBall(), 'Cone':()=>addCone(), 'Pole':()=>addPole(),
-    'Barrier':()=>addBarrier(), 'Goal':()=>addGoal(), 'Mannequin':()=>addMannequin(),
+    'Barrier':()=>addBarrier(), 'Goal':()=>addGoal(), 'GoalPost':()=>addGoalPost(), 'Mannequin':()=>addMannequin(),
     'Pass':   ()=>{currentArrowColor='#ffffff';currentArrowDash=false;currentArrowCurved=false;setTool('arrow');},
     'Run':    ()=>{currentArrowColor='#FBBF24';currentArrowDash=false;currentArrowCurved=true; setTool('arrow');},
     'Dribble':()=>{currentArrowColor='#ffffff';currentArrowDash=true; currentArrowCurved=false;setTool('arrow');},
