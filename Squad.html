@@ -2275,14 +2275,52 @@ async function reloadPlayers() {
     if (_lUpcomingMatches.length > 0) return;
     if (!_currentClubId) return;
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await window.sb.from('calendar_events')
+
+    // Source 1: calendar_events (type='match' — imported fixtures or manual events)
+    const { data: evtMatches, error: evtErr } = await window.sb.from('calendar_events')
       .select('id,title,opponent,home_away,date,start_time,location,competition')
       .eq('club_id', _currentClubId)
       .eq('type', 'match')
       .gte('date', today)
-      .order('date', { ascending:true })
-      .limit(3);
-    _lUpcomingMatches = data || [];
+      .order('date', { ascending: true })
+      .limit(5);
+    if (evtErr) console.warn('[Lineup] calendar_events error:', evtErr.message);
+
+    // Source 2: microcycles with match_date (created via the microcycle modal)
+    const { data: mcMatches, error: mcErr } = await window.sb.from('microcycles')
+      .select('id,name,rival,home_away,match_date,match_time,stadium')
+      .eq('club_id', _currentClubId)
+      .not('match_date', 'is', null)
+      .not('rival', 'is', null)
+      .gte('match_date', today)
+      .order('match_date', { ascending: true })
+      .limit(5);
+    if (mcErr) console.warn('[Lineup] microcycles error:', mcErr.message);
+
+    // Normalise microcycle rows to the same shape as calendar_events rows
+    const mcNorm = (mcMatches || []).map(m => ({
+      id:          'mc_' + m.id,
+      opponent:    m.rival,
+      home_away:   m.home_away || 'home',
+      date:        m.match_date,
+      start_time:  m.match_time || null,
+      location:    m.stadium || '',
+      competition: '',
+      title:       'vs ' + m.rival,
+    }));
+
+    // Merge, deduplicate by date+opponent, sort, keep 5 closest
+    const all = [...(evtMatches || []), ...mcNorm];
+    const seen = new Set();
+    const unique = all.filter(ev => {
+      const key = (ev.date || '') + '|' + (ev.opponent || ev.title || '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    unique.sort((a, b) => (a.date > b.date ? 1 : -1));
+    _lUpcomingMatches = unique.slice(0, 5);
+
     const sel  = document.getElementById('sqLMatchSelect');
     const note = document.getElementById('sqLMatchNote');
     if (!_lUpcomingMatches.length) {
