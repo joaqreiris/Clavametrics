@@ -54,6 +54,43 @@
 .hub-logout-btn{display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;border-radius:var(--cm-r-3);border:0;background:transparent;color:var(--cm-side-fg-muted);font:500 13px/1 var(--cm-font-sans);cursor:pointer;margin-top:2px}
 .hub-logout-btn:hover{background:var(--cm-side-item-active-bg);color:var(--cm-danger)}
 .hub-logout-btn .ti{font-size:15px}
+/* Notifications */
+.cm-nb{position:relative;display:inline-flex}
+.cm-nbadge{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;background:#DC2626;color:#fff;border-radius:8px;font:700 10px/16px monospace;text-align:center;display:none;pointer-events:none;z-index:1}
+.cm-np{position:absolute;right:0;top:calc(100% + 8px);width:360px;max-height:480px;background:var(--cm-surface,#fff);border:1px solid var(--cm-border,#e5e7eb);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);z-index:500;display:none;flex-direction:column;overflow:hidden}
+.cm-np.is-open{display:flex}
+.cm-np-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--cm-border,#e5e7eb);flex-shrink:0}
+.cm-np-h .ttl{font:600 13px/1 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111);flex:1}
+.cm-np-h .mark-all{font:500 11px/1 var(--cm-font-sans,sans-serif);color:var(--cm-accent,#6366f1);background:transparent;border:0;cursor:pointer;padding:4px 6px;border-radius:5px}
+.cm-np-h .mark-all:hover{background:var(--cm-bg-soft,#f4f4f5)}
+.cm-np-list{overflow-y:auto;flex:1}
+.cm-np-empty{padding:32px 16px;text-align:center;font:500 13px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280)}
+.cm-ni{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-bottom:1px solid var(--cm-border-soft,#f3f4f6);cursor:pointer;text-decoration:none;transition:background .1s}
+.cm-ni:hover{background:var(--cm-bg-soft,#f4f4f5)}
+.cm-ni.unread{background:color-mix(in srgb,var(--cm-accent,#6366f1) 7%,transparent)}
+.cm-ni-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:15px}
+.cm-ni-ico.physio{background:rgba(220,38,38,.1);color:#B91C1C}
+.cm-ni-ico.task{background:rgba(99,102,241,.1);color:#4f46e5}
+.cm-ni-ico.injury{background:rgba(245,158,11,.1);color:#B45309}
+.cm-ni-ico.session{background:rgba(34,197,94,.1);color:#15803D}
+.cm-ni-ico.def{background:var(--cm-bg-soft,#f4f4f5);color:var(--cm-fg-muted,#6b7280)}
+.cm-ni-body{flex:1;min-width:0}
+.cm-ni-title{font:600 12.5px/1.3 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-ni-desc{font:500 11.5px/1.4 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.cm-ni-time{font:500 10.5px/1 var(--cm-font-mono,monospace);color:var(--cm-fg-faint,#9ca3af);margin-top:4px}
+.cm-ni-dot{width:7px;height:7px;border-radius:50%;background:#DC2626;flex-shrink:0;margin-top:3px;align-self:flex-start}
+.cm-np-foot{padding:10px 14px;border-top:1px solid var(--cm-border,#e5e7eb);display:flex;justify-content:center;flex-shrink:0}
+.cm-np-foot a{font:600 12px/1 var(--cm-font-sans,sans-serif);color:var(--cm-accent,#6366f1);text-decoration:none;padding:6px 12px;border-radius:6px}
+.cm-np-foot a:hover{background:var(--cm-bg-soft,#f4f4f5)}
+#cm-toast-root{position:fixed;top:68px;right:16px;z-index:600;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.cm-toast{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--cm-surface,#fff);border:1px solid var(--cm-border,#e5e7eb);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:280px;max-width:360px;pointer-events:all;animation:cmSI .2s ease}
+@keyframes cmSI{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
+.cm-toast-ico{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
+.cm-toast-body{flex:1;min-width:0}
+.cm-toast-ttl{font:600 13px/1.2 var(--cm-font-sans,sans-serif);color:var(--cm-fg-strong,#111)}
+.cm-toast-desc{font:500 12px/1.3 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6b7280);margin-top:2px}
+.cm-toast-x{width:22px;height:22px;border:0;background:transparent;color:var(--cm-fg-muted,#6b7280);cursor:pointer;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}
+.cm-toast-x:hover{background:var(--cm-bg-soft,#f4f4f5)}
     `;
     document.head.appendChild(s);
   }
@@ -247,11 +284,195 @@
     }
   }
 
+  // ── NOTIFICATIONS ────────────────────────────────────────────
+  let _notifData = [];
+
+  function _notifIcon(type) {
+    const map = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'] };
+    const [cls, icon] = map[type] || ['def','ti-bell'];
+    return `<div class="cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>`;
+  }
+
+  function _relTime(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.floor(h / 24);
+    if (d === 1) return 'Yesterday';
+    return `${d}d ago`;
+  }
+
+  function _updateNotifBadge() {
+    const unread = _notifData.filter(n => !n.read).length;
+    const badge = document.getElementById('cm-nbadge');
+    if (!badge) return;
+    badge.textContent = unread > 99 ? '99+' : unread;
+    badge.style.display = unread > 0 ? 'block' : 'none';
+  }
+
+  function _renderNotifList() {
+    const list = document.getElementById('cm-np-list');
+    if (!list) return;
+    if (!_notifData.length) {
+      list.innerHTML = '<div class="cm-np-empty">No notifications yet</div>';
+      return;
+    }
+    list.innerHTML = _notifData.map(n => `
+      <a class="cm-ni${n.read ? '' : ' unread'}" data-nid="${n.id}" href="${n.link || '#'}">
+        ${_notifIcon(n.type)}
+        <div class="cm-ni-body">
+          <div class="cm-ni-title">${n.title}</div>
+          ${n.body ? `<div class="cm-ni-desc">${n.body}</div>` : ''}
+          <div class="cm-ni-time">${_relTime(n.created_at)}</div>
+        </div>
+        ${n.read ? '' : '<div class="cm-ni-dot"></div>'}
+      </a>`).join('');
+  }
+
+  function _closeNotifPanel() {
+    document.getElementById('cm-np')?.classList.remove('is-open');
+  }
+
+  function _showNotifToast(notif) {
+    const root = document.getElementById('cm-toast-root');
+    if (!root) return;
+    const types = { physio: ['physio','ti-stethoscope'], task: ['task','ti-checkbox'], injury: ['injury','ti-bandage'], session: ['session','ti-soccer-field'] };
+    const [cls, icon] = types[notif.type] || ['def','ti-bell'];
+    const toast = document.createElement('div');
+    toast.className = 'cm-toast';
+    toast.innerHTML = `
+      <div class="cm-toast-ico cm-ni-ico ${cls}"><i class="ti ${icon}"></i></div>
+      <div class="cm-toast-body">
+        <div class="cm-toast-ttl">${notif.title}</div>
+        ${notif.body ? `<div class="cm-toast-desc">${notif.body}</div>` : ''}
+      </div>
+      <button class="cm-toast-x" aria-label="Dismiss"><i class="ti ti-x"></i></button>`;
+    toast.querySelector('.cm-toast-x').addEventListener('click', () => toast.remove());
+    root.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+  }
+
+  async function _initNotifications() {
+    // Wait up to 4 s for window.sb to be initialised
+    let attempts = 0;
+    while (!window.sb && attempts < 20) { await new Promise(r => setTimeout(r, 200)); attempts++; }
+    if (!window.sb) return;
+
+    const { data: { user } } = await window.sb.auth.getUser();
+    if (!user) return;
+
+    // Toast root
+    if (!document.getElementById('cm-toast-root')) {
+      const tr = document.createElement('div');
+      tr.id = 'cm-toast-root';
+      document.body.appendChild(tr);
+    }
+
+    // Find bell button in header
+    const bellBtn = [...document.querySelectorAll('.cm-icon-btn')].find(b => b.querySelector('.ti-bell'));
+    if (!bellBtn) return;
+
+    // Wrap bell in .cm-nb to allow absolute-positioned badge + panel
+    const wrap = document.createElement('div');
+    wrap.className = 'cm-nb';
+    wrap.style.cssText = 'position:relative;display:inline-flex';
+    bellBtn.parentNode.insertBefore(wrap, bellBtn);
+    wrap.appendChild(bellBtn);
+
+    // Badge
+    const badge = document.createElement('span');
+    badge.id = 'cm-nbadge';
+    badge.className = 'cm-nbadge';
+    wrap.appendChild(badge);
+
+    // Panel
+    const panel = document.createElement('div');
+    panel.id = 'cm-np';
+    panel.className = 'cm-np';
+    panel.innerHTML = `
+      <div class="cm-np-h">
+        <span class="ttl">Notifications</span>
+        <button class="mark-all" id="cm-mark-all">Mark all read</button>
+      </div>
+      <div class="cm-np-list" id="cm-np-list"></div>
+      <div class="cm-np-foot"><a href="#">View all</a></div>`;
+    wrap.appendChild(panel);
+
+    // Load last 30 notifications
+    const { data: notifs } = await window.sb
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    _notifData = notifs || [];
+    _renderNotifList();
+    _updateNotifBadge();
+
+    // Bell click → toggle panel
+    bellBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      panel.classList.toggle('is-open');
+    });
+
+    // Click outside → close
+    document.addEventListener('click', e => {
+      if (!wrap.contains(e.target)) _closeNotifPanel();
+    });
+
+    // Notification item click → mark read, then navigate
+    panel.addEventListener('click', async e => {
+      const item = e.target.closest('.cm-ni[data-nid]');
+      if (!item) return;
+      const nid = item.dataset.nid;
+      const notif = _notifData.find(n => n.id === nid);
+      if (notif && !notif.read) {
+        notif.read = true;
+        _renderNotifList();
+        _updateNotifBadge();
+        await window.sb.from('notifications').update({ read: true }).eq('id', nid);
+      }
+      if (notif?.link && notif.link !== '#') {
+        e.preventDefault();
+        window.location.href = notif.link;
+      }
+    });
+
+    // Mark all read
+    document.getElementById('cm-mark-all')?.addEventListener('click', async () => {
+      const unreadIds = _notifData.filter(n => !n.read).map(n => n.id);
+      if (!unreadIds.length) return;
+      _notifData.forEach(n => { n.read = true; });
+      _renderNotifList();
+      _updateNotifBadge();
+      await window.sb.from('notifications').update({ read: true }).in('id', unreadIds);
+    });
+
+    // Realtime — new notifications pushed to this user
+    window.sb.channel(`cm-notifs-${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`
+      }, payload => {
+        _notifData.unshift(payload.new);
+        _renderNotifList();
+        _updateNotifBadge();
+        _showNotifToast(payload.new);
+      })
+      .subscribe();
+  }
+
   // ── BOOT ─────────────────────────────────────────────────────
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); });
+    document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); _initNotifications(); });
   } else {
     inject();
     loadData();
+    _initNotifications();
   }
 })();

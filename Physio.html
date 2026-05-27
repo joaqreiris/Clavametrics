@@ -204,6 +204,31 @@
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
+  /* Treatment card dropdown menu */
+  .ph-tc-menu { position:relative; }
+  .ph-tc-dropdown { position:absolute; right:0; top:calc(100% + 2px); min-width:164px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); box-shadow:var(--cm-shadow-3); z-index:120; overflow:hidden; display:none; }
+  .ph-tc-dropdown.is-open { display:block; }
+  .ph-tc-dd-item { display:flex; align-items:center; gap:9px; padding:8px 12px; font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; border:0; background:transparent; width:100%; text-align:left; }
+  .ph-tc-dd-item:hover { background:var(--cm-bg-soft); }
+  .ph-tc-dd-item.is-danger { color:var(--cm-danger); }
+  .ph-tc-dd-item .ti { font-size:14px; flex-shrink:0; color:var(--cm-fg-muted); }
+  .ph-tc-dd-item.is-danger .ti { color:var(--cm-danger); }
+  /* Edit mode banner */
+  .ph-edit-mode-bar { display:none; align-items:center; gap:8px; padding:8px 16px; background:rgba(99,102,241,.08); border-bottom:1px solid rgba(99,102,241,.2); font:500 12.5px/1 var(--cm-font-sans); color:#4f46e5; }
+  .ph-edit-mode-bar.is-on { display:flex; }
+  .ph-edit-mode-bar button { font:inherit; color:inherit; background:transparent; border:0; cursor:pointer; text-decoration:underline; padding:0; margin-left:auto; }
+  /* Notes overlay */
+  .ph-notes-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:300; display:none; align-items:center; justify-content:center; }
+  .ph-notes-overlay.is-open { display:flex; }
+  .ph-notes-box { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-3); width:min(520px,96vw); max-height:70vh; overflow-y:auto; }
+  .ph-notes-box-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); position:sticky; top:0; background:var(--cm-surface); }
+  .ph-notes-box-h h4 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; margin:0; }
+  .ph-notes-box-h .sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ph-notes-box-h .close { width:28px; height:28px; border-radius:6px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .ph-notes-box-b { padding:16px; display:flex; flex-direction:column; gap:12px; }
+  .ph-notes-box-b p { font:var(--cm-body); color:var(--cm-fg); line-height:1.6; margin:0; white-space:pre-wrap; }
+  .ph-notes-adapt { padding:10px 12px; background:var(--cm-warning-bg); border:1px solid var(--cm-warning-bd); border-radius:8px; font:500 12.5px/1.4 var(--cm-font-sans); color:#7C2D12; }
+
   /* Pain bar */
   .pain-bar { display:flex; align-items:center; gap:5px; }
   .pain-bar .pip { width:14px; height:14px; border-radius:3px; background:var(--cm-border-soft); }
@@ -266,6 +291,10 @@
 
         <!-- ============ FORM ============ -->
         <div class="ph-card">
+          <div class="ph-edit-mode-bar" id="phEditBar">
+            <i class="ti ti-edit" style="font-size:14px"></i><span id="phEditLabel">Editing treatment</span>
+            <button onclick="cancelEdit()">Cancel edit</button>
+          </div>
           <div class="ph-card-h">
             <h3>Register treatment</h3>
             <span class="sub" id="phFormSub">new session</span>
@@ -608,6 +637,8 @@ let _clubId = null, _profile = null;
 let _allPlayers = [], _allStaff = [], _allTreatments = [], _allTemplates = [];
 let _currentTreatType = 'rehab';
 let _selectedZones = new Set();
+let _treatMap = new Map();
+let _editingTreatmentId = null;
 
 (async () => {
   const ok = await window.requireAuth();
@@ -829,6 +860,9 @@ document.getElementById('notifyChk').addEventListener('change', function () {
 // RESET FORM
 // ══════════════════════════════════════════════════════
 function resetForm() {
+  _editingTreatmentId = null;
+  document.getElementById('phEditBar').classList.remove('is-on');
+  document.getElementById('phSaveBtn').innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save treatment';
   document.getElementById('phPlayerSelect').selectedIndex = 0;
   document.getElementById('phDateInput').value = new Date().toISOString().slice(0, 10);
   document.getElementById('phTimeInput').value = '';
@@ -847,6 +881,118 @@ function resetForm() {
   document.querySelectorAll('.ph-mod-btn').forEach(b => b.classList.remove('is-on'));
   _selectedZones.clear(); syncSvg(); renderZones();
 }
+
+function cancelEdit() { resetForm(); }
+
+function openEditTreatment(t, isDuplicate = false) {
+  resetForm();
+  _currentTreatType = t.treatment_type || 'rehab';
+  document.querySelectorAll('.ph-tt-btn').forEach(b => b.classList.toggle('is-on', b.dataset.t === _currentTreatType));
+  document.getElementById('condRehab').style.display = _currentTreatType === 'rehab' ? '' : 'none';
+  document.getElementById('condPrev').style.display  = _currentTreatType === 'preventive' ? '' : 'none';
+
+  document.getElementById('phPlayerSelect').value = t.player_id;
+  document.getElementById('phPlayerSelect').dispatchEvent(new Event('change'));
+
+  document.getElementById('phDateInput').value = isDuplicate ? new Date().toISOString().slice(0, 10) : (t.date || '');
+  document.getElementById('phTimeInput').value = t.session_time || '';
+  document.getElementById('phDurationInput').value = t.duration_min || '';
+
+  document.querySelectorAll('.ph-mod-btn').forEach(btn => {
+    btn.classList.toggle('is-on', Array.isArray(t.modalities) && t.modalities.includes(btn.dataset.m));
+  });
+
+  _selectedZones.clear();
+  if (Array.isArray(t.zones)) t.zones.forEach(z => _selectedZones.add(z));
+  syncSvg(); renderZones();
+
+  const pre  = t.pain_pre  ?? 0;
+  const post = t.pain_post ?? 0;
+  document.getElementById('phPainPre').value  = pre;
+  document.getElementById('phPainPost').value = post;
+  updatePainDisplay('pre', pre); updatePainDisplay('post', post);
+
+  document.querySelectorAll('.ph-status-btn').forEach(b => b.classList.toggle('is-on', b.dataset.s === (t.player_status || 'stable')));
+  if (t.physio_id) document.getElementById('phPhysioSelect').value = t.physio_id;
+
+  document.getElementById('phNotesInput').value = t.notes || '';
+  document.getElementById('notifyChk').checked = t.notify_coaches || false;
+  document.getElementById('phAdaptInput').value = t.adaptation_notes || t.adaptation || '';
+
+  if (_currentTreatType === 'rehab' && t.injury_id) {
+    setTimeout(() => {
+      const sel = document.getElementById('phInjurySelect');
+      if ([...sel.options].some(o => o.value === t.injury_id)) sel.value = t.injury_id;
+    }, 600);
+  }
+  if (_currentTreatType === 'preventive') {
+    if (t.reason) document.getElementById('phReasonSelect').value = t.reason;
+  }
+
+  if (!isDuplicate) {
+    _editingTreatmentId = t.id;
+    document.getElementById('phEditBar').classList.add('is-on');
+    document.getElementById('phSaveBtn').innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Update';
+  }
+
+  document.querySelector('.ph-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function deleteTreatment(id) {
+  if (!confirm('Delete this treatment? This action cannot be undone.')) return;
+  const { error } = await window.sb.from('treatments').delete().eq('id', id);
+  if (error) { alert('Error deleting: ' + error.message); return; }
+  _allTreatments = _allTreatments.filter(t => t.id !== id);
+  _treatMap.delete(id);
+  applyFilters();
+}
+
+function showNotesFull(t) {
+  const pl   = t.players || {};
+  const name = ((pl.first_name||'') + ' ' + (pl.last_name||'')).trim() || 'Treatment';
+  document.getElementById('phNotesMdTitle').textContent = name;
+  document.getElementById('phNotesMdDate').textContent  = t.date || '';
+  document.getElementById('phNotesMdBody').textContent  = t.notes || '—';
+  const adapt = t.adaptation_notes || t.adaptation || '';
+  const adaptEl = document.getElementById('phNotesMdAdapt');
+  adaptEl.style.display = adapt ? '' : 'none';
+  document.getElementById('phNotesMdAdaptTxt').textContent = adapt;
+  document.getElementById('phNotesOverlay').classList.add('is-open');
+}
+function closeNotesModal() { document.getElementById('phNotesOverlay').classList.remove('is-open'); }
+
+// Event delegation for treatment card menus
+document.getElementById('phListBody').addEventListener('click', e => {
+  const menuBtn = e.target.closest('.ph-tc-menu-btn');
+  if (menuBtn) {
+    const menu = menuBtn.closest('.ph-tc-menu');
+    const dd   = menu.querySelector('.ph-tc-dropdown');
+    document.querySelectorAll('.ph-tc-dropdown.is-open').forEach(d => { if (d !== dd) d.classList.remove('is-open'); });
+    dd.classList.toggle('is-open');
+    e.stopPropagation();
+    return;
+  }
+  const ddItem = e.target.closest('.ph-tc-dd-item');
+  if (ddItem) {
+    const menu  = ddItem.closest('.ph-tc-menu');
+    const card  = ddItem.closest('.ph-tcard');
+    const tid   = card?.dataset.tid;
+    const action = ddItem.dataset.action;
+    menu.querySelector('.ph-tc-dropdown').classList.remove('is-open');
+    if (!tid) return;
+    const t = _treatMap.get(tid);
+    if (!t) return;
+    if (action === 'edit')      openEditTreatment(t);
+    if (action === 'duplicate') openEditTreatment(t, true);
+    if (action === 'delete')    deleteTreatment(tid);
+    if (action === 'notes')     showNotesFull(t);
+    return;
+  }
+  document.querySelectorAll('.ph-tc-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+});
+document.addEventListener('click', () => {
+  document.querySelectorAll('.ph-tc-dropdown.is-open').forEach(d => d.classList.remove('is-open'));
+});
 
 // ══════════════════════════════════════════════════════
 // SAVE TREATMENT
@@ -904,33 +1050,37 @@ async function saveTreatment(andNew) {
     notify_coaches:   notify,
   };
 
+  const isUpdate = !!_editingTreatmentId;
   let saved;
   try {
-    const { data, error } = await window.sb.from('treatments').insert(payload).select().single();
-    if (error) {
-      console.error('[Physio] insert error:', error);
-      alert('Error saving treatment: ' + error.message);
-      return;
+    if (isUpdate) {
+      const { data, error } = await window.sb.from('treatments').update(payload).eq('id', _editingTreatmentId).select().single();
+      if (error) { console.error('[Physio] update error:', error); alert('Error updating: ' + error.message); return; }
+      saved = data;
+      const idx = _allTreatments.findIndex(t => t.id === _editingTreatmentId);
+      if (idx >= 0) _allTreatments[idx] = { ..._allTreatments[idx], ...payload };
+    } else {
+      const { data, error } = await window.sb.from('treatments').insert(payload).select().single();
+      if (error) { console.error('[Physio] insert error:', error); alert('Error saving treatment: ' + error.message); return; }
+      saved = data;
+      if (saved) _allTreatments.unshift(saved);
     }
-    saved = data;
   } catch (e) {
     console.error('[Physio] unexpected save error:', e);
     alert('Error saving treatment: ' + (e.message || 'Unknown error'));
     return;
   } finally {
-    // Reset button on any error path (success path uses its own timeout below)
     if (!saved) {
       btn.disabled = false;
-      btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save treatment';
+      btn.innerHTML = isUpdate
+        ? '<i class="ti ti-device-floppy" style="font-size:14px"></i>Update'
+        : '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save treatment';
     }
   }
 
-  // Notify coaches if checked and adaptation text exists
   if (notify && adaptTxt && saved?.id) {
     try { await sendCoachNotifications(saved.id, pid, adaptTxt); } catch(e) { console.warn('[Physio] coach notif error:', e); }
   }
-
-  // Urgent worsening notification (regardless of notify checkbox)
   if (status === 'worsening') {
     try { await sendWorseningNotification(pid); } catch(e) { console.warn('[Physio] worsening notif error:', e); }
   }
@@ -940,7 +1090,7 @@ async function saveTreatment(andNew) {
     btn.disabled = false;
     btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save treatment';
     if (andNew) { resetForm(); }
-    else { window.location.reload(); }
+    else { resetForm(); applyFilters(); }
   }, 1000);
 }
 
@@ -1095,6 +1245,9 @@ function renderList(list) {
   }
   body.style.cssText = '';
 
+  _treatMap.clear();
+  list.forEach(t => _treatMap.set(t.id, t));
+
   const grouped = {};
   list.forEach(t => { if (!grouped[t.date]) grouped[t.date] = []; grouped[t.date].push(t); });
 
@@ -1117,7 +1270,7 @@ function renderList(list) {
       const pPre  = t.pain_pre  ?? null;
       const pPost = t.pain_post ?? null;
 
-      return `<div class="ph-tcard${hasAdapt ? ' has-adapt' : ''}">
+      return `<div class="ph-tcard${hasAdapt ? ' has-adapt' : ''}" data-tid="${t.id}">
         <div class="av${name[0] ? ' tn' : ''}">${av.slice(0,2)}</div>
         <div class="body">
           <div class="top-row">
@@ -1132,9 +1285,14 @@ function renderList(list) {
           ${t.notes ? `<div class="notes">${t.notes.length > 100 ? t.notes.slice(0,100) + '…' : t.notes}</div>` : ''}
           ${hasAdapt ? `<div class="adapt-box"><i class="ti ti-flag-2"></i><span><strong>Adaptation</strong> · ${adaptText}</span></div>` : ''}
         </div>
-        <div class="card-actions">
-          <button title="Edit"><i class="ti ti-edit"></i></button>
-          <button title="More"><i class="ti ti-dots"></i></button>
+        <div class="card-actions ph-tc-menu">
+          <button class="ph-tc-menu-btn" title="Options"><i class="ti ti-dots-vertical"></i></button>
+          <div class="ph-tc-dropdown">
+            <button class="ph-tc-dd-item" data-action="edit"><i class="ti ti-edit"></i>Edit</button>
+            <button class="ph-tc-dd-item" data-action="duplicate"><i class="ti ti-copy"></i>Duplicate</button>
+            <button class="ph-tc-dd-item" data-action="notes"><i class="ti ti-notes"></i>View notes</button>
+            <button class="ph-tc-dd-item is-danger" data-action="delete"><i class="ti ti-trash"></i>Delete</button>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -1478,5 +1636,24 @@ function buildPainChart(sessions) {
 <script type="text/babel" src="settings-drawer.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<!-- ══ NOTES MODAL ══ -->
+<div class="ph-notes-overlay" id="phNotesOverlay">
+  <div class="ph-notes-box">
+    <div class="ph-notes-box-h">
+      <div style="flex:1;min-width:0">
+        <h4 id="phNotesMdTitle">Clinical notes</h4>
+        <div class="sub" id="phNotesMdDate"></div>
+      </div>
+      <button class="close" onclick="closeNotesModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="ph-notes-box-b">
+      <p id="phNotesMdBody"></p>
+      <div class="ph-notes-adapt" id="phNotesMdAdapt" style="display:none">
+        <strong>Adaptation:</strong> <span id="phNotesMdAdaptTxt"></span>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
