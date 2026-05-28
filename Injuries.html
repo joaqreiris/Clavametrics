@@ -165,6 +165,26 @@
   .hot.mild { fill:#EA580C; }
   .hot.pulse { animation:pulse 2.4s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+  .hot-dot { cursor:pointer; transition:opacity .15s; }
+  .hot-dot:hover { opacity:0.75; }
+  .hot-dot-group { cursor:pointer; }
+  .hot-dot-group:hover circle { opacity:0.75; }
+  .hot-dot-group.pulse, .hot-dot.pulse { animation:pulse 2.4s ease-in-out infinite; }
+  /* Body map popover */
+  .bmp-pop { position:fixed; z-index:350; width:284px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,.18); overflow:hidden; }
+  .bmp-pop-h { display:flex; align-items:center; justify-content:space-between; padding:10px 12px 8px; border-bottom:1px solid var(--cm-border-soft); }
+  .bmp-pop-title { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .bmp-pop-close { width:20px; height:20px; border:0; background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:4px; font-size:12px; padding:0; }
+  .bmp-pop-close:hover { background:var(--cm-bg-soft); }
+  .bmp-item { display:flex; align-items:flex-start; gap:9px; padding:9px 12px; border-bottom:1px solid var(--cm-border-soft); cursor:pointer; transition:background .1s; }
+  .bmp-item:last-child { border-bottom:0; }
+  .bmp-item:hover { background:var(--cm-bg-soft); }
+  .bmp-av { width:28px; height:28px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); color:var(--cm-fg); flex-shrink:0; }
+  .bmp-info { flex:1; min-width:0; }
+  .bmp-name { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .bmp-meta { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bmp-more { padding:9px 12px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-accent); cursor:pointer; text-align:center; border-top:1px solid var(--cm-border-soft); }
+  .bmp-more:hover { background:var(--cm-bg-soft); }
 
   /* Type breakdown */
   .type-bars { display:flex; flex-direction:column; gap:8px; }
@@ -397,9 +417,9 @@
               </div>
             </div>
             <div style="padding:0 16px 14px;display:flex;align-items:center;gap:14px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);flex-wrap:wrap">
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-danger)"></span>Severe</span>
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#EA580C"></span>Moderate</span>
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-warning)"></span>Minor</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-danger)"></span>Active</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#EA580C"></span>History</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:16px;border-radius:50%;background:var(--cm-danger);display:inline-flex;align-items:center;justify-content:center;font:600 8px/1 var(--cm-font-mono);color:#fff">3</span>Count</span>
             </div>
           </div>
 
@@ -754,6 +774,15 @@
       <button class="cm-btn is-primary" id="phBtnComplete" onclick="savePhaseStatus('done')" disabled>Mark as complete</button>
     </div>
   </div>
+</div>
+
+<!-- ═══════════════════ BODY MAP POPOVER ═══════════════════ -->
+<div id="bodyMapPopover" class="bmp-pop" style="display:none" onclick="event.stopPropagation()">
+  <div class="bmp-pop-h">
+    <span class="bmp-pop-title" id="bmpAreaTitle">Area</span>
+    <button class="bmp-pop-close" onclick="hideBodyAreaPopover()"><i class="ti ti-x"></i></button>
+  </div>
+  <div id="bmpList"></div>
 </div>
 
 <div id="tweaks-root"></div>
@@ -1530,6 +1559,7 @@ async function savePhaseStatus(status) {
   document.addEventListener('click', () => {
     document.getElementById('bodyRegionDd')?.classList.remove('is-open');
     document.querySelectorAll('.inj-ctx-dd').forEach(d => d.classList.remove('is-open'));
+    hideBodyAreaPopover();
   });
 
   // Search
@@ -1679,6 +1709,16 @@ async function savePhaseStatus(status) {
     const s = btn.dataset.sex;
     document.getElementById('bodyAnt').src  = 'assets/body-' + s + '-front.png';
     document.getElementById('bodyPost').src = 'assets/body-' + s + '-back.png';
+  });
+
+  // Body map dot clicks → popover (event delegation on SVG containers)
+  ['svgAnt', 'svgPost'].forEach(svgId => {
+    document.getElementById(svgId)?.addEventListener('click', e => {
+      e.stopPropagation();
+      const el = e.target.closest('[data-area]');
+      if (!el) { hideBodyAreaPopover(); return; }
+      showBodyAreaPopover(el.dataset.area, e.clientX, e.clientY);
+    });
   });
 })();
 
@@ -2047,28 +2087,129 @@ function injCard(inj) {
 
 // ═══════════════ BODY MAP ═══════════════
 function renderBodyMap() {
-  const active = _allInjuries.filter(i => i.status === 'active');
-  const SCOLOR = { severe:'var(--cm-danger)', moderate:'#EA580C', minor:'var(--cm-warning)' };
-  const today  = new Date();
+  // Group ALL injuries (active + resolved) by body_area
+  const areaMap = {};
+  _allInjuries.forEach(inj => {
+    if (!inj.body_area) return;
+    const k = inj.body_area.toLowerCase().trim();
+    if (!areaMap[k]) areaMap[k] = { area: inj.body_area, total: 0, active: 0 };
+    areaMap[k].total++;
+    if (inj.status === 'active') areaMap[k].active++;
+  });
 
   let antHtml = '', postHtml = '';
-  active.forEach(inj => {
-    const pl    = inj.players || _playersMap[inj.player_id] || {};
-    const pName = `${pl.first_name || ''} ${pl.last_name || ''}`.trim();
-    const days  = inj.start_date ? Math.round((today - new Date(inj.start_date)) / 86400000) : '?';
-    const tip   = `${pName} · ${inj.injury_type || inj.body_area || '?'} · ${days}d`;
-    const color = SCOLOR[inj.severity] || '#EA580C';
-    const coords = getBodyCoords(inj.body_area);
+  Object.values(areaMap).forEach(group => {
+    const coords = getBodyCoords(group.area);
     if (!coords) return;
-    const dot = (cx, cy) =>
-      `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5" class="hot pulse"><title>${tip}</title></circle>`;
+    const hasActive = group.active > 0;
+    // Red = has active injuries, orange = all resolved (history)
+    const color    = hasActive ? 'var(--cm-danger)' : '#EA580C';
+    const n        = group.total;
+    const r        = n >= 3 ? 5.5 : 4;
+    const areaKey  = group.area.toLowerCase().trim();
+    const pulseCls = hasActive ? ' pulse' : '';
+    const tip      = `${group.area} · ${group.active} active · ${group.total} total`;
+
+    const dot = (cx, cy) => {
+      if (n <= 1) {
+        return `<circle data-area="${areaKey}" cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5" class="hot-dot${pulseCls}"><title>${tip}</title></circle>`;
+      }
+      return `<g data-area="${areaKey}" class="hot-dot-group${pulseCls}">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5"/>
+        <text x="${cx}" y="${cy + 3.8}" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" pointer-events="none">${n > 9 ? '9+' : n}</text>
+        <title>${tip}</title>
+      </g>`;
+    };
     if (coords.ant)  antHtml  += dot(...coords.ant);
     if (coords.post) postHtml += dot(...coords.post);
   });
 
   document.getElementById('svgAnt').innerHTML  = antHtml;
   document.getElementById('svgPost').innerHTML = postHtml;
-  document.getElementById('bodyMapSub').textContent = `${active.length} active · all time`;
+  const activeCount = _allInjuries.filter(i => i.status === 'active').length;
+  document.getElementById('bodyMapSub').textContent = `${activeCount} active · season`;
+}
+
+// ═══════════════ BODY MAP POPOVER ═══════════════
+function showBodyAreaPopover(areaKey, clientX, clientY) {
+  const key = (areaKey || '').toLowerCase().trim();
+  const injuries = _allInjuries
+    .filter(i => (i.body_area || '').toLowerCase().trim() === key)
+    .sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+  if (!injuries.length) return;
+
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '—';
+  const SEV_LABEL = { minor:'Minor', moderate:'Moderate', severe:'Severe' };
+  const statusColor = inj => inj.status === 'resolved' ? 'var(--cm-success)' : getInjuryTab(inj) === 'returning' ? '#EA580C' : 'var(--cm-danger)';
+  const statusLabel = inj => inj.status === 'resolved' ? 'Resolved' : getInjuryTab(inj) === 'returning' ? 'Returning' : 'Active';
+
+  document.getElementById('bmpAreaTitle').textContent = injuries[0].body_area || areaKey;
+
+  const top3  = injuries.slice(0, 3);
+  const extra = injuries.length - 3;
+
+  document.getElementById('bmpList').innerHTML = top3.map(inj => {
+    const pl = inj.players || _playersMap[inj.player_id] || {};
+    const name     = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'Unknown';
+    const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const sev      = inj.severity || 'moderate';
+    return `<div class="bmp-item" onclick="scrollToInjury('${inj.id}')">
+      <div class="bmp-av">${initials}</div>
+      <div class="bmp-info">
+        <div class="bmp-name">${name}</div>
+        <div class="bmp-meta">${fmtDate(inj.start_date)} · ${inj.injury_type || '—'}</div>
+        <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
+          <span style="font:600 9.5px/1 var(--cm-font-mono);color:${statusColor(inj)};text-transform:uppercase;letter-spacing:0.04em">${statusLabel(inj)}</span>
+          <span class="inj-severity ${sev}" style="height:16px;font-size:9.5px;padding:0 6px"><span class="d"></span>${SEV_LABEL[sev]||sev}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('') + (extra > 0
+    ? `<div class="bmp-more" onclick="filterByArea('${key}')">View all ${injuries.length} injuries in this area →</div>`
+    : '');
+
+  const popover = document.getElementById('bodyMapPopover');
+  const W = window.innerWidth, H = window.innerHeight;
+  const pw = 288, ph = Math.min(top3.length * 76 + 46, 330);
+  let left = clientX + 12, top = clientY - 12;
+  if (left + pw > W - 8) left = clientX - pw - 12;
+  if (top  + ph > H - 8) top  = H - ph - 8;
+  if (top < 8) top = 8;
+  popover.style.left = left + 'px';
+  popover.style.top  = top  + 'px';
+  popover.style.display = '';
+}
+
+function hideBodyAreaPopover() {
+  document.getElementById('bodyMapPopover').style.display = 'none';
+}
+
+function scrollToInjury(injId) {
+  hideBodyAreaPopover();
+  const inj = _allInjuries.find(i => i.id === injId);
+  if (!inj) return;
+  const tab = getInjuryTab(inj);
+  document.querySelectorAll('.inj-seg').forEach(o => o.classList.remove('is-on'));
+  document.querySelector(`.inj-seg[data-tab="${tab}"]`)?.classList.add('is-on');
+  _currentTab = tab;
+  _currentSev = 'all';
+  document.querySelectorAll('.inj-pill').forEach(o => o.classList.remove('is-on'));
+  document.querySelector('.inj-pill[data-sev="all"]')?.classList.add('is-on');
+  applyFilters();
+  setTimeout(() => {
+    const el = document.querySelector(`[data-inj-id="${injId}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 80);
+}
+
+function filterByArea(areaKey) {
+  hideBodyAreaPopover();
+  _currentRegion = areaKey || null;
+  const dd = document.getElementById('bodyRegionDd');
+  if (dd) dd.querySelectorAll('.inj-dd-item').forEach(b =>
+    b.classList.toggle('is-on', (b.dataset.area || '').toLowerCase() === (areaKey || '').toLowerCase())
+  );
+  applyFilters();
 }
 
 // ═══════════════ TYPE BREAKDOWN ═══════════════
@@ -2332,13 +2473,46 @@ async function confirmDischarge() {
     phs.forEach(p => { p.status = 'done'; });
   }
 
-  // Revert future availability rows to 'available'
+  // Step 2: update existing 'injured' availability rows → 'available' from returnDate
+  if (inj?.player_id) {
+    try {
+      await window.sb.from('availability')
+        .update({ status: 'available' })
+        .eq('player_id', inj.player_id)
+        .eq('club_id', _clubId)
+        .gte('date', returnDate)
+        .eq('status', 'injured');
+      // Upsert a record for the return date itself (creates if missing)
+      await window.sb.from('availability')
+        .upsert(
+          { player_id: inj.player_id, date: returnDate, status: 'available', club_id: _clubId },
+          { onConflict: 'player_id,date' }
+        );
+    } catch(e) { console.warn('[Injuries] availability update failed:', e.message); }
+  }
+
+  // Step 3: insert notifications for coaches / admins / staff
   try {
-    if (inj?.player_id) {
-      await window.sb.from('availability').update({ status: 'available' })
-        .eq('player_id', inj.player_id).eq('club_id', _clubId).gte('date', returnDate);
+    const pl    = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
+    const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
+    const retFmt = new Date(returnDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    const { data: staff } = await window.sb.from('profiles')
+      .select('id')
+      .eq('club_id', _clubId)
+      .in('role', ['admin', 'coach', 'staff']);
+    if (staff?.length) {
+      await window.sb.from('notifications').insert(
+        staff.map(p => ({
+          user_id: p.id,
+          club_id: _clubId,
+          type:    'medical_clearance',
+          title:   `${pName} cleared — available for training`,
+          body:    `Medical clearance confirmed. Player available from ${retFmt}.`,
+          link:    '/Daily Planning.html'
+        }))
+      );
     }
-  } catch(_) { /* availability table may differ */ }
+  } catch(e) { console.warn('[Injuries] notifications insert failed:', e.message); }
 
   // Update local state
   if (inj) { inj.status = 'resolved'; inj.returned_date = returnDate; if (notes) inj.notes = notes; }
