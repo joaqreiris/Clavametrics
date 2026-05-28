@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rehab &amp; preventives — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="stylesheet" href="rehab-planner.css">
+<link rel="stylesheet" href="plans-overview.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+</head>
+<body class="cm">
+<div class="hub-shell">
+
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+
+    <header class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-activity-heartbeat"></i>
+        <span class="now">Rehab &amp; preventives</span>
+      </div>
+      <div class="actions">
+        <button class="cm-btn is-secondary"><i class="ti ti-download"></i> Export</button>
+        <a class="cm-btn is-primary" href="Rehab Planner.html"><i class="ti ti-plus"></i> New plan</a>
+      </div>
+    </header>
+
+    <section class="po-doc" data-screen-label="01 Rehab & preventives · overview">
+
+      <!-- Header -->
+      <div class="po-head">
+        <div>
+          <h1>Active plans</h1>
+          <div class="ctx">
+            <span><strong>7</strong> active</span>
+            <span style="color:var(--cm-fg-faint)">·</span>
+            <span><strong>4</strong> rehab · <strong>3</strong> preventive</span>
+            <span style="color:var(--cm-fg-faint)">·</span>
+            <span>2 owners on rotation today</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI strip -->
+      <div class="po-kpis">
+        <div class="po-kpi">
+          <div class="l"><i class="ti ti-bandage"></i>In rehab</div>
+          <div class="v">4</div>
+          <div class="break"><strong>1</strong> acute · <strong>2</strong> strength · <strong>1</strong> on-field</div>
+        </div>
+        <div class="po-kpi">
+          <div class="l"><i class="ti ti-flag-bolt"></i>Near RTP (≤7 d)</div>
+          <div class="v">2</div>
+          <div class="break">Joaquín Mella · Mateo Fernández</div>
+        </div>
+        <div class="po-kpi is-warn">
+          <div class="l"><i class="ti ti-alert-triangle"></i>Blocked today</div>
+          <div class="v">1</div>
+          <div class="break"><strong>Bruno Sosa</strong> · wellness 5.8</div>
+        </div>
+        <div class="po-kpi">
+          <div class="l"><i class="ti ti-shield-check"></i>Cleared this month</div>
+          <div class="v">3</div>
+          <div class="break">May avg time-to-RTP <strong>34 d</strong></div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="po-filters">
+        <div class="po-filter-pills">
+          <button class="is-on">All <span class="count">7</span></button>
+          <button>Rehab <span class="count">4</span></button>
+          <button>Preventive <span class="count">3</span></button>
+          <button>Near RTP <span class="count">2</span></button>
+          <button>Blocked <span class="count">1</span></button>
+        </div>
+        <div class="po-search">
+          <i class="ti ti-search"></i>
+          <input type="text" placeholder="Search athlete…" />
+          <span class="cm-kbd">/</span>
+        </div>
+        <div class="po-spacer"></div>
+        <span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">Sorted by: <strong style="color:var(--cm-fg)">RTP estimate</strong></span>
+      </div>
+
+      <!-- ─── REHAB GROUP ─── -->
+      <div class="po-section-h"><i class="ti ti-activity-heartbeat" style="color:#B91C1C"></i>Rehab &amp; return-to-play <span style="color:var(--cm-fg);font-weight:600">· 4</span></div>
+
+      <div class="po-table-wrap" style="margin-bottom:18px">
+        <table class="po-tbl">
+          <thead>
+            <tr>
+              <th style="width:18%">Athlete</th>
+              <th style="width:8%">Plan</th>
+              <th style="width:28%">Diagnosis &amp; phase</th>
+              <th style="width:11%">RTP</th>
+              <th>Owners</th>
+              <th>Today's session</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- Joaquín Mella · near RTP -->
+            <tr onclick="location.href='Rehab Planner.html'">
+              <td>
+                <div class="po-ath">
+                  <div class="av gk">JM</div>
+                  <div class="who"><div class="name">Joaquín Mella</div><div class="pos">GK · #1</div></div>
+                </div>
+              </td>
+              <td><span class="po-pill is-rehab"><i class="ti ti-activity-heartbeat"></i>Rehab</span></td>
+              <td>
+                <div class="po-ctx">
+                  <div class="line1">Shoulder dislocation · right · grade II</div>
+                  <div class="line2">
+                    <span>Day <strong>32</strong></span>
+                    <span class="sep">·</span>
+                    <span class="po-phase-pill field">On-field</span>
+                    <span class="sep">·</span>
+                    <span>Injury #211</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="po-rtp is-near">
+                  <div class="v">Jun 03<sub>±2d</sub></div>
+                  <div class="meta">in 7 days</div>
+                </div>
+              </td>
+              <td>
+                <div class="po-owners" title="Physio + S&C">
+                  <span class="av-mini physio">RM</span>
+                  <span class="av-mini sc">LP</span>
+                </div>
+              </td>
+              <td>
+                <div class="po-next">
+                  <div class="name"><span class="swatch" style="background:#15803D"></span>GK return protocol</div>
+                  <div class="meta"><i class="ti ti-clock"></i>16:00 <span class="sep">·</span> 45 min <span class="sep">·</span> 4 blocks</div>
+                </div>
+              </td>
+              <td><span class="po-status near"><span class="dot"></span><span class="lbl">Near RTP</span></span></td>
+              <td><i class="ti ti-chevron-right po-arrow"></i></td>
+            </tr>
+
+            <!-- Mateo Fernández · current Rehab Planner sample -->
+            <tr onclick="location.href='Rehab Planner.html'">
+              <td>
+                <div class="po-ath">
+                  <div class="av fw">MF</div>
+                  <div class="who"><div class="name">Mateo Fernández</div><div class="pos">RF · #18</div></div>
+                </div>
+              </td>
+              <td><span class="po-pill is-rehab"><i class="ti ti-activity-heartbeat"></i>Rehab</span></td>
+              <td>
+                <div class="po-ctx">
+                  <div class="line1">Hamstring (BFlh) · grade II</div>
+                  <div class="line2">
+                    <span>Day <strong>24</strong></span>
+                    <span class="sep">·</span>
+                    <span class="po-phase-pill strength">Strength</span>
+                    <span class="sep">·</span>
+                    <span>Injury #214</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="po-rtp is-near">
+                  <div class="v">Jun 18<sub>±5d</sub></div>
+                  <div class="meta">in 22 days</div>
+                </div>
+              </td>
+              <td>
+                <div class="po-owners">
+                  <span class="av-mini physio">RM</span>
+                  <span class="av-mini sc">LP</span>
+                  <span class="av-mini coach">DV</span>
+                </div>
+              </td>
+              <td>
+                <div class="po-next">
+                  <div class="name"><span class="swatch" style="background:#DC2626"></span>Posterior chain strength</div>
+                  <div class="meta"><i class="ti ti-clock"></i>14:30 <span class="sep">·</span> 32 min <span class="sep">·</span> 5 blocks</div>
+                </div>
+              </td>
+              <td><span class="po-status ok"><span class="dot"></span><span class="lbl">On track</span></span></td>
+              <td><i class="ti ti-chevron-right po-arrow"></i></td>
+            </tr>
+
+            <!-- Tomás Ríos -->
+            <tr onclick="location.href='Rehab Planner.html'">
+              <td>
+                <div class="po-ath">
+                  <div class="av mf">TR</div>
+                  <div class="who"><div class="name">Tomás Ríos</div><div class="pos">CM · #8</div></div>
+                </div>
+              </td>
+              <td><span class="po-pill is-rehab"><i class="ti ti-activity-heartbeat"></i>Rehab</span></td>
+              <td>
+                <div class="po-ctx">
+                  <div class="line1">Ankle sprain · lateral · grade II</div>
+                  <div class="line2">
+                    <span>Day <strong>11</strong></span>
+                    <span class="sep">·</span>
+                    <span class="po-phase-pill subacute">Subacute</span>
+                    <span class="sep">·</span>
+                    <span>Injury #218</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="po-rtp">
+                  <div class="v">Jun 26<sub>±7d</sub></div>
+                  <div class="meta">in 30 days</div>
+                </div>
+              </td>
+              <td>
+                <div class="po-owners">
+                  <span class="av-mini physio">RM</span>
+                  <span class="av-mini sc">LP</span>
+                </div>
+              </td>
+              <td>
+                <div class="po-next">
+                  <div class="name"><span class="swatch" style="background:#06B6D4"></span>Ankle mobility flow</div>
+                  <div class="meta"><i class="ti ti-clock"></i>11:00 <span class="sep">·</span> 18 min <span class="sep">·</span> 3 blocks</div>
+                </div>
+              </td>
+              <td><span class="po-status ok"><span class="dot"></span><span class="lbl">On track</span></span></td>
+              <td><i class="ti ti-chevron-right po-arrow"></i></td>
+            </tr>
+
+            <!-- Bruno Sosa · blocked -->
+            <tr onclick="location.href='Rehab Planner.html'">
+              <td>
+                <div class="po-ath">
+                  <div class="av df">BS</div>
+                  <div class="who"><div class="name">Bruno Sosa</div><div class="pos">CB · #4</div></div>
+                </div>
+              </td>
+              <td><span class="po-pill is-rehab"><i class="ti ti-activity-heartbeat"></i>Rehab</span></td>
+              <td>
+                <div class="po-ctx">
+                  <div class="line1">MCL · grade I · right knee</div>
+                  <div class="line2">
+                    <span>Day <strong>5</strong></span>
+                    <span class="sep">·</span>
+                    <span class="po-phase-pill subacute">Subacute</span>
+                    <span class="sep">·</span>
+                    <span>Injury #220</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="po-rtp">
+                  <div class="v">Jun 22<sub>±5d</sub></div>
+                  <div class="meta">in 26 days</div>
+                </div>
+              </td>
+              <td>
+                <div class="po-owners">
+                  <span class="av-mini physio">RM</span>
+                </div>
+              </td>
+              <td>
+                <div class="po-next">
+                  <div class="name"><span class="swatch" style="background:#22C55E"></span>Quad activation</div>
+                  <div class="meta"><i class="ti ti-clock"></i>10:30 <span class="sep">·</span> 14 min <span class="sep">·</span> 2 blocks</div>
+                </div>
+              </td>
+              <td><span class="po-status blocked"><span class="dot"></span><span class="lbl">Wellness 5.8</span></span></td>
+              <td><i class="ti ti-chevron-right po-arrow"></i></td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ─── PREVENTIVE GROUP ─── -->
+      <div class="po-section-h"><i class="ti ti-shield-half-filled" style="color:#1D4ED8"></i>Preventive <span style="color:var(--cm-fg);font-weight:600">· 3</span></div>
+
+      <div class="po-table-wrap">
+        <table class="po-tbl">
+          <thead>
+            <tr>
+              <th style="width:18%">Athlete</th>
+              <th style="width:8%">Plan</th>
+              <th style="width:28%">Risk &amp; phase</th>
+              <th style="width:11%">Programme</th>
+              <th>Owners</th>
+              <th>Today's session</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <tr onclick="location.href='Rehab Planner.html'">
+              <td>
+                <div class="po-ath">
+                  <div class="av df">LV</div>
+                  <div class="who"><div class="name">Lucas Vega</div><div class="pos">LB · #3</div></div>
+                </div>
+              </td>
+              <td><span class="po-pill is-prev"><i class="ti ti-shield-half-filled"></i>Preventive</span></td>
+              <td>
+                <div class="po-ctx">
+                  <div class="line1">Hamstring history · LSI 14% · BFlh</div>
+                  <div class="line2">
+                    <span class="po-phase-pill capacity">Hypertrophy &amp; control</span>
+                    <span class="sep">·</span>
+                    <span>Risk flag · evaluation May 12</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="po-rtp">
+                  <div class="v">W4 / 8</div>
+                  <div class="meta">4 weeks left</div>
+                </div>
+              </td>
+              <td>
+                <div class="po-owners">
+                  <span class="av-mini sc">LP</span>
+                  <span class="av-mini physio">RM</span>
+                </div>
+              </td>
+              <td>
+                <div class="po-next">
+                  <div class="name"><span class="swatch" style="background:#DC2626"></span>Posterior chain · Nordic emphasis</div>
+                  <div class="meta"><i class="ti ti-clock"></i>09:00 <span class="sep">·</span> 26 min <span class="sep">·</span> 4 ex</div>
+                </div>
+              </td>
+              <td><span class="po-status ok"><span class="dot"></span><span class="lbl">On track</span></span></td>
+              <td><i class="ti ti-chevron-right po-arrow"></i></td>
+            </tr>
+
+            <tr onclick="location.href='Rehab Planner.html'">
+              <td>
+                <div class="po-ath">
+                  <div class="av fw">DC</div>
+                  <div class="who"><div class="name">Diego Carmona</div><div class="pos">RW · #11</div></div>
+                </div>
+              </td>
+              <td><span class="po-pill is-prev"><i class="ti ti-shield-half-filled"></i>Preventive</span></td>
+              <td>
+                <div class="po-ctx">
+                  <div class="line1">High HSR exposure · ACWR 1.42</div>
+                  <div class="line2">
+                    <span class="po-phase-pill foundation">Foundation</span>
+                    <span class="sep">·</span>
+                    <span>Flagged by GPS · May 22</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="po-rtp">
+                  <div class="v">W2 / 6</div>
+                  <div class="meta">4 weeks left</div>
+                </div>
+              </td>
+              <td>
+                <div class="po-owners">
+                  <span class="av-mini sc">LP</span>
+                </div>
+              </td>
+              <td>
+                <div class="po-next">
+                  <div class="name"><span class="swatch" style="background:#10B981"></span>Movement prep · running</div>
+                  <div class="meta"><i class="ti ti-clock"></i>08:30 <span class="sep">·</span> 12 min <span class="sep">·</span> 4 ex</div>
+                </div>
+              </td>
+              <td><span class="po-status ok"><span class="dot"></span><span class="lbl">On track</span></span></td>
+              <td><i class="ti ti-chevron-right po-arrow"></i></td>
+            </tr>
+
+            <tr onclick="location.href='Rehab Planner.html'">
+              <td>
+                <div class="po-ath">
+                  <div class="av df">FO</div>
+                  <div class="who"><div class="name">Federico Olmos</div><div class="pos">CB · #5</div></div>
+                </div>
+              </td>
+              <td><span class="po-pill is-prev"><i class="ti ti-shield-half-filled"></i>Preventive</span></td>
+              <td>
+                <div class="po-ctx">
+                  <div class="line1">Quad asymmetry · LSI 18%</div>
+                  <div class="line2">
+                    <span class="po-phase-pill strength">Strength &amp; power</span>
+                    <span class="sep">·</span>
+                    <span>Risk flag · evaluation Apr 28</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="po-rtp">
+                  <div class="v">W6 / 8</div>
+                  <div class="meta">2 weeks left</div>
+                </div>
+              </td>
+              <td>
+                <div class="po-owners">
+                  <span class="av-mini sc">LP</span>
+                  <span class="av-mini physio">RM</span>
+                </div>
+              </td>
+              <td>
+                <div class="po-next">
+                  <div class="name"><span class="swatch" style="background:#DC2626"></span>Unilateral squat block</div>
+                  <div class="meta"><i class="ti ti-clock"></i>11:30 <span class="sep">·</span> 28 min <span class="sep">·</span> 4 ex</div>
+                </div>
+              </td>
+              <td><span class="po-status ok"><span class="dot"></span><span class="lbl">On track</span></span></td>
+              <td><i class="ti ti-chevron-right po-arrow"></i></td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:18px;padding:12px 16px;background:var(--cm-bg-soft);border:1px dashed var(--cm-border);border-radius:var(--cm-r-3);display:flex;gap:10px;align-items:center;font:var(--cm-body-sm);color:var(--cm-fg-muted)">
+        <i class="ti ti-info-circle" style="font-size:16px"></i>
+        Plans pull from <a href="Injuries.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px">Injuries</a>,
+        <a href="Evaluations.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px">Evaluations</a> and
+        <a href="GPS Analysis.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px">GPS analysis</a>.
+        Cleared and archived plans appear in the <a href="#" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px">history view</a>.
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+  const [clubId] = await Promise.all([window.getClubId(), window.applyClubTheme()]);
+
+  // ── Count active plans ─────────────────────────────────────
+  const [rehabRes, prevRes] = await Promise.all([
+    window.sb.from('rehab_protocols').select('id,status,name,injury_id,created_at,players(first_name,last_name)', { count: 'exact' })
+      .eq('club_id', clubId).eq('status', 'active'),
+    window.sb.from('preventive_routines').select('id,name,focus_area,frequency', { count: 'exact' })
+      .eq('club_id', clubId).eq('is_active', true),
+  ]);
+
+  const rehabs = rehabRes.data || [];
+  const prevs  = prevRes.data  || [];
+  const total  = rehabs.length + prevs.length;
+
+  // Update header counts
+  const ctxEl = document.querySelector('.po-head .ctx');
+  if (ctxEl && total > 0) {
+    ctxEl.innerHTML = `<span><strong>${total}</strong> active</span>
+      <span style="color:var(--cm-fg-faint)">·</span>
+      <span><strong>${rehabs.length}</strong> rehab · <strong>${prevs.length}</strong> preventive</span>`;
+  }
+
+  // ── Populate rehab rows if table has data ─────────────────
+  const tbody = document.querySelector('.po-table tbody');
+  if (tbody && rehabs.length > 0) {
+    tbody.innerHTML = rehabs.map(r => {
+      const p    = r.players;
+      const name = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '—';
+      const since = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
+      return `<tr>
+        <td><div class="po-player"><div class="po-av">${name.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2)}</div><div><div class="po-name">${name}</div></div></div></td>
+        <td><span class="po-badge rehab">Rehab</span></td>
+        <td>${r.name}</td>
+        <td>${since}</td>
+        <td><span class="po-status active"><span class="dot"></span>Active</span></td>
+        <td><a class="cm-btn is-ghost is-sm" href="Rehab Planner.html"><i class="ti ti-pencil"></i></a></td>
+      </tr>`;
+    }).join('') + prevs.map(r => `<tr>
+        <td>—</td>
+        <td><span class="po-badge prev">Preventive</span></td>
+        <td>${r.name}</td>
+        <td>—</td>
+        <td><span class="po-status active"><span class="dot"></span>Active</span></td>
+        <td><a class="cm-btn is-ghost is-sm" href="Rehab Planner.html"><i class="ti ti-pencil"></i></a></td>
+      </tr>`).join('');
+  }
+})();
+</script>
+
+<script>window.__CM_TWEAK_DEFAULTS = { theme: 'hybrid', accent: 'green' };</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+</body>
+</html>

@@ -144,8 +144,9 @@
       { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition' },
     ]},
     { label: 'Medical', items: [
-      { href: 'Injuries.html',          icon: 'ti-bandage',          label: 'Injuries' },
-      { href: 'Physio.html',            icon: 'ti-stethoscope',      label: 'Treatments' },
+      { href: 'Injuries.html',              icon: 'ti-bandage',              label: 'Injuries' },
+      { href: 'Physio.html',                icon: 'ti-stethoscope',          label: 'Treatments' },
+      { href: 'Rehab & Preventives.html',   icon: 'ti-activity-heartbeat',   label: 'Rehab & preventives' },
     ]},
     { label: 'Workspace', items: [
       { href: '#', icon: 'ti-settings', label: 'Settings', extra: 'data-open-settings' },
