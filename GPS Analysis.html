@@ -204,6 +204,28 @@
   .gp-ts svg { display:block; width:100%; height:200px; }
   .gp-scatter svg { display:block; width:100%; height:240px; }
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+
+  /* ── GPS interactive controls ─────────────────────────────── */
+  .gp-popover { position:fixed; z-index:900; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; min-width:180px; }
+  .gp-popover-item { display:flex; align-items:center; gap:8px; width:100%; padding:7px 10px; border:0; background:transparent; color:var(--cm-fg); font:500 13px/1 var(--cm-font-sans); cursor:pointer; border-radius:5px; text-align:left; }
+  .gp-popover-item:hover { background:var(--cm-bg-soft); color:var(--cm-fg-strong); }
+  .gp-popover-item .ti { font-size:14px; color:var(--cm-fg-muted); }
+  .gp-popover-sep { height:1px; background:var(--cm-border-soft); margin:4px 0; }
+  .gp-modal-overlay { position:fixed; inset:0; background:rgba(8,10,12,.55); backdrop-filter:blur(4px); z-index:950; display:flex; align-items:center; justify-content:center; }
+  .gp-modal { background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:0 20px 60px rgba(0,0,0,.25); width:560px; max-width:95vw; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
+  .gp-modal-h { display:flex; align-items:center; gap:12px; padding:16px 18px; border-bottom:1px solid var(--cm-border); }
+  .gp-modal-h h3 { font:600 15px/1 var(--cm-font-sans); letter-spacing:-.01em; color:var(--cm-fg-strong); flex:1; }
+  .gp-modal-body { flex:1; overflow-y:auto; padding:16px 18px; }
+  .gp-modal-x { width:28px; height:28px; border-radius:6px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .gp-modal-x:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .gp-toast { position:fixed; bottom:24px; right:24px; z-index:1000; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); box-shadow:0 8px 24px rgba(0,0,0,.18); padding:10px 16px; font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); opacity:1; transition:opacity 350ms; }
+  .gp-toast.fade { opacity:0; }
+  .gp-catalog { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .gp-catalog-item { padding:10px 12px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); cursor:pointer; font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg); text-align:left; width:100%; }
+  .gp-catalog-item:hover { border-color:var(--cm-accent); background:var(--cm-accent-soft); color:var(--cm-fg-strong); }
+  .gp-pop-search { width:100%; padding:5px 8px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); box-sizing:border-box; outline:none; }
+  .gp-pop-search:focus { border-color:var(--cm-accent); }
+  @keyframes gp-spin { to { transform:rotate(360deg); } }
 </style>
 </head>
 <body class="cm">
@@ -579,6 +601,446 @@
 
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// GPS Analysis — Interactive controls
+// ══════════════════════════════════════════════════════════════
+
+// ── State ─────────────────────────────────────────────────────
+window.gpState = { microcycle: 'MC 14', playerId: null, baseline: 'vs Role', view: 'ind' };
+
+// ── Helpers ───────────────────────────────────────────────────
+function getISOWeek(d) {
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  dt.setUTCDate(dt.getUTCDate() + 4 - (dt.getUTCDay() || 7));
+  const y0 = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  return Math.ceil((((dt - y0) / 86400000) + 1) / 7);
+}
+
+function initSizeToggles(root) {
+  root.querySelectorAll('.size-toggle').forEach(g =>
+    g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
+      b.classList.add('is-on');
+      const card = b.closest('.gp-c');
+      if (card) card.dataset.size = { S:'sm', M:'md', L:'lg', FULL:'full' }[b.textContent.trim()] || 'md';
+    }))
+  );
+}
+
+// ── Popover ───────────────────────────────────────────────────
+let _pop = null;
+
+function closePop() { _pop?.remove(); _pop = null; }
+
+document.addEventListener('click', e => {
+  if (_pop && !_pop.contains(e.target)) closePop();
+}, true);
+
+function _posPopover(pop, anchor) {
+  const r = anchor.getBoundingClientRect();
+  pop.style.top  = (r.bottom + 4) + 'px';
+  pop.style.left = r.left + 'px';
+  document.body.appendChild(pop);
+  _pop = pop;
+  requestAnimationFrame(() => {
+    const pr = pop.getBoundingClientRect();
+    if (pr.right > innerWidth - 8) pop.style.left = (innerWidth - pr.width - 8) + 'px';
+  });
+}
+
+function makePopover(anchor, items, onSelect) {
+  closePop();
+  const pop = document.createElement('div');
+  pop.className = 'gp-popover';
+  items.forEach(item => {
+    if (item.sep) { const hr = document.createElement('div'); hr.className = 'gp-popover-sep'; pop.appendChild(hr); return; }
+    const btn = document.createElement('button');
+    btn.className = 'gp-popover-item';
+    if (item.icon) { const i = document.createElement('i'); i.className = `ti ${item.icon}`; btn.appendChild(i); }
+    btn.appendChild(document.createTextNode(item.label));
+    btn.addEventListener('click', e => { e.stopPropagation(); closePop(); onSelect(item); });
+    pop.appendChild(btn);
+  });
+  _posPopover(pop, anchor);
+}
+
+function makeSearchPopover(anchor, players) {
+  closePop();
+  const pop = document.createElement('div');
+  pop.className = 'gp-popover';
+  pop.style.minWidth = '250px';
+  const wrap = document.createElement('div');
+  wrap.style.padding = '4px 4px 2px';
+  const inp = document.createElement('input');
+  inp.className = 'gp-pop-search';
+  inp.placeholder = 'Search player…';
+  wrap.appendChild(inp);
+  pop.appendChild(wrap);
+  const list = document.createElement('div');
+  list.style.maxHeight = '220px';
+  list.style.overflowY = 'auto';
+  pop.appendChild(list);
+
+  function render(q) {
+    list.innerHTML = '';
+    const filt = q ? players.filter(p => `${p.first_name} ${p.last_name} ${p.position||''}`.toLowerCase().includes(q.toLowerCase())) : players;
+    if (!filt.length) {
+      const em = document.createElement('div');
+      em.style.cssText = 'padding:8px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
+      em.textContent = 'No players found';
+      list.appendChild(em); return;
+    }
+    filt.slice(0, 20).forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'gp-popover-item';
+      btn.textContent = `${p.first_name[0]}. ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}`;
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); closePop();
+        window.gpState.playerId = p.id;
+        const label = `${p.first_name[0]}. ${p.last_name}`;
+        anchor.innerHTML = `<i class="ti ti-user"></i>${label}`;
+        showToast(`Player → ${label}`);
+        // TODO: re-render Individual and Match·ind views with new player
+      });
+      list.appendChild(btn);
+    });
+  }
+
+  render('');
+  inp.addEventListener('input', () => render(inp.value));
+  _posPopover(pop, anchor);
+  requestAnimationFrame(() => inp.focus());
+}
+
+// ── Modal ─────────────────────────────────────────────────────
+function makeModal(title, bodyHTML) {
+  closePop();
+  const ov = document.createElement('div');
+  ov.className = 'gp-modal-overlay';
+  const modal = document.createElement('div');
+  modal.className = 'gp-modal';
+  modal.innerHTML = `<div class="gp-modal-h"><h3></h3><button class="gp-modal-x"><i class="ti ti-x"></i></button></div><div class="gp-modal-body"></div>`;
+  modal.querySelector('h3').textContent = title;
+  modal.querySelector('.gp-modal-body').innerHTML = bodyHTML;
+  modal.querySelector('.gp-modal-x').addEventListener('click', () => ov.remove());
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.appendChild(modal);
+  document.body.appendChild(ov);
+  return ov;
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'gp-toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.classList.add('fade'); setTimeout(() => t.remove(), 400); }, 2200);
+}
+
+// ── Card catalog ──────────────────────────────────────────────
+const GP_CATALOG = {
+  ind:  ['Distance KPI','HSR KPI','Sprints KPI','Radar profile','× match max','Weekly bars','ACWR chart','Speed zones','Accel/Decel asym','Personal baseline trend'],
+  grp:  ['Z-score matrix','Squad ranking','Load vs HSR scatter','Team heatmap','Position box plot','Outliers card','Position radar','Squad readiness'],
+  mind: ['Match heatmap','Distance per min','Velocity profile','Sprint zonal grid','Halves drop-off','Recovery between sprints'],
+  mgrp: ['Total distance','HSR squad','Sprints','Us vs opponent','Team heatmap','Match vs training delivered'],
+};
+
+function openCatalog(insertBefore) {
+  const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
+  const items = GP_CATALOG[view] || [];
+  const modal = makeModal('Add card',
+    `<div class="gp-catalog">${items.map(n => `<button class="gp-catalog-item" data-name="${n}">${n}</button>`).join('')}</div>`
+  );
+  modal.querySelectorAll('.gp-catalog-item').forEach(btn => btn.addEventListener('click', () => {
+    const card = document.createElement('div');
+    card.className = 'gp-c';
+    card.dataset.size = 'md';
+    card.innerHTML = `<div class="gp-c-h"><span class="ttl"></span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div><div class="gp-c-b" style="align-items:center;justify-content:center;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans)">Configure metric →</div>`;
+    card.querySelector('.ttl').textContent = btn.dataset.name;
+    initSizeToggles(card);
+    insertBefore.parentNode.insertBefore(card, insertBefore);
+    modal.remove();
+  }));
+}
+
+// ── 1. Export button ──────────────────────────────────────────
+const exportBtn = document.querySelector('.gp-bar .right .cm-btn.is-outline');
+exportBtn?.addEventListener('click', e => {
+  e.stopPropagation();
+  makePopover(exportBtn, [
+    { label: 'PDF report',         icon: 'ti-file-type-pdf' },
+    { label: 'CSV · current view', icon: 'ti-table-export' },
+    { label: 'PNG snapshot',       icon: 'ti-photo-down' },
+    { label: 'Share link',         icon: 'ti-link' },
+  ], item => {
+    if (item.label === 'CSV · current view') {
+      const ths = [...document.querySelectorAll('.gp-view.is-on .gp-zt thead th')];
+      const trs = [...document.querySelectorAll('.gp-view.is-on .gp-zt tbody tr')];
+      if (!trs.length) { showToast('No table data in this view'); return; }
+      const lines = [ths.map(h => `"${h.textContent.trim()}"`).join(',')];
+      trs.forEach(tr => lines.push([...tr.querySelectorAll('td')].map(td => `"${td.textContent.trim().replace(/\s+/g,' ')}"`).join(',')));
+      const a = Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' })),
+        download: 'gps_export.csv',
+      });
+      a.click();
+      showToast('CSV exported');
+    } else if (item.label === 'Share link') {
+      navigator.clipboard.writeText(location.href).then(() => showToast('Link copied'));
+    } else {
+      console.log('TODO:', item.label);
+      showToast(item.label + ' — coming soon');
+    }
+  });
+});
+
+// ── 2. Dashboard bar pills ────────────────────────────────────
+document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
+  const pill = e.target.closest('.pill');
+  if (!pill || pill.id === 'editToggle') return;
+  e.stopPropagation();
+  const ic = pill.querySelector('.ti')?.className || '';
+
+  // MC pill
+  if (ic.includes('ti-clock')) {
+    const clubId = await window.getClubId();
+    const { data: sessions } = await window.sb.from('training_sessions')
+      .select('session_date').eq('club_id', clubId)
+      .order('session_date', { ascending: false }).limit(60);
+    const weeks = {};
+    (sessions || []).forEach(s => {
+      const d = new Date(s.session_date);
+      const k = `MC ${getISOWeek(d)}`;
+      if (!weeks[k]) weeks[k] = { label: k, date: s.session_date };
+    });
+    const mcItems = Object.values(weeks).slice(0, 10);
+    if (!mcItems.length) { showToast('No sessions found'); return; }
+    makePopover(pill, mcItems.map(w => ({ label: `${w.label}  ·  ${w.date}`, mc: w.label })), item => {
+      window.gpState.microcycle = item.mc;
+      pill.innerHTML = `<i class="ti ti-clock"></i>${item.mc}`;
+      showToast(`Microcycle → ${item.mc}`);
+    });
+  }
+
+  // Player pill
+  else if (ic.includes('ti-user')) {
+    const clubId = await window.getClubId();
+    const { data: players } = await window.sb.from('players')
+      .select('id,first_name,last_name,position,number')
+      .eq('club_id', clubId).neq('status', 'inactive').order('last_name');
+    if (!players?.length) { showToast('No players found'); return; }
+    makeSearchPopover(pill, players);
+  }
+
+  // Baseline pill
+  else if (ic.includes('ti-target')) {
+    makePopover(pill, ['vs Role','vs Squad','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
+      window.gpState.baseline = item.label;
+      pill.innerHTML = `<i class="ti ti-target"></i>${item.label}`;
+      showToast(`Baseline → ${item.label}`);
+      // TODO: recalculate z-scores with selected baseline
+    });
+  }
+
+  // Saved views pill
+  else if (ic.includes('ti-bookmark')) {
+    const saved = JSON.parse(localStorage.getItem('cm_gps_layouts') || '[]');
+    const svItems = [{ label: 'Save current layout…', icon: 'ti-device-floppy', action: 'save' }];
+    if (saved.length) svItems.push({ sep: true });
+    saved.forEach((v, i) => svItems.push({ label: v.name, icon: 'ti-bookmark', action: 'load', data: v }));
+    makePopover(pill, svItems, item => {
+      if (item.action === 'save') {
+        const name = prompt('Layout name:');
+        if (!name) return;
+        const cards = [...document.querySelectorAll('.gp-view.is-on .gp-c')].map(c => ({
+          title: c.querySelector('.ttl')?.textContent || '',
+          size: c.dataset.size,
+        }));
+        const all = JSON.parse(localStorage.getItem('cm_gps_layouts') || '[]');
+        all.push({ name, cards, ts: Date.now() });
+        localStorage.setItem('cm_gps_layouts', JSON.stringify(all));
+        showToast(`Layout "${name}" saved`);
+      } else if (item.action === 'load') {
+        item.data.cards?.forEach((sv, i) => {
+          const cards = document.querySelectorAll('.gp-view.is-on .gp-c');
+          if (cards[i]) cards[i].dataset.size = sv.size;
+        });
+        showToast(`Layout "${item.data.name}" loaded`);
+      }
+    });
+  }
+
+  // Add card pill
+  else if (ic.includes('ti-plus')) {
+    const addBtn = document.querySelector('.gp-view.is-on .gp-add');
+    if (addBtn) openCatalog(addBtn);
+  }
+});
+
+// ── 3. Add card buttons ───────────────────────────────────────
+document.querySelectorAll('.gp-add').forEach(btn => btn.addEventListener('click', () => openCatalog(btn)));
+
+// ── 4. Card menu (ti-dots) — delegated from .gp-page ─────────
+document.querySelector('.gp-page')?.addEventListener('click', e => {
+  const btn = e.target.closest('.gp-c-h .right > button');
+  if (!btn?.querySelector('.ti-dots')) return;
+  e.stopPropagation();
+  const card = btn.closest('.gp-c');
+  makePopover(btn, [
+    { label: 'Duplicate',     icon: 'ti-copy' },
+    { label: 'Change metric', icon: 'ti-chart-bar' },
+    { label: 'Change viz',    icon: 'ti-chart-area' },
+    { label: 'Export CSV',    icon: 'ti-table-export' },
+    { label: 'Remove',        icon: 'ti-trash' },
+  ], item => {
+    if (item.label === 'Duplicate') {
+      const clone = card.cloneNode(true);
+      initSizeToggles(clone);
+      card.after(clone);
+      showToast('Card duplicated');
+    } else if (item.label === 'Remove') {
+      card.remove();
+    } else {
+      console.log('TODO:', item.label);
+      showToast(item.label + ' — coming soon');
+    }
+  });
+});
+
+// ── 5. Z-score matrix sort ────────────────────────────────────
+let _zSortBtn = null;
+document.querySelectorAll('.gp-c-h .right > button').forEach(b => { if (b.querySelector('.ti-arrows-sort')) _zSortBtn = b; });
+if (_zSortBtn) {
+  const Z_COLS = ['Player','Distance','HSR','Sprints','Top spd','Accel','Load'];
+  let _zSt = { col: 0, dir: 1 };
+  _zSortBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    _zSt.dir *= -1;
+    if (_zSt.dir === 1) _zSt.col = (_zSt.col + 1) % Z_COLS.length;
+    const tbody = document.querySelector('.gp-view[data-view="grp"] .gp-zt tbody');
+    if (!tbody) return;
+    const rows = [...tbody.querySelectorAll('tr')];
+    rows.sort((a, b) => {
+      const v = tr => {
+        const cells = tr.querySelectorAll('td');
+        if (_zSt.col === 0) return cells[0]?.querySelector('.gp-mn')?.textContent || '';
+        return parseFloat(cells[_zSt.col]?.querySelector('.gp-zc')?.textContent) || 0;
+      };
+      const va = v(a), vb = v(b);
+      return _zSt.dir * (typeof va === 'string' ? va.localeCompare(vb) : va - vb);
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    showToast(`Sort: ${Z_COLS[_zSt.col]} ${_zSt.dir > 0 ? '↑' : '↓'}`);
+  });
+}
+
+// ── 6. .gp-c-pick chips — delegated from .gp-page ────────────
+document.querySelector('.gp-page')?.addEventListener('click', e => {
+  const pick = e.target.closest('.gp-c-pick');
+  if (!pick?.querySelector('.ti-chevron-down')) return;
+  e.stopPropagation();
+  const txt = pick.textContent.trim();
+
+  if (/Role|Squad|Self|Match peak/i.test(txt)) {
+    makePopover(pick, ['vs Role','vs Squad','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
+      pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
+      window.gpState.baseline = item.label;
+      // TODO: fire gp:cardconfig + recalculate z-scores
+    });
+  } else if (/MC\s*\d+\s*vs/i.test(txt)) {
+    makePopover(pick, ['MC 14 vs MC 13','MC 13 vs MC 12','MC 12 vs MC 11'].map(m => ({ label: m })), item => {
+      pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
+      // TODO: re-render weekly bars comparison
+    });
+  } else if (/Bars|Lines/i.test(txt)) {
+    makePopover(pick, [{ label: 'Bars' }, { label: 'Lines' }], item => {
+      pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
+      // TODO: switch chart type
+    });
+  } else if (/Player load|HSR|Distance/i.test(txt)) {
+    makePopover(pick, ['Player load','HSR','Distance','Sprints','Accelerations'].map(m => ({ label: m })), item => {
+      pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
+      pick.classList.add('is-accent');
+      // TODO: re-render metric
+    });
+  } else {
+    showToast('Configuration — coming soon');
+  }
+});
+
+// ── 7. Drawer buttons ─────────────────────────────────────────
+const _drops = document.querySelectorAll('.gp-drop');
+
+// Browse files
+_drops[0]?.querySelector('.cm-btn.is-outline')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.csv,.tsv,.xlsx,.xml,.json' });
+  inp.addEventListener('change', () => {
+    const file = inp.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      console.table(ev.target.result.split('\n').slice(0, 4).map(l => l.split(',')));
+      showToast(`Loaded: ${file.name}`);
+      const h4 = _drops[0].querySelector('h4');
+      if (h4) h4.textContent = file.name;
+    };
+    reader.readAsText(file);
+  });
+  inp.click();
+});
+
+// Download template
+_drops[0]?.querySelector('.cm-btn.is-ghost')?.addEventListener('click', e => {
+  e.stopPropagation();
+  const csv = 'player_name,session_date,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load\n';
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+    download: 'gps_template.csv',
+  });
+  a.click();
+  showToast('Template downloaded');
+});
+
+// Sync now
+const _syncBtn = _drops[1]?.querySelector('.cm-btn.is-outline');
+_syncBtn?.addEventListener('click', e => {
+  e.stopPropagation();
+  _syncBtn.disabled = true;
+  const orig = _syncBtn.innerHTML;
+  _syncBtn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px;animation:gp-spin 1s linear infinite"></i> Syncing…';
+  setTimeout(() => { _syncBtn.innerHTML = orig; _syncBtn.disabled = false; showToast('Sync complete · no new files'); }, 1500);
+});
+
+// Webhook settings
+_drops[1]?.querySelector('.cm-btn.is-ghost')?.addEventListener('click', async e => {
+  e.stopPropagation();
+  const clubId = (await window.getClubId()) || 'YOUR_CLUB_ID';
+  const modal = makeModal('Webhook settings', `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <p style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0">Point your GPS provider's webhook to this endpoint. Each POST auto-imports a GPS session.</p>
+      <div>
+        <label style="display:block;font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px">Endpoint URL</label>
+        <input id="gp-webhook-url" readonly onclick="this.select()"
+          style="width:100%;padding:9px 12px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-mono);box-sizing:border-box">
+      </div>
+      <p style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0">Provider selector and secret key configuration — coming soon.</p>
+    </div>`);
+  modal.querySelector('#gp-webhook-url').value = `https://api.clavametrics.app/webhooks/gps/${clubId}`;
+});
+
+// ── 8. Provider cards ─────────────────────────────────────────
+document.querySelector('.gp-conns')?.addEventListener('click', e => {
+  const card = e.target.closest('.gp-conn');
+  if (!card) return;
+  const name = card.querySelector('h5')?.textContent || 'Provider';
+  console.log('Connect flow:', name);
+  showToast(`${name} — connect flow coming soon`);
+});
+</script>
 
 <script>
 (async () => {

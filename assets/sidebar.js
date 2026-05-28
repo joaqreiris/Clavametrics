@@ -129,6 +129,7 @@
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning' },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history' },
       { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad' },
+      { href: 'Lineup.html',            icon: 'ti-clipboard-check',  label: 'Lineup', count: 'XI' },
       { href: 'Availability.html',      icon: 'ti-user-check',       label: 'Availability' },
       { href: 'Evaluations.html',       icon: 'ti-chart-dots',       label: 'Evaluations' },
       { href: 'Match%20Reports.html',   icon: 'ti-report-analytics', label: 'Match reports' },
