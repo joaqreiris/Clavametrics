@@ -261,7 +261,7 @@
 
   <main class="hub-main">
     <div class="hub-topbar">
-      <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Daily planning</span><span class="sep">/</span><span id="dpCrumbDate">Fri 16 May · MD−2</span></div>
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Daily planning</span><span class="sep">/</span><span id="dpCrumbDate">…</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
     </div>
@@ -271,10 +271,10 @@
       <header class="dp-head">
         <div>
           <h1>Daily planning</h1>
-          <div class="ctx"><span class="save-dot"></span><span id="dpSaveStatus">Autosaved</span> · <span id="dpUserName">…</span></div>
+          <div class="ctx"><span class="save-dot" id="dpSaveDot"></span><span id="dpSaveStatus">—</span> · <span id="dpUserName">…</span></div>
         </div>
         <div class="meta">
-          <div class="dp-pager"><button id="dpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="dpPagerLabel"><i class="ti ti-calendar-event"></i>Fri 16 May<span class="sub">MD−2</span></span><button id="dpNavNext"><i class="ti ti-chevron-right"></i></button></div>
+          <div class="dp-pager"><button id="dpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="dpPagerLabel"><i class="ti ti-calendar-event"></i>…</span><button id="dpNavNext"><i class="ti ti-chevron-right"></i></button></div>
           <button class="cm-btn is-outline is-sm" onclick="dpPrint()"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
           <button class="cm-btn is-outline is-sm" onclick="dpExportPDF()"><i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF</button>
           <button class="cm-btn is-primary is-sm" id="dpPublishBtn" onclick="dpPublish()"><i class="ti ti-share-2" style="font-size:14px"></i>Publish</button>
@@ -290,7 +290,7 @@
         <div class="dp-card-b">
           <div class="dp-fg">
             <div class="dp-f col-4"><label>Session name</label><input type="text" id="dpSessionTitle" placeholder="e.g. Tactical — Defensive organization"></div>
-            <div class="dp-f"><label>Date</label><input type="date" id="dpDateInput" value="2026-05-16"></div>
+            <div class="dp-f"><label>Date</label><input type="date" id="dpDateInput"></div>
             <div class="dp-f"><label>Start time</label><input type="time" id="dpStartTime"></div>
             <div class="dp-f"><label>End time</label><input type="time" id="dpEndTime"></div>
             <div class="dp-f"><label>Microcycle</label>
@@ -470,7 +470,7 @@
 <div id="settings-host"></div>
 
 <script>
-let _dpClubId = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
+let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 
@@ -607,7 +607,6 @@ async function loadDay(dateStr) {
   const today = new Date().toISOString().split('T')[0];
   const subLabel = dateStr === today ? 'today' : '';
   document.getElementById('dpDateInput').value = dateStr;
-  document.getElementById('dpCrumbDate').textContent = fmt;
 
   // Match microcycle for this date
   const mc = _dpMicrocycles.find(m => m.start_date <= dateStr && dateStr <= m.end_date);
@@ -621,30 +620,34 @@ async function loadDay(dateStr) {
   const mcMdLabel = mcMdDiff === null ? '' : mcMdDiff === 0 ? ' · MD' : mcMdDiff > 0 ? ` · MD−${mcMdDiff}` : ` · MD+${Math.abs(mcMdDiff)}`;
   const mcRivalLabel = mc?.rival ? ` · vs ${mc.rival}` : '';
   const mcLabel = mc ? (mc.name + mcMdLabel + mcRivalLabel) : '';
+  document.getElementById('dpCrumbDate').textContent = fmt + (mcMdLabel || '');
   document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : subLabel ? `<span class="sub">${subLabel}</span>` : ''}`;
 
-  const [availRes, adaptRes, sessRes] = await Promise.all([
+  const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle()
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id').eq('club_id', _dpClubId).eq('session_date', dateStr).order('created_at', { ascending: true }).limit(1)
   ]);
-
-  _dpCurrentSessionId = sessRes.data?.id || null;
-  _dpPublished = sessRes.data?.published || false;
-  const sess = sessRes.data;
+  if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
+  const sess = sessResult.data?.[0] || null;
+  _dpCurrentSessionId = sess?.id || null;
+  _dpPublished = sess?.published || false;
   const titleInput = document.getElementById('dpSessionTitle');
   if (sess) {
     if (titleInput) titleInput.value = sess.title || '';
     const st = document.getElementById('dpStartTime'); if (st) st.value = sess.session_time || '';
+    const et = document.getElementById('dpEndTime'); if (et) et.value = sess.end_time || '';
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = sess.session_type || '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = sess.notes || '';
     const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = sess.estimated_rpe || '';
     const so = document.getElementById('dpOrientation'); if (so) so.value = sess.orientation || '';
     const sf = document.getElementById('dpFocus'); if (sf) sf.value = sess.focus || '';
     const sm = document.getElementById('dpMatchDay'); if (sm) sm.value = sess.match_day_offset || '';
+    const mcSel2 = document.getElementById('dpMicrocycle'); if (mcSel2 && sess.microcycle_id) mcSel2.value = sess.microcycle_id;
   } else {
     if (titleInput) titleInput.value = '';
     const st = document.getElementById('dpStartTime'); if (st) st.value = '';
+    const et = document.getElementById('dpEndTime'); if (et) et.value = '';
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = '';
     const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = '';
@@ -656,12 +659,12 @@ async function loadDay(dateStr) {
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
 
   const avMap = {};
-  (availRes.data || []).forEach(a => { avMap[a.player_id] = a; });
+  (avResult.data || []).forEach(a => { avMap[a.player_id] = a; });
   _dpAvMap = avMap;
 
   dpRenderSquad(avMap);
 
-  const withAdapt = (adaptRes.data || []).filter(t => t.adaptation_notes);
+  const withAdapt = (adaptResult.data || []).filter(t => t.adaptation_notes);
   if (withAdapt.length) {
     document.getElementById('dpPhysioCt').textContent = withAdapt.length;
     document.getElementById('dpPhysioList').innerHTML = withAdapt.map(t => {
@@ -887,7 +890,7 @@ function filterLib() {
   }).join('');
 }
 async function addPlannerExercise(exerciseId) {
-  if (!_dpCurrentSessionId) { alert('No session for this date. Create a training session first.'); return; }
+  if (!await dpEnsureSession()) return;
   const ex  = _libExercises.find(e => e.id === exerciseId);
   const pos = document.querySelectorAll('#dpExGrid .dp-ex').length;
   const area = (ex?.field_width && ex?.field_height) ? ex.field_width * ex.field_height : null;
@@ -915,8 +918,8 @@ async function addPlannerExercise(exerciseId) {
 }
 
 // ── Manual exercise ──
-function openManualExModal() {
-  if (!_dpCurrentSessionId) { alert('No session for this date. Create a training session first.'); return; }
+async function openManualExModal() {
+  if (!await dpEnsureSession()) return;
   document.getElementById('manExName').value = '';
   document.getElementById('manExDur').value = '';
   document.getElementById('manExIntensity').value = '';
@@ -942,6 +945,11 @@ async function saveManualExercise() {
 // ── Session info autosave ──
 async function dpAutoSaveSession() {
   const date = _dpCurrentDate;
+  const dotEl  = document.getElementById('dpSaveDot');
+  const statEl = document.getElementById('dpSaveStatus');
+  if (dotEl)  dotEl.style.background = 'var(--cm-warning)';
+  if (statEl) statEl.textContent = 'Saving…';
+
   const TYPE_DEFAULTS = { tactical:'Tactical', conditioning:'Conditioning', gym:'Gym', match:'Match', recovery:'Recovery', other:'Training' };
   const typeVal = document.getElementById('dpSessionType')?.value || 'tactical';
   const nameVal = document.getElementById('dpSessionTitle')?.value?.trim();
@@ -956,31 +964,47 @@ async function dpAutoSaveSession() {
     if (diff > 0) duration = diff;
   }
   if (!duration && _dpSessionTotalMin > 0) duration = _dpSessionTotalMin;
+
+  const mcId = document.getElementById('dpMicrocycle')?.value || null;
   const payload = {
     title,
-    session_date: date,
-    session_type: typeVal,
-    session_time:  startVal,
+    session_date:     date,
+    session_type:     typeVal,
+    session_time:     startVal,
+    end_time:         endVal,
     duration,
-    orientation:   document.getElementById('dpOrientation')?.value || null,
-    focus:         document.getElementById('dpFocus')?.value || null,
+    orientation:      document.getElementById('dpOrientation')?.value || null,
+    focus:            document.getElementById('dpFocus')?.value || null,
     match_day_offset: document.getElementById('dpMatchDay')?.value || null,
-    notes:         document.getElementById('dpNotes')?.value?.trim() || null,
-    estimated_rpe: parseInt(document.getElementById('dpEstRpe')?.value) || null,
-    club_id:       _dpClubId
+    notes:            document.getElementById('dpNotes')?.value?.trim() || null,
+    estimated_rpe:    parseInt(document.getElementById('dpEstRpe')?.value) || null,
+    microcycle_id:    mcId || null,
+    coach_id:         _dpProfile?.id || null,
+    club_id:          _dpClubId
   };
+
+  let saveError = null;
   if (_dpCurrentSessionId) {
-    await window.sb.from('training_sessions').update(payload).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
+    const { error } = await window.sb.from('training_sessions').update(payload).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
+    saveError = error;
   } else {
-    const { data } = await window.sb.from('training_sessions').insert(payload).select('id').single();
-    if (data?.id) {
+    const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+    saveError = error;
+    if (!error && data?.id) {
       _dpCurrentSessionId = data.id;
       await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
       _dpUpdatePublishBtn();
     }
   }
-  const s = document.getElementById('dpSaveStatus');
-  if (s) { s.textContent = 'Saved'; setTimeout(() => { s.textContent = 'Autosaved'; }, 2500); }
+
+  if (saveError) {
+    console.error('Session save error:', saveError.message);
+    if (dotEl)  dotEl.style.background = 'var(--cm-danger)';
+    if (statEl) statEl.textContent = 'Error saving';
+    return;
+  }
+  if (dotEl)  dotEl.style.background = 'var(--cm-success)';
+  if (statEl) { statEl.textContent = 'Saved · just now'; setTimeout(() => { if (statEl.textContent === 'Saved · just now') statEl.textContent = 'Autosaved'; }, 3000); }
 }
 
 function dpQueueSave() {
@@ -990,6 +1014,12 @@ function dpQueueSave() {
 
 async function dpCreateSession() {
   await dpAutoSaveSession();
+}
+
+async function dpEnsureSession() {
+  if (_dpCurrentSessionId) return true;
+  await dpAutoSaveSession();
+  return !!_dpCurrentSessionId;
 }
 
 // ── Print Roster ──
@@ -1049,7 +1079,7 @@ async function loadActivationActivities(sessionId) {
 }
 
 async function dpActAdd() {
-  if (!_dpCurrentSessionId) { alert('No session for this date. Create a training session first.'); return; }
+  if (!await dpEnsureSession()) return;
   const pos = document.querySelectorAll('#dpActStrip .dp-act-pill').length;
   const { error } = await window.sb.from('session_exercises').insert({
     club_id: _dpClubId, session_id: _dpCurrentSessionId,
@@ -1162,6 +1192,7 @@ async function dpExportPDF() {
 
   if (club) await window.applyClubTheme();
 
+  _dpProfile = profile;
   const nameEl = document.getElementById('dpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
 
@@ -1192,6 +1223,17 @@ async function dpExportPDF() {
   (adaptRes.data || []).forEach(t => { if (!_dpAdaptMap[t.player_id]) _dpAdaptMap[t.player_id] = t; });
 
   await loadDay(initDate);
+
+  // Update save indicator after initial load
+  const initDot  = document.getElementById('dpSaveDot');
+  const initStat = document.getElementById('dpSaveStatus');
+  if (_dpCurrentSessionId) {
+    if (initDot)  initDot.style.background = 'var(--cm-success)';
+    if (initStat) initStat.textContent = 'Autosaved';
+  } else {
+    if (initDot)  initDot.style.background = 'var(--cm-fg-faint)';
+    if (initStat) initStat.textContent = 'Not saved';
+  }
 
   if (new URLSearchParams(window.location.search).get('openCreate') === '1') {
     await dpAutoSaveSession();
