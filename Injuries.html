@@ -355,7 +355,7 @@
         <div class="inj-segs">
           <button class="inj-seg is-on" data-tab="active"><i class="ti ti-activity-heartbeat"></i>Active<span class="ct">—</span></button>
           <button class="inj-seg" data-tab="returning"><i class="ti ti-progress"></i>Returning<span class="ct">—</span></button>
-          <button class="inj-seg" data-tab="resolved"><i class="ti ti-check"></i>Resolved<span class="ct">—</span></button>
+          <button class="inj-seg" data-tab="cleared"><i class="ti ti-check"></i>Resolved<span class="ct">—</span></button>
         </div>
         <div style="width:1px;height:24px;background:var(--cm-border)"></div>
         <button class="inj-pill is-on" data-sev="all">All<span class="ct">—</span></button>
@@ -1769,7 +1769,7 @@ function updateKPIs() {
   document.getElementById('kpiDaysLost').innerHTML = `${daysLost} <sub>days</sub>`;
 
   // Avg RTP
-  const resolved = _allInjuries.filter(i => i.status === 'resolved' && i.returned_date && i.start_date);
+  const resolved = _allInjuries.filter(i => (i.status === 'cleared' || i.status === 'resolved') && i.returned_date && i.start_date);
   const avgRTP = resolved.length
     ? Math.round(resolved.reduce((s, i) => s + Math.max(0, Math.round((new Date(i.returned_date) - new Date(i.start_date)) / 86400000)), 0) / resolved.length)
     : null;
@@ -1814,7 +1814,7 @@ function getCurrentPhaseNumber(injId) {
 // returning = status=active AND current phase 4-6 (Return to running/training/play)
 // resolved = status=resolved
 function getInjuryTab(inj) {
-  if (inj.status === 'resolved') return 'resolved';
+  if (inj.status === 'cleared' || inj.status === 'resolved') return 'cleared';
   const phNum = getCurrentPhaseNumber(inj.id);
   if (phNum === null) {
     // No phases → fall back to time-based estimate
@@ -2094,7 +2094,7 @@ function renderBodyMap() {
     const k = inj.body_area.toLowerCase().trim();
     if (!areaMap[k]) areaMap[k] = { area: inj.body_area, total: 0, active: 0 };
     areaMap[k].total++;
-    if (inj.status === 'active') areaMap[k].active++;
+    if (inj.status !== 'cleared' && inj.status !== 'resolved') areaMap[k].active++;
   });
 
   let antHtml = '', postHtml = '';
@@ -2126,7 +2126,7 @@ function renderBodyMap() {
 
   document.getElementById('svgAnt').innerHTML  = antHtml;
   document.getElementById('svgPost').innerHTML = postHtml;
-  const activeCount = _allInjuries.filter(i => i.status === 'active').length;
+  const activeCount = _allInjuries.filter(i => i.status !== 'cleared' && i.status !== 'resolved').length;
   document.getElementById('bodyMapSub').textContent = `${activeCount} active · season`;
 }
 
@@ -2140,8 +2140,8 @@ function showBodyAreaPopover(areaKey, clientX, clientY) {
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '—';
   const SEV_LABEL = { minor:'Minor', moderate:'Moderate', severe:'Severe' };
-  const statusColor = inj => inj.status === 'resolved' ? 'var(--cm-success)' : getInjuryTab(inj) === 'returning' ? '#EA580C' : 'var(--cm-danger)';
-  const statusLabel = inj => inj.status === 'resolved' ? 'Resolved' : getInjuryTab(inj) === 'returning' ? 'Returning' : 'Active';
+  const statusColor = inj => (inj.status === 'cleared' || inj.status === 'resolved') ? 'var(--cm-success)' : getInjuryTab(inj) === 'returning' ? '#EA580C' : 'var(--cm-danger)';
+  const statusLabel = inj => (inj.status === 'cleared' || inj.status === 'resolved') ? 'Resolved' : getInjuryTab(inj) === 'returning' ? 'Returning' : 'Active';
 
   document.getElementById('bmpAreaTitle').textContent = injuries[0].body_area || areaKey;
 
@@ -2231,8 +2231,8 @@ function renderTypeBreakdown() {
 function renderRecentlyResolved() {
   const el   = document.getElementById('injResolved');
   const sub  = document.getElementById('injResolvedSub');
-  const list = _allInjuries.filter(i => i.status === 'resolved').slice(0,6);
-  if (sub) sub.textContent = `${_allInjuries.filter(i=>i.status==='resolved').length} total`;
+  const list = _allInjuries.filter(i => i.status === 'cleared' || i.status === 'resolved').slice(0,6);
+  if (sub) sub.textContent = `${_allInjuries.filter(i => i.status === 'cleared' || i.status === 'resolved').length} total`;
   if (!el) return;
   if (!list.length) {
     el.style.cssText = 'color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center';
@@ -2461,7 +2461,7 @@ async function confirmDischarge() {
     : (inj?.notes || null);
 
   const { error } = await window.sb.from('injuries').update({
-    status: 'resolved', returned_date: returnDate, notes
+    status: 'cleared', returned_date: returnDate, notes
   }).eq('id', _dischargeId);
   if (error) { alert('Error: ' + error.message); return; }
 
@@ -2514,8 +2514,23 @@ async function confirmDischarge() {
     }
   } catch(e) { console.warn('[Injuries] notifications insert failed:', e.message); }
 
+  // Step 4: post message to club chat
+  try {
+    const pl    = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
+    const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
+    const retFmt = new Date(returnDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    await window.sb.from('messages').insert({
+      club_id:      _clubId,
+      sender_id:    _profile?.id || null,
+      sender_name:  _profile?.full_name || 'Medical Staff',
+      content:      `Medical clearance: ${pName} — ${inj?.injury_type || 'injury'} — cleared ${retFmt}.${disNotes ? '\n' + disNotes : ''}`,
+      message_type: 'medical_clearance',
+      recipient_id: null
+    });
+  } catch(e) { console.warn('[Injuries] chat message failed:', e.message); }
+
   // Update local state
-  if (inj) { inj.status = 'resolved'; inj.returned_date = returnDate; if (notes) inj.notes = notes; }
+  if (inj) { inj.status = 'cleared'; inj.returned_date = returnDate; if (notes) inj.notes = notes; }
 
   closeDischarge();
   updateKPIs();
