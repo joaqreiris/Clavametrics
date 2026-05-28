@@ -309,6 +309,31 @@
   .mc-evt.video .ti { color:#64748B; }
   .mc-evt.day-off { font-style:italic; color:var(--cm-fg-faint); border:1px dashed var(--cm-border); background:transparent; }
 
+  /* Meal types */
+  .mc-evt.breakfast,.mc-evt.lunch,.mc-evt.dinner { background:var(--cm-warning-bg); border-color:var(--cm-warning-bd); color:#92400E; }
+  .mc-evt.breakfast .ti,.mc-evt.lunch .ti,.mc-evt.dinner .ti { color:var(--cm-warning); }
+  .mc-evt.breakfast .time,.mc-evt.lunch .time,.mc-evt.dinner .time { color:#78350F; }
+
+  /* Logistics: hotel / bus */
+  .mc-evt.hotel,.mc-evt.bus { background:var(--cm-bg-soft); border-color:var(--cm-border); color:var(--cm-fg-muted); }
+  .mc-evt.hotel .ti,.mc-evt.bus .ti { color:var(--cm-fg-faint); }
+
+  /* Press conference */
+  .mc-evt.press { background:var(--cm-info-bg); border-color:var(--cm-info-bd); color:#334155; }
+  .mc-evt.press .ti { color:#64748B; }
+
+  /* Medical check */
+  .mc-evt.medical { background:color-mix(in srgb, var(--cm-danger-bg) 70%, var(--cm-bg-soft)); border-color:var(--cm-danger-bd); color:#7F1D1D; }
+  .mc-evt.medical .ti { color:var(--cm-danger); }
+
+  /* Walkthrough (activation pre-match, lighter than training) */
+  .mc-evt.walkthrough { background:color-mix(in srgb, var(--cm-info-bg) 55%, var(--cm-surface)); border-color:var(--cm-border-soft); color:#1D4ED8; }
+  .mc-evt.walkthrough .ti { color:var(--cm-info); }
+
+  /* Scouting (like video session) */
+  .mc-evt.scouting { background:#F8FAFC; border-color:#CBD5E1; color:#334155; }
+  .mc-evt.scouting .ti { color:#64748B; }
+
   /* === Right rail cards === */
   .cal-rail { display:flex; flex-direction:column; gap:14px; width:280px; min-width:280px; max-width:280px; flex-shrink:0; }
 
@@ -775,15 +800,39 @@
         <div class="sq-modal-field">
           <label for="calEvtF_type">Type</label>
           <select id="calEvtF_type">
-            <option value="tactical">Training (field)</option>
-            <option value="gym">Gym</option>
-            <option value="match">Match</option>
-            <option value="recovery">Recovery</option>
-            <option value="travel">Travel</option>
-            <option value="meeting">Meeting</option>
-            <option value="evaluation">Evaluation</option>
-            <option value="video_session">Video session</option>
-            <option value="other">Other</option>
+            <optgroup label="Training">
+              <option value="tactical">Training (field)</option>
+              <option value="gym">Gym</option>
+              <option value="recovery">Recovery</option>
+              <option value="walkthrough">Walkthrough / activation</option>
+            </optgroup>
+            <optgroup label="Match">
+              <option value="match">Match</option>
+              <option value="scouting">Scouting</option>
+            </optgroup>
+            <optgroup label="Meals">
+              <option value="breakfast">Breakfast</option>
+              <option value="lunch">Lunch</option>
+              <option value="dinner">Dinner</option>
+            </optgroup>
+            <optgroup label="Logistics">
+              <option value="hotel_checkin">Hotel check-in</option>
+              <option value="hotel_checkout">Hotel check-out</option>
+              <option value="bus_departure">Bus departure</option>
+              <option value="bus_arrival">Bus arrival</option>
+              <option value="travel">Travel</option>
+            </optgroup>
+            <optgroup label="Obligations">
+              <option value="press">Press conference</option>
+              <option value="medical_check">Medical check</option>
+              <option value="meeting">Meeting</option>
+              <option value="evaluation">Evaluation</option>
+              <option value="video_session">Video session</option>
+            </optgroup>
+            <optgroup label="Other">
+              <option value="day_off">Day off</option>
+              <option value="other">Other</option>
+            </optgroup>
           </select>
         </div>
         <div class="sq-modal-field">
@@ -791,8 +840,37 @@
           <input type="date" id="calEvtF_date">
         </div>
       </div>
+      <!-- Recurrence toggle (new events only) -->
+      <div class="sq-modal-row" id="calEvtRepeatRow">
+        <div class="sq-modal-field" style="grid-column:1/-1">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">
+            <input type="checkbox" id="calEvtF_repeat" style="width:14px;height:14px;cursor:pointer">
+            Repeat this event
+          </label>
+          <div id="calEvtRecurBlock" style="display:none;margin-top:10px;padding:12px;border:1px solid var(--cm-border-soft);border-radius:var(--cm-r-3);background:var(--cm-bg-soft)">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+              <div class="sq-modal-field">
+                <label for="calEvtF_pattern">Pattern</label>
+                <select id="calEvtF_pattern">
+                  <option value="daily">Every day</option>
+                  <option value="weekdays">Weekdays</option>
+                  <option value="custom">Custom dates</option>
+                </select>
+              </div>
+              <div class="sq-modal-field" id="calEvtRecurUntilWrap">
+                <label for="calEvtF_until">Until</label>
+                <input type="date" id="calEvtF_until">
+              </div>
+            </div>
+            <div class="sq-modal-field" id="calEvtCustomDatesWrap" style="display:none">
+              <label for="calEvtF_customDates">Custom dates (one per line, YYYY-MM-DD)</label>
+              <textarea id="calEvtF_customDates" rows="4" placeholder="2026-06-01&#10;2026-06-02&#10;2026-06-03"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="sq-modal-row">
-        <div class="sq-modal-field">
+        <div class="sq-modal-field" id="calEvtDurationWrap">
           <label for="calEvtF_duration">Duration (min)</label>
           <input type="number" id="calEvtF_duration" placeholder="e.g. 90" min="5" max="300">
         </div>
@@ -885,6 +963,7 @@
     </div>
     <div class="sq-modal-foot">
       <button class="cm-btn is-danger is-sm" id="calEvtDelete" style="display:none"><i class="ti ti-trash" style="font-size:13px"></i>Delete</button>
+      <button class="cm-btn is-ghost is-sm" id="calEvtDeleteSeries" style="display:none;color:var(--cm-danger)"><i class="ti ti-trash" style="font-size:13px"></i>Delete series</button>
       <a id="calEvtPlanLink" href="#" style="display:none;align-items:center;gap:5px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-accent);text-decoration:none"><i class="ti ti-external-link" style="font-size:13px"></i><span id="calEvtPlanLinkLabel">Open in planning</span></a>
       <div class="grow"></div>
       <span id="calEvtSaving" style="display:none;font:var(--cm-meta);color:var(--cm-fg-muted)">Saving…</span>
@@ -1090,18 +1169,33 @@ const TODAY = new Date().toISOString().split('T')[0];
 const EVT_ICONS = {
   training:'ti-soccer-field', gym:'ti-barbell', match:'ti-ball-football',
   recovery:'ti-heart-rate-monitor', travel:'ti-plane',
-  meeting:'ti-users', evaluation:'ti-clipboard-list', video:'ti-device-desktop'
+  meeting:'ti-users', evaluation:'ti-clipboard-list', video:'ti-device-desktop',
+  breakfast:'ti-coffee', lunch:'ti-soup', dinner:'ti-tools-kitchen',
+  hotel:'ti-bed', bus:'ti-bus',
+  press:'ti-microphone', medical:'ti-stethoscope',
+  walkthrough:'ti-walk', scouting:'ti-binoculars',
+  'day-off':'ti-beach',
 };
 function focusToClass(focus) {
   if (!focus) return 'training';
   const f = focus.toLowerCase();
-  if (f === 'match')             return 'match';
-  if (f === 'gym')               return 'gym';
-  if (f === 'recovery')          return 'recovery';
-  if (f === 'travel')            return 'travel';
-  if (f === 'meeting')           return 'meeting';
-  if (f === 'evaluation')        return 'evaluation';
+  if (f === 'match')                                         return 'match';
+  if (f === 'gym')                                           return 'gym';
+  if (f === 'recovery')                                      return 'recovery';
+  if (f === 'travel')                                        return 'travel';
+  if (f === 'meeting')                                       return 'meeting';
+  if (f === 'evaluation')                                    return 'evaluation';
   if (f === 'video' || f === 'video-session' || f === 'video_session') return 'video';
+  if (f === 'breakfast')                                     return 'breakfast';
+  if (f === 'lunch')                                         return 'lunch';
+  if (f === 'dinner')                                        return 'dinner';
+  if (f === 'hotel_checkin' || f === 'hotel_checkout')       return 'hotel';
+  if (f === 'bus_departure' || f === 'bus_arrival')          return 'bus';
+  if (f === 'press')                                         return 'press';
+  if (f === 'medical_check')                                 return 'medical';
+  if (f === 'walkthrough')                                   return 'walkthrough';
+  if (f === 'scouting')                                      return 'scouting';
+  if (f === 'day_off')                                       return 'day-off';
   return 'training'; // tactical, conditioning, other, training
 }
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1427,7 +1521,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
       .eq('club_id', _clubId)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
-      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url')
+      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id')
       .eq('club_id', _clubId)
       .gte('date', dateFrom).lte('date', dateTo).order('date')
   ]);
@@ -1445,6 +1539,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
     home_away: e.home_away, start_time: e.start_time, location: e.location,
     sort_order: e.sort_order, estimated_rpe: e.estimated_rpe,
     rival_crest_url: e.rival_crest_url || null,
+    recurrence_group_id: e.recurrence_group_id || null,
     source: 'event'
   }));
   return { data: [...norm, ...evts].sort((a, b) => {
@@ -1553,7 +1648,38 @@ async function renderWorkload() {
 }
 
 // ── Event modal ───────────────────────────────────────────────
-const CAL_EVT_TYPES = ['match','recovery','travel','meeting','evaluation','video_session'];
+const CAL_EVT_TYPES = [
+  'match','recovery','travel','meeting','evaluation','video_session',
+  'breakfast','lunch','dinner',
+  'hotel_checkin','hotel_checkout','bus_departure','bus_arrival',
+  'press','medical_check','walkthrough','scouting','day_off',
+];
+
+const DURATION_DEFAULTS = {
+  tactical:90, gym:60, recovery:60, match:90, video_session:60, meeting:60, evaluation:60, travel:null, other:null,
+  breakfast:45, lunch:60, dinner:60,
+  hotel_checkin:30, hotel_checkout:30, bus_departure:15, bus_arrival:15,
+  press:30, medical_check:30, walkthrough:30, scouting:60,
+  day_off:null,
+};
+
+function generateRecurrenceDates(startDate, pattern, until, customDatesText) {
+  if (pattern === 'custom') {
+    return (customDatesText || '').split('\n').map(l => l.trim()).filter(l => /^\d{4}-\d{2}-\d{2}$/.test(l));
+  }
+  if (!until) return [startDate];
+  const dates = [];
+  let cur = new Date(startDate + 'T12:00:00');
+  const end = new Date(until + 'T12:00:00');
+  while (cur <= end) {
+    const dow = cur.getDay();
+    if (pattern === 'daily' || (pattern === 'weekdays' && dow >= 1 && dow <= 5)) {
+      dates.push(cur.toISOString().slice(0, 10));
+    }
+    cur = new Date(cur.getTime() + 86400000);
+  }
+  return dates;
+}
 
 function toggleMatchFields(type) {
   const el = document.getElementById('calEvtMatchFields');
@@ -1606,10 +1732,28 @@ function openEvtModal(session, defaultDate) {
   const evtType = session?.session_type || 'tactical';
   document.getElementById('calEvtF_type').value  = evtType;
   document.getElementById('calEvtF_date').value  = session?.session_date || defaultDate || TODAY;
-  document.getElementById('calEvtF_duration').value = session?.duration || '';
+
+  // Duration: use saved value, or apply default for new events
+  const savedDur = session?.duration;
+  document.getElementById('calEvtF_duration').value = savedDur != null ? savedDur : (DURATION_DEFAULTS[evtType] ?? '');
+
+  // day_off: hide duration field
+  const durWrap = document.getElementById('calEvtDurationWrap');
+  if (durWrap) durWrap.style.display = evtType === 'day_off' ? 'none' : '';
+
   document.getElementById('calEvtF_notes').value = session?.notes || '';
   document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
   document.getElementById('calEvtSaving').style.display = 'none';
+
+  // Delete series button: show only when editing a recurring event
+  const delSeriesBtn = document.getElementById('calEvtDeleteSeries');
+  if (delSeriesBtn) delSeriesBtn.style.display = (session?.recurrence_group_id) ? 'inline-flex' : 'none';
+
+  // Recurrence: only show toggle for new events; reset state
+  const repeatRow = document.getElementById('calEvtRepeatRow');
+  if (repeatRow) repeatRow.style.display = session ? 'none' : '';
+  const repeatChk = document.getElementById('calEvtF_repeat');
+  if (repeatChk) { repeatChk.checked = false; document.getElementById('calEvtRecurBlock').style.display = 'none'; }
 
   // Match extra fields
   document.getElementById('calEvtF_opponent').value    = session?.opponent    || '';
@@ -1676,19 +1820,67 @@ async function saveEvt() {
   const type        = document.getElementById('calEvtF_type').value;
   const title       = document.getElementById('calEvtF_title').value.trim();
   const date        = document.getElementById('calEvtF_date').value;
-  const duration    = parseInt(document.getElementById('calEvtF_duration').value) || null;
+  const duration    = type === 'day_off' ? null : (parseInt(document.getElementById('calEvtF_duration').value) || null);
   const notes       = document.getElementById('calEvtF_notes').value.trim() || null;
   const estimatedRpe = parseInt(document.getElementById('calEvtF_rpe').value) || null;
+  const startTimeVal = document.getElementById('calEvtF_starttime').value || null;
 
   if (!title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
+
+  // Validation: day_off conflict (soft)
+  if (type === 'day_off' && !_editEvtId) {
+    const dayEvts = _sessions.filter(s => s.session_date === date && s.session_type !== 'day_off');
+    if (dayEvts.length > 0 && !confirm(`There are ${dayEvts.length} other event(s) on ${date}. Save day off anyway?`)) {
+      saving.style.display='none'; saveBtn.disabled=false; return;
+    }
+  }
+
+  // Validation: duplicate meal time (soft)
+  if (['breakfast','lunch','dinner'].includes(type) && startTimeVal && !_editEvtId) {
+    const clash = _sessions.find(s => s.session_date === date && s.session_type === type && s.start_time && s.start_time.slice(0,5) === startTimeVal.slice(0,5));
+    if (clash && !confirm(`A ${type} at ${startTimeVal.slice(0,5)} already exists on ${date}. Save anyway?`)) {
+      saving.style.display='none'; saveBtn.disabled=false; return;
+    }
+  }
+
+  // Type-change cleanup: if editing and was 'match', clear match-only fields
+  const prevType = _sessions.find(s => s.id === _editEvtId)?.session_type;
+  const matchFieldsToClear = (prevType === 'match' && type !== 'match')
+    ? { opponent: null, home_away: null, competition: null, location: null, rival_crest_url: null }
+    : {};
 
   const clubId = _clubId || await window.getClubId();
   const isCalEvt = CAL_EVT_TYPES.includes(type);
   let error;
 
-  const startTimeVal = document.getElementById('calEvtF_starttime').value || null;
+  // Recurrence (new events only)
+  const repeatChecked = !_editEvtId && document.getElementById('calEvtF_repeat')?.checked;
+  if (repeatChecked) {
+    const pattern     = document.getElementById('calEvtF_pattern').value;
+    const until       = document.getElementById('calEvtF_until').value;
+    const customDates = document.getElementById('calEvtF_customDates').value;
+    const dates = generateRecurrenceDates(date, pattern, until, customDates);
+    if (!dates.length) { showCalToast('No dates generated — check recurrence settings.'); saving.style.display='none'; saveBtn.disabled=false; return; }
+    const groupId = crypto.randomUUID();
+    const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, recurrence_group_id: groupId };
+    if (type === 'match') {
+      basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
+      basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
+      basePayload.competition = document.getElementById('calEvtF_competition').value || null;
+      basePayload.location    = document.getElementById('calEvtF_location').value.trim() || null;
+    }
+    const rows = dates.map(d => ({ ...basePayload, date: d }));
+    ({ error } = await window.sb.from('calendar_events').insert(rows));
+    saving.style.display = 'none'; saveBtn.disabled = false;
+    if (error) { showCalToast('Error: ' + error.message); return; }
+    closeEvtModal();
+    showCalToast(`${rows.length} events created.`);
+    await loadSessions();
+    return;
+  }
+
   if (isCalEvt) {
-    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal };
+    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, ...matchFieldsToClear };
     if (type === 'match') {
       payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
@@ -1753,19 +1945,47 @@ async function deleteEvt() {
   await loadSessions();
 }
 
+async function deleteEvtSeries() {
+  const s = _sessions.find(x => x.id === _editEvtId);
+  if (!s?.recurrence_group_id) return;
+  if (!confirm('Delete ALL events in this series?')) return;
+  const { error } = await window.sb.from('calendar_events').delete().eq('recurrence_group_id', s.recurrence_group_id);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  closeEvtModal(); showCalToast('Series deleted.');
+  await loadSessions();
+}
+
 document.getElementById('calEvtClose').addEventListener('click', closeEvtModal);
 document.getElementById('calEvtCancel').addEventListener('click', closeEvtModal);
 document.getElementById('calEvtSave').addEventListener('click', saveEvt);
 document.getElementById('calEvtDelete').addEventListener('click', deleteEvt);
+document.getElementById('calEvtDeleteSeries').addEventListener('click', deleteEvtSeries);
 document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeEvtModal(); });
 document.getElementById('calEvtF_type').addEventListener('change', function() {
-  toggleMatchFields(this.value);
-  toggleRpeRow(this.value);
+  const t = this.value;
+  toggleMatchFields(t);
+  toggleRpeRow(t);
   updateAuPreview();
+  // Duration default on type change (only when field is blank or user hasn't typed)
+  const durEl = document.getElementById('calEvtF_duration');
+  if (durEl && !_editEvtId) { durEl.value = DURATION_DEFAULTS[t] ?? ''; }
+  // day_off: hide duration
+  const durWrap = document.getElementById('calEvtDurationWrap');
+  if (durWrap) durWrap.style.display = t === 'day_off' ? 'none' : '';
 });
 document.getElementById('calEvtF_duration').addEventListener('input', updateAuPreview);
 document.getElementById('calEvtF_rpe').addEventListener('change', updateAuPreview);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvtModal(); });
+
+// Recurrence toggle wiring
+document.getElementById('calEvtF_repeat').addEventListener('change', function() {
+  document.getElementById('calEvtRecurBlock').style.display = this.checked ? '' : 'none';
+});
+document.getElementById('calEvtF_pattern').addEventListener('change', function() {
+  const isCustom = this.value === 'custom';
+  document.getElementById('calEvtRecurUntilWrap').style.display = isCustom ? 'none' : '';
+  document.getElementById('calEvtCustomDatesWrap').style.display = isCustom ? '' : 'none';
+});
 
 // Reload sessions when user returns to this tab (sync changes from Daily/Gym Planning)
 document.addEventListener('visibilitychange', () => {
@@ -2130,8 +2350,24 @@ document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg
 })));
 
 // ── Month view ────────────────────────────────────────────────
-const EVT_BG = { training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)', travel:'var(--cm-warning-bg)', meeting:'var(--cm-bg-soft)', evaluation:'var(--cm-warning-bg)', video:'var(--cm-info-bg)' };
-const EVT_CLR = { training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)', travel:'var(--cm-warning)', meeting:'var(--cm-fg-muted)', evaluation:'var(--cm-warning)', video:'var(--cm-info)' };
+const EVT_BG = {
+  training:'var(--cm-info-bg)', gym:'var(--cm-violet-bg)', match:'var(--cm-danger-bg)', recovery:'var(--cm-success-bg)',
+  travel:'var(--cm-warning-bg)', meeting:'var(--cm-bg-soft)', evaluation:'var(--cm-warning-bg)', video:'var(--cm-info-bg)',
+  breakfast:'var(--cm-warning-bg)', lunch:'var(--cm-warning-bg)', dinner:'var(--cm-warning-bg)',
+  hotel:'var(--cm-bg-soft)', bus:'var(--cm-bg-soft)',
+  press:'var(--cm-info-bg)', medical:'var(--cm-danger-bg)',
+  walkthrough:'var(--cm-info-bg)', scouting:'var(--cm-bg-soft)',
+  'day-off':'transparent',
+};
+const EVT_CLR = {
+  training:'var(--cm-info)', gym:'var(--cm-violet)', match:'var(--cm-danger)', recovery:'var(--cm-success)',
+  travel:'var(--cm-warning)', meeting:'var(--cm-fg-muted)', evaluation:'var(--cm-warning)', video:'var(--cm-info)',
+  breakfast:'var(--cm-warning)', lunch:'var(--cm-warning)', dinner:'var(--cm-warning)',
+  hotel:'var(--cm-fg-muted)', bus:'var(--cm-fg-muted)',
+  press:'var(--cm-info)', medical:'var(--cm-danger)',
+  walkthrough:'var(--cm-info)', scouting:'var(--cm-fg-muted)',
+  'day-off':'var(--cm-fg-faint)',
+};
 
 async function renderMonthView() {
   const y = _monthY, m = _monthM;
@@ -2638,15 +2874,25 @@ async function renderUpcoming() {
     return;
   }
 
-  const typeLabel = { match: 'MATCH', training: 'TRAINING', gym: 'GYM', travel: 'TRAVEL', recovery: 'RECOVERY', tactical: 'TACTICAL', physical: 'PHYSICAL' };
-  const typeCls   = { match: 't-match', training: 't-training', gym: 't-gym', travel: 't-travel', recovery: 't-recovery' };
+  const TYPE_LABELS = {
+    match:'MATCH', training:'TRAINING', gym:'GYM', travel:'TRAVEL', recovery:'RECOVERY',
+    tactical:'TRAINING', conditioning:'TRAINING', physical:'TRAINING', other:'OTHER',
+    breakfast:'BREAKFAST', lunch:'LUNCH', dinner:'DINNER',
+    hotel_checkin:'CHECK-IN', hotel_checkout:'CHECK-OUT',
+    bus_departure:'BUS DEP', bus_arrival:'BUS ARR',
+    press:'PRESS', medical_check:'MEDICAL',
+    walkthrough:'WALKTHRU', scouting:'SCOUTING',
+    day_off:'DAY OFF', meeting:'MEETING', evaluation:'EVAL', video_session:'VIDEO',
+  };
 
   container.innerHTML = items.slice(0, 6).map(item => {
     const d      = new Date(item.date + 'T12:00:00');
     const month  = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const day    = d.getDate();
-    const label  = typeLabel[item.type] || (item.type || 'EVENT').toUpperCase();
-    const cls    = typeCls[item.type] || '';
+    const label  = TYPE_LABELS[item.type] || (item.type || 'EVENT').toUpperCase().replace(/_/g,' ');
+    const cat    = focusToClass(item.type);
+    const badgeBg  = EVT_BG[cat]  || EVT_BG.training;
+    const badgeClr = EVT_CLR[cat] || EVT_CLR.training;
     const isMatch = item.type === 'match';
     const dStyle = isMatch ? 'background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)' : '';
     const mStyle = isMatch ? 'color:var(--cm-danger)' : '';
@@ -2660,7 +2906,7 @@ async function renderUpcoming() {
         <div class="upcoming-date" style="${dStyle}"><div class="m" style="${mStyle}">${month}</div><div class="d" style="${mStyle}">${day}</div></div>
         <div class="upcoming-body">
           <div class="upcoming-title" style="display:flex;align-items:center;gap:5px">${crestChip}${item.title}</div>
-          <div class="upcoming-meta"><span class="badge ${cls}">${label}</span>${loc}${timeChip}</div>
+          <div class="upcoming-meta"><span class="badge" style="background:${badgeBg};color:${badgeClr}">${label}</span>${loc}${timeChip}</div>
         </div>
         <div></div>
       </div>`;
