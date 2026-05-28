@@ -952,6 +952,14 @@
     wireExport();
     wireColorPickers();
 
+    // Wire formation + style save debounce (no Supabase needed, safe to do now)
+    document.querySelectorAll('.lu-form-btn').forEach(b => {
+      b.addEventListener('click', () => scheduleSave());
+    });
+    document.querySelectorAll('.style-tab').forEach(b => {
+      b.addEventListener('click', () => scheduleSave());
+    });
+
     // Sync render before Supabase data arrives so page isn't blank
     applyFormation();
     applyStyle();
@@ -970,6 +978,11 @@
       loadCoachInfo(_clubId),
       renderStaff(_clubId),
     ]);
+
+    // Players are ready — show clickable slots immediately.
+    // Don't wait for the lineup/match sequential chain below.
+    renderComposer();
+    applyFormation();
 
     // Load next match from calendar_events
     const match = await loadNextMatch(_clubId);
@@ -1006,14 +1019,6 @@
         if (subs.length)     state.subs = subs;
       }
     }
-
-    // Wire formation + style save debounce
-    document.querySelectorAll('.lu-form-btn').forEach(b => {
-      b.addEventListener('click', () => scheduleSave());
-    });
-    document.querySelectorAll('.style-tab').forEach(b => {
-      b.addEventListener('click', () => scheduleSave());
-    });
 
     // Load crests and wire rival upload
     await loadBranding(_clubId, match?.opponent || '');
