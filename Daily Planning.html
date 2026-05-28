@@ -624,9 +624,9 @@ async function loadDay(dateStr) {
   document.getElementById('dpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : subLabel ? `<span class="sub">${subLabel}</span>` : ''}`;
 
   const [availRes, adaptRes, sessRes] = await Promise.all([
-    window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: [] })),
-    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: null })),
-    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle().catch(() => ({ data: null }))
+    window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
+    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
+    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle()
   ]);
 
   _dpCurrentSessionId = sessRes.data?.id || null;
@@ -1182,8 +1182,7 @@ async function dpExportPDF() {
       .eq('notify_coaches', true)
       .gte('adaptation_sent_at', yesterday7)
       .gte('date', yesterday)
-      .order('adaptation_sent_at', { ascending: false })
-      .catch(() => ({ data: [] })),
+      .order('adaptation_sent_at', { ascending: false }),
   ]);
 
   _dpPlayers = playersRes.data || [];

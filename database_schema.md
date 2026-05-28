@@ -265,6 +265,295 @@ Important columns:
 
 ---
 
+# TABLE: microcycles
+
+Purpose:
+Weekly training blocks with match reference.
+
+Important columns:
+- id (uuid)
+- club_id (uuid)
+- name
+- start_date
+- end_date
+- match_date
+- match_time
+- rival
+- home_away (home/away/neutral)
+- stadium
+- color
+- type
+- notes
+- publish_players, publish_medical, published_at
+- created_at
+
+---
+
+# TABLE: calendar_events
+
+Purpose:
+Non-training events: matches, travel, meetings, evaluations, video sessions, recovery.
+
+Important columns:
+- id (uuid)
+- club_id (uuid)
+- created_by (uuid)
+- title
+- type (travel/meeting/evaluation/video_session/match/recovery)
+- date (DATE)
+- start_time (TIME)
+- end_time (TIME)
+- duration_minutes
+- location
+- opponent
+- competition (league/cup/international/friendly)
+- home_away (home/away/neutral)
+- notes
+- published (boolean)
+- rival_crest_url — added by migration 020/022
+- created_at, updated_at
+
+Used by:
+- Lineup (loadNextMatch)
+- Calendar
+- Global Search
+
+---
+
+# TABLE: lineups
+
+Purpose:
+Official lineup / poster for a match.
+
+Important columns:
+- id (uuid)
+- club_id (uuid)
+- match_id (uuid → calendar_events.id)
+- microcycle_id (uuid → microcycles.id)
+- formation (text, e.g. '4-3-3')
+- status (draft/locked/official/archived)
+- poster_style (editorial/stadium/magazine/ticket)
+- language (es/en/pt)
+- style_config (jsonb) — { title_color, accent_color } — added by migration 020/022
+- players (jsonb, legacy)
+- subs (jsonb, legacy)
+- published_at, published_by
+- created_by, created_at
+
+---
+
+# TABLE: lineup_players
+
+Purpose:
+Normalized player slots for a lineup (replaces JSONB blobs in lineups.players).
+
+Important columns:
+- id (uuid)
+- lineup_id (uuid → lineups.id)
+- player_id (uuid → players.id)
+- role (starter/substitute/reserve/injured)
+- slot_index (integer, 0..10 starters / 0..n subs)
+- x_pct, y_pct (position on pitch, 0–100)
+- is_captain (boolean)
+- is_vice_captain (boolean)
+- notes
+- created_at
+
+Constraints:
+- UNIQUE (lineup_id, role, slot_index) — migration 021/022
+
+---
+
+# TABLE: lineup_staff
+
+Purpose:
+Technical staff included in a lineup poster.
+
+Important columns:
+- id (uuid)
+- lineup_id (uuid → lineups.id)
+- profile_id (uuid → profiles.id)
+- display_name (text)
+- role_code (head/assistant/gk_coach/fitness/physio/analyst/other)
+- sort_order
+- created_at
+
+---
+
+# TABLE: club_branding
+
+Purpose:
+Override branding for lineup poster (custom crest, hashtag, colors).
+
+Important columns:
+- club_id (uuid PK → clubs.id)
+- crest_url
+- crest_dark_url
+- primary_color
+- accent_color
+- hashtag
+- updated_at
+
+---
+
+# TABLE: opponent_branding
+
+Purpose:
+Persists rival club crests across matches (keyed by club_id + opponent_name).
+
+Important columns:
+- id (uuid)
+- club_id (uuid → clubs.id)
+- opponent_name (text)
+- crest_url
+- primary_color
+- created_at
+
+Constraints:
+- UNIQUE (club_id, opponent_name)
+
+---
+
+# TABLE: club_settings
+
+Purpose:
+Per-club configuration (season info, preferences).
+
+Important columns:
+- club_id (uuid PK → clubs.id)
+- season_name (text)
+- season_start (date)
+- season_end (date)
+- competition (text)
+
+---
+
+# TABLE: notifications
+
+Purpose:
+In-app realtime notifications for users.
+
+Important columns:
+- id (uuid)
+- user_id (uuid → auth.users)
+- club_id (uuid → clubs.id)
+- type (text: physio/task/injury/session/…)
+- title (text)
+- body (text)
+- read (boolean)
+- link (text)
+- created_at
+
+RLS: user can read/update own rows; service role inserts.
+Realtime enabled.
+
+---
+
+# TABLE: messages
+
+Purpose:
+Chat messages — direct messages (recipient_id set) or club-wide (recipient_id null).
+
+Important columns:
+- id (uuid)
+- club_id (uuid → clubs.id)
+- sender_id (uuid → auth.users)
+- recipient_id (uuid → auth.users, null = group/club channel)
+- sender_name (text)
+- content (text)
+- created_at
+
+---
+
+# TABLE: channel_reads
+
+Purpose:
+Tracks last-read position per user per chat channel, for unread badge calculation.
+
+Important columns:
+- user_id (uuid → auth.users) PK part
+- channel_key (text) PK part — 'group' or a user UUID for DMs
+- club_id (uuid → clubs.id) PK part
+- last_read_at (timestamptz)
+
+Note: created by migration 022 (was missing before).
+
+---
+
+# TABLE: treatments
+
+Purpose:
+Physio treatment sessions linked to an injury (or standalone).
+
+Important columns:
+- id (uuid)
+- club_id (uuid)
+- player_id (uuid → players.id)
+- injury_id (uuid → injuries.id, nullable)
+- date (date)
+- type (text)
+- treatment_type (text)
+- modalities (text)
+- notes, adaptation_notes
+- adaptation_sent_at (timestamptz)
+- notify_coaches (boolean)
+- performed_by (text)
+- created_at
+
+---
+
+# TABLE: availability
+
+Purpose:
+Daily availability status override per player.
+
+Important columns:
+- id (uuid)
+- club_id (uuid)
+- player_id (uuid → players.id)
+- date (date)
+- status (available/modified/unavailable/injured/sick/away)
+- notes
+- created_at
+
+---
+
+# TABLE: tasks
+
+Purpose:
+Club task management (assignable to staff members).
+
+Important columns:
+- id (uuid)
+- club_id (uuid)
+- title, description
+- status (pending/in_progress/done/cancelled)
+- priority (low/medium/high/urgent)
+- due_date (date)
+- category (text)
+- created_by (uuid), created_by_name
+- assigned_to (uuid), assigned_to_name
+- created_at, updated_at
+
+---
+
+# TABLE: gym_exercises
+
+Purpose:
+Exercise library for gym planning.
+
+Important columns:
+- id (uuid)
+- club_id (uuid)
+- name
+- category
+- muscle_group
+- description
+- video_url
+- created_at
+
+---
+
 # GLOBAL DATABASE RULES
 
 ## Multi-tenant

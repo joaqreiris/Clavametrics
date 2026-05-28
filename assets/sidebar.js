@@ -423,13 +423,14 @@
       <div class="cm-np-foot"><a href="#">View all</a></div>`;
     wrap.appendChild(panel);
 
-    // Load last 30 notifications
-    const { data: notifs } = await window.sb
+    // Load last 30 notifications — bail silently if table doesn't exist
+    const { data: notifs, error: notifErr } = await window.sb
       .from('notifications')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(30);
+    if (notifErr) return;
     _notifData = notifs || [];
     _renderNotifList();
     _updateNotifBadge();
@@ -604,14 +605,17 @@
       _renderChatPanel();
     };
 
-    // Initial unread counts
-    const [{ data: reads }, { data: recentMsgs }] = await Promise.all([
+    // Initial unread counts — bail silently if either table doesn't exist yet
+    const [readsRes, msgsRes] = await Promise.all([
       window.sb.from('channel_reads').select('channel_key,last_read_at').eq('user_id', user.id).eq('club_id', clubId),
       window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name')
         .eq('club_id', clubId).neq('sender_id', user.id)
         .gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
         .order('created_at', { ascending: false }).limit(200)
     ]);
+    if (readsRes.error || msgsRes.error) return;
+    const reads = readsRes.data;
+    const recentMsgs = msgsRes.data;
     const readMap = {};
     (reads || []).forEach(r => { readMap[r.channel_key] = r.last_read_at; });
     for (const msg of (recentMsgs || [])) {

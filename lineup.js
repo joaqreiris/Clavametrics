@@ -694,31 +694,21 @@
   // ── Supabase: load next match from calendar_events
   async function loadNextMatch (clubId) {
     const today = new Date().toISOString().split('T')[0];
-    const makeQuery = (cols) => window.sb
+    const { data } = await window.sb
       .from('calendar_events')
-      .select(cols)
+      .select('id,opponent,date,start_time,location,competition,home_away,title,rival_crest_url')
       .eq('club_id', clubId)
       .eq('type', 'match')
       .gte('date', today)
       .order('date', { ascending: true })
       .limit(1)
       .maybeSingle();
-
-    // Try with rival_crest_url (migration 020); fall back if column missing
-    let { data, error } = await makeQuery(
-      'id,opponent,date,start_time,location,competition,home_away,title,rival_crest_url'
-    );
-    if (error) {
-      ({ data } = await makeQuery(
-        'id,opponent,date,start_time,location,competition,home_away,title'
-      ));
-    }
     return data;
   }
 
   // ── Supabase: get existing draft/locked lineup or create a new draft
   async function getOrCreateLineup (clubId, matchId) {
-    const { data: existing } = await window.sb
+    const baseQ = () => window.sb
       .from('lineups')
       .select('id,formation,status,poster_style,language,style_config')
       .eq('club_id', clubId)
@@ -727,11 +717,27 @@
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+    const baseQFallback = () => window.sb
+      .from('lineups')
+      .select('id,formation,status,poster_style,language')
+      .eq('club_id', clubId)
+      .eq('match_id', matchId)
+      .in('status', ['draft','locked','official'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let { data: existing, error: e1 } = await baseQ();
+    if (e1) ({ data: existing } = await baseQFallback());
     if (existing) return existing;
+
+    const selCols = e1
+      ? 'id,formation,status,poster_style,language'
+      : 'id,formation,status,poster_style,language,style_config';
     const { data: created } = await window.sb
       .from('lineups')
       .insert({ club_id: clubId, match_id: matchId, formation: '4-3-3', status: 'draft' })
-      .select('id,formation,status,poster_style,language,style_config')
+      .select(selCols)
       .single();
     return created;
   }
@@ -779,12 +785,20 @@
       const styleConfig = {};
       if (state.titleColor)  styleConfig.title_color  = state.titleColor;
       if (state.accentColor) styleConfig.accent_color = state.accentColor;
-      await window.sb.from('lineups').update({
+      const { error } = await window.sb.from('lineups').update({
         formation:    state.formation,
         poster_style: state.style,
         language:     state.language,
         style_config: styleConfig,
       }).eq('id', _lineupId);
+      // Fallback: if style_config column not yet added via migration, save without it
+      if (error?.code === '42703') {
+        await window.sb.from('lineups').update({
+          formation:    state.formation,
+          poster_style: state.style,
+          language:     state.language,
+        }).eq('id', _lineupId);
+      }
       const saved = document.getElementById('luSaveStatus');
       if (saved) saved.textContent = 'Saved · just now';
     }, 500);
@@ -976,6 +990,15 @@
         await window.sb.from('calendar_events')
           .update({ rival_crest_url: publicUrl })
           .eq('id', matchId);
+      }
+      // Also persist in opponent_branding so loadBranding() reuses it across matches
+      const opponentName = _currentMatch?.opponent;
+      if (_clubId && opponentName) {
+        await window.sb.from('opponent_branding')
+          .upsert(
+            { club_id: _clubId, opponent_name: opponentName, crest_url: publicUrl },
+            { onConflict: 'club_id,opponent_name' }
+          );
       }
       showToast('Opponent crest updated');
     });
