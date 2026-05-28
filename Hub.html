@@ -239,6 +239,81 @@
     border: 1px solid var(--cm-border);
   }
 
+  /* KPI section header */
+  .kpi-section-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .kpi-section-header h2 {
+    font: 600 14px/1 var(--cm-font-sans);
+    color: var(--cm-fg-strong);
+  }
+  .kpi-section-header .right { margin-left: auto; }
+  .kpi-gear-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--cm-fg-faint);
+    display: flex; align-items: center; padding: 4px;
+    border-radius: 6px;
+    transition: color var(--cm-dur-1), background var(--cm-dur-1);
+  }
+  .kpi-gear-btn:hover { color: var(--cm-fg); background: var(--cm-bg-sunk); }
+  .kpi-gear-btn .ti { font-size: 15px; }
+
+  /* KPI customize modal */
+  .kpi-modal-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.45); z-index: 900;
+    align-items: center; justify-content: center;
+  }
+  .kpi-modal-backdrop.open { display: flex; }
+  .kpi-modal {
+    background: var(--cm-surface);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    box-shadow: var(--cm-shadow-3);
+    width: 420px; max-width: 95vw;
+    padding: 24px;
+  }
+  .kpi-modal h3 {
+    font: 600 16px/1 var(--cm-font-sans);
+    color: var(--cm-fg-strong);
+    margin-bottom: 6px;
+  }
+  .kpi-modal .kpi-modal-sub {
+    font: var(--cm-body-sm); color: var(--cm-fg-muted);
+    margin-bottom: 18px;
+  }
+  .kpi-option-list {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-bottom: 20px;
+  }
+  .kpi-option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-2);
+    cursor: pointer;
+    transition: border-color var(--cm-dur-1), background var(--cm-dur-1);
+    user-select: none;
+  }
+  .kpi-option:hover { border-color: var(--cm-border-strong); background: var(--cm-bg-sunk); }
+  .kpi-option.selected { border-color: var(--cm-accent); background: var(--cm-accent-soft); }
+  .kpi-option input[type=checkbox] { display: none; }
+  .kpi-option-check {
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 1.5px solid var(--cm-border-strong);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: background var(--cm-dur-1), border-color var(--cm-dur-1);
+  }
+  .kpi-option.selected .kpi-option-check {
+    background: var(--cm-accent); border-color: var(--cm-accent); color: #fff;
+  }
+  .kpi-option-check .ti { font-size: 10px; }
+  .kpi-option-text { font: 500 13px/1.3 var(--cm-font-sans); color: var(--cm-fg); flex: 1; }
+  .kpi-option-text small { display: block; font: var(--cm-body-sm); color: var(--cm-fg-muted); margin-top: 2px; }
+  .kpi-modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
+
   /* Two-column lower row */
   .lower {
     display: grid;
@@ -462,50 +537,122 @@
       </header>
 
       <!-- KPI strip -->
-      <div class="kpis">
-        <div class="kpi">
+      <div class="kpi-section-header">
+        <h2>Key metrics</h2>
+        <div class="right">
+          <button class="kpi-gear-btn" id="btnCustomizeKpis" title="Customize KPIs">
+            <i class="ti ti-adjustments-horizontal"></i>
+          </button>
+        </div>
+      </div>
+      <div class="kpis" id="kpiStrip">
+        <div class="kpi" data-kpi-id="squad_size">
           <div class="kpi-label"><i class="ti ti-users"></i>Squad size</div>
           <div class="kpi-value" id="kpiSquad">— <sub>players</sub></div>
           <div class="kpi-trend">
             <span id="kpiSquadDelta" class="delta up"></span>
             <span>vs last microcycle</span>
           </div>
-          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+          <svg class="kpi-spark" id="sparkSquad" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,24 12,22 24,18 36,20 48,12 60,14 76,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-kpi-id="acwr">
           <div class="kpi-label"><i class="ti ti-chart-line"></i>Avg ACWR</div>
           <div class="kpi-value" id="kpiAcwr">—</div>
           <div class="kpi-trend">
-            <span class="delta down"><i class="ti ti-arrow-up-right"></i>+0.06</span>
-            <span style="color:var(--cm-warning)">Approaching sweet-spot</span>
+            <span id="kpiAcwrDelta" class="delta"></span>
+            <span id="kpiAcwrSub"></span>
           </div>
-          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+          <svg class="kpi-spark" id="sparkAcwr" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,22 12,18 24,20 36,14 48,16 60,10 76,12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-kpi-id="wellness">
           <div class="kpi-label"><i class="ti ti-heartbeat"></i>Wellness avg</div>
           <div class="kpi-value" id="kpiWellness">—<sub>/10</sub></div>
           <div class="kpi-trend">
             <span id="kpiWellnessDelta" class="delta up"></span>
-            <span id="wellnessSub">Checking…</span>
+            <span id="wellnessSub"></span>
           </div>
-          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+          <svg class="kpi-spark" id="sparkWellness" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,18 12,20 24,12 36,16 48,10 60,12 76,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <div class="kpi">
+        <div class="kpi" data-kpi-id="injuries">
           <div class="kpi-label"><i class="ti ti-bandage"></i>Active injuries</div>
           <div class="kpi-value" id="kpiInjuries">—</div>
           <div class="kpi-trend">
             <span id="kpiInjuriesDelta" class="delta up" style="color:var(--cm-success)"></span>
             <span id="kpiInjuriesSub"></span>
           </div>
-          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+          <svg class="kpi-spark" id="sparkInjuries" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,10 12,8 24,14 36,12 48,18 60,16 76,22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
+        </div>
+        <!-- Extra KPI cards (shown when selected in customize) -->
+        <div class="kpi" data-kpi-id="weather" style="display:none">
+          <div class="kpi-label"><i class="ti ti-cloud"></i>Weather</div>
+          <div class="kpi-value" id="kpiWeatherTemp">—<sub>°C</sub></div>
+          <div class="kpi-trend">
+            <span id="kpiWeatherCondition">Loading…</span>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,20 12,18 24,22 36,16 48,14 60,18 76,16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi" data-kpi-id="next_match" style="display:none">
+          <div class="kpi-label"><i class="ti ti-trophy"></i>Next match</div>
+          <div class="kpi-value" id="kpiNextMatch">—<sub>days</sub></div>
+          <div class="kpi-trend"><span id="kpiNextMatchSub"></span></div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,28 12,26 24,22 36,18 48,12 60,8 76,4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi" data-kpi-id="load_week" style="display:none">
+          <div class="kpi-label"><i class="ti ti-flame"></i>Load this week</div>
+          <div class="kpi-value" id="kpiLoadWeek">—<sub>AU</sub></div>
+          <div class="kpi-trend"><span id="kpiLoadWeekSub"></span></div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,24 12,20 24,18 36,14 48,16 60,12 76,10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi" data-kpi-id="wellness_submissions" style="display:none">
+          <div class="kpi-label"><i class="ti ti-circle-check"></i>Wellness today</div>
+          <div class="kpi-value" id="kpiWellnessSub">—<sub>submitted</sub></div>
+          <div class="kpi-trend"><span id="kpiWellnessSubSub"></span></div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,28 12,24 24,20 36,18 48,14 60,12 76,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi" data-kpi-id="available_today" style="display:none">
+          <div class="kpi-label"><i class="ti ti-run"></i>Available today</div>
+          <div class="kpi-value" id="kpiAvailToday">—<sub>players</sub></div>
+          <div class="kpi-trend"><span id="kpiAvailTodaySub"></span></div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,24 12,20 24,16 36,18 48,14 60,12 76,10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="kpi" data-kpi-id="sessions_week" style="display:none">
+          <div class="kpi-label"><i class="ti ti-calendar-event"></i>Sessions this week</div>
+          <div class="kpi-value" id="kpiSessionsWeek">—<sub>sessions</sub></div>
+          <div class="kpi-trend"><span id="kpiSessionsWeekSub"></span></div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,28 12,24 24,22 36,20 48,16 60,14 76,12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Customize KPIs modal -->
+      <div class="kpi-modal-backdrop" id="kpiModalBackdrop">
+        <div class="kpi-modal" role="dialog" aria-labelledby="kpiModalTitle">
+          <h3 id="kpiModalTitle">Customize dashboard</h3>
+          <p class="kpi-modal-sub">Select up to 4 KPIs to display</p>
+          <div class="kpi-option-list" id="kpiOptionList"></div>
+          <div class="kpi-modal-footer">
+            <button class="cm-btn is-ghost is-sm" id="btnKpiCancel">Cancel</button>
+            <button class="cm-btn is-primary is-sm" id="btnKpiSave">Save</button>
+          </div>
         </div>
       </div>
 
@@ -1174,10 +1321,12 @@ function renderTasks(tasks) {
   const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, sessActRes, injActRes, gpsActRes, mcRes, todaySessionRes, treatActRes, clearActRes] = await Promise.all([
     window.sb.from('players').select('id', { count: 'exact', head: true })
       .eq('club_id', clubId),
-    window.sb.from('injuries').select('status')
-      .eq('club_id', clubId).eq('status', 'active'),
-    window.sb.from('wellness').select('readiness')
-      .eq('club_id', clubId).gte('submitted_at', todayStartISO),
+    window.sb.from('injuries').select('status, start_date')
+      .eq('club_id', clubId).in('status', ['active', 'returning']),
+    window.sb.from('wellness').select('sleep_quality, mood, fatigue, stress, soreness')
+      .eq('club_id', clubId)
+      .gte('submitted_at', today + 'T00:00:00')
+      .lte('submitted_at', today + 'T23:59:59'),
     userId
       ? window.sb.from('tasks')
           .select('id, title, priority, status, due_date, created_by_name')
@@ -1259,19 +1408,36 @@ function renderTasks(tasks) {
   }
 
   if (!injuriesRes.error) {
-    document.getElementById('kpiInjuries').textContent = injuriesRes.data?.length ?? 0;
+    const activeInjs    = (injuriesRes.data || []).filter(i => i.status === 'active');
+    const returningInjs = (injuriesRes.data || []).filter(i => i.status === 'returning');
+    document.getElementById('kpiInjuries').textContent = activeInjs.length;
+    const todayMs = Date.now();
+    const avgDays = activeInjs.length
+      ? Math.round(activeInjs.reduce((s, i) => {
+          const start = i.start_date ? new Date(i.start_date).getTime() : todayMs;
+          return s + (todayMs - start) / 86400000;
+        }, 0) / activeInjs.length)
+      : null;
+    const parts = [];
+    if (returningInjs.length) parts.push(`${returningInjs.length} returning this week`);
+    if (avgDays !== null)     parts.push(`avg ${avgDays}d injured`);
+    document.getElementById('kpiInjuriesSub').textContent = parts.join(' · ') || '';
   } else {
     document.getElementById('kpiInjuries').textContent = '—';
   }
 
   if (!wellnessRes.error && wellnessRes.data?.length) {
-    const avg = wellnessRes.data.reduce((s, r) => s + (r.readiness || 0), 0) / wellnessRes.data.length;
+    const avg = wellnessRes.data.reduce((s, r) =>
+      s + ((r.sleep_quality || 0) + (r.mood || 0) + (r.fatigue || 0) +
+           (r.stress || 0) + (r.soreness || 0)) / 5, 0) / wellnessRes.data.length;
     document.getElementById('kpiWellness').innerHTML = `${avg.toFixed(1)}<sub>/10</sub>`;
     document.getElementById('wellnessSub').textContent =
       `${wellnessRes.data.length} of ${squadRes.count ?? '?'} submitted`;
   } else if (wellnessRes.error) {
     document.getElementById('kpiWellness').innerHTML = `—<sub>/10</sub>`;
     document.getElementById('wellnessSub').textContent = 'Could not load';
+  } else {
+    document.getElementById('wellnessSub').textContent = 'No submissions today';
   }
 
   console.log('[Hub] tasks:', tasksRes.data, tasksRes.error);
@@ -1308,8 +1474,9 @@ function renderTasks(tasks) {
     return s !== 'available' && s !== 'fit';
   }).length;
 
+  const _activeInjCount = (injuriesRes.data || []).filter(i => i.status === 'active').length;
   renderBadgesAndStats({
-    injuryCount:       injuriesRes.data?.length ?? 0,
+    injuryCount:       _activeInjCount,
     acwrWarningCount,
     notAvailableCount,
     squadCount:        squadRes.count ?? null,
@@ -1353,6 +1520,233 @@ function renderTasks(tasks) {
   const _hubNextMatch = _nm1 && _nm2 ? (_nm1.date <= _nm2.date ? _nm1 : _nm2) : (_nm1 || _nm2);
 
   renderGreetSub(mcRes.data, todaySessionRes.data, today, _hubNextMatch);
+
+  // ── ACWR sub text ─────────────────────────────────────────────────────────
+  if (!rpeRes.error && rpeRes.data?.length) {
+    const _acwrEl = document.getElementById('kpiAcwrSub');
+    const _acwrAvg = parseFloat(document.getElementById('kpiAcwr').textContent);
+    if (!isNaN(_acwrAvg) && _acwrEl) {
+      if (_acwrAvg < 0.8)       { _acwrEl.textContent = 'Below sweet-spot'; _acwrEl.style.color = 'var(--cm-warning)'; }
+      else if (_acwrAvg <= 1.3) { _acwrEl.textContent = 'Sweet-spot range';  _acwrEl.style.color = 'var(--cm-success)'; }
+      else if (_acwrAvg <= 1.5) { _acwrEl.textContent = 'Approaching limit'; _acwrEl.style.color = 'var(--cm-warning)'; }
+      else                       { _acwrEl.textContent = 'High risk zone';    _acwrEl.style.color = 'var(--cm-danger)'; }
+    }
+  }
+
+  // ── Sparklines — 7-day historical data ────────────────────────────────────
+  const last7days = Array.from({length: 7}, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    return d.toISOString().split('T')[0];
+  });
+  const sparkStart = last7days[0];
+
+  function _buildSparkPoints(values) {
+    const valid = values.filter(v => v !== null);
+    if (!valid.length) return null;
+    const min = Math.min(...valid), max = Math.max(...valid);
+    const range = max - min || 1;
+    const xStep = 76 / (values.length - 1);
+    return values.map((v, i) => {
+      if (v === null) return null;
+      const x = (i * xStep).toFixed(1);
+      const y = (28 - ((v - min) / range) * 24).toFixed(1);
+      return `${x},${y}`;
+    }).filter(Boolean).join(' ');
+  }
+
+  function _renderSpark(svgId, values) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+    const pts = _buildSparkPoints(values);
+    if (pts) svg.querySelector('polyline')?.setAttribute('points', pts);
+  }
+
+  const [_squadSparkRes, _wellSparkRes, _injSparkRes] = await Promise.all([
+    window.sb.from('availability').select('date, status')
+      .eq('club_id', clubId).gte('date', sparkStart).lte('date', today),
+    window.sb.from('wellness').select('submitted_at, sleep_quality, mood, fatigue, stress, soreness')
+      .eq('club_id', clubId)
+      .gte('submitted_at', sparkStart + 'T00:00:00')
+      .lte('submitted_at', today + 'T23:59:59'),
+    window.sb.from('injuries').select('start_date, returned_date, status')
+      .eq('club_id', clubId).lte('start_date', today),
+  ]);
+
+  if (!_squadSparkRes.error && _squadSparkRes.data) {
+    const _byD = {};
+    _squadSparkRes.data.forEach(r => {
+      if (!_byD[r.date]) _byD[r.date] = 0;
+      const s = (r.status || '').toLowerCase();
+      if (s === 'available' || s === 'fit') _byD[r.date]++;
+    });
+    _renderSpark('sparkSquad', last7days.map(d => _byD[d] ?? null));
+  }
+
+  if (!_wellSparkRes.error && _wellSparkRes.data) {
+    const _byD = {};
+    _wellSparkRes.data.forEach(r => {
+      const d = r.submitted_at?.split('T')[0];
+      if (!_byD[d]) _byD[d] = { s: 0, n: 0 };
+      _byD[d].s += ((r.sleep_quality||0)+(r.mood||0)+(r.fatigue||0)+(r.stress||0)+(r.soreness||0))/5;
+      _byD[d].n++;
+    });
+    _renderSpark('sparkWellness', last7days.map(d => _byD[d] ? _byD[d].s / _byD[d].n : null));
+  }
+
+  if (!_injSparkRes.error && _injSparkRes.data) {
+    _renderSpark('sparkInjuries', last7days.map(dayStr =>
+      _injSparkRes.data.filter(inj => {
+        const ret = inj.returned_date;
+        return inj.start_date <= dayStr && (!ret || ret > dayStr);
+      }).length
+    ));
+  }
+
+  if (!rpeRes.error && rpeRes.data?.length) {
+    _renderSpark('sparkAcwr', last7days.map(dayStr => {
+      const d7s  = new Date(dayStr); d7s.setDate(d7s.getDate() - 6);
+      const d28s = new Date(dayStr); d28s.setDate(d28s.getDate() - 27);
+      const s7  = d7s.toISOString().split('T')[0];
+      const s28 = d28s.toISOString().split('T')[0];
+      const _ld = {};
+      rpeRes.data.forEach(sess => {
+        if (sess.session_date < s28 || sess.session_date > dayStr) return;
+        const ac = sess.session_date >= s7;
+        (sess.rpe || []).forEach(r => {
+          if (!_ld[r.player_id]) _ld[r.player_id] = { a: 0, c: 0 };
+          _ld[r.player_id].c += r.load || 0;
+          if (ac) _ld[r.player_id].a += r.load || 0;
+        });
+      });
+      const av = Object.values(_ld).map(({ a, c }) => c > 0 ? a / (c / 4) : null).filter(v => v !== null);
+      return av.length ? av.reduce((x, y) => x + y, 0) / av.length : null;
+    }));
+  }
+
+  // ── KPI Customization ─────────────────────────────────────────────────────
+  const KPI_OPTIONS = [
+    { id: 'squad_size',           label: 'Squad size',                 desc: 'Total registered players' },
+    { id: 'acwr',                 label: 'Avg ACWR',                   desc: 'Acute:chronic workload ratio' },
+    { id: 'wellness',             label: 'Wellness avg',               desc: 'Today\'s average wellness score' },
+    { id: 'injuries',             label: 'Active injuries',            desc: 'Players currently injured' },
+    { id: 'next_match',           label: 'Next match countdown',       desc: 'Days until next match' },
+    { id: 'weather',              label: 'Weather',                    desc: 'Current weather conditions' },
+    { id: 'load_week',            label: 'Training load this week',    desc: 'Total AU in the past 7 days' },
+    { id: 'wellness_submissions', label: 'Wellness submissions today', desc: 'How many players submitted' },
+    { id: 'available_today',      label: 'Players available today',    desc: 'Fit for training' },
+    { id: 'sessions_week',        label: 'Sessions this week',         desc: 'Training sessions in 7 days' },
+  ];
+
+  let _kpiSel = ['squad_size', 'acwr', 'wellness', 'injuries'];
+
+  function _applyKpiPrefs() {
+    document.querySelectorAll('#kpiStrip .kpi[data-kpi-id]').forEach(el => {
+      el.style.display = _kpiSel.includes(el.dataset.kpiId) ? '' : 'none';
+    });
+    if (_kpiSel.includes('weather')) _loadWeather();
+    _populateExtras();
+  }
+
+  async function _saveKpiPrefs() {
+    const { data: ex } = await window.sb.from('profiles').select('settings').eq('id', userId).maybeSingle();
+    await window.sb.from('profiles').update({ settings: { ...(ex?.settings || {}), hub_kpis: _kpiSel } }).eq('id', userId);
+    _applyKpiPrefs();
+  }
+
+  // Load saved preferences
+  if (userId) {
+    const { data: _pref } = await window.sb.from('profiles').select('settings').eq('id', userId).maybeSingle();
+    const _saved = _pref?.settings?.hub_kpis;
+    if (Array.isArray(_saved) && _saved.length) _kpiSel = _saved;
+  }
+  _applyKpiPrefs();
+
+  function _openKpiModal() {
+    const list = document.getElementById('kpiOptionList');
+    list.innerHTML = KPI_OPTIONS.map(o => `
+      <label class="kpi-option${_kpiSel.includes(o.id) ? ' selected' : ''}" data-kid="${o.id}">
+        <span class="kpi-option-check"><i class="ti ti-check"></i></span>
+        <span class="kpi-option-text">${o.label}<small>${o.desc}</small></span>
+      </label>`).join('');
+    list.querySelectorAll('.kpi-option').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.dataset.kid;
+        const idx = _kpiSel.indexOf(id);
+        if (idx >= 0) { _kpiSel.splice(idx, 1); el.classList.remove('selected'); }
+        else if (_kpiSel.length < 4) { _kpiSel.push(id); el.classList.add('selected'); }
+      });
+    });
+    document.getElementById('kpiModalBackdrop').classList.add('open');
+  }
+
+  document.getElementById('btnCustomizeKpis')?.addEventListener('click', _openKpiModal);
+  document.getElementById('btnKpiCancel')?.addEventListener('click', () =>
+    document.getElementById('kpiModalBackdrop').classList.remove('open'));
+  document.getElementById('btnKpiSave')?.addEventListener('click', async () => {
+    document.getElementById('kpiModalBackdrop').classList.remove('open');
+    await _saveKpiPrefs();
+  });
+  document.getElementById('kpiModalBackdrop')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) document.getElementById('kpiModalBackdrop').classList.remove('open');
+  });
+
+  // ── Weather KPI ───────────────────────────────────────────────────────────
+  const _WMO = {
+    0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',
+    45:'Fog',48:'Icy fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',
+    61:'Light rain',63:'Rain',65:'Heavy rain',71:'Light snow',73:'Snow',75:'Heavy snow',
+    80:'Rain showers',81:'Heavy showers',82:'Violent showers',
+    95:'Thunderstorm',96:'Thunderstorm',99:'Thunderstorm'
+  };
+
+  function _loadWeather() {
+    const condEl = document.getElementById('kpiWeatherCondition');
+    if (!navigator.geolocation) { if (condEl) condEl.textContent = 'Geolocation unavailable'; return; }
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        const { latitude, longitude } = pos.coords;
+        const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode,windspeed_10m`);
+        const w = await r.json();
+        const temp = Math.round(w.current.temperature_2m);
+        const code = w.current.weathercode;
+        const wind = Math.round(w.current.windspeed_10m);
+        const cond = _WMO[code] || 'Unknown';
+        const good = code <= 3 && wind < 50;
+        document.getElementById('kpiWeatherTemp').innerHTML = `${temp}<sub>°C</sub>`;
+        if (condEl) condEl.innerHTML =
+          `${cond} · ${wind} km/h · <span style="color:var(--cm-${good?'success':'warning'})">${good?'Good for outdoor':'Consider indoor'}</span>`;
+      } catch { if (condEl) condEl.textContent = 'Could not load'; }
+    }, () => { if (condEl) condEl.textContent = 'Location denied'; });
+  }
+
+  // ── Extra KPI values ──────────────────────────────────────────────────────
+  function _populateExtras() {
+    if (_kpiSel.includes('next_match') && _hubNextMatch) {
+      const days = Math.max(0, Math.ceil((new Date(_hubNextMatch.date) - new Date(today)) / 86400000));
+      document.getElementById('kpiNextMatch').innerHTML = `${days}<sub>days</sub>`;
+      document.getElementById('kpiNextMatchSub').textContent = `vs ${_hubNextMatch.rival || '?'}`;
+    }
+    if (_kpiSel.includes('load_week') && !rpeRes.error && rpeRes.data) {
+      let _tot = 0;
+      rpeRes.data.forEach(s => { if (s.session_date >= date7) (s.rpe||[]).forEach(r => { _tot += r.load||0; }); });
+      document.getElementById('kpiLoadWeek').innerHTML = `${Math.round(_tot)}<sub>AU</sub>`;
+      document.getElementById('kpiLoadWeekSub').textContent = 'past 7 days';
+    }
+    if (_kpiSel.includes('wellness_submissions')) {
+      document.getElementById('kpiWellnessSub').innerHTML = `${wellnessRes.data?.length??0}<sub>submitted</sub>`;
+      document.getElementById('kpiWellnessSubSub').textContent = `of ${squadRes.count??'?'} today`;
+    }
+    if (_kpiSel.includes('available_today')) {
+      const _av = pillSource.filter(({ status='' }) => { const s=status.toLowerCase(); return s==='available'||s==='fit'; }).length;
+      document.getElementById('kpiAvailToday').innerHTML = `${_av}<sub>players</sub>`;
+      document.getElementById('kpiAvailTodaySub').textContent = `${pillSource.length - _av} unavailable`;
+    }
+    if (_kpiSel.includes('sessions_week') && !rpeRes.error && rpeRes.data) {
+      const _sw = new Set(rpeRes.data.filter(s => s.session_date >= date7).map(s => s.session_date)).size;
+      document.getElementById('kpiSessionsWeek').innerHTML = `${_sw}<sub>sessions</sub>`;
+      document.getElementById('kpiSessionsWeekSub').textContent = 'past 7 days';
+    }
+  }
 
   // Real-time: refresh activity when a treatment is saved or injury is cleared
   async function _hubRefreshActivity() {
