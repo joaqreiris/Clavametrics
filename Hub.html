@@ -470,6 +470,32 @@
   .hub-modal-actions .btn-cancel { background:var(--cm-bg-soft);color:var(--cm-fg-muted); }
   .hub-modal-actions .btn-save { background:var(--cm-accent);color:#fff; }
 
+  /* Weather KPI dynamic icon */
+  .kpi-icon-display {
+    position: absolute; right: 14px; top: 10px;
+    font-size: 34px; line-height: 1;
+    color: var(--cm-fg-faint);
+  }
+  .kpi-icon-display .ti { font-size: 34px; }
+
+  /* Next match rival badge */
+  .kpi-rival-display {
+    position: absolute; right: 14px; top: 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .kpi-rival-initials {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--cm-bg-sunk); border: 1px solid var(--cm-border);
+    display: flex; align-items: center; justify-content: center;
+    font: 600 11px/1 var(--cm-font-mono); color: var(--cm-fg-muted);
+    letter-spacing: 0.02em;
+  }
+  .kpi-rival-ha {
+    font: 500 10px/1 var(--cm-font-mono); color: var(--cm-fg-faint);
+    background: var(--cm-bg-sunk); border: 1px solid var(--cm-border);
+    padding: 2px 5px; border-radius: 3px;
+  }
+
   @media (max-width: 880px) {
     .hub-search { width: auto; }
   }
@@ -597,17 +623,17 @@
           <div class="kpi-trend">
             <span id="kpiWeatherCondition">Loading…</span>
           </div>
-          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
-            <polyline points="0,20 12,18 24,22 36,16 48,14 60,18 76,16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <!-- Icon mapped from WMO weathercode — set by _loadWeather() -->
+          <div class="kpi-icon-display" id="kpiWeatherIcon"><i class="ti ti-cloud"></i></div>
         </div>
         <div class="kpi" data-kpi-id="next_match" style="display:none">
           <div class="kpi-label"><i class="ti ti-trophy"></i>Next match</div>
           <div class="kpi-value" id="kpiNextMatch">—<sub>days</sub></div>
           <div class="kpi-trend"><span id="kpiNextMatchSub"></span></div>
-          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
-            <polyline points="0,28 12,26 24,22 36,18 48,12 60,8 76,4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <!-- Rival badge — initials from calendar_events/microcycles rival field; H/A from home_away -->
+          <div class="kpi-rival-display" id="kpiNextMatchBadge">
+            <div class="kpi-rival-initials" id="kpiNextMatchInitials">?</div>
+          </div>
         </div>
         <div class="kpi" data-kpi-id="load_week" style="display:none">
           <div class="kpi-label"><i class="ti ti-flame"></i>Load this week</div>
@@ -637,8 +663,20 @@
           <div class="kpi-label"><i class="ti ti-calendar-event"></i>Sessions this week</div>
           <div class="kpi-value" id="kpiSessionsWeek">—<sub>sessions</sub></div>
           <div class="kpi-trend"><span id="kpiSessionsWeekSub"></span></div>
+          <!-- Source: training_sessions WHERE session_date IN [weekStart, weekEnd] — set by _populateExtras() -->
           <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
             <polyline points="0,28 12,24 24,22 36,20 48,16 60,14 76,12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <!-- Source: injuries WHERE expected_return IN [weekStart, weekEnd] AND status != cleared -->
+        <div class="kpi" data-kpi-id="injury_returns_week" style="display:none">
+          <div class="kpi-label"><i class="ti ti-calendar-check"></i>Return to play</div>
+          <div class="kpi-value" id="kpiInjuryReturns">—<sub>players</sub></div>
+          <div class="kpi-trend">
+            <span id="kpiInjuryReturnsSub"></span>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 76 32" preserveAspectRatio="none">
+            <polyline points="0,24 12,20 24,18 36,14 48,12 60,8 76,6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
       </div>
@@ -676,7 +714,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-calendar"></i> MD-3 ready
+            <!-- Source: microcycles.match_date → MD-X calc; current MC from mcRes.data -->
+            <span id="modFootPlanner"><i class="ti ti-calendar"></i> MD-3 ready</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -690,7 +729,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-plus"></i> 4 new this week
+            <!-- Source: gym_exercises WHERE created_at >= weekStart; count from _gymNewRes -->
+            <span id="modFootSessionsLib"><i class="ti ti-plus"></i> 4 new this week</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -718,7 +758,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-target-arrow"></i> vs Atlético · Sun
+            <!-- Source: microcycles.rival + match_date (current MC), fallback to _hubNextMatch -->
+            <span id="modFootMicrocycles"><i class="ti ti-target-arrow"></i> vs Atlético · Sun</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -732,7 +773,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <span class="alert"><i class="ti ti-alert-triangle"></i> 3 need status</span>
+            <!-- Source: squadCount - availRes.data.length (players without availability entry today) -->
+            <span class="alert" id="modFootAvailability"><i class="ti ti-alert-triangle"></i> 3 need status</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -760,7 +802,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-clock"></i> Last: 3 days ago
+            <!-- Source: match_reports ORDER BY match_date DESC LIMIT 1 → _matchRptRes -->
+            <i class="ti ti-clock"></i> <span id="modFootMatchReports">Last: 3 days ago</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -788,7 +831,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-link"></i> Share link
+            <!-- Source: rpeRes.data — count entries for today's session; fallback to last session date -->
+            <span id="modFootRpe"><i class="ti ti-link"></i> Share link</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -816,7 +860,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-upload"></i> 2 sessions pending
+            <!-- Source: training_sessions last 7d with no matching gps_reports entry (_sessGpsCheckRes vs gpsActRes) -->
+            <span id="modFootGps"><i class="ti ti-upload"></i> 2 sessions pending</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -844,7 +889,8 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-scale"></i> Weigh-in Mon
+            <!-- Source: player_anthropometrics ORDER BY measurement_date DESC LIMIT 1 → _anthropRes -->
+            <span id="modFootNutrition"><i class="ti ti-scale"></i> Weigh-in Mon</span>
           </div>
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
@@ -1318,11 +1364,20 @@ function renderTasks(tasks) {
   const date14 = d14.toISOString().split('T')[0];
   const date7  = d7.toISOString().split('T')[0];
 
+  // Current week bounds (Mon–Sun)
+  const _wkStart = new Date();
+  _wkStart.setDate(_wkStart.getDate() - (_wkStart.getDay() === 0 ? 6 : _wkStart.getDay() - 1));
+  _wkStart.setHours(0, 0, 0, 0);
+  const weekStartStr = _wkStart.toISOString().split('T')[0];
+  const _wkEnd = new Date(_wkStart); _wkEnd.setDate(_wkEnd.getDate() + 6);
+  const weekEndStr = _wkEnd.toISOString().split('T')[0];
+
   const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, sessActRes, injActRes, gpsActRes, mcRes, todaySessionRes, treatActRes, clearActRes] = await Promise.all([
     window.sb.from('players').select('id', { count: 'exact', head: true })
       .eq('club_id', clubId),
-    window.sb.from('injuries').select('status, start_date')
-      .eq('club_id', clubId).in('status', ['active', 'returning']),
+    // expected_return needed for injury_returns_week KPI; include 'recovery' (schema) + 'returning' (legacy)
+    window.sb.from('injuries').select('status, start_date, expected_return')
+      .eq('club_id', clubId).in('status', ['active', 'returning', 'recovery']),
     window.sb.from('wellness').select('sleep_quality, mood, fatigue, stress, soreness')
       .eq('club_id', clubId)
       .gte('submitted_at', today + 'T00:00:00')
@@ -1521,6 +1576,151 @@ function renderTasks(tasks) {
 
   renderGreetSub(mcRes.data, todaySessionRes.data, today, _hubNextMatch);
 
+  // ── Secondary queries — module footers + new KPI data ─────────────────────
+  const [_sessWeekRes, _matchRptRes, _gymNewRes, _anthropRes, _sessGpsCheckRes] = await Promise.all([
+    // Sessions this week Mon–Sun — source for sessions_week KPI + Planner footer
+    window.sb.from('training_sessions')
+      .select('id, session_date, session_type')
+      .eq('club_id', clubId)
+      .gte('session_date', weekStartStr)
+      .lte('session_date', weekEndStr),
+    // Last match report date — source for Match Reports module footer
+    window.sb.from('match_reports')
+      .select('match_date')
+      .eq('club_id', clubId)
+      .order('match_date', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // New gym exercises this week — source for Sessions Library module footer
+    window.sb.from('gym_exercises')
+      .select('id', { count: 'exact', head: true })
+      .eq('club_id', clubId)
+      .gte('created_at', weekStartStr + 'T00:00:00'),
+    // Last anthropometric measurement — source for Nutrition module footer
+    window.sb.from('player_anthropometrics')
+      .select('measurement_date')
+      .eq('club_id', clubId)
+      .order('measurement_date', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // Sessions last 7d — used to compute GPS pending count against gpsActRes
+    window.sb.from('training_sessions')
+      .select('id')
+      .eq('club_id', clubId)
+      .gte('session_date', date7)
+      .lte('session_date', today),
+  ]);
+
+  // ── Dynamic module footers ─────────────────────────────────────────────────
+  {
+    // Planner — MD-X label from current microcycle match_date
+    const el = document.getElementById('modFootPlanner');
+    if (el) {
+      if (mcRes.data?.match_date) {
+        const diff = Math.round((new Date(mcRes.data.match_date) - new Date(today)) / 86400000);
+        const label = diff === 0 ? 'MD' : diff > 0 ? `MD-${diff}` : `MD+${Math.abs(diff)}`;
+        el.innerHTML = `<i class="ti ti-calendar"></i> ${label} ready`;
+      } else if (mcRes.data) {
+        el.innerHTML = `<i class="ti ti-calendar"></i> ${mcRes.data.name}`;
+      } else {
+        el.innerHTML = `<i class="ti ti-calendar"></i> —`;
+      }
+    }
+  }
+  {
+    // Sessions Library — gym_exercises created this week
+    const el = document.getElementById('modFootSessionsLib');
+    if (el) {
+      const n = _gymNewRes?.count ?? 0;
+      el.innerHTML = n > 0
+        ? `<i class="ti ti-plus"></i> ${n} new this week`
+        : `<i class="ti ti-list"></i> No new exercises`;
+    }
+  }
+  {
+    // Microcycles — rival + match day from current MC, fallback to nearest upcoming match
+    const el = document.getElementById('modFootMicrocycles');
+    if (el) {
+      const src = (mcRes.data?.rival && mcRes.data?.match_date) ? mcRes.data : null;
+      const rival    = src?.rival    || _hubNextMatch?.rival;
+      const matchDt  = src?.match_date || _hubNextMatch?.date;
+      if (rival && matchDt) {
+        const matchDay = new Date(matchDt).toLocaleDateString('en-US', { weekday: 'short' });
+        el.innerHTML = `<i class="ti ti-target-arrow"></i> vs ${rival} · ${matchDay}`;
+      } else {
+        el.innerHTML = `<i class="ti ti-target-arrow"></i> —`;
+      }
+    }
+  }
+  {
+    // Availability — players without an availability entry for today
+    const el = document.getElementById('modFootAvailability');
+    if (el) {
+      const needStatus = Math.max(0, (squadRes.count ?? 0) - (availRes.data?.length ?? 0));
+      if (needStatus > 0) {
+        el.className = 'alert';
+        el.innerHTML = `<i class="ti ti-alert-triangle"></i> ${needStatus} need status`;
+      } else {
+        el.className = '';
+        el.innerHTML = `<i class="ti ti-check"></i> All set`;
+      }
+    }
+  }
+  {
+    // Match Reports — formatAgo from last match_date in match_reports table
+    const el = document.getElementById('modFootMatchReports');
+    if (el) {
+      if (_matchRptRes.data?.match_date) {
+        el.textContent = formatAgo(_matchRptRes.data.match_date + 'T12:00:00');
+      } else {
+        el.textContent = '—';
+      }
+    }
+  }
+  {
+    // RPE — count submissions for today's session; fallback to last session date
+    const el = document.getElementById('modFootRpe');
+    if (el && !rpeRes.error && rpeRes.data) {
+      const todaySess = rpeRes.data.find(s => s.session_date === today);
+      const cnt = (todaySess?.rpe || []).length;
+      if (cnt > 0) {
+        el.innerHTML = `<i class="ti ti-activity"></i> ${cnt} submitted today`;
+      } else {
+        const lastSess = rpeRes.data
+          .filter(s => (s.rpe || []).length > 0)
+          .sort((a, b) => b.session_date.localeCompare(a.session_date))[0];
+        if (lastSess) {
+          el.innerHTML = `<i class="ti ti-activity"></i> Last: ${formatAgo(lastSess.session_date + 'T12:00:00')}`;
+        }
+        // else keeps default "Share link" HTML
+      }
+    }
+  }
+  {
+    // GPS — sessions in last 7d without any GPS report entry
+    const el = document.getElementById('modFootGps');
+    if (el) {
+      const coveredIds = new Set((gpsActRes.data || []).map(g => g.session_id));
+      const pending = (_sessGpsCheckRes.data || []).filter(s => !coveredIds.has(s.id)).length;
+      if (pending > 0) {
+        el.innerHTML = `<i class="ti ti-upload"></i> ${pending} session${pending === 1 ? '' : 's'} pending`;
+      } else {
+        el.innerHTML = `<i class="ti ti-check"></i> All imported`;
+      }
+    }
+  }
+  {
+    // Nutrition — last weigh-in from player_anthropometrics
+    const el = document.getElementById('modFootNutrition');
+    if (el) {
+      if (_anthropRes.data?.measurement_date) {
+        el.innerHTML = `<i class="ti ti-scale"></i> Last: ${formatAgo(_anthropRes.data.measurement_date + 'T12:00:00')}`;
+      } else {
+        el.innerHTML = `<i class="ti ti-scale"></i> No weigh-in data`;
+      }
+    }
+  }
+
   // ── ACWR sub text ─────────────────────────────────────────────────────────
   if (!rpeRes.error && rpeRes.data?.length) {
     const _acwrEl = document.getElementById('kpiAcwrSub');
@@ -1634,10 +1834,12 @@ function renderTasks(tasks) {
     { id: 'load_week',            label: 'Training load this week',    desc: 'Total AU in the past 7 days' },
     { id: 'wellness_submissions', label: 'Wellness submissions today', desc: 'How many players submitted' },
     { id: 'available_today',      label: 'Players available today',    desc: 'Fit for training' },
-    { id: 'sessions_week',        label: 'Sessions this week',         desc: 'Training sessions in 7 days' },
+    { id: 'sessions_week',        label: 'Sessions this week',         desc: 'Planned sessions Mon–Sun' },
+    { id: 'injury_returns_week',  label: 'Return to play this week',   desc: 'Players scheduled to return from injury' },
   ];
 
-  let _kpiSel = ['squad_size', 'acwr', 'wellness', 'injuries'];
+  // Default 4 cards — user can customize via the gear button
+  let _kpiSel = ['weather', 'next_match', 'injury_returns_week', 'sessions_week'];
 
   function _applyKpiPrefs() {
     document.querySelectorAll('#kpiStrip .kpi[data-kpi-id]').forEach(el => {
@@ -1701,6 +1903,7 @@ function renderTasks(tasks) {
 
   function _loadWeather() {
     const condEl = document.getElementById('kpiWeatherCondition');
+    const iconEl = document.getElementById('kpiWeatherIcon');
     if (!navigator.geolocation) { if (condEl) condEl.textContent = 'Geolocation unavailable'; return; }
     navigator.geolocation.getCurrentPosition(async pos => {
       try {
@@ -1715,6 +1918,22 @@ function renderTasks(tasks) {
         document.getElementById('kpiWeatherTemp').innerHTML = `${temp}<sub>°C</sub>`;
         if (condEl) condEl.innerHTML =
           `${cond} · ${wind} km/h · <span style="color:var(--cm-${good?'success':'warning'})">${good?'Good for outdoor':'Consider indoor'}</span>`;
+        // Dynamic icon mapped from WMO weathercode
+        if (iconEl) {
+          const icon  = code <= 1 ? 'ti-sun'
+                      : code <= 3 ? 'ti-cloud'
+                      : code <= 48 ? 'ti-cloud'       // fog
+                      : code <= 65 ? 'ti-cloud-rain'  // drizzle / rain
+                      : code <= 75 ? 'ti-snowflake'   // snow
+                      : code <= 82 ? 'ti-cloud-rain'  // showers
+                      : 'ti-bolt';                     // thunderstorm
+          const color = code <= 1  ? 'var(--cm-warning)'
+                      : code <= 3  ? 'var(--cm-fg-muted)'
+                      : code <= 65 ? 'var(--cm-info)'
+                      : code <= 75 ? 'var(--cm-info)'
+                      : 'var(--cm-danger)';
+          iconEl.innerHTML = `<i class="ti ${icon}" style="color:${color}"></i>`;
+        }
       } catch { if (condEl) condEl.textContent = 'Could not load'; }
     }, () => { if (condEl) condEl.textContent = 'Location denied'; });
   }
@@ -1724,7 +1943,15 @@ function renderTasks(tasks) {
     if (_kpiSel.includes('next_match') && _hubNextMatch) {
       const days = Math.max(0, Math.ceil((new Date(_hubNextMatch.date) - new Date(today)) / 86400000));
       document.getElementById('kpiNextMatch').innerHTML = `${days}<sub>days</sub>`;
-      document.getElementById('kpiNextMatchSub').textContent = `vs ${_hubNextMatch.rival || '?'}`;
+      const rival = _hubNextMatch.rival || '?';
+      document.getElementById('kpiNextMatchSub').textContent = `vs ${rival}`;
+      // Rival badge — initials + H/A indicator
+      const badgeEl = document.getElementById('kpiNextMatchBadge');
+      if (badgeEl) {
+        const initials = rival.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || '?';
+        const ha = _hubNextMatch.homeAway === 'home' ? 'H' : _hubNextMatch.homeAway === 'away' ? 'A' : _hubNextMatch.homeAway === 'neutral' ? 'N' : '';
+        badgeEl.innerHTML = `<div class="kpi-rival-initials">${initials}</div>${ha ? `<div class="kpi-rival-ha">${ha}</div>` : ''}`;
+      }
     }
     if (_kpiSel.includes('load_week') && !rpeRes.error && rpeRes.data) {
       let _tot = 0;
@@ -1741,10 +1968,30 @@ function renderTasks(tasks) {
       document.getElementById('kpiAvailToday').innerHTML = `${_av}<sub>players</sub>`;
       document.getElementById('kpiAvailTodaySub').textContent = `${pillSource.length - _av} unavailable`;
     }
-    if (_kpiSel.includes('sessions_week') && !rpeRes.error && rpeRes.data) {
-      const _sw = new Set(rpeRes.data.filter(s => s.session_date >= date7).map(s => s.session_date)).size;
-      document.getElementById('kpiSessionsWeek').innerHTML = `${_sw}<sub>sessions</sub>`;
-      document.getElementById('kpiSessionsWeekSub').textContent = 'past 7 days';
+    // Source: _sessWeekRes — training_sessions in Mon–Sun of current week
+    if (_kpiSel.includes('sessions_week') && _sessWeekRes && !_sessWeekRes.error) {
+      const sessions = _sessWeekRes.data || [];
+      const total     = sessions.length;
+      const completed = sessions.filter(s => s.session_date <= today).length;
+      document.getElementById('kpiSessionsWeek').innerHTML = `${total}<sub>sessions</sub>`;
+      document.getElementById('kpiSessionsWeekSub').textContent = total === 0
+        ? 'No sessions this week'
+        : completed < total
+          ? `${completed} done · ${total} total`
+          : `All ${total} completed`;
+    }
+    // Source: injuriesRes.data — expected_return within current week, status != cleared
+    if (_kpiSel.includes('injury_returns_week')) {
+      const rtpCount = (injuriesRes.data || []).filter(i =>
+        i.expected_return
+        && i.expected_return >= weekStartStr
+        && i.expected_return <= weekEndStr
+        && i.status !== 'cleared'
+      ).length;
+      document.getElementById('kpiInjuryReturns').innerHTML = `${rtpCount}<sub>players</sub>`;
+      document.getElementById('kpiInjuryReturnsSub').textContent = rtpCount === 0
+        ? 'None this week'
+        : `${rtpCount} this week`;
     }
   }
 
