@@ -1871,6 +1871,13 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // init size toggles for all new cards
   document.querySelectorAll('#card-acwr, #card-tsb, #card-vzones, #card-mc-heat, #card-pos-radar, #card-outliers, #card-half-drop, #card-vel-profile, #card-match-vs-train').forEach(c => initSizeToggles(c));
 };
+
+// Self-trigger: if the async IIFE already completed before this script ran
+// (happens when Supabase calls resolve synchronously, e.g. in test environments),
+// kick off rendering now with the stored data.
+if (window._gpReports && window._gpClubId) {
+  window.gpRenderScienceCards(window._gpReports, window._gpClubId);
+}
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
