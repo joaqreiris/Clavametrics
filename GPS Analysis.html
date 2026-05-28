@@ -422,7 +422,7 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="md">
+          <div class="gp-c" data-size="md" id="card-squad-rank">
             <div class="gp-c-h">
               <span class="ttl">Squad ranking</span>
               <div class="gp-c-picks" style="margin-left:6px">
@@ -431,7 +431,7 @@
               </div>
               <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
-            <div class="gp-c-b">
+            <div class="gp-c-b" id="squadRankBody">
               <div class="gp-rank">
                 <div class="gp-rank-row"><span class="ax">1</span><span class="gp-rank-bar"><span class="gp-rank-fill" style="width:96%">R. Vega · #7</span></span><span class="gp-rank-v">812 m</span></div>
                 <div class="gp-rank-row"><span class="ax">2</span><span class="gp-rank-bar"><span class="gp-rank-fill med" style="width:80%">T. López · #11</span></span><span class="gp-rank-v">694 m</span></div>
@@ -803,7 +803,7 @@ function makeSearchPopover(anchor, players) {
         const label = `${p.first_name[0]}. ${p.last_name}`;
         anchor.innerHTML = `<i class="ti ti-user"></i>${label}`;
         showToast(`Player → ${label}`);
-        // TODO: re-render Individual and Match·ind views with new player
+        window.renderView?.();
       });
       list.appendChild(btn);
     });
@@ -923,6 +923,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
       window.gpState.microcycle = item.mc;
       pill.innerHTML = `<i class="ti ti-clock"></i>${item.mc}`;
       showToast(`Microcycle → ${item.mc}`);
+      window.renderView?.();
     });
   }
 
@@ -942,7 +943,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
       window.gpState.baseline = item.label;
       pill.innerHTML = `<i class="ti ti-target"></i>${item.label}`;
       showToast(`Baseline → ${item.label}`);
-      // TODO: recalculate z-scores with selected baseline
+      window.renderView?.();
     });
   }
 
@@ -1878,6 +1879,167 @@ window.gpRenderScienceCards = async function (reports, clubId) {
 if (window._gpReports && window._gpClubId) {
   window.gpRenderScienceCards(window._gpReports, window._gpClubId);
 }
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// renderView() — re-fetches and re-renders all cards when
+// microcycle / player / baseline pills change
+// ══════════════════════════════════════════════════════════════
+
+async function _fetchReports(state) {
+  const clubId = window._gpClubId;
+  if (!clubId) return [];
+  const weekNum = parseInt((state.microcycle || '').replace(/\D/g, ''), 10);
+  const { data: sessions } = await window.sb.from('training_sessions')
+    .select('id,session_date').eq('club_id', clubId)
+    .order('session_date', { ascending: false }).limit(120);
+  const sessionIds = (sessions || [])
+    .filter(s => !isNaN(weekNum) && getISOWeek(new Date(s.session_date)) === weekNum)
+    .map(s => s.id);
+  if (!sessionIds.length) return [];
+  const { data: reports } = await window.sb.from('gps_reports')
+    .select('player_id,session_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
+    .in('session_id', sessionIds).eq('club_id', clubId)
+    .order('total_distance', { ascending: false });
+  return reports || [];
+}
+
+function _updateIndKpis(reports, state) {
+  const sel = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
+  if (!sel) return;
+  const p = sel.players;
+  const fname = p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : '—';
+  if (document.querySelector('.gp-view[data-view="ind"].is-on')) {
+    const sub = document.getElementById('secSub');
+    if (sub) sub.textContent = `${fname} · ${p?.position || '—'} · ${state.microcycle}`;
+  }
+  const kv = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
+  if (kv[0]) kv[0].innerHTML = `${sel.total_distance ? (sel.total_distance / 1000).toFixed(1) : '—'} <sub>km</sub>`;
+  if (kv[1]) kv[1].innerHTML = `${sel.high_speed_distance ?? '—'} <sub>m</sub>`;
+  if (kv[2]) kv[2].innerHTML = `${sel.sprint_distance ?? '—'}`;
+}
+
+function _updateRadar(reports, state) {
+  const canvas = document.getElementById('gpsRadar');
+  if (!canvas || reports.length < 2) return;
+  Chart.getChart(canvas)?.destroy();
+  const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
+  const LABELS  = ['Distance','HSR','Sprints','Top speed','Accel','Load'];
+  const mu_fn   = arr => arr.reduce((a,b) => a+b, 0) / arr.length;
+  const sd_fn   = (arr,m) => Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length) || 1;
+  const stats   = METRICS.map(m => { const vals=reports.map(r=>+(r[m]||0)); const mu=mu_fn(vals); return {mu,sigma:sd_fn(vals,mu)}; });
+  const sel     = (state.playerId ? reports.find(r=>r.player_id===state.playerId) : null) || reports[0];
+  const zs      = METRICS.map((m,i) => +((+(sel[m]||0)-stats[i].mu)/stats[i].sigma).toFixed(2));
+  const accent  = _accentHex();
+  new Chart(canvas, {
+    type: 'radar',
+    data: { labels: LABELS, datasets: [
+      { label:'Squad avg', data:Array(6).fill(0), borderColor:'rgba(128,128,128,0.3)', backgroundColor:'rgba(128,128,128,0.06)', borderDash:[4,3], borderWidth:1.5, pointRadius:0 },
+      { label: sel.players ? `${(sel.players.first_name||'')[0]}. ${sel.players.last_name||''}` : 'Player',
+        data:zs, borderColor:accent, backgroundColor:'rgba(34,197,94,0.12)', borderWidth:2,
+        pointRadius:4, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5 }
+    ]},
+    options: { responsive:true, maintainAspectRatio:true,
+      scales: { r:{ min:-3,max:3, ticks:{display:false,stepSize:1}, grid:{color:'rgba(128,128,128,0.18)'}, angleLines:{color:'rgba(128,128,128,0.18)'}, pointLabels:{color:'rgba(128,128,128,0.8)',font:{size:11}} } },
+      plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>` z = ${ctx.parsed.r>0?'+':''}${ctx.parsed.r.toFixed(2)}`}} }
+    }
+  });
+}
+
+function _updateZTable(reports, state) {
+  const tbody = document.querySelector('.gp-zt tbody');
+  if (!tbody) return;
+  const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
+  const useRole = state.baseline === 'vs Role';
+  const mu_fn   = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+  const sd_fn   = (arr,m) => Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length) || 1;
+  const sqStats = METRICS.map(m => { const vals=reports.map(r=>+(r[m]||0)); const mu=mu_fn(vals); return {mu,sigma:sd_fn(vals,mu)}; });
+
+  function zClass(z) {
+    if (z == null || isNaN(z)) return 'neu';
+    if (z >= 2)   return 'high';
+    if (z >= 1.5) return 'mhigh';
+    if (z >= 0.5) return 'warn';
+    if (z > -0.5) return 'neu';
+    if (z > -1)   return 'low';
+    if (z > -1.5) return 'mlow';
+    return 'vlow';
+  }
+
+  tbody.innerHTML = reports.map(r => {
+    const p = r.players;
+    const fn = p ? (((p.first_name||'')[0]||'')+'. '+(p.last_name||'')) : '—';
+    const initials = p ? (((p.first_name||'')[0]||'')+((p.last_name||'')[0]||'')).toUpperCase() : '?';
+    const num = p?.number ? `#${p.number}` : '';
+    const pos = p?.position || '—';
+    const cells = METRICS.map((m,i) => {
+      let z;
+      if (useRole) {
+        const base = window.gpScience.baselineByRole(pos, m);
+        z = (base > 0) ? (+(r[m]||0) - base) / (base * 0.2) : null;
+      } else {
+        z = window.gpScience.zScore(+(r[m]||0), sqStats[i].mu, sqStats[i].sigma);
+      }
+      const fmtZ = z != null ? (z > 0 ? '+' : '') + (+z).toFixed(1) : '—';
+      return `<td><span class="gp-zc ${zClass(z)}">${fmtZ}</span></td>`;
+    });
+    return `<tr>
+      <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
+        <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
+      ${cells.join('')}
+    </tr>`;
+  }).join('');
+}
+
+function _updateSquadRanking(reports) {
+  const body = document.getElementById('squadRankBody');
+  if (!body) return;
+  const sorted = [...reports].sort((a,b) => (b.high_speed_distance||0) - (a.high_speed_distance||0));
+  const maxHsr = sorted[0]?.high_speed_distance || 1;
+  const cls = pct => pct >= 85 ? '' : pct >= 60 ? ' med' : ' low';
+  body.innerHTML = `<div class="gp-rank">${sorted.slice(0,8).map((r,i) => {
+    const p = r.players;
+    const name = p ? `${(p.first_name||'')[0]}. ${p.last_name||''}` : '—';
+    const num  = p?.number ? ` · #${p.number}` : '';
+    const hsr  = r.high_speed_distance || 0;
+    const pct  = Math.round((hsr / maxHsr) * 100);
+    return `<div class="gp-rank-row"><span class="ax">${i+1}</span><span class="gp-rank-bar"><span class="gp-rank-fill${cls(pct)}" style="width:${pct}%">${name}${num}</span></span><span class="gp-rank-v">${hsr} m</span></div>`;
+  }).join('')}</div>`;
+}
+
+function _rerenderScienceCards(reports, clubId) {
+  ['canvasACWR','canvasTSB','canvasPosRadar','canvasVelProfile','canvasMatchVsTrain'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) Chart.getChart(el)?.destroy();
+  });
+  ['vzonesBody','mcHeatBody','outliersBody','halfDropBody'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '';
+  });
+  window.gpRenderScienceCards(reports, clubId);
+}
+
+window.renderView = async function () {
+  const state   = window.gpState;
+  const clubId  = window._gpClubId;
+  if (!clubId) return;
+  const reports = await _fetchReports(state);
+  if (!reports.length) return;
+  window._gpReports = reports;
+  _updateIndKpis(reports, state);
+  _updateRadar(reports, state);
+  _updateZTable(reports, state);
+  _updateSquadRanking(reports);
+  const totDist = reports.reduce((s,r) => s+(r.total_distance||0), 0);
+  const totHsr  = reports.reduce((s,r) => s+(r.high_speed_distance||0), 0);
+  const totSpr  = reports.reduce((s,r) => s+(r.sprint_distance||0), 0);
+  const grpKpis = document.querySelectorAll('.gp-view[data-view="mgrp"] .gp-kpi .v');
+  if (grpKpis[0]) grpKpis[0].innerHTML = `${(totDist/1000).toFixed(1)} <sub>km</sub>`;
+  if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
+  if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
+  _rerenderScienceCards(reports, clubId);
+};
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
