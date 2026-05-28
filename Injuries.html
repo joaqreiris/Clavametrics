@@ -250,6 +250,22 @@
   .ph-status-badge.pending { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); }
   .ph-status-badge.in_progress { background:var(--cm-accent-soft); color:var(--cm-accent); }
   .ph-status-badge.done { background:var(--cm-success-bg); color:var(--cm-success); }
+
+  /* Injury category chip */
+  .inj-cat-chip { display:inline-flex; align-items:center; height:16px; padding:0 5px; border-radius:4px; font:600 9.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; background:var(--cm-accent-soft); color:var(--cm-accent); margin-left:5px; }
+
+  /* Protocol references */
+  .inj-proto-row { display:flex; align-items:center; gap:5px; margin-top:8px; padding-top:8px; border-top:1px solid var(--cm-border-soft); font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .inj-proto-row .lbl { color:var(--cm-fg-muted); }
+  .inj-proto-row .name { font:600 11px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .inj-ref-wrap { position:relative; display:inline-flex; }
+  .inj-ref-btn { width:16px; height:16px; border-radius:50%; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); font:600 9px/1 var(--cm-font-mono); cursor:help; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+  .inj-ref-btn:hover { color:var(--cm-accent); border-color:var(--cm-accent); }
+  .inj-ref-tooltip { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); min-width:280px; max-width:340px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:8px; padding:10px 12px; box-shadow:0 4px 16px rgba(0,0,0,.16); z-index:400; font:500 11.5px/1.6 var(--cm-font-sans); color:var(--cm-fg-muted); white-space:normal; text-align:left; }
+  .inj-ref-tooltip .ref-title { font:600 11px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:6px; }
+  .inj-ref-tooltip li { list-style:none; padding:0; margin:0 0 4px; }
+  .inj-ref-tooltip li:last-child { margin:0; }
+  .inj-ref-wrap:hover .inj-ref-tooltip { display:block; }
 </style>
 </head>
 <body class="cm">
@@ -425,9 +441,20 @@
     <div class="inj-modal-body">
       <div class="inj-2col">
         <div class="cm-field"><label class="cm-label" for="logPlayer">Player *</label><select id="logPlayer" class="cm-input"><option value="">Select player…</option></select></div>
-        <div class="cm-field"><label class="cm-label" for="logType">Injury type *</label><input id="logType" class="cm-input" placeholder="e.g. Hamstring strain"></div>
+        <div class="cm-field"><label class="cm-label" for="logType">Diagnosis *</label><input id="logType" class="cm-input" placeholder="e.g. Distensión isquiotibial derecha"></div>
       </div>
-      <div class="inj-3col">
+      <div class="inj-2col">
+        <div class="cm-field"><label class="cm-label" for="logCategory">Injury category *</label>
+          <select id="logCategory" class="cm-input">
+            <option value="">Select category…</option>
+            <option value="muscular">Muscular</option>
+            <option value="acl">ACL</option>
+            <option value="ligament">Ligament (non-ACL)</option>
+            <option value="tendon">Tendon</option>
+            <option value="bone">Bone</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
         <div class="cm-field"><label class="cm-label" for="logSev">Severity *</label>
           <select id="logSev" class="cm-input">
             <option value="">Select…</option>
@@ -436,6 +463,8 @@
             <option value="severe">Severe</option>
           </select>
         </div>
+      </div>
+      <div class="inj-2col">
         <div class="cm-field"><label class="cm-label" for="logStart">Start date *</label><input id="logStart" type="date" class="cm-input"></div>
         <div class="cm-field"><label class="cm-label" for="logReturn">Est. return</label><input id="logReturn" type="date" class="cm-input"><div id="logReturnHint" style="display:none;margin-top:4px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-accent)"></div></div>
       </div>
@@ -465,7 +494,7 @@
         </div>
       </div>
 
-      <!-- BAMIC section — shown only for muscular injuries -->
+      <!-- BAMIC section — shown only when category = muscular -->
       <div id="bamicSection" style="display:none">
         <div class="inj-2col">
           <div class="cm-field">
@@ -499,6 +528,63 @@
           <div id="bamicAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
             <strong style="margin-bottom:3px">⚠ Intratendinous injury</strong>
             Elevated re-injury risk. Extended rehabilitation recommended.
+          </div>
+        </div>
+      </div>
+
+      <!-- Ligament section — shown when category = ligament -->
+      <div id="ligamentSection" style="display:none">
+        <div class="inj-2col">
+          <div class="cm-field">
+            <label class="cm-label" for="logLigamentGrade">Ligament grade (JOSPT / Kerkhoffs 2012)</label>
+            <select id="logLigamentGrade" class="cm-input">
+              <option value="">Not classified</option>
+              <option value="grade_i">Grade I — Mild stretch, no tear (RTP: 7-14 days)</option>
+              <option value="grade_ii">Grade II — Partial tear, moderate instability (RTP: 14-35 days)</option>
+              <option value="grade_iii">Grade III — Complete tear, significant instability (RTP: 35-77 days)</option>
+            </select>
+          </div>
+          <div id="ligamentGradeAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
+            <strong style="margin-bottom:3px">⚠ Grade III ligament tear</strong>
+            Significant instability. Consider surgical evaluation. Extended rehabilitation required.
+          </div>
+        </div>
+      </div>
+
+      <!-- Tendon section — shown when category = tendon -->
+      <div id="tendonSection" style="display:none">
+        <div class="inj-2col">
+          <div class="cm-field">
+            <label class="cm-label" for="logTendonStage">Tendon continuum stage (Cook &amp; Purdam 2009)</label>
+            <select id="logTendonStage" class="cm-input">
+              <option value="">Not classified</option>
+              <option value="reactive">Stage 1 — Reactive tendinopathy · acute overload, reversible (RTP: 14-28 days)</option>
+              <option value="disrepair">Stage 2 — Tendon disrepair · structural changes (RTP: 28-56 days)</option>
+              <option value="degenerative">Stage 3 — Degenerative tendinopathy · advanced, poor reversibility (RTP: 56-120 days)</option>
+            </select>
+          </div>
+          <div id="tendonDegenerativeAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.30);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:#B45309">
+            <strong style="margin-bottom:3px">⚠ Degenerative tendinopathy</strong>
+            Poor reversibility. High recurrence risk. Long-term load management required.
+          </div>
+        </div>
+      </div>
+
+      <!-- Bone section — shown when category = bone -->
+      <div id="boneSection" style="display:none">
+        <div class="inj-2col">
+          <div class="cm-field">
+            <label class="cm-label" for="logBoneType">Fracture classification</label>
+            <select id="logBoneType" class="cm-input">
+              <option value="">Not classified</option>
+              <option value="stress_low">Stress fracture — Low risk (tibia, fibula) · RTP: 42-56 days</option>
+              <option value="stress_high">Stress fracture — High risk (navicular, 5th MT, femoral neck) · RTP: 84-120 days</option>
+              <option value="complete">Complete fracture · RTP: 84 days (orthopedic review required)</option>
+            </select>
+          </div>
+          <div id="boneHighRiskAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
+            <strong style="margin-bottom:3px">⚠ High-risk stress fracture</strong>
+            Orthopedic evaluation required before return to loading. May require surgical intervention.
           </div>
         </div>
       </div>
@@ -879,15 +965,168 @@ const PROTOCOLS = {
     ],
     durations:{minor:[3,5,7,10,14],moderate:[5,10,14,21,28],severe:[7,14,21,35,42]},
   },
+  // Ligament Grade I — JOSPT/Kerkhoffs (2012), RTP ~14 days
+  ligament_i: {
+    phases:[
+      {name:'Acute PRICE',type:'acute',criteria:'Pain and swelling controlled; weight bearing possible'},
+      {name:'Partial loading',type:'subacute',criteria:'Pain-free partial weight bearing; proprioception begun'},
+      {name:'Strengthening',type:'strength',criteria:'Full ROM; eccentric strengthening pain-free'},
+      {name:'Functional',type:'running',criteria:'Pain-free jogging; change of direction initiated'},
+      {name:'Return to training',type:'training',criteria:'Single leg balance ≥90%; figure-8 run pain-free'},
+    ],
+    durations:{minor:[3,4,3,2,2]},
+  },
+  // Ligament Grade II — JOSPT/Kerkhoffs (2012), RTP ~35 days
+  ligament_ii: {
+    phases:[
+      {name:'Acute immobilization',type:'acute',criteria:'Pain and swelling controlled; protected weight bearing'},
+      {name:'Partial weight bearing',type:'subacute',criteria:'ROM progressing; partial weight bearing pain-free'},
+      {name:'Strengthening',type:'strength',criteria:'Eccentric strength ≥70%; proprioception restored'},
+      {name:'Functional / COD',type:'running',criteria:'Change of direction pain-free; jogging unrestricted'},
+      {name:'Return to training',type:'training',criteria:'Hop test ≥90% LSI; no swelling post-exercise'},
+    ],
+    durations:{minor:[5,5,11,7,7]},
+  },
+  // Ligament Grade III — JOSPT/Kerkhoffs (2012), RTP ~77 days
+  ligament_iii: {
+    phases:[
+      {name:'Acute / protected',type:'acute',criteria:'Immobilization; swelling controlled; pain ≤3/10'},
+      {name:'ROM / partial loading',type:'subacute',criteria:'ROM progressing; partial weight bearing with support'},
+      {name:'Strengthening',type:'strength',criteria:'Eccentric strength ≥60%; no joint effusion'},
+      {name:'Neuromuscular',type:'neuromuscular',criteria:'Single leg balance ≥80%; Y-Balance within 4 cm'},
+      {name:'Return to running',type:'running',criteria:'Running pain-free at 8 km/h; no swelling post-session'},
+      {name:'Return to competition',type:'competition',criteria:'Hop test ≥90% LSI; figure-8 run pain-free; strength ≥90% symmetry'},
+    ],
+    durations:{minor:[14,7,14,14,14,14]},
+  },
+  // Tendon Stage 1 — Reactive (Cook & Purdam 2009, Silbernagel 2007), RTP ~28 days
+  tendon_reactive: {
+    phases:[
+      {name:'Isometric loading',type:'acute',criteria:'Pain ≤3/10 NRS during isometric holds at long muscle length'},
+      {name:'Isotonic loading',type:'subacute',criteria:'Pain ≤3/10; 3×15 slow tempo completed; no morning stiffness'},
+      {name:'Energy storage',type:'strength',criteria:'Plyometrics pain-free; VISA-P >60'},
+      {name:'Return to running',type:'running',criteria:'Progressive running without pain spike; VISA-P >70'},
+      {name:'Return to training',type:'training',criteria:'Full training load tolerated; VISA-P >80'},
+      {name:'Return to competition',type:'competition',criteria:'VISA-P >80; no symptoms 24h post-match'},
+    ],
+    durations:{minor:[7,7,7,3,2,2]},
+  },
+  // Tendon Stage 2 — Disrepair (Cook & Purdam 2009), RTP ~56 days
+  tendon_disrepair: {
+    phases:[
+      {name:'Isometric loading',type:'acute',criteria:'Pain ≤3/10 NRS during isometric holds'},
+      {name:'Isotonic loading',type:'subacute',criteria:'Pain ≤3/10; progressive resistance 3×15'},
+      {name:'Energy storage',type:'strength',criteria:'Plyometrics pain-free; VISA-P >60'},
+      {name:'Return to running',type:'running',criteria:'Running mechanics assessed; pain-free; VISA-P >70'},
+      {name:'Return to training',type:'training',criteria:'Full training pain-free; VISA-P >80'},
+      {name:'Return to competition',type:'competition',criteria:'VISA-P >80; symmetric loading confirmed'},
+    ],
+    durations:{minor:[14,13,14,7,5,3]},
+  },
+  // Tendon Stage 3 — Degenerative (Cook & Purdam 2009), RTP ~120 days
+  tendon_degenerative: {
+    phases:[
+      {name:'Isometric loading',type:'acute',criteria:'Pain ≤3/10; isometric at long muscle length — 5×45s'},
+      {name:'Isotonic loading',type:'subacute',criteria:'Slow heavy resistance; pain ≤3/10; 3×8 at 70% 1RM'},
+      {name:'Energy storage',type:'strength',criteria:'Pain-free plyometrics; double leg progressing to single leg; VISA-P >60'},
+      {name:'Return to running',type:'running',criteria:'Running pain-free; gait analysis passed; VISA-P >70'},
+      {name:'Return to training',type:'training',criteria:'Full training pain-free; VISA-P >80'},
+      {name:'Return to competition',type:'competition',criteria:'VISA-P >80; no symptoms 24h post-match; load monitoring plan in place'},
+    ],
+    durations:{minor:[14,14,21,21,14,36]},
+  },
+  // Bone — Stress fracture low risk (tibia, fibula), RTP ~56 days
+  bone_stress_low: {
+    phases:[
+      {name:'Rest / unloading',type:'acute',criteria:'Non-weight bearing or crutches; no pain on palpation'},
+      {name:'Pool running',type:'subacute',criteria:'Pain-free pool running; no bony tenderness'},
+      {name:'Progressive loading',type:'strength',criteria:'Walking pain-free; graduated impact loading tolerated'},
+      {name:'Return to running',type:'running',criteria:'Running mechanics pain-free; no bone pain post-session'},
+      {name:'Return to sport',type:'competition',criteria:'Full training completed; radiological/clinical clearance'},
+    ],
+    durations:{minor:[14,7,14,10,11]},
+  },
+  // Bone — Stress fracture high risk (navicular, 5th MT, femoral neck), RTP ~120 days
+  bone_stress_high: {
+    phases:[
+      {name:'Rest / non-weight bearing',type:'acute',criteria:'Orthopedic evaluation; non-weight bearing; imaging confirmed'},
+      {name:'Partial weight bearing',type:'subacute',criteria:'Progressive weight bearing; no bony pain'},
+      {name:'Progressive loading',type:'strength',criteria:'Full weight bearing; low-impact activities pain-free'},
+      {name:'Return to running',type:'running',criteria:'Running mechanics pain-free; bone scan / MRI clearance'},
+      {name:'Return to sport',type:'competition',criteria:'Full training; orthopedic sign-off; load monitoring plan'},
+    ],
+    durations:{minor:[21,21,21,21,36]},
+  },
+  // Bone — Complete fracture, RTP ~84 days
+  bone_complete: {
+    phases:[
+      {name:'Immobilization',type:'acute',criteria:'Fracture alignment confirmed; non-weight bearing'},
+      {name:'Partial weight bearing',type:'subacute',criteria:'Callus formation on imaging; partial weight bearing tolerated'},
+      {name:'Full weight bearing',type:'strength',criteria:'Full weight bearing pain-free; normal gait'},
+      {name:'Pool conditioning',type:'running',criteria:'Cardiovascular fitness restored; no bone pain'},
+      {name:'Running mechanics',type:'running',criteria:'Running form assessed; progressive impact loading'},
+      {name:'Return to training',type:'training',criteria:'Full team training; impact tolerated'},
+      {name:'Return to competition',type:'competition',criteria:'Radiological union confirmed; functional tests passed'},
+    ],
+    durations:{minor:[21,14,14,14,7,7,7]},
+  },
 };
 
-function getProtocol(injuryType) {
+// ═══════════════ PROTOCOL BIBLIOGRAPHY ═══════════════
+const PROTOCOL_REFS = {
+  muscle: [
+    'Pollock N et al. (2014). British athletics muscle injury classification. Br J Sports Med.',
+    'Askling CM et al. (2013). Acute hamstring injuries in Swedish elite football. Br J Sports Med.',
+  ],
+  acl: [
+    'Myer GD et al. (2006). Rehabilitation after ACL reconstruction. JOSPT.',
+    'van Melick N et al. (2016). Evidence-based clinical practice update: ACL rehabilitation. Br J Sports Med.',
+  ],
+  ligament: [
+    'Kerkhoffs GM et al. (2012). Diagnosis, treatment and prevention of ankle sprains. Br J Sports Med.',
+    'Tassignon B et al. (2021). Criteria-based RTP following lateral ankle sprain. IJSPT.',
+  ],
+  tendon: [
+    'Cook JL & Purdam CR (2009). Is tendon pathology a continuum? Br J Sports Med.',
+    'Silbernagel KG et al. (2007). Full symptomatic recovery does not ensure full recovery. Br J Sports Med.',
+  ],
+  bone: [
+    'Boden BP & Osbahr DC (2000). High-risk stress fractures: evaluation and treatment. J Am Acad Orthop Surg.',
+    'Warden SJ et al. (2014). Management and prevention of bone stress injuries. JOSPT.',
+  ],
+};
+
+const CATEGORY_LABELS = {
+  muscular:'Muscular', acl:'ACL', ligament:'Ligament', tendon:'Tendon', bone:'Bone', other:'Other'
+};
+
+function getProtocol(injuryType, injuryCategory, subClassification) {
+  // Category-based selection takes priority
+  if (injuryCategory === 'acl')      return PROTOCOLS.acl;
+  if (injuryCategory === 'muscular') return PROTOCOLS.muscle;
+  if (injuryCategory === 'ligament') {
+    if (subClassification === 'grade_iii') return PROTOCOLS.ligament_iii;
+    if (subClassification === 'grade_ii')  return PROTOCOLS.ligament_ii;
+    return PROTOCOLS.ligament_i;
+  }
+  if (injuryCategory === 'tendon') {
+    if (subClassification === 'degenerative') return PROTOCOLS.tendon_degenerative;
+    if (subClassification === 'disrepair')    return PROTOCOLS.tendon_disrepair;
+    return PROTOCOLS.tendon_reactive;
+  }
+  if (injuryCategory === 'bone') {
+    if (subClassification === 'stress_high') return PROTOCOLS.bone_stress_high;
+    if (subClassification === 'complete')    return PROTOCOLS.bone_complete;
+    return PROTOCOLS.bone_stress_low;
+  }
+  if (injuryCategory === 'other') return PROTOCOLS.generic;
+  // Fallback: text-based matching for legacy injuries without category
   const t = (injuryType || '').toLowerCase();
-  if (/acl|cruciate/.test(t))                                  return PROTOCOLS.acl;
+  if (/acl|cruciate/.test(t))                                          return PROTOCOLS.acl;
   if (/muscle|strain|tear|hamstring|quad|calf|adductor|groin/.test(t)) return PROTOCOLS.muscle;
-  if (/ligament|sprain|ankle|mcl|lcl/.test(t))                return PROTOCOLS.ligament;
-  if (/tendon|tendinop|achilles|patellar/.test(t))             return PROTOCOLS.tendon;
-  if (/bone|fracture|stress/.test(t))                          return PROTOCOLS.bone;
+  if (/ligament|sprain|ankle|mcl|lcl/.test(t))                        return PROTOCOLS.ligament_i;
+  if (/tendon|tendinop|achilles|patellar/.test(t))                     return PROTOCOLS.tendon_reactive;
+  if (/bone|fracture|stress/.test(t))                                  return PROTOCOLS.bone_stress_low;
   return PROTOCOLS.generic;
 }
 
@@ -932,11 +1171,25 @@ const RTP_DAYS = {
   '3a':42,'3b':63,'3c':84,'4':120,
 };
 
-function calcEstimatedReturn(startDate, bamicGrade, injuryType) {
+const LIGAMENT_RTP = { grade_i:14, grade_ii:35, grade_iii:77 };
+const TENDON_RTP   = { reactive:28, disrepair:56, degenerative:120 };
+const BONE_RTP     = { stress_low:56, stress_high:120, complete:84 };
+
+function calcEstimatedReturn(startDate, bamicGrade, injuryType, injuryCategory, subClassification) {
   if (!startDate) return null;
   let days = null;
-  if (/acl|cruciate/i.test(injuryType || '')) days = 270;
-  else if (bamicGrade && RTP_DAYS[bamicGrade])  days = RTP_DAYS[bamicGrade];
+  const cat = injuryCategory || '';
+  if (cat === 'acl' || /acl|cruciate/i.test(injuryType || '')) {
+    days = 270;
+  } else if ((cat === 'muscular' || !cat) && bamicGrade && RTP_DAYS[bamicGrade]) {
+    days = RTP_DAYS[bamicGrade];
+  } else if (cat === 'ligament') {
+    days = LIGAMENT_RTP[subClassification] || 14;
+  } else if (cat === 'tendon') {
+    days = TENDON_RTP[subClassification] || 28;
+  } else if (cat === 'bone') {
+    days = BONE_RTP[subClassification] || 84;
+  }
   if (!days) return null;
   const d = new Date(startDate); d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
@@ -985,12 +1238,14 @@ function buildBamicPhases(injuryId, startDate, grade) {
   });
 }
 
-function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade) {
+function buildPhases(injuryId, startDate, severity, injuryType, bamicGrade, injuryCategory, subClassification) {
   if (bamicGrade && BAMIC_PROTOCOLS[bamicGrade]) {
     return buildBamicPhases(injuryId, startDate, bamicGrade);
   }
-  const proto = getProtocol(injuryType);
-  const sev   = severity || 'moderate';
+  const proto = getProtocol(injuryType, injuryCategory, subClassification);
+  // New category-based protocols have a single 'minor' duration row — use it regardless of severity
+  const hasSingleRow = proto.durations.minor && !proto.durations.moderate;
+  const sev   = hasSingleRow ? 'minor' : (severity || 'moderate');
   const durs  = proto.durations[sev] || proto.durations.severe || proto.durations.moderate;
   const phases = []; let cumDays = 0;
   proto.phases.forEach((ph, idx) => {
@@ -1338,41 +1593,77 @@ async function savePhaseStatus(status) {
     });
   });
 
-  // Show BAMIC section when injury type is muscular
-  document.getElementById('logType')?.addEventListener('input', function() {
-    const show = isMuscular(this.value);
-    document.getElementById('bamicSection').style.display = show ? '' : 'none';
-    if (!show) {
-      document.getElementById('logBamic').value = '';
-      document.getElementById('bamicAlert').style.display = 'none';
-    }
+  // Category selector — show/hide sub-classification sections
+  document.getElementById('logCategory')?.addEventListener('change', function() {
+    _hideAllSubClsSections();
+    const cat = this.value;
+    if (cat === 'muscular')  document.getElementById('bamicSection').style.display = '';
+    if (cat === 'ligament')  document.getElementById('ligamentSection').style.display = '';
+    if (cat === 'tendon')    document.getElementById('tendonSection').style.display = '';
+    if (cat === 'bone')      document.getElementById('boneSection').style.display = '';
+    // Reset sub-cls values when switching category
+    document.getElementById('logBamic').value         = '';
+    document.getElementById('logLigamentGrade').value = '';
+    document.getElementById('logTendonStage').value   = '';
+    document.getElementById('logBoneType').value      = '';
+    autoFillReturn();
   });
 
-  // Show intratendinous alert when grade ends in 'c'
+  // Show intratendinous alert when BAMIC grade ends in 'c'
   document.getElementById('logBamic')?.addEventListener('change', function() {
     document.getElementById('bamicAlert').style.display =
       this.value.endsWith('c') ? 'flex' : 'none';
+    autoFillReturn();
   });
 
-  // Auto-calculate expected return from BAMIC grade or ACL type
+  // Ligament grade III alert
+  document.getElementById('logLigamentGrade')?.addEventListener('change', function() {
+    document.getElementById('ligamentGradeAlert').style.display =
+      this.value === 'grade_iii' ? 'flex' : 'none';
+    autoFillReturn();
+  });
+
+  // Tendon degenerative alert
+  document.getElementById('logTendonStage')?.addEventListener('change', function() {
+    document.getElementById('tendonDegenerativeAlert').style.display =
+      this.value === 'degenerative' ? 'flex' : 'none';
+    autoFillReturn();
+  });
+
+  // Bone high-risk alert
+  document.getElementById('logBoneType')?.addEventListener('change', function() {
+    document.getElementById('boneHighRiskAlert').style.display =
+      this.value === 'stress_high' ? 'flex' : 'none';
+    autoFillReturn();
+  });
+
+  // Auto-calculate expected return from category + sub-classification
   function autoFillReturn() {
     if (_returnManuallyEdited) return;
-    const startDate  = document.getElementById('logStart')?.value;
-    const bamicGrade = document.getElementById('logBamic')?.value;
-    const injType    = document.getElementById('logType')?.value;
-    const est = calcEstimatedReturn(startDate, bamicGrade, injType);
+    const startDate      = document.getElementById('logStart')?.value;
+    const bamicGrade     = document.getElementById('logBamic')?.value;
+    const injType        = document.getElementById('logType')?.value;
+    const injCategory    = document.getElementById('logCategory')?.value;
+    const subCls         = getSubClsFromModal(injCategory);
+    const est = calcEstimatedReturn(startDate, bamicGrade, injType, injCategory, subCls);
     const hintEl = document.getElementById('logReturnHint');
     if (est) {
       document.getElementById('logReturn').value = est;
-      const lbl = /acl|cruciate/i.test(injType||'') ? 'ACL protocol' : `BAMIC ${bamicGrade}`;
-      if (hintEl) { hintEl.textContent = `Auto-estimated: ${fmtHintDate(est)} — ${lbl}`; hintEl.style.display = ''; }
+      let lbl;
+      if (injCategory === 'acl' || /acl|cruciate/i.test(injType||'')) lbl = 'ACL protocol (270 days)';
+      else if (injCategory === 'muscular' && bamicGrade)               lbl = `BAMIC ${bamicGrade}`;
+      else if (injCategory === 'ligament' && subCls)                   lbl = `Ligament ${subCls.replace('grade_','Grade ').toUpperCase()} — Kerkhoffs 2012`;
+      else if (injCategory === 'tendon'   && subCls)                   lbl = `Tendon Stage ${subCls === 'reactive' ? '1' : subCls === 'disrepair' ? '2' : '3'} — Cook & Purdam`;
+      else if (injCategory === 'bone'     && subCls)                   lbl = `Bone — ${subCls === 'stress_low' ? 'stress low risk' : subCls === 'stress_high' ? 'stress high risk' : 'complete fracture'}`;
+      else lbl = 'protocol estimate';
+      if (hintEl) { hintEl.textContent = `Estimated: ${fmtHintDate(est)} — ${lbl}`; hintEl.style.display = ''; }
     } else {
       if (hintEl) hintEl.style.display = 'none';
     }
   }
   document.getElementById('logStart')?.addEventListener('change', autoFillReturn);
-  document.getElementById('logBamic')?.addEventListener('change', autoFillReturn);
   document.getElementById('logType')?.addEventListener('input', autoFillReturn);
+  document.getElementById('logCategory')?.addEventListener('change', autoFillReturn);
   document.getElementById('logReturn')?.addEventListener('input', () => {
     _returnManuallyEdited = true;
     const hintEl = document.getElementById('logReturnHint');
@@ -1502,13 +1793,17 @@ function hasReinjuryRisk(inj) {
 }
 
 function getPriorInjury(inj) {
-  if (!inj.body_area || !inj.start_date) return null;
+  if (!inj.start_date) return null;
+  if (!inj.body_area && !inj.injury_category) return null;
   const injStart = new Date(inj.start_date);
   const ninety   = new Date(injStart); ninety.setDate(injStart.getDate() - 90);
   return _allInjuries.find(o =>
     o.id !== inj.id && o.player_id === inj.player_id &&
-    (o.body_area || '').toLowerCase() === inj.body_area.toLowerCase() &&
-    new Date(o.start_date) >= ninety && new Date(o.start_date) < injStart
+    new Date(o.start_date) >= ninety && new Date(o.start_date) < injStart &&
+    (
+      (inj.injury_category && o.injury_category && o.injury_category === inj.injury_category) ||
+      (inj.body_area && (o.body_area || '').toLowerCase() === inj.body_area.toLowerCase())
+    )
   ) || null;
 }
 
@@ -1670,7 +1965,7 @@ function injCard(inj) {
       </div>
       <div class="inj-fact">
         <span class="inj-fact-l">Diagnosis</span>
-        <span class="inj-fact-v">${inj.injury_type || '—'} <small>${inj.body_area || ''}</small></span>
+        <span class="inj-fact-v">${inj.injury_type || '—'} <small>${inj.body_area || ''}</small>${inj.injury_category ? `<span class="inj-cat-chip">${CATEGORY_LABELS[inj.injury_category] || inj.injury_category}</span>` : ''}</span>
       </div>
       <div class="inj-fact">
         <span class="inj-fact-l">Severity</span>
@@ -1693,7 +1988,8 @@ function injCard(inj) {
     const prior = getPriorInjury(inj);
     if (!prior) return '';
     const days = Math.round((new Date(inj.start_date) - new Date(prior.start_date)) / 86400000);
-    return `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>Re-injury — previous ${prior.injury_type || inj.injury_type || 'injury'} (${prior.body_area || inj.body_area || ''}) ${days}d ago. Extended protocol recommended.</span></div>`;
+    const catLabel = inj.injury_category ? (CATEGORY_LABELS[inj.injury_category] || inj.injury_category) : (prior.injury_type || inj.injury_type || 'injury');
+    return `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>Re-injury risk — previous ${catLabel} injury ${days}d ago. Extended protocol and load monitoring recommended.</span></div>`;
   })()}
     <div class="inj-timeline">${tlHtml}</div>
 
@@ -1721,6 +2017,31 @@ function injCard(inj) {
         <div><div class="l">Notes</div><div class="v">${inj.notes ? inj.notes.slice(0,60) + (inj.notes.length > 60 ? '…':'') : '—'}</div></div>
       </div>
     </div>
+    ${(() => {
+      const cat   = inj.injury_category || (()=>{ const t=(inj.injury_type||'').toLowerCase(); if(/acl|cruciate/.test(t)) return 'acl'; if(/muscle|strain|tear|hamstring|quad|calf|adductor|groin/.test(t)) return 'muscular'; if(/ligament|sprain|ankle/.test(t)) return 'ligament'; if(/tendon|tendinop|achilles/.test(t)) return 'tendon'; if(/bone|fracture/.test(t)) return 'bone'; return null; })();
+      const refs  = cat ? (PROTOCOL_REFS[cat === 'muscular' ? 'muscle' : cat] || []) : [];
+      const proto = getProtocol(inj.injury_type, inj.injury_category, inj.sub_classification);
+      const protoLabel = proto === PROTOCOLS.acl ? 'ACL 7-phase protocol'
+        : proto === PROTOCOLS.muscle ? 'BAMIC muscle protocol'
+        : proto === PROTOCOLS.ligament_i ? 'Ligament Grade I protocol'
+        : proto === PROTOCOLS.ligament_ii ? 'Ligament Grade II protocol'
+        : proto === PROTOCOLS.ligament_iii ? 'Ligament Grade III protocol'
+        : proto === PROTOCOLS.tendon_reactive ? 'Tendon Stage 1 — Reactive'
+        : proto === PROTOCOLS.tendon_disrepair ? 'Tendon Stage 2 — Disrepair'
+        : proto === PROTOCOLS.tendon_degenerative ? 'Tendon Stage 3 — Degenerative'
+        : proto === PROTOCOLS.bone_stress_low ? 'Bone — Stress fracture low risk'
+        : proto === PROTOCOLS.bone_stress_high ? 'Bone — Stress fracture high risk'
+        : proto === PROTOCOLS.bone_complete ? 'Bone — Complete fracture'
+        : 'Generic protocol';
+      if (!refs.length && protoLabel === 'Generic protocol') return '';
+      const refList = refs.map(r => `<li>${r}</li>`).join('');
+      return `<div class="inj-proto-row">
+        <i class="ti ti-flask" style="font-size:12px"></i>
+        <span class="lbl">Protocol:</span>
+        <span class="name">${protoLabel}</span>
+        ${refs.length ? `<div class="inj-ref-wrap"><button class="inj-ref-btn" aria-label="References">ⓘ</button><div class="inj-ref-tooltip"><div class="ref-title">References</div><ul>${refList}</ul></div></div>` : ''}
+      </div>`;
+    })()}
   </div>`;
 }
 
@@ -1830,11 +2151,23 @@ function populatePlayerSelect(selId) {
 }
 
 // ═══════════════ LOG MODAL ═══════════════
+function _hideAllSubClsSections() {
+  ['bamicSection','ligamentSection','tendonSection','boneSection'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  ['bamicAlert','ligamentGradeAlert','tendonDegenerativeAlert','boneHighRiskAlert'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
 function openLogModal() {
   _editingInjuryId = null;
   document.getElementById('modalLogInjTitle').textContent = 'Log injury';
   document.getElementById('logPlayer').value    = '';
   document.getElementById('logType').value      = '';
+  document.getElementById('logCategory').value  = '';
   document.getElementById('logAreaSel').value   = '';
   document.getElementById('logSev').value       = '';
   document.getElementById('logStart').value     = new Date().toISOString().split('T')[0];
@@ -1842,8 +2175,10 @@ function openLogModal() {
   document.getElementById('logMechanism').value = '';
   document.getElementById('logNotes').value     = '';
   document.getElementById('logBamic').value     = '';
-  document.getElementById('bamicSection').style.display = 'none';
-  document.getElementById('bamicAlert').style.display   = 'none';
+  document.getElementById('logLigamentGrade').value = '';
+  document.getElementById('logTendonStage').value   = '';
+  document.getElementById('logBoneType').value      = '';
+  _hideAllSubClsSections();
   document.getElementById('logReturnHint').style.display = 'none';
   _returnManuallyEdited = false;
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => z.classList.remove('is-sel'));
@@ -1855,9 +2190,9 @@ function openEditInjury(id) {
   if (!inj) return;
   _editingInjuryId = id;
   document.getElementById('modalLogInjTitle').textContent = 'Edit injury';
-  const pl = inj.players || _playersMap[inj.player_id] || {};
   document.getElementById('logPlayer').value    = inj.player_id || '';
   document.getElementById('logType').value      = inj.injury_type || '';
+  document.getElementById('logCategory').value  = inj.injury_category || '';
   document.getElementById('logAreaSel').value   = inj.body_area || '';
   document.getElementById('logSev').value       = inj.severity || '';
   document.getElementById('logStart').value     = inj.start_date || '';
@@ -1865,11 +2200,27 @@ function openEditInjury(id) {
   document.getElementById('logMechanism').value = inj.mechanism || '';
   document.getElementById('logNotes').value     = inj.notes || '';
   document.getElementById('logBamic').value     = inj.bamic_grade || '';
-  const _showBamic = isMuscular(inj.injury_type || '');
-  document.getElementById('bamicSection').style.display = _showBamic ? '' : 'none';
-  document.getElementById('bamicAlert').style.display   = _showBamic && (inj.bamic_grade || '').endsWith('c') ? 'flex' : 'none';
+  document.getElementById('logLigamentGrade').value = (inj.injury_category === 'ligament' ? inj.sub_classification : '') || '';
+  document.getElementById('logTendonStage').value   = (inj.injury_category === 'tendon'   ? inj.sub_classification : '') || '';
+  document.getElementById('logBoneType').value      = (inj.injury_category === 'bone'     ? inj.sub_classification : '') || '';
+  // Show/hide sub-classification sections based on category
+  _hideAllSubClsSections();
+  const cat = inj.injury_category || '';
+  if (cat === 'muscular') {
+    document.getElementById('bamicSection').style.display = '';
+    document.getElementById('bamicAlert').style.display = (inj.bamic_grade || '').endsWith('c') ? 'flex' : 'none';
+  } else if (cat === 'ligament') {
+    document.getElementById('ligamentSection').style.display = '';
+    document.getElementById('ligamentGradeAlert').style.display = inj.sub_classification === 'grade_iii' ? 'flex' : 'none';
+  } else if (cat === 'tendon') {
+    document.getElementById('tendonSection').style.display = '';
+    document.getElementById('tendonDegenerativeAlert').style.display = inj.sub_classification === 'degenerative' ? 'flex' : 'none';
+  } else if (cat === 'bone') {
+    document.getElementById('boneSection').style.display = '';
+    document.getElementById('boneHighRiskAlert').style.display = inj.sub_classification === 'stress_high' ? 'flex' : 'none';
+  }
   document.getElementById('logReturnHint').style.display = 'none';
-  _returnManuallyEdited = !!(inj.expected_return); // don't overwrite existing return date
+  _returnManuallyEdited = !!(inj.expected_return);
   // Highlight on map
   const area = inj.body_area || '';
   document.querySelectorAll('#formMapAnt .bz, #formMapPost .bz').forEach(z => {
@@ -1882,24 +2233,33 @@ function closeLogModal() {
   document.getElementById('modalLogInj').classList.remove('is-open');
 }
 
+function getSubClsFromModal(category) {
+  if (category === 'ligament') return document.getElementById('logLigamentGrade')?.value || null;
+  if (category === 'tendon')   return document.getElementById('logTendonStage')?.value   || null;
+  if (category === 'bone')     return document.getElementById('logBoneType')?.value       || null;
+  return null;
+}
+
 async function saveInjury() {
   const g = id => document.getElementById(id)?.value?.trim();
-  const player_id       = g('logPlayer');
-  const injury_type     = g('logType');
-  const body_area       = g('logAreaSel');
-  const severity        = g('logSev');
-  const start_date      = g('logStart');
-  const expected_return = g('logReturn') || null;
-  const mechanism       = g('logMechanism') || null;
-  const notes           = g('logNotes')  || null;
-  const bamic_grade     = g('logBamic')  || null;
+  const player_id        = g('logPlayer');
+  const injury_type      = g('logType');
+  const injury_category  = g('logCategory') || null;
+  const body_area        = g('logAreaSel');
+  const severity         = g('logSev');
+  const start_date       = g('logStart');
+  const expected_return  = g('logReturn') || null;
+  const mechanism        = g('logMechanism') || null;
+  const notes            = g('logNotes')  || null;
+  const bamic_grade      = g('logBamic')  || null;
+  const sub_classification = getSubClsFromModal(injury_category);
 
-  if (!player_id || !injury_type || !severity || !start_date) {
-    alert('Please fill in Player, Injury type, Severity and Start date.');
+  if (!player_id || !injury_type || !injury_category || !severity || !start_date) {
+    alert('Please fill in Player, Diagnosis, Injury category, Severity and Start date.');
     return;
   }
 
-  const payload = { player_id, injury_type, body_area: body_area || null, severity, start_date, expected_return, mechanism, notes, bamic_grade };
+  const payload = { player_id, injury_type, injury_category, sub_classification, body_area: body_area || null, severity, start_date, expected_return, mechanism, notes, bamic_grade };
 
   if (_editingInjuryId) {
     const { error } = await window.sb.from('injuries').update(payload).eq('id', _editingInjuryId);
@@ -1914,7 +2274,7 @@ async function saveInjury() {
 
     // Auto-create phases
     try {
-      const phases = buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade);
+      const phases = buildPhases(newInj.id, start_date, severity, injury_type, bamic_grade, injury_category, sub_classification);
       const { data: insertedPhs } = await window.sb.from('injury_phases').insert(phases).select();
       if (insertedPhs) _phasesMap[newInj.id] = insertedPhs;
     } catch(e) { console.warn('[Injuries] phases insert failed:', e.message); }
