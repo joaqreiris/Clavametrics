@@ -146,7 +146,22 @@ async function main() {
 
   if (!clubs?.length) { console.error('❌  No hay clubs en la DB.'); process.exit(1); }
 
-  const club = clubs[0];
+  // ─ Club selection ──────────────────────────────────────────
+  let club;
+  if (clubs.length === 1) {
+    club = clubs[0];
+  } else {
+    console.log('\n🏟️  Clubs disponibles:');
+    clubs.forEach((c, i) => console.log(`   ${i + 1}) ${c.name}  (${c.id})`));
+    const pick = await rl.question(`\nElegí un club (1-${clubs.length}): `);
+    const idx = parseInt(pick.trim(), 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= clubs.length) {
+      console.error('❌  Selección inválida.'); rl.close(); process.exit(1);
+    }
+    club = clubs[idx];
+    console.log(`✓ Club seleccionado: ${club.name}\n`);
+  }
+
   const clubPlayers  = (players  || []).filter(p => p.club_id === club.id);
   const clubSessions = (sessions || []).filter(s => s.club_id === club.id);
 
