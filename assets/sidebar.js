@@ -144,7 +144,7 @@
     ]},
     { label: 'Medical', items: [
       { href: 'Injuries.html',          icon: 'ti-bandage',          label: 'Injuries' },
-      { href: 'Physio.html',            icon: 'ti-stethoscope',      label: 'Physio' },
+      { href: 'Physio.html',            icon: 'ti-stethoscope',      label: 'Treatments' },
     ]},
     { label: 'Workspace', items: [
       { href: '#', icon: 'ti-settings', label: 'Settings', extra: 'data-open-settings' },
