@@ -8,7 +8,7 @@ ALTER TABLE training_sessions
   ADD COLUMN IF NOT EXISTS focus          text,
   ADD COLUMN IF NOT EXISTS match_day_offset text,
   ADD COLUMN IF NOT EXISTS published      boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS microcycle_id  uuid REFERENCES microcycles(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS microcycle_id  text REFERENCES microcycles(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS sort_order     integer NOT NULL DEFAULT 0;
 
 -- Index for fast date queries (Calendar + Daily Planning both filter by session_date)
