@@ -150,8 +150,9 @@
       { href: 'Rehab & Preventives.html',   icon: 'ti-activity-heartbeat',   label: 'Rehab & preventives' },
     ]},
     { label: 'Workspace', items: [
-      { href: '#', icon: 'ti-settings', label: 'Settings', extra: 'data-open-settings' },
-      { href: 'Admin.html',             icon: 'ti-user-shield',      label: 'Admin' },
+      { href: '#',           icon: 'ti-settings',    label: 'Settings', extra: 'data-open-settings' },
+      { href: 'Admin.html',  icon: 'ti-user-shield', label: 'Admin' },
+      { href: 'Billing.html',icon: 'ti-credit-card', label: 'Billing' },
     ]},
   ];
 
