@@ -121,8 +121,9 @@
   let _clubId     = null;
   let _saveTimer  = null;
   let _allPlayers    = [];
-  let _picker        = null;
-  let _playersLoading = true;
+  let _picker               = null;
+  let _pickerOutsideHandler = null;
+  let _playersLoading       = true;
   let _currentMatch  = null;
 
   // ── Strings (English-only UI)
@@ -608,8 +609,12 @@
     });
     requestAnimationFrame(() => input.focus());
 
-    const onOutside = e => { if (!panel.contains(e.target)) closePicker(); };
-    setTimeout(() => document.addEventListener('click', onOutside, { once: true }), 0);
+    // Store handler in module var so closePicker can always cancel it,
+    // even when the pick happens via mousedown (click never reaches document).
+    _pickerOutsideHandler = e => { if (_picker && !_picker.contains(e.target)) closePicker(); };
+    setTimeout(() => {
+      if (_pickerOutsideHandler) document.addEventListener('click', _pickerOutsideHandler);
+    }, 0);
   }
 
   function wireComposerDelegation () {
@@ -627,6 +632,10 @@
 
   function closePicker () {
     if (_picker) { _picker.remove(); _picker = null; }
+    if (_pickerOutsideHandler) {
+      document.removeEventListener('click', _pickerOutsideHandler);
+      _pickerOutsideHandler = null;
+    }
   }
 
   function selectPlayer (squadPlayer, slotIdx, kind) {
