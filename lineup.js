@@ -228,13 +228,6 @@
       return p ? filledRow(p, i, 'sub') : emptyRow('SUB', i, 'sub');
     }).join('');
 
-    xi.querySelectorAll('.lu-row').forEach(row => {
-      row.addEventListener('click', () => openPicker(+row.dataset.idx, 'xi', row));
-    });
-    sub.querySelectorAll('.lu-row').forEach(row => {
-      row.addEventListener('click', () => openPicker(+row.dataset.idx, 'sub', row));
-    });
-
     updateTabCounts();
   }
 
@@ -426,7 +419,30 @@
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>Generating…'; }
     try {
       await ensureH2C();
-      const canvas = await html2canvas(poster, { backgroundColor: null, scale: 2, useCORS: true });
+      const canvas = await html2canvas(poster, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        onclone: (doc) => {
+          const p = doc.querySelector('.pst-pitch');
+          if (p) {
+            const pitchBg = {
+              editorial: 'linear-gradient(180deg,rgba(255,255,255,0.02) 0%,transparent 100%),linear-gradient(180deg,#18492a 0%,#0b2312 100%)',
+              stadium:   'linear-gradient(180deg,rgba(0,0,0,0.30) 0%,rgba(0,0,0,0.55) 100%),repeating-linear-gradient(90deg,rgba(255,255,255,0.04) 0 calc(100%/16),rgba(0,0,0,0.04) calc(100%/16) calc(100%/8))',
+              magazine:  'linear-gradient(180deg,#E6DFCF 0%,#DCD3BD 100%)',
+              ticket:    '#ECE3CC',
+            }[state.style] || 'linear-gradient(180deg,#18492a 0%,#0b2312 100%)';
+            p.style.background = pitchBg;
+          }
+          const accent = state.accentColor || '#4ADE80';
+          const hx = accent.replace('#','');
+          const r = parseInt(hx.slice(0,2),16), g = parseInt(hx.slice(2,4),16), b = parseInt(hx.slice(4,6),16);
+          doc.querySelectorAll('.pst-spot.is-captain .badge').forEach(el => {
+            el.style.boxShadow = `0 0 0 2px rgba(${r},${g},${b},0.30)`;
+          });
+        },
+      });
       const rivalName = (rival || document.querySelector('[data-rival-name]')?.textContent || 'opponent').replace(/\s+/g, '_');
       const dateStr   = document.querySelector('[data-banner-date]')?.textContent?.replace(/[\s,]+/g, '_') || 'match';
       canvas.toBlob(blob => {
@@ -592,6 +608,19 @@
     setTimeout(() => document.addEventListener('click', onOutside, { once: true }), 0);
   }
 
+  function wireComposerDelegation () {
+    const xi  = document.querySelector('[data-list="xi"]');
+    const sub = document.querySelector('[data-list="subs"]');
+    [xi, sub].forEach(container => {
+      if (!container) return;
+      container.addEventListener('click', e => {
+        const row = e.target.closest('.lu-row');
+        if (!row) return;
+        openPicker(+row.dataset.idx, row.dataset.kind, row);
+      });
+    });
+  }
+
   function closePicker () {
     if (_picker) { _picker.remove(); _picker = null; }
   }
@@ -647,8 +676,9 @@
   // ── Supabase: load next match from calendar_events
   async function loadNextMatch (clubId) {
     const today = new Date().toISOString().split('T')[0];
-    const base = () => window.sb
+    const makeQuery = (cols) => window.sb
       .from('calendar_events')
+      .select(cols)
       .eq('club_id', clubId)
       .eq('type', 'match')
       .gte('date', today)
@@ -657,11 +687,11 @@
       .maybeSingle();
 
     // Try with rival_crest_url (migration 020); fall back if column missing
-    let { data, error } = await base().select(
+    let { data, error } = await makeQuery(
       'id,opponent,date,start_time,location,competition,home_away,title,rival_crest_url'
     );
     if (error) {
-      ({ data } = await base().select(
+      ({ data } = await makeQuery(
         'id,opponent,date,start_time,location,competition,home_away,title'
       ));
     }
@@ -905,6 +935,17 @@
     input.addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file || !window.sb) return;
+
+      // Show immediately as data URL (works in export without CORS issues)
+      const dataUrl = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = ev => res(ev.target.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      document.querySelectorAll('.opp-crest').forEach(img => { img.src = dataUrl; });
+
+      // Upload to storage in background for persistence
       const ext  = file.name.split('.').pop().toLowerCase();
       const path = `rival-crests/${_clubId || 'default'}/${matchId || 'default'}.${ext}`;
       const { error } = await window.sb.storage
@@ -913,8 +954,6 @@
       if (error) { showToast('Upload failed: ' + error.message); return; }
       const { data: { publicUrl } } = window.sb.storage
         .from('club-assets').getPublicUrl(path);
-      document.querySelectorAll('.opp-crest').forEach(img => { img.src = publicUrl; });
-      // Persist so future page loads show the saved crest
       if (matchId) {
         await window.sb.from('calendar_events')
           .update({ rival_crest_url: publicUrl })
@@ -961,6 +1000,7 @@
     wireStyles();
     wireExport();
     wireColorPickers();
+    wireComposerDelegation();
 
     // Wire formation + style save debounce (no Supabase needed, safe to do now)
     document.querySelectorAll('.lu-form-btn').forEach(b => {
