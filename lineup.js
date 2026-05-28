@@ -115,10 +115,12 @@
   };
 
   // ── Module-level lineup context (set in init)
-  let _lineupId  = null;
-  let _clubId    = null;
-  let _mcName    = null;
-  let _saveTimer = null;
+  let _lineupId   = null;
+  let _clubId     = null;
+  let _mcName     = null;
+  let _saveTimer  = null;
+  let _allPlayers = [];
+  let _picker     = null;
 
   // ── Strings
   const T = {
@@ -191,9 +193,10 @@
     const sub = document.querySelector('[data-list="subs"]');
     if (!xi || !sub) return;
 
-    const flagBg = (code) => FLAG_CSS[code] ? `style="background:${FLAG_CSS[code]}"` : '';
-    const row = (p, idx, kind) => `
-      <div class="lu-row" data-kind="${kind}" data-idx="${idx}" data-pos="${p.role.toLowerCase()}">
+    const flagBg = code => FLAG_CSS[code] ? `style="background:${FLAG_CSS[code]}"` : '';
+
+    const filledRow = (p, idx, kind) => `
+      <div class="lu-row" data-kind="${kind}" data-idx="${idx}" data-pos="${p.role.toLowerCase()}" title="Click para cambiar">
         <span class="handle"><i class="ti ti-grip-vertical"></i></span>
         <span class="num">${p.num}</span>
         <div class="body">
@@ -201,24 +204,51 @@
           <div class="meta">${p.role}</div>
         </div>
         <span class="role-tag ${p.role.toLowerCase()}">${p.role}</span>
-      </div>
-    `;
+      </div>`;
 
-    xi.innerHTML = state.starters.map((p, i) => row(p, i, 'xi')).join('');
-    sub.innerHTML = state.subs.map((p, i) => row(p, i, 'sub')).join('');
+    const emptyRow = (posHint, idx, kind) => `
+      <div class="lu-row is-empty" data-kind="${kind}" data-idx="${idx}" data-pos="${posHint.toLowerCase()}" title="Click para agregar jugador">
+        <span class="handle"><i class="ti ti-grip-vertical"></i></span>
+        <span class="num"><i class="ti ti-user-plus" style="font-size:13px"></i></span>
+        <div class="body">
+          <div class="name lu-empty-label">Seleccionar jugador…</div>
+          <div class="meta">${posHint}</div>
+        </div>
+        <span class="role-tag ${posHint.toLowerCase()}">${posHint}</span>
+      </div>`;
 
-    // Wire row clicks → bench/sub action could go here.
+    const positions = FORMATIONS[state.formation];
+    xi.innerHTML = positions.map((pos, i) => {
+      const p = state.starters[i];
+      return p ? filledRow(p, i, 'xi') : emptyRow(pos.role, i, 'xi');
+    }).join('');
+
+    const SUB_SLOTS = 7;
+    sub.innerHTML = Array.from({ length: SUB_SLOTS }, (_, i) => {
+      const p = state.subs[i];
+      return p ? filledRow(p, i, 'sub') : emptyRow('SUB', i, 'sub');
+    }).join('');
+
+    xi.querySelectorAll('.lu-row').forEach(row => {
+      row.addEventListener('click', () => openPicker(+row.dataset.idx, 'xi', row));
+    });
+    sub.querySelectorAll('.lu-row').forEach(row => {
+      row.addEventListener('click', () => openPicker(+row.dataset.idx, 'sub', row));
+    });
+
+    updateTabCounts();
   }
 
   // ── Render the subs band on the poster
   function renderSubsBand () {
     const band = document.querySelector('[data-poster-subs]');
     if (!band) return;
-    band.innerHTML = state.subs.map(p => `
+    const filled = state.subs.filter(Boolean);
+    band.innerHTML = filled.map(p => `
       <div class="pst-sub"><span class="n">${p.num}</span><span class="nm">${p.last}</span></div>
     `).join('');
     const ct = document.querySelector('[data-poster-subs-count]');
-    if (ct) ct.textContent = state.subs.length;
+    if (ct) ct.textContent = filled.length;
   }
 
   // ── Render the match meta cells on the poster
@@ -422,6 +452,134 @@
     return _h2cPromise;
   }
 
+  // ── Player picker ─────────────────────────────────────────────
+
+  async function loadSquadPlayers (clubId) {
+    const { data } = await window.sb
+      .from('players')
+      .select('id,first_name,last_name,number,position,nationality')
+      .eq('club_id', clubId)
+      .neq('status', 'inactive')
+      .order('last_name');
+    _allPlayers = data || [];
+  }
+
+  function openPicker (slotIdx, kind, anchor) {
+    closePicker();
+    const posHint = kind === 'xi'
+      ? (FORMATIONS[state.formation][slotIdx]?.role || 'ANY')
+      : 'ANY';
+
+    const panel = document.createElement('div');
+    panel.className = 'lu-picker';
+    const rect = anchor.getBoundingClientRect();
+    panel.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+    panel.style.left = rect.left + 'px';
+    panel.style.width = Math.max(rect.width, 260) + 'px';
+
+    panel.innerHTML = `
+      <div class="lu-picker-search">
+        <i class="ti ti-search"></i>
+        <input class="lu-picker-input" placeholder="Buscar jugador…">
+      </div>
+      <div class="lu-picker-list"></div>`;
+
+    document.body.appendChild(panel);
+    _picker = panel;
+
+    const input = panel.querySelector('.lu-picker-input');
+    const list  = panel.querySelector('.lu-picker-list');
+
+    const renderList = q => {
+      const ql = (q || '').toLowerCase();
+      let players = _allPlayers.filter(p =>
+        !ql || `${p.last_name} ${p.first_name} ${p.number}`.toLowerCase().includes(ql)
+      ).slice().sort((a, b) => {
+        const am = mapPosition(a.position) === posHint;
+        const bm = mapPosition(b.position) === posHint;
+        if (am !== bm) return am ? -1 : 1;
+        return (a.last_name || '').localeCompare(b.last_name || '');
+      });
+
+      if (!players.length) {
+        list.innerHTML = '<div class="lu-picker-empty">Sin jugadores</div>';
+        return;
+      }
+      list.innerHTML = players.map(p => {
+        const pos = mapPosition(p.position);
+        return `<div class="lu-picker-row${pos === posHint ? ' is-match' : ''}" data-id="${p.id}">
+          <span class="lu-pr-num">${p.number || '?'}</span>
+          <span class="lu-pr-name">${p.last_name}, ${(p.first_name || '')[0] || ''}.</span>
+          <span class="role-tag ${pos.toLowerCase()}">${pos}</span>
+        </div>`;
+      }).join('');
+
+      list.querySelectorAll('.lu-picker-row').forEach(row => {
+        row.addEventListener('mousedown', e => {
+          e.preventDefault();
+          const player = _allPlayers.find(p => p.id === row.dataset.id);
+          if (player) selectPlayer(player, slotIdx, kind);
+          closePicker();
+        });
+      });
+    };
+
+    renderList('');
+    input.addEventListener('input', e => renderList(e.target.value));
+    requestAnimationFrame(() => input.focus());
+
+    const onOutside = e => { if (!panel.contains(e.target)) closePicker(); };
+    setTimeout(() => document.addEventListener('click', onOutside, { once: true }), 0);
+  }
+
+  function closePicker () {
+    if (_picker) { _picker.remove(); _picker = null; }
+  }
+
+  async function selectPlayer (squadPlayer, slotIdx, kind) {
+    const nat = (squadPlayer.nationality || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
+    const p = {
+      id:      squadPlayer.id,
+      num:     squadPlayer.number || '?',
+      last:    squadPlayer.last_name || '—',
+      first:   squadPlayer.first_name ? squadPlayer.first_name[0] + '.' : '',
+      role:    mapPosition(squadPlayer.position),
+      captain: false,
+      vice:    false,
+      flag:    FLAG_CSS[nat] ? nat : null,
+    };
+
+    if (kind === 'xi') {
+      while (state.starters.length <= slotIdx) state.starters.push(null);
+      state.starters[slotIdx] = p;
+    } else {
+      while (state.subs.length <= slotIdx) state.subs.push(null);
+      state.subs[slotIdx] = p;
+    }
+
+    renderComposer();
+    renderPitch();
+    renderSubsBand();
+
+    if (_lineupId && squadPlayer.id) {
+      const role = kind === 'xi' ? 'starter' : 'substitute';
+      await window.sb.from('lineup_players')
+        .delete()
+        .eq('lineup_id', _lineupId)
+        .eq('role', role)
+        .eq('slot_index', slotIdx);
+      await window.sb.from('lineup_players')
+        .insert({ lineup_id: _lineupId, player_id: squadPlayer.id, role, slot_index: slotIdx });
+    }
+  }
+
+  function updateTabCounts () {
+    const xiTab  = document.querySelector('[data-tab="xi"] .ct');
+    const subTab = document.querySelector('[data-tab="subs"] .ct');
+    if (xiTab)  xiTab.textContent  = state.starters.filter(Boolean).length;
+    if (subTab) subTab.textContent = state.subs.filter(Boolean).length;
+  }
+
   // ── Supabase: load next match from microcycles
   async function loadNextMatch (clubId) {
     const today = new Date().toISOString().split('T')[0];
@@ -594,6 +752,9 @@
     const ok = await window.requireAuth();
     if (!ok) return;
     _clubId = await window.getClubId();
+
+    // Load squad players for the picker (non-blocking alongside match load)
+    await loadSquadPlayers(_clubId);
 
     // Load next match from microcycles
     const mc = await loadNextMatch(_clubId);
