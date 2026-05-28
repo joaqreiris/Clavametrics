@@ -277,6 +277,13 @@
   .club-proto-card .cp-actions { display:flex; gap:5px; flex-shrink:0; }
   .cp-mod-chip { display:inline-block; padding:3px 9px; border-radius:20px; border:1px solid var(--cm-border); font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); background:var(--cm-bg-soft); cursor:pointer; }
   .cp-mod-chip.is-on { background:var(--cm-fg-strong); border-color:var(--cm-fg-strong); color:var(--cm-bg); }
+  /* Protocol search */
+  .proto-search-wrap { position:relative; margin-bottom:10px; }
+  .proto-search-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--cm-fg-muted); font-size:15px; pointer-events:none; z-index:1; }
+  .proto-search-input { width:100%; height:38px; padding:0 14px 0 38px; border-radius:8px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); font:var(--cm-body); color:var(--cm-fg); outline:none; box-sizing:border-box; }
+  .proto-search-input:focus { border-color:var(--cm-primary); background:var(--cm-surface); }
+  .proto-search-input::placeholder { color:var(--cm-fg-muted); }
+  mark.proto-hl { background:rgba(251,191,36,.35); color:inherit; border-radius:2px; padding:0 1px; font-style:normal; }
 </style>
 </head>
 <body class="cm">
@@ -609,6 +616,12 @@
     </div>
     <div class="ph-modal-body" style="padding-top:12px">
       <div id="protoTabEvidence">
+        <div class="proto-search-wrap">
+          <i class="ti ti-search proto-search-icon"></i>
+          <input type="text" id="protoSearchInput" class="proto-search-input"
+                 placeholder="Search protocols… (e.g. hamstring, ACL, TENS, Grade II)"
+                 oninput="onProtoSearch(this.value)">
+        </div>
         <div class="proto-filter-bar">
           <button class="proto-filter-btn is-on" data-cat="all" onclick="filterProtocols('all')">All</button>
           <button class="proto-filter-btn" data-cat="manual" onclick="filterProtocols('manual')">Manual therapy</button>
@@ -1520,6 +1533,7 @@ let _clubProtocols = [];
 let _appliedProtocolName = null;
 let _currentProtoTab = 'evidence';
 let _currentProtoFilter = 'all';
+let _protoSearchQuery = '';
 
 const EVIDENCE_PROTOCOLS = [
   // ── MANUAL THERAPY ──────────────────────────────────────────────────────
@@ -1778,12 +1792,45 @@ const CAT_LABELS = {
   mixed:    'Mixed',
 };
 
+const PROTO_TAGS = {
+  ev_stm_hamstring:    ['hamstring', 'muscle', 'bamic', 'grade 1', 'grade 2', 'soft tissue', 'acute', 'isquiotibial', 'biceps femoris', 'effleurage'],
+  ev_iastm:            ['graston', 'rockblades', 'myofascial', 'adhesion', 'scar', 'cicatriz', 'chronic', 'stiffness', 'instrument assisted'],
+  ev_mfr_quad:         ['quad', 'cuadriceps', 'hip flexor', 'myofascial', 'trigger point', 'iliopsoas', 'release'],
+  ev_jmob_ankle:       ['ankle', 'tobillo', 'ligament', 'sprain', 'esguince', 'dorsiflexion', 'maitland', 'mulligan', 'stiff', 'snag', 'mobilization'],
+  ev_tens:             ['pain', 'dolor', 'ankle', 'acute', 'electric', 'analgesia', 'nerve', 'sprain', 'esguince', 'current'],
+  ev_ift:              ['edema', 'swelling', 'inflamacion', 'ankle', 'chronic', 'stiffness', 'interferencial', 'interferential'],
+  ev_us:               ['tendon', 'tendinopathy', 'scar', 'adhesion', 'contusion', 'ultrasound', 'chronic', 'us'],
+  ev_eswt:             ['tendinopathy', 'chronic', 'calcification', 'tendon', 'achilles', 'shock wave', 'ondas de choque', 'hematoma'],
+  ev_lllt:             ['laser', 'tendinopathy', 'healing', 'inflammation', 'collagen', 'repair', 'photobiomodulation', 'lllt'],
+  ev_pool_walk:        ['acl', 'cruciate', 'pool', 'unload', 'grade 2', 'grade 3', 'fracture', 'water', 'aqua', 'piscina', 'descarga', 'partial weight'],
+  ev_contrast_hydro:   ['recovery', 'recuperacion', 'match', 'fatigue', 'doms', 'contrast', 'cold water', 'post-game', 'ice bath'],
+  ev_kt_hamstring:     ['kinesio', 'kt tape', 'kinesiotape', 'hamstring', 'muscle', 'lymphatic', 'inhibition', 'facilitation'],
+  ev_rigid_tape_ankle: ['ankle', 'tobillo', 'sprain', 'esguince', 'grade 2', 'grade 3', 'rtp', 'return to play', 'stability', 'funcional', 'stirrup', 'heel lock'],
+  ev_dn_hamstring:     ['dry needling', 'trigger point', 'hamstring', 'flexibility', 'rom', 'myofascial', 'espasmo', 'twitch', 'needling', 'isquiotibial'],
+  ev_dn_ankle:         ['dry needling', 'trigger point', 'ankle', 'calf', 'achilles', 'gastrocnemius', 'soleus', 'dorsiflexion', 'pantorrilla', 'needling'],
+  ev_nmes:             ['acl', 'cruciate', 'atrophy', 'post-op', 'surgery', 'immobilization', 'muscle', 'electric', 'neuromodulation', 'estimulacion', 'nmes', 'ems'],
+};
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function hl(text, q) {
+  const safe = esc(text);
+  if (!q) return safe;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  return safe.replace(re, m => `<mark class="proto-hl">${m}</mark>`);
+}
+
 function closeProtocols() { document.getElementById('protocolsOverlay').classList.remove('is-open'); }
 function closeNewProto()  { document.getElementById('newProtoOverlay').classList.remove('is-open'); }
 
 document.getElementById('btnTemplates').addEventListener('click', openProtocols);
 
 async function openProtocols() {
+  _protoSearchQuery = '';
+  const inp = document.getElementById('protoSearchInput');
+  if (inp) inp.value = '';
   document.getElementById('protocolsOverlay').classList.add('is-open');
   switchProtoTab(_currentProtoTab);
   renderEvidenceProtocols();
@@ -1808,18 +1855,52 @@ function toggleProtoCard(id) {
   if (card) card.classList.toggle('is-open');
 }
 
+function onProtoSearch(val) {
+  _protoSearchQuery = val;
+  renderEvidenceProtocols();
+}
+
+function clearProtoSearch() {
+  _protoSearchQuery = '';
+  const inp = document.getElementById('protoSearchInput');
+  if (inp) inp.value = '';
+  renderEvidenceProtocols();
+}
+
 function renderEvidenceProtocols() {
   const list = document.getElementById('evidenceProtocolsList');
-  const filtered = _currentProtoFilter === 'all'
+  const q  = _protoSearchQuery.trim();
+  const ql = q.toLowerCase();
+
+  let filtered = _currentProtoFilter === 'all'
     ? EVIDENCE_PROTOCOLS
     : EVIDENCE_PROTOCOLS.filter(p => p.category === _currentProtoFilter);
+
+  if (ql) {
+    filtered = filtered.filter(p => {
+      const tags = PROTO_TAGS[p.id] || [];
+      return p.name.toLowerCase().includes(ql) ||
+             p.indication.toLowerCase().includes(ql) ||
+             p.ref.toLowerCase().includes(ql) ||
+             p.category.toLowerCase().includes(ql) ||
+             tags.some(t => t.includes(ql));
+    });
+  }
+
   if (!filtered.length) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No protocols in this category.</div>';
+    const clearBtn = q
+      ? `<button class="cm-btn is-outline is-sm" style="margin-top:10px" onclick="clearProtoSearch()"><i class="ti ti-x" style="font-size:13px"></i>Clear search</button>`
+      : '';
+    const msg = q
+      ? `No protocols found for "<strong>${esc(q)}</strong>"<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:6px">Try searching by injury type, body part or treatment modality</div>`
+      : 'No protocols in this category.';
+    list.innerHTML = `<div style="padding:28px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body)">${msg}${clearBtn}</div>`;
     return;
   }
+
   list.innerHTML = filtered.map(p => {
-    const subtitle = p.subtitle ? ` <span style="font-weight:400;color:var(--cm-fg-muted)">· ${p.subtitle}</span>` : '';
-    const techHtml = p.technique.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const subtitle = p.subtitle ? ` <span style="font-weight:400;color:var(--cm-fg-muted)">· ${esc(p.subtitle)}</span>` : '';
+    const techHtml = esc(p.technique);
     return `<div class="proto-card" id="pc-${p.id}">
       <div class="proto-card-summary" onclick="toggleProtoCard('${p.id}')">
         <div class="proto-card-top">
@@ -1827,15 +1908,15 @@ function renderEvidenceProtocols() {
           <span class="proto-ev-badge lv-${p.evidenceLevel.toLowerCase()}">Level ${p.evidenceLevel}</span>
           <i class="ti ti-chevron-down proto-expand-icon" style="font-size:14px"></i>
         </div>
-        <div class="proto-name">${p.name}${subtitle}</div>
-        <div class="proto-ref">${p.ref}</div>
-        <div class="proto-indication"><strong>Indication: </strong>${p.indication}</div>
+        <div class="proto-name">${hl(p.name, q)}${subtitle}</div>
+        <div class="proto-ref">${esc(p.ref)}</div>
+        <div class="proto-indication"><strong>Indication: </strong>${hl(p.indication, q)}</div>
       </div>
       <div class="proto-detail">
         <div class="proto-sections">
           <div><div class="proto-sec-label">Technique</div><div class="proto-sec-body">${techHtml}</div></div>
-          <div><div class="proto-sec-label">Contraindications</div><div class="proto-sec-body">${p.contraindications}</div></div>
-          <div><div class="proto-sec-label">Evidence</div><div class="proto-ev-note">${p.evidenceNote}</div></div>
+          <div><div class="proto-sec-label">Contraindications</div><div class="proto-sec-body">${esc(p.contraindications)}</div></div>
+          <div><div class="proto-sec-label">Evidence</div><div class="proto-ev-note">${esc(p.evidenceNote)}</div></div>
         </div>
         <div class="proto-apply-row">
           <button class="cm-btn is-primary is-sm" onclick="applyProtocol('${p.id}', true)"><i class="ti ti-player-play" style="font-size:13px"></i>Apply to session</button>
