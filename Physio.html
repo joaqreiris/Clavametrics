@@ -611,17 +611,17 @@
       <button class="close" onclick="closeProtocols()"><i class="ti ti-x"></i></button>
     </div>
     <div class="proto-tabs">
-      <button class="proto-tab is-on" data-tab="evidence" onclick="switchProtoTab('evidence')"><i class="ti ti-book-2" style="font-size:14px"></i>Evidence-based protocols</button>
-      <button class="proto-tab" data-tab="club" onclick="switchProtoTab('club')"><i class="ti ti-building-hospital" style="font-size:14px"></i>Club protocols</button>
+      <button class="proto-tab is-on" data-tab="evidence" onclick="switchProtoTab('evidence')"><i class="ti ti-book-2" style="font-size:14px"></i><span class="proto-tab-text">Evidence-based protocols</span></button>
+      <button class="proto-tab" data-tab="club" onclick="switchProtoTab('club')"><i class="ti ti-building-hospital" style="font-size:14px"></i><span class="proto-tab-text">Club protocols</span></button>
     </div>
-    <div class="ph-modal-body" style="padding-top:12px">
+    <div class="proto-search-wrap" style="padding:8px 20px 0">
+      <i class="ti ti-search proto-search-icon"></i>
+      <input type="text" id="protoSearchInput" class="proto-search-input"
+             placeholder="Search protocols… (e.g. hamstring, ACL, TENS, Grade II)"
+             oninput="onProtoSearch(this.value)">
+    </div>
+    <div class="ph-modal-body" style="padding-top:8px">
       <div id="protoTabEvidence">
-        <div class="proto-search-wrap">
-          <i class="ti ti-search proto-search-icon"></i>
-          <input type="text" id="protoSearchInput" class="proto-search-input"
-                 placeholder="Search protocols… (e.g. hamstring, ACL, TENS, Grade II)"
-                 oninput="onProtoSearch(this.value)">
-        </div>
         <div class="proto-filter-bar">
           <button class="proto-filter-btn is-on" data-cat="all" onclick="filterProtocols('all')">All</button>
           <button class="proto-filter-btn" data-cat="manual" onclick="filterProtocols('manual')">Manual therapy</button>
@@ -1540,93 +1540,93 @@ const EVIDENCE_PROTOCOLS = [
   {
     id: 'ev_stm_hamstring',
     name: 'Soft Tissue Mobilization — Hamstring',
-    subtitle: 'Fase aguda',
+    subtitle: 'Acute phase',
     category: 'manual',
     ref: 'JOSPT Clinical Practice Guidelines HSI (2022); Cheatham SW et al. Int J Sports Phys Ther (2018)',
-    indication: 'BAMIC Grado 1-2, días 2-7 post-lesión',
-    technique: 'Posición: decúbito prono, rodilla extendida\n• Fricción transversa profunda en zona lesión: 3-5 min\n• Effleurage longitudinal distal→proximal: 5 min\n• Presión directa en puntos gatillo: 30-90s por punto\n• ROM pasivo suave dentro de rango sin dolor\nDuración total: 20-30 min\nFrecuencia: Diaria en fase aguda, días alternos después',
-    contraindications: 'Hematoma grande, rotura completa, infección activa',
+    indication: 'BAMIC Grade 1-2, days 2-7 post-injury',
+    technique: 'Position: prone, knee extended\n• Deep transverse friction at injury site: 3-5 min\n• Longitudinal effleurage distal→proximal: 5 min\n• Direct pressure on trigger points: 30-90s per point\n• Gentle passive ROM within pain-free range\nTotal duration: 20-30 min\nFrequency: Daily in acute phase, alternating days after',
+    contraindications: 'Large hematoma, complete rupture, active infection',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — mejora ROM y reduce dolor agudo',
+    evidenceNote: 'Level B — improves ROM and reduces acute pain',
     duration: 25,
     modalities: ['Manual therapy'],
-    applyNotes: '[Protocol: Soft Tissue Mobilization — Hamstring]\nFricción transversa profunda 3-5min + Effleurage distal→proximal 5min + Puntos gatillo 30-90s/punto + ROM pasivo sin dolor',
+    applyNotes: '[Protocol: Soft Tissue Mobilization — Hamstring]\nDeep transverse friction 3-5min + Effleurage distal→proximal 5min + Trigger points 30-90s/point + Passive ROM pain-free',
   },
   {
     id: 'ev_iastm',
-    name: 'IASTM — Instrumento Asistido',
+    name: 'IASTM — Instrument Assisted',
     subtitle: 'Graston / Rockblades',
     category: 'manual',
     ref: 'Cheatham SW et al. Int J Sports Phys Ther (2018); PMC10566405 (2023)',
-    indication: 'Restricciones miofasciales, cicatrices, adherencias post-lesión (NO en fase aguda <72h)',
-    technique: '• Escaneo diagnóstico con instrumento: 2-3 min\n• Tratamiento con ángulo 45-60°: movimientos cortos proximal→distal\n• Presión progresiva según tolerancia\n• Movilización activa simultánea si posible\n• 3-5 pases por zona, 2-3 zonas por sesión\nDuración: 15-20 min incluyendo calentamiento previo\nFrecuencia: 1-2 veces/semana, 4-6 semanas\nPost-tratamiento: Hielo 10 min + stretching suave',
-    contraindications: 'Anticoagulantes, trombosis, piel dañada, lesión aguda <72h',
+    indication: 'Myofascial restrictions, scar tissue, post-injury adhesions (NOT in acute phase <72h)',
+    technique: '• Diagnostic scanning with instrument: 2-3 min\n• Treatment at 45-60° angle: short proximal→distal strokes\n• Progressive pressure according to tolerance\n• Simultaneous active mobilization if possible\n• 3-5 passes per zone, 2-3 zones per session\nDuration: 15-20 min including warm-up\nFrequency: 1-2 times/week, 4-6 weeks\nPost-treatment: Ice 10 min + gentle stretching',
+    contraindications: 'Anticoagulants, thrombosis, damaged skin, acute injury <72h',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — mejora ROM y dolor crónico; microtrauma controlado induce remodelación colágeno',
+    evidenceNote: 'Level B — improves ROM and chronic pain; controlled microtrauma induces collagen remodeling',
     duration: 20,
     modalities: ['Manual therapy'],
-    applyNotes: '[Protocol: IASTM — Instrumento Asistido]\nEscaneo 2-3min + Tratamiento 45-60° pases proximal→distal (3-5 pases/zona, 2-3 zonas) + Hielo 10min post',
+    applyNotes: '[Protocol: IASTM — Instrument Assisted]\nScanning 2-3min + Treatment 45-60° proximal→distal strokes (3-5 passes/zone, 2-3 zones) + Ice 10min post',
   },
   {
     id: 'ev_mfr_quad',
-    name: 'Myofascial Release — Cuádriceps / Hip Flexors',
+    name: 'Myofascial Release — Quadriceps / Hip Flexors',
     subtitle: '',
     category: 'manual',
-    ref: 'PMC investigación miofascial 2023',
-    indication: 'Tensión miofascial, restricción ROM, síndrome dolor miofascial',
-    technique: '• Presión sostenida en puntos de restricción: 90-120s\n• Dirección de la restricción, sin forzar\n• Esperar sensación de liberación tisular\n• 3-4 zonas por sesión\nDuración: 20-30 min\nFrecuencia: 2-3 veces/semana',
-    contraindications: 'Inflamación aguda activa, fracturas, tumores',
+    ref: 'PMC myofascial research 2023',
+    indication: 'Myofascial tension, ROM restriction, myofascial pain syndrome',
+    technique: '• Sustained pressure at restriction points: 90-120s\n• Follow direction of restriction, without forcing\n• Wait for tissue release sensation\n• 3-4 zones per session\nDuration: 20-30 min\nFrequency: 2-3 times/week',
+    contraindications: 'Active acute inflammation, fractures, tumors',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — efectivo para dolor y ROM',
+    evidenceNote: 'Level B — effective for pain and ROM',
     duration: 25,
     modalities: ['Manual therapy', 'Massage'],
-    applyNotes: '[Protocol: Myofascial Release — Cuádriceps/Hip Flexors]\nPresión sostenida 90-120s por punto de restricción (3-4 zonas), esperar liberación tisular',
+    applyNotes: '[Protocol: Myofascial Release — Quadriceps/Hip Flexors]\nSustained pressure 90-120s per restriction point (3-4 zones), wait for tissue release',
   },
   {
     id: 'ev_jmob_ankle',
-    name: 'Joint Mobilization — Tobillo',
+    name: 'Joint Mobilization — Ankle',
     subtitle: 'Mulligan / Maitland',
     category: 'manual',
     ref: 'Tassignon B et al. IJSPT (2021); Kerkhoffs GM et al. Br J Sports Med (2012)',
-    indication: 'Esguince tobillo Grado I-II, restricción dorsiflexión, rigidez articular post-inmovilización',
-    technique: 'Técnica Mulligan SNAG:\n• Deslizamiento AP en talo mientras paciente hace dorsiflexión activa\n• 3 × 10 repeticiones\n\nTécnica Maitland Grado III-IV:\n• Oscilaciones amplitud media/grande en rango de resistencia\n• 3 × 30 oscilaciones\nDuración: 15 min\nFrecuencia: Diaria en fase subaguda',
-    contraindications: 'Fractura no consolidada, inestabilidad severa Grado III no tratada',
+    indication: 'Ankle sprain Grade I-II, dorsiflexion restriction, post-immobilization joint stiffness',
+    technique: 'Mulligan SNAG technique:\n• AP glide on talus while patient performs active dorsiflexion\n• 3 × 10 repetitions\n\nMaitland Grade III-IV technique:\n• Mid/large amplitude oscillations in resistance range\n• 3 × 30 oscillations\nDuration: 15 min\nFrequency: Daily in subacute phase',
+    contraindications: 'Non-consolidated fracture, untreated severe Grade III instability',
     evidenceLevel: 'A',
-    evidenceNote: 'Nivel A — BJSM 2023 meta-análisis: ROM completo en 4 semanas vs 6 semanas sin movilización',
+    evidenceNote: 'Level A — BJSM 2023 meta-analysis: full ROM at 4 weeks vs 6 weeks without mobilization',
     duration: 15,
     modalities: ['Manual therapy'],
-    applyNotes: '[Protocol: Joint Mobilization — Tobillo Mulligan/Maitland]\nMulligan SNAG: deslizamiento AP + dorsiflexión activa 3×10 | Maitland III-IV: oscilaciones 3×30',
+    applyNotes: '[Protocol: Joint Mobilization — Ankle Mulligan/Maitland]\nMulligan SNAG: AP glide + active dorsiflexion 3×10 | Maitland III-IV: oscillations 3×30',
   },
   // ── ELECTROTHERAPY ──────────────────────────────────────────────────────
   {
     id: 'ev_tens',
-    name: 'TENS — Analgesia Aguda',
+    name: 'TENS — Acute Analgesia',
     subtitle: '',
     category: 'electro',
-    ref: 'IJCRT 2024 (TENS ankle sprain); CK Physio BJSM 2023 meta-análisis',
-    indication: 'Control dolor agudo/subagudo, cualquier lesión músculo-esquelética',
-    technique: 'Convencional (alta frecuencia):\n• Frecuencia: 80-150 Hz · Ancho pulso: 50-80 μs\n• Intensidad: sensación hormigueo sin contracción\n• Electrodos: perilesionales o a lo largo del nervio\n• Duración: 20-30 min\n\nAcupuntura (baja frecuencia):\n• Frecuencia: 1-4 Hz · Ancho pulso: 150-250 μs\n• Intensidad: contracción muscular visible\n• Duración: 20-30 min\nFrecuencia: 1-2 veces/día en fase aguda',
-    contraindications: 'Marcapasos, epilepsia, trombosis, área cardíaca, embarazo',
+    ref: 'IJCRT 2024 (TENS ankle sprain); CK Physio BJSM 2023 meta-analysis',
+    indication: 'Acute/subacute pain management, any musculoskeletal injury',
+    technique: 'Conventional (high frequency):\n• Frequency: 80-150 Hz · Pulse width: 50-80 μs\n• Intensity: tingling sensation without contraction\n• Electrodes: perilesional or along the nerve\n• Duration: 20-30 min\n\nAcupuncture (low frequency):\n• Frequency: 1-4 Hz · Pulse width: 150-250 μs\n• Intensity: visible muscle contraction\n• Duration: 20-30 min\nFrequency: 1-2 times/day in acute phase',
+    contraindications: 'Pacemaker, epilepsy, thrombosis, cardiac area, pregnancy',
     evidenceLevel: 'A',
-    evidenceNote: 'Nivel A — reducción dolor significativa vs control en esguince agudo (IJCRT 2024)',
+    evidenceNote: 'Level A — significant pain reduction vs control in acute sprain (IJCRT 2024)',
     duration: 25,
     modalities: ['Electrotherapy'],
-    applyNotes: '[Protocol: TENS — Analgesia Aguda]\nConvencional: 80-150Hz / 50-80μs / hormigueo sin contracción | 20-30min perilesional',
+    applyNotes: '[Protocol: TENS — Acute Analgesia]\nConventional: 80-150Hz / 50-80μs / tingling without contraction | 20-30min perilesional',
   },
   {
     id: 'ev_ift',
-    name: 'Interferential Therapy (IFT) — Edema y Dolor',
+    name: 'Interferential Therapy (IFT) — Edema and Pain',
     subtitle: '',
     category: 'electro',
     ref: 'CK Physio (BJSM 2023 data); PMC ankle sprain RCT 2021',
-    indication: 'Edema post-lesión, dolor crónico, rigidez articular',
-    technique: '• Frecuencia portadora: 4000 Hz\n• Frecuencia interferencia: 80-120 Hz (dolor) / 10-50 Hz (edema/músculo)\n• Intensidad: hormigueo cómodo\n• Electrodos: cuadrante alrededor de zona lesionada\n• Duración: 15-20 min\nFrecuencia: Diaria en fase aguda-subaguda',
-    contraindications: 'Marcapasos, epilepsia, trombosis, tumores, embarazo',
+    indication: 'Post-injury edema, chronic pain, joint stiffness',
+    technique: '• Carrier frequency: 4000 Hz\n• Interference frequency: 80-120 Hz (pain) / 10-50 Hz (edema/muscle)\n• Intensity: comfortable tingling\n• Electrodes: quadrant around injured area\n• Duration: 15-20 min\nFrequency: Daily in acute-subacute phase',
+    contraindications: 'Pacemaker, epilepsy, thrombosis, tumors, pregnancy',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — reduce circunferencia 18-22% en 2 semanas; combinado con compresión: 28% reducción edema',
+    evidenceNote: 'Level B — reduces circumference 18-22% in 2 weeks; combined with compression: 28% edema reduction',
     duration: 20,
     modalities: ['Electrotherapy'],
-    applyNotes: '[Protocol: IFT — Edema y Dolor]\n4000Hz portadora | Interferencia 80-120Hz (dolor) o 10-50Hz (edema) | 15-20min cuadrante',
+    applyNotes: '[Protocol: IFT — Edema and Pain]\n4000Hz carrier | Interference 80-120Hz (pain) or 10-50Hz (edema) | 15-20min quadrant',
   },
   {
     id: 'ev_us',
@@ -1634,29 +1634,29 @@ const EVIDENCE_PROTOCOLS = [
     subtitle: '',
     category: 'electro',
     ref: 'Watson T & Young SR (2008) Electrotherapy; Cochrane Database (2024)',
-    indication: 'Tendinopatía crónica, cicatrices, adherencias, contusiones musculares',
-    technique: 'Tejido superficial (<2cm):\n• Frecuencia: 3 MHz · Intensidad: 0.5-1.0 W/cm²\n• Modo: pulsado 1:4 (agudo) / continuo (crónico)\n• Duración: 5-10 min por zona\n\nTejido profundo (>2cm):\n• Frecuencia: 1 MHz · Intensidad: 1.0-2.0 W/cm²\n• Modo: pulsado/continuo según fase\nFrecuencia: 3-5 veces/semana, 6-12 sesiones',
-    contraindications: 'Crecimiento óseo activo, trombosis, tumores, marcapasos, embarazo',
+    indication: 'Chronic tendinopathy, scar tissue, adhesions, muscle contusions',
+    technique: 'Superficial tissue (<2cm):\n• Frequency: 3 MHz · Intensity: 0.5-1.0 W/cm²\n• Mode: pulsed 1:4 (acute) / continuous (chronic)\n• Duration: 5-10 min per zone\n\nDeep tissue (>2cm):\n• Frequency: 1 MHz · Intensity: 1.0-2.0 W/cm²\n• Mode: pulsed/continuous depending on phase\nFrequency: 3-5 times/week, 6-12 sessions',
+    contraindications: 'Active bone growth, thrombosis, tumors, pacemaker, pregnancy',
     evidenceLevel: 'C',
-    evidenceNote: 'Nivel C — evidencia mixta en Cochrane 2024. Más efectivo en fase proliferativa (días 3-14)',
+    evidenceNote: 'Level C — mixed evidence in Cochrane 2024. Most effective in proliferative phase (days 3-14)',
     duration: 15,
     modalities: ['Electrotherapy'],
-    applyNotes: '[Protocol: Therapeutic Ultrasound]\nSuperficial: 3MHz 0.5-1.0W/cm² | Profundo: 1MHz 1.0-2.0W/cm² | Pulsado en agudo, continuo en crónico',
+    applyNotes: '[Protocol: Therapeutic Ultrasound]\nSuperficial: 3MHz 0.5-1.0W/cm² | Deep: 1MHz 1.0-2.0W/cm² | Pulsed in acute, continuous in chronic',
   },
   {
     id: 'ev_eswt',
-    name: 'ESWT — Ondas de Choque Extracorpóreas',
+    name: 'ESWT — Extracorporeal Shock Wave Therapy',
     subtitle: '',
     category: 'electro',
     ref: 'PMC10521343 Systematic Review (2023)',
-    indication: 'Tendinopatías crónicas, hematomas musculares crónicos, calcificaciones (NO en fase aguda <3 semanas)',
-    technique: 'Parámetros radiales:\n• Presión: 1.5-3.0 bar\n• Frecuencia: 8-15 Hz\n• Pulsos: 2000-3000 por sesión\n• Sin anestesia local (feedback del paciente)\nFrecuencia: 1 sesión/semana, 3-5 sesiones\nPost-tratamiento: Sin AINEs 48h, hielo permitido',
-    contraindications: 'Lesión aguda, trastornos coagulación, tumores, embarazo, sobre epífisis abiertas',
+    indication: 'Chronic tendinopathies, chronic muscle hematomas, calcifications (NOT in acute phase <3 weeks)',
+    technique: 'Radial parameters:\n• Pressure: 1.5-3.0 bar\n• Frequency: 8-15 Hz\n• Pulses: 2000-3000 per session\n• No local anesthesia (patient feedback)\nFrequency: 1 session/week, 3-5 sessions\nPost-treatment: No NSAIDs 48h, ice permitted',
+    contraindications: 'Acute injury, coagulation disorders, tumors, pregnancy, over open epiphyses',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — menos dolor VAS, mejor función, reducción tamaño lesión en US, RTP más rápido (SR 2023, 8 estudios, 143 pacientes)',
+    evidenceNote: 'Level B — lower VAS pain, better function, US lesion size reduction, faster RTP (SR 2023, 8 studies, 143 patients)',
     duration: 30,
     modalities: ['Electrotherapy'],
-    applyNotes: '[Protocol: ESWT — Ondas de Choque]\nRadial: 1.5-3.0bar / 8-15Hz / 2000-3000 pulsos | 1 sesión/semana | Sin AINEs 48h post',
+    applyNotes: '[Protocol: ESWT — Shock Wave]\nRadial: 1.5-3.0bar / 8-15Hz / 2000-3000 pulses | 1 session/week | No NSAIDs 48h post',
   },
   {
     id: 'ev_lllt',
@@ -1664,122 +1664,122 @@ const EVIDENCE_PROTOCOLS = [
     subtitle: '',
     category: 'electro',
     ref: 'Huang et al. meta-analysis (2023)',
-    indication: 'Tendinopatía, cicatrización tisular, control dolor e inflamación',
-    technique: '• Longitud de onda: 630-980 nm\n• Potencia: 10-100 mW · Dosis: 1-4 J/cm²\n• Aplicación de contacto o sin contacto\n• Duración: 5-10 min por zona\nFrecuencia: 3-5 veces/semana, 4-8 semanas\nMecanismo: Estimula citocromo c oxidasa → ↑ATP, ↑VEGF, +22% síntesis colágeno (días 3-14)',
-    contraindications: 'Sobre ojos, tumores, áreas fotosensibles, embarazo',
+    indication: 'Tendinopathy, tissue healing, pain and inflammation control',
+    technique: '• Wavelength: 630-980 nm\n• Power: 10-100 mW · Dose: 1-4 J/cm²\n• Contact or non-contact application\n• Duration: 5-10 min per zone\nFrequency: 3-5 times/week, 4-8 weeks\nMechanism: Stimulates cytochrome c oxidase → ↑ATP, ↑VEGF, +22% collagen synthesis (days 3-14)',
+    contraindications: 'Over eyes, tumors, photosensitive areas, pregnancy',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — acelera reparación tisular en fase proliferativa (Huang 2023 meta-análisis)',
+    evidenceNote: 'Level B — accelerates tissue repair in proliferative phase (Huang 2023 meta-analysis)',
     duration: 15,
     modalities: ['Electrotherapy'],
-    applyNotes: '[Protocol: LLLT — Low Level Laser]\n630-980nm / 10-100mW / 1-4J/cm² | 5-10min por zona | 3-5x/semana',
+    applyNotes: '[Protocol: LLLT — Low Level Laser]\n630-980nm / 10-100mW / 1-4J/cm² | 5-10min per zone | 3-5x/week',
   },
   // ── HYDROTHERAPY ────────────────────────────────────────────────────────
   {
     id: 'ev_pool_walk',
-    name: 'Pool Walking — Descarga Progresiva',
+    name: 'Pool Walking — Progressive Unloading',
     subtitle: '',
     category: 'hydro',
-    ref: 'Aspetar Guidelines (2025); literatura ACL rehab',
-    indication: 'Fase aguda-subaguda con necesidad de descarga: lesiones musculares Grado 2-3, ACL, fracturas en carga progresiva',
-    technique: '• Profundidad: cuello (10% peso corporal) → cintura (50%)\n• Temperatura: 32-34°C\n• Marcha normal: 10-15 min → 20-30 min progresivo\n• Ejercicios: leg swings, kicks, mini squats\n• Resistencia con aletas o paletas si tolera\nFrecuencia: Diaria en fase de descarga\nProgresión: Marcha pain-free en agua → iniciar carga en tierra',
-    contraindications: 'Heridas abiertas, infección activa, fiebre',
+    ref: 'Aspetar Guidelines (2025); ACL rehab literature',
+    indication: 'Acute-subacute phase requiring unloading: Grade 2-3 muscle injuries, ACL, fractures with progressive loading',
+    technique: '• Depth: neck (10% body weight) → waist (50%)\n• Temperature: 32-34°C\n• Normal walking: 10-15 min → 20-30 min progressive\n• Exercises: leg swings, kicks, mini squats\n• Resistance with fins or paddles if tolerated\nFrequency: Daily in unloading phase\nProgression: Pain-free walking in water → initiate loading on land',
+    contraindications: 'Open wounds, active infection, fever',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — descarga segura del miembro con mantenimiento cardiovascular y propioceptivo',
+    evidenceNote: 'Level B — safe limb unloading with cardiovascular and proprioceptive maintenance',
     duration: 30,
     modalities: ['Hydrotherapy'],
-    applyNotes: '[Protocol: Pool Walking — Descarga Progresiva]\nProfundidad cuello→cintura | 32-34°C | Marcha + leg swings + mini squats | 10-15min progresando a 30min',
+    applyNotes: '[Protocol: Pool Walking — Progressive Unloading]\nDepth neck→waist | 32-34°C | Walking + leg swings + mini squats | 10-15min progressing to 30min',
   },
   {
     id: 'ev_contrast_hydro',
-    name: 'Contrast Hydrotherapy — Recuperación',
+    name: 'Contrast Hydrotherapy — Recovery',
     subtitle: '',
     category: 'hydro',
     ref: 'CK Physio sports recovery protocols',
-    indication: 'Recuperación post-partido o entrenamiento intenso, control edema subagudo',
-    technique: '• Caliente 38-40°C: 3-4 min\n• Frío 10-15°C: 1 min\n• Repetir 3-4 ciclos\n• Terminar siempre en frío\nDuración total: 15-20 min\nFrecuencia: Post-sesión intensa (NO en fase aguda de lesión activa)',
-    contraindications: 'Lesión aguda activa, arteriopatía periférica, Raynaud, heridas abiertas',
+    indication: 'Post-match or intense training recovery, subacute edema management',
+    technique: '• Hot 38-40°C: 3-4 min\n• Cold 10-15°C: 1 min\n• Repeat 3-4 cycles\n• Always finish with cold\nTotal duration: 15-20 min\nFrequency: Post-intense session (NOT in active acute injury phase)',
+    contraindications: 'Active acute injury, peripheral arterial disease, Raynaud\'s, open wounds',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — reduce DOMS, mejora recuperación subjetiva y función neuromuscular al día siguiente',
+    evidenceNote: 'Level B — reduces DOMS, improves subjective recovery and next-day neuromuscular function',
     duration: 20,
     modalities: ['Hydrotherapy'],
-    applyNotes: '[Protocol: Contrast Hydrotherapy]\nCaliente 38-40°C (3-4min) + Frío 10-15°C (1min) × 3-4 ciclos | Terminar en frío',
+    applyNotes: '[Protocol: Contrast Hydrotherapy]\nHot 38-40°C (3-4min) + Cold 10-15°C (1min) × 3-4 cycles | Finish with cold',
   },
   // ── TAPING ──────────────────────────────────────────────────────────────
   {
     id: 'ev_kt_hamstring',
     name: 'Kinesio Taping — Hamstring',
-    subtitle: 'Inhibición / Facilitación',
+    subtitle: 'Inhibition / Facilitation',
     category: 'taping',
     ref: 'Kinesio Taping Method (Kase et al.)',
-    indication: 'Dolor muscular agudo, facilitar circulación linfática, reducir inhibición',
-    technique: 'Inhibición (dolor/tono elevado):\n• Ancla proximal sin tensión → 0-15% tensión papel fuera\n• Dirección: inserción → origen\n\nFacilitación (fuerza/activación):\n• Dirección: origen → inserción · Tensión: 25-50%\n\n• 1-2 Y-strips o I-strips\nDuración aplicación: 3-5 días',
-    contraindications: 'Piel dañada, alergia al adhesivo, trombosis, heridas abiertas',
+    indication: 'Acute muscle pain, facilitate lymphatic circulation, reduce inhibition',
+    technique: 'Inhibition (pain/elevated tone):\n• Proximal anchor without tension → 0-15% paper-off tension\n• Direction: insertion → origin\n\nFacilitation (strength/activation):\n• Direction: origin → insertion · Tension: 25-50%\n\n• 1-2 Y-strips or I-strips\nApplication duration: 3-5 days',
+    contraindications: 'Damaged skin, adhesive allergy, thrombosis, open wounds',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — reducción dolor y mejora ROM a corto plazo (moderada evidencia)',
+    evidenceNote: 'Level B — pain reduction and ROM improvement in the short term (moderate evidence)',
     duration: 15,
     modalities: ['Taping'],
-    applyNotes: '[Protocol: Kinesio Taping — Hamstring]\nInhibición: inserción→origen 0-15% tensión | Facilitación: origen→inserción 25-50% | 1-2 Y-strips / 3-5 días',
+    applyNotes: '[Protocol: Kinesio Taping — Hamstring]\nInhibition: insertion→origin 0-15% tension | Facilitation: origin→insertion 25-50% | 1-2 Y-strips / 3-5 days',
   },
   {
     id: 'ev_rigid_tape_ankle',
-    name: 'Rigid Taping — Estabilización Tobillo',
+    name: 'Rigid Taping — Ankle Stabilization',
     subtitle: '',
     category: 'taping',
     ref: 'Kerkhoffs GM et al. (2012); Tassignon B et al. (2021)',
-    indication: 'Esguince Grado II-III, RTP con soporte funcional (recomendado 6 meses post-Grado III)',
-    technique: '• Anchor strips en tercio distal de pierna\n• 2-3 stirrups laterales\n• Heel lock bilateral\n• Figure-8\n• Closing strips\nMaterial: Tape inelástico 38mm + underwrap\nDuración: Reemplazar en cada sesión de entrenamiento',
-    contraindications: 'Alergia al adhesivo, heridas abiertas, piel muy sensible',
+    indication: 'Grade II-III sprain, RTP with functional support (recommended 6 months post-Grade III)',
+    technique: '• Anchor strips on distal third of leg\n• 2-3 lateral stirrups\n• Bilateral heel lock\n• Figure-8\n• Closing strips\nMaterial: Inelastic tape 38mm + underwrap\nDuration: Replace at each training session',
+    contraindications: 'Adhesive allergy, open wounds, very sensitive skin',
     evidenceLevel: 'A',
-    evidenceNote: 'Nivel A — previene re-lesión en Grado II-III durante RTP',
+    evidenceNote: 'Level A — prevents re-injury in Grade II-III during RTP',
     duration: 15,
     modalities: ['Taping'],
-    applyNotes: '[Protocol: Rigid Taping — Estabilización Tobillo]\nAnchors + stirrups laterales + heel lock + figure-8 + closing | Tape inelástico 38mm + underwrap',
+    applyNotes: '[Protocol: Rigid Taping — Ankle Stabilization]\nAnchors + lateral stirrups + heel lock + figure-8 + closing | Inelastic tape 38mm + underwrap',
   },
   // ── NEEDLING / NEUROMODULATION ───────────────────────────────────────────
   {
     id: 'ev_dn_hamstring',
-    name: 'Dry Needling — Puntos Gatillo Hamstring',
+    name: 'Dry Needling — Hamstring Trigger Points',
     subtitle: '',
     category: 'needling',
     ref: 'Alaei P et al. J Sport Rehabil (2020); JSR CAT (2023); Dunning J et al. Phys Ther Rev (2014)',
-    indication: 'Puntos gatillo activos, restricción ROM, dolor miofascial (NO en lesión aguda <72h)',
-    technique: '• Identificar punto gatillo por palpación\n• Aguja 0.25-0.30mm × 40-50mm\n• Buscar twitch response (respuesta de espasmo local)\n• Pistoning suave: 5-10 repeticiones\n• 3 puntos por sesión máximo:\n    – Bíceps femoral largo proximal\n    – Semimembranoso central\n    – Semitendinoso distal\n• 1 min por punto\nDuración: 15-20 min\nFrecuencia: 2 veces/semana, 3-4 semanas\nPost: Stretching suave + hielo si dolor',
-    contraindications: 'Anticoagulantes, embarazo, fobia a agujas, infección local, área irradiada',
+    indication: 'Active trigger points, ROM restriction, myofascial pain (NOT in acute injury <72h)',
+    technique: '• Identify trigger point by palpation\n• Needle 0.25-0.30mm × 40-50mm\n• Seek twitch response (local spasm response)\n• Gentle pistoning: 5-10 repetitions\n• Maximum 3 points per session:\n    – Long proximal biceps femoris\n    – Central semimembranosus\n    – Distal semitendinosus\n• 1 min per point\nDuration: 15-20 min\nFrequency: 2 times/week, 3-4 weeks\nPost: Gentle stretching + ice if pain',
+    contraindications: 'Anticoagulants, pregnancy, needle phobia, local infection, irradiated area',
     evidenceLevel: 'A',
-    evidenceNote: 'Nivel A para mejora ROM inmediata (Alaei 2020 RCT: DN > static stretching en compliance muscular a 15min); Nivel B para dolor crónico',
+    evidenceNote: 'Level A for immediate ROM improvement (Alaei 2020 RCT: DN > static stretching in muscle compliance at 15min); Level B for chronic pain',
     duration: 20,
     modalities: ['Needling'],
-    applyNotes: '[Protocol: Dry Needling — Hamstring]\n0.25-0.30mm × 40-50mm | Twitch response + pistoning 5-10 reps | 3 puntos máx (BFL prox + SM central + ST distal) | 1min/punto',
+    applyNotes: '[Protocol: Dry Needling — Hamstring]\n0.25-0.30mm × 40-50mm | Twitch response + pistoning 5-10 reps | 3 points max (BFL prox + SM central + ST distal) | 1min/point',
   },
   {
     id: 'ev_dn_ankle',
-    name: 'Dry Needling — Tobillo / Pantorrilla',
+    name: 'Dry Needling — Ankle / Calf',
     subtitle: '',
     category: 'needling',
-    ref: 'Literatura dry needling lower extremity',
-    indication: 'Puntos gatillo gastrocnemio/sóleo, restricción dorsiflexión, tendinopatía Aquiles crónica',
-    technique: '• Gastrocnemio medial/lateral: 2-3 puntos\n• Sóleo: 1-2 puntos profundos\n• Agujas 0.30mm × 50-60mm\n• Twitch response buscado en cada punto\nDuración: 15-20 min\nFrecuencia: 1-2 veces/semana\nPrecaución: área poplítea (vascular)',
-    contraindications: 'Anticoagulantes, embarazo, fobia a agujas, infección local, precaución en área poplítea',
+    ref: 'Dry needling lower extremity literature',
+    indication: 'Gastrocnemius/soleus trigger points, dorsiflexion restriction, chronic Achilles tendinopathy',
+    technique: '• Medial/lateral gastrocnemius: 2-3 points\n• Soleus: 1-2 deep points\n• Needles 0.30mm × 50-60mm\n• Twitch response sought at each point\nDuration: 15-20 min\nFrequency: 1-2 times/week\nCaution: popliteal area (vascular)',
+    contraindications: 'Anticoagulants, pregnancy, needle phobia, local infection, caution in popliteal area',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — mejora dorsiflexión y reduce dolor en tendinopatía crónica',
+    evidenceNote: 'Level B — improves dorsiflexion and reduces pain in chronic tendinopathy',
     duration: 20,
     modalities: ['Needling'],
-    applyNotes: '[Protocol: Dry Needling — Tobillo/Pantorrilla]\n0.30mm × 50-60mm | Gastrocnemio 2-3pts + Sóleo 1-2pts | Twitch response cada punto',
+    applyNotes: '[Protocol: Dry Needling — Ankle/Calf]\n0.30mm × 50-60mm | Gastrocnemius 2-3pts + Soleus 1-2pts | Twitch response each point',
   },
   {
     id: 'ev_nmes',
-    name: 'NMES — Estimulación Neuromuscular',
-    subtitle: 'Neuromodulación',
+    name: 'NMES — Neuromuscular Stimulation',
+    subtitle: 'Neuromodulation',
     category: 'needling',
     ref: 'CK Physio (BJSM 2023 data)',
-    indication: 'Atrofia por desuso, inhibición post-cirugía (ACL, fracturas), mantener fuerza durante inmovilización',
-    technique: '• Fuerza: 35-50 Hz / 250-400 μs / contracción visible\n• Resistencia: 10-20 Hz / 250-400 μs\n• On/Off: 10s/50s → progresando a 10s/10s\n• Intensidad: máxima tolerable con contracción visible\n• Duración: 20-30 min\nFrecuencia: Diaria en inmovilización; 3-4x/semana en rehabilitación',
-    contraindications: 'Marcapasos, epilepsia, trombosis, sobre área cardíaca',
+    indication: 'Disuse atrophy, post-surgery inhibition (ACL, fractures), maintain strength during immobilization',
+    technique: '• Strength: 35-50 Hz / 250-400 μs / visible contraction\n• Endurance: 10-20 Hz / 250-400 μs\n• On/Off: 10s/50s → progressing to 10s/10s\n• Intensity: maximum tolerable with visible contraction\n• Duration: 20-30 min\nFrequency: Daily during immobilization; 3-4x/week in rehabilitation',
+    contraindications: 'Pacemaker, epilepsy, thrombosis, over cardiac area',
     evidenceLevel: 'B',
-    evidenceNote: 'Nivel B — mantiene masa muscular durante inmovilización, acelera recuperación post-ACL',
+    evidenceNote: 'Level B — maintains muscle mass during immobilization, accelerates post-ACL recovery',
     duration: 25,
     modalities: ['Electrotherapy'],
-    applyNotes: '[Protocol: NMES — Estimulación Neuromuscular]\nFuerza: 35-50Hz / Resistencia: 10-20Hz | 250-400μs | On/Off 10s/50s→10s/10s | 20-30min',
+    applyNotes: '[Protocol: NMES — Neuromuscular Stimulation]\nStrength: 35-50Hz / Endurance: 10-20Hz | 250-400μs | On/Off 10s/50s→10s/10s | 20-30min',
   },
 ];
 
@@ -1831,6 +1831,7 @@ async function openProtocols() {
   _protoSearchQuery = '';
   const inp = document.getElementById('protoSearchInput');
   if (inp) inp.value = '';
+  updateTabBadges(null, null);
   document.getElementById('protocolsOverlay').classList.add('is-open');
   switchProtoTab(_currentProtoTab);
   renderEvidenceProtocols();
@@ -1855,16 +1856,61 @@ function toggleProtoCard(id) {
   if (card) card.classList.toggle('is-open');
 }
 
+function updateTabBadges(evidenceCount, clubCount) {
+  const evidenceBtn = document.querySelector('.proto-tab[data-tab="evidence"] .proto-tab-text');
+  const clubBtn     = document.querySelector('.proto-tab[data-tab="club"] .proto-tab-text');
+  if (!evidenceBtn || !clubBtn) return;
+  if (evidenceCount !== null) {
+    evidenceBtn.textContent = `Evidence-based protocols (${evidenceCount})`;
+    clubBtn.textContent     = `Club protocols (${clubCount})`;
+  } else {
+    evidenceBtn.textContent = 'Evidence-based protocols';
+    clubBtn.textContent     = 'Club protocols';
+  }
+}
+
 function onProtoSearch(val) {
-  _protoSearchQuery = val;
+  _protoSearchQuery = val.trim();
+  const ql = _protoSearchQuery.toLowerCase();
+
+  if (ql) {
+    const evidenceResults = EVIDENCE_PROTOCOLS.filter(p => {
+      const tags = PROTO_TAGS[p.id] || [];
+      return p.name.toLowerCase().includes(ql) ||
+             p.indication.toLowerCase().includes(ql) ||
+             p.ref.toLowerCase().includes(ql) ||
+             p.category.toLowerCase().includes(ql) ||
+             tags.some(t => t.includes(ql));
+    });
+    const clubResults = _clubProtocols.filter(p =>
+      (p.title || '').toLowerCase().includes(ql) ||
+      (p.treatment_type || '').toLowerCase().includes(ql) ||
+      (p.injury_type || '').toLowerCase().includes(ql) ||
+      (Array.isArray(p.modalities) ? p.modalities.join(' ') : '').toLowerCase().includes(ql)
+    );
+
+    if (_currentProtoTab === 'evidence' && evidenceResults.length === 0 && clubResults.length > 0) {
+      switchProtoTab('club');
+    } else if (_currentProtoTab === 'club' && clubResults.length === 0 && evidenceResults.length > 0) {
+      switchProtoTab('evidence');
+    }
+
+    updateTabBadges(evidenceResults.length, clubResults.length);
+  } else {
+    updateTabBadges(null, null);
+  }
+
   renderEvidenceProtocols();
+  renderClubProtocols();
 }
 
 function clearProtoSearch() {
   _protoSearchQuery = '';
   const inp = document.getElementById('protoSearchInput');
   if (inp) inp.value = '';
+  updateTabBadges(null, null);
   renderEvidenceProtocols();
+  renderClubProtocols();
 }
 
 function renderEvidenceProtocols() {
@@ -1938,11 +1984,24 @@ async function loadClubProtocols() {
 
 function renderClubProtocols() {
   const el = document.getElementById('clubProtocolsList');
-  if (!_clubProtocols.length) {
-    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No club protocols saved. Create one above.</div>';
+  const ql = _protoSearchQuery.toLowerCase();
+  const protocols = ql
+    ? _clubProtocols.filter(p =>
+        (p.title || '').toLowerCase().includes(ql) ||
+        (p.treatment_type || '').toLowerCase().includes(ql) ||
+        (p.injury_type || '').toLowerCase().includes(ql) ||
+        (Array.isArray(p.modalities) ? p.modalities.join(' ') : '').toLowerCase().includes(ql)
+      )
+    : _clubProtocols;
+
+  if (!protocols.length) {
+    const msg = ql && _clubProtocols.length
+      ? `No club protocols found for "<strong>${esc(_protoSearchQuery)}</strong>"`
+      : 'No club protocols saved. Create one above.';
+    el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${msg}</div>`;
     return;
   }
-  el.innerHTML = _clubProtocols.map(t => {
+  el.innerHTML = protocols.map(t => {
     const mods = Array.isArray(t.modalities) ? t.modalities.join(', ') : '—';
     const dur  = t.duration_minutes ? t.duration_minutes + ' min' : '—';
     return `<div class="club-proto-card">
