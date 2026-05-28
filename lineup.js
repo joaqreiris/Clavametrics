@@ -531,7 +531,6 @@
   }
 
   function openPicker (slotIdx, kind, anchor) {
-    console.time('picker-open');
     closePicker();
     const posHint = kind === 'xi'
       ? (FORMATIONS[state.formation][slotIdx]?.role || 'ANY')
@@ -564,30 +563,32 @@
       ...state.subs.filter(Boolean).map(p => p.id),
     ].filter(id => id !== currentSlotId));
 
-    const renderList = q => {
-      const ql = (q || '').toLowerCase();
-      let players = _allPlayers.filter(p =>
-        !assignedIds.has(p.id) &&
-        (!ql || `${p.last_name} ${p.first_name} ${p.number}`.toLowerCase().includes(ql))
-      ).slice().sort((a, b) => {
-        const am = mapPosition(a.position) === posHint;
-        const bm = mapPosition(b.position) === posHint;
+    // Sort once on open; only filter by text on each keystroke
+    const baseList = _allPlayers
+      .filter(p => !assignedIds.has(p.id))
+      .map(p => ({ ...p, _pos: mapPosition(p.position) }))
+      .sort((a, b) => {
+        const am = a._pos === posHint, bm = b._pos === posHint;
         if (am !== bm) return am ? -1 : 1;
         return (a.last_name || '').localeCompare(b.last_name || '');
       });
+
+    const renderList = q => {
+      const ql = (q || '').toLowerCase();
+      const players = ql
+        ? baseList.filter(p => `${p.last_name} ${p.first_name} ${p.number}`.toLowerCase().includes(ql))
+        : baseList;
 
       if (!players.length) {
         list.innerHTML = '<div class="lu-picker-empty">No players found</div>';
         return;
       }
-      list.innerHTML = players.map(p => {
-        const pos = mapPosition(p.position);
-        return `<div class="lu-picker-row${pos === posHint ? ' is-match' : ''}" data-id="${p.id}">
+      list.innerHTML = players.map(p => `
+        <div class="lu-picker-row${p._pos === posHint ? ' is-match' : ''}" data-id="${p.id}">
           <span class="lu-pr-num">${p.number || '?'}</span>
           <span class="lu-pr-name">${p.last_name}, ${(p.first_name || '')[0] || ''}.</span>
-          <span class="role-tag ${pos.toLowerCase()}">${pos}</span>
-        </div>`;
-      }).join('');
+          <span class="role-tag ${p._pos.toLowerCase()}">${p._pos}</span>
+        </div>`).join('');
 
       list.querySelectorAll('.lu-picker-row').forEach(row => {
         row.addEventListener('mousedown', e => {
@@ -600,8 +601,11 @@
     };
 
     renderList('');
-    console.timeEnd('picker-open');
-    input.addEventListener('input', e => renderList(e.target.value));
+    let _inputTimer;
+    input.addEventListener('input', e => {
+      clearTimeout(_inputTimer);
+      _inputTimer = setTimeout(() => renderList(e.target.value), 100);
+    });
     requestAnimationFrame(() => input.focus());
 
     const onOutside = e => { if (!panel.contains(e.target)) closePicker(); };
@@ -625,7 +629,7 @@
     if (_picker) { _picker.remove(); _picker = null; }
   }
 
-  async function selectPlayer (squadPlayer, slotIdx, kind) {
+  function selectPlayer (squadPlayer, slotIdx, kind) {
     const nat = (squadPlayer.nationality || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
     const p = {
       id:      squadPlayer.id,
@@ -646,20 +650,25 @@
       state.subs[slotIdx] = p;
     }
 
+    // Render is synchronous — UI is instant
     renderComposer();
     renderPitch();
     renderSubsBand();
 
-    if (_lineupId && squadPlayer.id) {
-      const role = kind === 'xi' ? 'starter' : 'substitute';
-      await window.sb.from('lineup_players')
-        .delete()
-        .eq('lineup_id', _lineupId)
-        .eq('role', role)
-        .eq('slot_index', slotIdx);
-      await window.sb.from('lineup_players')
-        .insert({ lineup_id: _lineupId, player_id: squadPlayer.id, role, slot_index: slotIdx });
-    }
+    // Persist in background — never blocks the UI
+    persistSlot(slotIdx, kind, squadPlayer.id)
+      .catch(err => showToast('Save error: ' + err.message));
+  }
+
+  async function persistSlot (slotIdx, kind, playerId) {
+    if (!_lineupId || !playerId) return;
+    const role = kind === 'xi' ? 'starter' : 'substitute';
+    const { error } = await window.sb.from('lineup_players')
+      .upsert(
+        { lineup_id: _lineupId, player_id: playerId, role, slot_index: slotIdx },
+        { onConflict: 'lineup_id,role,slot_index' }
+      );
+    if (error) throw error;
   }
 
   function updateTabCounts () {
