@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="hybrid">
+<html lang="en" data-theme="hybrid">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -38,7 +38,7 @@
     <div class="hub-topbar">
       <div class="hub-crumb">
         <i class="ti ti-home"></i>
-        <span>Clava FC</span>
+        <span data-club-name>Club</span>
         <span class="sep">/</span>
         <a href="Squad.html" style="color:inherit;text-decoration:none">Squad</a>
         <span class="sep">/</span>
@@ -46,7 +46,7 @@
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Buscar jugadores, microciclos…">
+        <input placeholder="Search players, matches…">
       </div>
       <div class="actions">
         <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
@@ -57,33 +57,32 @@
 
     <section class="lu-page">
 
-      <!-- Match-info banner (auto-loaded from MC 14) -->
+      <!-- Match-info banner -->
       <div class="lu-mc">
         <div>
-          <div class="lu-mc-tag"><i class="ti ti-bolt" style="font-size:11px"></i>Próximo partido</div>
-          <div class="lu-mc-cycle">Microciclo 14 · 11 May → 24 May</div>
+          <div class="lu-mc-tag"><i class="ti ti-bolt" style="font-size:11px"></i>Next match</div>
+          <div class="lu-mc-cycle" data-mc-cycle>—</div>
           <div class="lu-mc-title">
-            Clava FC
+            <span data-club-name-title>Club</span>
             <span class="vs">vs</span>
-            <img class="opp-crest" src="assets/sample-club-crest.png" alt="Atlético">
-            Atlético
-            <span class="home"><i class="ti ti-home" style="font-size:11px"></i>Local</span>
+            <img class="opp-crest" src="assets/sample-club-crest.png" alt="">
+            <span data-rival-name>—</span>
+            <span class="home" data-home-away><i class="ti ti-home" style="font-size:11px"></i>Home</span>
           </div>
           <div class="lu-mc-meta">
-            <span class="item"><i class="ti ti-calendar-event"></i>Dom <strong>18 May 2026</strong></span>
-            <span class="item"><i class="ti ti-clock"></i><strong>17:00</strong> ART</span>
-            <span class="item"><i class="ti ti-building-stadium"></i><strong>Estadio Clava</strong> · 27,460</span>
-            <span class="item"><i class="ti ti-trophy"></i><strong>Liga Profesional</strong> · J28</span>
-            <span class="item"><i class="ti ti-thermometer"></i>16°C · despejado</span>
+            <span class="item"><i class="ti ti-calendar-event"></i><strong data-banner-date>—</strong></span>
+            <span class="item"><i class="ti ti-clock"></i><strong data-banner-time>—</strong></span>
+            <span class="item"><i class="ti ti-building-stadium"></i><strong data-banner-venue>—</strong></span>
+            <span class="item"><i class="ti ti-trophy"></i><strong data-banner-comp>—</strong></span>
           </div>
         </div>
         <div class="lu-mc-countdown">
-          <div class="num"><span data-countdown>2</span><span style="font-size:14px;color:var(--cm-fg-muted);letter-spacing:0.04em"> d</span></div>
-          <div class="lbl">Faltan</div>
+          <div class="num"><span data-countdown>—</span><span style="font-size:14px;color:var(--cm-fg-muted);letter-spacing:0.04em"> d</span></div>
+          <div class="lbl">Days to go</div>
         </div>
         <div class="lu-mc-actions">
-          <button class="cm-btn is-outline is-sm" title="Sync from microcycle"><i class="ti ti-refresh" style="font-size:14px"></i>Re-sync MC 14</button>
-          <button class="cm-btn is-outline is-sm" title="Previous lineup"><i class="ti ti-history" style="font-size:14px"></i>Plantillas</button>
+          <button class="cm-btn is-outline is-sm" id="luResyncBtn"><i class="ti ti-refresh" style="font-size:14px"></i>Re-sync</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-history" style="font-size:14px"></i>Templates</button>
         </div>
       </div>
 
@@ -95,13 +94,13 @@
           <div class="lu-comp-head">
             <i class="ti ti-clipboard-list"></i>
             <h3>Composer</h3>
-            <span class="count">11 + 7 + 4</span>
+            <span class="count" id="luCompCount">11 + 7</span>
           </div>
 
           <!-- Formation picker -->
           <div class="lu-form">
             <div class="lu-form-h">
-              <span class="lbl">Formación</span>
+              <span class="lbl">Formation</span>
               <span class="grow"></span>
               <span class="system" data-form-system>4-3-3</span>
             </div>
@@ -117,9 +116,9 @@
 
           <!-- Tabs -->
           <div class="lu-tabs">
-            <button class="lu-tab is-on" data-tab="xi"><i class="ti ti-circle-letter-x" style="font-size:14px"></i>XI <span class="ct">11</span></button>
-            <button class="lu-tab" data-tab="subs"><i class="ti ti-arrows-exchange" style="font-size:14px"></i>Suplentes <span class="ct">7</span></button>
-            <button class="lu-tab" data-tab="staff"><i class="ti ti-id-badge" style="font-size:14px"></i>Staff <span class="ct">4</span></button>
+            <button class="lu-tab is-on" data-tab="xi"><i class="ti ti-circle-letter-x" style="font-size:14px"></i>XI <span class="ct">0</span></button>
+            <button class="lu-tab" data-tab="subs"><i class="ti ti-arrows-exchange" style="font-size:14px"></i>Substitutes <span class="ct">0</span></button>
+            <button class="lu-tab" data-tab="staff"><i class="ti ti-id-badge" style="font-size:14px"></i>Staff</button>
           </div>
 
           <!-- Lists -->
@@ -127,66 +126,28 @@
 
             <!-- XI pane -->
             <div data-pane="xi">
-              <div class="lu-sec-title"><i class="ti ti-star-filled"></i>XI Inicial</div>
+              <div class="lu-sec-title"><i class="ti ti-star-filled"></i>Starting XI</div>
               <div data-list="xi"></div>
-              <!-- rendered by lineup.js -->
             </div>
 
             <!-- Subs pane -->
             <div data-pane="subs" style="display:none">
-              <div class="lu-sec-title"><i class="ti ti-arrows-exchange"></i>Suplentes</div>
+              <div class="lu-sec-title"><i class="ti ti-arrows-exchange"></i>Substitutes</div>
               <div data-list="subs"></div>
             </div>
 
             <!-- Staff pane -->
             <div data-pane="staff" style="display:none">
-              <div class="lu-sec-title"><i class="ti ti-id-badge"></i>Cuerpo técnico</div>
-              <div style="padding:0 8px">
-                <div class="lu-row" data-pos="mf">
-                  <span class="handle"><i class="ti ti-grip-vertical"></i></span>
-                  <span class="num"><i class="ti ti-crown" style="font-size:13px;color:var(--cm-warning)"></i></span>
-                  <div class="body">
-                    <div class="name">Beccacece, Sebastián</div>
-                    <div class="meta">Director Técnico</div>
-                  </div>
-                  <span class="role-tag" style="background:rgba(217,119,6,0.12);color:#B45309">DT</span>
-                </div>
-                <div class="lu-row" data-pos="mf">
-                  <span class="handle"><i class="ti ti-grip-vertical"></i></span>
-                  <span class="num">·</span>
-                  <div class="body">
-                    <div class="name">Insúa, Maximiliano</div>
-                    <div class="meta">Ayudante de campo</div>
-                  </div>
-                  <span class="role-tag mf">AYU</span>
-                </div>
-                <div class="lu-row" data-pos="gk">
-                  <span class="handle"><i class="ti ti-grip-vertical"></i></span>
-                  <span class="num">·</span>
-                  <div class="body">
-                    <div class="name">Migliore, Federico</div>
-                    <div class="meta">Entrenador de arqueros</div>
-                  </div>
-                  <span class="role-tag gk">ARQ</span>
-                </div>
-                <div class="lu-row" data-pos="st">
-                  <span class="handle"><i class="ti ti-grip-vertical"></i></span>
-                  <span class="num">·</span>
-                  <div class="body">
-                    <div class="name">Reiris, Joaquín</div>
-                    <div class="meta">Preparador físico</div>
-                  </div>
-                  <span class="role-tag" style="background:rgba(22,163,74,0.12);color:#15803D">P.F.</span>
-                </div>
-              </div>
+              <div class="lu-sec-title"><i class="ti ti-id-badge"></i>Coaching staff</div>
+              <div style="padding:0 8px" id="staffList"></div>
             </div>
 
           </div>
 
           <div class="lu-comp-foot">
-            <span class="saved">Sincronizado · hace 4 s</span>
+            <span class="saved" id="luSaveStatus">—</span>
             <span class="grow"></span>
-            <button class="cm-btn is-ghost is-sm" title="Reset to last published"><i class="ti ti-rotate" style="font-size:13px"></i>Reset</button>
+            <button class="cm-btn is-ghost is-sm"><i class="ti ti-rotate" style="font-size:13px"></i>Reset</button>
           </div>
         </aside>
 
@@ -195,7 +156,7 @@
 
           <!-- Style switcher bar -->
           <div class="lu-stage-bar">
-            <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);letter-spacing:0.08em;text-transform:uppercase;margin-right:6px">Estilo</span>
+            <span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);letter-spacing:0.08em;text-transform:uppercase;margin-right:6px">Style</span>
             <div class="style-tabs">
               <button class="style-tab is-on" data-style="editorial"><span class="dot" style="background:#0B130E;border-color:rgba(74,222,128,0.4)"></span>Editorial</button>
               <button class="style-tab" data-style="stadium"><span class="dot" style="background:#1d4d23;border-color:rgba(252,211,77,0.5)"></span>Stadium</button>
@@ -211,37 +172,42 @@
             <div class="lu-poster is-editorial" data-comment-anchor="lineup-poster">
 
               <!-- Stamp (visible only on ticket style) -->
-              <div class="pst-stamp" data-poster-stamp>Oficial · MC 14</div>
+              <div class="pst-stamp" data-poster-stamp>Official</div>
 
               <!-- Head: home crest · club name · opp crest -->
               <header class="pst-head">
-                <img class="pst-crest" src="assets/sample-club-crest.png" alt="Clava FC">
+                <img class="pst-crest" src="assets/sample-club-crest.png" alt="">
                 <div class="pst-clubcol">
-                  <div class="name">Clava FC</div>
-                  <div class="sub">First team · 2025 / 26</div>
+                  <div class="name" data-club-name-poster>Club</div>
+                  <div class="sub" data-club-team-sub>First team</div>
                 </div>
                 <div class="pst-vs">
                   <span class="lbl">vs</span>
-                  <img class="opp-crest" src="assets/sample-club-crest.png" alt="Atlético">
+                  <div class="pst-opp-wrap">
+                    <img class="opp-crest" src="assets/sample-club-crest.png" alt="">
+                    <label class="lu-opp-upload" title="Upload opponent crest">
+                      <i class="ti ti-camera"></i>
+                      <input type="file" accept="image/*" id="rivalCrestInput" style="display:none">
+                    </label>
+                  </div>
                 </div>
               </header>
 
-              <!-- Title + matchday number -->
+              <!-- Title + matchday -->
               <div class="pst-banner">
-                <div class="ttl"><span data-poster-title>Convocatoria</span><br><em data-poster-title-em>Oficial</em></div>
+                <div class="ttl"><span data-poster-title>Lineup</span><br><em data-poster-title-em>Official</em></div>
                 <div class="meta-stack">
-                  <div>Fecha</div>
-                  <div class="big">J28</div>
-                  <div style="margin-top:6px">Liga Pro</div>
+                  <div data-poster-comp-label>Competition</div>
+                  <div class="big" data-poster-matchday>—</div>
                 </div>
               </div>
 
               <!-- Match meta strip -->
               <div class="pst-matchmeta">
-                <div class="cell"><div class="l" data-meta="matchday-l">Fecha</div><div class="v">Dom 18 May<small>2026</small></div></div>
-                <div class="cell"><div class="l" data-meta="kickoff-l">Hora</div><div class="v">17:00<small>ART</small></div></div>
-                <div class="cell"><div class="l" data-meta="venue-l">Estadio</div><div class="v">Estadio Clava<small>Local</small></div></div>
-                <div class="cell"><div class="l" data-meta="comp-l">Competición</div><div class="v">Liga Pro<small>J28</small></div></div>
+                <div class="cell"><div class="l" data-meta="matchday-l">Date</div><div class="v" data-match-date>—</div></div>
+                <div class="cell"><div class="l" data-meta="kickoff-l">Kick-off</div><div class="v" data-match-time>—</div></div>
+                <div class="cell"><div class="l" data-meta="venue-l">Venue</div><div class="v" data-match-venue>—</div></div>
+                <div class="cell"><div class="l" data-meta="comp-l">Competition</div><div class="v" data-match-comp>—</div></div>
               </div>
 
               <!-- Pitch with formation -->
@@ -252,9 +218,9 @@
               <!-- Substitutes band -->
               <div class="pst-band">
                 <div class="pst-band-h">
-                  <span data-band-subs>Suplentes</span>
+                  <span data-band-subs>Substitutes</span>
                   <span class="ct">·</span>
-                  <span class="ct"><span data-poster-subs-count>7</span> jugadores</span>
+                  <span class="ct"><span data-poster-subs-count>0</span> players</span>
                 </div>
                 <div class="pst-subs" data-poster-subs></div>
               </div>
@@ -262,11 +228,11 @@
               <!-- Footer: coach + tagline -->
               <footer class="pst-foot">
                 <div class="coach">
-                  <span class="l" data-coach-l>DT</span>
-                  <span class="v">S. Beccacece</span>
+                  <span class="l" data-coach-l>HEAD COACH</span>
+                  <span class="v" data-coach-v>—</span>
                 </div>
                 <span class="grow"></span>
-                <span class="tag" data-poster-tag>#VamosClava</span>
+                <span class="tag" data-poster-tag>#ClavaMetrics</span>
               </footer>
 
             </div>
@@ -274,11 +240,11 @@
 
           <!-- Actions -->
           <div class="lu-actions">
-            <span class="label"><i class="ti ti-send"></i>Compartir esta convocatoria</span>
+            <span class="label"><i class="ti ti-send"></i>Share this lineup</span>
             <span class="grow"></span>
-            <button class="cm-btn is-outline is-sm" data-export="pdf"><i class="ti ti-printer" style="font-size:14px"></i>Imprimir</button>
-            <button class="cm-btn is-outline is-sm" data-export="image"><i class="ti ti-photo-down" style="font-size:14px"></i>Descargar PNG</button>
-            <button class="cm-btn is-primary is-sm" data-export="share"><i class="ti ti-brand-hipchat" style="font-size:14px"></i>Enviar a #match-day</button>
+            <button class="cm-btn is-outline is-sm" data-export="pdf"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
+            <button class="cm-btn is-outline is-sm" data-export="image"><i class="ti ti-photo-down" style="font-size:14px"></i>Download PNG</button>
+            <button class="cm-btn is-primary is-sm" data-export="share"><i class="ti ti-share" style="font-size:14px"></i>Share lineup</button>
           </div>
 
         </div>
@@ -287,6 +253,38 @@
 
     </section>
   </main>
+</div>
+
+<!-- Share modal -->
+<div class="lu-share-backdrop" id="luShareBackdrop"></div>
+<div class="lu-share-modal" id="luShareModal">
+  <div class="lu-share-head">
+    <span>Share lineup</span>
+    <button class="cm-icon-btn" id="luShareClose"><i class="ti ti-x"></i></button>
+  </div>
+  <div class="lu-share-opts">
+    <button class="lu-share-opt" id="luShareChat">
+      <i class="ti ti-brand-hipchat"></i>
+      <div>
+        <div class="t">Send to #match-day</div>
+        <div class="s">Publish as official + notify chat</div>
+      </div>
+    </button>
+    <button class="lu-share-opt" id="luShareDownload">
+      <i class="ti ti-photo-down"></i>
+      <div>
+        <div class="t">Download PNG</div>
+        <div class="s">Save poster as image file</div>
+      </div>
+    </button>
+    <button class="lu-share-opt" id="luShareLink">
+      <i class="ti ti-link"></i>
+      <div>
+        <div class="t">Copy link</div>
+        <div class="s">Shareable URL with lineup ID</div>
+      </div>
+    </button>
+  </div>
 </div>
 
 <div id="tweaks-root"></div>

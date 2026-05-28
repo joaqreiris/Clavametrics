@@ -117,7 +117,6 @@
   // ── Module-level lineup context (set in init)
   let _lineupId   = null;
   let _clubId     = null;
-  let _mcName     = null;
   let _saveTimer  = null;
   let _allPlayers    = [];
   let _picker        = null;
@@ -179,7 +178,7 @@
     const flagBg = code => FLAG_CSS[code] ? `style="background:${FLAG_CSS[code]}"` : '';
 
     const filledRow = (p, idx, kind) => `
-      <div class="lu-row" data-kind="${kind}" data-idx="${idx}" data-pos="${p.role.toLowerCase()}" title="Click para cambiar">
+      <div class="lu-row" data-kind="${kind}" data-idx="${idx}" data-pos="${p.role.toLowerCase()}" title="Click to change">
         <span class="handle"><i class="ti ti-grip-vertical"></i></span>
         <span class="num">${p.num}</span>
         <div class="body">
@@ -513,10 +512,18 @@
     const input = panel.querySelector('.lu-picker-input');
     const list  = panel.querySelector('.lu-picker-list');
 
+    // Exclude players already assigned to other slots
+    const currentSlotId = kind === 'xi' ? state.starters[slotIdx]?.id : state.subs[slotIdx]?.id;
+    const assignedIds = new Set([
+      ...state.starters.filter(Boolean).map(p => p.id),
+      ...state.subs.filter(Boolean).map(p => p.id),
+    ].filter(id => id !== currentSlotId));
+
     const renderList = q => {
       const ql = (q || '').toLowerCase();
       let players = _allPlayers.filter(p =>
-        !ql || `${p.last_name} ${p.first_name} ${p.number}`.toLowerCase().includes(ql)
+        !assignedIds.has(p.id) &&
+        (!ql || `${p.last_name} ${p.first_name} ${p.number}`.toLowerCase().includes(ql))
       ).slice().sort((a, b) => {
         const am = mapPosition(a.position) === posHint;
         const bm = mapPosition(b.position) === posHint;
@@ -597,10 +604,14 @@
   }
 
   function updateTabCounts () {
+    const xiCt  = state.starters.filter(Boolean).length;
+    const subCt = state.subs.filter(Boolean).length;
     const xiTab  = document.querySelector('[data-tab="xi"] .ct');
     const subTab = document.querySelector('[data-tab="subs"] .ct');
-    if (xiTab)  xiTab.textContent  = state.starters.filter(Boolean).length;
-    if (subTab) subTab.textContent = state.subs.filter(Boolean).length;
+    if (xiTab)  xiTab.textContent  = xiCt;
+    if (subTab) subTab.textContent = subCt;
+    const compCount = document.getElementById('luCompCount');
+    if (compCount) compCount.textContent = `${xiCt} + ${subCt}`;
   }
 
   // ── Supabase: load next match from calendar_events
@@ -733,13 +744,12 @@
     updateCountdown(match.date);
   }
 
-  // ── Club info: logo + name from clubs table
+  // ── Club info: logo + name from clubs table, season from club_settings
   async function loadClubInfo (clubId) {
-    const { data } = await window.sb
-      .from('clubs')
-      .select('logo_url,name')
-      .eq('id', clubId)
-      .maybeSingle();
+    const [{ data }, { data: settings }] = await Promise.all([
+      window.sb.from('clubs').select('logo_url,name').eq('id', clubId).maybeSingle(),
+      window.sb.from('club_settings').select('season_name').eq('club_id', clubId).limit(1).maybeSingle(),
+    ]);
     if (!data) return;
     if (data.logo_url) {
       document.querySelectorAll('.pst-crest').forEach(img => { img.src = data.logo_url; });
@@ -748,7 +758,53 @@
       document.querySelectorAll('[data-club-name], [data-club-name-title], [data-club-name-poster]').forEach(el => {
         el.textContent = data.name;
       });
+      // Default hashtag from club name (overridden by loadBranding if club_branding row exists)
+      const tag = '#' + data.name.replace(/\s+/g, '').toUpperCase();
+      T.en.tagline = tag;
+      document.querySelectorAll('[data-poster-tag]').forEach(el => { el.textContent = tag; });
     }
+    const season = settings?.season_name;
+    const teamSub = season ? `First team · ${season}` : 'First team';
+    document.querySelectorAll('[data-club-team-sub]').forEach(el => { el.textContent = teamSub; });
+  }
+
+  // ── Coach: load head coach name from profiles → poster footer
+  async function loadCoachInfo (clubId) {
+    const { data } = await window.sb
+      .from('profiles')
+      .select('full_name')
+      .eq('club_id', clubId)
+      .eq('role', 'coach')
+      .order('created_at')
+      .limit(1)
+      .maybeSingle();
+    if (data?.full_name) {
+      document.querySelectorAll('[data-coach-v]').forEach(el => { el.textContent = data.full_name; });
+    }
+  }
+
+  // ── Staff pane: render profiles with coach/staff/admin roles
+  async function renderStaff (clubId) {
+    const { data } = await window.sb
+      .from('profiles')
+      .select('full_name,role')
+      .eq('club_id', clubId)
+      .in('role', ['coach', 'staff', 'admin'])
+      .order('created_at');
+    const list = document.getElementById('staffList');
+    if (!list || !data?.length) return;
+    const roleLabel = r => ({ coach: 'Head coach', staff: 'Staff', admin: 'Director' }[r] || r);
+    const roleTag   = r => ({ coach: 'HC', staff: 'AST', admin: 'MGR' }[r] || 'STF');
+    list.innerHTML = data.map((p, i) => `
+      <div class="lu-row" data-pos="mf">
+        <span class="handle"><i class="ti ti-grip-vertical"></i></span>
+        <span class="num">${p.role === 'coach' && i === 0 ? '<i class="ti ti-crown" style="font-size:13px;color:var(--cm-warning)"></i>' : '·'}</span>
+        <div class="body">
+          <div class="name">${p.full_name || '—'}</div>
+          <div class="meta">${roleLabel(p.role)}</div>
+        </div>
+        <span class="role-tag" style="${p.role === 'coach' ? 'background:rgba(217,119,6,0.12);color:#B45309' : ''}">${roleTag(p.role)}</span>
+      </div>`).join('');
   }
 
   // ── Rival crest upload to Supabase Storage
@@ -819,10 +875,12 @@
     if (!ok) return;
     _clubId = await window.getClubId();
 
-    // Load squad players and club info in parallel (non-blocking)
+    // Load squad, club info, coach, and staff in parallel
     await Promise.all([
       loadSquadPlayers(_clubId),
       loadClubInfo(_clubId),
+      loadCoachInfo(_clubId),
+      renderStaff(_clubId),
     ]);
 
     // Load next match from calendar_events
