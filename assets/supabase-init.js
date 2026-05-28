@@ -92,6 +92,62 @@
     if (event === 'SIGNED_OUT') window.location.replace('Login.html');
   });
 
+  // ── Opponent crest helpers ─────────────────────────────────────────
+  // Slug for Storage path: "Atlético Madrid" → "atletico-madrid"
+  window.slugifyOpponent = function (name) {
+    return (name || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'rival';
+  };
+
+  // 2-letter initials: "Real Madrid" → "RM"
+  window.rivalInitials = function (name) {
+    const words = (name || '').split(/\s+/).filter(Boolean);
+    return words.length >= 2
+      ? words.slice(0, 2).map(w => w[0].toUpperCase()).join('')
+      : (name || '?').slice(0, 2).toUpperCase() || '?';
+  };
+
+  // Cached crest lookup: calendar_events.rival_crest_url → opponent_branding
+  const _crestCache = new Map();
+
+  window.getOpponentCrest = async function ({ clubId, opponentName, matchId } = {}) {
+    const norm     = (opponentName || '').toLowerCase().trim();
+    const nameKey  = `n|${clubId}|${norm}`;
+    const matchKey = matchId ? `m|${matchId}` : null;
+
+    if (matchKey && _crestCache.has(matchKey)) return _crestCache.get(matchKey);
+    if (norm && _crestCache.has(nameKey))       return _crestCache.get(nameKey);
+
+    // Per-match override wins
+    if (matchId) {
+      const { data } = await window.sb.from('calendar_events')
+        .select('rival_crest_url').eq('id', matchId).maybeSingle();
+      if (data?.rival_crest_url) {
+        if (matchKey) _crestCache.set(matchKey, data.rival_crest_url);
+        if (norm)     _crestCache.set(nameKey,  data.rival_crest_url);
+        return data.rival_crest_url;
+      }
+    }
+
+    // Fallback: opponent_branding (case-insensitive by opponent name)
+    if (!norm || !clubId) return null;
+    const { data } = await window.sb.from('opponent_branding')
+      .select('crest_url').eq('club_id', clubId)
+      .ilike('opponent_name', opponentName.trim()).maybeSingle();
+    const url = data?.crest_url || null;
+    _crestCache.set(nameKey, url);
+    if (matchKey) _crestCache.set(matchKey, url);
+    return url;
+  };
+
+  window.invalidateCrestCache = function (clubId, opponentName, matchId) {
+    if (matchId) _crestCache.delete(`m|${matchId}`);
+    if (clubId && opponentName) {
+      _crestCache.delete(`n|${clubId}|${(opponentName || '').toLowerCase().trim()}`);
+    }
+  };
+
   // Returns active players for the club (excludes inactive), ordered by number.
   // Pass teamId to restrict to a specific team/category.
   window.getActivePlayers = async function (clubId, teamId) {

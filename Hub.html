@@ -1563,14 +1563,14 @@ function renderTasks(tasks) {
   // Nearest upcoming match from both calendar_events and microcycles
   const [_nextEvtRes, _nextMcRes] = await Promise.all([
     window.sb.from('calendar_events')
-      .select('date,opponent,title,home_away').eq('club_id', clubId).eq('type', 'match')
+      .select('date,opponent,title,home_away,rival_crest_url').eq('club_id', clubId).eq('type', 'match')
       .gte('date', today).order('date', { ascending: true }).limit(1).maybeSingle(),
     window.sb.from('microcycles')
       .select('rival,match_date,home_away').eq('club_id', clubId)
       .not('match_date', 'is', null).not('rival', 'is', null)
       .gte('match_date', today).order('match_date', { ascending: true }).limit(1).maybeSingle(),
   ]);
-  const _nm1 = _nextEvtRes.data  ? { date: _nextEvtRes.data.date,       rival: _nextEvtRes.data.opponent || (_nextEvtRes.data.title||'').replace(/^vs\s*/i,''), homeAway: _nextEvtRes.data.home_away  } : null;
+  const _nm1 = _nextEvtRes.data  ? { date: _nextEvtRes.data.date,       rival: _nextEvtRes.data.opponent || (_nextEvtRes.data.title||'').replace(/^vs\s*/i,''), homeAway: _nextEvtRes.data.home_away, rival_crest_url: _nextEvtRes.data.rival_crest_url || null  } : null;
   const _nm2 = _nextMcRes.data   ? { date: _nextMcRes.data.match_date,  rival: _nextMcRes.data.rival,                                                           homeAway: _nextMcRes.data.home_away  } : null;
   const _hubNextMatch = _nm1 && _nm2 ? (_nm1.date <= _nm2.date ? _nm1 : _nm2) : (_nm1 || _nm2);
 
@@ -1945,12 +1945,20 @@ function renderTasks(tasks) {
       document.getElementById('kpiNextMatch').innerHTML = `${days}<sub>days</sub>`;
       const rival = _hubNextMatch.rival || '?';
       document.getElementById('kpiNextMatchSub').textContent = `vs ${rival}`;
-      // Rival badge — initials + H/A indicator
+      // Rival badge — crest image (fallback: initials) + H/A indicator
       const badgeEl = document.getElementById('kpiNextMatchBadge');
       if (badgeEl) {
-        const initials = rival.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || '?';
-        const ha = _hubNextMatch.homeAway === 'home' ? 'H' : _hubNextMatch.homeAway === 'away' ? 'A' : _hubNextMatch.homeAway === 'neutral' ? 'N' : '';
-        badgeEl.innerHTML = `<div class="kpi-rival-initials">${initials}</div>${ha ? `<div class="kpi-rival-ha">${ha}</div>` : ''}`;
+        const initials   = rival.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || '?';
+        const ha         = _hubNextMatch.homeAway === 'home' ? 'H' : _hubNextMatch.homeAway === 'away' ? 'A' : _hubNextMatch.homeAway === 'neutral' ? 'N' : '';
+        const haHtml     = ha ? `<div class="kpi-rival-ha">${ha}</div>` : '';
+        const crestUrl   = _hubNextMatch.rival_crest_url || null;
+        if (crestUrl) {
+          badgeEl.innerHTML = `<img id="kpiRivalCrestImg" src="${crestUrl}" style="width:48px;height:48px;border-radius:50%;object-fit:contain" alt="${rival}">${haHtml}`;
+          const crestImg = document.getElementById('kpiRivalCrestImg');
+          if (crestImg) crestImg.onerror = () => { crestImg.outerHTML = `<div class="kpi-rival-initials">${initials}</div>`; };
+        } else {
+          badgeEl.innerHTML = `<div class="kpi-rival-initials">${initials}</div>${haHtml}`;
+        }
       }
     }
     if (_kpiSel.includes('load_week') && !rpeRes.error && rpeRes.data) {

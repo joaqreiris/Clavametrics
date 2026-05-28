@@ -960,15 +960,16 @@
     }
   }
 
-  // ── Rival crest upload to Supabase Storage + persist URL to calendar_events
-  function wireRivalUpload (matchId) {
+  // ── Rival crest upload (Lineup poster quick-upload)
+  // Primary upload path is the Calendar match event modal; this is a secondary shortcut.
+  function wireRivalUpload (matchId, opponentName) {
     const input = document.getElementById('rivalCrestInput');
     if (!input) return;
     input.addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file || !window.sb) return;
 
-      // Show immediately as data URL (works in export without CORS issues)
+      // Show immediately as data URL
       const dataUrl = await new Promise((res, rej) => {
         const reader = new FileReader();
         reader.onload = ev => res(ev.target.result);
@@ -977,38 +978,37 @@
       });
       document.querySelectorAll('.opp-crest').forEach(img => { img.src = dataUrl; });
 
-      // Upload to storage in background for persistence
-      const ext  = file.name.split('.').pop().toLowerCase();
-      const path = `rival-crests/${_clubId || 'default'}/${matchId || 'default'}.${ext}`;
-      const { error } = await window.sb.storage
-        .from('club-assets')
-        .upload(path, file, { upsert: true });
+      // Upload to Storage using canonical path opponent-crests/{club_id}/{slug}.{ext}
+      const rival = opponentName || _currentMatch?.opponent || 'rival';
+      const slug  = window.slugifyOpponent ? window.slugifyOpponent(rival) : 'rival';
+      const ext   = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z]/g, '') || 'png';
+      const path  = `opponent-crests/${_clubId || 'default'}/${slug}.${ext}`;
+      const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true });
       if (error) { showToast('Upload failed: ' + error.message); return; }
-      const { data: { publicUrl } } = window.sb.storage
-        .from('club-assets').getPublicUrl(path);
+      const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+
+      // Persist to calendar_events + opponent_branding
       if (matchId) {
-        await window.sb.from('calendar_events')
-          .update({ rival_crest_url: publicUrl })
-          .eq('id', matchId);
+        await window.sb.from('calendar_events').update({ rival_crest_url: publicUrl }).eq('id', matchId);
       }
-      // Also persist in opponent_branding so loadBranding() reuses it across matches
-      const opponentName = _currentMatch?.opponent;
-      if (_clubId && opponentName) {
-        await window.sb.from('opponent_branding')
-          .upsert(
-            { club_id: _clubId, opponent_name: opponentName, crest_url: publicUrl },
-            { onConflict: 'club_id,opponent_name' }
-          );
+      if (_clubId && rival) {
+        await window.sb.from('opponent_branding').upsert(
+          { club_id: _clubId, opponent_name: rival.toLowerCase().trim(), crest_url: publicUrl },
+          { onConflict: 'club_id,opponent_name' }
+        );
       }
+      if (window.invalidateCrestCache) window.invalidateCrestCache(_clubId, rival, matchId);
+      document.querySelectorAll('.opp-crest').forEach(img => { img.src = publicUrl; });
       showToast('Opponent crest updated');
     });
   }
 
   // ── Branding: load club crest + opponent crest
-  async function loadBranding (clubId, opponentName) {
+  // existingCrestUrl (from calendar_events.rival_crest_url) wins over opponent_branding
+  async function loadBranding (clubId, opponentName, existingCrestUrl) {
     const [cbResult, obResult] = await Promise.all([
       window.sb.from('club_branding').select('crest_url,hashtag').eq('club_id', clubId).maybeSingle(),
-      opponentName
+      (!existingCrestUrl && opponentName)
         ? window.sb.from('opponent_branding').select('crest_url')
             .eq('club_id', clubId)
             .ilike('opponent_name', opponentName)
@@ -1017,7 +1017,7 @@
     ]);
 
     const clubCrest = cbResult.data?.crest_url;
-    const oppCrest  = obResult.data?.crest_url;
+    const oppCrest  = existingCrestUrl || obResult.data?.crest_url;
     const hashtag   = cbResult.data?.hashtag;
 
     if (clubCrest) {
@@ -1111,9 +1111,9 @@
       }
     }
 
-    // Load crests and wire rival upload
-    await loadBranding(_clubId, match?.opponent || '');
-    wireRivalUpload(match?.id);
+    // Load crests and wire rival upload (calendar_events.rival_crest_url takes priority)
+    await loadBranding(_clubId, match?.opponent || '', match?.rival_crest_url || null);
+    wireRivalUpload(match?.id, match?.opponent || '');
     wireShareModal();
 
     // Re-render with real data

@@ -839,6 +839,32 @@
             </select>
           </div>
         </div>
+        <!-- Rival crest -->
+        <div class="sq-modal-row">
+          <div class="sq-modal-field" style="grid-column:1/-1">
+            <label>Rival crest</label>
+            <div style="display:flex;align-items:center;gap:12px;padding-top:2px">
+              <div id="calEvtCrestPreview" style="width:64px;height:64px;border-radius:50%;border:1.5px solid var(--cm-border);background:var(--cm-bg-soft);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+                <span id="calEvtCrestInitials" style="font:700 18px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">?</span>
+                <img id="calEvtCrestImg" src="" alt="" style="width:100%;height:100%;object-fit:contain;display:none">
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <label class="cm-btn is-ghost is-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
+                    <i class="ti ti-upload" style="font-size:12px"></i>Upload
+                    <input type="file" id="calEvtCrestInput" accept="image/png,image/jpeg,image/svg+xml" style="display:none">
+                  </label>
+                  <button type="button" class="cm-btn is-ghost is-sm" id="calEvtCrestRemove" style="display:none">Remove</button>
+                </div>
+                <div style="font:var(--cm-meta);color:var(--cm-fg-faint)">Reusable for future matches against this rival</div>
+                <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font:var(--cm-meta);color:var(--cm-fg-muted)">
+                  <input type="checkbox" id="calEvtCrestMatchOnly" style="vertical-align:middle">
+                  Use for this match only
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="sq-modal-row">
           <div class="sq-modal-field">
             <label for="calEvtF_competition">Competition</label>
@@ -1057,6 +1083,7 @@ let _seasonSettings = null;  // { season_start, season_end, season_name, competi
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
 let _monthEvts = []; // full session objects for month view click handlers
+let _pendingCrestUrl = null; // staged crest URL after Storage upload, written to DB on save
 let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
 const TODAY = new Date().toISOString().split('T')[0];
 
@@ -1261,8 +1288,11 @@ function renderGrid() {
           const dur = s.duration ? ` ${s.duration}′` : '';
           const timeStr = s.start_time ? s.start_time.slice(0, 5) : '';
           const au = (s.duration && s.estimated_rpe) ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>` : '';
+          const leadEl = (cat === 'match' && s.rival_crest_url)
+            ? `<img src="${s.rival_crest_url}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
+            : `<i class="ti ${icon}"></i>`;
           return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" draggable="true">
-            <i class="ti ${icon}"></i>
+            ${leadEl}
             ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
             <span class="name" title="${(s.title || s.session_type || cat) + dur}">${s.title || s.session_type || cat}${dur}</span>${au}
           </div>`;
@@ -1397,7 +1427,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
       .eq('club_id', _clubId)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
-      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe')
+      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url')
       .eq('club_id', _clubId)
       .gte('date', dateFrom).lte('date', dateTo).order('date')
   ]);
@@ -1414,6 +1444,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
     opponent: e.opponent, competition: e.competition,
     home_away: e.home_away, start_time: e.start_time, location: e.location,
     sort_order: e.sort_order, estimated_rpe: e.estimated_rpe,
+    rival_crest_url: e.rival_crest_url || null,
     source: 'event'
   }));
   return { data: [...norm, ...evts].sort((a, b) => {
@@ -1543,6 +1574,29 @@ function updateAuPreview() {
   if (el) el.textContent = (dur && rpe) ? String(dur * rpe) : '—';
 }
 
+// ── Rival crest preview helpers ───────────────────────────────
+function calCrestShowImg(url) {
+  const img = document.getElementById('calEvtCrestImg');
+  const ini = document.getElementById('calEvtCrestInitials');
+  const rem = document.getElementById('calEvtCrestRemove');
+  if (!img || !ini) return;
+  if (url) {
+    img.src = url;
+    img.style.display = '';
+    ini.style.display = 'none';
+    img.onerror = () => { img.style.display = 'none'; ini.style.display = ''; };
+  } else {
+    img.src = '';
+    img.style.display = 'none';
+    ini.style.display = '';
+  }
+  if (rem) rem.style.display = url ? '' : 'none';
+}
+function calCrestSetInitials(name) {
+  const el = document.getElementById('calEvtCrestInitials');
+  if (el) el.textContent = window.rivalInitials ? window.rivalInitials(name) : ((name || '?').split(/\s+/).slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('') || '?');
+}
+
 function openEvtModal(session, defaultDate) {
   _editEvtId     = session?.id     || null;
   _editEvtSource = session?.source || null;
@@ -1564,6 +1618,26 @@ function openEvtModal(session, defaultDate) {
   document.getElementById('calEvtF_starttime').value   = session?.start_time  ? session.start_time.slice(0,5) : '';
   document.getElementById('calEvtF_location').value    = session?.location    || '';
   document.getElementById('calEvtF_rpe').value = session?.estimated_rpe || '';
+
+  // Crest (match type only) — reset then populate
+  _pendingCrestUrl = null;
+  const _crestInp = document.getElementById('calEvtCrestInput');
+  if (_crestInp) _crestInp.value = '';
+  const _crestOnly = document.getElementById('calEvtCrestMatchOnly');
+  if (_crestOnly) _crestOnly.checked = false;
+  const _opName = session?.opponent || '';
+  calCrestSetInitials(_opName);
+  if (session?.rival_crest_url) {
+    calCrestShowImg(session.rival_crest_url);
+  } else if (_opName && evtType === 'match' && _clubId) {
+    calCrestShowImg(null);
+    window.sb.from('opponent_branding').select('crest_url')
+      .eq('club_id', _clubId).ilike('opponent_name', _opName).maybeSingle()
+      .then(({ data }) => { if (data?.crest_url) calCrestShowImg(data.crest_url); });
+  } else {
+    calCrestShowImg(null);
+  }
+
   toggleMatchFields(evtType);
   toggleRpeRow(evtType);
   updateAuPreview();
@@ -1620,6 +1694,7 @@ async function saveEvt() {
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
       payload.competition = document.getElementById('calEvtF_competition').value || null;
       payload.location    = document.getElementById('calEvtF_location').value.trim() || null;
+      if (_pendingCrestUrl) payload.rival_crest_url = _pendingCrestUrl;
     }
     if (_editEvtId && _editEvtSource === 'event') {
       ({ error } = await window.sb.from('calendar_events').update(payload).eq('id', _editEvtId));
@@ -1649,6 +1724,21 @@ async function saveEvt() {
 
   saving.style.display = 'none'; saveBtn.disabled = false;
   if (error) { showCalToast('Error: ' + error.message); return; }
+
+  // Persist crest to opponent_branding (unless match-only toggle is checked)
+  if (_pendingCrestUrl && type === 'match') {
+    const _matchOnly = document.getElementById('calEvtCrestMatchOnly')?.checked;
+    const _opponent  = document.getElementById('calEvtF_opponent').value.trim();
+    if (!_matchOnly && _opponent && clubId) {
+      window.sb.from('opponent_branding').upsert(
+        { club_id: clubId, opponent_name: _opponent.toLowerCase().trim(), crest_url: _pendingCrestUrl },
+        { onConflict: 'club_id,opponent_name' }
+      ); // fire-and-forget
+    }
+    if (window.invalidateCrestCache) window.invalidateCrestCache(clubId, _opponent, _editEvtId);
+    _pendingCrestUrl = null;
+  }
+
   closeEvtModal();
   showCalToast(_editEvtId ? 'Event updated.' : 'Event added.');
   await loadSessions();
@@ -1953,6 +2043,51 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
       });
     }, 0);
   });
+})();
+
+// ── Modal rival crest upload ──────────────────────────────────
+(function() {
+  const input  = document.getElementById('calEvtCrestInput');
+  const remBtn = document.getElementById('calEvtCrestRemove');
+  if (!input) return;
+
+  input.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Show immediately via data URL
+    const dataUrl = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = ev => res(ev.target.result);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+    calCrestShowImg(dataUrl);
+    _pendingCrestUrl = dataUrl;
+
+    // Upload to Storage (opponent-crests/{club_id}/{slug}.{ext})
+    const opName = document.getElementById('calEvtF_opponent')?.value.trim() || 'rival';
+    const clubId = _clubId || await window.getClubId();
+    const slug   = window.slugifyOpponent ? window.slugifyOpponent(opName) : 'rival';
+    const ext    = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z]/g, '') || 'png';
+    const path   = `opponent-crests/${clubId}/${slug}.${ext}`;
+
+    const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true });
+    if (error) { showCalToast('Upload failed: ' + error.message); calCrestShowImg(null); _pendingCrestUrl = null; return; }
+
+    const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+    _pendingCrestUrl = publicUrl;
+    calCrestShowImg(publicUrl);
+  });
+
+  if (remBtn) {
+    remBtn.addEventListener('click', () => {
+      _pendingCrestUrl = null;
+      calCrestShowImg(null);
+      input.value = '';
+      calCrestSetInitials(document.getElementById('calEvtF_opponent')?.value.trim() || '');
+    });
+  }
 })();
 
 // ── Ribbon Reset button ───────────────────────────────────────
@@ -2356,7 +2491,7 @@ function renderSeasonRibbon(mcs, extraMatches) {
           compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
         }
         const rival = s.opponent || (s.title||'Match').replace(/^vs\s+/i,'');
-        rawMarkers.push({ date: d, isAway, comp: compClass(compStr), rival, isFromMc: false });
+        rawMarkers.push({ date: d, isAway, comp: compClass(compStr), rival, isFromMc: false, crestUrl: s.rival_crest_url || null });
       }
     });
 
@@ -2371,6 +2506,7 @@ function renderSeasonRibbon(mcs, extraMatches) {
         rival:    m.rival,
         isFromMc: m.isFromMc,
         mcData:   m.mcData,
+        crestUrl: m.crestUrl || null,
       }));
 
     const groups = [];
@@ -2390,7 +2526,10 @@ function renderSeasonRibbon(mcs, extraMatches) {
       marker.className = 'match-marker is-' + cc;
       marker.style.left = first.leftStr + '%';
       marker.title = g.items.map(i => `${i.rival} · ${compLabel(i.comp)} · ${i.isAway?'Away':'Home'}`).join(' | ');
-      marker.innerHTML = `<i class="ti ${icon}"></i>${label}${extra ? `<span class="extra">+${extra}</span>` : ''}`;
+      const leadIcon = first.crestUrl
+        ? `<img src="${first.crestUrl}" style="width:12px;height:12px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
+        : `<i class="ti ${icon}"></i>`;
+      marker.innerHTML = `${leadIcon}${label}${extra ? `<span class="extra">+${extra}</span>` : ''}`;
       marker.addEventListener('click', e => { e.stopPropagation(); showMatchPopover(marker, g.items); });
       matchesEl.appendChild(marker);
     });
@@ -2484,7 +2623,7 @@ async function renderUpcoming() {
   // Merge sessions with match days from MCs
   const items = [];
   (sessions || []).forEach(s => {
-    items.push({ date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null });
+    items.push({ date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null, rival_crest_url: s.rival_crest_url || null });
   });
   _allMCs.forEach(mc => {
     if (!mc.match_date || mc.match_date < TODAY || mc.match_date > in14d) return;
@@ -2512,12 +2651,15 @@ async function renderUpcoming() {
     const dStyle = isMatch ? 'background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)' : '';
     const mStyle = isMatch ? 'color:var(--cm-danger)' : '';
     const loc      = isMatch ? (item.isAway ? 'Away' : 'Home') : '';
-    const timeChip = item.start_time ? `<span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${item.start_time.slice(0,5)}</span>` : '';
+    const timeChip  = item.start_time ? `<span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${item.start_time.slice(0,5)}</span>` : '';
+    const crestChip = (isMatch && item.rival_crest_url)
+      ? `<img src="${item.rival_crest_url}" style="width:16px;height:16px;border-radius:50%;object-fit:contain;flex-shrink:0;margin-right:2px;vertical-align:middle" onerror="this.style.display='none'" alt="">`
+      : '';
     return `
       <div class="upcoming-row">
         <div class="upcoming-date" style="${dStyle}"><div class="m" style="${mStyle}">${month}</div><div class="d" style="${mStyle}">${day}</div></div>
         <div class="upcoming-body">
-          <div class="upcoming-title">${item.title}</div>
+          <div class="upcoming-title" style="display:flex;align-items:center;gap:5px">${crestChip}${item.title}</div>
           <div class="upcoming-meta"><span class="badge ${cls}">${label}</span>${loc}${timeChip}</div>
         </div>
         <div></div>
@@ -2807,7 +2949,7 @@ async function showImportPreview(fixtures) {
 
   // Load match events from calendar_events for ribbon
   const { data: matchSess } = await window.sb.from('calendar_events')
-    .select('id,title,date,opponent,home_away,competition')
+    .select('id,title,date,opponent,home_away,competition,rival_crest_url')
     .eq('club_id', _clubId)
     .eq('type', 'match')
     .order('date');
