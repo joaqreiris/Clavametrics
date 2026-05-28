@@ -63,7 +63,7 @@
 /* ─── Two-column body ──────────────────────────────────── */
 .lu-body {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 340px 1fr;
   gap: 18px;
   align-items: start;
 }
@@ -228,6 +228,9 @@
 .lu-stage-bar .style-tab .dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); }
 .lu-stage-bar .grow { flex: 1; }
 .lu-stage-bar .zoom { display: inline-flex; align-items: center; gap: 4px; font: 500 11px/1 var(--cm-font-mono); color: var(--cm-fg-muted); padding: 0 6px; border-left: 1px solid var(--cm-border); height: 22px; margin-left: 4px; }
+.lu-color-pickers { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-left: 1px solid var(--cm-border); height: 28px; }
+.lu-color-pickers label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font: 600 10px/1 var(--cm-font-mono); color: var(--cm-fg-faint); letter-spacing: 0.08em; text-transform: uppercase; }
+.lu-color-pickers input[type="color"] { width: 22px; height: 22px; border: 1px solid var(--cm-border); border-radius: var(--cm-r-2); padding: 1px; cursor: pointer; background: none; }
 
 .lu-actions {
   width: 100%;
@@ -254,7 +257,7 @@
    ============================================================= */
 .lu-poster {
   width: 600px;
-  height: 750px;
+  height: 800px;
   position: relative;
   overflow: hidden;
   font-feature-settings: "ss01", "cv11", "tnum";
@@ -289,14 +292,14 @@
   display: flex; align-items: baseline; justify-content: space-between;
 }
 .pst-banner .ttl {
-  font: 700 64px/0.9 var(--cm-font-sans);
-  letter-spacing: -0.045em;
-  color: var(--pst-fg);
+  font: 800 34px/1 var(--cm-font-sans);
+  letter-spacing: -0.03em;
+  color: var(--pst-title-color, var(--pst-fg));
   text-transform: uppercase;
 }
 .pst-banner .ttl em {
   font-style: normal;
-  color: var(--pst-accent);
+  color: var(--pst-em-color, var(--pst-accent));
 }
 .pst-banner .meta-stack {
   text-align: right;
@@ -344,7 +347,7 @@
 .pst-pitch {
   position: relative;
   margin: 4px 22px 0;
-  height: 320px;
+  height: 460px;
   border-radius: 12px;
   overflow: hidden;
   background:
@@ -627,6 +630,90 @@
   opacity: 0.85;
 }
 
+/* ─── Opponent crest upload ─────────────────────────────── */
+.pst-opp-wrap { position: relative; display: inline-flex; }
+.lu-opp-upload {
+  position: absolute;
+  bottom: -4px; right: -4px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--cm-surface);
+  border: 1px solid var(--cm-border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--cm-dur-1);
+}
+.pst-opp-wrap:hover .lu-opp-upload { opacity: 1; }
+.lu-opp-upload .ti { font-size: 9px; color: var(--cm-fg-muted); }
+
+/* ─── Share modal ────────────────────────────────────────── */
+.lu-share-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1100;
+}
+.lu-share-backdrop.is-open { display: block; }
+.lu-share-modal {
+  display: none;
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 380px;
+  background: var(--cm-surface);
+  border: 1px solid var(--cm-border);
+  border-radius: var(--cm-r-5);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.28);
+  z-index: 1200;
+  overflow: hidden;
+}
+.lu-share-modal.is-open { display: block; }
+.lu-share-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--cm-border);
+  font: 600 14px/1 var(--cm-font-sans);
+  color: var(--cm-fg-strong);
+}
+.lu-share-opts { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.lu-share-opt {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--cm-border);
+  border-radius: var(--cm-r-4);
+  background: var(--cm-bg-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--cm-dur-1), border-color var(--cm-dur-1);
+}
+.lu-share-opt:hover { background: var(--cm-surface); border-color: var(--cm-border-strong); }
+.lu-share-opt > .ti { font-size: 20px; color: var(--cm-accent); flex-shrink: 0; }
+.lu-share-opt .t { font: 600 13px/1 var(--cm-font-sans); color: var(--cm-fg-strong); margin-bottom: 3px; }
+.lu-share-opt .s { font: 500 11.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted); }
+
+/* ─── Loading skeleton ───────────────────────────────────── */
+@keyframes lu-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.lu-skeleton {
+  background: linear-gradient(90deg,
+    var(--cm-bg-soft) 25%,
+    color-mix(in srgb, var(--cm-border) 60%, transparent) 50%,
+    var(--cm-bg-soft) 75%);
+  background-size: 800px 100%;
+  animation: lu-shimmer 1.4s infinite linear;
+  border-radius: var(--cm-r-2);
+}
+.lu-row-skeleton {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px;
+}
+.lu-row-skeleton .sk-num  { width: 24px; height: 14px; }
+.lu-row-skeleton .sk-name { flex: 1; height: 14px; }
+.lu-row-skeleton .sk-tag  { width: 32px; height: 20px; border-radius: 999px; }
+
 /* ─── Print --------------------------------------------- */
 @media print {
   body.cm { background: #FFF !important; }
@@ -641,7 +728,7 @@
   .lu-poster {
     width: 100%;
     height: auto;
-    aspect-ratio: 600 / 750;
+    aspect-ratio: 600 / 800;
     page-break-inside: avoid;
     break-inside: avoid;
   }

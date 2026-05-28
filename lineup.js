@@ -112,6 +112,8 @@
     showNumbers: true,
     showCaptainBadge: true,
     language: 'en',
+    titleColor: null,
+    accentColor: null,
   };
 
   // ── Module-level lineup context (set in init)
@@ -380,6 +382,31 @@
     setCaptainBadge:(v)=> { state.showCaptainBadge = !!v; renderPitch(); },
   };
 
+  // ── Poster color overrides (title + accent CSS vars)
+  function applyColors () {
+    const poster = document.querySelector('.lu-poster');
+    if (!poster) return;
+    if (state.titleColor) poster.style.setProperty('--pst-title-color', state.titleColor);
+    else poster.style.removeProperty('--pst-title-color');
+    if (state.accentColor) poster.style.setProperty('--pst-em-color', state.accentColor);
+    else poster.style.removeProperty('--pst-em-color');
+  }
+
+  function wireColorPickers () {
+    const titlePicker  = document.getElementById('luTitleColor');
+    const accentPicker = document.getElementById('luAccentColor');
+    titlePicker?.addEventListener('input', e => {
+      state.titleColor = e.target.value;
+      applyColors();
+      scheduleSave();
+    });
+    accentPicker?.addEventListener('input', e => {
+      state.accentColor = e.target.value;
+      applyColors();
+      scheduleSave();
+    });
+  }
+
   // ── Export-as-image (lazy load html-to-image; fallback to print)
   function wireExport () {
     const btnImg = document.querySelector('[data-export="image"]');
@@ -487,6 +514,7 @@
   }
 
   function openPicker (slotIdx, kind, anchor) {
+    console.time('picker-open');
     closePicker();
     const posHint = kind === 'xi'
       ? (FORMATIONS[state.formation][slotIdx]?.role || 'ANY')
@@ -555,6 +583,7 @@
     };
 
     renderList('');
+    console.timeEnd('picker-open');
     input.addEventListener('input', e => renderList(e.target.value));
     requestAnimationFrame(() => input.focus());
 
@@ -619,7 +648,7 @@
     const today = new Date().toISOString().split('T')[0];
     const { data } = await window.sb
       .from('calendar_events')
-      .select('id,opponent,date,start_time,location,competition,home_away,title')
+      .select('id,opponent,date,start_time,location,competition,home_away,title,rival_crest_url')
       .eq('club_id', clubId)
       .eq('type', 'match')
       .gte('date', today)
@@ -633,7 +662,7 @@
   async function getOrCreateLineup (clubId, matchId) {
     const { data: existing } = await window.sb
       .from('lineups')
-      .select('id,formation,status,poster_style,language')
+      .select('id,formation,status,poster_style,language,style_config')
       .eq('club_id', clubId)
       .eq('match_id', matchId)
       .in('status', ['draft','locked','official'])
@@ -644,7 +673,7 @@
     const { data: created } = await window.sb
       .from('lineups')
       .insert({ club_id: clubId, match_id: matchId, formation: '4-3-3', status: 'draft' })
-      .select('id,formation,status,poster_style,language')
+      .select('id,formation,status,poster_style,language,style_config')
       .single();
     return created;
   }
@@ -684,20 +713,28 @@
     });
   }
 
-  // ── Supabase: debounced save of lineup metadata (formation, style, language)
+  // ── Supabase: debounced save of lineup metadata (formation, style, language, colors)
   function scheduleSave () {
     if (!_lineupId) return;
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(async () => {
+      const styleConfig = {};
+      if (state.titleColor)  styleConfig.title_color  = state.titleColor;
+      if (state.accentColor) styleConfig.accent_color = state.accentColor;
       await window.sb.from('lineups').update({
         formation:    state.formation,
         poster_style: state.style,
         language:     state.language,
+        style_config: styleConfig,
       }).eq('id', _lineupId);
       const saved = document.getElementById('luSaveStatus');
       if (saved) saved.textContent = 'Saved · just now';
     }, 500);
   }
+
+  // ── Competition label map (calendar_events uses lowercase enum values)
+  const COMP_LABELS = { league: 'League', cup: 'Cup', international: 'International', friendly: 'Friendly' };
+  const fmtComp = c => COMP_LABELS[c] || (c ? c.charAt(0).toUpperCase() + c.slice(1) : '—');
 
   // ── Banner: update .lu-mc + poster meta with calendar_event data
   function updateBanner (match) {
@@ -714,6 +751,11 @@
     set('[data-rival-name]', rival);
     document.querySelectorAll('.opp-crest').forEach(img => { img.alt = rival; });
 
+    // Show rival crest from calendar_events if already saved
+    if (match.rival_crest_url) {
+      document.querySelectorAll('.opp-crest').forEach(img => { img.src = match.rival_crest_url; });
+    }
+
     const homeEl = document.querySelector('[data-home-away]');
     if (homeEl) homeEl.innerHTML = match.home_away === 'home'
       ? '<i class="ti ti-home" style="font-size:11px"></i>Home'
@@ -723,21 +765,24 @@
     set('[data-banner-date]',  fmtDate(match.date));
     set('[data-banner-time]',  match.start_time ? match.start_time.slice(0,5) : '—');
     set('[data-banner-venue]', match.location || '—');
-    set('[data-banner-comp]',  match.competition || '—');
+    set('[data-banner-comp]',  fmtComp(match.competition));
 
     // Poster meta cells
     const d = match.date ? new Date(match.date + 'T12:00:00') : null;
     const dateStr = d ? d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' }) : '—';
     const yearStr = d ? d.getFullYear() : '';
+    const homeAway = match.home_away === 'home' ? 'Home' : match.home_away === 'away' ? 'Away' : '';
 
     const setHtml = (sel, html) => { const el = document.querySelector(sel); if (el) el.innerHTML = html; };
     setHtml('[data-match-date]',  d ? `${dateStr}<small>${yearStr}</small>` : '—');
-    setHtml('[data-match-time]',  match.start_time ? `${match.start_time.slice(0,5)}<small>local</small>` : '—');
-    setHtml('[data-match-venue]', match.location ? `${match.location}<small>${match.home_away === 'home' ? 'Home' : 'Away'}</small>` : '—');
-    setHtml('[data-match-comp]',  match.competition ? `${match.competition}` : '—');
+    setHtml('[data-match-time]',  match.start_time ? match.start_time.slice(0,5) : '—');
+    setHtml('[data-match-venue]', match.location
+      ? `${match.location}${homeAway ? `<small>${homeAway}</small>` : ''}`
+      : (homeAway || '—'));
+    setHtml('[data-match-comp]',  fmtComp(match.competition));
 
-    // Poster right column (matchday number / competition)
-    set('[data-poster-comp-label]', match.competition || 'Match');
+    // Poster right column
+    set('[data-poster-comp-label]', fmtComp(match.competition));
     set('[data-poster-matchday]', '');
 
     // Countdown
@@ -768,26 +813,25 @@
     document.querySelectorAll('[data-club-team-sub]').forEach(el => { el.textContent = teamSub; });
   }
 
-  // ── Coach: load head coach name from profiles → poster footer
+  // ── Coach: load head coach name from profiles → poster footer (admin fallback)
   async function loadCoachInfo (clubId) {
-    const { data } = await window.sb
+    const { data: rows } = await window.sb
       .from('profiles')
-      .select('full_name')
+      .select('full_name,role')
       .eq('club_id', clubId)
-      .eq('role', 'coach')
-      .order('created_at')
-      .limit(1)
-      .maybeSingle();
-    if (data?.full_name) {
-      document.querySelectorAll('[data-coach-v]').forEach(el => { el.textContent = data.full_name; });
+      .in('role', ['coach', 'admin'])
+      .order('created_at');
+    const coach = (rows || []).find(r => r.role === 'coach') || rows?.[0];
+    if (coach?.full_name) {
+      document.querySelectorAll('[data-coach-v]').forEach(el => { el.textContent = coach.full_name; });
     }
   }
 
-  // ── Staff pane: render profiles with coach/staff/admin roles
+  // ── Staff pane: render profiles with checkboxes for lineup inclusion
   async function renderStaff (clubId) {
     const { data } = await window.sb
       .from('profiles')
-      .select('full_name,role')
+      .select('id,full_name,role')
       .eq('club_id', clubId)
       .in('role', ['coach', 'staff', 'admin'])
       .order('created_at');
@@ -803,11 +847,48 @@
           <div class="name">${p.full_name || '—'}</div>
           <div class="meta">${roleLabel(p.role)}</div>
         </div>
-        <span class="role-tag" style="${p.role === 'coach' ? 'background:rgba(217,119,6,0.12);color:#B45309' : ''}">${roleTag(p.role)}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="checkbox" class="lu-staff-check" data-pid="${p.id}" data-name="${(p.full_name || '').replace(/"/g,'&quot;')}" data-prole="${p.role}" title="Include in lineup">
+          <span class="role-tag" style="${p.role === 'coach' ? 'background:rgba(217,119,6,0.12);color:#B45309' : ''}">${roleTag(p.role)}</span>
+        </div>
       </div>`).join('');
+
+    list.querySelectorAll('.lu-staff-check').forEach(cb => {
+      cb.addEventListener('change', () => toggleStaff(cb.dataset.pid, cb.dataset.name, cb.dataset.prole, cb.checked));
+    });
   }
 
-  // ── Rival crest upload to Supabase Storage
+  // ── Staff: check boxes for profiles already saved in lineup_staff
+  async function loadLineupStaff (lineupId) {
+    const { data } = await window.sb
+      .from('lineup_staff')
+      .select('profile_id')
+      .eq('lineup_id', lineupId);
+    const checked = new Set((data || []).map(r => r.profile_id).filter(Boolean));
+    document.querySelectorAll('.lu-staff-check').forEach(cb => {
+      cb.checked = checked.has(cb.dataset.pid);
+    });
+  }
+
+  // ── Staff: toggle a profile in/out of lineup_staff
+  async function toggleStaff (profileId, displayName, profileRole, include) {
+    if (!_lineupId) return;
+    const roleCodeMap = { coach: 'head', staff: 'assistant', admin: 'other' };
+    // Always delete first to avoid duplicates (no UNIQUE constraint on lineup_id+profile_id)
+    await window.sb.from('lineup_staff').delete()
+      .eq('lineup_id', _lineupId)
+      .eq('profile_id', profileId);
+    if (include) {
+      await window.sb.from('lineup_staff').insert({
+        lineup_id:    _lineupId,
+        profile_id:   profileId,
+        display_name: displayName,
+        role_code:    roleCodeMap[profileRole] || 'other',
+      });
+    }
+  }
+
+  // ── Rival crest upload to Supabase Storage + persist URL to calendar_events
   function wireRivalUpload (matchId) {
     const input = document.getElementById('rivalCrestInput');
     if (!input) return;
@@ -815,7 +896,7 @@
       const file = e.target.files[0];
       if (!file || !window.sb) return;
       const ext  = file.name.split('.').pop().toLowerCase();
-      const path = `rival-crests/${matchId || 'default'}.${ext}`;
+      const path = `rival-crests/${_clubId || 'default'}/${matchId || 'default'}.${ext}`;
       const { error } = await window.sb.storage
         .from('club-assets')
         .upload(path, file, { upsert: true });
@@ -823,6 +904,12 @@
       const { data: { publicUrl } } = window.sb.storage
         .from('club-assets').getPublicUrl(path);
       document.querySelectorAll('.opp-crest').forEach(img => { img.src = publicUrl; });
+      // Persist so future page loads show the saved crest
+      if (matchId) {
+        await window.sb.from('calendar_events')
+          .update({ rival_crest_url: publicUrl })
+          .eq('id', matchId);
+      }
       showToast('Opponent crest updated');
     });
   }
@@ -863,6 +950,7 @@
     wireFormations();
     wireStyles();
     wireExport();
+    wireColorPickers();
 
     // Sync render before Supabase data arrives so page isn't blank
     applyFormation();
@@ -896,9 +984,23 @@
         if (lineup.poster_style) state.style = lineup.poster_style;
         if (lineup.language)     state.language = lineup.language;
 
+        // Apply saved color overrides
+        if (lineup.style_config?.title_color) {
+          state.titleColor = lineup.style_config.title_color;
+          const p = document.getElementById('luTitleColor');
+          if (p) p.value = state.titleColor;
+        }
+        if (lineup.style_config?.accent_color) {
+          state.accentColor = lineup.style_config.accent_color;
+          const p = document.getElementById('luAccentColor');
+          if (p) p.value = state.accentColor;
+        }
+        applyColors();
+
         const [starters, subs] = await Promise.all([
           loadLineupPlayers(lineup.id, 'starter'),
           loadLineupPlayers(lineup.id, 'substitute'),
+          loadLineupStaff(lineup.id),
         ]);
         if (starters.length) state.starters = starters;
         if (subs.length)     state.subs = subs;
