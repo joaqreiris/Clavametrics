@@ -158,6 +158,7 @@
 
     const positions = FORMATIONS[state.formation];
     state.starters.forEach((p, i) => {
+      if (!p) return;
       const pos = positions[i] || { x: 50, y: 50 };
       const spot = document.createElement('div');
       spot.className = 'pst-spot' + (p.captain && state.showCaptainBadge ? ' is-captain' : '');
@@ -646,15 +647,24 @@
   // ── Supabase: load next match from calendar_events
   async function loadNextMatch (clubId) {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await window.sb
+    const base = () => window.sb
       .from('calendar_events')
-      .select('id,opponent,date,start_time,location,competition,home_away,title,rival_crest_url')
       .eq('club_id', clubId)
       .eq('type', 'match')
       .gte('date', today)
       .order('date', { ascending: true })
       .limit(1)
       .maybeSingle();
+
+    // Try with rival_crest_url (migration 020); fall back if column missing
+    let { data, error } = await base().select(
+      'id,opponent,date,start_time,location,competition,home_away,title,rival_crest_url'
+    );
+    if (error) {
+      ({ data } = await base().select(
+        'id,opponent,date,start_time,location,competition,home_away,title'
+      ));
+    }
     return data;
   }
 
