@@ -21,7 +21,7 @@
 
 -- ─── A. lineups: add status + microcycle_id + poster fields ──
 ALTER TABLE lineups
-  ADD COLUMN IF NOT EXISTS microcycle_id uuid
+  ADD COLUMN IF NOT EXISTS microcycle_id text
     REFERENCES microcycles(id) ON DELETE SET NULL;
 
 ALTER TABLE lineups
