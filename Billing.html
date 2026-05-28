@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Billing — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ─── App shell (same as Admin / Plan Picker) ─── */
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  /* Topbar */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb a { color:var(--cm-fg-muted); text-decoration:none; }
+  .hub-crumb a:hover { color:var(--cm-fg); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .actions { margin-left:auto; display:flex; gap:8px; }
+
+  /* ─── Page ─── */
+  .bl-page { padding:24px 28px 64px; max-width:1400px; width:100%; }
+  .bl-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .bl-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .bl-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .bl-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .bl-head .meta { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Tabs */
+  .bl-tabs { display:flex; gap:2px; padding:4px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); margin-bottom:18px; width:max-content; }
+  .bl-tab { padding:0 12px; height:32px; display:inline-flex; align-items:center; gap:6px; border:0; background:transparent; border-radius:5px; font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg-muted); text-decoration:none; cursor:pointer; }
+  .bl-tab:hover { color:var(--cm-fg); }
+  .bl-tab.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  .bl-tab .ti { font-size:14px; }
+  .bl-tab .ct { font:500 11px/1 var(--cm-font-mono); padding:1px 5px; border-radius:3px; background:var(--cm-bg-sunk); color:var(--cm-fg-muted); margin-left:2px; }
+
+  /* KPI strip */
+  .bl-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .bl-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 16px 16px; box-shadow:var(--cm-shadow-1); }
+  .bl-kpi-l { display:flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .bl-kpi-l .ti { font-size:14px; }
+  .bl-kpi-v { font:600 28px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .bl-kpi-v sub { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .bl-kpi-t { margin-top:10px; display:flex; align-items:center; gap:6px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .bl-kpi-t .delta-up { color:var(--cm-accent); font-weight:600; }
+  .bl-kpi-t .delta-down { color:#d4a14a; font-weight:600; }
+
+  /* Layout grid */
+  .bl-grid { display:grid; grid-template-columns:1.6fr 1fr; gap:14px; }
+  @media (max-width:1200px){ .bl-grid { grid-template-columns:1fr; } .bl-kpis { grid-template-columns:repeat(2,1fr); } }
+
+  .bl-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
+  .bl-card-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .bl-card-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .bl-card-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
+  .bl-card-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* Per-category table */
+  .bl-cats { width:100%; border-collapse:collapse; }
+  .bl-cats thead th {
+    text-align:left; padding:10px 16px;
+    font:500 11px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--cm-fg-muted); background:var(--cm-bg-soft);
+    border-bottom:1px solid var(--cm-border);
+  }
+  .bl-cats thead th.r { text-align:right; }
+  .bl-cats tbody td { padding:12px 16px; border-bottom:1px solid var(--cm-border-soft); font:var(--cm-body); color:var(--cm-fg); vertical-align:middle; }
+  .bl-cats tbody td.r { text-align:right; font:600 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .bl-cats tbody tr:hover { background:var(--cm-bg-soft); }
+  .bl-cats tbody tr:last-child td { border-bottom:0; }
+  .bl-cats .cat-cell { display:flex; align-items:center; gap:10px; }
+  .bl-cats .cat-cell .ic {
+    width:30px; height:30px; border-radius:var(--cm-r-3);
+    background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft);
+    display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted);
+    flex-shrink:0;
+  }
+  .bl-cats .cat-cell .name { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .bl-cats .cat-cell .sub { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .bl-cats .pill { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:var(--cm-r-pill); font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--cm-border); }
+  .bl-cats .pill.t-free  { color:var(--cm-fg-muted); background:var(--cm-bg-soft); }
+  .bl-cats .pill.t-basic { color:#d4a14a; background:color-mix(in srgb, #d4a14a 10%, transparent); border-color:color-mix(in srgb, #d4a14a 35%, transparent); }
+  .bl-cats .pill.t-pro   { color:var(--cm-accent); background:var(--cm-accent-soft); border-color:color-mix(in srgb, var(--cm-accent) 35%, transparent); }
+  .bl-cats .pill.t-full  { color:#6366f1; background:color-mix(in srgb, #6366f1 10%, transparent); border-color:color-mix(in srgb, #6366f1 35%, transparent); }
+  .bl-cats .status { display:inline-flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .bl-cats .status .dot { width:6px; height:6px; border-radius:50%; }
+  .bl-cats .status.ok .dot { background:var(--cm-accent); }
+  .bl-cats .status.warn .dot { background:#d4a14a; }
+  .bl-cats .status.danger .dot { background:var(--cm-danger); }
+  .bl-cats .actions-cell { display:flex; gap:6px; justify-content:flex-end; }
+
+  /* Totals footer row */
+  .bl-cats tfoot td {
+    padding:14px 16px;
+    background:var(--cm-bg-soft);
+    border-top:1px solid var(--cm-border);
+    font:600 13.5px/1 var(--cm-font-sans);
+    color:var(--cm-fg-strong);
+  }
+  .bl-cats tfoot td.r { text-align:right; font-family:var(--cm-font-mono); font-size:15px; }
+
+  /* Next invoice card */
+  .bl-next-amt {
+    font:600 36px/1 var(--cm-font-sans);
+    letter-spacing:-0.025em; color:var(--cm-fg-strong);
+    margin:14px 0 4px;
+  }
+  .bl-next-amt sub { font:500 14px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .bl-next-date {
+    font:500 12.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted);
+  }
+  .bl-next-date strong { color:var(--cm-fg-strong); }
+  .bl-next-lines {
+    margin-top:18px; padding-top:14px;
+    border-top:1px solid var(--cm-border-soft);
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .bl-next-line { display:flex; justify-content:space-between; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .bl-next-line strong { color:var(--cm-fg); font-weight:500; }
+  .bl-next-line .v { font-family:var(--cm-font-mono); }
+  .bl-next-line.discount .v { color:var(--cm-accent); }
+  .bl-next-line.total { padding-top:10px; margin-top:6px; border-top:1px solid var(--cm-border-soft); font:600 13.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .bl-next-line.total .v { font-family:var(--cm-font-mono); font-size:14px; }
+
+  /* Payment method card */
+  .bl-pm { padding:16px; display:flex; align-items:center; gap:14px; }
+  .bl-pm-brand {
+    width:48px; height:32px; border-radius:5px;
+    background:linear-gradient(135deg, #1a1f71, #5161b8);
+    color:#fff; display:flex; align-items:center; justify-content:center;
+    font:700 9px/1 var(--cm-font-sans); letter-spacing:0.1em;
+    flex-shrink:0;
+  }
+  .bl-pm-info .num { font:500 13.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .bl-pm-info .exp { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .bl-pm-info .holder { font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:6px; }
+  .bl-pm .right { margin-left:auto; }
+
+  /* Activity feed */
+  .bl-act { padding:6px 0; }
+  .bl-act-item {
+    display:grid; grid-template-columns:32px 1fr auto;
+    align-items:flex-start; gap:12px;
+    padding:10px 16px;
+    border-bottom:1px solid var(--cm-border-soft);
+  }
+  .bl-act-item:last-child { border-bottom:0; }
+  .bl-act-ic {
+    width:28px; height:28px; border-radius:var(--cm-r-3);
+    display:flex; align-items:center; justify-content:center;
+    background:var(--cm-bg-soft); color:var(--cm-fg-muted);
+    border:1px solid var(--cm-border-soft);
+    flex-shrink:0;
+  }
+  .bl-act-ic .ti { font-size:14px; }
+  .bl-act-ic.ok { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:color-mix(in srgb, var(--cm-accent) 30%, transparent); }
+  .bl-act-ic.warn { background:color-mix(in srgb, #d4a14a 12%, transparent); color:#d4a14a; border-color:color-mix(in srgb, #d4a14a 35%, transparent); }
+  .bl-act-ic.danger { background:color-mix(in srgb, var(--cm-danger) 10%, transparent); color:var(--cm-danger); border-color:color-mix(in srgb, var(--cm-danger) 30%, transparent); }
+  .bl-act-body .l { font:500 13px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
+  .bl-act-body .l strong { font-weight:600; color:var(--cm-fg-strong); }
+  .bl-act-body .meta { font:500 11px/1.3 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:3px; }
+  .bl-act-amt { font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-fg-strong); white-space:nowrap; }
+  .bl-act-amt.neg { color:#d4a14a; }
+  .bl-act-amt.refund { color:var(--cm-accent); }
+
+  /* Banner */
+  .bl-banner {
+    display:flex; align-items:center; gap:12px;
+    padding:12px 16px;
+    background:color-mix(in srgb, #d4a14a 8%, var(--cm-surface));
+    border:1px solid color-mix(in srgb, #d4a14a 35%, transparent);
+    border-radius:var(--cm-r-4);
+    margin-bottom:18px;
+  }
+  .bl-banner .ti { font-size:18px; color:#d4a14a; flex-shrink:0; }
+  .bl-banner .body { flex:1; font:500 13px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
+  .bl-banner .body strong { color:var(--cm-fg-strong); font-weight:600; }
+  .bl-banner .right { display:flex; gap:6px; }
+
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="01 Billing dashboard">
+
+  <div id="hub-side-root"></div>
+
+  <!-- ───── MAIN ───── -->
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i>
+        <a href="Admin.html">Workspace</a>
+        <span class="sep">/</span>
+        <a href="Admin.html">Admin</a>
+        <span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Billing</span>
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <div class="bl-page">
+
+      <header class="bl-head">
+        <div>
+          <h1>Billing &amp; subscriptions</h1>
+          <div class="ctx"><strong>Clava Group</strong> · 5 categories · combined billing · owner <strong>you</strong></div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-download" style="font-size:14px"></i>Export CSV</button>
+          <a class="cm-btn is-outline is-sm" href="Invoices.html"><i class="ti ti-file-invoice" style="font-size:14px"></i>All invoices</a>
+          <a class="cm-btn is-primary is-sm" href="Plan Picker.html"><i class="ti ti-plus" style="font-size:14px"></i>Add category</a>
+        </div>
+      </header>
+
+      <!-- Tabs -->
+      <div class="bl-tabs" role="tablist">
+        <a class="bl-tab is-on" href="Billing.html"><i class="ti ti-layout-dashboard"></i>Overview</a>
+        <a class="bl-tab" href="Invoices.html"><i class="ti ti-file-invoice"></i>Invoices<span class="ct">38</span></a>
+        <a class="bl-tab" href="#"><i class="ti ti-credit-card"></i>Payment methods<span class="ct">2</span></a>
+        <a class="bl-tab" href="#"><i class="ti ti-building-bank"></i>Tax &amp; info</a>
+        <a class="bl-tab" href="#"><i class="ti ti-receipt-tax"></i>Credits<span class="ct">$120</span></a>
+      </div>
+
+      <!-- Warning banner (trial / over-limit) -->
+      <div class="bl-banner">
+        <i class="ti ti-alert-circle"></i>
+        <div class="body">
+          <strong>U-17 is at 38/40 players.</strong> Upgrade to Pro before May&nbsp;28 to avoid new player onboarding being blocked.
+        </div>
+        <div class="right">
+          <a class="cm-btn is-outline is-sm" href="Plan Picker.html"><i class="ti ti-arrow-up" style="font-size:14px"></i>Upgrade U-17</a>
+        </div>
+      </div>
+
+      <!-- KPI strip -->
+      <div class="bl-kpis">
+        <div class="bl-kpi">
+          <div class="bl-kpi-l"><i class="ti ti-coin"></i>Monthly total</div>
+          <div class="bl-kpi-v">$485<sub>USD</sub></div>
+          <div class="bl-kpi-t"><i class="ti ti-trending-up" style="font-size:13px;color:var(--cm-accent)"></i><span class="delta-up">+ $40</span> · vs last month</div>
+        </div>
+        <div class="bl-kpi">
+          <div class="bl-kpi-l"><i class="ti ti-calendar-time"></i>Next invoice</div>
+          <div class="bl-kpi-v">May 28</div>
+          <div class="bl-kpi-t">in 3 days · auto-charged to Visa ··4242</div>
+        </div>
+        <div class="bl-kpi">
+          <div class="bl-kpi-l"><i class="ti ti-credit-card"></i>Method</div>
+          <div class="bl-kpi-v" style="font-size:20px">Visa ··4242</div>
+          <div class="bl-kpi-t">expires 08/27 · primary</div>
+        </div>
+        <div class="bl-kpi">
+          <div class="bl-kpi-l"><i class="ti ti-receipt-tax"></i>Credits</div>
+          <div class="bl-kpi-v">$120<sub>USD</sub></div>
+          <div class="bl-kpi-t">applied to next invoice automatically</div>
+        </div>
+      </div>
+
+      <!-- Two-column: categories table (left), next invoice + activity (right) -->
+      <div class="bl-grid">
+
+        <!-- ─── Per-category breakdown ─── -->
+        <div class="bl-card">
+          <div class="bl-card-h">
+            <h3>Categories &amp; subscriptions</h3>
+            <span class="sub">5 active · billed separately</span>
+            <div class="right">
+              <button class="cm-icon-btn"><i class="ti ti-arrows-sort"></i></button>
+              <button class="cm-icon-btn"><i class="ti ti-filter"></i></button>
+            </div>
+          </div>
+          <table class="bl-cats">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Plan</th>
+                <th>Status</th>
+                <th>Next bill</th>
+                <th class="r">Monthly</th>
+                <th class="r" style="width:100px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="cat-cell">
+                    <div class="ic"><i class="ti ti-ball-football"></i></div>
+                    <div>
+                      <div class="name">Clava FC · First team</div>
+                      <div class="sub">27 / 80 players · 5 staff</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="pill t-pro">Pro</span></td>
+                <td><span class="status ok"><span class="dot"></span>Active</span></td>
+                <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">May 28</span></td>
+                <td class="r">$120.00</td>
+                <td class="r"><div class="actions-cell"><a class="cm-btn is-ghost is-sm" href="Manage Subscription.html"><i class="ti ti-dots"></i></a></div></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cat-cell">
+                    <div class="ic"><i class="ti ti-ball-football"></i></div>
+                    <div>
+                      <div class="name">Clava FC · Reserves</div>
+                      <div class="sub">22 / 80 players · 3 staff</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="pill t-pro">Pro</span></td>
+                <td><span class="status ok"><span class="dot"></span>Active</span></td>
+                <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">May 28</span></td>
+                <td class="r">$100.00</td>
+                <td class="r"><div class="actions-cell"><button class="cm-btn is-ghost is-sm"><i class="ti ti-dots"></i></button></div></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cat-cell">
+                    <div class="ic"><i class="ti ti-ball-football"></i></div>
+                    <div>
+                      <div class="name">Clava FC · U-19</div>
+                      <div class="sub">28 / 40 players · 2 staff</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="pill t-basic">Basic</span></td>
+                <td><span class="status ok"><span class="dot"></span>Active</span></td>
+                <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">May 28</span></td>
+                <td class="r">$60.00</td>
+                <td class="r"><div class="actions-cell"><button class="cm-btn is-ghost is-sm"><i class="ti ti-dots"></i></button></div></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cat-cell">
+                    <div class="ic"><i class="ti ti-ball-football"></i></div>
+                    <div>
+                      <div class="name">Clava FC · U-17</div>
+                      <div class="sub">38 / 40 players · 2 staff · <span style="color:#d4a14a">near limit</span></div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="pill t-basic">Basic</span></td>
+                <td><span class="status warn"><span class="dot"></span>Near limit</span></td>
+                <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">May 28</span></td>
+                <td class="r">$60.00</td>
+                <td class="r"><div class="actions-cell"><a class="cm-btn is-outline is-sm" href="Plan Picker.html"><i class="ti ti-arrow-up" style="font-size:13px"></i>Upgrade</a></div></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cat-cell">
+                    <div class="ic"><i class="ti ti-ball-football"></i></div>
+                    <div>
+                      <div class="name">Clava FC · Women</div>
+                      <div class="sub">24 / 80 players · 4 staff</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="pill t-pro">Pro</span></td>
+                <td><span class="status ok"><span class="dot"></span>Active</span></td>
+                <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">May 28</span></td>
+                <td class="r">$120.00</td>
+                <td class="r"><div class="actions-cell"><button class="cm-btn is-ghost is-sm"><i class="ti ti-dots"></i></button></div></td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="cat-cell">
+                    <div class="ic"><i class="ti ti-ball-football"></i></div>
+                    <div>
+                      <div class="name">Clava FC · Academy</div>
+                      <div class="sub">14 / 15 players · mobile only · <span style="color:var(--cm-danger)">over soon</span></div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="pill t-free">Free</span></td>
+                <td><span class="status danger"><span class="dot"></span>Over soon</span></td>
+                <td><span style="font:500 12.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">—</span></td>
+                <td class="r">$0.00</td>
+                <td class="r"><div class="actions-cell"><a class="cm-btn is-outline is-sm" href="Plan Picker.html"><i class="ti ti-arrow-up" style="font-size:13px"></i>Upgrade</a></div></td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4">Combined monthly · billed May 28</td>
+                <td class="r">$485.00</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- ─── Right column ─── -->
+        <div style="display:flex; flex-direction:column; gap:14px;">
+
+          <!-- Next invoice card -->
+          <div class="bl-card">
+            <div class="bl-card-h">
+              <h3>Next invoice</h3>
+              <span class="sub">draft · auto-renews May 28</span>
+            </div>
+            <div style="padding:16px">
+              <div class="bl-next-amt">$365.00<sub>USD</sub></div>
+              <div class="bl-next-date">due <strong>May 28, 2026</strong> · in 3 days</div>
+              <div class="bl-next-lines">
+                <div class="bl-next-line"><span><strong>5 categories</strong> · subscription renewal</span><span class="v">$485.00</span></div>
+                <div class="bl-next-line discount"><span>Credit balance applied</span><span class="v">− $120.00</span></div>
+                <div class="bl-next-line"><span>Tax (ARG 21%)</span><span class="v">— included</span></div>
+                <div class="bl-next-line total"><span>Estimated total</span><span class="v">$365.00</span></div>
+              </div>
+              <div style="margin-top:14px;display:flex;gap:6px;">
+                <button class="cm-btn is-outline is-sm" style="flex:1"><i class="ti ti-eye" style="font-size:14px"></i>Preview</button>
+                <button class="cm-btn is-outline is-sm" style="flex:1"><i class="ti ti-download" style="font-size:14px"></i>PDF</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Payment method card -->
+          <div class="bl-card">
+            <div class="bl-card-h">
+              <h3>Primary payment method</h3>
+              <span class="sub">used for all categories</span>
+              <div class="right">
+                <button class="cm-btn is-ghost is-sm">Manage</button>
+              </div>
+            </div>
+            <div class="bl-pm">
+              <div class="bl-pm-brand">VISA</div>
+              <div class="bl-pm-info">
+                <div class="num">···· ···· ···· 4242</div>
+                <div class="exp">expires 08 / 27</div>
+                <div class="holder">Joaquín Reiris</div>
+              </div>
+              <div class="right">
+                <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+              </div>
+            </div>
+            <div style="padding:10px 16px; border-top:1px solid var(--cm-border-soft); display:flex; align-items:center; gap:8px; font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted);">
+              <i class="ti ti-shield-check" style="font-size:14px; color:var(--cm-accent)"></i>
+              Backup card on file · Mastercard ··8821
+            </div>
+          </div>
+
+          <!-- Activity feed -->
+          <div class="bl-card">
+            <div class="bl-card-h">
+              <h3>Recent activity</h3>
+              <span class="sub">last 30 days</span>
+              <div class="right">
+                <a class="cm-btn is-ghost is-sm" href="Invoices.html">All <i class="ti ti-arrow-up-right" style="font-size:13px"></i></a>
+              </div>
+            </div>
+            <div class="bl-act">
+              <div class="bl-act-item">
+                <div class="bl-act-ic ok"><i class="ti ti-check"></i></div>
+                <div class="bl-act-body">
+                  <div class="l"><strong>Invoice paid</strong> · April monthly · INV-0142</div>
+                  <div class="meta">Apr 28 · Visa ··4242</div>
+                </div>
+                <div class="bl-act-amt">−$445.00</div>
+              </div>
+              <div class="bl-act-item">
+                <div class="bl-act-ic ok"><i class="ti ti-arrow-up"></i></div>
+                <div class="bl-act-body">
+                  <div class="l">Women plan upgraded · <strong>Basic → Pro</strong></div>
+                  <div class="meta">Apr 14 · Joaquín R. · prorated</div>
+                </div>
+                <div class="bl-act-amt neg">+$60.00 / mo</div>
+              </div>
+              <div class="bl-act-item">
+                <div class="bl-act-ic"><i class="ti ti-gift"></i></div>
+                <div class="bl-act-body">
+                  <div class="l">$120 credit issued · <strong>Annual billing trial</strong></div>
+                  <div class="meta">Apr 02 · expires Oct 01, 2026</div>
+                </div>
+                <div class="bl-act-amt refund">+$120.00</div>
+              </div>
+              <div class="bl-act-item">
+                <div class="bl-act-ic ok"><i class="ti ti-check"></i></div>
+                <div class="bl-act-body">
+                  <div class="l"><strong>Invoice paid</strong> · March monthly · INV-0131</div>
+                  <div class="meta">Mar 28 · Visa ··4242</div>
+                </div>
+                <div class="bl-act-amt">−$385.00</div>
+              </div>
+              <div class="bl-act-item">
+                <div class="bl-act-ic warn"><i class="ti ti-credit-card"></i></div>
+                <div class="bl-act-body">
+                  <div class="l">Backup card added · <strong>Mastercard ··8821</strong></div>
+                  <div class="meta">Mar 18 · Joaquín R.</div>
+                </div>
+                <div class="bl-act-amt" style="color:var(--cm-fg-muted)">—</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<div id="tweaks-root"></div>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+
+  const [club, clubId] = await Promise.all([window.getClub(), window.getClubId()]);
+  if (club) window.applyClubTheme();
+
+  // ── Header ────────────────────────────────────────────────
+  const ctxEl = document.querySelector('.bl-head .ctx');
+  if (ctxEl && club) {
+    ctxEl.innerHTML = `<strong>${club.name}</strong> · billing overview`;
+  }
+
+  // ── KPIs from clubs.billing_* ────────────────────────────
+  if (club) {
+    const amtEl  = document.querySelector('.bl-kpis .bl-kpi:nth-child(1) .bl-kpi-v');
+    const dateEl = document.querySelector('.bl-kpis .bl-kpi:nth-child(2) .bl-kpi-v');
+    const dateT  = document.querySelector('.bl-kpis .bl-kpi:nth-child(2) .bl-kpi-t');
+
+    if (amtEl && club.billing_amount != null) {
+      amtEl.innerHTML = `$${(+club.billing_amount).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}<sub>USD</sub>`;
+    }
+    if (dateEl && club.billing_next_date) {
+      const d = new Date(club.billing_next_date);
+      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      dateEl.textContent = label;
+      const daysLeft = Math.round((d - new Date()) / 86400000);
+      if (dateT && daysLeft >= 0) dateT.textContent = `in ${daysLeft} day${daysLeft !== 1 ? 's' : ''} · auto-charged`;
+    }
+  }
+
+  // ── Payment method ────────────────────────────────────────
+  const { data: pms } = await window.sb.from('payment_methods')
+    .select('brand,last4,exp_month,exp_year,is_default')
+    .eq('club_id', clubId)
+    .order('is_default', { ascending: false })
+    .limit(2);
+
+  if (pms?.length) {
+    const pm = pms[0];
+    const brand = (pm.brand || 'CARD').toUpperCase();
+    const mo = String(pm.exp_month || '').padStart(2, '0');
+    const yr = String(pm.exp_year || '').slice(-2);
+    document.querySelector('.bl-pm-brand')         && (document.querySelector('.bl-pm-brand').textContent = brand);
+    document.querySelector('.bl-pm-info .num')     && (document.querySelector('.bl-pm-info .num').textContent = `···· ···· ···· ${pm.last4 || '——'}`);
+    document.querySelector('.bl-pm-info .exp')     && (document.querySelector('.bl-pm-info .exp').textContent = `expires ${mo} / ${yr}`);
+    const kpiMethod = document.querySelector('.bl-kpis .bl-kpi:nth-child(3) .bl-kpi-v');
+    if (kpiMethod) kpiMethod.textContent = `${brand} ··${pm.last4 || '——'}`;
+  }
+
+  // ── Subscription + plan ───────────────────────────────────
+  const { data: subs } = await window.sb.from('subscriptions')
+    .select('status,billing_cycle,current_period_end,plans(name,price_monthly)')
+    .eq('club_id', clubId)
+    .limit(1)
+    .maybeSingle();
+
+  if (subs?.plans) {
+    const planBadge = document.querySelector('.pill.t-pro, .pill.t-basic, .pill.t-free');
+    if (planBadge) {
+      const n = subs.plans.name || '';
+      const cls = n.toLowerCase().includes('pro') ? 't-pro' : n.toLowerCase().includes('basic') ? 't-basic' : 't-free';
+      planBadge.className = `pill ${cls}`;
+      planBadge.textContent = n;
+    }
+  }
+
+  // ── Recent invoices ───────────────────────────────────────
+  const { data: invs } = await window.sb.from('invoices')
+    .select('invoice_number,amount,status,paid_at,created_at')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (invs?.length) {
+    const feed = document.querySelector('.bl-act');
+    if (feed) {
+      const fmtDate = s => new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      feed.innerHTML = invs.map(inv => {
+        const isPaid = inv.status === 'paid';
+        const icCls  = isPaid ? 'ok' : inv.status === 'failed' ? 'warn' : '';
+        const icon   = isPaid ? 'ti-check' : inv.status === 'failed' ? 'ti-x' : 'ti-clock';
+        const label  = isPaid ? '<strong>Invoice paid</strong>' : `<strong>Invoice ${inv.status}</strong>`;
+        const date   = fmtDate(inv.paid_at || inv.created_at);
+        const amt    = '$' + (+inv.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return `<div class="bl-act-item">
+          <div class="bl-act-ic ${icCls}"><i class="ti ${icon}"></i></div>
+          <div class="bl-act-body">
+            <div class="l">${label} · ${inv.invoice_number || '—'}</div>
+            <div class="meta">${date}</div>
+          </div>
+          <div class="bl-act-amt">−${amt}</div>
+        </div>`;
+      }).join('');
+    }
+  }
+})();
+</script>
+
+<script>window.__CM_TWEAK_DEFAULTS = { theme: 'hybrid', accent: 'green' };</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+</body>
+</html>

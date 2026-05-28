@@ -145,6 +145,11 @@ const BillingPanel = () => {
             <span className="sd-billing-val" style={{color: status === 'active' ? 'var(--cm-success)' : 'var(--cm-fg-muted)'}}>{loading ? '…' : (status || '—')}</span>
           </div>
         </div>
+        <div style={{padding:'10px 14px', borderTop:'1px solid var(--cm-border-soft)'}}>
+          <a href="Billing.html" style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12.5,fontWeight:500,color:'var(--cm-accent)',textDecoration:'none'}}>
+            Ver detalle completo <i className="ti ti-arrow-right" style={{fontSize:13}}></i>
+          </a>
+        </div>
         <div className="sd-note" style={{marginTop:12}}>
           <i className="ti ti-brand-stripe"></i>
           Billing is managed via Stripe. Subscription data syncs automatically when the webhook is active. Contact your admin to change plans.
