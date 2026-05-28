@@ -233,6 +233,50 @@
   .pain-bar .pip.on-low  { background:var(--cm-success); }
   .pain-bar .pip.on-mid  { background:var(--cm-warning); }
   .pain-bar .pip.on-high { background:var(--cm-danger); }
+
+  /* ══ PROTOCOLS MODAL ══ */
+  .proto-tabs { display:flex; gap:0; border-bottom:1px solid var(--cm-border-soft); padding:0 18px; background:var(--cm-surface); position:sticky; top:49px; z-index:1; }
+  .proto-tab { padding:10px 16px; font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg-muted); background:none; border:none; border-bottom:2px solid transparent; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .proto-tab.is-on { color:var(--cm-primary); border-bottom-color:var(--cm-primary); font-weight:600; }
+  .proto-filter-bar { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:12px; }
+  .proto-filter-btn { padding:4px 11px; border-radius:20px; border:1px solid var(--cm-border); font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); background:var(--cm-bg-soft); cursor:pointer; }
+  .proto-filter-btn.is-on { background:var(--cm-fg-strong); border-color:var(--cm-fg-strong); color:var(--cm-bg); }
+  .proto-card { border:1px solid var(--cm-border-soft); border-radius:10px; overflow:hidden; margin-bottom:8px; }
+  .proto-card-summary { padding:12px 14px; cursor:pointer; user-select:none; }
+  .proto-card-summary:hover { background:var(--cm-bg-soft); }
+  .proto-card-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .proto-cat-badge { font:600 10px/1 var(--cm-font-mono); letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:4px; flex-shrink:0; }
+  .proto-cat-badge.manual  { background:rgba(251,146,60,.15);  color:#C2410C; }
+  .proto-cat-badge.electro { background:rgba(59,130,246,.12);  color:#1D4ED8; }
+  .proto-cat-badge.hydro   { background:rgba(6,182,212,.12);   color:#0E7490; }
+  .proto-cat-badge.taping  { background:rgba(168,85,247,.12);  color:#7C3AED; }
+  .proto-cat-badge.needling{ background:rgba(239,68,68,.12);   color:#DC2626; }
+  .proto-cat-badge.mixed   { background:rgba(107,114,128,.15); color:#4B5563; }
+  .proto-cat-badge.club    { background:rgba(16,185,129,.12);  color:#047857; }
+  .proto-ev-badge { font:700 10px/1 var(--cm-font-mono); padding:3px 8px; border-radius:4px; margin-left:auto; flex-shrink:0; }
+  .proto-ev-badge.lv-a { background:rgba(16,185,129,.15); color:#047857; }
+  .proto-ev-badge.lv-b { background:rgba(251,146,60,.15);  color:#C2410C; }
+  .proto-ev-badge.lv-c { background:rgba(156,163,175,.15); color:#6B7280; }
+  .proto-expand-icon { color:var(--cm-fg-muted); margin-left:2px; transition:transform .2s; flex-shrink:0; }
+  .proto-card.is-open .proto-expand-icon { transform:rotate(180deg); }
+  .proto-name { font:600 14px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .proto-ref  { font:400 11px/1.4 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .proto-indication { font:var(--cm-body-sm); color:var(--cm-fg); margin-top:5px; }
+  .proto-indication strong { color:var(--cm-fg-muted); font-weight:500; }
+  .proto-detail { display:none; padding:0 14px 14px; border-top:1px solid var(--cm-border-soft); }
+  .proto-card.is-open .proto-detail { display:block; }
+  .proto-sections { display:grid; gap:10px; padding-top:12px; }
+  .proto-sec-label { font:600 10px/1 var(--cm-font-mono); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:4px; }
+  .proto-sec-body { font:var(--cm-body-sm); color:var(--cm-fg); white-space:pre-line; line-height:1.55; }
+  .proto-ev-note { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-left:3px solid var(--cm-border-strong); padding:8px 10px; border-radius:0 6px 6px 0; margin-top:2px; }
+  .proto-apply-row { display:flex; justify-content:flex-end; margin-top:12px; padding-top:10px; border-top:1px solid var(--cm-border-soft); }
+  .club-proto-card { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:8px; margin-bottom:6px; }
+  .club-proto-card .cp-info { flex:1; min-width:0; }
+  .club-proto-card .cp-title { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); display:flex; align-items:center; gap:6px; }
+  .club-proto-card .cp-sub   { font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .club-proto-card .cp-actions { display:flex; gap:5px; flex-shrink:0; }
+  .cp-mod-chip { display:inline-block; padding:3px 9px; border-radius:20px; border:1px solid var(--cm-border); font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); background:var(--cm-bg-soft); cursor:pointer; }
+  .cp-mod-chip.is-on { background:var(--cm-fg-strong); border-color:var(--cm-fg-strong); color:var(--cm-bg); }
 </style>
 </head>
 <body class="cm">
@@ -264,7 +308,7 @@
         </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm" id="btnExportWeek"><i class="ti ti-file-export" style="font-size:14px"></i>Export week</button>
-          <button class="cm-btn is-outline is-sm" id="btnTemplates"><i class="ti ti-template" style="font-size:14px"></i>Templates</button>
+          <button class="cm-btn is-outline is-sm" id="btnTemplates"><i class="ti ti-clipboard-list" style="font-size:14px"></i>Protocols</button>
           <button class="cm-btn is-primary is-sm" id="btnHistory"><i class="ti ti-clock-history" style="font-size:14px"></i>Patient history</button>
         </div>
       </header>
@@ -552,62 +596,90 @@
   </main>
 </div>
 
-<!-- ══ TEMPLATES MODAL ══ -->
-<div class="ph-overlay" id="tmplOverlay">
-  <div class="ph-modal">
+<!-- ══ PROTOCOLS MODAL ══ -->
+<div class="ph-overlay" id="protocolsOverlay">
+  <div class="ph-modal" style="max-width:860px">
     <div class="ph-modal-h">
-      <div><h3>Treatment templates</h3><div class="sub">Pre-configured protocols</div></div>
-      <button class="close" onclick="closeTmpl()"><i class="ti ti-x"></i></button>
+      <div><h3>Clinical Treatment Protocols</h3><div class="sub">Evidence-based clinical protocols for physiotherapy</div></div>
+      <button class="close" onclick="closeProtocols()"><i class="ti ti-x"></i></button>
     </div>
-    <div class="ph-modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:4px">
-        <button class="cm-btn is-primary is-sm" id="btnNewTemplate"><i class="ti ti-plus" style="font-size:13px"></i>New template</button>
-        <button class="cm-btn is-outline is-sm" id="btnSaveAsTemplate"><i class="ti ti-copy" style="font-size:13px"></i>Save current session as template</button>
+    <div class="proto-tabs">
+      <button class="proto-tab is-on" data-tab="evidence" onclick="switchProtoTab('evidence')"><i class="ti ti-book-2" style="font-size:14px"></i>Evidence-based protocols</button>
+      <button class="proto-tab" data-tab="club" onclick="switchProtoTab('club')"><i class="ti ti-building-hospital" style="font-size:14px"></i>Club protocols</button>
+    </div>
+    <div class="ph-modal-body" style="padding-top:12px">
+      <div id="protoTabEvidence">
+        <div class="proto-filter-bar">
+          <button class="proto-filter-btn is-on" data-cat="all" onclick="filterProtocols('all')">All</button>
+          <button class="proto-filter-btn" data-cat="manual" onclick="filterProtocols('manual')">Manual therapy</button>
+          <button class="proto-filter-btn" data-cat="electro" onclick="filterProtocols('electro')">Electrotherapy</button>
+          <button class="proto-filter-btn" data-cat="hydro" onclick="filterProtocols('hydro')">Hydrotherapy</button>
+          <button class="proto-filter-btn" data-cat="taping" onclick="filterProtocols('taping')">Taping</button>
+          <button class="proto-filter-btn" data-cat="needling" onclick="filterProtocols('needling')">Needling / Neuro</button>
+        </div>
+        <div id="evidenceProtocolsList"></div>
       </div>
-      <div id="tmplList" style="margin-top:8px">
-        <div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading templates…</div>
+      <div id="protoTabClub" style="display:none">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="cm-btn is-primary is-sm" onclick="showNewClubProtocol()"><i class="ti ti-plus" style="font-size:13px"></i>New protocol</button>
+          <button class="cm-btn is-outline is-sm" onclick="saveSessionAsClubProtocol()"><i class="ti ti-copy" style="font-size:13px"></i>Save current session as protocol</button>
+        </div>
+        <div id="clubProtocolsList"><div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading…</div></div>
       </div>
     </div>
     <div class="ph-modal-foot">
-      <button class="cm-btn is-outline" onclick="closeTmpl()">Close</button>
+      <button class="cm-btn is-outline" onclick="closeProtocols()">Close</button>
     </div>
   </div>
 </div>
 
-<!-- ══ NEW TEMPLATE FORM MODAL ══ -->
-<div class="ph-overlay" id="newTmplOverlay">
-  <div class="ph-modal" style="max-width:480px">
+<!-- ══ NEW CLUB PROTOCOL FORM ══ -->
+<div class="ph-overlay" id="newProtoOverlay">
+  <div class="ph-modal" style="max-width:520px">
     <div class="ph-modal-h">
-      <div><h3 id="newTmplTitle">New template</h3></div>
-      <button class="close" onclick="closeNewTmpl()"><i class="ti ti-x"></i></button>
+      <div><h3>New club protocol</h3><div class="sub">Save a custom clinical protocol for your club</div></div>
+      <button class="close" onclick="closeNewProto()"><i class="ti ti-x"></i></button>
     </div>
     <div class="ph-modal-body" style="gap:10px">
-      <div class="ph-f"><label>Template name</label><input id="tmplName" placeholder="e.g. Hamstring rehabilitation phase 1"></div>
+      <div class="ph-f"><label>Protocol name</label><input id="newProtoName" placeholder="e.g. Hamstring acute phase protocol"></div>
       <div class="ph-f-row">
         <div class="ph-f">
-          <label>Type</label>
-          <select id="tmplType">
-            <option value="rehab">Rehabilitation</option>
-            <option value="preventive">Preventive</option>
+          <label>Category</label>
+          <select id="newProtoCat">
+            <option value="Manual">Manual therapy</option>
+            <option value="Electro">Electrotherapy</option>
+            <option value="Hydro">Hydrotherapy</option>
+            <option value="Taping">Taping</option>
+            <option value="Needling">Needling</option>
+            <option value="Mixed">Mixed</option>
           </select>
         </div>
         <div class="ph-f">
-          <label>Injury type (optional)</label>
-          <input id="tmplInjuryType" placeholder="Hamstring, Ankle…">
+          <label>Duration (min)</label>
+          <input id="newProtoDuration" type="number" placeholder="30">
         </div>
       </div>
+      <div class="ph-f"><label>Indication / target injury</label><input id="newProtoIndication" placeholder="Hamstring Grado 1-2, días 2-7"></div>
       <div class="ph-f">
-        <label>Default duration (min)</label>
-        <input id="tmplDuration" type="number" placeholder="45">
+        <label>Modalities</label>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">
+          <button class="cp-mod-chip" data-m="Manual therapy" onclick="this.classList.toggle('is-on')">Manual</button>
+          <button class="cp-mod-chip" data-m="Electrotherapy" onclick="this.classList.toggle('is-on')">Electro</button>
+          <button class="cp-mod-chip" data-m="Hydrotherapy" onclick="this.classList.toggle('is-on')">Hydro</button>
+          <button class="cp-mod-chip" data-m="Massage" onclick="this.classList.toggle('is-on')">Massage</button>
+          <button class="cp-mod-chip" data-m="Taping" onclick="this.classList.toggle('is-on')">Taping</button>
+          <button class="cp-mod-chip" data-m="Needling" onclick="this.classList.toggle('is-on')">Needling</button>
+          <button class="cp-mod-chip" data-m="Other" onclick="this.classList.toggle('is-on')">Other</button>
+        </div>
       </div>
-      <div class="ph-f">
-        <label>Notes template</label>
-        <textarea id="tmplNotesTemplate" placeholder="Standard protocol…" rows="3"></textarea>
-      </div>
+      <div class="ph-f"><label>Technique / parameters</label><textarea id="newProtoTechnique" placeholder="Position, parameters, duration, reps…" rows="4"></textarea></div>
+      <div class="ph-f"><label>Recommended frequency</label><input id="newProtoFrequency" placeholder="e.g. 3 times/week, 4-6 weeks"></div>
+      <div class="ph-f"><label>Contraindications</label><textarea id="newProtoContra" placeholder="Acute injury, anticoagulants…" rows="2"></textarea></div>
+      <div class="ph-f"><label>Reference (optional)</label><input id="newProtoRef" placeholder="Author et al. (year). Journal."></div>
     </div>
     <div class="ph-modal-foot">
-      <button class="cm-btn is-outline" onclick="closeNewTmpl()">Cancel</button>
-      <button class="cm-btn is-primary" id="btnSaveTmpl"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save template</button>
+      <button class="cm-btn is-outline" onclick="closeNewProto()">Cancel</button>
+      <button class="cm-btn is-primary" id="btnSaveNewProto"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save protocol</button>
     </div>
   </div>
 </div>
@@ -1442,105 +1514,450 @@ async function exportWeek() {
 }
 
 // ══════════════════════════════════════════════════════
-// TEMPLATES
+// PROTOCOLS
 // ══════════════════════════════════════════════════════
-function closeTmpl()    { document.getElementById('tmplOverlay').classList.remove('is-open'); }
-function closeNewTmpl() { document.getElementById('newTmplOverlay').classList.remove('is-open'); }
+let _clubProtocols = [];
+let _appliedProtocolName = null;
+let _currentProtoTab = 'evidence';
+let _currentProtoFilter = 'all';
 
-document.getElementById('btnTemplates').addEventListener('click', openTemplates);
-async function openTemplates() {
-  document.getElementById('tmplOverlay').classList.add('is-open');
-  const { data: tmpls } = await window.sb
-    .from('treatment_templates')
-    .select('*')
-    .eq('club_id', _clubId)
-    .order('created_at', { ascending: false });
-  _allTemplates = tmpls || [];
-  renderTemplates();
+const EVIDENCE_PROTOCOLS = [
+  // ── MANUAL THERAPY ──────────────────────────────────────────────────────
+  {
+    id: 'ev_stm_hamstring',
+    name: 'Soft Tissue Mobilization — Hamstring',
+    subtitle: 'Fase aguda',
+    category: 'manual',
+    ref: 'JOSPT Clinical Practice Guidelines HSI (2022); Cheatham SW et al. Int J Sports Phys Ther (2018)',
+    indication: 'BAMIC Grado 1-2, días 2-7 post-lesión',
+    technique: 'Posición: decúbito prono, rodilla extendida\n• Fricción transversa profunda en zona lesión: 3-5 min\n• Effleurage longitudinal distal→proximal: 5 min\n• Presión directa en puntos gatillo: 30-90s por punto\n• ROM pasivo suave dentro de rango sin dolor\nDuración total: 20-30 min\nFrecuencia: Diaria en fase aguda, días alternos después',
+    contraindications: 'Hematoma grande, rotura completa, infección activa',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — mejora ROM y reduce dolor agudo',
+    duration: 25,
+    modalities: ['Manual therapy'],
+    applyNotes: '[Protocol: Soft Tissue Mobilization — Hamstring]\nFricción transversa profunda 3-5min + Effleurage distal→proximal 5min + Puntos gatillo 30-90s/punto + ROM pasivo sin dolor',
+  },
+  {
+    id: 'ev_iastm',
+    name: 'IASTM — Instrumento Asistido',
+    subtitle: 'Graston / Rockblades',
+    category: 'manual',
+    ref: 'Cheatham SW et al. Int J Sports Phys Ther (2018); PMC10566405 (2023)',
+    indication: 'Restricciones miofasciales, cicatrices, adherencias post-lesión (NO en fase aguda <72h)',
+    technique: '• Escaneo diagnóstico con instrumento: 2-3 min\n• Tratamiento con ángulo 45-60°: movimientos cortos proximal→distal\n• Presión progresiva según tolerancia\n• Movilización activa simultánea si posible\n• 3-5 pases por zona, 2-3 zonas por sesión\nDuración: 15-20 min incluyendo calentamiento previo\nFrecuencia: 1-2 veces/semana, 4-6 semanas\nPost-tratamiento: Hielo 10 min + stretching suave',
+    contraindications: 'Anticoagulantes, trombosis, piel dañada, lesión aguda <72h',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — mejora ROM y dolor crónico; microtrauma controlado induce remodelación colágeno',
+    duration: 20,
+    modalities: ['Manual therapy'],
+    applyNotes: '[Protocol: IASTM — Instrumento Asistido]\nEscaneo 2-3min + Tratamiento 45-60° pases proximal→distal (3-5 pases/zona, 2-3 zonas) + Hielo 10min post',
+  },
+  {
+    id: 'ev_mfr_quad',
+    name: 'Myofascial Release — Cuádriceps / Hip Flexors',
+    subtitle: '',
+    category: 'manual',
+    ref: 'PMC investigación miofascial 2023',
+    indication: 'Tensión miofascial, restricción ROM, síndrome dolor miofascial',
+    technique: '• Presión sostenida en puntos de restricción: 90-120s\n• Dirección de la restricción, sin forzar\n• Esperar sensación de liberación tisular\n• 3-4 zonas por sesión\nDuración: 20-30 min\nFrecuencia: 2-3 veces/semana',
+    contraindications: 'Inflamación aguda activa, fracturas, tumores',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — efectivo para dolor y ROM',
+    duration: 25,
+    modalities: ['Manual therapy', 'Massage'],
+    applyNotes: '[Protocol: Myofascial Release — Cuádriceps/Hip Flexors]\nPresión sostenida 90-120s por punto de restricción (3-4 zonas), esperar liberación tisular',
+  },
+  {
+    id: 'ev_jmob_ankle',
+    name: 'Joint Mobilization — Tobillo',
+    subtitle: 'Mulligan / Maitland',
+    category: 'manual',
+    ref: 'Tassignon B et al. IJSPT (2021); Kerkhoffs GM et al. Br J Sports Med (2012)',
+    indication: 'Esguince tobillo Grado I-II, restricción dorsiflexión, rigidez articular post-inmovilización',
+    technique: 'Técnica Mulligan SNAG:\n• Deslizamiento AP en talo mientras paciente hace dorsiflexión activa\n• 3 × 10 repeticiones\n\nTécnica Maitland Grado III-IV:\n• Oscilaciones amplitud media/grande en rango de resistencia\n• 3 × 30 oscilaciones\nDuración: 15 min\nFrecuencia: Diaria en fase subaguda',
+    contraindications: 'Fractura no consolidada, inestabilidad severa Grado III no tratada',
+    evidenceLevel: 'A',
+    evidenceNote: 'Nivel A — BJSM 2023 meta-análisis: ROM completo en 4 semanas vs 6 semanas sin movilización',
+    duration: 15,
+    modalities: ['Manual therapy'],
+    applyNotes: '[Protocol: Joint Mobilization — Tobillo Mulligan/Maitland]\nMulligan SNAG: deslizamiento AP + dorsiflexión activa 3×10 | Maitland III-IV: oscilaciones 3×30',
+  },
+  // ── ELECTROTHERAPY ──────────────────────────────────────────────────────
+  {
+    id: 'ev_tens',
+    name: 'TENS — Analgesia Aguda',
+    subtitle: '',
+    category: 'electro',
+    ref: 'IJCRT 2024 (TENS ankle sprain); CK Physio BJSM 2023 meta-análisis',
+    indication: 'Control dolor agudo/subagudo, cualquier lesión músculo-esquelética',
+    technique: 'Convencional (alta frecuencia):\n• Frecuencia: 80-150 Hz · Ancho pulso: 50-80 μs\n• Intensidad: sensación hormigueo sin contracción\n• Electrodos: perilesionales o a lo largo del nervio\n• Duración: 20-30 min\n\nAcupuntura (baja frecuencia):\n• Frecuencia: 1-4 Hz · Ancho pulso: 150-250 μs\n• Intensidad: contracción muscular visible\n• Duración: 20-30 min\nFrecuencia: 1-2 veces/día en fase aguda',
+    contraindications: 'Marcapasos, epilepsia, trombosis, área cardíaca, embarazo',
+    evidenceLevel: 'A',
+    evidenceNote: 'Nivel A — reducción dolor significativa vs control en esguince agudo (IJCRT 2024)',
+    duration: 25,
+    modalities: ['Electrotherapy'],
+    applyNotes: '[Protocol: TENS — Analgesia Aguda]\nConvencional: 80-150Hz / 50-80μs / hormigueo sin contracción | 20-30min perilesional',
+  },
+  {
+    id: 'ev_ift',
+    name: 'Interferential Therapy (IFT) — Edema y Dolor',
+    subtitle: '',
+    category: 'electro',
+    ref: 'CK Physio (BJSM 2023 data); PMC ankle sprain RCT 2021',
+    indication: 'Edema post-lesión, dolor crónico, rigidez articular',
+    technique: '• Frecuencia portadora: 4000 Hz\n• Frecuencia interferencia: 80-120 Hz (dolor) / 10-50 Hz (edema/músculo)\n• Intensidad: hormigueo cómodo\n• Electrodos: cuadrante alrededor de zona lesionada\n• Duración: 15-20 min\nFrecuencia: Diaria en fase aguda-subaguda',
+    contraindications: 'Marcapasos, epilepsia, trombosis, tumores, embarazo',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — reduce circunferencia 18-22% en 2 semanas; combinado con compresión: 28% reducción edema',
+    duration: 20,
+    modalities: ['Electrotherapy'],
+    applyNotes: '[Protocol: IFT — Edema y Dolor]\n4000Hz portadora | Interferencia 80-120Hz (dolor) o 10-50Hz (edema) | 15-20min cuadrante',
+  },
+  {
+    id: 'ev_us',
+    name: 'Therapeutic Ultrasound',
+    subtitle: '',
+    category: 'electro',
+    ref: 'Watson T & Young SR (2008) Electrotherapy; Cochrane Database (2024)',
+    indication: 'Tendinopatía crónica, cicatrices, adherencias, contusiones musculares',
+    technique: 'Tejido superficial (<2cm):\n• Frecuencia: 3 MHz · Intensidad: 0.5-1.0 W/cm²\n• Modo: pulsado 1:4 (agudo) / continuo (crónico)\n• Duración: 5-10 min por zona\n\nTejido profundo (>2cm):\n• Frecuencia: 1 MHz · Intensidad: 1.0-2.0 W/cm²\n• Modo: pulsado/continuo según fase\nFrecuencia: 3-5 veces/semana, 6-12 sesiones',
+    contraindications: 'Crecimiento óseo activo, trombosis, tumores, marcapasos, embarazo',
+    evidenceLevel: 'C',
+    evidenceNote: 'Nivel C — evidencia mixta en Cochrane 2024. Más efectivo en fase proliferativa (días 3-14)',
+    duration: 15,
+    modalities: ['Electrotherapy'],
+    applyNotes: '[Protocol: Therapeutic Ultrasound]\nSuperficial: 3MHz 0.5-1.0W/cm² | Profundo: 1MHz 1.0-2.0W/cm² | Pulsado en agudo, continuo en crónico',
+  },
+  {
+    id: 'ev_eswt',
+    name: 'ESWT — Ondas de Choque Extracorpóreas',
+    subtitle: '',
+    category: 'electro',
+    ref: 'PMC10521343 Systematic Review (2023)',
+    indication: 'Tendinopatías crónicas, hematomas musculares crónicos, calcificaciones (NO en fase aguda <3 semanas)',
+    technique: 'Parámetros radiales:\n• Presión: 1.5-3.0 bar\n• Frecuencia: 8-15 Hz\n• Pulsos: 2000-3000 por sesión\n• Sin anestesia local (feedback del paciente)\nFrecuencia: 1 sesión/semana, 3-5 sesiones\nPost-tratamiento: Sin AINEs 48h, hielo permitido',
+    contraindications: 'Lesión aguda, trastornos coagulación, tumores, embarazo, sobre epífisis abiertas',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — menos dolor VAS, mejor función, reducción tamaño lesión en US, RTP más rápido (SR 2023, 8 estudios, 143 pacientes)',
+    duration: 30,
+    modalities: ['Electrotherapy'],
+    applyNotes: '[Protocol: ESWT — Ondas de Choque]\nRadial: 1.5-3.0bar / 8-15Hz / 2000-3000 pulsos | 1 sesión/semana | Sin AINEs 48h post',
+  },
+  {
+    id: 'ev_lllt',
+    name: 'LLLT — Low Level Laser Therapy',
+    subtitle: '',
+    category: 'electro',
+    ref: 'Huang et al. meta-analysis (2023)',
+    indication: 'Tendinopatía, cicatrización tisular, control dolor e inflamación',
+    technique: '• Longitud de onda: 630-980 nm\n• Potencia: 10-100 mW · Dosis: 1-4 J/cm²\n• Aplicación de contacto o sin contacto\n• Duración: 5-10 min por zona\nFrecuencia: 3-5 veces/semana, 4-8 semanas\nMecanismo: Estimula citocromo c oxidasa → ↑ATP, ↑VEGF, +22% síntesis colágeno (días 3-14)',
+    contraindications: 'Sobre ojos, tumores, áreas fotosensibles, embarazo',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — acelera reparación tisular en fase proliferativa (Huang 2023 meta-análisis)',
+    duration: 15,
+    modalities: ['Electrotherapy'],
+    applyNotes: '[Protocol: LLLT — Low Level Laser]\n630-980nm / 10-100mW / 1-4J/cm² | 5-10min por zona | 3-5x/semana',
+  },
+  // ── HYDROTHERAPY ────────────────────────────────────────────────────────
+  {
+    id: 'ev_pool_walk',
+    name: 'Pool Walking — Descarga Progresiva',
+    subtitle: '',
+    category: 'hydro',
+    ref: 'Aspetar Guidelines (2025); literatura ACL rehab',
+    indication: 'Fase aguda-subaguda con necesidad de descarga: lesiones musculares Grado 2-3, ACL, fracturas en carga progresiva',
+    technique: '• Profundidad: cuello (10% peso corporal) → cintura (50%)\n• Temperatura: 32-34°C\n• Marcha normal: 10-15 min → 20-30 min progresivo\n• Ejercicios: leg swings, kicks, mini squats\n• Resistencia con aletas o paletas si tolera\nFrecuencia: Diaria en fase de descarga\nProgresión: Marcha pain-free en agua → iniciar carga en tierra',
+    contraindications: 'Heridas abiertas, infección activa, fiebre',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — descarga segura del miembro con mantenimiento cardiovascular y propioceptivo',
+    duration: 30,
+    modalities: ['Hydrotherapy'],
+    applyNotes: '[Protocol: Pool Walking — Descarga Progresiva]\nProfundidad cuello→cintura | 32-34°C | Marcha + leg swings + mini squats | 10-15min progresando a 30min',
+  },
+  {
+    id: 'ev_contrast_hydro',
+    name: 'Contrast Hydrotherapy — Recuperación',
+    subtitle: '',
+    category: 'hydro',
+    ref: 'CK Physio sports recovery protocols',
+    indication: 'Recuperación post-partido o entrenamiento intenso, control edema subagudo',
+    technique: '• Caliente 38-40°C: 3-4 min\n• Frío 10-15°C: 1 min\n• Repetir 3-4 ciclos\n• Terminar siempre en frío\nDuración total: 15-20 min\nFrecuencia: Post-sesión intensa (NO en fase aguda de lesión activa)',
+    contraindications: 'Lesión aguda activa, arteriopatía periférica, Raynaud, heridas abiertas',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — reduce DOMS, mejora recuperación subjetiva y función neuromuscular al día siguiente',
+    duration: 20,
+    modalities: ['Hydrotherapy'],
+    applyNotes: '[Protocol: Contrast Hydrotherapy]\nCaliente 38-40°C (3-4min) + Frío 10-15°C (1min) × 3-4 ciclos | Terminar en frío',
+  },
+  // ── TAPING ──────────────────────────────────────────────────────────────
+  {
+    id: 'ev_kt_hamstring',
+    name: 'Kinesio Taping — Hamstring',
+    subtitle: 'Inhibición / Facilitación',
+    category: 'taping',
+    ref: 'Kinesio Taping Method (Kase et al.)',
+    indication: 'Dolor muscular agudo, facilitar circulación linfática, reducir inhibición',
+    technique: 'Inhibición (dolor/tono elevado):\n• Ancla proximal sin tensión → 0-15% tensión papel fuera\n• Dirección: inserción → origen\n\nFacilitación (fuerza/activación):\n• Dirección: origen → inserción · Tensión: 25-50%\n\n• 1-2 Y-strips o I-strips\nDuración aplicación: 3-5 días',
+    contraindications: 'Piel dañada, alergia al adhesivo, trombosis, heridas abiertas',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — reducción dolor y mejora ROM a corto plazo (moderada evidencia)',
+    duration: 15,
+    modalities: ['Taping'],
+    applyNotes: '[Protocol: Kinesio Taping — Hamstring]\nInhibición: inserción→origen 0-15% tensión | Facilitación: origen→inserción 25-50% | 1-2 Y-strips / 3-5 días',
+  },
+  {
+    id: 'ev_rigid_tape_ankle',
+    name: 'Rigid Taping — Estabilización Tobillo',
+    subtitle: '',
+    category: 'taping',
+    ref: 'Kerkhoffs GM et al. (2012); Tassignon B et al. (2021)',
+    indication: 'Esguince Grado II-III, RTP con soporte funcional (recomendado 6 meses post-Grado III)',
+    technique: '• Anchor strips en tercio distal de pierna\n• 2-3 stirrups laterales\n• Heel lock bilateral\n• Figure-8\n• Closing strips\nMaterial: Tape inelástico 38mm + underwrap\nDuración: Reemplazar en cada sesión de entrenamiento',
+    contraindications: 'Alergia al adhesivo, heridas abiertas, piel muy sensible',
+    evidenceLevel: 'A',
+    evidenceNote: 'Nivel A — previene re-lesión en Grado II-III durante RTP',
+    duration: 15,
+    modalities: ['Taping'],
+    applyNotes: '[Protocol: Rigid Taping — Estabilización Tobillo]\nAnchors + stirrups laterales + heel lock + figure-8 + closing | Tape inelástico 38mm + underwrap',
+  },
+  // ── NEEDLING / NEUROMODULATION ───────────────────────────────────────────
+  {
+    id: 'ev_dn_hamstring',
+    name: 'Dry Needling — Puntos Gatillo Hamstring',
+    subtitle: '',
+    category: 'needling',
+    ref: 'Alaei P et al. J Sport Rehabil (2020); JSR CAT (2023); Dunning J et al. Phys Ther Rev (2014)',
+    indication: 'Puntos gatillo activos, restricción ROM, dolor miofascial (NO en lesión aguda <72h)',
+    technique: '• Identificar punto gatillo por palpación\n• Aguja 0.25-0.30mm × 40-50mm\n• Buscar twitch response (respuesta de espasmo local)\n• Pistoning suave: 5-10 repeticiones\n• 3 puntos por sesión máximo:\n    – Bíceps femoral largo proximal\n    – Semimembranoso central\n    – Semitendinoso distal\n• 1 min por punto\nDuración: 15-20 min\nFrecuencia: 2 veces/semana, 3-4 semanas\nPost: Stretching suave + hielo si dolor',
+    contraindications: 'Anticoagulantes, embarazo, fobia a agujas, infección local, área irradiada',
+    evidenceLevel: 'A',
+    evidenceNote: 'Nivel A para mejora ROM inmediata (Alaei 2020 RCT: DN > static stretching en compliance muscular a 15min); Nivel B para dolor crónico',
+    duration: 20,
+    modalities: ['Needling'],
+    applyNotes: '[Protocol: Dry Needling — Hamstring]\n0.25-0.30mm × 40-50mm | Twitch response + pistoning 5-10 reps | 3 puntos máx (BFL prox + SM central + ST distal) | 1min/punto',
+  },
+  {
+    id: 'ev_dn_ankle',
+    name: 'Dry Needling — Tobillo / Pantorrilla',
+    subtitle: '',
+    category: 'needling',
+    ref: 'Literatura dry needling lower extremity',
+    indication: 'Puntos gatillo gastrocnemio/sóleo, restricción dorsiflexión, tendinopatía Aquiles crónica',
+    technique: '• Gastrocnemio medial/lateral: 2-3 puntos\n• Sóleo: 1-2 puntos profundos\n• Agujas 0.30mm × 50-60mm\n• Twitch response buscado en cada punto\nDuración: 15-20 min\nFrecuencia: 1-2 veces/semana\nPrecaución: área poplítea (vascular)',
+    contraindications: 'Anticoagulantes, embarazo, fobia a agujas, infección local, precaución en área poplítea',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — mejora dorsiflexión y reduce dolor en tendinopatía crónica',
+    duration: 20,
+    modalities: ['Needling'],
+    applyNotes: '[Protocol: Dry Needling — Tobillo/Pantorrilla]\n0.30mm × 50-60mm | Gastrocnemio 2-3pts + Sóleo 1-2pts | Twitch response cada punto',
+  },
+  {
+    id: 'ev_nmes',
+    name: 'NMES — Estimulación Neuromuscular',
+    subtitle: 'Neuromodulación',
+    category: 'needling',
+    ref: 'CK Physio (BJSM 2023 data)',
+    indication: 'Atrofia por desuso, inhibición post-cirugía (ACL, fracturas), mantener fuerza durante inmovilización',
+    technique: '• Fuerza: 35-50 Hz / 250-400 μs / contracción visible\n• Resistencia: 10-20 Hz / 250-400 μs\n• On/Off: 10s/50s → progresando a 10s/10s\n• Intensidad: máxima tolerable con contracción visible\n• Duración: 20-30 min\nFrecuencia: Diaria en inmovilización; 3-4x/semana en rehabilitación',
+    contraindications: 'Marcapasos, epilepsia, trombosis, sobre área cardíaca',
+    evidenceLevel: 'B',
+    evidenceNote: 'Nivel B — mantiene masa muscular durante inmovilización, acelera recuperación post-ACL',
+    duration: 25,
+    modalities: ['Electrotherapy'],
+    applyNotes: '[Protocol: NMES — Estimulación Neuromuscular]\nFuerza: 35-50Hz / Resistencia: 10-20Hz | 250-400μs | On/Off 10s/50s→10s/10s | 20-30min',
+  },
+];
+
+const CAT_LABELS = {
+  manual:   'Manual therapy',
+  electro:  'Electrotherapy',
+  hydro:    'Hydrotherapy',
+  taping:   'Taping',
+  needling: 'Needling / Neuro',
+  mixed:    'Mixed',
+};
+
+function closeProtocols() { document.getElementById('protocolsOverlay').classList.remove('is-open'); }
+function closeNewProto()  { document.getElementById('newProtoOverlay').classList.remove('is-open'); }
+
+document.getElementById('btnTemplates').addEventListener('click', openProtocols);
+
+async function openProtocols() {
+  document.getElementById('protocolsOverlay').classList.add('is-open');
+  switchProtoTab(_currentProtoTab);
+  renderEvidenceProtocols();
+  await loadClubProtocols();
 }
 
-function renderTemplates() {
-  const el = document.getElementById('tmplList');
-  if (!_allTemplates.length) {
-    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No templates saved. Create one to pre-fill treatment sessions.</div>';
+function switchProtoTab(tab) {
+  _currentProtoTab = tab;
+  document.querySelectorAll('.proto-tab').forEach(b => b.classList.toggle('is-on', b.dataset.tab === tab));
+  document.getElementById('protoTabEvidence').style.display = tab === 'evidence' ? '' : 'none';
+  document.getElementById('protoTabClub').style.display     = tab === 'club'     ? '' : 'none';
+}
+
+function filterProtocols(cat) {
+  _currentProtoFilter = cat;
+  document.querySelectorAll('.proto-filter-btn').forEach(b => b.classList.toggle('is-on', b.dataset.cat === cat));
+  renderEvidenceProtocols();
+}
+
+function toggleProtoCard(id) {
+  const card = document.getElementById('pc-' + id);
+  if (card) card.classList.toggle('is-open');
+}
+
+function renderEvidenceProtocols() {
+  const list = document.getElementById('evidenceProtocolsList');
+  const filtered = _currentProtoFilter === 'all'
+    ? EVIDENCE_PROTOCOLS
+    : EVIDENCE_PROTOCOLS.filter(p => p.category === _currentProtoFilter);
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No protocols in this category.</div>';
     return;
   }
-  el.innerHTML = _allTemplates.map(t => {
-    const mods = Array.isArray(t.modalities) ? t.modalities.join(', ') : '—';
-    return `<div class="tmpl-card">
-      <div class="tc-info">
-        <div class="tc-title">${t.title}</div>
-        <div class="tc-sub">${t.treatment_type === 'preventive' ? 'Preventive' : 'Rehab'}${t.injury_type ? ' · ' + t.injury_type : ''} · ${t.duration_minutes ? t.duration_minutes + ' min' : '—'} · ${mods}</div>
+  list.innerHTML = filtered.map(p => {
+    const subtitle = p.subtitle ? ` <span style="font-weight:400;color:var(--cm-fg-muted)">· ${p.subtitle}</span>` : '';
+    const techHtml = p.technique.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div class="proto-card" id="pc-${p.id}">
+      <div class="proto-card-summary" onclick="toggleProtoCard('${p.id}')">
+        <div class="proto-card-top">
+          <span class="proto-cat-badge ${p.category}">${CAT_LABELS[p.category] || p.category}</span>
+          <span class="proto-ev-badge lv-${p.evidenceLevel.toLowerCase()}">Level ${p.evidenceLevel}</span>
+          <i class="ti ti-chevron-down proto-expand-icon" style="font-size:14px"></i>
+        </div>
+        <div class="proto-name">${p.name}${subtitle}</div>
+        <div class="proto-ref">${p.ref}</div>
+        <div class="proto-indication"><strong>Indication: </strong>${p.indication}</div>
       </div>
-      <div class="tc-actions">
-        <button class="cm-btn is-outline is-sm" onclick="useTemplate('${t.id}')">Use</button>
-        <button class="cm-icon-btn" onclick="deleteTemplate('${t.id}')" title="Delete"><i class="ti ti-trash" style="font-size:13px"></i></button>
+      <div class="proto-detail">
+        <div class="proto-sections">
+          <div><div class="proto-sec-label">Technique</div><div class="proto-sec-body">${techHtml}</div></div>
+          <div><div class="proto-sec-label">Contraindications</div><div class="proto-sec-body">${p.contraindications}</div></div>
+          <div><div class="proto-sec-label">Evidence</div><div class="proto-ev-note">${p.evidenceNote}</div></div>
+        </div>
+        <div class="proto-apply-row">
+          <button class="cm-btn is-primary is-sm" onclick="applyProtocol('${p.id}', true)"><i class="ti ti-player-play" style="font-size:13px"></i>Apply to session</button>
+        </div>
       </div>
     </div>`;
   }).join('');
 }
 
-function useTemplate(id) {
-  const t = _allTemplates.find(x => x.id === id);
-  if (!t) return;
-  // Set type
-  _currentTreatType = t.treatment_type || 'rehab';
-  document.querySelectorAll('.ph-tt-btn').forEach(b => b.classList.toggle('is-on', b.dataset.t === _currentTreatType));
-  document.getElementById('condRehab').style.display = _currentTreatType === 'rehab' ? '' : 'none';
-  document.getElementById('condPrev').style.display  = _currentTreatType === 'preventive' ? '' : 'none';
-  // Duration
-  if (t.duration_minutes) document.getElementById('phDurationInput').value = t.duration_minutes;
-  // Modalities
-  document.querySelectorAll('.ph-mod-btn').forEach(b => b.classList.remove('is-on'));
-  if (Array.isArray(t.modalities)) {
-    t.modalities.forEach(m => {
-      document.querySelectorAll('.ph-mod-btn').forEach(b => { if (b.dataset.m === m) b.classList.add('is-on'); });
-    });
+async function loadClubProtocols() {
+  const { data } = await window.sb
+    .from('treatment_templates')
+    .select('*')
+    .eq('club_id', _clubId)
+    .order('created_at', { ascending: false });
+  _clubProtocols = data || [];
+  renderClubProtocols();
+}
+
+function renderClubProtocols() {
+  const el = document.getElementById('clubProtocolsList');
+  if (!_clubProtocols.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No club protocols saved. Create one above.</div>';
+    return;
   }
-  // Notes template
-  if (t.notes_template) document.getElementById('phNotesInput').value = t.notes_template;
-  closeTmpl();
+  el.innerHTML = _clubProtocols.map(t => {
+    const mods = Array.isArray(t.modalities) ? t.modalities.join(', ') : '—';
+    const dur  = t.duration_minutes ? t.duration_minutes + ' min' : '—';
+    return `<div class="club-proto-card">
+      <div class="cp-info">
+        <div class="cp-title"><span class="proto-cat-badge club">Club</span>${t.title}</div>
+        <div class="cp-sub">${t.treatment_type || '—'}${t.injury_type ? ' · ' + t.injury_type : ''} · ${dur} · ${mods}</div>
+      </div>
+      <div class="cp-actions">
+        <button class="cm-btn is-primary is-sm" onclick="applyProtocol('${t.id}', false)"><i class="ti ti-player-play" style="font-size:13px"></i>Apply</button>
+        <button class="cm-icon-btn" onclick="deleteClubProtocol('${t.id}')" title="Delete"><i class="ti ti-trash" style="font-size:13px"></i></button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-async function deleteTemplate(id) {
-  if (!confirm('Delete this template?')) return;
+function applyProtocol(id, isEvidence) {
+  let name, modalities, duration, notes;
+  if (isEvidence) {
+    const p = EVIDENCE_PROTOCOLS.find(x => x.id === id);
+    if (!p) return;
+    name      = p.name;
+    modalities = p.modalities;
+    duration   = p.duration;
+    notes      = p.applyNotes;
+  } else {
+    const t = _clubProtocols.find(x => x.id === id);
+    if (!t) return;
+    name      = t.title;
+    modalities = Array.isArray(t.modalities) ? t.modalities : [];
+    duration   = t.duration_minutes || null;
+    let tech = '';
+    try { const d = JSON.parse(t.notes_template || '{}'); tech = d.technique || ''; } catch { tech = t.notes_template || ''; }
+    notes = `[Protocol: ${t.title}]\n${tech}`;
+  }
+  if (duration) document.getElementById('phDurationInput').value = duration;
+  document.querySelectorAll('.ph-mod-btn').forEach(b => b.classList.remove('is-on'));
+  modalities.forEach(m => {
+    document.querySelectorAll('.ph-mod-btn').forEach(b => { if (b.dataset.m === m) b.classList.add('is-on'); });
+  });
+  document.getElementById('phNotesInput').value = notes;
+  _appliedProtocolName = name;
+  closeProtocols();
+}
+
+async function deleteClubProtocol(id) {
+  if (!confirm('Delete this protocol?')) return;
   await window.sb.from('treatment_templates').delete().eq('id', id);
-  _allTemplates = _allTemplates.filter(t => t.id !== id);
-  renderTemplates();
+  _clubProtocols = _clubProtocols.filter(t => t.id !== id);
+  renderClubProtocols();
 }
 
-document.getElementById('btnNewTemplate').addEventListener('click', () => {
-  document.getElementById('newTmplTitle').textContent = 'New template';
-  document.getElementById('newTmplOverlay').classList.add('is-open');
-});
+function showNewClubProtocol() {
+  document.getElementById('newProtoOverlay').classList.add('is-open');
+  ['newProtoName','newProtoIndication','newProtoTechnique','newProtoFrequency','newProtoContra','newProtoRef'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('newProtoCat').value = 'Manual';
+  document.getElementById('newProtoDuration').value = '';
+  document.querySelectorAll('.cp-mod-chip').forEach(b => b.classList.remove('is-on'));
+}
 
-document.getElementById('btnSaveAsTemplate').addEventListener('click', () => {
-  // Pre-fill from current session
-  const mods = [...document.querySelectorAll('.ph-mod-btn.is-on')].map(b => b.dataset.m);
-  document.getElementById('tmplType').value = _currentTreatType;
-  document.getElementById('tmplDuration').value = document.getElementById('phDurationInput').value || '';
-  document.getElementById('tmplNotesTemplate').value = document.getElementById('phNotesInput').value || '';
-  document.getElementById('newTmplTitle').textContent = 'Save session as template';
-  document.getElementById('newTmplOverlay').classList.add('is-open');
-});
+function saveSessionAsClubProtocol() {
+  showNewClubProtocol();
+  document.getElementById('newProtoDuration').value  = document.getElementById('phDurationInput').value || '';
+  document.getElementById('newProtoTechnique').value = document.getElementById('phNotesInput').value || '';
+  document.querySelectorAll('.ph-mod-btn.is-on').forEach(b => {
+    const chip = document.querySelector(`.cp-mod-chip[data-m="${b.dataset.m}"]`);
+    if (chip) chip.classList.add('is-on');
+  });
+}
 
-document.getElementById('btnSaveTmpl').addEventListener('click', async () => {
-  const title = document.getElementById('tmplName').value.trim();
-  if (!title) { alert('Enter a template name.'); return; }
+document.getElementById('btnSaveNewProto').addEventListener('click', async () => {
+  const title = document.getElementById('newProtoName').value.trim();
+  if (!title) { alert('Enter a protocol name.'); return; }
+  const mods  = [...document.querySelectorAll('.cp-mod-chip.is-on')].map(b => b.dataset.m);
+  const notesData = JSON.stringify({
+    technique:        document.getElementById('newProtoTechnique').value.trim(),
+    frequency:        document.getElementById('newProtoFrequency').value.trim(),
+    contraindications:document.getElementById('newProtoContra').value.trim(),
+    reference:        document.getElementById('newProtoRef').value.trim(),
+  });
   const payload = {
     club_id:          _clubId,
     title,
-    treatment_type:   document.getElementById('tmplType').value,
-    injury_type:      document.getElementById('tmplInjuryType').value.trim() || null,
-    duration_minutes: parseInt(document.getElementById('tmplDuration').value) || null,
-    notes_template:   document.getElementById('tmplNotesTemplate').value.trim() || null,
-    modalities:       [...document.querySelectorAll('.ph-mod-btn.is-on')].map(b => b.dataset.m) || null,
+    treatment_type:   document.getElementById('newProtoCat').value,
+    injury_type:      document.getElementById('newProtoIndication').value.trim() || null,
+    duration_minutes: parseInt(document.getElementById('newProtoDuration').value) || null,
+    notes_template:   notesData,
+    modalities:       mods.length ? mods : null,
     created_by:       _profile?.id || null,
   };
   const { error } = await window.sb.from('treatment_templates').insert(payload);
   if (error) { alert('Error: ' + error.message); return; }
-  closeNewTmpl();
-  await openTemplates();
+  closeNewProto();
+  await loadClubProtocols();
+  switchProtoTab('club');
 });
 
 // ══════════════════════════════════════════════════════
