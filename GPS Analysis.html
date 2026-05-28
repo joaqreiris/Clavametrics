@@ -10,6 +10,7 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="assets/gps-science.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -356,6 +357,40 @@
             </div>
           </div>
 
+          <!-- ACWR chart -->
+          <div class="gp-c" data-size="md" id="card-acwr">
+            <div class="gp-c-h">
+              <span class="ttl">ACWR</span>
+              <span class="sub">8-week · squad avg load</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:190px">
+              <canvas id="canvasACWR"></canvas>
+            </div>
+          </div>
+
+          <!-- Fitness · Fatigue · Form (CTL/ATL/TSB) -->
+          <div class="gp-c" data-size="md" id="card-tsb">
+            <div class="gp-c-h">
+              <span class="ttl">Fitness · Fatigue · Form</span>
+              <span class="sub">CTL / ATL / TSB</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:190px">
+              <canvas id="canvasTSB"></canvas>
+            </div>
+          </div>
+
+          <!-- Velocity zones distribution -->
+          <div class="gp-c" data-size="sm" id="card-vzones">
+            <div class="gp-c-h">
+              <span class="ttl">Velocity zones</span>
+              <span class="sub">squad avg · last session</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="vzonesBody" style="gap:7px;justify-content:center"></div>
+          </div>
+
           <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>chart · KPI · table · custom</small></button>
         </div>
       </div>
@@ -458,6 +493,38 @@
             </div>
           </div>
 
+          <!-- Microcycle heatmap -->
+          <div class="gp-c" data-size="full" id="card-mc-heat">
+            <div class="gp-c-h">
+              <span class="ttl">Microcycle load heatmap</span>
+              <span class="sub">last 6 sessions · squad avg player load</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="mcHeatBody" style="overflow-x:auto"></div>
+          </div>
+
+          <!-- Position radar -->
+          <div class="gp-c" data-size="md" id="card-pos-radar">
+            <div class="gp-c-h">
+              <span class="ttl">Position profile</span>
+              <span class="sub">avg per position · last session</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="align-items:center;justify-content:center">
+              <canvas id="canvasPosRadar" style="max-height:280px"></canvas>
+            </div>
+          </div>
+
+          <!-- Outliers z > |2| -->
+          <div class="gp-c" data-size="md" id="card-outliers">
+            <div class="gp-c-h">
+              <span class="ttl">Outliers</span>
+              <span class="sub">z &gt; |2| · last session</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="outliersBody" style="gap:6px"></div>
+          </div>
+
           <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>group metric · comparison</small></button>
         </div>
       </div>
@@ -519,6 +586,28 @@
             </div>
           </div>
 
+          <!-- Half drop-off -->
+          <div class="gp-c" data-size="md" id="card-half-drop">
+            <div class="gp-c-h">
+              <span class="ttl">Half drop-off</span>
+              <span class="sub">1st vs 2nd half · key metrics</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="halfDropBody" style="gap:10px;justify-content:center"></div>
+          </div>
+
+          <!-- Velocity profile (per-minute) -->
+          <div class="gp-c" data-size="lg" id="card-vel-profile">
+            <div class="gp-c-h">
+              <span class="ttl">Velocity profile</span>
+              <span class="sub">speed vs time · sprint markers</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:190px">
+              <canvas id="canvasVelProfile"></canvas>
+            </div>
+          </div>
+
           <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>shot map · speed zones</small></button>
         </div>
       </div>
@@ -559,6 +648,18 @@
                 <div class="blob" style="left:68%; top:48%; width:190px; height:190px; background:rgba(252,211,77,0.65)"></div>
                 <div class="blob" style="left:78%; top:42%; width:130px; height:130px; background:rgba(248,113,113,0.55)"></div>
               </div>
+            </div>
+          </div>
+
+          <!-- Match demands vs training delivered -->
+          <div class="gp-c" data-size="full" id="card-match-vs-train">
+            <div class="gp-c-h">
+              <span class="ttl">Match demands vs training delivered</span>
+              <span class="sub">last MD vs MC avg · squad means</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:200px">
+              <canvas id="canvasMatchVsTrain"></canvas>
             </div>
           </div>
 
@@ -1084,6 +1185,8 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
     .order('total_distance', { ascending: false });
 
   if (!reports || !reports.length) return;
+  window._gpReports = reports;
+  window._gpClubId  = clubId;
 
   // Update group view Z-score table with real players + raw metrics
   const tbody = document.querySelector('.gp-zt tbody');
@@ -1209,11 +1312,565 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
   const totDist = reports.reduce((s, r) => s + (r.total_distance || 0), 0);
   const totHsr  = reports.reduce((s, r) => s + (r.high_speed_distance || 0), 0);
   const totSpr  = reports.reduce((s, r) => s + (r.sprint_distance || 0), 0);
-  const grpKpis = document.querySelectorAll('.gp-view[data-view="grp"] .gp-kpi .v');
+  const grpKpis = document.querySelectorAll('.gp-view[data-view="mgrp"] .gp-kpi .v');
   if (grpKpis[0]) grpKpis[0].innerHTML = `${(totDist/1000).toFixed(1)} <sub>km</sub>`;
   if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
   if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
+
+  // Kick off science card rendering (defined in script below)
+  if (typeof window.gpRenderScienceCards === 'function') {
+    window.gpRenderScienceCards(reports, clubId);
+  }
 })();
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// GPS Science Cards — render with real DB data
+// ══════════════════════════════════════════════════════════════
+
+// Chart.js accent helper
+function _accentHex() {
+  return getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
+}
+
+// ── ACWR bands plugin ─────────────────────────────────────────
+const _acwrBandsPlugin = {
+  id: 'acwrBands',
+  beforeDraw(chart) {
+    const { ctx, chartArea, scales: { y } } = chart;
+    if (!chartArea || !y) return;
+    const { top, bottom, left, right } = chartArea;
+    [
+      [0,   0.8,  'rgba(59,130,246,0.07)'],
+      [0.8, 1.3,  'rgba(34,197,94,0.08)'],
+      [1.3, 1.5,  'rgba(245,158,11,0.10)'],
+      [1.5, 2.5,  'rgba(239,68,68,0.09)'],
+    ].forEach(([lo, hi, col]) => {
+      const yTop = Math.max(y.getPixelForValue(hi), top);
+      const yBot = Math.min(y.getPixelForValue(lo), bottom);
+      if (yBot <= yTop) return;
+      ctx.fillStyle = col;
+      ctx.fillRect(left, yTop, right - left, yBot - yTop);
+    });
+  }
+};
+
+// ── Chart defaults ────────────────────────────────────────────
+const _chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: true,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { color: 'rgba(128,128,128,0.12)' }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 10 } } },
+    y: { grid: { color: 'rgba(128,128,128,0.12)' }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 10 } } },
+  },
+};
+
+// ── Velocity zones ────────────────────────────────────────────
+function _renderVzones(reports) {
+  const body = document.getElementById('vzonesBody');
+  if (!body || !reports.length || !window.gpScience) return;
+
+  // squad average zones
+  const sum = { z1:0, z2:0, z3:0, z4:0, z5:0, total:0 };
+  reports.forEach(r => {
+    const z = window.gpScience.velocityZones(r);
+    z.forEach((zone, i) => { sum['z'+(i+1)] += zone.dist; });
+    sum.total += r.total_distance || 0;
+  });
+  const n  = reports.length;
+  const avg = [sum.z1, sum.z2, sum.z3, sum.z4, sum.z5].map(v => Math.round(v / n));
+  const tot = avg.reduce((a, b) => a + b, 0) || 1;
+  const labels = ['Z1 <7', 'Z2 7-14', 'Z3 14-20', 'Z4 20-25', 'Z5 >25'];
+  const colors = ['#64748b', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
+
+  // label row
+  const labelRow = document.createElement('div');
+  labelRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px';
+  labels.forEach((l, i) => {
+    const sp = document.createElement('span');
+    sp.style.cssText = `display:inline-flex;align-items:center;gap:4px;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)`;
+    sp.innerHTML = `<span style="width:8px;height:8px;border-radius:2px;background:${colors[i]};display:inline-block"></span>${l}`;
+    labelRow.appendChild(sp);
+  });
+  body.appendChild(labelRow);
+
+  // stacked bar
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;height:22px;border-radius:5px;overflow:hidden;width:100%';
+  avg.forEach((v, i) => {
+    const seg = document.createElement('div');
+    seg.style.cssText = `flex:${v || 0.01};background:${colors[i]};transition:flex 400ms ease`;
+    seg.title = `${labels[i]}: ${v} m`;
+    bar.appendChild(seg);
+  });
+  body.appendChild(bar);
+
+  // values row
+  const valRow = document.createElement('div');
+  valRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:6px';
+  avg.forEach((v, i) => {
+    const sp = document.createElement('span');
+    sp.style.cssText = `font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg)`;
+    sp.textContent = `${v} m`;
+    sp.title = labels[i];
+    valRow.appendChild(sp);
+  });
+  body.appendChild(valRow);
+}
+
+// ── Outliers ──────────────────────────────────────────────────
+function _renderOutliers(reports) {
+  const body = document.getElementById('outliersBody');
+  if (!body || !window.gpScience) return;
+
+  const METRICS = ['total_distance','high_speed_distance','sprint_distance','accelerations','player_load'];
+  const LABELS  = { total_distance:'Distance', high_speed_distance:'HSR', sprint_distance:'Sprint', accelerations:'Accel', player_load:'Load' };
+  const flags   = window.gpScience.outliers(reports, METRICS, 2);
+
+  if (!flags.length) {
+    const em = document.createElement('div');
+    em.style.cssText = 'display:flex;align-items:center;gap:8px;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);padding:10px 0';
+    em.innerHTML = `<i class="ti ti-circle-check" style="color:var(--cm-success);font-size:16px"></i>No outliers (z ≤ |2|) in this session`;
+    body.appendChild(em);
+    return;
+  }
+
+  flags.forEach(f => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--cm-border-soft)';
+    const p = f.player;
+    const name = p ? `${(p.first_name||'')[0]}. ${p.last_name||''}` : '—';
+    const pos  = p?.position || '—';
+    const dir  = f.z > 0 ? 'ti-arrow-up-right' : 'ti-arrow-down-right';
+    const col  = Math.abs(f.z) >= 3 ? 'var(--cm-danger)' : 'var(--cm-warning)';
+    row.innerHTML = `
+      <div class="gp-mav" style="flex-shrink:0">${name.split(' ')[0][0]||'?'}${(p?.last_name||'?')[0]}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}</div>
+        <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${pos} · ${LABELS[f.metric] || f.metric}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font:600 12px/1 var(--cm-font-mono);color:${col}"><i class="ti ${dir}" style="font-size:11px"></i>${f.z > 0 ? '+' : ''}${f.z}</div>
+        <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${f.value.toLocaleString()}</div>
+      </div>`;
+    body.appendChild(row);
+  });
+}
+
+// ── Position radar ────────────────────────────────────────────
+function _renderPosRadar(reports) {
+  const canvas = document.getElementById('canvasPosRadar');
+  if (!canvas || !window.gpScience) return;
+
+  const POS = ['GK','CB','FB','MF','WG','ST'];
+  const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
+  const LABELS  = ['Distance','HSR','Sprint','Top spd','Accel','Load'];
+
+  function normPos(raw) {
+    const p = (raw||'').toUpperCase();
+    if (/GK|GOAL|ARQ|PORT/.test(p)) return 'GK';
+    if (/CB|CENTR|CENT.B/.test(p)) return 'CB';
+    if (/FB|WB|LAT/.test(p))       return 'FB';
+    if (/WG|WING|EXT/.test(p))     return 'WG';
+    if (/ST|CF|STR|FWD|DEL/.test(p)) return 'ST';
+    return 'MF';
+  }
+
+  const groups = {};
+  POS.forEach(p => { groups[p] = []; });
+  reports.forEach(r => {
+    const pk = normPos(r.players?.position);
+    if (groups[pk]) groups[pk].push(r);
+  });
+
+  const colors = ['#6366f1','#ef4444','#f59e0b','#22c55e','#06b6d4','#f97316'];
+  const datasets = [];
+  POS.forEach((pos, pi) => {
+    const grp = groups[pos];
+    if (!grp.length) return;
+    const vals = METRICS.map((m, mi) => {
+      const avg = grp.reduce((s, r) => s + (+(r[m]||0)), 0) / grp.length;
+      const baseline = window.gpScience.baselineByRole(pos, m) || 1;
+      return +(avg / baseline * 100).toFixed(1); // % of baseline
+    });
+    datasets.push({
+      label: pos,
+      data: vals,
+      borderColor: colors[pi],
+      backgroundColor: colors[pi].replace(')', ',0.05)').replace('rgb', 'rgba'),
+      borderWidth: 1.8,
+      pointRadius: 3,
+      pointBackgroundColor: colors[pi],
+    });
+  });
+
+  if (!datasets.length) return;
+
+  new Chart(canvas, {
+    type: 'radar',
+    data: { labels: LABELS, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        r: {
+          min: 0, max: 150,
+          ticks: { display: false, stepSize: 50 },
+          grid: { color: 'rgba(128,128,128,0.15)' },
+          angleLines: { color: 'rgba(128,128,128,0.15)' },
+          pointLabels: { color: 'rgba(128,128,128,0.8)', font: { size: 10 } },
+        }
+      },
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, padding: 8 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.r}% of baseline` } },
+      },
+    }
+  });
+}
+
+// ── Half drop-off (stub data — no per-half DB data) ───────────
+function _renderHalfDropoff() {
+  const body = document.getElementById('halfDropBody');
+  if (!body) return;
+  const metrics = [
+    { label:'Distance', h1:5.8, h2:5.2, unit:'km' },
+    { label:'HSR',      h1:320, h2:255, unit:'m'  },
+    { label:'Sprints',  h1:11,  h2:8,   unit:''   },
+    { label:'Accel',    h1:26,  h2:21,  unit:''   },
+    { label:'Load',     h1:360, h2:298, unit:'AU' },
+    { label:'Top spd',  h1:30.2,h2:29.4,unit:'km/h'},
+  ];
+  metrics.forEach(m => {
+    const pct = ((m.h2 - m.h1) / m.h1 * 100);
+    const col = pct < -10 ? 'var(--cm-danger)' : pct < -5 ? 'var(--cm-warning)' : 'var(--cm-success)';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:68px 1fr 1fr 48px;align-items:center;gap:8px';
+    row.innerHTML = `
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg)">${m.label}</span>
+      <div style="text-align:right;font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${m.h1}${m.unit}</div>
+      <div style="text-align:right;font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${m.h2}${m.unit}</div>
+      <div style="text-align:right;font:600 11px/1 var(--cm-font-mono);color:${col}">${pct.toFixed(0)}%</div>`;
+    body.appendChild(row);
+  });
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:grid;grid-template-columns:68px 1fr 1fr 48px;gap:8px;padding-bottom:4px;border-bottom:1px solid var(--cm-border-soft);margin-bottom:2px';
+  hdr.innerHTML = `<span></span><span style="text-align:right;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">1st half</span><span style="text-align:right;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">2nd half</span><span style="text-align:right;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Δ%</span>`;
+  body.insertBefore(hdr, body.firstChild);
+}
+
+// ── Velocity profile (stub synthetic data) ────────────────────
+function _renderVelProfile() {
+  const canvas = document.getElementById('canvasVelProfile');
+  if (!canvas) return;
+  const accent = _accentHex();
+  // synthetic per-minute speed data (90 data points)
+  const spd = Array.from({ length: 90 }, (_, i) => {
+    const base = 11 + 4 * Math.sin(i * 0.18) + 2 * Math.sin(i * 0.07);
+    const noise = (Math.random() - 0.5) * 3;
+    return +(base + noise).toFixed(1);
+  });
+  // Mark sprint minutes (speed > 20 km/h approx)
+  const sprints = spd.map((v, i) => v > 18 ? v : null);
+
+  new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: Array.from({ length: 90 }, (_, i) => i % 15 === 0 ? `${i}′` : ''),
+      datasets: [
+        {
+          label: 'Speed (km/h)',
+          data: spd,
+          borderColor: accent,
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          pointRadius: 0,
+          tension: 0.3,
+        },
+        {
+          label: 'Sprint (>18 km/h)',
+          data: sprints,
+          borderColor: 'transparent',
+          backgroundColor: 'rgba(239,68,68,0.6)',
+          borderWidth: 0,
+          pointRadius: 4,
+          pointStyle: 'triangle',
+          pointBackgroundColor: '#ef4444',
+          showLine: false,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} km/h` } },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 10 } } },
+        y: { min: 0, max: 35, grid: { color: 'rgba(128,128,128,0.12)' }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 10 } } },
+      },
+    }
+  });
+}
+
+// ── Async rendering (needs DB fetches) ────────────────────────
+window.gpRenderScienceCards = async function (reports, clubId) {
+  // Synchronous cards first
+  _renderVzones(reports);
+  _renderOutliers(reports);
+  _renderPosRadar(reports);
+  _renderHalfDropoff();
+  _renderVelProfile();
+
+  // ── Historical data for ACWR / TSB / MC heatmap / Match vs Training
+  const d84 = new Date();
+  d84.setDate(d84.getDate() - 84);
+  const cutoff = d84.toISOString().slice(0, 10);
+
+  const [{ data: histSessions }, ] = await Promise.all([
+    window.sb.from('training_sessions')
+      .select('id,session_date,session_type,notes')
+      .eq('club_id', clubId)
+      .gte('session_date', cutoff)
+      .order('session_date', { ascending: true }),
+  ]);
+
+  if (!histSessions?.length) return;
+
+  const hids = histSessions.map(s => s.id);
+  const { data: histLoads } = await window.sb.from('gps_reports')
+    .select('session_id,player_load')
+    .in('session_id', hids)
+    .eq('club_id', clubId);
+
+  // Build session → avg load map
+  const loadBySession = {};
+  (histLoads || []).forEach(r => {
+    if (!loadBySession[r.session_id]) loadBySession[r.session_id] = [];
+    loadBySession[r.session_id].push(r.player_load || 0);
+  });
+
+  const daily = histSessions
+    .filter(s => loadBySession[s.id]?.length)
+    .map(s => {
+      const arr = loadBySession[s.id];
+      return { date: s.session_date, load: arr.reduce((a, b) => a + b, 0) / arr.length, type: s.session_type, notes: s.notes || '' };
+    });
+
+  if (!daily.length) return;
+
+  // ── ACWR chart ────────────────────────────────────────────
+  const canvasACWR = document.getElementById('canvasACWR');
+  if (canvasACWR && window.gpScience) {
+    const acwrData = window.gpScience.acwr(daily);
+    const accent   = _accentHex();
+    new Chart(canvasACWR, {
+      type: 'line',
+      plugins: [_acwrBandsPlugin],
+      data: {
+        labels: acwrData.map(d => d.date.slice(5)), // MM-DD
+        datasets: [{
+          label: 'ACWR',
+          data: acwrData.map(d => d.ratio),
+          borderColor: accent,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: acwrData.map(d =>
+            !d.ratio ? 'transparent' :
+            d.ratio > 1.5 ? '#ef4444' :
+            d.ratio > 1.3 ? '#f59e0b' : accent
+          ),
+          tension: 0.35,
+        }]
+      },
+      options: {
+        ..._chartDefaults,
+        scales: {
+          x: { ..._chartDefaults.scales.x },
+          y: { ..._chartDefaults.scales.y, min: 0, max: 2,
+               ticks: { ..._chartDefaults.scales.y.ticks, stepSize: 0.5,
+                        callback: v => v === 0.8 ? '0.8 ✓' : v === 1.3 ? '1.3 ⚠' : v === 1.5 ? '1.5 ✗' : v } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ACWR ${ctx.parsed.y}` } },
+        },
+      }
+    });
+  }
+
+  // ── Fitness · Fatigue · Form (CTL/ATL/TSB) ───────────────
+  const canvasTSB = document.getElementById('canvasTSB');
+  if (canvasTSB && window.gpScience) {
+    const tsbData = window.gpScience.trainingStressBalance(daily);
+    new Chart(canvasTSB, {
+      type: 'line',
+      data: {
+        labels: tsbData.map(d => d.date.slice(5)),
+        datasets: [
+          {
+            label: 'CTL (Fitness)',
+            data: tsbData.map(d => d.ctl),
+            borderColor: '#22c55e',
+            backgroundColor: 'transparent',
+            borderWidth: 2, pointRadius: 0, tension: 0.35,
+          },
+          {
+            label: 'ATL (Fatigue)',
+            data: tsbData.map(d => d.atl),
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            borderWidth: 2, pointRadius: 0, tension: 0.35,
+          },
+          {
+            label: 'TSB (Form)',
+            data: tsbData.map(d => d.tsb),
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99,102,241,0.07)',
+            fill: true,
+            borderWidth: 1.5, pointRadius: 0, tension: 0.35,
+          },
+        ]
+      },
+      options: {
+        ..._chartDefaults,
+        plugins: {
+          legend: { display: true, position: 'bottom',
+            labels: { font: { size: 10 }, boxWidth: 12, padding: 8, color: 'rgba(128,128,128,0.8)' } },
+          tooltip: { mode: 'index', intersect: false },
+        },
+        scales: {
+          x: { ..._chartDefaults.scales.x },
+          y: { ..._chartDefaults.scales.y },
+        },
+      }
+    });
+  }
+
+  // ── MC heatmap ────────────────────────────────────────────
+  const mcBody = document.getElementById('mcHeatBody');
+  if (mcBody && daily.length) {
+    const last8 = daily.slice(-8);
+    const maxLoad = Math.max(...last8.map(d => d.load), 1);
+    const tbl = document.createElement('table');
+    tbl.style.cssText = 'border-collapse:separate;border-spacing:6px;width:100%';
+    const thead = tbl.createTHead();
+    const hrow  = thead.insertRow();
+    hrow.insertCell().innerHTML = '<th style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-align:left;padding:0 2px">Session</th>';
+    last8.forEach(d => {
+      const th = document.createElement('th');
+      th.style.cssText = 'font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-align:center;white-space:nowrap;padding:0 2px';
+      th.textContent = d.date.slice(5);
+      hrow.appendChild(th);
+    });
+    const tbody = tbl.createTBody();
+
+    // row per metric
+    [
+      ['Load', 'player_load'],
+    ].forEach(([label]) => {
+      const tr = tbody.insertRow();
+      const td0 = tr.insertCell();
+      td0.style.cssText = 'font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);white-space:nowrap;padding:2px';
+      td0.textContent = label;
+      last8.forEach(d => {
+        const td = tr.insertCell();
+        const pct = d.load / maxLoad;
+        const r = Math.round(34 + pct * 205);
+        const g = Math.round(197 - pct * 163);
+        const b = 94;
+        td.style.cssText = `background:rgba(${r},${g},${b},0.75);border-radius:5px;text-align:center;padding:6px 4px`;
+        td.innerHTML = `<span style="font:600 10px/1 var(--cm-font-mono);color:#fff">${Math.round(d.load)}</span>`;
+        td.title = `${d.date} · ${d.type || ''} · avg load ${Math.round(d.load)}`;
+      });
+    });
+
+    // second row: session type
+    const tr2 = tbody.insertRow();
+    tr2.insertCell().style.cssText = 'padding:2px';
+    last8.forEach(d => {
+      const td = tr2.insertCell();
+      td.style.cssText = 'text-align:center;padding:2px';
+      const label = d.notes.includes('[SEED]') || d.type === 'Match' ? 'MD' :
+                    d.type === 'Recovery' ? 'MD+1' : d.type || '—';
+      td.innerHTML = `<span style="font:500 9.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${label}</span>`;
+    });
+
+    mcBody.appendChild(tbl);
+  }
+
+  // ── Match demands vs training delivered ───────────────────
+  const canvasMvT = document.getElementById('canvasMatchVsTrain');
+  if (canvasMvT && daily.length) {
+    // Last MD session (highest load, or session_type='Match')
+    const matchSession = [...daily].reverse().find(d => d.type === 'Match') || daily[daily.length - 1];
+    // Training sessions from same MC (last 6 non-match sessions before the match)
+    const trainSessions = daily.filter(d => d !== matchSession && d.type !== 'Match').slice(-6);
+    const trainAvg = trainSessions.length
+      ? trainSessions.reduce((s, d) => s + d.load, 0) / trainSessions.length
+      : 0;
+
+    // Use current reports for match vs training comparison per metric
+    const METS    = ['total_distance','high_speed_distance','sprint_distance','accelerations','player_load'];
+    const MLABELS = ['Distance','HSR','Sprint','Accel','Load'];
+    const SCALES  = [1000, 1, 1, 1, 1];
+    const UNITS   = ['km','m','m','n','AU'];
+
+    // For match: avg of current reports (assume current session = latest available)
+    const matchVals = METS.map(m => {
+      const avg = reports.reduce((s, r) => s + (+(r[m]||0)), 0) / (reports.length || 1);
+      return avg;
+    });
+
+    // For training baseline: use phase multipliers vs match values
+    const trainRatio = trainAvg && matchSession.load ? (trainAvg / matchSession.load) : 0.7;
+    const trainVals  = matchVals.map(v => v * trainRatio);
+
+    new Chart(canvasMvT, {
+      type: 'bar',
+      data: {
+        labels: MLABELS,
+        datasets: [
+          {
+            label: 'Match',
+            data: matchVals.map((v, i) => +(v / SCALES[i]).toFixed(1)),
+            backgroundColor: 'rgba(99,102,241,0.7)',
+            borderRadius: 4,
+          },
+          {
+            label: 'Training avg',
+            data: trainVals.map((v, i) => +(v / SCALES[i]).toFixed(1)),
+            backgroundColor: 'rgba(34,197,94,0.5)',
+            borderRadius: 4,
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: true, position: 'top',
+            labels: { font: { size: 11 }, boxWidth: 12, padding: 10, color: 'rgba(128,128,128,0.8)' } },
+          tooltip: { callbacks: {
+            label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y} ${UNITS[ctx.dataIndex] || ''}`
+          } },
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 11 } } },
+          y: { grid: { color: 'rgba(128,128,128,0.12)' }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 10 } } },
+        },
+      }
+    });
+  }
+
+  // init size toggles for all new cards
+  document.querySelectorAll('#card-acwr, #card-tsb, #card-vzones, #card-mc-heat, #card-pos-radar, #card-outliers, #card-half-drop, #card-vel-profile, #card-match-vs-train').forEach(c => initSizeToggles(c));
+};
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
