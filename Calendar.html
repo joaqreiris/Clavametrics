@@ -484,6 +484,72 @@
     .mc-day { width: 140px; min-width: 140px; max-width: 140px; }
     .mc-days { grid-template-columns: repeat(7, 140px); }
   }
+
+  /* === Visible-to audience chips (event modal) === */
+  .cal-vis-chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:2px; }
+  .cal-vis-chip {
+    display:inline-flex; align-items:center; gap:5px;
+    height:28px; padding:0 10px; border-radius:6px;
+    border:1px solid var(--cm-border); background:var(--cm-bg-soft);
+    color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans);
+    cursor:pointer; transition:background 100ms, border-color 100ms, color 100ms;
+  }
+  .cal-vis-chip:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .cal-vis-chip.is-on {
+    background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-accent);
+  }
+  .cal-vis-chip.is-always {
+    background:var(--cm-success-bg); color:var(--cm-success);
+    border-color:var(--cm-success-bd); cursor:default; pointer-events:none;
+  }
+  .cal-vis-chip .ti { font-size:13px; }
+
+  /* === Player-view banner === */
+  .cal-player-banner {
+    display:flex; align-items:center; gap:10px; padding:8px 16px;
+    border-bottom:1px solid var(--cm-border-soft);
+    background:color-mix(in srgb, var(--cm-accent) 6%, var(--cm-surface));
+  }
+  .cal-player-banner-icon {
+    width:26px; height:26px; border-radius:6px; flex-shrink:0;
+    background:var(--cm-accent-soft); color:var(--cm-accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .cal-player-banner-icon .ti { font-size:13px; }
+  .cal-player-banner-text { flex:1; font:500 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg); }
+  .cal-player-banner-text strong { color:var(--cm-accent); }
+  .cal-player-banner-back {
+    border:0; background:transparent; cursor:pointer;
+    font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+    padding:4px 8px; border-radius:4px;
+  }
+  .cal-player-banner-back:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  /* Hide AU badge (staff-only metric) in player view */
+  .mc-days.is-player-view .mc-evt-au { display:none !important; }
+
+  /* === Share link input === */
+  .share-link-input {
+    flex:1; height:34px; padding:0 10px; border-radius:var(--cm-r-3);
+    border:1px solid var(--cm-border); background:var(--cm-bg-sunk);
+    color:var(--cm-fg-muted); font:var(--cm-body-sm); outline:none;
+  }
+
+  /* === Print / PDF export === */
+  @media print {
+    #hub-side-root, .hub-topbar, .cal-head, .cal-kpis,
+    .cal-ribbon-card, .cal-rail, .cal-filters, .mc-info-row,
+    .cal-card-h .right, .sq-modal-backdrop, #tweaks-root,
+    #settings-host { display:none !important; }
+    .hub-main { overflow:visible !important; }
+    .cal-page { padding:0 !important; max-width:none !important; }
+    .cal-grid { display:block !important; }
+    .cal-card { border:none !important; box-shadow:none !important; }
+    .mc-days { display:flex !important; flex-wrap:wrap !important;
+               overflow:visible !important; grid-template-columns:unset !important; }
+    .mc-day { width:14.28% !important; min-width:0 !important;
+              max-width:none !important; box-sizing:border-box !important; }
+    .cal-player-banner { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
 </style>
 </head>
 <body class="cm">
@@ -566,6 +632,7 @@
               <button class="cal-seg"><i class="ti ti-calendar-month"></i>Month</button>
               <button class="cal-seg is-on"><i class="ti ti-calendar-stats"></i>Microcycle</button>
               <button class="cal-seg"><i class="ti ti-list"></i>List</button>
+              <button class="cal-seg" id="calSegPlayerView"><i class="ti ti-eye"></i>Player view</button>
             </div>
           </div>
         </div>
@@ -611,6 +678,13 @@
               </div>
               <button class="cm-icon-btn" id="calMcNav" title="Other microcycles"><i class="ti ti-dots"></i></button>
             </div>
+          </div>
+
+          <!-- Player-view banner (shown when Player view segment is active) -->
+          <div class="cal-player-banner" id="calPlayerBanner" style="display:none">
+            <div class="cal-player-banner-icon"><i class="ti ti-eye"></i></div>
+            <div class="cal-player-banner-text">Previewing what players see · <strong><span id="calPlayerBannerCount">0</span> events</strong> visible</div>
+            <button class="cal-player-banner-back" id="calPlayerBannerBack">Back to staff view</button>
           </div>
 
           <!-- MC summary row -->
@@ -883,6 +957,26 @@
         <div class="sq-modal-field" style="grid-column:1/-1">
           <label for="calEvtF_notes">Notes</label>
           <textarea id="calEvtF_notes" placeholder="Optional" rows="2"></textarea>
+        </div>
+      </div>
+      <!-- Visible to: audience chips -->
+      <div class="sq-modal-row">
+        <div class="sq-modal-field" style="grid-column:1/-1">
+          <label>Visible to</label>
+          <div class="cal-vis-chips" id="calEvtVisChips">
+            <button type="button" class="cal-vis-chip is-always" title="Staff always has full access — cannot be removed">
+              <i class="ti ti-briefcase"></i>Staff
+            </button>
+            <button type="button" class="cal-vis-chip" data-vis="players" title="Players see this in their shared calendar view">
+              <i class="ti ti-users"></i>Players
+            </button>
+            <button type="button" class="cal-vis-chip" data-vis="medical" title="Medical staff and physios see this">
+              <i class="ti ti-stethoscope"></i>Medical
+            </button>
+            <button type="button" class="cal-vis-chip" data-vis="board" title="Club board sees this in their read-only summary">
+              <i class="ti ti-eye"></i>Board
+            </button>
+          </div>
         </div>
       </div>
       <!-- Expected RPE (training & gym only) -->
@@ -1164,6 +1258,7 @@ let _ribbonViewRange = null; // { from, to } when sub-range active; null = full 
 let _monthEvts = []; // full session objects for month view click handlers
 let _pendingCrestUrl = null; // staged crest URL after Storage upload, written to DB on save
 let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
+let _activeShareLink = null; // active share_link row for current MC (players scope)
 const TODAY = new Date().toISOString().split('T')[0];
 
 const EVT_ICONS = {
@@ -1211,6 +1306,60 @@ function showCalToast(msg) {
   setTimeout(() => t.classList.remove('is-show'), 2800);
 }
 
+// ── Visible-to audience defaults per event type ─────────────────
+// Values returned here are the NON-staff audiences (staff is always included)
+const VISIBLE_TO_DEFAULTS = {
+  match:         ['players','medical'],
+  tactical:      ['players','medical'],
+  gym:           ['players','medical'],
+  recovery:      ['players','medical'],
+  conditioning:  ['players','medical'],
+  travel:        ['players','medical'],
+  walkthrough:   ['players','medical'],
+  breakfast:     ['players','medical'],
+  lunch:         ['players','medical'],
+  dinner:        ['players','medical'],
+  hotel_checkin: ['players','medical'],
+  hotel_checkout:['players','medical'],
+  bus_departure: ['players','medical'],
+  bus_arrival:   ['players','medical'],
+  day_off:       ['players','medical'],
+  press:         ['players','medical'],
+  other:         ['players','medical'],
+  meeting:       [],
+  scouting:      [],
+  evaluation:    [],
+  video_session: [],
+  medical_check: ['medical'],
+};
+
+function getVisibleToFromChips() {
+  const on = Array.from(document.querySelectorAll('#calEvtVisChips .cal-vis-chip[data-vis].is-on'))
+    .map(c => c.dataset.vis);
+  return ['staff', ...on];
+}
+
+function setVisibleToChips(visibleTo) {
+  const arr = Array.isArray(visibleTo) ? visibleTo : ['staff'];
+  document.querySelectorAll('#calEvtVisChips .cal-vis-chip[data-vis]').forEach(chip => {
+    chip.classList.toggle('is-on', arr.includes(chip.dataset.vis));
+  });
+}
+
+function setVisibleToDefaults(type) {
+  const extras = VISIBLE_TO_DEFAULTS[type] || [];
+  document.querySelectorAll('#calEvtVisChips .cal-vis-chip[data-vis]').forEach(chip => {
+    chip.classList.toggle('is-on', extras.includes(chip.dataset.vis));
+  });
+}
+
+// Wire chip clicks
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#calEvtVisChips .cal-vis-chip[data-vis]').forEach(chip => {
+    chip.addEventListener('click', () => chip.classList.toggle('is-on'));
+  });
+});
+
 // Microcycle select fields — module-level so accessible from all listeners
 const MC_BASE_SELECT = 'id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium';
 const MC_FULL_SELECT = MC_BASE_SELECT + ',publish_players,publish_medical,publish_board,published_at,publish_config';
@@ -1222,12 +1371,28 @@ function _pubLabelEl(group) { return document.getElementById('calPubLabel' + gro
 function renderPublishState() {
   const mc = _allMCs[_mcIdx];
   if (!mc) return;
-  const groups = [
-    { key: 'players', field: 'publish_players' },
+
+  // Players badge: driven by active share link (not publish_players flag)
+  const playersBadge = _pubBadgeEl('players');
+  const playersLabel = _pubLabelEl('players');
+  if (playersBadge && playersLabel) {
+    if (_activeShareLink) {
+      playersBadge.className = 'cm-pill is-success';
+      const msAgo = Date.now() - new Date(_activeShareLink.created_at).getTime();
+      const daysAgo = Math.round(msAgo / 86400000);
+      playersLabel.textContent = daysAgo === 0 ? 'Published today' : `Published · ${daysAgo}d ago`;
+    } else {
+      playersBadge.className = 'cm-pill is-warning';
+      playersLabel.textContent = 'Draft';
+    }
+    playersBadge.style.cursor = 'pointer';
+  }
+
+  // Medical and Board: toggle-based (unchanged)
+  for (const { key, field } of [
     { key: 'medical', field: 'publish_medical' },
     { key: 'board',   field: 'publish_board'   },
-  ];
-  for (const { key, field } of groups) {
+  ]) {
     const published = !!mc[field];
     const badge = _pubBadgeEl(key);
     const label = _pubLabelEl(key);
@@ -1255,7 +1420,7 @@ async function togglePublishGroup(group) {
 }
 
 // Badge click handlers
-document.getElementById('calPubBadgePlayers').addEventListener('click', () => togglePublishGroup('players'));
+document.getElementById('calPubBadgePlayers').addEventListener('click', () => openShareModal());
 document.getElementById('calPubBadgeMedical').addEventListener('click', () => togglePublishGroup('medical'));
 document.getElementById('calPubBadgeBoard').addEventListener('click', () => togglePublishGroup('board'));
 
@@ -1354,7 +1519,20 @@ function renderGrid() {
   const headEl = document.getElementById('calHeadCtx');
   if (headEl) headEl.innerHTML = `<strong>${mcName}</strong>${headMdLabel}${headTarget}`;
 
-  grid.className = 'mc-days';
+  const isPlayerView = _calView === 'player';
+  grid.className = 'mc-days' + (isPlayerView ? ' is-player-view' : '');
+
+  // Update player banner
+  const banner = document.getElementById('calPlayerBanner');
+  if (banner) {
+    if (isPlayerView) {
+      const playerEvtCount = _sessions.filter(s => Array.isArray(s.visible_to) && s.visible_to.includes('players')).length;
+      document.getElementById('calPlayerBannerCount').textContent = playerEvtCount;
+      banner.style.display = '';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 
   // Build all day columns
   let html = '';
@@ -1362,7 +1540,11 @@ function renderGrid() {
     const dateStr = addDays(start, i);
     const d = new Date(dateStr + 'T12:00:00');
     const isToday = dateStr === TODAY;
-    const daySessions = _sessions.filter(s => s.session_date === dateStr);
+    const allDaySessions = _sessions.filter(s => s.session_date === dateStr);
+    // In player view: only show events visible to players
+    const daySessions = isPlayerView
+      ? allDaySessions.filter(s => Array.isArray(s.visible_to) && s.visible_to.includes('players'))
+      : allDaySessions;
     const isOff = daySessions.length === 0;
 
     let mdLabel = '';
@@ -1381,7 +1563,10 @@ function renderGrid() {
           const icon = EVT_ICONS[cat] || 'ti-calendar';
           const dur = s.duration ? ` ${s.duration}′` : '';
           const timeStr = s.start_time ? s.start_time.slice(0, 5) : '';
-          const au = (s.duration && s.estimated_rpe) ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>` : '';
+          // AU hidden in player view (staff-only metric)
+          const au = (!isPlayerView && s.duration && s.estimated_rpe)
+            ? `<span class="mc-evt-au" style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>`
+            : '';
           const leadEl = (cat === 'match' && s.rival_crest_url)
             ? `<img src="${s.rival_crest_url}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
             : `<i class="ti ${icon}"></i>`;
@@ -1392,6 +1577,9 @@ function renderGrid() {
           </div>`;
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
 
+    // In player view hide the + Add button
+    const addBtn = isPlayerView ? '' : `<button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">+ Add</button>`;
+
     html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}" data-date="${dateStr}">
       <div class="mc-day-head">
         <span class="mc-day-dow">${DAYS_SHORT[d.getDay()]}</span>
@@ -1400,7 +1588,7 @@ function renderGrid() {
       </div>
       <div class="mc-day-events" data-date="${dateStr}">
         ${eventsHtml}
-        <button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">+ Add</button>
+        ${addBtn}
       </div>
     </div>`;
   }
@@ -1517,11 +1705,11 @@ async function updateSortOrders(dateStr) {
 async function fetchAllEvents(dateFrom, dateTo) {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
-      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time')
+      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,visible_to')
       .eq('club_id', _clubId)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
-      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id')
+      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id,visible_to')
       .eq('club_id', _clubId)
       .gte('date', dateFrom).lte('date', dateTo).order('date')
   ]);
@@ -1529,6 +1717,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
   const norm = (sessRes.data || []).map(s => ({
     ...s, session_date: (s.session_date || '').split('T')[0],
     start_time: s.session_time || null,
+    visible_to: s.visible_to || ['staff'],
     source: 'session'
   }));
   const evts = evtRes.error ? [] : (evtRes.data || []).map(e => ({
@@ -1540,6 +1729,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
     sort_order: e.sort_order, estimated_rpe: e.estimated_rpe,
     rival_crest_url: e.rival_crest_url || null,
     recurrence_group_id: e.recurrence_group_id || null,
+    visible_to: e.visible_to || ['staff'],
     source: 'event'
   }));
   return { data: [...norm, ...evts].sort((a, b) => {
@@ -1786,6 +1976,13 @@ function openEvtModal(session, defaultDate) {
   toggleRpeRow(evtType);
   updateAuPreview();
 
+  // Visible-to chips: restore saved value or apply type default
+  if (session?.visible_to?.length) {
+    setVisibleToChips(session.visible_to);
+  } else {
+    setVisibleToDefaults(evtType);
+  }
+
   // Planning link (only for training/gym)
   const planLink  = document.getElementById('calEvtPlanLink');
   const planLabel = document.getElementById('calEvtPlanLinkLabel');
@@ -1849,6 +2046,7 @@ async function saveEvt() {
     ? { opponent: null, home_away: null, competition: null, location: null, rival_crest_url: null }
     : {};
 
+  const visibleTo = getVisibleToFromChips();
   const clubId = _clubId || await window.getClubId();
   const isCalEvt = CAL_EVT_TYPES.includes(type);
   let error;
@@ -1862,7 +2060,7 @@ async function saveEvt() {
     const dates = generateRecurrenceDates(date, pattern, until, customDates);
     if (!dates.length) { showCalToast('No dates generated — check recurrence settings.'); saving.style.display='none'; saveBtn.disabled=false; return; }
     const groupId = crypto.randomUUID();
-    const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, recurrence_group_id: groupId };
+    const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, recurrence_group_id: groupId, visible_to: visibleTo };
     if (type === 'match') {
       basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
@@ -1880,7 +2078,7 @@ async function saveEvt() {
   }
 
   if (isCalEvt) {
-    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, ...matchFieldsToClear };
+    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, visible_to: visibleTo, ...matchFieldsToClear };
     if (type === 'match') {
       payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
@@ -1900,7 +2098,7 @@ async function saveEvt() {
       ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
   } else {
-    const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal };
+    const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo };
     if (_editEvtId && _editEvtSource === 'session') {
       ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
     } else if (_editEvtId && _editEvtSource === 'event') {
@@ -1972,6 +2170,8 @@ document.getElementById('calEvtF_type').addEventListener('change', function() {
   // day_off: hide duration
   const durWrap = document.getElementById('calEvtDurationWrap');
   if (durWrap) durWrap.style.display = t === 'day_off' ? 'none' : '';
+  // Update visible-to defaults to match new type (only on new events)
+  if (!_editEvtId) setVisibleToDefaults(t);
 });
 document.getElementById('calEvtF_duration').addEventListener('input', updateAuPreview);
 document.getElementById('calEvtF_rpe').addEventListener('change', updateAuPreview);
@@ -2101,6 +2301,7 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
       _weekOffset = 0;
       pop.remove();
       await loadSessions();
+      await loadShareLink();
     });
     pop.appendChild(item);
   });
@@ -2330,17 +2531,29 @@ document.querySelectorAll('.cal-filters').forEach(bar => {
 });
 
 // ── View switching ────────────────────────────────────────────
-const VIEW_MAP = { 'Month': 'month', 'Microcycle': 'microcycle', 'List': 'list' };
+const VIEW_MAP = { 'Month': 'month', 'Microcycle': 'microcycle', 'List': 'list', 'Player view': 'player' };
 
 function switchView(view) {
   _calView = view;
   const mcGrid = document.querySelector('.cal-grid');
-  if (mcGrid) mcGrid.style.display = view === 'microcycle' ? '' : 'none';
+  // Microcycle and Player view share the same grid
+  if (mcGrid) mcGrid.style.display = (view === 'microcycle' || view === 'player') ? '' : 'none';
   document.getElementById('calViewMonth').style.display = view === 'month' ? '' : 'none';
   document.getElementById('calViewList').style.display  = view === 'list'  ? '' : 'none';
   if (view === 'month') renderMonthView();
   if (view === 'list')  renderListView();
+  if (view === 'microcycle' || view === 'player') renderGrid(); // re-render to apply/remove player filter
 }
+
+// Player banner "Back to staff view" button
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('calPlayerBannerBack')?.addEventListener('click', () => {
+    document.querySelectorAll('.cal-segs .cal-seg').forEach(s => {
+      s.classList.toggle('is-on', s.textContent.trim() === 'Microcycle');
+    });
+    switchView('microcycle');
+  });
+});
 
 document.querySelectorAll('.cal-segs').forEach(g => g.querySelectorAll('.cal-seg').forEach(s => s.addEventListener('click', () => {
   g.querySelectorAll('.cal-seg').forEach(o => o.classList.remove('is-on'));
@@ -3158,6 +3371,143 @@ async function showImportPreview(fixtures) {
   });
 })();
 
+// ── Share with players ────────────────────────────────────────
+async function loadShareLink() {
+  if (!_clubId) return;
+  const mc = _allMCs[_mcIdx];
+  if (!mc) { _activeShareLink = null; return; }
+  const { data } = await window.sb.from('share_links')
+    .select('*')
+    .eq('club_id', _clubId)
+    .eq('scope', 'players')
+    .eq('revoked', false)
+    .eq('mc_id', mc.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  _activeShareLink = data || null;
+  renderPublishState();
+}
+
+function renderShareLinkSection() {
+  const el = document.getElementById('calShareLinkSection');
+  if (!el) return;
+  if (_activeShareLink) {
+    const url = `${location.origin}/shared.html?token=${_activeShareLink.token}`;
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:6px">
+        <input class="share-link-input" type="text" value="${url}" readonly id="calShareLinkInput">
+        <button class="cm-btn is-ghost is-sm" id="calShareCopyBtn" title="Copy link"><i class="ti ti-copy" style="font-size:13px"></i></button>
+        <button class="cm-btn is-danger is-sm" id="calShareRevokeBtn"><i class="ti ti-trash" style="font-size:12px"></i>Revoke</button>
+      </div>`;
+    document.getElementById('calShareCopyBtn')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(url).then(() => showCalToast('Link copied.')).catch(() => {
+        const inp = document.getElementById('calShareLinkInput');
+        if (inp) { inp.select(); document.execCommand('copy'); showCalToast('Link copied.'); }
+      });
+    });
+    document.getElementById('calShareRevokeBtn')?.addEventListener('click', revokeShareLink);
+  } else {
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:1;font:var(--cm-body-sm);color:var(--cm-fg-muted)">No active link for this microcycle.</span>
+        <button class="cm-btn is-primary is-sm" id="calShareGenBtn"><i class="ti ti-link" style="font-size:13px"></i>Generate link</button>
+      </div>`;
+    document.getElementById('calShareGenBtn')?.addEventListener('click', generateShareLink);
+  }
+}
+
+function openShareModal() {
+  renderShareLinkSection();
+  document.getElementById('calShareBackdrop').classList.add('is-open');
+}
+
+function closeShareModal() {
+  document.getElementById('calShareBackdrop').classList.remove('is-open');
+}
+
+async function generateShareLink() {
+  const mc = _allMCs[_mcIdx];
+  if (!mc || !_clubId) return;
+  const token = crypto.randomUUID();
+  const { data, error } = await window.sb.from('share_links').insert({
+    club_id: _clubId, scope: 'players', token, mc_id: mc.id,
+  }).select().single();
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  _activeShareLink = data;
+  renderPublishState();
+  renderShareLinkSection();
+  showCalToast('Share link generated.');
+}
+
+async function revokeShareLink() {
+  if (!_activeShareLink) return;
+  if (!confirm('Revoke this link? Anyone who has it will lose access.')) return;
+  const { error } = await window.sb.from('share_links').update({ revoked: true }).eq('id', _activeShareLink.id);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  _activeShareLink = null;
+  renderPublishState();
+  renderShareLinkSection();
+  showCalToast('Link revoked.');
+}
+
+function exportPDF() {
+  const prevView = _calView;
+  if (_calView !== 'player') {
+    _calView = 'player';
+    renderGrid();
+  }
+  window.print();
+  // Restore view after print dialog
+  if (prevView !== 'player') {
+    setTimeout(() => {
+      _calView = prevView;
+      renderGrid();
+    }, 200);
+  }
+}
+
+async function exportPNG() {
+  // Lazy-load html2canvas
+  if (!window.html2canvas) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('html2canvas load failed'));
+      document.head.appendChild(s);
+    }).catch(() => null);
+  }
+  if (!window.html2canvas) { showCalToast('Could not load image export library.'); return; }
+
+  const prevView = _calView;
+  if (_calView !== 'player') { _calView = 'player'; renderGrid(); }
+
+  const grid = document.getElementById('calDaysGrid');
+  try {
+    const canvas = await window.html2canvas(grid, { backgroundColor: '#ffffff', scale: 2, useCORS: true });
+    const mc = _allMCs[_mcIdx];
+    const link = document.createElement('a');
+    link.download = `schedule-players-${mc?.name || 'week'}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    showCalToast('Image exported.');
+  } catch (e) {
+    showCalToast('Export failed: ' + e.message);
+  }
+
+  if (prevView !== 'player') { setTimeout(() => { _calView = prevView; renderGrid(); }, 100); }
+}
+
+// Wire share modal
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('calShareClose')?.addEventListener('click', closeShareModal);
+  document.getElementById('calShareCancel')?.addEventListener('click', closeShareModal);
+  document.getElementById('calShareBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeShareModal(); });
+  document.getElementById('calShareExportPdf')?.addEventListener('click', () => { closeShareModal(); exportPDF(); });
+  document.getElementById('calShareExportPng')?.addEventListener('click', () => { closeShareModal(); exportPNG(); });
+});
+
 // ── Boot ──────────────────────────────────────────────────────
 (async () => {
   const ok = await window.requireAuth();
@@ -3237,6 +3587,7 @@ async function showImportPreview(fixtures) {
   }
 
   await loadSessions();
+  await loadShareLink();
 
   // Deep-link: scroll to and highlight specific event
   if (_urlHlId) requestAnimationFrame(() => {
@@ -3326,6 +3677,46 @@ async function showImportPreview(fixtures) {
     <div class="sq-modal-foot" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-ghost is-sm" id="calPubManageCancel">Cancel</button>
       <button class="cm-btn is-primary is-sm" id="calPubManageSave">Save settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share with players modal -->
+<div class="sq-modal-backdrop" id="calShareBackdrop">
+  <div class="sq-modal" style="max-width:480px" role="dialog" aria-modal="true">
+    <div class="sq-modal-head">
+      <h2>Share with players</h2>
+      <button class="sq-modal-close" id="calShareClose"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body" style="gap:18px">
+
+      <!-- Public link -->
+      <div class="sq-modal-field">
+        <label>Public link · read-only</label>
+        <div id="calShareLinkSection" style="display:flex;flex-direction:column;gap:8px">
+          <!-- Rendered dynamically by renderShareLinkSection() -->
+        </div>
+        <div style="font:var(--cm-meta);color:var(--cm-fg-faint);margin-top:4px">Anyone with the link can view the player schedule. No login required.</div>
+      </div>
+
+      <!-- Exports -->
+      <div style="border-top:1px solid var(--cm-border-soft);padding-top:16px">
+        <div style="font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px">Export</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="cm-btn is-outline is-sm" id="calShareExportPdf">
+            <i class="ti ti-file-type-pdf" style="font-size:13px"></i>Export PDF
+          </button>
+          <button class="cm-btn is-outline is-sm" id="calShareExportPng">
+            <i class="ti ti-photo" style="font-size:13px"></i>Export image
+          </button>
+        </div>
+        <div style="font:var(--cm-meta);color:var(--cm-fg-faint);margin-top:8px">Only events visible to players are included.</div>
+      </div>
+
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <button class="cm-btn is-ghost is-sm" id="calShareCancel">Close</button>
     </div>
   </div>
 </div>
