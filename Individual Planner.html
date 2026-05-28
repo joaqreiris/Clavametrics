@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Individual S&amp;C — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="stylesheet" href="rehab-planner.css">
+<link rel="stylesheet" href="individual-planner.css">
+<link rel="stylesheet" href="block-drawer.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+</head>
+<body class="cm">
+<div class="hub-shell">
+  <div id="hub-side-root"></div>
+
+  <!-- ───── MAIN ───── -->
+  <main class="hub-main">
+
+    <!-- topbar -->
+    <header class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-user-cog"></i>
+        <a href="#">Performance</a>
+        <span class="sep">/</span>
+        <a href="Individual Plans.html">Individual S&amp;C</a>
+        <span class="sep">/</span>
+        <span class="now">Lautaro Vergara · Capacity block</span>
+      </div>
+      <div class="actions">
+        <a class="cm-btn is-ghost" href="Individual Plans.html"><i class="ti ti-users"></i> Switch athlete</a>
+        <button class="cm-btn is-secondary"><i class="ti ti-printer"></i> Export</button>
+        <button class="cm-btn is-primary"><i class="ti ti-device-floppy"></i> Save plan</button>
+      </div>
+    </header>
+
+    <section class="rp-doc" data-screen-label="01 Individual S&C planner">
+
+      <!-- ─── Athlete strip ─── -->
+      <div class="rp-athlete">
+        <div class="rp-athlete-av">LV</div>
+        <div class="rp-athlete-id">
+          <div class="name">
+            Lautaro Vergara
+            <span class="mode-tag is-perf"><i class="ti ti-user-cog"></i> Individual S&amp;C</span>
+          </div>
+          <div class="ctx">
+            <span><strong>CB</strong> · #4 · 24 y/o</span>
+            <span class="sep">·</span>
+            <span>Capacity block · in-season</span>
+            <span class="sep">·</span>
+            <span>Programme week <strong>4</strong> of 12</span>
+            <span class="sep">·</span>
+            <span>Next match · <strong>Jun 01</strong> vs. River</span>
+          </div>
+        </div>
+
+        <div class="rp-athlete-stat">
+          <div class="l">ACWR</div>
+          <div class="v">1.18</div>
+        </div>
+        <div class="rp-athlete-stat">
+          <div class="l">Readiness</div>
+          <div class="v">8.2<sub>/10</sub></div>
+        </div>
+        <div class="rp-athlete-stat">
+          <div class="l">Match min · last 4</div>
+          <div class="v">174<sub>'</sub></div>
+        </div>
+        <div class="rp-athlete-stat">
+          <div class="l">1RM squat</div>
+          <div class="v">162<sub>kg</sub></div>
+        </div>
+
+        <div class="rp-athlete-actions">
+          <div class="rp-athlete-team" title="Plan owners">
+            <span class="av-mini sc">LP</span>
+            <span class="av-mini coach">DV</span>
+            <span class="label">Owners</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Training phases bar ─── -->
+      <div class="rp-trainbar" style="display:block">
+        <div class="rp-trainbar-h">
+          <span class="l">Programme</span>
+          <span class="summary">12-week individual block · <strong>Week 4 of 12</strong> · goal: <strong>aerobic capacity + force expression</strong></span>
+          <div class="right">
+            <button class="cm-btn is-ghost" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> Edit phases</button>
+          </div>
+        </div>
+        <div class="rp-train-track" style="grid-template-columns:0.7fr 1.3fr 1fr 1.5fr">
+          <div class="rp-train-seg is-done"><span class="dot"></span>Re-introduction<span class="wk">W1–2</span></div>
+          <div class="rp-train-seg is-current"><span class="dot"></span>Capacity<span class="wk">W3–5 · NOW</span></div>
+          <div class="rp-train-seg"><span class="dot"></span>Intensity &amp; power<span class="wk">W6–7</span></div>
+          <div class="rp-train-seg"><span class="dot"></span>Competition maintenance<span class="wk">W8–12</span></div>
+        </div>
+      </div>
+
+      <!-- ─── Performance KPI strip ─── -->
+      <div class="ip-kpis">
+        <div class="ip-kpi">
+          <div class="l"><i class="ti ti-route"></i>Total distance · planned</div>
+          <div class="v">22.5<sub>km</sub></div>
+          <div class="delta up"><i class="ti ti-trending-up"></i>+14% vs. squad</div>
+          <div class="ip-spark">
+            <div class="bar" style="height:50%"></div>
+            <div class="bar" style="height:60%"></div>
+            <div class="bar" style="height:55%"></div>
+            <div class="bar is-now" style="height:80%"></div>
+            <div class="bar is-target" style="height:70%"></div>
+            <div class="bar is-target" style="height:60%"></div>
+          </div>
+        </div>
+        <div class="ip-kpi">
+          <div class="l"><i class="ti ti-bolt"></i>HSR · planned</div>
+          <div class="v">1,420<sub>m</sub></div>
+          <div class="delta up"><i class="ti ti-trending-up"></i>+20% vs. squad</div>
+          <div class="ip-spark">
+            <div class="bar" style="height:30%"></div>
+            <div class="bar" style="height:40%"></div>
+            <div class="bar" style="height:55%"></div>
+            <div class="bar is-now" style="height:82%"></div>
+            <div class="bar is-target" style="height:65%"></div>
+            <div class="bar is-target" style="height:55%"></div>
+          </div>
+        </div>
+        <div class="ip-kpi">
+          <div class="l"><i class="ti ti-flame"></i>Sprints · planned</div>
+          <div class="v">28</div>
+          <div class="delta up"><i class="ti ti-trending-up"></i>+17% vs. squad</div>
+          <div class="ip-spark">
+            <div class="bar" style="height:40%"></div>
+            <div class="bar" style="height:55%"></div>
+            <div class="bar" style="height:60%"></div>
+            <div class="bar is-now" style="height:78%"></div>
+            <div class="bar is-target" style="height:62%"></div>
+            <div class="bar is-target" style="height:50%"></div>
+          </div>
+        </div>
+        <div class="ip-kpi">
+          <div class="l"><i class="ti ti-barbell"></i>Strength · sessions</div>
+          <div class="v">3</div>
+          <div class="delta up"><i class="ti ti-trending-up"></i>+1 vs. squad</div>
+          <div class="ip-spark">
+            <div class="bar" style="height:50%"></div>
+            <div class="bar" style="height:60%"></div>
+            <div class="bar" style="height:75%"></div>
+            <div class="bar is-now" style="height:85%"></div>
+            <div class="bar is-target" style="height:70%"></div>
+            <div class="bar is-target" style="height:55%"></div>
+          </div>
+        </div>
+        <div class="ip-kpi">
+          <div class="l"><i class="ti ti-sum"></i>Total AU</div>
+          <div class="v">2,840</div>
+          <div class="delta up"><i class="ti ti-trending-up"></i>+17% vs. squad</div>
+          <div class="ip-spark">
+            <div class="bar" style="height:42%"></div>
+            <div class="bar" style="height:55%"></div>
+            <div class="bar" style="height:68%"></div>
+            <div class="bar is-now" style="height:88%"></div>
+            <div class="bar is-target" style="height:72%"></div>
+            <div class="bar is-target" style="height:55%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── View switch + week pager ─── -->
+      <div class="rp-view-h">
+        <div class="rp-seg" id="view-seg">
+          <button data-view="kanban" class="is-on"><i class="ti ti-layout-kanban"></i> Kanban</button>
+          <button data-view="table"><i class="ti ti-table"></i> Table</button>
+          <button data-view="timeline"><i class="ti ti-timeline-event"></i> Timeline</button>
+        </div>
+        <div class="rp-week-pager">
+          <button><i class="ti ti-chevron-left"></i></button>
+          <span class="label">Week 4 <span class="sub">May 26 – Jun 01</span></span>
+          <button><i class="ti ti-chevron-right"></i></button>
+        </div>
+        <div class="spacer"></div>
+        <span class="meta"><span class="cm-kbd">⌘</span><span class="cm-kbd">K</span> &nbsp;to add block</span>
+      </div>
+
+      <!-- ─── Workspace: kanban + side panel ─── -->
+      <div class="rp-work" id="workspace">
+
+        <!-- KANBAN -->
+        <div id="view-kanban" class="rp-view-content">
+          <div class="rp-kanban" id="kanban"></div>
+        </div>
+
+        <!-- TABLE -->
+        <div id="view-table" class="rp-view-content rp-hidden">
+          <div class="rp-table-wrap">
+            <table class="rp-tbl">
+              <thead>
+                <tr>
+                  <th style="width:32%">Block</th>
+                  <th>Duration</th>
+                  <th>Owner</th>
+                  <th>Volume</th>
+                  <th>Intensity</th>
+                  <th>GPS targets</th>
+                  <th>AU</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TIMELINE -->
+        <div id="view-timeline" class="rp-view-content rp-hidden">
+          <div class="rp-timeline-wrap">
+            <div class="rp-tl-h"><i class="ti ti-timeline-event"></i> Week 4 · May 26 – Jun 01 · scaled to 120 min</div>
+            <div class="rp-tl-rows" id="tl-rows"></div>
+          </div>
+        </div>
+
+        <!-- SIDE PANEL -->
+        <aside class="rp-side-panel">
+
+          <!-- Block detail -->
+          <div class="rp-panel-card">
+            <div class="rp-panel-h">
+              <h3><i class="ti ti-target-arrow"></i> Block detail</h3>
+              <div class="right">
+                <button class="ic-btn" title="Edit block" onclick="window.openBlockDrawer({ context:'ip', day:'Wed, May 28', existing: { type:'cond', name:'Aerobic capacity intervals', duration:42, rpe:8, owner:'sc', notes:'Outdoor, grass. Re-test MAS end of W5. Skip block if readiness < 6.', ctxField:'15:15 · 90% MAS', exerciseIds:['int1515','shut','tempo'] } })"><i class="ti ti-pencil"></i></button>
+                <button class="ic-btn" title="Duplicate"><i class="ti ti-copy"></i></button>
+                <button class="ic-btn" title="Remove"><i class="ti ti-trash"></i></button>
+              </div>
+            </div>
+            <div class="rp-panel-b">
+              <div class="rp-bd-title">
+                <span class="swatch" style="background:#EA580C"></span>
+                Aerobic capacity intervals
+              </div>
+              <div class="rp-bd-sub">
+                <span>Wed · May 28</span>
+                <span class="sep">·</span>
+                <span>Conditioning</span>
+                <span class="sep">·</span>
+                <span>42 min</span>
+                <span class="sep">·</span>
+                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#1D4ED8;margin-right:4px;vertical-align:middle"></span>S&amp;C · L. Pérez</span>
+              </div>
+
+              <div class="rp-bd-metrics">
+                <div class="rp-bd-metric"><div class="l">Volume</div><div class="v">8<sub>reps</sub></div></div>
+                <div class="rp-bd-metric"><div class="l">RPE target</div><div class="v">8<sub>/10</sub></div></div>
+                <div class="rp-bd-metric"><div class="l">AU</div><div class="v">412</div></div>
+              </div>
+
+              <div class="rp-bd-section">
+                <div class="rp-bd-section-h">Exercises · 3</div>
+                <div class="rp-bd-ex">
+                  <div class="n">1</div>
+                  <div class="body">
+                    <div class="name">15:15 intervals · 90% MAS</div>
+                    <div class="params">
+                      <span class="p"><span class="l">reps</span>8</span>
+                      <span class="p"><span class="l">work</span>15s</span>
+                      <span class="p"><span class="l">rest</span>15s</span>
+                      <span class="p"><span class="l">target</span>5.4 m/s</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="rp-bd-ex">
+                  <div class="n">2</div>
+                  <div class="body">
+                    <div class="name">Shuttle runs · 20m</div>
+                    <div class="params">
+                      <span class="p"><span class="l">sets</span>4</span>
+                      <span class="p"><span class="l">reps</span>6</span>
+                      <span class="p"><span class="l">rest</span>1:30</span>
+                      <span class="p"><span class="l">target</span>5.8s /run</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="rp-bd-ex">
+                  <div class="n">3</div>
+                  <div class="body">
+                    <div class="name">Tempo continuous · 70% HRmax</div>
+                    <div class="params">
+                      <span class="p"><span class="l">dur</span>12 min</span>
+                      <span class="p"><span class="l">HR</span>140 bpm</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rp-bd-section">
+                <div class="rp-bd-section-h">Targets</div>
+                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                  <span class="rp-gps-pill"><span class="l">TD</span><span class="v">3.6 km</span></span>
+                  <span class="rp-gps-pill"><span class="l">HSR</span><span class="v">680 m</span></span>
+                  <span class="rp-gps-pill"><span class="l">Vmax</span><span class="v">7.4 m/s</span></span>
+                  <span class="rp-gps-pill"><span class="l">Sprints</span><span class="v">14</span></span>
+                </div>
+              </div>
+
+              <div class="rp-bd-section">
+                <div class="rp-bd-section-h">Notes</div>
+                <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">
+                  Outdoor, grass. Re-test MAS at end of W5 to recalibrate. Skip block if readiness &lt; 6.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Squad comparison -->
+          <div class="rp-panel-card">
+            <div class="rp-panel-h">
+              <h3><i class="ti ti-chart-bar"></i> This week vs. squad</h3>
+              <div class="right">
+                <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)">CB · n=4</span>
+              </div>
+            </div>
+            <div class="rp-panel-b">
+
+              <div class="ip-compare-row">
+                <span class="name"><i class="ti ti-route"></i>Total distance</span>
+                <span class="mine">22.5<sub>km</sub></span>
+                <div class="ip-compare-bar">
+                  <div class="self" style="width:74%"></div>
+                  <div class="squad-marker" style="left:65%"></div>
+                </div>
+              </div>
+
+              <div class="ip-compare-row">
+                <span class="name"><i class="ti ti-bolt"></i>High-speed running</span>
+                <span class="mine">1,420<sub>m</sub></span>
+                <div class="ip-compare-bar">
+                  <div class="self" style="width:78%"></div>
+                  <div class="squad-marker" style="left:65%"></div>
+                </div>
+              </div>
+
+              <div class="ip-compare-row">
+                <span class="name"><i class="ti ti-flame"></i>Sprint count</span>
+                <span class="mine">28</span>
+                <div class="ip-compare-bar">
+                  <div class="self" style="width:70%"></div>
+                  <div class="squad-marker" style="left:60%"></div>
+                </div>
+              </div>
+
+              <div class="ip-compare-row">
+                <span class="name"><i class="ti ti-barbell"></i>Strength sessions</span>
+                <span class="mine">3</span>
+                <div class="ip-compare-bar">
+                  <div class="self" style="width:82%"></div>
+                  <div class="squad-marker" style="left:55%"></div>
+                </div>
+              </div>
+
+              <div class="ip-compare-row">
+                <span class="name"><i class="ti ti-sum"></i>Total AU</span>
+                <span class="mine">2,840</span>
+                <div class="ip-compare-bar">
+                  <div class="self" style="width:80%"></div>
+                  <div class="squad-marker" style="left:68%"></div>
+                </div>
+              </div>
+
+              <div class="ip-compare-foot">
+                <div class="legend">
+                  <span class="sw"><span class="ch"></span>This athlete</span>
+                  <span class="sw"><span class="ch squad"></span>Squad avg</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Strength / sprint benchmarks -->
+          <div class="rp-panel-card">
+            <div class="rp-panel-h">
+              <h3><i class="ti ti-gauge"></i> Benchmarks</h3>
+              <div class="right">
+                <button class="ic-btn" title="Add test result"><i class="ti ti-plus"></i></button>
+              </div>
+            </div>
+            <div class="rp-panel-b">
+              <div class="ip-bench-row">
+                <span class="name"><i class="ti ti-barbell"></i>1RM back squat</span>
+                <span class="v">162<sub>kg</sub></span>
+                <span class="trend up"><i class="ti ti-trending-up"></i>+4kg</span>
+              </div>
+              <div class="ip-bench-row">
+                <span class="name"><i class="ti ti-barbell"></i>1RM bench press</span>
+                <span class="v">112<sub>kg</sub></span>
+                <span class="trend up"><i class="ti ti-trending-up"></i>+2kg</span>
+              </div>
+              <div class="ip-bench-row">
+                <span class="name"><i class="ti ti-arrow-up"></i>CMJ height</span>
+                <span class="v">42.8<sub>cm</sub></span>
+                <span class="trend up"><i class="ti ti-trending-up"></i>+1.2cm</span>
+              </div>
+              <div class="ip-bench-row">
+                <span class="name"><i class="ti ti-run"></i>30m sprint</span>
+                <span class="v">3.96<sub>s</sub></span>
+                <span class="trend up"><i class="ti ti-trending-up"></i>−0.04s</span>
+              </div>
+              <div class="ip-bench-row">
+                <span class="name"><i class="ti ti-bolt"></i>MAS</span>
+                <span class="v">5.4<sub>m/s</sub></span>
+                <span class="trend down"><i class="ti ti-trending-down"></i>−0.1</span>
+              </div>
+            </div>
+          </div>
+
+        </aside>
+      </div>
+
+      <div style="margin-top:14px;display:flex;gap:8px;align-items:center;font:var(--cm-body-sm);color:var(--cm-fg-muted)">
+        <i class="ti ti-info-circle"></i>
+        Linked: <a href="GPS Analysis.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px">GPS · last 4 sessions</a> · <a href="Load Monitor.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px">Load monitor · ACWR 1.18</a> · <a href="Evaluations.html" style="color:var(--cm-fg);text-decoration:underline;text-underline-offset:3px">Last evaluation · Apr 28</a>
+      </div>
+
+    </section>
+  </main>
+</div>
+
+<!-- React + Babel for Tweaks panel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="tweaks-panel.jsx" type="text/babel"></script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<div id="tweaks-root"></div>
+
+<script src="individual-planner.js"></script>
+<script src="block-drawer.js"></script>
+<script src="individual-planner-tweaks.jsx" type="text/babel"></script>
+
+<script>
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+  const clubId = await window.getClubId();
+  window.applyClubTheme?.();
+
+  // Populate any player selects in the page with real players
+  const selects = document.querySelectorAll('select[id*="player"], select[name*="player"], .ip-player-select');
+  if (!selects.length) return;
+  const players = await window.getActivePlayers(clubId);
+  selects.forEach(sel => {
+    const placeholder = sel.options[0];
+    sel.innerHTML = '';
+    if (placeholder) sel.appendChild(placeholder);
+    players.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${window.formatPlayerName(p)} · #${p.number || '—'} · ${p.position || '—'}`;
+      sel.appendChild(opt);
+    });
+  });
+})();
+</script>
+</body>
+</html>

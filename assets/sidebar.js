@@ -139,8 +139,9 @@
       { href: 'RPE.html',               icon: 'ti-activity',         label: 'RPE' },
       { href: 'Load%20Monitor.html',    icon: 'ti-chart-line',       label: 'Load monitor' },
       { href: 'GPS%20Analysis.html',    icon: 'ti-radar-2',          label: 'GPS analysis' },
-      { href: 'Gym%20Planner.html',     icon: 'ti-barbell',          label: 'Gym planner' },
-      { href: 'Gym%20Library.html',     icon: 'ti-books',            label: 'Gym library' },
+      { href: 'Gym%20Planner.html',      icon: 'ti-barbell',          label: 'Gym planner' },
+      { href: 'Individual%20Plans.html', icon: 'ti-user-cog',         label: 'Individual S&C' },
+      { href: 'Gym%20Library.html',      icon: 'ti-books',            label: 'Gym library' },
       { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition' },
     ]},
     { label: 'Medical', items: [
