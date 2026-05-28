@@ -165,9 +165,9 @@
   .hot.mild { fill:#EA580C; }
   .hot.pulse { animation:pulse 2.4s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
-  .hot-dot { cursor:pointer; transition:opacity .15s; }
+  .hot-dot { cursor:pointer; transition:opacity .15s; pointer-events:all; }
   .hot-dot:hover { opacity:0.75; }
-  .hot-dot-group { cursor:pointer; }
+  .hot-dot-group { cursor:pointer; pointer-events:all; }
   .hot-dot-group:hover circle { opacity:0.75; }
   .hot-dot-group.pulse, .hot-dot.pulse { animation:pulse 2.4s ease-in-out infinite; }
   /* Body map popover */
@@ -2116,7 +2116,7 @@ function renderBodyMap() {
       }
       return `<g data-area="${areaKey}" class="hot-dot-group${pulseCls}">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="var(--cm-surface)" stroke-width="1.5"/>
-        <text x="${cx}" y="${cy + 3.8}" text-anchor="middle" font-size="5.5" font-weight="700" fill="white" pointer-events="none">${n > 9 ? '9+' : n}</text>
+        <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="5.5" font-weight="700" fill="white" pointer-events="none">${n > 9 ? '9+' : n}</text>
         <title>${tip}</title>
       </g>`;
     };
