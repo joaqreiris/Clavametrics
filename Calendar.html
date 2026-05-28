@@ -68,10 +68,24 @@
   .cal-ribbon {
     position:relative;
     display:grid;
-    grid-template-rows: auto 30px 24px 18px;
+    grid-template-rows: 14px auto 30px 24px 14px;
     min-width:1200px;
     gap:5px;
   }
+  .cal-row-season {
+    font:600 9px/1 var(--cm-font-mono);
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--cm-fg-faint);
+    display:flex;
+    align-items:center;
+    padding:0 2px;
+    gap:8px;
+    white-space:nowrap;
+    overflow:hidden;
+  }
+  .cal-row-season a { color:var(--cm-accent); text-decoration:none; }
+  .cal-row-season a:hover { text-decoration:underline; }
 
   /* Date rail (months / weeks) */
   .cal-row-months { display:grid; grid-template-columns:repeat(8, 1fr); position:relative; }
@@ -101,7 +115,7 @@
     background:var(--cm-accent-soft);
     border:1px solid var(--cm-border);
     color:var(--cm-fg-strong);
-    display:flex; align-items:center;
+    display:flex; align-items:center; justify-content:center;
     font:600 9.5px/1 var(--cm-font-mono);
     letter-spacing:0.02em;
     cursor:pointer;
@@ -148,10 +162,10 @@
   .match-marker .ti { font-size:9px; flex-shrink:0; }
   .match-marker .extra { font:600 8px/1 var(--cm-font-mono); opacity:0.75; margin-left:1px; }
 
-  /* Today line */
+  /* Today line — spans full ribbon height as child of .cal-ribbon */
   .today-line {
     position:absolute;
-    top:-6px; bottom:-6px;
+    top:0; bottom:0;
     width:0;
     border-left:2px solid var(--cm-fg-strong);
     z-index:5;
@@ -160,29 +174,28 @@
   .today-line::after {
     content:"TODAY";
     position:absolute;
-    top:-18px; left:-22px;
+    top:0; left:-22px;
     width:44px;
     background:var(--cm-fg-strong);
     color:var(--cm-bg);
     font:600 9px/1 var(--cm-font-mono);
     letter-spacing:0.08em;
-    padding:4px 0;
-    border-radius:4px;
+    padding:3px 0;
+    border-radius:0 0 4px 4px;
     text-align:center;
   }
 
-  /* Week ticks */
-  .cal-row-weeks {
+  /* Date ticks (day-of-month numbers: 5, 10, 15, 20, 25) */
+  .cal-row-dates {
     position:relative;
-    font:500 10px/1 var(--cm-font-mono);
+    font:500 9px/1 var(--cm-font-mono);
     color:var(--cm-fg-faint);
   }
-  .cal-row-weeks .wk {
+  .cal-row-dates .dt {
     position:absolute;
     transform:translateX(-50%);
-    padding-top:6px;
+    padding-top:3px;
     border-top:1px solid var(--cm-border-soft);
-    width:auto;
     white-space:nowrap;
   }
 
@@ -523,6 +536,7 @@
               <span class="label" id="calRibbonPagerLabel" style="cursor:pointer;user-select:none" title="Click to jump to date range">—<span class="yr"></span></span>
               <button title="Next period"><i class="ti ti-chevron-right"></i></button>
             </div>
+            <button id="calRibbonReset" style="display:none;height:28px;padding:0 9px;border-radius:5px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;color:var(--cm-fg-muted);cursor:pointer" title="Reset to full season view">Reset</button>
             <div class="cal-segs">
               <button class="cal-seg"><i class="ti ti-calendar-month"></i>Month</button>
               <button class="cal-seg is-on"><i class="ti ti-calendar-stats"></i>Microcycle</button>
@@ -533,21 +547,25 @@
 
         <div class="cal-ribbon-body">
           <div class="cal-ribbon" style="position:relative">
+            <!-- Season name row: rendered by renderSeasonRibbon() -->
+            <div class="cal-row-season" id="calRibbonSeasonLabel"></div>
+
             <!-- Months: rendered dynamically by renderSeasonRibbon() -->
             <div class="cal-row-months" id="calRibbonMonths" style="grid-template-columns: repeat(6,1fr)">
               <span class="month" style="color:var(--cm-fg-faint);font-style:italic">Loading…</span>
             </div>
 
             <!-- MC bars row — rendered by renderSeasonRibbon() from Supabase microcycles data -->
-            <div class="cal-row-mcs" id="calRibbonMcs" style="position:relative; height:30px">
-              <div class="today-line" id="calTodayLine" style="left:50%"></div>
-            </div>
+            <div class="cal-row-mcs" id="calRibbonMcs" style="position:relative; height:30px"></div>
 
             <!-- Match markers row — rendered by renderSeasonRibbon() -->
             <div class="cal-row-matches" id="calRibbonMatches" style="position:relative; height:24px"></div>
 
-            <!-- Week ticks: rendered dynamically by renderSeasonRibbon() -->
-            <div class="cal-row-weeks" id="calRibbonWeeks"></div>
+            <!-- Date ticks: day-of-month numbers, rendered by renderSeasonRibbon() -->
+            <div class="cal-row-dates" id="calRibbonDates"></div>
+
+            <!-- Today line spans full ribbon height -->
+            <div class="today-line" id="calTodayLine" style="left:50%"></div>
           </div>
         </div>
       </div>
@@ -779,6 +797,12 @@
           <input type="number" id="calEvtF_duration" placeholder="e.g. 90" min="5" max="300">
         </div>
         <div class="sq-modal-field">
+          <label id="calEvtStarttimeLabel" for="calEvtF_starttime">Start time</label>
+          <input type="time" id="calEvtF_starttime">
+        </div>
+      </div>
+      <div class="sq-modal-row">
+        <div class="sq-modal-field" style="grid-column:1/-1">
           <label for="calEvtF_notes">Notes</label>
           <textarea id="calEvtF_notes" placeholder="Optional" rows="2"></textarea>
         </div>
@@ -827,12 +851,6 @@
             </select>
           </div>
           <div class="sq-modal-field">
-            <label for="calEvtF_starttime">Kick-off time</label>
-            <input type="time" id="calEvtF_starttime">
-          </div>
-        </div>
-        <div class="sq-modal-row">
-          <div class="sq-modal-field" style="grid-column:1/-1">
             <label for="calEvtF_location">Location / Stadium</label>
             <input type="text" id="calEvtF_location" placeholder="e.g. Estadio Municipal">
           </div>
@@ -1034,9 +1052,10 @@
 // ── State ──────────────────────────────────────────────────────
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editEvtSource = null, _editMcId = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
-let _ribbonMeta = null;     // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
-let _seasonSettings = null; // { season_start, season_end, season_name, competition } from club_settings
-let _matchSessions = []; // calendar_events with type='match'
+let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
+let _seasonSettings = null;  // { season_start, season_end, season_name, competition } from club_settings
+let _matchSessions = [];     // calendar_events with type='match'
+let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
 let _monthEvts = []; // full session objects for month view click handlers
 let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
 const TODAY = new Date().toISOString().split('T')[0];
@@ -1240,9 +1259,11 @@ function renderGrid() {
           const cat = focusToClass(s.session_type);
           const icon = EVT_ICONS[cat] || 'ti-calendar';
           const dur = s.duration ? ` ${s.duration}′` : '';
+          const timeStr = s.start_time ? s.start_time.slice(0, 5) : '';
           const au = (s.duration && s.estimated_rpe) ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>` : '';
           return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" draggable="true">
             <i class="ti ${icon}"></i>
+            ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
             <span class="name" title="${(s.title || s.session_type || cat) + dur}">${s.title || s.session_type || cat}${dur}</span>${au}
           </div>`;
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
@@ -1372,7 +1393,7 @@ async function updateSortOrders(dateStr) {
 async function fetchAllEvents(dateFrom, dateTo) {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
-      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe')
+      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time')
       .eq('club_id', _clubId)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
@@ -1382,7 +1403,9 @@ async function fetchAllEvents(dateFrom, dateTo) {
   ]);
   if (sessRes.error) return { error: sessRes.error.message };
   const norm = (sessRes.data || []).map(s => ({
-    ...s, session_date: (s.session_date || '').split('T')[0], source: 'session'
+    ...s, session_date: (s.session_date || '').split('T')[0],
+    start_time: s.session_time || null,
+    source: 'session'
   }));
   const evts = evtRes.error ? [] : (evtRes.data || []).map(e => ({
     id: e.id, title: e.title, session_type: e.type,
@@ -1504,6 +1527,8 @@ const CAL_EVT_TYPES = ['match','recovery','travel','meeting','evaluation','video
 function toggleMatchFields(type) {
   const el = document.getElementById('calEvtMatchFields');
   if (el) el.style.display = type === 'match' ? '' : 'none';
+  const lbl = document.getElementById('calEvtStarttimeLabel');
+  if (lbl) lbl.textContent = type === 'match' ? 'Kick-off time' : 'Start time';
 }
 
 function toggleRpeRow(type) {
@@ -1587,13 +1612,13 @@ async function saveEvt() {
   const isCalEvt = CAL_EVT_TYPES.includes(type);
   let error;
 
+  const startTimeVal = document.getElementById('calEvtF_starttime').value || null;
   if (isCalEvt) {
-    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe };
+    const payload = { title, type, date, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal };
     if (type === 'match') {
       payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
       payload.competition = document.getElementById('calEvtF_competition').value || null;
-      payload.start_time  = document.getElementById('calEvtF_starttime').value || null;
       payload.location    = document.getElementById('calEvtF_location').value.trim() || null;
     }
     if (_editEvtId && _editEvtSource === 'event') {
@@ -1608,7 +1633,7 @@ async function saveEvt() {
       ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
   } else {
-    const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe };
+    const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal };
     if (_editEvtId && _editEvtSource === 'session') {
       ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
     } else if (_editEvtId && _editEvtSource === 'event') {
@@ -1783,15 +1808,28 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
   const rb = document.querySelector('.cal-ribbon-body');
   if (!rb) return;
 
-  // Scroll ±2 months on arrow click
+  // Scroll ±3 months (or shift sub-range when active)
   document.querySelectorAll('.cal-ribbon-h .cal-pager button').forEach((btn, i) => {
     btn.addEventListener('click', () => {
       if (!_ribbonMeta) return;
-      const { totalMs } = _ribbonMeta;
-      const ribbonEl = rb.querySelector('.cal-ribbon');
-      const totalW = (ribbonEl ? ribbonEl.scrollWidth : rb.scrollWidth) || 1;
-      const monthPx = (91 * 86400000 / totalMs) * totalW; // ~3 months
-      rb.scrollBy({ left: i === 0 ? -monthPx : monthPx, behavior: 'smooth' });
+      const dir = i === 0 ? -1 : 1; // -1 = back, +1 = forward
+      if (_ribbonViewRange) {
+        // Shift the sub-range by ~3 months
+        const shiftMs = 91 * 86400000 * dir;
+        const newFrom = new Date(new Date(_ribbonViewRange.from + 'T00:00:00').getTime() + shiftMs);
+        const newTo   = new Date(new Date(_ribbonViewRange.to   + 'T00:00:00').getTime() + shiftMs);
+        _ribbonViewRange = {
+          from: newFrom.toISOString().slice(0, 10),
+          to:   newTo.toISOString().slice(0, 10),
+        };
+        renderSeasonRibbon(_allMCs, _matchSessions);
+      } else {
+        const { totalMs } = _ribbonMeta;
+        const ribbonEl = rb.querySelector('.cal-ribbon');
+        const totalW = (ribbonEl ? ribbonEl.scrollWidth : rb.scrollWidth) || 1;
+        const monthPx = (91 * 86400000 / totalMs) * totalW;
+        rb.scrollBy({ left: dir * monthPx, behavior: 'smooth' });
+      }
     });
   });
 
@@ -1894,17 +1932,18 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
     document.body.appendChild(pop);
     _rangePop = pop;
 
+    // Pre-fill with current sub-range if active
+    if (_ribbonViewRange) {
+      pop.querySelector('#calRangeFrom').value = _ribbonViewRange.from;
+      pop.querySelector('#calRangeTo').value   = _ribbonViewRange.to;
+    }
+
     pop.querySelector('#calRangeJump').addEventListener('click', () => {
       const from = pop.querySelector('#calRangeFrom').value;
       const to   = pop.querySelector('#calRangeTo').value;
       if (!from || !to || to < from) { showCalToast('Select a valid date range.'); return; }
-      const rb = document.querySelector('.cal-ribbon-body');
-      if (!rb || !_ribbonMeta) return;
-      const { ribbonStart, totalMs } = _ribbonMeta;
-      const ribbonEl = rb.querySelector('.cal-ribbon');
-      const totalW = ribbonEl?.scrollWidth || rb.scrollWidth;
-      const fromPct = (new Date(from + 'T00:00:00') - ribbonStart) / totalMs;
-      rb.scrollTo({ left: Math.max(0, fromPct * totalW), behavior: 'smooth' });
+      _ribbonViewRange = { from, to };
+      renderSeasonRibbon(_allMCs, _matchSessions);
       closeRangePop();
     });
 
@@ -1915,6 +1954,12 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
     }, 0);
   });
 })();
+
+// ── Ribbon Reset button ───────────────────────────────────────
+document.getElementById('calRibbonReset')?.addEventListener('click', () => {
+  _ribbonViewRange = null;
+  renderSeasonRibbon(_allMCs, _matchSessions);
+});
 
 // ── Filter pills ──────────────────────────────────────────────
 document.querySelectorAll('.cal-filters').forEach(bar => {
@@ -2143,18 +2188,27 @@ function renderSeasonRibbon(mcs, extraMatches) {
   const ordered = mcs.slice().sort((a, b) => a.start_date > b.start_date ? 1 : -1);
   const firstMcStart = new Date(ordered[0].start_date + 'T00:00:00');
   const lastMcEnd    = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
-  // Start exactly at first MC (or season_start if configured) — no empty leading space
-  const ribbonStart = _seasonSettings?.season_start
-    ? new Date(_seasonSettings.season_start + 'T00:00:00')
-    : firstMcStart;
-  const ribbonEnd = _seasonSettings?.season_end
-    ? new Date(_seasonSettings.season_end + 'T00:00:00')
-    : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
+
+  // Sub-range override (Punto 3: Jump to date range)
+  const ribbonStart = _ribbonViewRange?.from
+    ? new Date(_ribbonViewRange.from + 'T00:00:00')
+    : _seasonSettings?.season_start
+      ? new Date(_seasonSettings.season_start + 'T00:00:00')
+      : firstMcStart;
+  const ribbonEnd = _ribbonViewRange?.to
+    ? new Date(_ribbonViewRange.to + 'T00:00:00')
+    : _seasonSettings?.season_end
+      ? new Date(_seasonSettings.season_end + 'T00:00:00')
+      : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
   const totalMs = ribbonEnd - ribbonStart;
   if (totalMs <= 0) return;
 
   // Expose metadata for pager scroll
   _ribbonMeta = { ribbonStart, totalMs };
+
+  // Show/hide Reset button based on whether a sub-range is active
+  const resetBtn = document.getElementById('calRibbonReset');
+  if (resetBtn) resetBtn.style.display = _ribbonViewRange ? '' : 'none';
 
   function pct(dateStr) {
     const ms = new Date(dateStr + 'T00:00:00') - ribbonStart;
@@ -2189,22 +2243,35 @@ function renderSeasonRibbon(mcs, extraMatches) {
     });
   }
 
-  // Week ticks: every 4 weeks to reduce clutter
-  const weeksEl = document.getElementById('calRibbonWeeks');
-  if (weeksEl) {
-    weeksEl.innerHTML = '';
-    let wkDate = new Date(ribbonStart), wkNum = 1, tick = 0;
-    while (wkDate <= ribbonEnd) {
-      if (tick % 2 === 0) {
-        const wPct = ((wkDate - ribbonStart) / totalMs * 100).toFixed(1);
-        const el = document.createElement('span');
-        el.className = 'wk';
-        el.style.left = wPct + '%';
-        el.textContent = `W${wkNum}`;
-        weeksEl.appendChild(el);
-      }
-      wkDate = new Date(wkDate.getTime() + 14 * 86400000);
-      wkNum += 2; tick++;
+  // Season name label (top row)
+  const seasonLabelEl = document.getElementById('calRibbonSeasonLabel');
+  if (seasonLabelEl) {
+    const sy = ribbonStart.getFullYear(), ey = ribbonEnd.getFullYear();
+    const autoSeason = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
+    const sName = _seasonSettings?.season_name || `Season ${autoSeason}`;
+    const compPart = _seasonSettings?.competition ? ` · ${_seasonSettings.competition}` : '';
+    seasonLabelEl.textContent = sName + compPart;
+  }
+
+  // Date ticks: 5, 10, 15, 20, 25 of each month within range
+  const datesEl = document.getElementById('calRibbonDates');
+  if (datesEl) {
+    datesEl.innerHTML = '';
+    const TICK_DAYS = [5, 10, 15, 20, 25];
+    let mCur = new Date(ribbonStart.getFullYear(), ribbonStart.getMonth(), 1);
+    while (mCur <= ribbonEnd) {
+      TICK_DAYS.forEach(day => {
+        const d = new Date(mCur.getFullYear(), mCur.getMonth(), day);
+        if (d >= ribbonStart && d <= ribbonEnd) {
+          const pPct = ((d - ribbonStart) / totalMs * 100).toFixed(2);
+          const el = document.createElement('span');
+          el.className = 'dt';
+          el.style.left = pPct + '%';
+          el.textContent = day;
+          datesEl.appendChild(el);
+        }
+      });
+      mCur = new Date(mCur.getFullYear(), mCur.getMonth() + 1, 1);
     }
   }
 
@@ -2250,10 +2317,16 @@ function renderSeasonRibbon(mcs, extraMatches) {
       });
       barsEl.appendChild(bar);
     });
-    const tl = document.createElement('div');
-    tl.className = 'today-line';
-    tl.style.left = todayPct + '%';
-    barsEl.appendChild(tl);
+    // Today-line lives in the ribbon container to span all rows
+    const ribbonCont = barsEl.closest('.cal-ribbon');
+    const existingTl = ribbonCont?.querySelector('.today-line');
+    if (existingTl) { existingTl.style.left = todayPct + '%'; }
+    else if (ribbonCont) {
+      const tl = document.createElement('div');
+      tl.className = 'today-line';
+      tl.style.left = todayPct + '%';
+      ribbonCont.appendChild(tl);
+    }
   }
 
   // Match markers — merge microcycle match_dates + imported match sessions
@@ -2411,7 +2484,7 @@ async function renderUpcoming() {
   // Merge sessions with match days from MCs
   const items = [];
   (sessions || []).forEach(s => {
-    items.push({ date: s.session_date, title: s.title, type: s.session_type });
+    items.push({ date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null });
   });
   _allMCs.forEach(mc => {
     if (!mc.match_date || mc.match_date < TODAY || mc.match_date > in14d) return;
@@ -2438,13 +2511,14 @@ async function renderUpcoming() {
     const isMatch = item.type === 'match';
     const dStyle = isMatch ? 'background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)' : '';
     const mStyle = isMatch ? 'color:var(--cm-danger)' : '';
-    const loc    = isMatch ? (item.isAway ? 'Away' : 'Home') : '';
+    const loc      = isMatch ? (item.isAway ? 'Away' : 'Home') : '';
+    const timeChip = item.start_time ? `<span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${item.start_time.slice(0,5)}</span>` : '';
     return `
       <div class="upcoming-row">
         <div class="upcoming-date" style="${dStyle}"><div class="m" style="${mStyle}">${month}</div><div class="d" style="${mStyle}">${day}</div></div>
         <div class="upcoming-body">
           <div class="upcoming-title">${item.title}</div>
-          <div class="upcoming-meta"><span class="badge ${cls}">${label}</span>${loc}</div>
+          <div class="upcoming-meta"><span class="badge ${cls}">${label}</span>${loc}${timeChip}</div>
         </div>
         <div></div>
       </div>`;
