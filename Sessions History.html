@@ -415,15 +415,15 @@
   const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DAYS_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  const FOCUS_MAP = { Tactical:'tactical', Physical:'physical', Technical:'technical', Match:'tactical', Recovery:'individual', Conditioning:'physical', Gym:'physical' };
+  const FOCUS_MAP = { tactical:'tactical', match:'tactical', recovery:'individual', conditioning:'physical', gym:'physical', technical:'technical', other:'positional' };
   const ORIENT_MAP = {
-    Tactical:    { cls:'dur',  label:'Duration'       },
-    Physical:    { cls:'spd',  label:'Speed'          },
-    Match:       { cls:'ten',  label:'Match'          },
-    Recovery:    { cls:'rec',  label:'Recovery'       },
-    Gym:         { cls:'ten',  label:'Muscle tension' },
-    Conditioning:{ cls:'act',  label:'Activation'     },
-    Technical:   { cls:'intro',label:'Introductory'   },
+    tactical:    { cls:'dur',  label:'Tactical'      },
+    conditioning:{ cls:'act',  label:'Conditioning'  },
+    match:       { cls:'ten',  label:'Match'         },
+    recovery:    { cls:'rec',  label:'Recovery'      },
+    gym:         { cls:'ten',  label:'Gym'           },
+    technical:   { cls:'intro',label:'Technical'     },
+    other:       { cls:'spd',  label:'Other'         },
   };
   const FOCUS_TYPES = {
     Tactical:   ['tactical','match'],
@@ -1106,9 +1106,12 @@
 
     if (error || !data?.length) {
       const gymBtn = isGym ? `<button class="cm-btn is-sm is-outline" style="margin-top:12px" onclick="window.location.href='Gym Planner.html?date=${sess.session_date}'"><i class="ti ti-barbell" style="font-size:13px"></i>Open in Gym Planner</button>` : '';
-      exList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises recorded for this session${gymBtn}</div>`;
+      exList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises recorded for this session${gymBtn ? '<br>' + gymBtn : ''}</div>`;
       return;
     }
+
+    const activationEx = data.filter(e => e.phase === 'activation');
+    const mainEx       = data.filter(e => e.phase !== 'activation');
 
     if (isGym) {
       // Gym summary: muscle groups + total volume + duration
@@ -1131,7 +1134,7 @@
       exList._plannerMap = plannerMap;
     }
 
-    exList.innerHTML = data.map(ex => {
+    function renderExCard(ex) {
       const pData   = ex.planner_exercise_id ? (exList._plannerMap?.[ex.planner_exercise_id] || {}) : {};
       const name    = ex.name || ex.gym_exercises?.name || '—';
       const dur     = ex.duration ? `${ex.duration}′` : null;
@@ -1182,7 +1185,18 @@
           ${badges}
         </div>
       </div>`;
-    }).join('');
+    }
+
+    let html = '';
+    if (activationEx.length) {
+      html += `<div style="font:500 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:0 0 6px">Activation</div>`;
+      html += activationEx.map(renderExCard).join('');
+    }
+    if (mainEx.length) {
+      if (activationEx.length) html += `<div style="font:500 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:10px 0 6px">Field exercises</div>`;
+      html += mainEx.map(renderExCard).join('');
+    }
+    exList.innerHTML = html || `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises recorded for this session</div>`;
   }
 
   // ── Detail inline edit mode ──

@@ -307,7 +307,7 @@
               </select>
             </div>
             <div class="dp-f"><label>Orientation</label>
-              <select><option>Introductory</option><option>Activation</option><option>Muscle tension</option><option selected>Speed</option><option>Duration</option><option>Recovery</option></select>
+              <select id="dpOrientation"><option value="">—</option><option value="introductory">Introductory</option><option value="activation">Activation</option><option value="muscle_tension">Muscle tension</option><option value="speed">Speed</option><option value="duration">Duration</option><option value="recovery">Recovery</option></select>
             </div>
             <div class="dp-f"><label>Focus</label>
               <select id="dpFocus"><option value="tactical">Tactical</option><option value="individual">Individual</option><option value="physical" selected>Physical</option><option value="sectorial">Sectorial</option></select>
@@ -320,7 +320,7 @@
               </select>
             </div>
             <div class="dp-f"><label>Match day</label>
-              <select><option>— Not a match day —</option><option>MD−5</option><option>MD−4</option><option>MD−3</option><option selected>MD−2</option><option>MD−1</option><option>MD</option><option>MD+1</option><option>MD+2</option></select>
+              <select id="dpMatchDay"><option value="">— Not a match day —</option><option value="MD-5">MD−5</option><option value="MD-4">MD−4</option><option value="MD-3">MD−3</option><option value="MD-2">MD−2</option><option value="MD-1">MD−1</option><option value="MD0">MD</option><option value="MD+1">MD+1</option><option value="MD+2">MD+2</option></select>
             </div>
             <div class="dp-f col-4"><label>Notes · context</label>
               <textarea id="dpNotes" placeholder="General session notes, weather, kit, observations…"></textarea>
@@ -541,7 +541,7 @@ function dpRenderSquad(avMap) {
   document.getElementById('dpSquadBody').innerHTML = Object.entries(groups)
     .sort((a,b) => a[1].o - b[1].o)
     .map(([lbl, {list}]) =>
-      `<div class="dp-pl-group"><span class="l">${lbl}</span><span class="l-line"></span></div><div class="dp-players">${list.map(chip).join('')}</div>`
+      `<div class="dp-pl-group"><span class="l">${lbl} · ${list.length}</span><span class="l-line"></span></div><div class="dp-players">${list.map(chip).join('')}</div>`
     ).join('');
 
   let avCt = 0, partCt = 0, unCt = 0, awayCt = 0, injCt = 0, sickCt = 0;
@@ -625,8 +625,8 @@ async function loadDay(dateStr) {
 
   const [availRes, adaptRes, sessRes] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: [] })),
-    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation,adaptation_notes,adaptation_sent_at,zones, players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: null })),
-    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published,estimated_rpe').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle().catch(() => ({ data: null }))
+    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr).catch(() => ({ data: null })),
+    window.sb.from('training_sessions').select('id,title,session_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset').eq('club_id', _dpClubId).eq('session_date', dateStr).maybeSingle().catch(() => ({ data: null }))
   ]);
 
   _dpCurrentSessionId = sessRes.data?.id || null;
@@ -639,12 +639,18 @@ async function loadDay(dateStr) {
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = sess.session_type || '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = sess.notes || '';
     const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = sess.estimated_rpe || '';
+    const so = document.getElementById('dpOrientation'); if (so) so.value = sess.orientation || '';
+    const sf = document.getElementById('dpFocus'); if (sf) sf.value = sess.focus || '';
+    const sm = document.getElementById('dpMatchDay'); if (sm) sm.value = sess.match_day_offset || '';
   } else {
     if (titleInput) titleInput.value = '';
     const st = document.getElementById('dpStartTime'); if (st) st.value = '';
     const stype = document.getElementById('dpSessionType'); if (stype) stype.value = '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = '';
     const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = '';
+    const so = document.getElementById('dpOrientation'); if (so) so.value = '';
+    const sf = document.getElementById('dpFocus'); if (sf) sf.value = '';
+    const sm = document.getElementById('dpMatchDay'); if (sm) sm.value = '';
   }
   _dpUpdatePublishBtn();
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
@@ -655,14 +661,13 @@ async function loadDay(dateStr) {
 
   dpRenderSquad(avMap);
 
-  const withAdapt = (adaptRes.data || []).filter(t => t.adaptation_notes || t.adaptation || t.has_adaptation);
+  const withAdapt = (adaptRes.data || []).filter(t => t.adaptation_notes);
   if (withAdapt.length) {
     document.getElementById('dpPhysioCt').textContent = withAdapt.length;
     document.getElementById('dpPhysioList').innerHTML = withAdapt.map(t => {
       const pl = t.players || {};
       const av2 = (`${pl.first_name||''} ${pl.last_name||''}`.trim()).split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase() || '?';
-      const zones = Array.isArray(t.zones) ? t.zones : (t.zones ? t.zones.split(',').map(z=>z.trim()) : []);
-      const adaptText = t.adaptation_notes || t.adaptation || '';
+      const adaptText = t.adaptation_notes || '';
       const tt = t.treatment_type || 'rehab';
       const ttDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${tt==='preventive'?'#16A34A':'#DC2626'};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>`;
       const mods = Array.isArray(t.modalities) ? t.modalities : (t.type ? (Array.isArray(t.type) ? t.type : [t.type]) : []);
@@ -672,7 +677,6 @@ async function loadDay(dateStr) {
           <div class="name">${ttDot}${((pl.first_name||'')+' '+(pl.last_name||'')).trim()||'Unknown'} · #${pl.number??'—'} · ${pl.position||''}</div>
           <div class="note">${adaptText}</div>
           ${mods.length ? `<div class="zones">${mods.map(m=>`<span class="z">${m}</span>`).join('')}</div>` : ''}
-          ${zones.length ? `<div class="zones">${zones.map(z=>`<span class="z">${z}</span>`).join('')}</div>` : ''}
         </div>
         <div class="act"><button title="Mark as resolved" onclick="this.closest('.dp-physio-alert').style.opacity='0.4'">✓ Applied</button></div>
       </div>`;
@@ -942,11 +946,25 @@ async function dpAutoSaveSession() {
   const typeVal = document.getElementById('dpSessionType')?.value || 'tactical';
   const nameVal = document.getElementById('dpSessionTitle')?.value?.trim();
   const title   = nameVal || TYPE_DEFAULTS[typeVal] || 'Training';
+  const startVal = document.getElementById('dpStartTime')?.value || null;
+  const endVal   = document.getElementById('dpEndTime')?.value   || null;
+  let duration = null;
+  if (startVal && endVal) {
+    const [sh, sm] = startVal.split(':').map(Number);
+    const [eh, em] = endVal.split(':').map(Number);
+    const diff = (eh * 60 + em) - (sh * 60 + sm);
+    if (diff > 0) duration = diff;
+  }
+  if (!duration && _dpSessionTotalMin > 0) duration = _dpSessionTotalMin;
   const payload = {
     title,
     session_date: date,
     session_type: typeVal,
-    session_time:  document.getElementById('dpStartTime')?.value  || null,
+    session_time:  startVal,
+    duration,
+    orientation:   document.getElementById('dpOrientation')?.value || null,
+    focus:         document.getElementById('dpFocus')?.value || null,
+    match_day_offset: document.getElementById('dpMatchDay')?.value || null,
     notes:         document.getElementById('dpNotes')?.value?.trim() || null,
     estimated_rpe: parseInt(document.getElementById('dpEstRpe')?.value) || null,
     club_id:       _dpClubId
@@ -1159,7 +1177,7 @@ async function dpExportPDF() {
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
     window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,publish_players,publish_medical,published_at').eq('club_id', clubId).order('start_date'),
     window.sb.from('treatments')
-      .select('player_id, adaptation, adaptation_notes, adaptation_sent_at, date')
+      .select('player_id, adaptation_notes, adaptation_sent_at, date')
       .eq('club_id', clubId)
       .eq('notify_coaches', true)
       .gte('adaptation_sent_at', yesterday7)
@@ -1185,7 +1203,7 @@ async function dpExportPDF() {
   document.getElementById('dpDateInput').addEventListener('change', e => { if (e.target.value) loadDay(e.target.value); });
 
   // Autosave session info with debounce on field changes
-  ['dpSessionTitle','dpStartTime','dpSessionType','dpFocus','dpNotes','dpEstRpe'].forEach(id => {
+  ['dpSessionTitle','dpStartTime','dpEndTime','dpSessionType','dpOrientation','dpFocus','dpMatchDay','dpNotes','dpEstRpe'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('change', dpQueueSave);
@@ -1201,6 +1219,16 @@ async function dpExportPDF() {
 <script type="text/babel" src="settings-drawer.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<div id="dpStatusMenu" class="dp-status-menu">
+  <div class="dp-status-opt" data-s="available"><span class="dot" style="background:var(--cm-success)"></span>Available</div>
+  <div class="dp-status-opt" data-s="partial"><span class="dot" style="background:var(--cm-warning)"></span>Partial</div>
+  <div class="dp-status-opt" data-s="injured"><span class="dot" style="background:#dc2626"></span>Injured</div>
+  <div class="dp-status-opt" data-s="sick"><span class="dot" style="background:#a855f7"></span>Sick</div>
+  <div class="dp-status-opt" data-s="unavailable"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable</div>
+  <div class="dp-status-opt" data-s="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away</div>
+</div>
+
 <script>
   document.querySelectorAll('.dp-squad-pill').forEach(p => p.addEventListener('click', () => {
     document.querySelectorAll('.dp-squad-pill').forEach(o => o.classList.remove('is-on'));
@@ -1244,13 +1272,6 @@ async function dpExportPDF() {
   });
 </script>
 
-<div id="dpStatusMenu" class="dp-status-menu">
-  <div class="dp-status-opt" data-s="available"><span class="dot" style="background:var(--cm-success)"></span>Available</div>
-  <div class="dp-status-opt" data-s="partial"><span class="dot" style="background:var(--cm-warning)"></span>Partial</div>
-  <div class="dp-status-opt" data-s="injured"><span class="dot" style="background:#dc2626"></span>Injured</div>
-  <div class="dp-status-opt" data-s="sick"><span class="dot" style="background:#a855f7"></span>Sick</div>
-  <div class="dp-status-opt" data-s="unavailable"><span class="dot" style="background:var(--cm-danger)"></span>Unavailable</div>
-  <div class="dp-status-opt" data-s="away"><span class="dot" style="background:var(--cm-info,#3b82f6)"></span>Away</div>
-</div>
+
 </body>
 </html>
