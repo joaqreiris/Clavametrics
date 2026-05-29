@@ -263,6 +263,10 @@
   .gp-map-sel   { width:100%; padding:4px 7px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); color:var(--cm-fg); font:500 11.5px/1 var(--cm-font-sans); }
   .gp-map-sel.is-green { border-color:var(--cm-success); background:var(--cm-success-bg); }
   .gp-map-sel.is-yellow { border-color:var(--cm-warning); background:rgba(245,158,11,.08); }
+  .gp-map-table tr.matched-custom td:first-child { border-left:3px solid var(--cm-accent); }
+  .gp-map-sel.is-blue { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .gp-create-form-row td { padding:0 !important; }
+  .gp-create-metric-form { padding:12px 14px; background:var(--cm-bg-soft); border-bottom:2px solid var(--cm-accent); }
   /* Step 3 grid table — display:contents rows align perfectly with the header */
   .gp-match-row           { display:contents; }
   .s3-hdr-cell            { padding:10px 16px; font:600 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
@@ -2664,16 +2668,26 @@ window.renderView = async function () {
   }
 
   // ── Column auto-match ──────────────────────────────────────
+  // Order: 1. saved mapping  2. catalog label  3. built-in aliases
   function autoMatchColumn(colName, existingMappings) {
     const nc = _norm(colName);
-    // Saved mapping takes priority (user previously set it for this provider)
+    // 1. Saved mapping (memory of prior imports for this provider)
     const saved = existingMappings.find(m => _norm(m.source_column_name) === nc);
     if (saved) return { metric: saved.target_metric, confidence: 'saved', score: 1, conversion: saved.unit_conversion || 1 };
 
-    const normFn = window.normalizeAlias || _norm;
+    const normFn  = window.normalizeAlias || _norm;
     const catHint = _categoryHint(nc);
+    const THRESHOLD = catHint ? 0.75 : 0.85;
 
-    // 1 ── Exact alias match (player fields checked first via array order)
+    // 2. Catalog label matching (catches custom metrics and renamed core labels)
+    const catalog = _wizState.metricCatalog || [];
+    for (const def of catalog) {
+      if (_norm(def.label) === nc) {
+        return { metric: def.key, confidence: 'high', score: 1, conversion: detectConversion(colName, def.key) };
+      }
+    }
+
+    // 3. Built-in alias exact match (player fields first via array order)
     for (const entry of _aliasDb) {
       if (!_catOk(catHint, entry.category)) continue;
       for (const alias of entry.aliases) {
@@ -2683,21 +2697,27 @@ window.renderView = async function () {
       }
     }
 
-    // 2 ── Fuzzy match with category filtering
-    // Threshold: 0.75 when we have a category hint, 0.85 when we don't.
-    const THRESHOLD = catHint ? 0.75 : 0.85;
-    let best = null, bestScore = 0;
+    // 4. Fuzzy — pick best between catalog labels and built-in aliases
+    let bestCatalogKey = null, bestCatalogScore = 0;
+    for (const def of catalog) {
+      const s = _sim(nc, _norm(def.label));
+      if (s > bestCatalogScore) { bestCatalogScore = s; bestCatalogKey = def.key; }
+    }
+    let bestAliasKey = null, bestAliasScore = 0;
     for (const entry of _aliasDb) {
       if (!_catOk(catHint, entry.category)) continue;
       for (const alias of entry.aliases) {
         const s = _sim(nc, normFn(alias));
-        if (s > bestScore) { bestScore = s; best = entry.metric_key; }
+        if (s > bestAliasScore) { bestAliasScore = s; bestAliasKey = entry.metric_key; }
       }
     }
-    if (bestScore >= THRESHOLD) {
-      return { metric: best, confidence: 'medium', score: bestScore, conversion: detectConversion(colName, best) };
+    if (bestCatalogScore >= THRESHOLD && bestCatalogScore >= bestAliasScore) {
+      return { metric: bestCatalogKey, confidence: 'medium', score: bestCatalogScore, conversion: detectConversion(colName, bestCatalogKey) };
     }
-    return { metric: null, confidence: 'none', score: bestScore, conversion: 1 };
+    if (bestAliasScore >= THRESHOLD) {
+      return { metric: bestAliasKey, confidence: 'medium', score: bestAliasScore, conversion: detectConversion(colName, bestAliasKey) };
+    }
+    return { metric: null, confidence: 'none', score: Math.max(bestCatalogScore, bestAliasScore), conversion: 1 };
   }
 
   function detectConversion(colName, metric) {
@@ -2753,8 +2773,18 @@ window.renderView = async function () {
       existingMappings = data || [];
     }
 
+    // Load metric catalog (core + custom definitions for this club)
+    let metricCatalog = [];
+    if (clubId) {
+      const { data } = await window.sb.from('gps_metric_definitions')
+        .select('key,label,unit,category,decimals,is_core,display_order')
+        .eq('club_id', clubId)
+        .order('display_order', { ascending: true });
+      metricCatalog = data || [];
+    }
+
     _wizState = {
-      file, rows, clubId, existingMappings,
+      file, rows, clubId, existingMappings, metricCatalog,
       headerRow: 0,          // 0-based index
       sessionType: sessionTypeGuess,
       matchDate: '',
@@ -3192,31 +3222,71 @@ window.renderView = async function () {
     });
   }
 
+  // slug helper for "Create new metric" key auto-generation
+  function _toSlug(s) {
+    const slug = (s || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/, '');
+    return /^[a-z]/.test(slug) ? slug : ('m_' + slug) || 'metric';
+  }
+
   // Build grouped <select> options for the column mapping dropdown
+  // Groups: Player fields / Core metrics (from catalog) / Custom metrics / Special / Ignore / Create new
   function _buildSelOptions(selectedVal) {
-    const pfKeys = window.GPS_PLAYER_FIELD_KEYS || new Set();
+    const pfKeys      = window.GPS_PLAYER_FIELD_KEYS || new Set();
     const pfEntries   = _aliasDb.filter(e => pfKeys.has(e.metric_key));
-    const coreEntries = _aliasDb.filter(e => !pfKeys.has(e.metric_key) && e.category !== 'date');
     const specEntries = _aliasDb.filter(e => e.category === 'date');
-    const opt = m => {
-      const label = METRIC_LABEL[m] || m;
-      return `<option value="${m}"${m === selectedVal ? ' selected' : ''}>${label}</option>`;
-    };
+    const catalog     = _wizState.metricCatalog || [];
+    const coreMetrics = catalog.filter(d => d.is_core);
+    const custMetrics = catalog.filter(d => !d.is_core);
+
+    const opt = (key, label) =>
+      `<option value="${key}"${key === selectedVal ? ' selected' : ''}>${label}</option>`;
+
+    // Fallback to _aliasDb core entries when catalog hasn't been seeded yet
+    const coreHtml = coreMetrics.length
+      ? coreMetrics.map(d => opt(d.key, d.label + (d.unit ? ` (${d.unit})` : ''))).join('')
+      : _aliasDb.filter(e => !pfKeys.has(e.metric_key) && e.category !== 'date')
+          .map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('');
+
     return `<option value="__ignore__"${'__ignore__' === selectedVal ? ' selected' : ''}>— Ignore this column —</option>
-      <optgroup label="── Player fields ──">${pfEntries.map(e => opt(e.metric_key)).join('')}</optgroup>
-      <optgroup label="── Core metrics ──">${coreEntries.map(e => opt(e.metric_key)).join('')}</optgroup>
-      ${specEntries.length ? `<optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key)).join('')}</optgroup>` : ''}`;
+      <option value="__create__"${'__create__' === selectedVal ? ' selected' : ''}>+ Create new metric...</option>
+      <optgroup label="── Player fields ──">${pfEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>
+      <optgroup label="── Core metrics ──">${coreHtml}</optgroup>
+      ${custMetrics.length ? `<optgroup label="── Custom metrics ──">${custMetrics.map(d => opt(d.key, d.label + (d.unit ? ` (${d.unit})` : ''))).join('')}</optgroup>` : ''}
+      ${specEntries.length ? `<optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>` : ''}`;
+  }
+
+  function _s2RowCls(c, catalog) {
+    if (c.excluded) return '';
+    const def  = catalog.find(d => d.key === c.metric);
+    const conf = c.confidence;
+    if (def && !def.is_core && (conf === 'high' || conf === 'saved' || conf === 'medium')) return 'matched-custom';
+    if (conf === 'high' || conf === 'saved') return 'matched-auto';
+    if (conf === 'medium') return 'matched-guess';
+    return 'matched-none';
+  }
+
+  function _s2SelCls(metricKey, conf, catalog) {
+    const def = catalog.find(d => d.key === metricKey);
+    if (def && !def.is_core) return 'is-blue';
+    if (conf === 'high' || conf === 'saved') return 'is-green';
+    if (conf === 'medium') return 'is-yellow';
+    return '';
   }
 
   function renderStep2(body, footer) {
     const { columnMap } = _wizState;
+    const catalog = _wizState.metricCatalog || [];
     const rows = Object.entries(columnMap);
+    const custCount = catalog.filter(d => !d.is_core).length;
 
     body.innerHTML = `
       <p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">
         Map each file column to a ClavaMetrics metric.
-        <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-success)"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Auto-matched</span>
-        <span style="display:inline-flex;align-items:center;gap:4px;color:#b45309;margin-left:8px"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Possible match (verify)</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-success)"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Core</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-accent);margin-left:8px"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Custom${custCount ? ` (${custCount})` : ''}</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;color:#b45309;margin-left:8px"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Possible match</span>
       </p>
       <div style="overflow-x:auto">
       <table class="gp-map-table">
@@ -3233,20 +3303,23 @@ window.renderView = async function () {
               <td style="color:var(--cm-fg-faint);font:500 11.5px/1 var(--cm-font-mono)">—</td>
             </tr>`;
           }
-          const conf   = c.confidence;
-          const rowCls = conf === 'high' || conf === 'saved' ? 'matched-auto' : conf === 'medium' ? 'matched-guess' : 'matched-none';
-          const selCls = conf === 'high' || conf === 'saved' ? 'is-green' : conf === 'medium' ? 'is-yellow' : '';
+          const conf     = c.confidence;
+          const rowCls   = _s2RowCls(c, catalog);
+          const selCls   = _s2SelCls(c.metric, conf, catalog);
           const selected = c.metric || '__ignore__';
           const tooltip  = conf === 'high' || conf === 'saved'
-            ? 'Auto-matched (exact alias)'
+            ? 'Auto-matched (exact)'
             : conf === 'medium'
             ? `Possible match · score ${Math.round((c.score || 0) * 100)}%`
             : 'No match — ignored by default';
           return `<tr class="${rowCls}" data-ci="${i}">
             <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${c.sourceCol}</td>
-            <td><select class="gp-map-sel ${selCls}" data-ci="${i}" title="${tooltip}">
-              ${_buildSelOptions(selected)}
-            </select></td>
+            <td>
+              <select class="gp-map-sel ${selCls}" data-ci="${i}" title="${tooltip}">
+                ${_buildSelOptions(selected)}
+              </select>
+              <div class="gp-create-inline" data-ci="${i}"></div>
+            </td>
             <td><input type="number" class="gp-conv-inp" data-ci="${i}" value="${c.conversion}"
               step="0.001" min="0.001" style="width:80px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-mono)"></td>
           </tr>`;
@@ -3256,9 +3329,16 @@ window.renderView = async function () {
 
     body.querySelectorAll('.gp-map-sel').forEach(sel => {
       sel.addEventListener('change', e => {
-        const ci = +e.target.dataset.ci;
-        _wizState.columnMap[ci].metric = e.target.value === '__ignore__' ? null : e.target.value;
-        e.target.className = 'gp-map-sel';
+        const ci  = +e.target.dataset.ci;
+        const val = e.target.value;
+        if (val === '__create__') {
+          _showCreateMetricForm(ci, e.target);
+          return;
+        }
+        // Clear any open create form for this column
+        body.querySelector(`.gp-create-inline[data-ci="${ci}"]`).innerHTML = '';
+        _wizState.columnMap[ci].metric = val === '__ignore__' ? null : val;
+        e.target.className = 'gp-map-sel ' + _s2SelCls(val, 'high', _wizState.metricCatalog || []);
       });
     });
     body.querySelectorAll('.gp-conv-inp').forEach(inp => {
@@ -3279,6 +3359,118 @@ window.renderView = async function () {
       await saveMappingsToDB();
       buildPlayerMatches();
       setWizStep(3);
+    });
+  }
+
+  // ── Create new metric inline form ─────────────────────────
+  function _showCreateMetricForm(ci, sel) {
+    const inlineDiv = document.querySelector(`.gp-create-inline[data-ci="${ci}"]`);
+    if (!inlineDiv) return;
+    // Close any other open forms
+    document.querySelectorAll('.gp-create-inline').forEach(d => { if (+d.dataset.ci !== ci) d.innerHTML = ''; });
+
+    const colName = _wizState.columnMap[ci]?.sourceCol || '';
+    const suggestedKey = _toSlug(colName);
+
+    inlineDiv.innerHTML = `
+      <div class="gp-create-metric-form" style="margin-top:6px">
+        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">New metric</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Label *</label>
+            <input id="nmLabel${ci}" type="text" value="${colName}" placeholder="e.g. Player Load Slow"
+              style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+            <div style="margin-top:2px;font:400 9.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">key: <span id="nmKeyPrev${ci}">${suggestedKey}</span></div>
+          </div>
+          <div>
+            <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Unit</label>
+            <input id="nmUnit${ci}" type="text" placeholder="m, km/h, AU, %…"
+              style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Category *</label>
+            <select id="nmCategory${ci}" style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+              <option value="custom">custom</option>
+              <option value="distance">distance</option>
+              <option value="speed">speed</option>
+              <option value="acceleration">acceleration</option>
+              <option value="load">load</option>
+              <option value="time">time</option>
+              <option value="count">count</option>
+            </select>
+          </div>
+          <div>
+            <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Decimals *</label>
+            <input id="nmDecimals${ci}" type="number" value="2" min="0" max="4"
+              style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Description</label>
+          <textarea id="nmDesc${ci}" rows="2" placeholder="Optional…"
+            style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+        <div id="nmErr${ci}" style="display:none;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-danger);margin-bottom:6px"></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="cm-btn is-outline is-sm" id="nmCancel${ci}">Cancel</button>
+          <button class="cm-btn is-primary is-sm" id="nmSave${ci}">Save metric</button>
+        </div>
+      </div>`;
+
+    // Live key preview
+    const labelInp = document.getElementById(`nmLabel${ci}`);
+    const keySpan  = document.getElementById(`nmKeyPrev${ci}`);
+    labelInp.addEventListener('input', () => { keySpan.textContent = _toSlug(labelInp.value); });
+
+    // Cancel
+    document.getElementById(`nmCancel${ci}`).addEventListener('click', () => {
+      inlineDiv.innerHTML = '';
+      sel.value = _wizState.columnMap[ci]?.metric || '__ignore__';
+    });
+
+    // Save
+    document.getElementById(`nmSave${ci}`).addEventListener('click', async () => {
+      const label    = labelInp.value.trim();
+      const key      = _toSlug(label);
+      const unit     = document.getElementById(`nmUnit${ci}`).value.trim() || null;
+      const category = document.getElementById(`nmCategory${ci}`).value;
+      const decimals = Math.max(0, Math.min(4, +document.getElementById(`nmDecimals${ci}`).value || 2));
+      const desc     = document.getElementById(`nmDesc${ci}`).value.trim() || null;
+      const errDiv   = document.getElementById(`nmErr${ci}`);
+
+      if (!label) { errDiv.textContent = 'Label is required.'; errDiv.style.display = ''; return; }
+      if (!/^[a-z][a-z0-9_]*$/.test(key)) { errDiv.textContent = `Generated key "${key}" is invalid — label must start with a letter.`; errDiv.style.display = ''; return; }
+      if ((_wizState.metricCatalog || []).find(d => d.key === key)) {
+        errDiv.textContent = `Key "${key}" already exists in the catalog.`; errDiv.style.display = ''; return;
+      }
+
+      const saveBtn = document.getElementById(`nmSave${ci}`);
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+
+      const newDef = {
+        club_id: _wizState.clubId, key, label, unit, category,
+        decimals, description: desc, is_core: false,
+        display_order: 200 + (_wizState.metricCatalog || []).filter(d => !d.is_core).length,
+      };
+      const { error } = await window.sb.from('gps_metric_definitions').insert(newDef);
+      if (error) {
+        errDiv.textContent = error.message; errDiv.style.display = '';
+        saveBtn.disabled = false; saveBtn.textContent = 'Save metric';
+        return;
+      }
+
+      // Update local catalog cache
+      _wizState.metricCatalog = [...(_wizState.metricCatalog || []), { ...newDef }];
+
+      // Update the select for this column
+      sel.innerHTML = _buildSelOptions(key);
+      sel.value = key;
+      sel.className = 'gp-map-sel is-blue';
+      _wizState.columnMap[ci].metric = key;
+
+      inlineDiv.innerHTML = '';
     });
   }
 
