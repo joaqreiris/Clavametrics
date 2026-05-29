@@ -3061,10 +3061,10 @@ window.renderView = async function () {
         row.innerHTML = `
           <div style="min-width:130px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${display}</div>
           <span class="gp-match-badge ${match.confidence}">${pctStr}</span>
-          <div style="flex:1;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)" id="matchLbl_${CSS.escape(rawKey)}">${pLabel}</div>
-          <div id="matchActions_${CSS.escape(rawKey)}"></div>`;
+          <div style="flex:1;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${pLabel}</div>
+          <div class="gp-match-actions"></div>`;
 
-        const actions = row.querySelector(`#matchActions_${CSS.escape(rawKey)}`);
+        const actions = row.querySelector('.gp-match-actions');
 
         if (match.confidence === 'high' && p) {
           actions.innerHTML = `<span class="gp-match-badge high">Auto-matched</span>`;
@@ -3092,7 +3092,7 @@ window.renderView = async function () {
           btn.textContent = 'Confirmed';
           btn.nextElementSibling?.remove();
           // Show position warning after manual confirmation
-          const actions = btn.closest(`#matchActions_${CSS.escape(key)}`);
+          const actions = btn.closest('.gp-match-actions');
           if (actions && match) _renderPositionWarning(actions, key, match, match.player);
         } else if (btn.classList.contains('gp-pos-keep')) {
           btn.closest('.gp-pos-warn')?.remove();
@@ -3144,7 +3144,7 @@ window.renderView = async function () {
   }
 
   function showCreatePlayerForm(key, btn, matchData) {
-    const wrap = btn.closest('.gp-match-row').querySelector(`#matchActions_${CSS.escape(key)}`);
+    const wrap = btn.closest('.gp-match-row').querySelector('.gp-match-actions');
     if (!wrap) return;
     // Autocomplete from player fields in the CSV row
     const nameParts = (matchData?.rawName || '').split(' ');
@@ -3157,19 +3157,19 @@ window.renderView = async function () {
       : 'MF';
     wrap.innerHTML = `
       <div class="gp-imp-form" style="grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:0;margin-top:4px">
-        <div><label>First name</label><input id="cpFN_${CSS.escape(key)}" placeholder="First" value="${fnGuess}"></div>
-        <div><label>Last name</label><input id="cpLN_${CSS.escape(key)}" placeholder="Last" value="${lnGuess}"></div>
-        <div><label>Position</label><select id="cpPos_${CSS.escape(key)}">
+        <div><label>First name</label><input class="cp-fn" placeholder="First" value="${fnGuess}"></div>
+        <div><label>Last name</label><input class="cp-ln" placeholder="Last" value="${lnGuess}"></div>
+        <div><label>Position</label><select class="cp-pos">
           ${POSITIONS.map(p => `<option${p === posGuess ? ' selected' : ''}>${p}</option>`).join('')}
         </select></div>
-        <div><label>#</label><input id="cpNum_${CSS.escape(key)}" placeholder="0" type="number" min="1" value="${numGuess}"></div>
+        <div><label>#</label><input class="cp-num" placeholder="0" type="number" min="1" value="${numGuess}"></div>
       </div>
-      <button class="gp-match-confirm" style="margin-top:6px" id="cpSave_${CSS.escape(key)}">Save &amp; match</button>`;
-    wrap.querySelector(`#cpSave_${CSS.escape(key)}`).addEventListener('click', async () => {
-      const fn  = wrap.querySelector(`#cpFN_${CSS.escape(key)}`).value.trim();
-      const ln  = wrap.querySelector(`#cpLN_${CSS.escape(key)}`).value.trim();
-      const pos = wrap.querySelector(`#cpPos_${CSS.escape(key)}`).value;
-      const num = wrap.querySelector(`#cpNum_${CSS.escape(key)}`).value;
+      <button class="gp-match-confirm cp-save" style="margin-top:6px">Save &amp; match</button>`;
+    wrap.querySelector('.cp-save').addEventListener('click', async () => {
+      const fn  = wrap.querySelector('.cp-fn').value.trim();
+      const ln  = wrap.querySelector('.cp-ln').value.trim();
+      const pos = wrap.querySelector('.cp-pos').value;
+      const num = wrap.querySelector('.cp-num').value;
       if (!fn || !ln) { showToast('First and last name required'); return; }
       const insertObj = {
         club_id: _wizState.clubId, first_name: fn, last_name: ln,
