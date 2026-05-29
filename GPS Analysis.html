@@ -295,6 +295,30 @@
   .gp-drop.drag-over { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
   .gp-demo-tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg-muted); font:600 9px/1 var(--cm-font-mono); flex-shrink:0; }
 
+  /* ── Microcycle Compare ─────────────────────────────────────── */
+  .gp-mc-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
+  .mc-metric-pills { display:flex; gap:10px; flex-wrap:wrap; width:100%; padding:4px 0; }
+  .mc-metric-pill { flex:1; min-width:120px; display:flex; flex-direction:column; gap:3px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
+  .mc-mp-label { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; }
+  .mc-mp-diff  { font:700 18px/1.1 var(--cm-font-sans); }
+  .mc-mp-range { font:500 10.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .mc-tbl { width:100%; border-collapse:collapse; font:500 12px/1.4 var(--cm-font-sans); }
+  .mc-tbl th { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; padding:6px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--cm-border); cursor:pointer; }
+  .mc-tbl th:first-child { text-align:left; cursor:default; }
+  .mc-tbl th.is-sort { color:var(--cm-accent); }
+  .mc-tbl td { padding:5px 10px; text-align:right; border-bottom:1px solid var(--cm-border-soft); }
+  .mc-tbl td:first-child { text-align:left; }
+  .mc-tbl tr:hover td { background:var(--cm-bg-soft); }
+  .mc-diff { display:inline-flex; align-items:center; gap:3px; min-width:58px; justify-content:flex-end; font:700 11.5px/1 var(--cm-font-mono); }
+  .mc-diff.d-vup   { color:var(--cm-success); }
+  .mc-diff.d-up    { color:#86efac; }
+  .mc-diff.d-neu   { color:var(--cm-fg-muted); }
+  .mc-diff.d-dn    { color:var(--cm-warning); }
+  .mc-diff.d-vdn   { color:var(--cm-danger); }
+  .mc-bar-cell { display:flex; align-items:center; gap:6px; }
+  .mc-bar-track { flex:1; height:8px; background:var(--cm-bg-sunk); border-radius:4px; overflow:hidden; }
+  .mc-bar-fill  { height:100%; border-radius:4px; background:var(--cm-accent); }
+
   /* ── Match Performance ──────────────────────────────────────── */
   .gp-mp-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
   .mp-kpis { display:flex; gap:10px; flex-wrap:wrap; width:100%; padding:4px 0; }
@@ -1051,7 +1075,72 @@
 
       <!-- MICROCYCLE COMPARE -->
       <div class="gp-view" data-view="mc">
+
+        <!-- Microcycle Compare — filters bar -->
+        <div class="gp-mc-bar" id="mcBar">
+          <select class="sc-sel" id="mc-md-code">
+            <option value="MD-5">MD-5</option>
+            <option value="MD-4">MD-4</option>
+            <option value="MD-3" selected>MD-3</option>
+            <option value="MD-2">MD-2</option>
+            <option value="MD-1">MD-1</option>
+            <option value="MD">MD (match day)</option>
+            <option value="MD+1">MD+1</option>
+          </select>
+          <select class="sc-sel" id="mc-scope">
+            <option value="vs_last">vs Last microcycle</option>
+            <option value="vs_avg_3">vs Average of last 3 MCs</option>
+            <option value="vs_avg_5">vs Average of last 5 MCs</option>
+          </select>
+          <select class="sc-sel" id="mc-metric">
+            <option value="total_distance">Total Distance</option>
+            <option value="high_speed_distance">HSR</option>
+            <option value="sprint_distance">Sprint Distance</option>
+            <option value="player_load">Player Load</option>
+            <option value="sprint_count">Sprint Count</option>
+          </select>
+          <button class="pill" id="mc-load-btn" style="height:30px"><i class="ti ti-refresh"></i>Load</button>
+          <span class="sc-info" id="mc-info">Select filters and click Load</span>
+        </div>
+
         <div class="gp-grid is-edit">
+
+          <!-- NEW: Diff by metric summary -->
+          <div class="gp-c" data-size="full" id="card-mc-diff-metric">
+            <div class="gp-c-h">
+              <span class="ttl">Diff by metric</span>
+              <span class="sub" id="mc-metric-sub">squad avg diff% per metric</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="mc-metric-body" style="padding:10px 14px">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Click Load to compare microcycles.</div>
+            </div>
+          </div>
+
+          <!-- NEW: MC diff table -->
+          <div class="gp-c" data-size="full" id="card-mc-table">
+            <div class="gp-c-h">
+              <span class="ttl">MC diff table</span>
+              <span class="sub" id="mc-table-sub">current vs reference · one row per player</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="mc-table-body" style="overflow-x:auto;padding:0">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Click Load to compare microcycles.</div>
+            </div>
+          </div>
+
+          <!-- NEW: MC diff scatter -->
+          <div class="gp-c" data-size="full" id="card-mc-scatter">
+            <div class="gp-c-h">
+              <span class="ttl">Diff scatter</span>
+              <span class="sub">X: diff% vs reference · Y: current value · each point = a player</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:280px;padding:10px">
+              <canvas id="canvasMCScatter"></canvas>
+            </div>
+          </div>
+
           <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>MC diff · scatter · trend</small></button>
         </div>
       </div>
@@ -6462,6 +6551,349 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   });
 
   if (document.querySelector('.gp-view[data-view="ind"].is-on')) pwInit();
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MICROCYCLE COMPARE (vista mc) — diff table + scatter + metrics
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  const fmtN   = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d });
+  const fmtPct = (v) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+
+  function diffCls(pct) {
+    if (pct == null) return 'd-neu';
+    if (pct > 20)   return 'd-vup';
+    if (pct > 5)    return 'd-up';
+    if (pct > -5)   return 'd-neu';
+    if (pct > -20)  return 'd-dn';
+    return 'd-vdn';
+  }
+
+  function calcDiff(curr, ref) {
+    if (curr == null || ref == null || ref === 0) return null;
+    return (curr - ref) / ref * 100;
+  }
+
+  // ── MD_Code helpers ──────────────────────────────────────────
+  function mdCodeFromDates(sessionDate, matchDate) {
+    if (!matchDate) return null;
+    const diff = Math.round((new Date(matchDate + 'T00:00:00') - new Date(sessionDate + 'T00:00:00')) / 86400000);
+    if (diff === 0) return 'MD';
+    if (diff > 0)  return `MD-${diff}`;
+    return `MD+${Math.abs(diff)}`;
+  }
+
+  // ── METRIC definitions ────────────────────────────────────────
+  const MC_METRICS = [
+    { key: 'total_distance',          label: 'Total Distance', unit: 'm'  },
+    { key: 'high_speed_distance',     label: 'HSR',            unit: 'm'  },
+    { key: 'sprint_distance',         label: 'Sprint Dist',    unit: 'm'  },
+    { key: 'player_load',             label: 'Player Load',    unit: 'AU' },
+    { key: 'sprint_count',            label: 'Sprints',        unit: ''   },
+  ];
+
+  // ── state & DOM ──────────────────────────────────────────────
+  const _mc = { scatterChart: null };
+  let _mcInited   = false;
+  let _mcSessions = []; // all sessions for club
+  let _playerMap  = {};
+  let _mcSortKey  = 'diff_pct'; let _mcSortDir = -1;
+
+  const mdCodeSel  = document.getElementById('mc-md-code');
+  const scopeSel   = document.getElementById('mc-scope');
+  const metricSel  = document.getElementById('mc-metric');
+  const loadBtn    = document.getElementById('mc-load-btn');
+  const mcInfo     = document.getElementById('mc-info');
+  const metricBody = document.getElementById('mc-metric-body');
+  const tableBody  = document.getElementById('mc-table-body');
+  const scatCanvas = document.getElementById('canvasMCScatter');
+  if (!loadBtn) return;
+
+  // ── init — build session index once ──────────────────────────
+  async function mcInit() {
+    if (_mcInited) return;
+    _mcInited = true;
+    try {
+      const clubId = await window.getClubId?.();
+      if (!clubId || !window.sb) return;
+      const [{ data: sessions }, { data: players }] = await Promise.all([
+        window.sb.from('training_sessions').select('id,session_date,session_type,title')
+          .eq('club_id', clubId).order('session_date', { ascending: true }),
+        window.sb.from('players').select('id,first_name,last_name,number,position')
+          .eq('club_id', clubId).neq('status','inactive'),
+      ]);
+      _mcSessions = sessions || [];
+      _playerMap  = Object.fromEntries((players || []).map(p => [p.id, p]));
+      mcInfo.textContent = `${_mcSessions.length} sessions indexed. Select filters and click Load.`;
+    } catch (e) { console.error('mcInit:', e); }
+  }
+
+  // ── build MD_Code index per week ──────────────────────────────
+  function _buildWeekIndex() {
+    const weeks = {};
+    for (const s of _mcSessions) {
+      const d   = new Date(s.session_date + 'T00:00:00');
+      const wk  = getISOWeek(d);
+      const yr  = d.getFullYear();
+      const key = `${yr}-W${String(wk).padStart(2,'0')}`;
+      if (!weeks[key]) weeks[key] = { key, sessions: [], matchDate: null };
+      weeks[key].sessions.push(s);
+      if (s.session_type === 'match') weeks[key].matchDate = s.session_date;
+    }
+    // Assign MD_Codes
+    for (const w of Object.values(weeks)) {
+      w.mdMap = {}; // md_code → session_id
+      for (const s of w.sessions) {
+        const code = mdCodeFromDates(s.session_date, w.matchDate);
+        if (code) w.mdMap[code] = s.id;
+      }
+    }
+    return Object.values(weeks).sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  // ── load & compare ───────────────────────────────────────────
+  async function _mcLoad() {
+    const selectedMD = mdCodeSel.value;
+    const scope      = scopeSel.value;
+    const metricKey  = metricSel.value;
+    mcInfo.textContent = 'Loading...';
+    metricBody.innerHTML = tableBody.innerHTML =
+      '<div style="padding:16px;color:var(--cm-fg-muted)">Loading...</div>';
+
+    try {
+      const clubId = await window.getClubId?.();
+      const weeks  = _buildWeekIndex();
+
+      // Find all weeks that have the selected MD_Code
+      const weeksWith = weeks.filter(w => w.mdMap[selectedMD]);
+      if (weeksWith.length < 2) {
+        mcInfo.textContent = weeksWith.length === 0
+          ? `No weeks found with ${selectedMD}. Need at least 2 microcycles to compare.`
+          : `Only 1 week has ${selectedMD}. Need at least 2 to compare.`;
+        metricBody.innerHTML = tableBody.innerHTML =
+          `<div style="padding:16px;color:var(--cm-fg-muted)">${mcInfo.textContent}</div>`;
+        return;
+      }
+
+      // Current = last week, reference = previous N weeks
+      const currentWeek = weeksWith[weeksWith.length - 1];
+      const refCount    = scope === 'vs_last' ? 1 : scope === 'vs_avg_3' ? 3 : 5;
+      const refWeeks    = weeksWith.slice(-(refCount + 1), -1);
+
+      const currentSessId = currentWeek.mdMap[selectedMD];
+      const refSessIds    = refWeeks.map(w => w.mdMap[selectedMD]).filter(Boolean);
+
+      if (!refSessIds.length) {
+        mcInfo.textContent = 'Not enough historical microcycles for comparison.';
+        metricBody.innerHTML = tableBody.innerHTML = `<div style="padding:16px;color:var(--cm-fg-muted)">${mcInfo.textContent}</div>`;
+        return;
+      }
+
+      // Load GPS reports for current + reference sessions
+      const allSessIds = [currentSessId, ...refSessIds];
+      const { data: reports } = await window.sb
+        .from('gps_reports')
+        .select(`player_id,session_id,${MC_METRICS.map(m=>m.key).join(',')}`)
+        .eq('club_id', clubId).in('session_id', allSessIds);
+
+      const allReports = reports || [];
+
+      // Build per-player data
+      const playerIds = [...new Set(allReports.map(r => r.player_id))];
+      const playerRows = playerIds.map(pid => {
+        const currReport = allReports.find(r => r.player_id === pid && r.session_id === currentSessId);
+        const refReports = allReports.filter(r => r.player_id === pid && refSessIds.includes(r.session_id));
+
+        const row = { pid, player: _playerMap[pid] || {} };
+        for (const m of MC_METRICS) {
+          const currVal = currReport?.[m.key] ?? null;
+          const refVals = refReports.map(r => r[m.key]).filter(v => v != null);
+          const refAvg  = refVals.length ? refVals.reduce((s,v)=>s+v,0)/refVals.length : null;
+          row[m.key]         = currVal;
+          row[m.key + '_ref'] = refAvg;
+          row[m.key + '_diff'] = calcDiff(currVal, refAvg);
+        }
+        row.diff_pct = row[metricKey + '_diff'];
+        return row;
+      }).filter(r => r[metricKey] != null || r[metricKey+'_ref'] != null);
+
+      const currentDate = currentWeek.sessions.find(s=>s.id===currentSessId)?.session_date || '';
+      const refLabel    = refWeeks.length === 1 ? refWeeks[0].key : `avg of ${refWeeks.length} MCs`;
+      mcInfo.textContent = `${selectedMD} · ${currentDate} vs ${refLabel} · ${playerRows.length} players`;
+
+      _mcRenderMetricDiff(playerRows);
+      _mcRenderTable(playerRows, metricKey);
+      _mcRenderScatter(playerRows, metricKey);
+    } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = 'Error loading data.'; }
+  }
+
+  // ── Diff by metric ────────────────────────────────────────────
+  function _mcRenderMetricDiff(rows) {
+    if (!rows.length) { metricBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No data.</div>'; return; }
+
+    const pills = MC_METRICS.map(m => {
+      const diffs = rows.map(r => r[m.key + '_diff']).filter(v => v != null);
+      if (!diffs.length) return null;
+      const avg   = diffs.reduce((s,v)=>s+v,0)/diffs.length;
+      const min   = Math.min(...diffs);
+      const max   = Math.max(...diffs);
+      return `<div class="mc-metric-pill">
+        <span class="mc-mp-label">${m.label}</span>
+        <span class="mc-mp-diff ${diffCls(avg)}">${fmtPct(avg)}</span>
+        <span class="mc-mp-range">Range: ${fmtPct(min)} to ${fmtPct(max)}</span>
+      </div>`;
+    }).filter(Boolean);
+
+    metricBody.innerHTML = `<div class="mc-metric-pills">${pills.join('')}</div>`;
+  }
+
+  // ── MC diff table ─────────────────────────────────────────────
+  function _mcRenderTable(rows, primaryKey) {
+    if (!rows.length) { tableBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No data.</div>'; return; }
+
+    const sorted = [...rows].sort((a, b) => {
+      const av = a[_mcSortKey === 'player' ? 'pid' : _mcSortKey] ?? (_mcSortDir > 0 ? Infinity : -Infinity);
+      const bv = b[_mcSortKey === 'player' ? 'pid' : _mcSortKey] ?? (_mcSortDir > 0 ? Infinity : -Infinity);
+      if (_mcSortKey === 'player') {
+        return (a.player.last_name||'').localeCompare(b.player.last_name||'') * _mcSortDir;
+      }
+      return (av - bv) * _mcSortDir;
+    });
+
+    const maxVal = Math.max(...rows.map(r => r[primaryKey] || 0));
+
+    const headers = `<tr>
+      <th data-key="player" style="text-align:left">Player</th>
+      <th data-key="${primaryKey}">Current (m)</th>
+      <th data-key="${primaryKey}_ref">Ref (m)</th>
+      <th data-key="diff_pct">Diff %</th>
+      <th style="min-width:120px;cursor:default">Bar</th>
+    </tr>`;
+
+    const bodyRows = sorted.map(r => {
+      const p    = r.player;
+      const name = `${p.last_name||''} ${(p.first_name||'')[0]||''}.`.trim() || r.pid.slice(0,8);
+      const curr = r[primaryKey];
+      const ref  = r[primaryKey + '_ref'];
+      const diff = r['diff_pct'];
+      const barPct = curr != null && maxVal > 0 ? Math.round(curr/maxVal*100) : 0;
+
+      return `<tr>
+        <td><strong>${name}</strong>${p.position ? `<span style="color:var(--cm-fg-muted);font-size:10.5px"> · ${p.position}</span>` : ''}</td>
+        <td>${fmtN(curr, 0)}</td>
+        <td style="color:var(--cm-fg-muted)">${fmtN(ref, 0)}</td>
+        <td><span class="mc-diff ${diffCls(diff)}">${fmtPct(diff)}</span></td>
+        <td><div class="mc-bar-cell"><div class="mc-bar-track"><div class="mc-bar-fill" style="width:${barPct}%"></div></div></div></td>
+      </tr>`;
+    }).join('');
+
+    tableBody.innerHTML = `<table class="mc-tbl"><thead>${headers}</thead><tbody>${bodyRows}</tbody></table>`;
+
+    tableBody.querySelectorAll('th[data-key]').forEach(th => {
+      th.addEventListener('click', () => {
+        const k = th.dataset.key;
+        if (_mcSortKey === k) _mcSortDir *= -1; else { _mcSortKey = k; _mcSortDir = -1; }
+        _mcRenderTable(rows, primaryKey);
+      });
+    });
+  }
+
+  // ── scatter ───────────────────────────────────────────────────
+  function _mcRenderScatter(rows, metricKey) {
+    if (!scatCanvas || typeof Chart === 'undefined') return;
+    if (_mc.scatterChart) { _mc.scatterChart.destroy(); _mc.scatterChart = null; }
+    if (!rows.length) return;
+
+    const validRows = rows.filter(r => r[metricKey] != null && r[metricKey+'_diff'] != null);
+    if (!validRows.length) return;
+
+    const avgDiff = validRows.reduce((s,r)=>s+r[metricKey+'_diff'],0)/validRows.length;
+    const metricLabel = MC_METRICS.find(m=>m.key===metricKey)?.label || metricKey;
+    const unit        = MC_METRICS.find(m=>m.key===metricKey)?.unit || '';
+
+    const points = validRows.map(r => ({
+      x: r[metricKey+'_diff'],
+      y: r[metricKey],
+      label: (r.player.last_name || r.pid.slice(0,6)),
+    }));
+
+    _mc.scatterChart = new Chart(scatCanvas, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: 'Players',
+          data: points,
+          pointRadius: 8,
+          pointHoverRadius: 10,
+          backgroundColor: points.map(p => p.x > 0 ? 'rgba(74,222,128,.7)' : 'rgba(248,113,113,.65)'),
+          borderColor: 'transparent',
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: {
+            title: { display: true, text: `Diff % vs reference` },
+            ticks: { callback: v => `${v>=0?'+':''}${v}%` },
+          },
+          y: { title: { display: true, text: `${metricLabel}${unit?' ('+unit+')':''}` } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const pt = points[ctx.dataIndex];
+                return [`${pt.label}`, `${metricLabel}: ${fmtN(ctx.parsed.y, 0)} ${unit}`, `Diff: ${fmtPct(ctx.parsed.x)}`];
+              },
+            },
+          },
+          // Average line via afterDraw
+        },
+      },
+      plugins: [{
+        id: 'avgLine',
+        afterDraw(chart) {
+          const { ctx, scales: { x, y } } = chart;
+          const xPx = x.getPixelForValue(avgDiff);
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(xPx, y.top);
+          ctx.lineTo(xPx, y.bottom);
+          ctx.strokeStyle = 'rgba(99,102,241,.6)';
+          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(99,102,241,.8)';
+          ctx.font = '10px Geist Mono, monospace';
+          ctx.fillText(`AVG ${fmtPct(avgDiff)}`, xPx + 4, y.top + 14);
+          ctx.restore();
+          // Player labels
+          ctx.save();
+          ctx.font = '10px Geist, system-ui';
+          ctx.fillStyle = 'var(--cm-fg)';
+          points.forEach((pt, i) => {
+            const px = x.getPixelForValue(pt.x);
+            const py = y.getPixelForValue(pt.y);
+            ctx.fillText(pt.label, px + 10, py - 4);
+          });
+          ctx.restore();
+        },
+      }],
+    });
+  }
+
+  // ── events ───────────────────────────────────────────────────
+  loadBtn.addEventListener('click', _mcLoad);
+  metricSel.addEventListener('change', () => { /* reload on metric change only if data loaded */ });
+
+  window._mcInit = mcInit;
+
+  document.getElementById('sections')?.addEventListener('click', e => {
+    if (e.target.closest('.gp-sec[data-view="mc"]')) setTimeout(mcInit, 0);
+  });
 })();
 </script>
 
