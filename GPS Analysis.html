@@ -3442,7 +3442,7 @@ window.renderView = async function () {
           <select id="wizSessionType" style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
             <option value="auto" ${sessionType==='auto'?'selected':''}>Auto-detect from filename</option>
             <option value="match" ${sessionType==='match'?'selected':''}>Match (official)</option>
-            <option value="conditioning" ${(sessionType==='conditioning'||sessionType==='training')?'selected':''}>Training session</option>
+            <option value="training" ${(sessionType==='training'||sessionType==='conditioning')?'selected':''}>Training session</option>
           </select>
         </div>
       </div>
@@ -4792,7 +4792,7 @@ window.renderView = async function () {
     'player_load','avg_speed','hmld','time_played','sprint_count','distance_per_minute',
   ]);
   const GPS_INT_COLS = new Set(['accelerations','decelerations','sprint_count','time_played']);
-  const SESSION_TYPES = ['tactical','conditioning','gym','match','recovery','other'];
+  const SESSION_TYPES = ['training','match','conditioning','tactical','gym','recovery','rehab','other'];
 
   // ── Step 4 — Session info ──────────────────────────────────
   // Extracts unique dates from the parsed file (if session_date column is mapped)
@@ -4834,7 +4834,7 @@ window.renderView = async function () {
   async function renderStep4Session(body, footer) {
     const { clubId, sessionType, columnMap } = _wizState;
     const today   = new Date().toISOString().slice(0, 10);
-    const initType = sessionType === 'auto' ? 'conditioning' : (sessionType || 'conditioning');
+    const initType = sessionType === 'auto' ? 'training' : (sessionType || 'training');
 
     const { uniqueDates, dateMap, doubleDates } = _buildDateMap();
     const hasDateCol   = uniqueDates.length > 0;
@@ -5001,35 +5001,39 @@ window.renderView = async function () {
       if (_rawTypes.length) {
         // Build heuristic map on first render; preserve on re-render
         if (!_wizState.typeMap) {
-          const _h = { match: 'match', official: 'match', game: 'match', partido: 'match',
-                       rehab: 'recovery', recovery: 'recovery', dvg: 'recovery',
-                       gym: 'gym', tactical: 'tactical', conditioning: 'conditioning',
-                       friendly: 'match' };
           _wizState.typeMap = {};
           for (const rt of _rawTypes) {
             const nc = rt.toLowerCase();
-            const hit = Object.entries(_h).find(([k]) => nc.includes(k));
-            _wizState.typeMap[rt] = hit ? hit[1] : 'conditioning';
+            let canon = 'training';
+            if (/match|partido/.test(nc))            canon = 'match';
+            else if (/train|entren/.test(nc))        canon = 'training';
+            else if (/rehab|rehabilit/.test(nc))     canon = 'rehab';
+            else if (/condition|físic|fisic/.test(nc)) canon = 'conditioning';
+            else if (/recover|recup|regenera/.test(nc)) canon = 'recovery';
+            else if (/gym|fuerza/.test(nc))           canon = 'gym';
+            else if (/tact/.test(nc))                 canon = 'tactical';
+            _wizState.typeMap[rt] = canon;
           }
         }
         const _typeRowsHTML = _rawTypes.map(rt => {
-          const canon = _wizState.typeMap[rt] || 'conditioning';
+          const canon = _wizState.typeMap[rt] || 'training';
           const _topts = SESSION_TYPES.map(t => `<option value="${t}"${t === canon ? ' selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('');
           return `<tr>
             <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg);padding:5px 8px">"${rt}"</td>
             <td style="padding:5px 4px;color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans)">→</td>
-            <td style="padding:5px 8px">
+            <td style="padding:5px 8px;display:flex;align-items:center;gap:6px">
               <select class="gp-typemap-sel" data-raw="${rt.replace(/"/g,'&quot;')}"
                 style="padding:4px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans)">
                 ${_topts}
               </select>
+              <span style="font:500 10px/1 var(--cm-font-sans);color:var(--cm-fg-faint);white-space:nowrap">auto</span>
             </td>
           </tr>`;
         }).join('');
         body.insertAdjacentHTML('beforeend', `
           <div style="margin-top:12px;padding:10px 12px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
-            <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">
-              Map session types — <span style="font-weight:400;text-transform:none">map "Official Match" → Match so it feeds baselines</span>
+            <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:8px">
+              Detectamos los tipos automáticamente. Revisá y corregí solo si algo está mal.
             </div>
             <table style="width:100%;border-collapse:collapse"><tbody>${_typeRowsHTML}</tbody></table>
           </div>`);
@@ -5050,7 +5054,7 @@ window.renderView = async function () {
     footer.querySelector('#wizBack4').addEventListener('click', () => setWizStep(3));
     footer.querySelector('#wizNext4').addEventListener('click', () => {
       si.isHistorical  = body.querySelector('[name="s4mode"]:checked')?.value === 'historical';
-      si.sessionType   = body.querySelector('#s4Type')?.value || 'conditioning';
+      si.sessionType   = body.querySelector('#s4Type')?.value || 'training';
       if (si.mode === 'single') {
         si.date  = body.querySelector('#s4Date')?.value  || today;
         si.title = body.querySelector('#s4Title')?.value.trim() || '';
@@ -5294,7 +5298,7 @@ window.renderView = async function () {
           }
         } else {
           // Original path: one session per unique date, single global type
-          const type = sessionType || 'conditioning';
+          const type = sessionType || 'training';
           setStatus('Creating sessions…', `0 / ${uniqueDates.length}`);
 
           for (let i = 0; i < uniqueDates.length; i++) {
@@ -5322,7 +5326,7 @@ window.renderView = async function () {
 
         if (!singleSessionId) {
           const date  = sessionInfo.date  || new Date().toISOString().slice(0, 10);
-          const type  = sessionInfo.sessionType || sessionType || 'conditioning';
+          const type  = sessionInfo.sessionType || sessionType || 'training';
           const title = sessionInfo.title || `GPS import · ${date}`;
           const payload = { club_id: clubId, title, session_date: date, session_type: type, is_historical: !!isHistorical };
           const { data: newSess, error } = await window.sb.from('training_sessions')
