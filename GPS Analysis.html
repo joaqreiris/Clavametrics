@@ -1189,65 +1189,72 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
 </script>
 
 <script>
-(async () => {
-  const ok = await window.requireAuth();
-  if (!ok) return;
-
-  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
-  const clubId = await window.getClubId();
-
-  if (club) window.applyClubTheme();
-
-  // Player count for subtitle
-  const { count } = await window.sb.from('players')
-    .select('id', { count: 'exact', head: true })
-    .eq('club_id', clubId)
-    .neq('status', 'inactive');
+// ── refreshDashboard — reusable after import ──────────────────
+// opts.sessionId: if provided, switch microcycle filter to that session's week
+window.refreshDashboard = async function (opts = {}) {
+  const clubId = window._gpClubId || (await window.getClubId());
+  if (!clubId) return;
+  window._gpClubId = clubId;
 
   const sub = document.getElementById('gpSub');
 
-  // Latest training session with GPS data
+  // If a specific session was just imported, pivot the MC filter to it
+  if (opts.sessionId) {
+    const { data: sess } = await window.sb.from('training_sessions')
+      .select('id,title,session_date,session_type').eq('id', opts.sessionId).single();
+    if (sess) {
+      const wk = getISOWeek(new Date(sess.session_date));
+      window.gpState.microcycle = `MC ${wk}`;
+      document.querySelectorAll('.gp-dash-bar .pill').forEach(pill => {
+        if (pill.querySelector('.ti-clock')) {
+          pill.innerHTML = `<i class="ti ti-clock"></i>MC ${wk}`;
+        }
+      });
+    }
+  }
+
+  // Player count subtitle
+  const { count } = await window.sb.from('players')
+    .select('id', { count: 'exact', head: true })
+    .eq('club_id', clubId).neq('status', 'inactive');
+
+  // Latest session for subtitle
   const { data: sessions } = await window.sb.from('training_sessions')
     .select('id,title,session_date,session_type')
     .eq('club_id', clubId)
-    .order('session_date', { ascending: false })
-    .limit(1);
+    .order('session_date', { ascending: false }).limit(1);
 
   const latestSession = sessions?.[0] || null;
-
   if (!latestSession) {
     if (sub) sub.textContent = `${count ?? 0} players · no sessions found`;
     return;
   }
-
   if (sub) sub.textContent = `${count ?? 0} players · ${latestSession.title || latestSession.session_type} · ${latestSession.session_date}`;
 
-  // Load GPS reports for latest session with player info
+  // Load GPS reports for latest session
   const { data: reports } = await window.sb.from('gps_reports')
     .select('player_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
-    .eq('session_id', latestSession.id)
-    .eq('club_id', clubId)
+    .eq('session_id', latestSession.id).eq('club_id', clubId)
     .order('total_distance', { ascending: false });
 
-  if (!reports || !reports.length) return;
+  if (!reports?.length) return;
   window._gpReports = reports;
-  window._gpClubId  = clubId;
 
-  // Update group view Z-score table with real players + raw metrics
+  // Z-score table (Group view)
   const tbody = document.querySelector('.gp-zt tbody');
   if (tbody) {
     tbody.innerHTML = reports.map(r => {
       const p = r.players;
-      const fn = p ? (((p.first_name||'')[0]||'') + '. ' + (p.last_name||'')) : '—';
+      const fn       = p ? (((p.first_name||'')[0]||'') + '. ' + (p.last_name||'')) : '—';
       const initials = p ? (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() : '?';
-      const num = p?.number ? `#${p.number}` : '';
-      const pos = p?.position || '—';
-      const dist = r.total_distance ? (r.total_distance / 1000).toFixed(1) + ' km' : '—';
-      const hsr  = r.high_speed_distance ? r.high_speed_distance + ' m' : '—';
-      const spr  = r.sprint_distance ? r.sprint_distance + ' m' : '—';
-      const spd  = r.max_speed ? r.max_speed + ' km/h' : '—';
-      const acc  = r.accelerations ?? '—';
-      const load = r.player_load ?? '—';
+      const num  = p?.number ? `#${p.number}` : '';
+      const pos  = p?.position || '—';
+      const dist = r.total_distance       ? (r.total_distance / 1000).toFixed(1) + ' km' : '—';
+      const hsr  = r.high_speed_distance  ? r.high_speed_distance + ' m'                 : '—';
+      const spr  = r.sprint_distance      ? r.sprint_distance + ' m'                     : '—';
+      const spd  = r.max_speed            ? r.max_speed + ' km/h'                        : '—';
+      const acc  = r.accelerations        ?? '—';
+      const load = r.player_load          ?? '—';
       return `<tr>
         <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
           <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
@@ -1261,111 +1268,76 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
     }).join('');
   }
 
-  // Update individual view KPIs with first player's data
+  // Individual KPIs (first / selected player)
   const first = reports[0];
   if (first) {
     const p = first.players;
     const fname = p ? ((p.first_name||'') + ' ' + (p.last_name||'')).trim() : '—';
     const indSub = document.getElementById('secSub');
     if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${latestSession.title || latestSession.session_type}`;
-
     const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
     if (kpiVals[0]) kpiVals[0].innerHTML = `${first.total_distance ? (first.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
     if (kpiVals[1]) kpiVals[1].innerHTML = `${first.high_speed_distance ?? '—'} <sub>m</sub>`;
     if (kpiVals[2]) kpiVals[2].innerHTML = `${first.sprint_distance ?? '—'}`;
   }
 
-  // ── GPS Radar — z-score vs squad ───────────────────────────────
+  // Radar chart
   const radarCanvas = document.getElementById('gpsRadar');
   const radarEmpty  = document.getElementById('gpsRadarEmpty');
   if (radarCanvas && reports.length >= 2) {
+    Chart.getChart(radarCanvas)?.destroy();
     const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
     const LABELS  = ['Distance','HSR','Sprints','Top speed','Accel','Load'];
-
-    function mean(arr) { return arr.reduce((a,b)=>a+b,0)/arr.length; }
-    function stdDev(arr,m) { return Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length)||1; }
-
-    const stats = METRICS.map(m => {
-      const vals = reports.map(r=>+(r[m]||0));
-      const mu   = mean(vals);
-      return { mu, sigma: stdDev(vals, mu) };
-    });
-
-    const selected = first || reports[0];
-    const zScores  = METRICS.map((m,i) => {
-      const { mu, sigma } = stats[i];
-      return +((+(selected[m]||0) - mu) / sigma).toFixed(2);
-    });
-
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
-
+    const mu_fn   = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+    const sd_fn   = (arr,m) => Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length)||1;
+    const stats   = METRICS.map(m => { const v=reports.map(r=>+(r[m]||0)); const mu=mu_fn(v); return {mu,sigma:sd_fn(v,mu)}; });
+    const sel     = (window.gpState.playerId ? reports.find(r=>r.player_id===window.gpState.playerId) : null) || reports[0];
+    const zs      = METRICS.map((m,i) => +((+(sel[m]||0)-stats[i].mu)/stats[i].sigma).toFixed(2));
+    const accent  = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
     new Chart(radarCanvas, {
       type: 'radar',
-      data: {
-        labels: LABELS,
-        datasets: [
-          {
-            label: 'Squad avg',
-            data: Array(6).fill(0),
-            borderColor: 'rgba(128,128,128,0.3)',
-            backgroundColor: 'rgba(128,128,128,0.06)',
-            borderDash: [4,3],
-            borderWidth: 1.5,
-            pointRadius: 0,
-          },
-          {
-            label: (selected.players ? `${(selected.players.first_name||'')[0]}. ${selected.players.last_name||''}` : 'Player'),
-            data: zScores,
-            borderColor: accent,
-            backgroundColor: 'rgba(34,197,94,0.12)',
-            borderWidth: 2,
-            pointRadius: 4,
-            pointBackgroundColor: accent,
-            pointBorderColor: '#fff',
-            pointBorderWidth: 1.5,
-          }
-        ]
+      data: { labels: LABELS, datasets: [
+        { label:'Squad avg', data:Array(6).fill(0), borderColor:'rgba(128,128,128,0.3)', backgroundColor:'rgba(128,128,128,0.06)', borderDash:[4,3], borderWidth:1.5, pointRadius:0 },
+        { label: sel.players ? `${(sel.players.first_name||'')[0]}. ${sel.players.last_name||''}` : 'Player',
+          data:zs, borderColor:accent, backgroundColor:'rgba(34,197,94,0.12)', borderWidth:2,
+          pointRadius:4, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5 },
+      ]},
+      options: { responsive:true, maintainAspectRatio:true,
+        scales: { r:{ min:-3,max:3, ticks:{display:false,stepSize:1}, grid:{color:'rgba(128,128,128,0.18)'}, angleLines:{color:'rgba(128,128,128,0.18)'}, pointLabels:{color:'rgba(128,128,128,0.8)',font:{size:11}} } },
+        plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>` z = ${ctx.parsed.r>0?'+':''}${ctx.parsed.r.toFixed(2)}`}} },
       },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        scales: {
-          r: {
-            min: -3, max: 3,
-            ticks: { display: false, stepSize: 1 },
-            grid: { color: 'rgba(128,128,128,0.18)' },
-            angleLines: { color: 'rgba(128,128,128,0.18)' },
-            pointLabels: { color: 'rgba(128,128,128,0.8)', font: { size: 11 } }
-          }
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: ctx => ` z = ${ctx.parsed.r>0?'+':''}${ctx.parsed.r.toFixed(2)}`
-            }
-          }
-        }
-      }
     });
-  } else if (radarCanvas && reports.length < 2) {
+    radarCanvas.style.display = '';
+    if (radarEmpty) radarEmpty.style.display = 'none';
+  } else if (radarCanvas) {
     radarCanvas.style.display = 'none';
     if (radarEmpty) radarEmpty.style.display = 'block';
   }
 
-  // Group view totals
-  const totDist = reports.reduce((s, r) => s + (r.total_distance || 0), 0);
-  const totHsr  = reports.reduce((s, r) => s + (r.high_speed_distance || 0), 0);
-  const totSpr  = reports.reduce((s, r) => s + (r.sprint_distance || 0), 0);
+  // Match group KPIs
+  const totDist = reports.reduce((s,r) => s+(r.total_distance||0), 0);
+  const totHsr  = reports.reduce((s,r) => s+(r.high_speed_distance||0), 0);
+  const totSpr  = reports.reduce((s,r) => s+(r.sprint_distance||0), 0);
   const grpKpis = document.querySelectorAll('.gp-view[data-view="mgrp"] .gp-kpi .v');
   if (grpKpis[0]) grpKpis[0].innerHTML = `${(totDist/1000).toFixed(1)} <sub>km</sub>`;
   if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
   if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
 
-  // Kick off science card rendering (defined in script below)
+  // Science cards
   if (typeof window.gpRenderScienceCards === 'function') {
     window.gpRenderScienceCards(reports, clubId);
   }
+};
+
+// ── Initial page load ─────────────────────────────────────────
+(async () => {
+  const ok = await window.requireAuth();
+  if (!ok) return;
+  const [, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId   = await window.getClubId();
+  if (club) window.applyClubTheme();
+  window._gpClubId = clubId;
+  await window.refreshDashboard();
 })();
 </script>
 
@@ -2311,7 +2283,8 @@ window.renderView = async function () {
         <div class="gp-wiz-step is-on" data-step="1">1 · Preview</div>
         <div class="gp-wiz-step" data-step="2">2 · Map columns</div>
         <div class="gp-wiz-step" data-step="3">3 · Match players</div>
-        <div class="gp-wiz-step" data-step="4">4 · Import</div>
+        <div class="gp-wiz-step" data-step="4">4 · Session</div>
+        <div class="gp-wiz-step" data-step="5">5 · Import</div>
       </div>
       <div class="gp-modal-body" id="wizBody" style="overflow-y:auto;max-height:calc(85vh - 160px)"></div>
       <div class="gp-wiz-footer" id="wizFooter"></div>`;
@@ -2342,7 +2315,8 @@ window.renderView = async function () {
     if (n === 1) renderStep1(body, footer);
     else if (n === 2) renderStep2(body, footer);
     else if (n === 3) renderStep3(body, footer);
-    else if (n === 4) renderStep4(body, footer);
+    else if (n === 4) renderStep4Session(body, footer);
+    else if (n === 5) renderStep5Import(body);
   }
 
   function renderStep1(body, footer) {
@@ -2403,7 +2377,7 @@ window.renderView = async function () {
     body.querySelector('#wizSourceLabel').addEventListener('input', e => { _wizState.sourceLabel = e.target.value; });
 
     footer.innerHTML = `
-      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 1 of 4</span>
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 1 of 5</span>
       <div class="right">
         <button class="cm-btn is-outline is-sm" onclick="document.getElementById('gpImportModal')?.remove()">Cancel</button>
         <button class="cm-btn is-primary is-sm" id="wizNext1">Next: Map columns</button>
@@ -2490,7 +2464,7 @@ window.renderView = async function () {
     });
 
     footer.innerHTML = `
-      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 2 of 4</span>
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 2 of 5</span>
       <div class="right">
         <button class="cm-btn is-outline is-sm" id="wizBack2">Back</button>
         <button class="cm-btn is-primary is-sm" id="wizNext2">Next: Match players</button>
@@ -2621,13 +2595,13 @@ window.renderView = async function () {
     }
 
     footer.innerHTML = `
-      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 3 of 4</span>
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 3 of 5</span>
       <div class="right">
         <button class="cm-btn is-outline is-sm" id="wizBack3">Back</button>
-        <button class="cm-btn is-primary is-sm" id="wizNext3">Import data</button>
+        <button class="cm-btn is-primary is-sm" id="wizNext3">Next: Session info</button>
       </div>`;
     footer.querySelector('#wizBack3').addEventListener('click', () => setWizStep(2));
-    footer.querySelector('#wizNext3').addEventListener('click', () => { setWizStep(4); runImport(); });
+    footer.querySelector('#wizNext3').addEventListener('click', () => setWizStep(4));
   }
 
   function showCreatePlayerForm(key, btn) {
@@ -2661,115 +2635,399 @@ window.renderView = async function () {
     });
   }
 
-  // ── Step 4 — Import ────────────────────────────────────────
-  function renderStep4(body) {
+  // ── GPS report columns that can be persisted ─────────────────
+  const GPS_REPORT_COLS = new Set([
+    'total_distance','high_speed_distance','very_high_speed_distance',
+    'sprint_distance','accelerations','decelerations','max_speed',
+    'player_load','avg_speed','hmld','time_played','sprint_count','distance_per_minute',
+  ]);
+  const GPS_INT_COLS = new Set(['accelerations','decelerations','sprint_count','time_played']);
+  const SESSION_TYPES = ['tactical','conditioning','gym','match','recovery','other'];
+
+  // ── Step 4 — Session info ──────────────────────────────────
+  async function renderStep4Session(body, footer) {
+    const { clubId, sessionType, matchDate } = _wizState;
+    const today = new Date().toISOString().slice(0, 10);
+    const initDate = matchDate || today;
+    const initType = sessionType === 'auto' ? 'training' : sessionType;
+
+    // Initialise session state in wizard
+    if (!_wizState.sessionInfo) {
+      _wizState.sessionInfo = {
+        date: initDate, type: initType,
+        title: '', existingId: null, calendarEventId: null,
+        status: 'searching',  // 'found' | 'new' | 'searching'
+      };
+    }
+
+    body.innerHTML = `
+      <p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 14px">
+        Choose or create the training session this file belongs to.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label class="gp-step4-lbl">Session date</label>
+          <input type="date" id="s4Date" value="${_wizState.sessionInfo.date}"
+            style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
+        </div>
+        <div>
+          <label class="gp-step4-lbl">Session type</label>
+          <select id="s4Type" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
+            ${SESSION_TYPES.map(t => `<option value="${t}"${t===initType?' selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="gp-step4-lbl">Session title (optional)</label>
+        <input type="text" id="s4Title" value="${_wizState.sessionInfo.title}"
+          placeholder="Leave blank to auto-generate"
+          style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
+      </div>
+      <div id="s4MatchLink" style="display:none;margin-bottom:12px">
+        <label class="gp-step4-lbl">Link to calendar match event (optional)</label>
+        <select id="s4MatchEvent" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
+          <option value="">— None —</option>
+        </select>
+      </div>
+      <div id="s4SessionBanner" style="margin-top:4px"></div>`;
+
+    const lbl = `font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px`;
+    body.querySelectorAll('.gp-step4-lbl').forEach(el => el.style.cssText = lbl);
+
+    async function lookupSession() {
+      const date = body.querySelector('#s4Date').value;
+      const type = body.querySelector('#s4Type').value;
+      const banner = document.getElementById('s4SessionBanner');
+      if (!date || !type || !clubId) { banner.innerHTML = ''; return; }
+      banner.innerHTML = `<div style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Searching…</div>`;
+
+      const { data } = await window.sb.from('training_sessions')
+        .select('id,title,session_date,session_type')
+        .eq('club_id', clubId).eq('session_date', date).eq('session_type', type).limit(3);
+
+      _wizState.sessionInfo.date  = date;
+      _wizState.sessionInfo.type  = type;
+      _wizState.sessionInfo.title = body.querySelector('#s4Title').value.trim();
+
+      if (data?.length) {
+        const s = data[0];
+        _wizState.sessionInfo.existingId = s.id;
+        _wizState.sessionInfo.status = 'found';
+        banner.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--cm-success-bg);border:1px solid var(--cm-success);border-radius:var(--cm-r-3)">
+            <i class="ti ti-circle-check" style="color:var(--cm-success);font-size:16px"></i>
+            <div style="flex:1">
+              <div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${s.title || s.session_type} · ${s.session_date}</div>
+              <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">Existing session found — data will be added to it</div>
+            </div>
+            ${data.length > 1 ? `<select id="s4ExistingSel" style="padding:4px 6px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans)">
+              ${data.map(ss => `<option value="${ss.id}">${ss.title || ss.session_type} · ${ss.session_date}</option>`).join('')}
+            </select>` : ''}
+          </div>`;
+        const sel = document.getElementById('s4ExistingSel');
+        if (sel) sel.addEventListener('change', e => { _wizState.sessionInfo.existingId = e.target.value; });
+      } else {
+        _wizState.sessionInfo.existingId = null;
+        _wizState.sessionInfo.status = 'new';
+        banner.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
+            <i class="ti ti-plus" style="color:var(--cm-fg-muted);font-size:16px"></i>
+            <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">No session found for this date and type — a new session will be created</div>
+          </div>`;
+      }
+
+      // If match: load nearby calendar_events
+      const matchLink = document.getElementById('s4MatchLink');
+      if (type === 'match') {
+        matchLink.style.display = 'block';
+        const dateFrom = new Date(date); dateFrom.setDate(dateFrom.getDate() - 2);
+        const dateTo   = new Date(date); dateTo.setDate(dateTo.getDate() + 2);
+        const { data: evts } = await window.sb.from('calendar_events')
+          .select('id,title,date,opponent')
+          .eq('club_id', clubId).eq('type', 'match')
+          .gte('date', dateFrom.toISOString().slice(0, 10))
+          .lte('date', dateTo.toISOString().slice(0, 10));
+        const sel = document.getElementById('s4MatchEvent');
+        sel.innerHTML = '<option value="">— None —</option>';
+        (evts || []).forEach(ev => {
+          const opt = document.createElement('option');
+          opt.value = ev.id;
+          opt.textContent = `${ev.title || 'Match'} vs ${ev.opponent || '?'} · ${ev.date}`;
+          sel.appendChild(opt);
+        });
+        sel.addEventListener('change', e => { _wizState.sessionInfo.calendarEventId = e.target.value || null; });
+      } else {
+        matchLink.style.display = 'none';
+        _wizState.sessionInfo.calendarEventId = null;
+      }
+    }
+
+    let _debounce = null;
+    const triggerLookup = () => { clearTimeout(_debounce); _debounce = setTimeout(lookupSession, 350); };
+
+    body.querySelector('#s4Date').addEventListener('change', triggerLookup);
+    body.querySelector('#s4Type').addEventListener('change', triggerLookup);
+    body.querySelector('#s4Title').addEventListener('input', e => { _wizState.sessionInfo.title = e.target.value.trim(); });
+
+    lookupSession(); // initial run
+
+    footer.innerHTML = `
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 4 of 5</span>
+      <div class="right">
+        <button class="cm-btn is-outline is-sm" id="wizBack4">Back</button>
+        <button class="cm-btn is-primary is-sm" id="wizNext4">Import data</button>
+      </div>`;
+    footer.querySelector('#wizBack4').addEventListener('click', () => setWizStep(3));
+    footer.querySelector('#wizNext4').addEventListener('click', () => {
+      _wizState.sessionInfo.date  = body.querySelector('#s4Date').value;
+      _wizState.sessionInfo.type  = body.querySelector('#s4Type').value;
+      _wizState.sessionInfo.title = body.querySelector('#s4Title').value.trim();
+      setWizStep(5);
+      runImport();
+    });
+  }
+
+  // ── Step 5 — Import progress ───────────────────────────────
+  function renderStep5Import(body) {
     body.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:32px 0">
         <i class="ti ti-loader-2" id="wizSpinner" style="font-size:32px;color:var(--cm-accent);animation:gp-spin 1s linear infinite"></i>
         <div id="wizImportStatus" style="font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center">Preparing import…</div>
       </div>`;
+    document.getElementById('wizFooter').innerHTML = '';
   }
 
+  // ── Build rows from parsed file ────────────────────────────
+  function buildInsertableRows(sessionId) {
+    const { rows, headerRow, columnMap, clubId, confirmedMap } = _wizState;
+    const playerNameIdx = Object.entries(columnMap).find(([, c]) => c.metric === 'player_name')?.[0];
+    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const hasPlayerMapping = playerNameIdx != null;
+    const insertable = [];
+    let skippedCells = 0;
+    const warnings = [];
+
+    for (const row of dataRows) {
+      const rawName  = hasPlayerMapping ? String(row[+playerNameIdx] ?? '').trim() : null;
+      const playerId = rawName ? (confirmedMap[rawName] || null) : null;
+
+      // Skip rows whose player was not matched (only if we have player column)
+      if (hasPlayerMapping && !playerId) {
+        if (rawName) warnings.push(`"${rawName}" not matched to a squad player — row skipped`);
+        continue;
+      }
+
+      const rec = { club_id: clubId, session_id: sessionId, player_id: playerId };
+
+      for (const [ci, map] of Object.entries(columnMap)) {
+        if (!map.metric || !GPS_REPORT_COLS.has(map.metric)) continue;
+        const raw = row[+ci];
+        if (raw === '' || raw == null) continue;
+        const num = +raw * (map.conversion || 1);
+        if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
+        rec[map.metric] = GPS_INT_COLS.has(map.metric) ? Math.round(num) : +num.toFixed(4);
+      }
+
+      // Validate required foreign keys are real UUIDs
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!UUID_RE.test(rec.club_id) || !UUID_RE.test(rec.session_id)) continue;
+      if (rec.player_id && !UUID_RE.test(rec.player_id)) { rec.player_id = null; }
+
+      insertable.push(rec);
+    }
+
+    return { insertable, skippedCells, warnings };
+  }
+
+  // ── Duplicate resolution panel ─────────────────────────────
+  function showDuplicatePanel(existingPids, onChoice) {
+    const body = document.getElementById('wizBody');
+    if (!body) { onChoice('replace'); return; }
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;padding:8px 0">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3)">
+          <i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:20px;flex-shrink:0"></i>
+          <div>
+            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px">${existingPids.length} existing report${existingPids.length!==1?'s':''} found for this session</div>
+            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Choose how to handle them before importing:</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="gp-dup-opt" data-action="replace" style="padding:12px 14px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);text-align:left;cursor:pointer;width:100%">
+            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Replace existing reports</div>
+            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Delete the ${existingPids.length} existing row${existingPids.length!==1?'s':''} and insert new data</div>
+          </button>
+          <button class="gp-dup-opt" data-action="skip" style="padding:12px 14px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);text-align:left;cursor:pointer;width:100%">
+            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Skip duplicates</div>
+            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Only insert rows for players that do not yet have a report for this session</div>
+          </button>
+          <button class="gp-dup-opt" data-action="cancel" style="padding:12px 14px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);text-align:left;cursor:pointer;width:100%">
+            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Cancel import</div>
+            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Go back without making changes</div>
+          </button>
+        </div>
+      </div>`;
+
+    body.querySelectorAll('.gp-dup-opt').forEach(btn => {
+      btn.addEventListener('mouseenter', () => { btn.style.borderColor = 'var(--cm-accent)'; btn.style.background = 'var(--cm-accent-soft)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.borderColor = 'var(--cm-border)'; btn.style.background = 'var(--cm-surface)'; });
+      btn.addEventListener('click', () => {
+        body.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:32px 0">
+            <i class="ti ti-loader-2" id="wizSpinner" style="font-size:32px;color:var(--cm-accent);animation:gp-spin 1s linear infinite"></i>
+            <div id="wizImportStatus" style="font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center">Processing…</div>
+          </div>`;
+        onChoice(btn.dataset.action);
+      });
+    });
+  }
+
+  // ── Main import function ───────────────────────────────────
   async function runImport() {
     const status = txt => {
       const el = document.getElementById('wizImportStatus');
       if (el) el.textContent = txt;
     };
 
-    try {
-      const { rows, headerRow, columnMap, sessionType, matchDate, clubId, confirmedMap } = _wizState;
-      const hdr = rows[headerRow] || [];
-
-      status('Resolving session…');
-
-      // Find or create session
-      let sessionId = await resolveSession(sessionType, matchDate, clubId);
-      if (!sessionId) { status('Could not create session. Aborting.'); return; }
-
-      status('Mapping rows…');
-      const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
-
-      const playerNameIdx = Object.entries(columnMap).find(([, c]) => c.metric === 'player_name')?.[0];
-      const insertable    = [];
-
-      for (const row of dataRows) {
-        const rawName  = String(row[playerNameIdx] ?? '').trim();
-        const playerId = confirmedMap[rawName] || null;
-
-        const rec = { club_id: clubId, session_id: sessionId, player_id: playerId };
-        for (const [ci, map] of Object.entries(columnMap)) {
-          if (!map.metric || map.metric === '__ignore__' || map.metric === 'player_name'
-              || map.metric === 'jersey_number' || map.metric === 'session_date' || map.metric === 'position') continue;
-          const raw = row[+ci];
-          if (raw === '' || raw == null) continue;
-          rec[map.metric] = +(+raw * map.conversion).toFixed(4);
-        }
-        insertable.push(rec);
-      }
-
-      if (!insertable.length) { status('No importable rows found.'); return; }
-
-      status(`Checking for duplicates…`);
-      // Check existing
-      const { data: existing } = await window.sb.from('gps_reports')
-        .select('id,player_id').eq('session_id', sessionId).eq('club_id', clubId);
-
-      if (existing?.length) {
-        const choice = confirm(`${existing.length} row(s) already exist for this session.\n\nOK = Replace existing rows\nCancel = Abort import`);
-        if (!choice) { status('Import cancelled.'); return; }
-        const ids = existing.map(r => r.id);
-        await window.sb.from('gps_reports').delete().in('id', ids);
-      }
-
-      status(`Inserting ${insertable.length} rows…`);
-      const chunkSize = 50;
-      for (let i = 0; i < insertable.length; i += chunkSize) {
-        const { error } = await window.sb.from('gps_reports').insert(insertable.slice(i, i + chunkSize));
-        if (error) throw error;
-      }
-
-      // Save external_gps_id for future auto-matching
-      for (const [rawKey, playerId] of Object.entries(confirmedMap)) {
-        if (playerId && rawKey) {
-          await window.sb.from('players').update({ external_gps_id: rawKey })
-            .eq('id', playerId).eq('club_id', clubId);
-        }
-      }
-
+    const finishWithError = msg => {
       document.getElementById('wizSpinner')?.remove();
-      status(`Import complete — ${insertable.length} rows inserted.`);
+      const el = document.getElementById('wizImportStatus');
+      if (el) {
+        el.innerHTML = `<span style="color:var(--cm-danger)">${msg}</span>`;
+      }
+      document.getElementById('wizFooter').innerHTML = `
+        <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-danger)">${msg}</span>
+        <div class="right">
+          <button class="cm-btn is-outline is-sm" id="wizRetry">Retry</button>
+          <button class="cm-btn is-outline is-sm" onclick="document.getElementById('gpImportModal')?.remove()">Close</button>
+        </div>`;
+      document.getElementById('wizRetry')?.addEventListener('click', () => { renderStep5Import(document.getElementById('wizBody')); runImport(); });
+    };
+
+    try {
+      const { clubId, sessionInfo, confirmedMap } = _wizState;
+
+      // ── 1. Resolve / create session ──────────────────────────
+      status('Resolving session…');
+      let sessionId = sessionInfo?.existingId || null;
+
+      if (!sessionId) {
+        const date  = sessionInfo?.date  || new Date().toISOString().slice(0, 10);
+        const type  = sessionInfo?.type  || 'training';
+        const title = sessionInfo?.title || `GPS import · ${date}`;
+
+        const insertPayload = { club_id: clubId, title, session_date: date, session_type: type };
+        if (sessionInfo?.calendarEventId) insertPayload.calendar_event_id = sessionInfo.calendarEventId;
+
+        const { data: newSess, error: sessErr } = await window.sb
+          .from('training_sessions').insert(insertPayload).select('id').single();
+        if (sessErr) { finishWithError('Could not create session: ' + sessErr.message); return; }
+        sessionId = newSess.id;
+        _wizState.sessionInfo.existingId = sessionId;
+      }
+
+      // ── 2. Build rows ────────────────────────────────────────
+      status('Mapping rows…');
+      const { insertable, skippedCells, warnings } = buildInsertableRows(sessionId);
+
+      if (!insertable.length) {
+        finishWithError('No importable rows found — check player matching and column mapping.');
+        return;
+      }
+
+      // ── 3. Detect duplicates ─────────────────────────────────
+      status('Checking for duplicates…');
+      const playerIds = [...new Set(insertable.map(r => r.player_id).filter(Boolean))];
+      const { data: existing } = await window.sb.from('gps_reports')
+        .select('id,player_id')
+        .eq('club_id', clubId).eq('session_id', sessionId)
+        .in('player_id', playerIds.length ? playerIds : ['00000000-0000-0000-0000-000000000000']);
+
+      // ── 4. Duplicate resolution (non-blocking UI) ────────────
+      if (existing?.length) {
+        await new Promise(resolve => {
+          showDuplicatePanel(existing, async choice => {
+            if (choice === 'cancel') {
+              finishWithError('Import cancelled.');
+              resolve('cancel');
+              return;
+            }
+            if (choice === 'replace') {
+              const ids = existing.map(r => r.id);
+              const { error } = await window.sb.from('gps_reports').delete().in('id', ids);
+              if (error) { finishWithError('Delete failed: ' + error.message); resolve('error'); return; }
+            } else if (choice === 'skip') {
+              const existingPids = new Set(existing.map(r => r.player_id));
+              const before = insertable.length;
+              insertable.splice(0, insertable.length, ...insertable.filter(r => !existingPids.has(r.player_id)));
+              const skipped = before - insertable.length;
+              if (!insertable.length) {
+                finishWithError(`All ${skipped} rows already exist — nothing to import.`);
+                resolve('skip-empty');
+                return;
+              }
+            }
+            resolve(choice);
+          });
+        });
+        // If finishWithError was called, wizSpinner is gone — bail
+        if (!document.getElementById('wizSpinner')) return;
+      }
+
+      // ── 5. UPSERT ────────────────────────────────────────────
+      status(`Inserting ${insertable.length} rows…`);
+      const CHUNK = 50;
+      for (let i = 0; i < insertable.length; i += CHUNK) {
+        const { error } = await window.sb.from('gps_reports')
+          .upsert(insertable.slice(i, i + CHUNK), { onConflict: 'player_id,session_id' });
+        if (error) throw error;
+        status(`Inserting… ${Math.min(i + CHUNK, insertable.length)} / ${insertable.length}`);
+      }
+
+      // ── 6. Persist external_gps_id ───────────────────────────
+      const extUpdates = Object.entries(confirmedMap)
+        .filter(([rawKey, pid]) => rawKey && pid);
+      await Promise.all(extUpdates.map(([rawKey, pid]) =>
+        window.sb.from('players').update({ external_gps_id: rawKey })
+          .eq('id', pid).eq('club_id', clubId)
+      ));
+
+      // ── 7. Success ───────────────────────────────────────────
+      document.getElementById('wizSpinner')?.remove();
+      const uniquePlayers = new Set(insertable.map(r => r.player_id).filter(Boolean)).size;
+      const sessionLabel  = sessionInfo?.title || `${sessionInfo?.type} · ${sessionInfo?.date}`;
+
+      const warningLines = [...warnings.slice(0, 5), ...(skippedCells ? [`${skippedCells} cell(s) skipped (invalid values)`] : [])];
+
+      const successHtml = `
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0;text-align:center">
+          <i class="ti ti-circle-check" style="font-size:36px;color:var(--cm-success)"></i>
+          <div>
+            <div style="font:600 15px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">Import complete</div>
+            <div style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">${insertable.length} report${insertable.length!==1?'s':''} for ${uniquePlayers} player${uniquePlayers!==1?'s':''}</div>
+            <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px">Session: ${sessionLabel}</div>
+          </div>
+          ${warningLines.length ? `
+          <div style="width:100%;padding:8px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3);text-align:left">
+            <div style="font:600 10.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-warning);margin-bottom:5px">Warnings</div>
+            ${warningLines.map(w => `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${w}</div>`).join('')}
+          </div>` : ''}
+        </div>`;
+      document.getElementById('wizBody').innerHTML = successHtml;
       document.getElementById('wizFooter').innerHTML = `
         <div class="right">
-          <button class="cm-btn is-primary is-sm" onclick="document.getElementById('gpImportModal')?.remove();window.renderView?.()">Done</button>
+          <button class="cm-btn is-primary is-sm" id="wizDone">Done</button>
         </div>`;
+      document.getElementById('wizDone').addEventListener('click', () => {
+        document.getElementById('gpImportModal')?.remove();
+        window.refreshDashboard?.({ sessionId });
+      });
 
-      showToast(`Imported ${insertable.length} GPS rows`);
-      window._gpClubId = clubId;
-      window.renderView?.();
+      showToast(`Imported ${insertable.length} GPS reports · ${uniquePlayers} players`);
 
     } catch (e) {
-      document.getElementById('wizImportStatus').textContent = 'Error: ' + e.message;
-      document.getElementById('wizSpinner')?.remove();
+      finishWithError('Error: ' + (e.message || String(e)));
     }
-  }
-
-  async function resolveSession(sessionType, matchDate, clubId) {
-    const effectiveType = sessionType === 'auto' ? 'training' : sessionType;
-    const dateToUse     = matchDate || new Date().toISOString().slice(0, 10);
-
-    // Check if a session already exists for this date + type
-    const { data: existing } = await window.sb.from('training_sessions')
-      .select('id').eq('club_id', clubId)
-      .eq('session_date', dateToUse).eq('session_type', effectiveType).limit(1);
-    if (existing?.length) return existing[0].id;
-
-    // Create new session
-    const { data, error } = await window.sb.from('training_sessions').insert({
-      club_id: clubId, title: `GPS import · ${dateToUse}`,
-      session_date: dateToUse, session_type: effectiveType,
-    }).select('id').single();
-    if (error) { showToast('Session create error: ' + error.message); return null; }
-    return data.id;
   }
 
   // ── Wire up Browse files button + drag-and-drop ────────────
