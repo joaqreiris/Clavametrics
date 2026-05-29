@@ -1318,7 +1318,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
 let _zSortBtn = null;
 document.querySelectorAll('.gp-c-h .right > button').forEach(b => { if (b.querySelector('.ti-arrows-sort')) _zSortBtn = b; });
 if (_zSortBtn) {
-  const Z_COLS = ['Player','Distance','HSR','Sprints','Top spd','Accel','Load'];
+  const Z_COLS = ['Player', ..._getChartMetrics().map(d => d.label)];
   let _zSt = { col: 0, dir: 1 };
   _zSortBtn.addEventListener('click', e => {
     e.stopPropagation();
@@ -1365,16 +1365,21 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       // TODO: switch chart type
     });
   } else if (/Player load|HSR|Distance|Sprints|Accelerations|Decel|Max speed|VHSR|HMLD/i.test(txt)) {
-    const RANK_OPTS = [
-      { label: 'HSR',          metric: 'high_speed_distance' },
-      { label: 'Total dist',   metric: 'total_distance' },
-      { label: 'Sprints',      metric: 'sprint_distance' },
-      { label: 'VHSR',         metric: 'very_high_speed_distance' },
-      { label: 'Player load',  metric: 'player_load' },
-      { label: 'Accelerations',metric: 'accelerations' },
-      { label: 'Max speed',    metric: 'max_speed' },
-      { label: 'HMLD',         metric: 'hmld' },
-    ];
+    const _catalog = window._gpCatalog || [];
+    const RANK_OPTS = _catalog.length
+      ? _catalog
+          .filter(d => !['time_played','distance_per_minute','sprint_count'].includes(d.key))
+          .map(d => ({ label: d.label, metric: d.key }))
+      : [
+          { label: 'HSR',           metric: 'high_speed_distance' },
+          { label: 'Total dist',    metric: 'total_distance' },
+          { label: 'Sprints',       metric: 'sprint_distance' },
+          { label: 'VHSR',          metric: 'very_high_speed_distance' },
+          { label: 'Player load',   metric: 'player_load' },
+          { label: 'Accelerations', metric: 'accelerations' },
+          { label: 'Max speed',     metric: 'max_speed' },
+          { label: 'HMLD',          metric: 'hmld' },
+        ];
     makePopover(pick, RANK_OPTS.map(o => ({ label: o.label, metric: o.metric })), item => {
       pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
       pick.classList.add('is-accent');
@@ -1603,6 +1608,11 @@ async function _detectSmartDefault(clubId, userId) {
     window._gpSettings = await loadGpsSettings(clubId);
   }
 
+  // Load metric catalog (used by charts for dynamic labels/units)
+  if (typeof window.getCatalog === 'function') {
+    window._gpCatalog = await window.getCatalog(clubId);
+  }
+
   // Apply smart default / saved prefs
   const prefs = await _detectSmartDefault(clubId, window._gpUserId);
   applyGpsPrefs(prefs);
@@ -1625,6 +1635,44 @@ async function _detectSmartDefault(clubId, userId) {
 // Chart.js accent helper
 function _accentHex() {
   return getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
+}
+
+// Returns MetricDef[] for chart METRICS axes, driven by catalog + active_metrics setting.
+// Falls back to hardcoded defaults when catalog has not been seeded yet.
+function _getChartMetrics() {
+  const catalog = window._gpCatalog || [];
+  const active  = window._gpSettings?.active_metrics;
+  if (catalog.length) {
+    if (active?.length) {
+      const defs = active.map(k => catalog.find(d => d.key === k)).filter(Boolean);
+      if (defs.length) return defs;
+    }
+    const DEFAULT_KEYS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
+    const defs = DEFAULT_KEYS.map(k => catalog.find(d => d.key === k)).filter(Boolean);
+    if (defs.length) return defs;
+  }
+  return [
+    { key: 'total_distance',      label: 'Distance',  unit: 'm',    decimals: 0 },
+    { key: 'high_speed_distance', label: 'HSR',       unit: 'm',    decimals: 0 },
+    { key: 'sprint_distance',     label: 'Sprints',   unit: 'm',    decimals: 0 },
+    { key: 'max_speed',           label: 'Top speed', unit: 'km/h', decimals: 1 },
+    { key: 'accelerations',       label: 'Accel',     unit: '',     decimals: 0 },
+    { key: 'player_load',         label: 'Load',      unit: 'AU',   decimals: 1 },
+  ];
+}
+
+// Format a metric value using catalog decimals/unit. Falls back to old _RANK_METRIC_UNITS.
+function _fmtMetricVal(key, value) {
+  const v = value || 0;
+  if (key === 'total_distance') return (v / 1000).toFixed(1) + ' km';
+  const def = (window._gpCatalog || []).find(d => d.key === key);
+  if (def) {
+    const r = def.decimals === 0 ? Math.round(v) : +v.toFixed(def.decimals);
+    return r + (def.unit ? ' ' + def.unit : '');
+  }
+  const unit = _RANK_METRIC_UNITS[key] ?? '';
+  if (key === 'max_speed') return v.toFixed(1) + ' km/h';
+  return Math.round(v) + (unit ? ' ' + unit : '');
 }
 
 // ── ACWR bands plugin ─────────────────────────────────────────
@@ -2275,8 +2323,9 @@ async function _updateRadar(reports, state) {
   if (!canvas) return;
   Chart.getChart(canvas)?.destroy();
 
-  const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
-  const LABELS  = ['Distance','HSR','Sprints','Top speed','Accel','Load'];
+  const _cmDefs = _getChartMetrics();
+  const METRICS = _cmDefs.map(d => d.key);
+  const LABELS  = _cmDefs.map(d => d.label);
   const sel     = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
   const accent  = _accentHex();
 
@@ -2381,9 +2430,15 @@ async function _updateRadar(reports, state) {
 }
 
 function _updateZTable(reports, state) {
-  const tbody = document.querySelector('.gp-zt tbody');
+  const tbody = document.querySelector('.gp-view[data-view="ind"] .gp-zt tbody');
   if (!tbody) return;
-  const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
+  const _ztDefs = _getChartMetrics();
+  const METRICS = _ztDefs.map(d => d.key);
+  // Update thead labels from catalog
+  const _ztHead = document.querySelector('.gp-view[data-view="ind"] .gp-zt thead tr');
+  if (_ztHead) {
+    _ztHead.innerHTML = '<th class="pc">Player</th>' + _ztDefs.map(d => `<th>${d.label}</th>`).join('');
+  }
   const useRole = state.baseline === 'vs Role';
   const mu_fn   = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
   const sd_fn   = (arr,m) => Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length) || 1;
@@ -2440,14 +2495,8 @@ function _updateSquadRanking(reports, metric = 'high_speed_distance') {
   }
   const sorted = [...reports].sort((a, b) => (b[metric]||0) - (a[metric]||0));
   const maxVal = sorted[0]?.[metric] || 1;
-  const unit   = _RANK_METRIC_UNITS[metric] ?? '';
   const cls    = pct => pct >= 85 ? '' : pct >= 60 ? ' med' : ' low';
-  const fmt    = (r) => {
-    const v = r[metric] || 0;
-    if (metric === 'total_distance') return (v / 1000).toFixed(1) + ' km';
-    if (metric === 'max_speed')      return v.toFixed(1) + ' km/h';
-    return Math.round(v) + (unit ? ' ' + unit : '');
-  };
+  const fmt    = (r) => _fmtMetricVal(metric, r[metric] || 0);
   body.innerHTML = `<div class="gp-rank">${sorted.slice(0, 10).map((r, i) => {
     const p    = r.players;
     const name = p ? `${(p.first_name||'')[0]}. ${p.last_name||''}` : '—';

@@ -85,10 +85,8 @@
       return { baseline: null, count: 0, confidence: 'none', source: 'insufficient_data',
                warning: 'Missing arguments' };
     }
-    if (!BASELINE_METRICS.includes(metric)) {
-      return { baseline: null, count: 0, confidence: 'none', source: 'insufficient_data',
-               warning: `Unknown metric: ${metric}` };
-    }
+
+    const isCore = BASELINE_METRICS.includes(metric);
 
     const settings = await _loadClubSettings(clubId);
     const n   = (opts && opts.n) || settings.baseline_n || DEFAULT_N;
@@ -96,22 +94,53 @@
     const now = Date.now();
     if (_cache[key] && now - _cache[key].ts < CACHE_TTL_MS) return _cache[key].result;
 
-    const { data, error } = await window.sb
-      .from('gps_reports')
-      .select(`${metric}, training_sessions!inner(session_type)`)
-      .eq('player_id', player_id)
-      .eq('club_id', clubId)
-      .eq('training_sessions.session_type', 'match')
-      .not(metric, 'is', null)
-      .order(metric, { ascending: false })
-      .limit(n);
+    let vals = [];
+    let queryError = null;
 
-    if (error || !data) {
-      return { baseline: null, count: 0, confidence: 'none', source: 'insufficient_data',
-               warning: error?.message || 'Query failed' };
+    if (isCore) {
+      // Core metric — column in gps_reports
+      const { data, error } = await window.sb
+        .from('gps_reports')
+        .select(`${metric}, training_sessions!inner(session_type)`)
+        .eq('player_id', player_id)
+        .eq('club_id', clubId)
+        .eq('training_sessions.session_type', 'match')
+        .not(metric, 'is', null)
+        .order(metric, { ascending: false })
+        .limit(n);
+      queryError = error;
+      vals = (data || []).map(r => +(r[metric] || 0));
+    } else {
+      // Custom metric — EAV in gps_report_metrics
+      // Step 1: get report IDs for player's match sessions
+      const { data: matchReports, error: e1 } = await window.sb
+        .from('gps_reports')
+        .select('id, training_sessions!inner(session_type)')
+        .eq('player_id', player_id)
+        .eq('club_id', clubId)
+        .eq('training_sessions.session_type', 'match');
+      queryError = e1;
+      const reportIds = (matchReports || []).map(r => r.id);
+      if (reportIds.length) {
+        const { data: eav, error: e2 } = await window.sb
+          .from('gps_report_metrics')
+          .select('value')
+          .in('report_id', reportIds)
+          .eq('metric_key', metric)
+          .not('value', 'is', null)
+          .order('value', { ascending: false })
+          .limit(n);
+        if (!queryError) queryError = e2;
+        vals = (eav || []).map(r => +(r.value || 0));
+      }
     }
 
-    const count = data.length;
+    if (queryError) {
+      return { baseline: null, count: 0, confidence: 'none', source: 'insufficient_data',
+               warning: queryError.message || 'Query failed' };
+    }
+
+    const count = vals.length;
     let result;
     if (count < MIN_MATCHES) {
       result = {
@@ -119,11 +148,11 @@
         warning: `Insufficient match data (${count} match${count !== 1 ? 'es' : ''} available, need at least ${MIN_MATCHES})`,
       };
     } else {
-      const mean       = data.reduce((s, r) => s + (+(r[metric] || 0)), 0) / count;
+      const mean       = vals.reduce((s, v) => s + v, 0) / count;
       const confidence = count >= n ? 'high' : 'medium';
       const source     = count >= n ? 'full' : 'partial';
-      const warning    = count < n ? `Baseline from ${count} matches (recommended: ${n})` : null;
-      result = { baseline: +mean.toFixed(2), count, confidence, source, warning };
+      result = { baseline: +mean.toFixed(2), count, confidence, source,
+                 warning: count < n ? `Baseline from ${count} matches (recommended: ${n})` : null };
     }
 
     _cache[key] = { result, ts: now };
@@ -137,28 +166,58 @@
    */
   window.getMatchBaselineBatch = async function (player_ids, metric, clubId, opts) {
     if (!player_ids?.length || !metric || !clubId) return {};
-    if (!BASELINE_METRICS.includes(metric)) return {};
 
+    const isCore = BASELINE_METRICS.includes(metric);
     const settings = await _loadClubSettings(clubId);
     const n = (opts && opts.n) || settings.baseline_n || DEFAULT_N;
 
-    const { data, error } = await window.sb
-      .from('gps_reports')
-      .select(`player_id, ${metric}, training_sessions!inner(session_type)`)
-      .in('player_id', player_ids)
-      .eq('club_id', clubId)
-      .eq('training_sessions.session_type', 'match')
-      .not(metric, 'is', null)
-      .order(metric, { ascending: false });
-
-    if (error || !data) return {};
-
-    // Group by player_id, keep top-N per player
+    // byPlayer: player_id → number[] (top-N values, descending)
     const byPlayer = {};
-    data.forEach(r => {
-      if (!byPlayer[r.player_id]) byPlayer[r.player_id] = [];
-      if (byPlayer[r.player_id].length < n) byPlayer[r.player_id].push(+(r[metric] || 0));
-    });
+
+    if (isCore) {
+      const { data, error } = await window.sb
+        .from('gps_reports')
+        .select(`player_id, ${metric}, training_sessions!inner(session_type)`)
+        .in('player_id', player_ids)
+        .eq('club_id', clubId)
+        .eq('training_sessions.session_type', 'match')
+        .not(metric, 'is', null)
+        .order(metric, { ascending: false });
+      if (error || !data) return {};
+      data.forEach(r => {
+        if (!byPlayer[r.player_id]) byPlayer[r.player_id] = [];
+        if (byPlayer[r.player_id].length < n) byPlayer[r.player_id].push(+(r[metric] || 0));
+      });
+    } else {
+      // Custom metric — two-step via gps_report_metrics
+      const { data: matchReports, error: e1 } = await window.sb
+        .from('gps_reports')
+        .select('id, player_id, training_sessions!inner(session_type)')
+        .in('player_id', player_ids)
+        .eq('club_id', clubId)
+        .eq('training_sessions.session_type', 'match');
+      if (e1 || !matchReports?.length) return {};
+
+      const reportToPlayer = {};
+      matchReports.forEach(r => { reportToPlayer[r.id] = r.player_id; });
+      const allReportIds = matchReports.map(r => r.id);
+
+      const { data: eav, error: e2 } = await window.sb
+        .from('gps_report_metrics')
+        .select('report_id, value')
+        .in('report_id', allReportIds)
+        .eq('metric_key', metric)
+        .not('value', 'is', null)
+        .order('value', { ascending: false });
+      if (e2 || !eav) return {};
+
+      eav.forEach(row => {
+        const pid = reportToPlayer[row.report_id];
+        if (!pid) return;
+        if (!byPlayer[pid]) byPlayer[pid] = [];
+        if (byPlayer[pid].length < n) byPlayer[pid].push(+(row.value || 0));
+      });
+    }
 
     const out = {};
     player_ids.forEach(pid => {
@@ -176,7 +235,6 @@
           warning: count < n ? `Baseline from ${count} matches (recommended: ${n})` : null,
         };
       }
-      // Populate cache for individual lookups
       const key = _cacheKey(pid, metric, n);
       if (!_cache[key]) _cache[key] = { result: out[pid], ts: Date.now() };
     });
