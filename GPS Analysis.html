@@ -1767,8 +1767,9 @@ function _renderOutliers(reports) {
   const body = document.getElementById('outliersBody');
   if (!body || !window.gpScience) return;
 
-  const METRICS = ['total_distance','high_speed_distance','sprint_distance','accelerations','player_load'];
-  const LABELS  = { total_distance:'Distance', high_speed_distance:'HSR', sprint_distance:'Sprint', accelerations:'Accel', player_load:'Load' };
+  const _odefs  = _getChartMetrics();
+  const METRICS = _odefs.map(d => d.key);
+  const LABELS  = Object.fromEntries(_odefs.map(d => [d.key, d.label]));
   const flags   = window.gpScience.outliers(reports, METRICS, 2);
 
   if (!flags.length) {
@@ -1807,8 +1808,9 @@ function _renderPosRadar(reports) {
   if (!canvas || !window.gpScience) return;
 
   const POS = ['GK','CB','FB','MF','WG','ST'];
-  const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
-  const LABELS  = ['Distance','HSR','Sprint','Top spd','Accel','Load'];
+  const _pdefs  = _getChartMetrics();
+  const METRICS = _pdefs.map(d => d.key);
+  const LABELS  = _pdefs.map(d => d.label);
 
   function normPos(raw) {
     const p = (raw||'').toUpperCase();

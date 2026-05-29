@@ -161,22 +161,95 @@ Important columns:
 - player_id (uuid)
 - session_id (uuid)
 - club_id (uuid)
-- total_distance
-- high_speed_distance
-- sprint_distance
-- accelerations
-- decelerations
-- max_speed
-- player_load
-- avg_speed
-- very_high_speed_distance (numeric, nullable) — added migration 028
+- total_distance (numeric)
+- high_speed_distance (numeric)
+- sprint_distance (numeric)
+- accelerations (integer)
+- decelerations (integer)
+- max_speed (numeric)
+- player_load (numeric)
+- avg_speed (numeric)
+- very_high_speed_distance (numeric, nullable) — migration 028
 - hmld (numeric, nullable) — High Metabolic Load Distance, migration 028
 - time_played (numeric, nullable) — minutes played, migration 028
+- sprint_count (integer, nullable) — migration 028
+- distance_per_minute (numeric, nullable) — migration 028
 - created_at
+
+Constraints:
+- UNIQUE(player_id, session_id)
 
 Relationships:
 - gps_reports.player_id -> players.id
 - gps_reports.session_id -> training_sessions.id
+
+Note: Only core metrics (13 columns) live here. Custom/extensible metrics
+go to gps_report_metrics (EAV). See bloque-7 for hybrid model.
+
+---
+
+# TABLE: gps_metric_definitions
+
+Purpose:
+Catalog of GPS metrics per club — both core (13 universal columns) and
+custom (club-defined, stored in gps_report_metrics EAV).
+Reference: migrations 034, 035 (bloque 7).
+
+Important columns:
+- id (uuid)
+- club_id (uuid, FK clubs)
+- key (text) — snake_case identifier, regex /^[a-z][a-z0-9_]*$/
+- label (text) — human-readable name shown in UI
+- unit (text, nullable) — e.g. "m", "km/h", "AU"
+- category (text) — distance|speed|acceleration|load|time|count|custom
+- decimals (integer 0-4, default 2) — display precision
+- is_core (boolean) — true = column in gps_reports; false = EAV in gps_report_metrics
+- display_order (integer, default 100) — order in selectors and catalog table
+- description (text, nullable)
+- created_by (uuid, FK auth.users)
+- created_at, updated_at
+
+Constraints:
+- UNIQUE(club_id, key)
+- CHECK key ~ /^[a-z][a-z0-9_]*/
+- CHECK category IN (distance, speed, acceleration, load, time, count, custom)
+- CHECK decimals BETWEEN 0 AND 4
+
+Indexes:
+- idx_gps_metric_def_club(club_id)
+
+Seeded automatically:
+- 13 core metrics inserted with is_core=true for existing clubs (migration 035)
+- trigger seed_core_metrics_for_club fires AFTER INSERT ON clubs for new clubs
+
+---
+
+# TABLE: gps_report_metrics
+
+Purpose:
+EAV (Entity-Attribute-Value) store for custom GPS metrics not covered by
+gps_reports columns. One row per report+metric_key combination.
+Reference: migrations 034 (bloque 7).
+
+Important columns:
+- id (uuid)
+- report_id (uuid, FK gps_reports ON DELETE CASCADE) — links to the core report row
+- club_id (uuid, FK clubs)
+- metric_key (text) — must match a key in gps_metric_definitions for the club
+- value (numeric, nullable)
+- created_at
+
+Constraints:
+- UNIQUE(report_id, metric_key) — one value per metric per report
+
+Indexes:
+- idx_gps_rm_report(report_id)
+- idx_gps_rm_club_metric(club_id, metric_key)
+
+Usage:
+- Written by the import pipeline when a mapped column is not in GPS_REPORT_COLS
+- Read by getReportsForSession() in assets/gps-reader.js, merged into metrics dict
+- Baseline for custom metrics computed by getMatchBaseline() via 2-step query
 
 ---
 
@@ -192,8 +265,11 @@ Important columns:
 - club_id (uuid, FK clubs)
 - source_label (text) — free-form provider name, e.g. "Catapult Vector", "StatSports CSV"
 - source_column_name (text) — exact column header from the file
-- target_metric (text) — canonical metric name in gps_reports
+- target_metric (text) — key in gps_metric_definitions (core or custom). Special value "__ignore__" = skip column.
 - unit_conversion (numeric, default 1.0) — multiply raw value before storing (e.g. 1000 for km → m)
+- parse_format (text, nullable) — format hint for date/duration columns
+- column_type (text, nullable) — manual type override (date|duration|number|text|ignore)
+- excluded (boolean, default false) — column excluded in preview step
 - created_at, updated_at
 
 Constraints:
@@ -201,12 +277,6 @@ Constraints:
 
 Indexes:
 - idx_gps_mappings_club(club_id)
-
-Canonical target_metric values:
-  total_distance, high_speed_distance, very_high_speed_distance,
-  sprint_distance, accelerations, decelerations, max_speed,
-  player_load, hmld, time_played, player_name, jersey_number,
-  session_date, position
 
 ---
 
