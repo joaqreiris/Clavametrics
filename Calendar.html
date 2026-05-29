@@ -206,8 +206,8 @@
   .cal-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
   .cal-card-h { display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--cm-border-soft); }
   .cal-card-h h3 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .cal-card-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
-  .cal-card-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .cal-card-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; white-space:nowrap; flex-shrink:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .cal-card-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; flex-shrink:0; }
 
   /* === MC daily strip (7-14 day grid) === */
   .mc-days {
@@ -621,7 +621,7 @@
   /* Footer */
   .cal-epop-foot {
     border-top:1px solid var(--cm-border-soft); padding:7px 12px 9px;
-    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+    display:flex; align-items:center; gap:6px;
   }
   .cal-epop-foot .ep-grow { flex:1; }
   /* Task extras: avatar, priority, due date */
@@ -2434,8 +2434,8 @@ function showEvtPopover(anchor, session) {
     ${rows.length || notesHtml ? `<div class="cal-epop-body">${rows.join('')}${notesHtml}</div>` : ''}
     ${tasksSection}
     ${(!isPlayerView) ? `<div class="cal-epop-foot">
-      <div class="ep-grow"></div>
       ${planBtn}
+      <div class="ep-grow"></div>
       ${delBtn}
       <button class="cm-btn is-primary is-sm" id="epEditBtn" style="height:26px;font-size:11.5px"><i class="ti ti-edit" style="font-size:11px"></i>Edit event</button>
     </div>` : ''}
