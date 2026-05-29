@@ -626,7 +626,7 @@ async function loadDay(dateStr) {
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id').eq('club_id', _dpClubId).eq('session_date', dateStr).order('created_at', { ascending: true }).limit(1)
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id').eq('club_id', _dpClubId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   const sess = sessResult.data?.[0] || null;

@@ -263,6 +263,14 @@
           <h4>Session type</h4>
           <div id="shOrientFilters"><!-- populated by renderOrientFilters() --></div>
 
+          <h4 style="margin-top:16px">Data source</h4>
+          <div>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">
+              <input type="checkbox" id="shShowHistorical">
+              Show historical GPS imports
+            </label>
+          </div>
+
           <h4>Focus</h4>
           <div class="sh-chips" id="focusChips">
             <button class="sh-chip" data-focus="Tactical">Tactical</button>
@@ -488,12 +496,15 @@
     await loadSessions(clubId);
   }
 
+  let _showHistorical = false;
+
   async function loadSessions(clubId) {
-    const { data, error } = await window.sb
+    let q = window.sb
       .from('training_sessions')
-      .select('id,club_id,session_date,title,notes,session_type,duration,estimated_rpe,rpe(rpe,duration,load)')
-      .eq('club_id', clubId)
-      .order('session_date', { ascending: false });
+      .select('id,club_id,session_date,title,notes,session_type,duration,estimated_rpe,is_historical,rpe(rpe,duration,load)')
+      .eq('club_id', clubId);
+    if (!_showHistorical) q = q.eq('is_historical', false);
+    const { data, error } = await q.order('session_date', { ascending: false });
     if (error) { console.error(error); return; }
     allSessions = (data || []).map(s => ({ ...s, _mdPos: computeMdPos(s.session_date) }));
     renderOrientFilters();
@@ -962,6 +973,14 @@
 
   // Search
   document.getElementById('searchInput').addEventListener('input', e => { searchText = e.target.value; applyFilters(); });
+
+  // Historical toggle — reload from DB so filter applies server-side
+  document.getElementById('shShowHistorical')?.addEventListener('change', async e => {
+    _showHistorical = e.target.checked;
+    await loadSessions(shClubId);
+    renderOrientFilters();
+    applyFilters();
+  });
 
   // Calendar nav
   document.getElementById('shCalPrev')?.addEventListener('click', () => {

@@ -1396,12 +1396,12 @@ function renderTasks(tasks) {
       .eq('club_id', clubId),
     window.sb.from('training_sessions')
       .select('session_date, rpe(player_id, load)')
-      .eq('club_id', clubId)
+      .eq('club_id', clubId).eq('is_historical', false)
       .gte('session_date', date28)
       .lte('session_date', today),
     window.sb.from('training_sessions')
       .select('title, session_date, created_at, profiles(full_name, role)')
-      .eq('club_id', clubId)
+      .eq('club_id', clubId).eq('is_historical', false)
       .gte('session_date', date7)
       .order('created_at', { ascending: false })
       .limit(3),
@@ -1425,7 +1425,7 @@ function renderTasks(tasks) {
       .maybeSingle(),
     window.sb.from('training_sessions')
       .select('session_time, location, session_type')
-      .eq('club_id', clubId)
+      .eq('club_id', clubId).eq('is_historical', false)
       .eq('session_date', today)
       .order('session_time', { ascending: true })
       .limit(1)
@@ -1593,7 +1593,7 @@ function renderTasks(tasks) {
     // Sessions this week Mon–Sun — source for sessions_week KPI + Planner footer
     window.sb.from('training_sessions')
       .select('id, session_date, session_type')
-      .eq('club_id', clubId)
+      .eq('club_id', clubId).eq('is_historical', false)
       .gte('session_date', weekStartStr)
       .lte('session_date', weekEndStr),
     // Last match report date — source for Match Reports module footer
@@ -1618,7 +1618,7 @@ function renderTasks(tasks) {
     // Sessions last 7d — used to compute GPS pending count against gpsActRes
     window.sb.from('training_sessions')
       .select('id')
-      .eq('club_id', clubId)
+      .eq('club_id', clubId).eq('is_historical', false)
       .gte('session_date', date7)
       .lte('session_date', today),
   ]);

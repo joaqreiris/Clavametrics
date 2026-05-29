@@ -3536,131 +3536,202 @@ window.renderView = async function () {
   const SESSION_TYPES = ['tactical','conditioning','gym','match','recovery','other'];
 
   // ── Step 4 — Session info ──────────────────────────────────
-  async function renderStep4Session(body, footer) {
-    const { clubId, sessionType, matchDate } = _wizState;
-    const today = new Date().toISOString().slice(0, 10);
-    const initDate = matchDate || today;
-    const initType = sessionType === 'auto' ? 'training' : sessionType;
+  // Extracts unique dates from the parsed file (if session_date column is mapped)
+  // and returns { uniqueDates, dateMap, doubleDates }.
+  function _buildDateMap() {
+    const { rows, headerRow, columnMap } = _wizState;
+    const _colOf = m => Object.entries(columnMap).find(([, c]) => c.metric === m)?.[0];
+    const dateColIdx    = _colOf('session_date');
+    const playerNameIdx = _colOf('player_name') ?? _colOf('player_first_name');
+    const jerseyIdx     = _colOf('jersey_number');
+    if (dateColIdx == null) return { uniqueDates: [], dateMap: {}, doubleDates: [] };
 
-    // Initialise session state in wizard
+    const fmt      = columnMap[dateColIdx]?.parseFormat || null;
+    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const dateMap  = {};
+    const playerDateSeen = {};
+
+    for (const row of dataRows) {
+      const rawDate = String(row[+dateColIdx] || '').trim();
+      const parsed  = window.gpParseDate ? window.gpParseDate(rawDate, fmt) : null;
+      const iso     = parsed?.iso;
+      if (!iso || parsed.invalid) continue;
+      dateMap[iso] = (dateMap[iso] || 0) + 1;
+      const jersey = jerseyIdx     != null ? String(row[+jerseyIdx]     ?? '').trim() : '';
+      const name   = playerNameIdx != null ? String(row[+playerNameIdx] ?? '').trim() : '';
+      const pk = jersey || name;
+      if (pk) { const k = `${pk}__${iso}`; playerDateSeen[k] = (playerDateSeen[k] || 0) + 1; }
+    }
+
+    const uniqueDates = Object.keys(dateMap).sort();
+    const doubleCounts = {};
+    for (const [k, cnt] of Object.entries(playerDateSeen)) {
+      if (cnt > 1) { const date = k.split('__').slice(-1)[0]; doubleCounts[date] = (doubleCounts[date] || 0) + 1; }
+    }
+    const doubleDates = Object.entries(doubleCounts).map(([date, n]) => ({ date, n }));
+    return { uniqueDates, dateMap, doubleDates };
+  }
+
+  async function renderStep4Session(body, footer) {
+    const { clubId, sessionType, columnMap } = _wizState;
+    const today   = new Date().toISOString().slice(0, 10);
+    const initType = sessionType === 'auto' ? 'training' : (sessionType || 'training');
+
+    const { uniqueDates, dateMap, doubleDates } = _buildDateMap();
+    const hasDateCol   = uniqueDates.length > 0;
+    const isMultiDate  = uniqueDates.length > 1;
+
+    // Heuristic: pre-select "Historical" when latest date is >30 days ago
+    let suggestHistorical = false;
+    if (hasDateCol) {
+      const latestDate = new Date(uniqueDates[uniqueDates.length - 1] + 'T00:00:00');
+      suggestHistorical = (Date.now() - latestDate.getTime()) > 30 * 86400000;
+    }
+
     if (!_wizState.sessionInfo) {
       _wizState.sessionInfo = {
-        date: initDate, type: initType,
-        title: '', existingId: null, calendarEventId: null,
-        status: 'searching',  // 'found' | 'new' | 'searching'
+        mode: hasDateCol ? 'multi' : 'single',
+        isHistorical: suggestHistorical,
+        sessionType: initType,
+        uniqueDates, dateMap, doubleDates,
+        // single-mode only
+        date: today, title: '', existingId: null, calendarEventId: null,
       };
     }
+    const si = _wizState.sessionInfo;
 
-    body.innerHTML = `
-      <p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 14px">
-        Choose or create the training session this file belongs to.
-      </p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-        <div>
-          <label class="gp-step4-lbl">Session date</label>
-          <input type="date" id="s4Date" value="${_wizState.sessionInfo.date}"
-            style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
+    const LBL = `font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px`;
+    const INP = `width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box`;
+    const typeOpts = SESSION_TYPES.map(t => `<option value="${t}"${t===si.sessionType?' selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('');
+
+    // ── Radio choice: Historical / Real sessions ─────────────
+    const choiceHTML = (isHistorical, isHist) => {
+      const chk = isHist ? 'checked' : '';
+      const alt = !isHist ? 'checked' : '';
+      return `
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <label style="display:flex;gap:10px;padding:10px 12px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);cursor:pointer;background:var(--cm-bg-soft)">
+          <input type="radio" name="s4mode" value="historical" ${chk} style="margin-top:1px;flex-shrink:0">
+          <div>
+            <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">Historical data — for analysis only</div>
+            <div style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Sessions won't appear in Calendar, Sessions History, or Daily Planning. GPS data will be fully available for charts, baselines, and comparisons.</div>
+          </div>
+        </label>
+        <label style="display:flex;gap:10px;padding:10px 12px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);cursor:pointer;background:var(--cm-bg-soft)">
+          <input type="radio" name="s4mode" value="real" ${alt} style="margin-top:1px;flex-shrink:0">
+          <div>
+            <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">Real sessions — full integration</div>
+            <div style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Each date will create a training session visible in Calendar, Sessions History, and Daily Planning.</div>
+          </div>
+        </label>
+      </div>`;
+    };
+
+    if (!hasDateCol) {
+      // ── Single-date mode (no date column mapped) ─────────────
+      body.innerHTML = `
+        <p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">
+          No session date column detected. Choose a date and how to treat this import.
+        </p>
+        ${choiceHTML(true, si.isHistorical)}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div>
+            <label style="${LBL}">Session date</label>
+            <input type="date" id="s4Date" value="${si.date}" style="${INP}">
+          </div>
+          <div>
+            <label style="${LBL}">Session type</label>
+            <select id="s4Type" style="${INP.replace('12px/1','12px/1.4')}">${typeOpts}</select>
+          </div>
         </div>
-        <div>
-          <label class="gp-step4-lbl">Session type</label>
-          <select id="s4Type" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
-            ${SESSION_TYPES.map(t => `<option value="${t}"${t===initType?' selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('')}
-          </select>
+        <div style="margin-bottom:12px">
+          <label style="${LBL}">Session title (optional)</label>
+          <input type="text" id="s4Title" value="${si.title}" placeholder="Leave blank to auto-generate" style="${INP}">
         </div>
-      </div>
-      <div style="margin-bottom:12px">
-        <label class="gp-step4-lbl">Session title (optional)</label>
-        <input type="text" id="s4Title" value="${_wizState.sessionInfo.title}"
-          placeholder="Leave blank to auto-generate"
-          style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
-      </div>
-      <div id="s4MatchLink" style="display:none;margin-bottom:12px">
-        <label class="gp-step4-lbl">Link to calendar match event (optional)</label>
-        <select id="s4MatchEvent" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
-          <option value="">— None —</option>
-        </select>
-      </div>
-      <div id="s4SessionBanner" style="margin-top:4px"></div>`;
+        <div id="s4SessionBanner" style="margin-top:4px"></div>`;
 
-    const lbl = `font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px`;
-    body.querySelectorAll('.gp-step4-lbl').forEach(el => el.style.cssText = lbl);
-
-    async function lookupSession() {
-      const date = body.querySelector('#s4Date').value;
-      const type = body.querySelector('#s4Type').value;
-      const banner = document.getElementById('s4SessionBanner');
-      if (!date || !type || !clubId) { banner.innerHTML = ''; return; }
-      banner.innerHTML = `<div style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Searching…</div>`;
-
-      const { data } = await window.sb.from('training_sessions')
-        .select('id,title,session_date,session_type')
-        .eq('club_id', clubId).eq('session_date', date).eq('session_type', type).limit(3);
-
-      _wizState.sessionInfo.date  = date;
-      _wizState.sessionInfo.type  = type;
-      _wizState.sessionInfo.title = body.querySelector('#s4Title').value.trim();
-
-      if (data?.length) {
-        const s = data[0];
-        _wizState.sessionInfo.existingId = s.id;
-        _wizState.sessionInfo.status = 'found';
-        banner.innerHTML = `
-          <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--cm-success-bg);border:1px solid var(--cm-success);border-radius:var(--cm-r-3)">
-            <i class="ti ti-circle-check" style="color:var(--cm-success);font-size:16px"></i>
-            <div style="flex:1">
-              <div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${s.title || s.session_type} · ${s.session_date}</div>
-              <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">Existing session found — data will be added to it</div>
-            </div>
-            ${data.length > 1 ? `<select id="s4ExistingSel" style="padding:4px 6px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans)">
-              ${data.map(ss => `<option value="${ss.id}">${ss.title || ss.session_type} · ${ss.session_date}</option>`).join('')}
-            </select>` : ''}
-          </div>`;
-        const sel = document.getElementById('s4ExistingSel');
-        if (sel) sel.addEventListener('change', e => { _wizState.sessionInfo.existingId = e.target.value; });
-      } else {
-        _wizState.sessionInfo.existingId = null;
-        _wizState.sessionInfo.status = 'new';
-        banner.innerHTML = `
-          <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
-            <i class="ti ti-plus" style="color:var(--cm-fg-muted);font-size:16px"></i>
-            <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">No session found for this date and type — a new session will be created</div>
-          </div>`;
+      async function lookupSingle() {
+        const date = body.querySelector('#s4Date').value;
+        const type = body.querySelector('#s4Type').value;
+        const banner = document.getElementById('s4SessionBanner');
+        if (!date || !type || !clubId || body.querySelector('[name="s4mode"]:checked')?.value === 'historical') {
+          banner.innerHTML = '';
+          si.existingId = null;
+          return;
+        }
+        banner.innerHTML = `<div style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Searching…</div>`;
+        const { data } = await window.sb.from('training_sessions')
+          .select('id,title,session_date,session_type')
+          .eq('club_id', clubId).eq('session_date', date).eq('session_type', type)
+          .eq('is_historical', false).limit(3);
+        if (data?.length) {
+          const s = data[0];
+          si.existingId = s.id;
+          banner.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--cm-success-bg);border:1px solid var(--cm-success);border-radius:var(--cm-r-3)">
+              <i class="ti ti-circle-check" style="color:var(--cm-success);font-size:16px"></i>
+              <div style="flex:1">
+                <div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${s.title || s.session_type} · ${s.session_date}</div>
+                <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">Existing session — data will be added to it</div>
+              </div>
+            </div>`;
+        } else {
+          si.existingId = null;
+          banner.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
+              <i class="ti ti-plus" style="color:var(--cm-fg-muted);font-size:16px"></i>
+              <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">No session found — a new session will be created</div>
+            </div>`;
+        }
       }
+      let _deb = null;
+      const triggerLookup = () => { clearTimeout(_deb); _deb = setTimeout(lookupSingle, 350); };
+      body.querySelector('#s4Date').addEventListener('change', triggerLookup);
+      body.querySelector('#s4Type').addEventListener('change', triggerLookup);
+      body.querySelectorAll('[name="s4mode"]').forEach(r => r.addEventListener('change', triggerLookup));
+      body.querySelector('#s4Title').addEventListener('input', e => { si.title = e.target.value.trim(); });
+      lookupSingle();
 
-      // If match: load nearby calendar_events
-      const matchLink = document.getElementById('s4MatchLink');
-      if (type === 'match') {
-        matchLink.style.display = 'block';
-        const dateFrom = new Date(date); dateFrom.setDate(dateFrom.getDate() - 2);
-        const dateTo   = new Date(date); dateTo.setDate(dateTo.getDate() + 2);
-        const { data: evts } = await window.sb.from('calendar_events')
-          .select('id,title,date,opponent')
-          .eq('club_id', clubId).eq('type', 'match')
-          .gte('date', dateFrom.toISOString().slice(0, 10))
-          .lte('date', dateTo.toISOString().slice(0, 10));
-        const sel = document.getElementById('s4MatchEvent');
-        sel.innerHTML = '<option value="">— None —</option>';
-        (evts || []).forEach(ev => {
-          const opt = document.createElement('option');
-          opt.value = ev.id;
-          opt.textContent = `${ev.title || 'Match'} vs ${ev.opponent || '?'} · ${ev.date}`;
-          sel.appendChild(opt);
-        });
-        sel.addEventListener('change', e => { _wizState.sessionInfo.calendarEventId = e.target.value || null; });
-      } else {
-        matchLink.style.display = 'none';
-        _wizState.sessionInfo.calendarEventId = null;
-      }
+    } else {
+      // ── Multi-date mode (session_date column mapped) ─────────
+      const totalRows   = Object.values(dateMap).reduce((a, b) => a + b, 0);
+      const earliest    = uniqueDates[0];
+      const latest      = uniqueDates[uniqueDates.length - 1];
+      const previewDates = uniqueDates.length <= 6
+        ? uniqueDates
+        : [...uniqueDates.slice(0, 3), null, ...uniqueDates.slice(-2)];
+
+      const dateListHTML = previewDates.map(d =>
+        d ? `<div style="display:flex;justify-content:space-between;font:500 12px/1.6 var(--cm-font-sans);color:var(--cm-fg)">
+               <span>${d}</span>
+               <span style="color:var(--cm-fg-muted)">${dateMap[d]} row${dateMap[d]!==1?'s':''}</span>
+             </div>`
+          : `<div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:2px 0">… ${uniqueDates.length - 5} more dates …</div>`
+      ).join('');
+
+      const doubleWarning = doubleDates.length ? `
+        <div style="margin-bottom:12px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3)">
+          <div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-warning);margin-bottom:4px">Possible double sessions detected</div>
+          ${doubleDates.map(d => `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${d.date} — ${d.n} player${d.n!==1?'s appear':'appears'} more than once</div>`).join('')}
+          <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">Duplicate rows per player+date will be deduplicated automatically (last row kept).</div>
+        </div>` : '';
+
+      body.innerHTML = `
+        <div style="padding:10px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);margin-bottom:12px">
+          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">
+            This file contains data for ${uniqueDates.length} session${uniqueDates.length!==1?'s':''} · ${totalRows} rows
+          </div>
+          ${dateListHTML}
+          <div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">${earliest} → ${latest}</div>
+        </div>
+        ${doubleWarning}
+        <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">How should we treat these sessions?</div>
+        ${choiceHTML(true, si.isHistorical)}
+        <div>
+          <label style="${LBL}">Session type for all dates</label>
+          <select id="s4Type" style="${INP.replace('12px/1','12px/1.4')}">${typeOpts}</select>
+        </div>`;
     }
-
-    let _debounce = null;
-    const triggerLookup = () => { clearTimeout(_debounce); _debounce = setTimeout(lookupSession, 350); };
-
-    body.querySelector('#s4Date').addEventListener('change', triggerLookup);
-    body.querySelector('#s4Type').addEventListener('change', triggerLookup);
-    body.querySelector('#s4Title').addEventListener('input', e => { _wizState.sessionInfo.title = e.target.value.trim(); });
-
-    lookupSession(); // initial run
 
     footer.innerHTML = `
       <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 4 of 5</span>
@@ -3670,9 +3741,12 @@ window.renderView = async function () {
       </div>`;
     footer.querySelector('#wizBack4').addEventListener('click', () => setWizStep(3));
     footer.querySelector('#wizNext4').addEventListener('click', () => {
-      _wizState.sessionInfo.date  = body.querySelector('#s4Date').value;
-      _wizState.sessionInfo.type  = body.querySelector('#s4Type').value;
-      _wizState.sessionInfo.title = body.querySelector('#s4Title').value.trim();
+      si.isHistorical  = body.querySelector('[name="s4mode"]:checked')?.value === 'historical';
+      si.sessionType   = body.querySelector('#s4Type')?.value || 'training';
+      if (si.mode === 'single') {
+        si.date  = body.querySelector('#s4Date')?.value  || today;
+        si.title = body.querySelector('#s4Title')?.value.trim() || '';
+      }
       setWizStep(5);
       runImport();
     });
@@ -3688,30 +3762,42 @@ window.renderView = async function () {
     document.getElementById('wizFooter').innerHTML = '';
   }
 
-  // ── Build rows from parsed file ────────────────────────────
-  function buildInsertableRows(sessionId) {
+  // ── Build rows from parsed file ──────────────────────────────
+  // dateSessionMap: { 'YYYY-MM-DD' → session_id } or null (single-session mode)
+  // singleSessionId: fallback session_id when dateSessionMap is null
+  function buildInsertableRows(dateSessionMap, singleSessionId) {
     const { rows, headerRow, columnMap, clubId, confirmedMap } = _wizState;
     const _colOf = metric => Object.entries(columnMap).find(([, c]) => c.metric === metric)?.[0];
     const playerNameIdx = _colOf('player_name') ?? _colOf('player_first_name');
     const jerseyIdx     = _colOf('jersey_number');
-    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const dateColIdx    = _colOf('session_date');
+    const dateFmt       = dateColIdx != null ? (columnMap[dateColIdx]?.parseFormat || null) : null;
+    const dataRows      = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
     const hasPlayerMapping = playerNameIdx != null || jerseyIdx != null;
     const insertable = [];
     let skippedCells = 0;
-    const warnings = [];
+    const warnings   = [];
+    const UUID_RE    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
     for (const row of dataRows) {
-      // Key must match what buildPlayerMatches used: jersey first, name second
       const rawJersey = jerseyIdx     != null ? String(row[+jerseyIdx]     ?? '').trim() : '';
       const rawName   = playerNameIdx != null ? String(row[+playerNameIdx] ?? '').trim() : null;
       const key       = rawJersey || rawName || null;
       const playerId  = key ? (confirmedMap[key] || null) : null;
 
-      // Skip rows whose player was not matched (only if we have player column)
       if (hasPlayerMapping && !playerId) {
-        if (key) warnings.push(`"${key}" not matched to a squad player — row skipped`);
+        if (key) warnings.push(`"${key}" not matched — row skipped`);
         continue;
       }
+
+      // Resolve session_id for this row (multi-date or single)
+      let sessionId = singleSessionId;
+      if (dateColIdx != null && dateSessionMap) {
+        const rawDate = String(row[+dateColIdx] || '').trim();
+        const parsed  = window.gpParseDate ? window.gpParseDate(rawDate, dateFmt) : null;
+        if (parsed?.iso && !parsed.invalid) sessionId = dateSessionMap[parsed.iso] || singleSessionId;
+      }
+      if (!sessionId) continue;
 
       const rec = { club_id: clubId, session_id: sessionId, player_id: playerId };
 
@@ -3720,7 +3806,6 @@ window.renderView = async function () {
         const raw = row[+ci];
         if (raw === '' || raw == null) continue;
 
-        // time_played arrives as a duration (HH:MM:SS, Excel time fraction, Date object, etc.)
         if (map.metric === 'time_played' && typeof window.gpParseDuration === 'function') {
           const pd = window.gpParseDuration(raw, map.parseFormat || null);
           if (pd.invalid || pd.minutes === null) { skippedCells++; continue; }
@@ -3728,14 +3813,11 @@ window.renderView = async function () {
           continue;
         }
 
-        // All other GPS metrics are numeric
         const num = +raw * (map.conversion || 1);
         if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
         rec[map.metric] = GPS_INT_COLS.has(map.metric) ? Math.round(num) : +num.toFixed(4);
       }
 
-      // Validate required foreign keys are real UUIDs
-      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!UUID_RE.test(rec.club_id) || !UUID_RE.test(rec.session_id)) continue;
       if (rec.player_id && !UUID_RE.test(rec.player_id)) { rec.player_id = null; }
 
@@ -3745,62 +3827,17 @@ window.renderView = async function () {
     return { insertable, skippedCells, warnings };
   }
 
-  // ── Duplicate resolution panel ─────────────────────────────
-  function showDuplicatePanel(existingPids, onChoice) {
-    const body = document.getElementById('wizBody');
-    if (!body) { onChoice('replace'); return; }
-    body.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:16px;padding:8px 0">
-        <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3)">
-          <i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:20px;flex-shrink:0"></i>
-          <div>
-            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:4px">${existingPids.length} existing report${existingPids.length!==1?'s':''} found for this session</div>
-            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Choose how to handle them before importing:</div>
-          </div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <button class="gp-dup-opt" data-action="replace" style="padding:12px 14px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);text-align:left;cursor:pointer;width:100%">
-            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Replace existing reports</div>
-            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Delete the ${existingPids.length} existing row${existingPids.length!==1?'s':''} and insert new data</div>
-          </button>
-          <button class="gp-dup-opt" data-action="skip" style="padding:12px 14px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);text-align:left;cursor:pointer;width:100%">
-            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Skip duplicates</div>
-            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Only insert rows for players that do not yet have a report for this session</div>
-          </button>
-          <button class="gp-dup-opt" data-action="cancel" style="padding:12px 14px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-surface);text-align:left;cursor:pointer;width:100%">
-            <div style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Cancel import</div>
-            <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">Go back without making changes</div>
-          </button>
-        </div>
-      </div>`;
-
-    body.querySelectorAll('.gp-dup-opt').forEach(btn => {
-      btn.addEventListener('mouseenter', () => { btn.style.borderColor = 'var(--cm-accent)'; btn.style.background = 'var(--cm-accent-soft)'; });
-      btn.addEventListener('mouseleave', () => { btn.style.borderColor = 'var(--cm-border)'; btn.style.background = 'var(--cm-surface)'; });
-      btn.addEventListener('click', () => {
-        body.innerHTML = `
-          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:32px 0">
-            <i class="ti ti-loader-2" id="wizSpinner" style="font-size:32px;color:var(--cm-accent);animation:gp-spin 1s linear infinite"></i>
-            <div id="wizImportStatus" style="font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center">Processing…</div>
-          </div>`;
-        onChoice(btn.dataset.action);
-      });
-    });
-  }
-
   // ── Main import function ───────────────────────────────────
   async function runImport() {
-    const status = txt => {
+    const setStatus = (main, sub) => {
       const el = document.getElementById('wizImportStatus');
-      if (el) el.textContent = txt;
+      if (el) el.innerHTML = main + (sub ? `<br><span style="font:400 11px/1.4 var(--cm-font-sans);opacity:.7">${sub}</span>` : '');
     };
 
     const finishWithError = msg => {
       document.getElementById('wizSpinner')?.remove();
       const el = document.getElementById('wizImportStatus');
-      if (el) {
-        el.innerHTML = `<span style="color:var(--cm-danger)">${msg}</span>`;
-      }
+      if (el) el.innerHTML = `<span style="color:var(--cm-danger)">${msg}</span>`;
       document.getElementById('wizFooter').innerHTML = `
         <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-danger)">${msg}</span>
         <div class="right">
@@ -3812,114 +3849,117 @@ window.renderView = async function () {
 
     try {
       const { clubId, sessionInfo, confirmedMap } = _wizState;
+      const { mode, isHistorical, sessionType, uniqueDates } = sessionInfo;
+      const isMultiMode = mode === 'multi' && uniqueDates?.length > 0;
 
-      // ── 1. Resolve / create session ──────────────────────────
-      status('Resolving session…');
-      let sessionId = sessionInfo?.existingId || null;
+      // ── 1. Create / resolve training_sessions ──────────────
+      let dateSessionMap = null;
+      let singleSessionId = null;
 
-      if (!sessionId) {
-        const date  = sessionInfo?.date  || new Date().toISOString().slice(0, 10);
-        const type  = sessionInfo?.type  || 'training';
-        const title = sessionInfo?.title || `GPS import · ${date}`;
+      if (isMultiMode) {
+        // One session per unique date
+        dateSessionMap = {};
+        setStatus('Creating sessions…', `0 / ${uniqueDates.length}`);
 
-        const insertPayload = { club_id: clubId, title, session_date: date, session_type: type };
-        if (sessionInfo?.calendarEventId) insertPayload.calendar_event_id = sessionInfo.calendarEventId;
+        for (let i = 0; i < uniqueDates.length; i++) {
+          const date = uniqueDates[i];
+          const type = sessionType || 'training';
 
-        const { data: newSess, error: sessErr } = await window.sb
-          .from('training_sessions').insert(insertPayload).select('id').single();
-        if (sessErr) { finishWithError('Could not create session: ' + sessErr.message); return; }
-        sessionId = newSess.id;
-        _wizState.sessionInfo.existingId = sessionId;
+          // Try to find existing session for this date + type + historical flag
+          const { data: existing } = await window.sb.from('training_sessions')
+            .select('id')
+            .eq('club_id', clubId).eq('session_date', date)
+            .eq('session_type', type).eq('is_historical', isHistorical)
+            .limit(1);
+
+          let sessionId = existing?.[0]?.id || null;
+
+          if (!sessionId) {
+            const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
+            const { data: newSess, error } = await window.sb.from('training_sessions')
+              .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical })
+              .select('id').single();
+            if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
+            sessionId = newSess.id;
+          }
+
+          dateSessionMap[date] = sessionId;
+          setStatus('Creating sessions…', `${i + 1} / ${uniqueDates.length}`);
+        }
+      } else {
+        // Single-session mode (no date column or manual date)
+        setStatus('Resolving session…');
+        singleSessionId = sessionInfo.existingId || null;
+
+        if (!singleSessionId) {
+          const date  = sessionInfo.date  || new Date().toISOString().slice(0, 10);
+          const type  = sessionInfo.sessionType || sessionType || 'training';
+          const title = sessionInfo.title || `GPS import · ${date}`;
+          const payload = { club_id: clubId, title, session_date: date, session_type: type, is_historical: !!isHistorical };
+          const { data: newSess, error } = await window.sb.from('training_sessions')
+            .insert(payload).select('id').single();
+          if (error) { finishWithError('Could not create session: ' + error.message); return; }
+          singleSessionId = newSess.id;
+          sessionInfo.existingId = singleSessionId;
+        }
       }
 
-      // ── 2. Build rows ────────────────────────────────────────
-      status('Mapping rows…');
-      const { insertable, skippedCells, warnings } = buildInsertableRows(sessionId);
+      // ── 2. Build insertable rows ───────────────────────────
+      setStatus('Mapping rows…');
+      const { insertable, skippedCells, warnings } = buildInsertableRows(dateSessionMap, singleSessionId);
 
       if (!insertable.length) {
         finishWithError('No importable rows found — check player matching and column mapping.');
         return;
       }
 
-      // ── 3. Detect duplicates ─────────────────────────────────
-      status('Checking for duplicates…');
-      const playerIds = [...new Set(insertable.map(r => r.player_id).filter(Boolean))];
-      const { data: existing } = await window.sb.from('gps_reports')
-        .select('id,player_id')
-        .eq('club_id', clubId).eq('session_id', sessionId)
-        .in('player_id', playerIds.length ? playerIds : ['00000000-0000-0000-0000-000000000000']);
+      // Deduplicate: keep last row per (player_id, session_id) to avoid
+      // "ON CONFLICT cannot affect row a second time" from Postgres
+      const rowKey = r => `${r.player_id ?? '_'}__${r.session_id}`;
+      const deduped = [...new Map(insertable.map(r => [rowKey(r), r])).values()];
 
-      // ── 4. Duplicate resolution (non-blocking UI) ────────────
-      if (existing?.length) {
-        await new Promise(resolve => {
-          showDuplicatePanel(existing, async choice => {
-            if (choice === 'cancel') {
-              finishWithError('Import cancelled.');
-              resolve('cancel');
-              return;
-            }
-            if (choice === 'replace') {
-              const ids = existing.map(r => r.id);
-              const { error } = await window.sb.from('gps_reports').delete().in('id', ids);
-              if (error) { finishWithError('Delete failed: ' + error.message); resolve('error'); return; }
-            } else if (choice === 'skip') {
-              const existingPids = new Set(existing.map(r => r.player_id));
-              const before = insertable.length;
-              insertable.splice(0, insertable.length, ...insertable.filter(r => !existingPids.has(r.player_id)));
-              const skipped = before - insertable.length;
-              if (!insertable.length) {
-                finishWithError(`All ${skipped} rows already exist — nothing to import.`);
-                resolve('skip-empty');
-                return;
-              }
-            }
-            resolve(choice);
-          });
-        });
-        // If finishWithError was called, wizSpinner is gone — bail
-        if (!document.getElementById('wizSpinner')) return;
-      }
+      // ── 3. Batch upsert in chunks of 500 ─────────────────
+      const CHUNK = 500;
+      let done = 0;
+      setStatus('Saving GPS reports…', `0 / ${deduped.length}`);
 
-      // ── 5. UPSERT ────────────────────────────────────────────
-      status(`Inserting ${insertable.length} rows…`);
-      const CHUNK = 50;
-      for (let i = 0; i < insertable.length; i += CHUNK) {
+      for (let i = 0; i < deduped.length; i += CHUNK) {
         const { error } = await window.sb.from('gps_reports')
-          .upsert(insertable.slice(i, i + CHUNK), { onConflict: 'player_id,session_id' });
+          .upsert(deduped.slice(i, i + CHUNK), { onConflict: 'player_id,session_id' });
         if (error) throw error;
-        status(`Inserting… ${Math.min(i + CHUNK, insertable.length)} / ${insertable.length}`);
+        done = Math.min(i + CHUNK, deduped.length);
+        setStatus('Saving GPS reports…', `${done} / ${deduped.length}`);
       }
 
-      // ── 6. Persist external_gps_id (only when column was explicitly mapped) ─
-      const extGpsIdMapped = Object.values(_wizState.columnMap)
-        .some(c => c.metric === 'player_external_gps_id');
+      // ── 4. Persist external_gps_id ───────────────────────
+      const extGpsIdMapped = Object.values(_wizState.columnMap).some(c => c.metric === 'player_external_gps_id');
       if (extGpsIdMapped) {
-        const extUpdates = Object.entries(confirmedMap)
-          .filter(([rawKey, pid]) => {
-            const pm = _wizState.playerMatches[rawKey];
-            return pid && pm?.rawExtGpsId;
-          });
+        const extUpdates = Object.entries(confirmedMap).filter(([rawKey, pid]) => {
+          const pm = _wizState.playerMatches[rawKey];
+          return pid && pm?.rawExtGpsId;
+        });
         await Promise.all(extUpdates.map(([rawKey, pid]) => {
           const extId = _wizState.playerMatches[rawKey].rawExtGpsId;
-          return window.sb.from('players').update({ external_gps_id: extId })
-            .eq('id', pid).eq('club_id', clubId);
+          return window.sb.from('players').update({ external_gps_id: extId }).eq('id', pid).eq('club_id', clubId);
         }));
       }
 
-      // ── 7. Success ───────────────────────────────────────────
+      // ── 5. Success ────────────────────────────────────────
       document.getElementById('wizSpinner')?.remove();
-      const uniquePlayers = new Set(insertable.map(r => r.player_id).filter(Boolean)).size;
-      const sessionLabel  = sessionInfo?.title || `${sessionInfo?.type} · ${sessionInfo?.date}`;
+      const sessionCount   = isMultiMode ? uniqueDates.length : 1;
+      const uniquePlayers  = new Set(deduped.map(r => r.player_id).filter(Boolean)).size;
+      const sessionLabel   = isHistorical ? 'historical' : 'real';
+      const warningLines   = [...warnings.slice(0, 5), ...(skippedCells ? [`${skippedCells} cell(s) skipped (invalid values)`] : [])];
+      const firstSessionId = isMultiMode ? (dateSessionMap[uniqueDates[0]] || null) : singleSessionId;
 
-      const warningLines = [...warnings.slice(0, 5), ...(skippedCells ? [`${skippedCells} cell(s) skipped (invalid values)`] : [])];
-
-      const successHtml = `
+      document.getElementById('wizBody').innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0;text-align:center">
           <i class="ti ti-circle-check" style="font-size:36px;color:var(--cm-success)"></i>
           <div>
             <div style="font:600 15px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">Import complete</div>
-            <div style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">${insertable.length} report${insertable.length!==1?'s':''} for ${uniquePlayers} player${uniquePlayers!==1?'s':''}</div>
-            <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px">Session: ${sessionLabel}</div>
+            <div style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">
+              ${sessionCount} session${sessionCount!==1?'s':''} (${sessionLabel}) · ${deduped.length} GPS report${deduped.length!==1?'s':''} · ${uniquePlayers} player${uniquePlayers!==1?'s':''}
+            </div>
           </div>
           ${warningLines.length ? `
           <div style="width:100%;padding:8px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3);text-align:left">
@@ -3927,17 +3967,13 @@ window.renderView = async function () {
             ${warningLines.map(w => `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${w}</div>`).join('')}
           </div>` : ''}
         </div>`;
-      document.getElementById('wizBody').innerHTML = successHtml;
-      document.getElementById('wizFooter').innerHTML = `
-        <div class="right">
-          <button class="cm-btn is-primary is-sm" id="wizDone">Done</button>
-        </div>`;
+      document.getElementById('wizFooter').innerHTML = `<div class="right"><button class="cm-btn is-primary is-sm" id="wizDone">Done</button></div>`;
       document.getElementById('wizDone').addEventListener('click', () => {
         document.getElementById('gpImportModal')?.remove();
-        window.refreshDashboard?.({ sessionId });
+        window.refreshDashboard?.({ sessionId: firstSessionId });
       });
 
-      showToast(`Imported ${insertable.length} GPS reports · ${uniquePlayers} players`);
+      showToast(`Imported ${deduped.length} GPS reports · ${uniquePlayers} players · ${sessionCount} sessions`);
       window.dispatchEvent(new CustomEvent('gps:reports:updated', { detail: { clubId } }));
 
     } catch (e) {

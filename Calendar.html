@@ -1978,7 +1978,7 @@ async function fetchAllEvents(dateFrom, dateTo) {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
       .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,visible_to,created_at')
-      .eq('club_id', _clubId)
+      .eq('club_id', _clubId).eq('is_historical', false)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
       .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id,visible_to,created_at')
@@ -2054,7 +2054,7 @@ async function renderWorkload() {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
       .select('session_date,duration,estimated_rpe,session_type')
-      .eq('club_id', clubId).gte('session_date', dateFrom).lte('session_date', dateTo),
+      .eq('club_id', clubId).eq('is_historical', false).gte('session_date', dateFrom).lte('session_date', dateTo),
     window.sb.from('calendar_events')
       .select('date,duration_minutes,estimated_rpe,type')
       .eq('club_id', clubId).gte('date', dateFrom).lte('date', dateTo)
