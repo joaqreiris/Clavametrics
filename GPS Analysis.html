@@ -1143,25 +1143,6 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
 // ── 7. Drawer buttons ─────────────────────────────────────────
 const _drops = document.querySelectorAll('.gp-drop');
 
-// Browse files
-_drops[0]?.querySelector('.cm-btn.is-outline')?.addEventListener('click', e => {
-  e.stopPropagation();
-  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.csv,.tsv,.xlsx,.xml,.json' });
-  inp.addEventListener('change', () => {
-    const file = inp.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      console.table(ev.target.result.split('\n').slice(0, 4).map(l => l.split(',')));
-      showToast(`Loaded: ${file.name}`);
-      const h4 = _drops[0].querySelector('h4');
-      if (h4) h4.textContent = file.name;
-    };
-    reader.readAsText(file);
-  });
-  inp.click();
-});
-
 // Download template
 _drops[0]?.querySelector('.cm-btn.is-ghost')?.addEventListener('click', e => {
   e.stopPropagation();
@@ -3190,7 +3171,7 @@ window.renderView = async function () {
       const pos   = match.rawPosition
         ? POSITIONS.find(p => p.toLowerCase() === (match.rawPosition || '').toLowerCase().slice(0, 2)) || 'MF'
         : 'MF';
-      const rec = { club_id: _wizState.clubId, first_name: fn, last_name: ln, position: pos, number: match.rawJersey || null, status: 'active' };
+      const rec = { club_id: _wizState.clubId, first_name: fn, last_name: ln, position: pos, number: match.rawJersey || null, status: 'available' };
       if (match.rawExtGpsId) rec.external_gps_id = match.rawExtGpsId;
       rowData.push({ rowEl, key, match, fn, ln });
       insertArr.push(rec);
@@ -3514,7 +3495,7 @@ window.renderView = async function () {
 
       const insertObj = {
         club_id: _wizState.clubId, first_name: fn, last_name: ln,
-        position: pos, number: num || null, status: 'active',
+        position: pos, number: num || null, status: 'available',
       };
       if (matchData?.rawExtGpsId) insertObj.external_gps_id = matchData.rawExtGpsId;
 
@@ -3967,9 +3948,10 @@ window.renderView = async function () {
   // ── Wire up Browse files button + drag-and-drop ────────────
   function initUploadHandlers() {
     const dropZone = document.querySelector('.gp-drop');
-    if (!dropZone) return;
+    if (!dropZone || dropZone.dataset.uploadInit) return;
+    dropZone.dataset.uploadInit = '1';
 
-    // Hidden file input
+    // Hidden file input — created once, never re-created
     const fileInput = Object.assign(document.createElement('input'), {
       type: 'file', accept: '.csv,.tsv,.xlsx,.xls', style: 'display:none',
     });
@@ -3977,9 +3959,13 @@ window.renderView = async function () {
 
     const handleFile = f => { if (f) openImportWizard(f); };
 
-    fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      fileInput.value = ''; // reset so same file can be re-selected
+      handleFile(f);
+    });
 
-    // Browse files button
+    // Browse files button — cloneNode strips any pre-existing handlers
     const browseBtn = dropZone.querySelector('.cm-btn.is-outline');
     if (browseBtn) {
       const newBtn = browseBtn.cloneNode(true);
@@ -3987,17 +3973,19 @@ window.renderView = async function () {
       newBtn.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
     }
 
-    // Click on drop zone (not on buttons)
+    // Click on drop zone area (not on a button)
     dropZone.addEventListener('click', e => {
       if (e.target.closest('.cm-btn')) return;
       fileInput.click();
     });
 
     // Drag-and-drop
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt =>
+      dropZone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); })
+    );
+    dropZone.addEventListener('dragover', () => dropZone.classList.add('drag-over'));
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
     dropZone.addEventListener('drop', e => {
-      e.preventDefault();
       dropZone.classList.remove('drag-over');
       const f = e.dataTransfer.files[0];
       if (f) handleFile(f);
