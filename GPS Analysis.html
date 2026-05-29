@@ -2728,7 +2728,12 @@ window.renderView = async function () {
     const nc = _norm(colName);
     // 1. Saved mapping (memory of prior imports for this provider)
     const saved = existingMappings.find(m => _norm(m.source_column_name) === nc);
-    if (saved) return { metric: saved.target_metric, confidence: 'saved', score: 1, conversion: saved.unit_conversion || 1 };
+    if (saved) {
+      if (saved.target_metric && saved.target_metric.startsWith('__attr__')) {
+        return { metric: null, attribute: saved.target_metric.slice(8), confidence: 'saved', score: 1, conversion: saved.unit_conversion || 1 };
+      }
+      return { metric: saved.target_metric, confidence: 'saved', score: 1, conversion: saved.unit_conversion || 1 };
+    }
 
     const normFn  = window.normalizeAlias || _norm;
     const catHint = _categoryHint(nc);
@@ -3270,6 +3275,7 @@ window.renderView = async function () {
       const match = autoMatchColumn(col, labelMappings);
       _wizState.columnMap[i] = {
         sourceCol: col, metric: match.metric,
+        attribute: match.attribute || null,
         confidence: match.confidence, score: match.score || 0,
         conversion: match.conversion,
         parseFormat, colType, excluded: false,
@@ -3285,14 +3291,12 @@ window.renderView = async function () {
     return /^[a-z]/.test(slug) ? slug : ('m_' + slug) || 'metric';
   }
 
-  // Build grouped <select> options for the column mapping dropdown
-  // Groups: Player fields / Core metrics (from catalog) / Custom metrics / Session attributes / Special / Ignore / Create new
-  const SESSION_ATTR_OPTIONS = [
-    { key: 'rival',       label: 'Rival' },
-    { key: 'md_code',     label: 'MD-code' },
-    { key: 'competition', label: 'Competition' },
-    { key: 'venue',       label: 'Venue (home / away)' },
-  ];
+  // slug helper for session attribute keys — lowercase, accents removed, only [a-z0-9_]
+  function _toAttrSlug(s) {
+    return (s || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/, '');
+  }
 
   function _buildSelOptions(selectedVal) {
     const pfKeys      = window.GPS_PLAYER_FIELD_KEYS || new Set();
@@ -3311,8 +3315,14 @@ window.renderView = async function () {
       : _aliasDb.filter(e => !pfKeys.has(e.metric_key) && e.category !== 'date')
           .map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('');
 
-    const attrHtml = SESSION_ATTR_OPTIONS.map(a => opt(`__attr__${a.key}`, a.label)).join('') +
-      `<option value="__attr_custom__"${'__attr_custom__' === selectedVal ? ' selected' : ''}>Custom attribute…</option>`;
+    let attrHtml;
+    if (selectedVal && selectedVal.startsWith('__attr__')) {
+      const attrKey = selectedVal.slice(8);
+      attrHtml = `<option value="${selectedVal}" selected>${attrKey}</option>
+        <option value="__attr_custom__">+ Session attribute…</option>`;
+    } else {
+      attrHtml = `<option value="__attr_custom__"${'__attr_custom__' === selectedVal ? ' selected' : ''}>+ Session attribute…</option>`;
+    }
 
     return `<option value="__ignore__"${'__ignore__' === selectedVal ? ' selected' : ''}>— Ignore this column —</option>
       <option value="__create__"${'__create__' === selectedVal ? ' selected' : ''}>+ Create new metric...</option>
@@ -3555,19 +3565,21 @@ window.renderView = async function () {
     });
   }
 
-  function _showCreateAttrForm(ci, sel) {
+  async function _showCreateAttrForm(ci, sel) {
     const inlineDiv = document.querySelector(`.gp-create-inline[data-ci="${ci}"]`);
     if (!inlineDiv) return;
     document.querySelectorAll('.gp-create-inline').forEach(d => { if (+d.dataset.ci !== ci) d.innerHTML = ''; });
 
     inlineDiv.innerHTML = `
       <div class="gp-create-metric-form" style="margin-top:6px;border-bottom-color:var(--cm-info)">
-        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-info);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Custom session attribute</div>
-        <div style="margin-bottom:8px">
-          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Key * <span style="font-weight:400;text-transform:none">(snake_case, e.g. weather_condition)</span></label>
-          <input id="naKey${ci}" type="text" placeholder="e.g. weather_condition"
+        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-info);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Session attribute</div>
+        <div style="margin-bottom:6px">
+          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Attribute key</label>
+          <input id="naKey${ci}" type="text" placeholder="e.g. Rival, MD Code, Weather…"
             style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+          <div id="naSlug${ci}" style="margin-top:4px;min-height:14px;font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)"></div>
         </div>
+        <div id="naSugg${ci}" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
         <div id="naErr${ci}" style="display:none;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-danger);margin-bottom:6px"></div>
         <div style="display:flex;gap:6px;justify-content:flex-end">
           <button class="cm-btn is-outline is-sm" id="naCancel${ci}">Cancel</button>
@@ -3575,8 +3587,52 @@ window.renderView = async function () {
         </div>
       </div>`;
 
-    const keyInp = document.getElementById(`naKey${ci}`);
+    const keyInp  = document.getElementById(`naKey${ci}`);
+    const slugDiv = document.getElementById(`naSlug${ci}`);
+    const suggDiv = document.getElementById(`naSugg${ci}`);
     keyInp.focus();
+
+    // Live slug preview
+    keyInp.addEventListener('input', () => {
+      const slug = _toAttrSlug(keyInp.value);
+      if (slug) {
+        slugDiv.textContent = `→ ${slug}`;
+        slugDiv.style.color = /^[a-z]/.test(slug) ? 'var(--cm-info)' : 'var(--cm-warning)';
+      } else {
+        slugDiv.textContent = '';
+      }
+    });
+
+    // Load existing attribute keys for this club as suggestion chips
+    (async () => {
+      try {
+        const { data } = await window.sb
+          .from('training_sessions')
+          .select('session_attributes')
+          .eq('club_id', _wizState.clubId)
+          .not('session_attributes', 'eq', '{}')
+          .limit(300);
+        const keySet = new Set();
+        (data || []).forEach(r => {
+          if (r.session_attributes) Object.keys(r.session_attributes).forEach(k => keySet.add(k));
+        });
+        const suggs = [...keySet].sort();
+        if (suggs.length) {
+          suggDiv.innerHTML = `<span style="font:500 9.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint);align-self:center">Used before:</span>` +
+            suggs.map(k =>
+              `<button type="button"
+                style="padding:2px 8px;border:1px solid var(--cm-info);border-radius:12px;background:var(--cm-info-bg);color:var(--cm-info);font:600 10.5px/1.4 var(--cm-font-mono);cursor:pointer"
+                data-key="${k}">${k}</button>`
+            ).join('');
+          suggDiv.querySelectorAll('button[data-key]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              keyInp.value = btn.dataset.key;
+              keyInp.dispatchEvent(new Event('input'));
+            });
+          });
+        }
+      } catch (_) {}
+    })();
 
     document.getElementById(`naCancel${ci}`).addEventListener('click', () => {
       inlineDiv.innerHTML = '';
@@ -3586,24 +3642,16 @@ window.renderView = async function () {
     });
 
     document.getElementById(`naSave${ci}`).addEventListener('click', () => {
-      const key    = keyInp.value.trim().toLowerCase().replace(/\s+/g, '_');
+      const slug   = _toAttrSlug(keyInp.value);
       const errDiv = document.getElementById(`naErr${ci}`);
-      if (!key) { errDiv.textContent = 'Key is required.'; errDiv.style.display = ''; return; }
-      if (!/^[a-z][a-z0-9_]*$/.test(key)) {
-        errDiv.textContent = `"${key}" is invalid — must start with a letter, only a-z 0-9 _.`;
+      if (!slug) { errDiv.textContent = 'Key is required.'; errDiv.style.display = ''; return; }
+      if (!/^[a-z][a-z0-9_]*$/.test(slug)) {
+        errDiv.textContent = `"${slug}" must start with a letter (a–z).`;
         errDiv.style.display = ''; return;
       }
-      _wizState.columnMap[ci].attribute = key;
+      _wizState.columnMap[ci].attribute = slug;
       _wizState.columnMap[ci].metric    = null;
-      // Rebuild the select so the custom key appears as selected
-      sel.innerHTML = _buildSelOptions(`__attr__${key}`);
-      // The custom key isn't in SESSION_ATTR_OPTIONS so we add it manually as selected
-      const customOpt = document.createElement('option');
-      customOpt.value = `__attr__${key}`;
-      customOpt.textContent = key;
-      customOpt.selected = true;
-      sel.querySelector('optgroup[label="── Session attributes ──"]')?.prepend(customOpt);
-      sel.value = `__attr__${key}`;
+      sel.innerHTML = _buildSelOptions(`__attr__${slug}`);
       sel.className = 'gp-map-sel is-attr';
       inlineDiv.innerHTML = '';
     });
@@ -3613,12 +3661,13 @@ window.renderView = async function () {
     const { clubId, sourceLabel, columnMap } = _wizState;
     if (!clubId) return;
     const upserts = Object.values(columnMap)
-      .filter(c => (c.metric && c.metric !== '__ignore__') || c.excluded)
+      .filter(c => (c.metric && c.metric !== '__ignore__') || c.attribute || c.excluded)
       .map(c => {
+        const target = c.excluded ? '__ignore__' : (c.attribute ? '__attr__' + c.attribute : c.metric);
         const rec = {
           club_id: clubId, source_label: sourceLabel,
           source_column_name: c.sourceCol,
-          target_metric: c.excluded ? '__ignore__' : c.metric,
+          target_metric: target,
           unit_conversion: c.conversion || 1,
           updated_at: new Date().toISOString(),
         };
