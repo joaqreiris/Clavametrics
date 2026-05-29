@@ -294,6 +294,40 @@
   .gp-drop.drag-over { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
   .gp-demo-tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg-muted); font:600 9px/1 var(--cm-font-mono); flex-shrink:0; }
 
+  /* ── Player Week Report ─────────────────────────────────────── */
+  .gp-pw-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
+  .pw-next-match { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:auto; }
+  .pw-next-match strong { color:var(--cm-fg); }
+  .pw-kpis { display:flex; gap:10px; flex-wrap:wrap; width:100%; padding:4px 0; }
+  .pw-kpi { flex:1; min-width:110px; display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
+  .pw-kpi .k-label { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.04em; }
+  .pw-kpi .k-val   { font:600 20px/1.1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pw-kpi .k-val sub { font-size:11px; font-weight:500; color:var(--cm-fg-muted); margin-left:2px; }
+  .pw-tbl { width:100%; border-collapse:collapse; font:500 12px/1.4 var(--cm-font-sans); }
+  .pw-tbl th { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; padding:6px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--cm-border); }
+  .pw-tbl th:first-child { text-align:left; }
+  .pw-tbl td { padding:5px 10px; text-align:right; border-bottom:1px solid var(--cm-border-soft); }
+  .pw-tbl td:first-child { text-align:left; }
+  .pw-tbl tr:last-child td { border-bottom:none; }
+  .pw-md { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:3px; font:700 10.5px/1 var(--cm-font-mono); }
+  .pw-md.md-5 { background:rgba(74,222,128,.15); color:var(--cm-success); }
+  .pw-md.md-4 { background:rgba(251,191,36,.15); color:var(--cm-warning); }
+  .pw-md.md-3 { background:rgba(251,146,60,.18); color:#fb923c; }
+  .pw-md.md-2 { background:rgba(251,191,36,.12); color:var(--cm-warning); }
+  .pw-md.md-1 { background:rgba(74,222,128,.12); color:var(--cm-success); }
+  .pw-md.md-0 { background:rgba(248,113,113,.18); color:var(--cm-danger); }
+  .pw-md.md-plus { background:var(--cm-bg-soft); color:var(--cm-fg-muted); }
+  .pw-rpe { display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; font:700 11px/1 var(--cm-font-sans); }
+  .pw-rpe.r-low  { background:rgba(74,222,128,.18); color:var(--cm-success); }
+  .pw-rpe.r-mid  { background:rgba(251,191,36,.18); color:var(--cm-warning); }
+  .pw-rpe.r-high { background:rgba(251,146,60,.22); color:#fb923c; }
+  .pw-rpe.r-max  { background:rgba(248,113,113,.22); color:var(--cm-danger); }
+  .pw-pct { font:600 11px/1 var(--cm-font-mono); }
+  .pw-pct.p-low  { color:var(--cm-success); }
+  .pw-pct.p-mid  { color:var(--cm-warning); }
+  .pw-pct.p-high { color:#fb923c; }
+  .pw-pct.p-over { color:var(--cm-danger); }
+
   /* ── Session Control ─────────────────────────────────────────── */
   .gp-sc-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
   .sc-sel { height:30px; padding:0 10px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
@@ -389,9 +423,53 @@
         </div>
       </div>
 
-      <!-- INDIVIDUAL -->
+      <!-- INDIVIDUAL / PLAYER WEEK REPORT -->
       <div class="gp-view is-on" data-view="ind">
+
+        <!-- Player Week — filters bar -->
+        <div class="gp-pw-bar" id="pwBar">
+          <select class="sc-sel" id="pw-player-sel"><option value="">Player...</option></select>
+          <select class="sc-sel" id="pw-mc-sel"><option value="">Microcycle...</option></select>
+          <span class="pw-next-match" id="pw-next-match"></span>
+        </div>
+
         <div class="gp-grid is-edit">
+
+          <!-- NEW: Player Week KPI row -->
+          <div class="gp-c" data-size="full" id="card-pw-kpi">
+            <div class="gp-c-h">
+              <span class="ttl">Player Week KPIs</span>
+              <span class="sub" id="pw-kpi-sub">MC totals</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="pw-kpi-body" style="padding:10px 14px">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Select a player and microcycle above.</div>
+            </div>
+          </div>
+
+          <!-- NEW: Player week table (day-by-day) -->
+          <div class="gp-c" data-size="full" id="card-pw-table">
+            <div class="gp-c-h">
+              <span class="ttl">Player week table</span>
+              <span class="sub">day by day · MD_Code · RPE · %Game</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="pw-tbl-body" style="overflow-x:auto;padding:0">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Select a player and microcycle.</div>
+            </div>
+          </div>
+
+          <!-- NEW: High Intensity Actions chart -->
+          <div class="gp-c" data-size="full" id="card-pw-chart">
+            <div class="gp-c-h">
+              <span class="ttl">High Intensity Actions</span>
+              <span class="sub">HSR · VHSR · Sprint + Acc+Dec</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:220px;padding:10px">
+              <canvas id="canvasPWChart"></canvas>
+            </div>
+          </div>
 
           <div class="gp-c" data-size="sm">
             <div class="gp-c-h"><span class="ttl">Distance</span><span class="sub">90′</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
@@ -5934,6 +6012,304 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   srcBtn.addEventListener('click', openSrc);
   document.getElementById('srcClose').addEventListener('click', closeSrc);
   srcOverlay.addEventListener('click', closeSrc);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     PLAYER WEEK REPORT (vista ind) — filtros + KPIs + tabla + chart
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  const fmtN = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d, minimumFractionDigits: d });
+
+  // Get the Monday of a given ISO week / year
+  function isoWeekMonday(week, year) {
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const day  = jan4.getUTCDay() || 7;
+    const mon  = new Date(jan4);
+    mon.setUTCDate(jan4.getUTCDate() - day + 1 + (week - 1) * 7);
+    return mon;
+  }
+
+  function mdCode(sessionDate, matchDate) {
+    if (!matchDate) return null;
+    const diff = Math.round((new Date(matchDate + 'T00:00:00') - new Date(sessionDate + 'T00:00:00')) / 86400000);
+    if (diff === 0) return 'MD';
+    if (diff > 0)  return `MD-${diff}`;
+    return `MD+${Math.abs(diff)}`;
+  }
+
+  function mdCssKey(code) {
+    if (!code) return 'md-plus';
+    if (code === 'MD')    return 'md-0';
+    const m = code.match(/^MD-(\d+)$/);
+    if (m) { const n = parseInt(m[1]); return n <= 5 ? `md-${n}` : 'md-plus'; }
+    return 'md-plus';
+  }
+
+  function rpeCls(v) {
+    if (!v) return '';
+    if (v <= 3)  return 'r-low';
+    if (v <= 6)  return 'r-mid';
+    if (v <= 8)  return 'r-high';
+    return 'r-max';
+  }
+
+  function pctCls(pct) {
+    if (pct < 30)  return 'p-low';
+    if (pct < 60)  return 'p-mid';
+    if (pct < 90)  return 'p-high';
+    return 'p-over';
+  }
+
+  // ── state ────────────────────────────────────────────────────
+  const _pw = { playerId: null, mcKey: null, chartInst: null };
+  let _pwInited = false;
+  let _allSess  = []; // all training_sessions for club
+
+  // ── DOM ──────────────────────────────────────────────────────
+  const playerSel  = document.getElementById('pw-player-sel');
+  const mcSel      = document.getElementById('pw-mc-sel');
+  const nextMatch  = document.getElementById('pw-next-match');
+  const kpiBody    = document.getElementById('pw-kpi-body');
+  const tblBody    = document.getElementById('pw-tbl-body');
+  const pwCanvas   = document.getElementById('canvasPWChart');
+  if (!playerSel) return;
+
+  // ── init ─────────────────────────────────────────────────────
+  async function pwInit() {
+    if (_pwInited) return;
+    _pwInited = true;
+    try {
+      const clubId = await window.getClubId?.();
+      if (!clubId || !window.sb) return;
+
+      const [{ data: players }, { data: sessions }] = await Promise.all([
+        window.sb.from('players').select('id,first_name,last_name,number,position')
+          .eq('club_id', clubId).neq('status','inactive').order('last_name'),
+        window.sb.from('training_sessions').select('id,session_date,session_type,title')
+          .eq('club_id', clubId).order('session_date', { ascending: false }).limit(300),
+      ]);
+
+      _allSess = sessions || [];
+
+      (players || []).forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = `${p.last_name || ''} ${(p.first_name || '')[0] || ''}.${p.number ? ' #' + p.number : ''}`.trim();
+        playerSel.appendChild(o);
+      });
+
+      // Build MC options from ISO weeks
+      const weeks = {};
+      _allSess.forEach(s => {
+        const d = new Date(s.session_date + 'T00:00:00');
+        const wk = getISOWeek(d);
+        const yr = d.getFullYear();
+        const key = `${yr}-W${String(wk).padStart(2,'0')}`;
+        if (!weeks[key]) weeks[key] = { wk, yr, from: s.session_date, to: s.session_date };
+        else {
+          if (s.session_date < weeks[key].from) weeks[key].from = s.session_date;
+          if (s.session_date > weeks[key].to)   weeks[key].to   = s.session_date;
+        }
+      });
+      Object.entries(weeks).slice(0, 20).forEach(([key, v]) => {
+        const o = document.createElement('option');
+        o.value = key;
+        o.textContent = `MC ${v.wk}  ·  ${v.from}`;
+        mcSel.appendChild(o);
+      });
+
+      if (playerSel.options.length > 1) playerSel.selectedIndex = 1;
+      if (mcSel.options.length > 1)     mcSel.selectedIndex = 1;
+      _pw.playerId = playerSel.value || null;
+      _pw.mcKey    = mcSel.value || null;
+      if (_pw.playerId && _pw.mcKey) await _pwLoad();
+    } catch (e) { console.error('pwInit:', e); }
+  }
+
+  // ── load data ────────────────────────────────────────────────
+  async function _pwLoad() {
+    const { playerId, mcKey } = _pw;
+    if (!playerId || !mcKey) return;
+    try {
+      const clubId = await window.getClubId?.();
+      const [yr, wStr] = mcKey.split('-W');
+      const wk = parseInt(wStr, 10);
+      const mon = isoWeekMonday(wk, parseInt(yr, 10));
+      const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+      const from = mon.toISOString().slice(0,10);
+      const to   = sun.toISOString().slice(0,10);
+
+      // Sessions in this week
+      const weekSess = _allSess.filter(s => s.session_date >= from && s.session_date <= to);
+      const matchSess = weekSess.find(s => s.session_type === 'match');
+      const matchDate = matchSess?.session_date || null;
+
+      // Update next match banner
+      nextMatch.innerHTML = matchDate
+        ? `vs <strong>${matchSess?.title || 'match'}</strong> · MD on ${matchDate}`
+        : 'No match in this MC';
+
+      if (!weekSess.length) {
+        kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No sessions this week.</div>';
+        tblBody.innerHTML = '';
+        return;
+      }
+
+      const sessIds = weekSess.map(s => s.id);
+
+      // Load gps_reports + rpe in parallel
+      const [{ data: reports }, { data: rpeRows }] = await Promise.all([
+        window.sb.from('gps_reports')
+          .select('session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
+          .eq('player_id', playerId).eq('club_id', clubId).in('session_id', sessIds),
+        window.sb.from('rpe').select('session_id,rpe_value').eq('player_id', playerId).in('session_id', sessIds).catch(() => ({ data: [] })),
+      ]);
+
+      const rpeMap = Object.fromEntries((rpeRows || []).map(r => [r.session_id, r.rpe_value]));
+
+      // Merge sessions with reports
+      const rows = weekSess.map(s => ({
+        session: s,
+        report:  (reports || []).find(r => r.session_id === s.id) || null,
+        rpe:     rpeMap[s.id] ?? null,
+        mdCode:  mdCode(s.session_date, matchDate),
+      })).sort((a, b) => a.session.session_date.localeCompare(b.session.session_date));
+
+      // Load match baseline for %Game
+      let baseline = null;
+      if (typeof window.getMatchBaseline === 'function') {
+        try {
+          baseline = {
+            total_distance:          await window.getMatchBaseline(playerId, 'total_distance', clubId),
+            high_speed_distance:     await window.getMatchBaseline(playerId, 'high_speed_distance', clubId),
+            sprint_count:            await window.getMatchBaseline(playerId, 'sprint_count', clubId),
+            accDec:                  await window.getMatchBaseline(playerId, 'accelerations', clubId),
+          };
+        } catch { baseline = null; }
+      }
+
+      _pwRenderKPIs(rows);
+      _pwRenderTable(rows, baseline);
+      _pwRenderChart(rows);
+    } catch (e) { console.error('_pwLoad:', e); }
+  }
+
+  // ── KPIs ─────────────────────────────────────────────────────
+  function _pwRenderKPIs(rows) {
+    const reports = rows.map(r => r.report).filter(Boolean);
+    if (!reports.length) { kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No GPS data for this player this week.</div>'; return; }
+
+    const sum  = key => reports.reduce((s, r) => s + (r[key] || 0), 0);
+    const maxV = key => Math.max(...reports.map(r => r[key] || 0));
+    const accDec = sum('accelerations') + sum('decelerations');
+
+    const kpis = [
+      { label: 'Int Load',      val: sum('player_load'),             unit: 'AU',   dec: 0 },
+      { label: 'Total Distance',val: sum('total_distance') / 1000,   unit: 'km',   dec: 2 },
+      { label: 'Total HSR',     val: sum('high_speed_distance'),      unit: 'm',    dec: 0 },
+      { label: 'Total Sprints', val: sum('sprint_count'),             unit: '',     dec: 0 },
+      { label: 'Acc + Dec',     val: accDec,                         unit: '',     dec: 0 },
+      { label: 'Max Velocity',  val: maxV('max_speed'),               unit: 'km/h', dec: 1 },
+    ];
+
+    kpiBody.innerHTML = `<div class="pw-kpis">${kpis.map(k =>
+      `<div class="pw-kpi"><span class="k-label">${k.label}</span><span class="k-val">${fmtN(k.val, k.dec)}${k.unit ? `<sub>${k.unit}</sub>` : ''}</span></div>`
+    ).join('')}</div>`;
+  }
+
+  // ── Table ────────────────────────────────────────────────────
+  function _pwRenderTable(rows, baseline) {
+    const showPct = !!(baseline?.total_distance);
+
+    const header = `<tr>
+      <th style="text-align:left">Date</th>
+      <th style="text-align:left">MD Code</th>
+      <th>RPE</th>
+      <th>Load (AU)</th>
+      <th>TD (m)</th>
+      <th>HSR (m)</th>
+      <th>SPR (n)</th>
+      <th>Acc+Dec</th>
+      ${showPct ? '<th>TD%Game</th><th>HSR%Game</th>' : ''}
+    </tr>`;
+
+    const body = rows.map(row => {
+      const r    = row.report;
+      const code = row.mdCode || '—';
+      const cssK = mdCssKey(row.mdCode);
+      const rpe  = row.rpe;
+      const accDec = r ? (r.accelerations || 0) + (r.decelerations || 0) : null;
+
+      let pctTD = '', pctHSR = '';
+      if (showPct && r) {
+        const td = baseline.total_distance > 0 ? Math.round(r.total_distance / baseline.total_distance * 100) : null;
+        const hsr = baseline.high_speed_distance > 0 ? Math.round(r.high_speed_distance / baseline.high_speed_distance * 100) : null;
+        pctTD  = td  != null ? `<span class="pw-pct ${pctCls(td)}">${td}%</span>`   : '—';
+        pctHSR = hsr != null ? `<span class="pw-pct ${pctCls(hsr)}">${hsr}%</span>` : '—';
+      }
+
+      return `<tr>
+        <td>${row.session.session_date}</td>
+        <td><span class="pw-md ${cssK}">${code}</span></td>
+        <td>${rpe != null ? `<span class="pw-rpe ${rpeCls(rpe)}">${rpe}</span>` : '—'}</td>
+        <td>${r ? fmtN(r.player_load, 0) : '—'}</td>
+        <td>${r ? fmtN(r.total_distance, 0) : '—'}</td>
+        <td>${r ? fmtN(r.high_speed_distance, 0) : '—'}</td>
+        <td>${r ? fmtN(r.sprint_count, 0) : '—'}</td>
+        <td>${r && accDec != null ? fmtN(accDec, 0) : '—'}</td>
+        ${showPct ? `<td>${pctTD}</td><td>${pctHSR}</td>` : ''}
+      </tr>`;
+    }).join('');
+
+    tblBody.innerHTML = `<table class="pw-tbl"><thead>${header}</thead><tbody>${body}</tbody></table>`;
+  }
+
+  // ── Chart ────────────────────────────────────────────────────
+  function _pwRenderChart(rows) {
+    if (!pwCanvas || typeof Chart === 'undefined') return;
+    if (_pw.chartInst) { _pw.chartInst.destroy(); _pw.chartInst = null; }
+
+    const labels = rows.map(r => r.mdCode || r.session.session_date);
+    const hsr    = rows.map(r => r.report?.high_speed_distance || 0);
+    const vhsr   = rows.map(r => r.report?.very_high_speed_distance || 0);
+    const spr    = rows.map(r => r.report?.sprint_distance || 0);
+    const accDec = rows.map(r => r.report ? (r.report.accelerations || 0) + (r.report.decelerations || 0) : 0);
+
+    _pw.chartInst = new Chart(pwCanvas, {
+      data: {
+        labels,
+        datasets: [
+          { type: 'bar',  label: 'HSR (m)',    data: hsr,    backgroundColor: 'rgba(251,191,36,.7)',  stack: 'hi' },
+          { type: 'bar',  label: 'VHSR (m)',   data: vhsr,   backgroundColor: 'rgba(232,121,249,.7)', stack: 'hi' },
+          { type: 'bar',  label: 'Sprint (m)', data: spr,    backgroundColor: 'rgba(74,222,128,.7)',  stack: 'hi' },
+          { type: 'line', label: 'Acc+Dec',    data: accDec, borderColor: 'var(--cm-accent)', backgroundColor: 'transparent', yAxisID: 'y1', tension: 0.3, pointRadius: 4 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, grid: { display: false } },
+          y:  { stacked: true, beginAtZero: true, title: { display: true, text: 'HSR + VHSR + SPR (m)' } },
+          y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Acc+Dec' }, grid: { drawOnChartArea: false } },
+        },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
+      },
+    });
+  }
+
+  // ── events ───────────────────────────────────────────────────
+  playerSel.addEventListener('change', () => { _pw.playerId = playerSel.value || null; if (_pw.playerId && _pw.mcKey) _pwLoad(); });
+  mcSel.addEventListener('change',     () => { _pw.mcKey    = mcSel.value || null;    if (_pw.playerId && _pw.mcKey) _pwLoad(); });
+
+  window._pwInit = pwInit;
+
+  document.getElementById('sections')?.addEventListener('click', e => {
+    if (e.target.closest('.gp-sec[data-view="ind"]')) setTimeout(pwInit, 0);
+  });
+
+  if (document.querySelector('.gp-view[data-view="ind"].is-on')) pwInit();
+})();
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════
