@@ -379,6 +379,8 @@
   .mc-evt.drag-over { background: var(--cm-accent-soft) !important; border-color: var(--cm-accent) !important; border-width: 1.5px; }
   .mc-evt-placeholder { height: 34px; border: 2px dashed var(--cm-accent); border-radius: 6px; background: color-mix(in srgb, var(--cm-accent) 8%, transparent); margin-bottom: 4px; pointer-events: none; }
   body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
+  .mc-day.drag-target { outline: 2px solid var(--cm-accent); outline-offset: -2px; background: color-mix(in srgb, var(--cm-accent) 5%, transparent); transition: outline 80ms, background 80ms; }
+  .mc-day.drag-target-warn { outline-color: var(--cm-warning); background: color-mix(in srgb, var(--cm-warning) 5%, transparent); }
 
   /* Workload chart */
   .wk-chart { padding:14px 16px 18px; }
@@ -1636,7 +1638,19 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Render grid (continuous view — all MC days in one scrollable row) ──────────────
-let _dragId = null, _dragDate = null, _dropTargetId = null;
+let _dragId = null, _dragDate = null, _dragHasTime = false, _dropTargetId = null, _dropTargetDate = null;
+
+// Cancel drag with ESC
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && _dragId) {
+    _dragId = null; _dragDate = null; _dragHasTime = false;
+    _dropTargetId = null; _dropTargetDate = null;
+    document.body.classList.remove('is-dragging');
+    document.querySelectorAll('.mc-evt.is-dragging').forEach(x => x.classList.remove('is-dragging'));
+    document.querySelectorAll('.mc-evt.drag-over').forEach(x => x.classList.remove('drag-over'));
+    document.querySelectorAll('.mc-day.drag-target,.mc-day.drag-target-warn').forEach(x => x.classList.remove('drag-target','drag-target-warn'));
+  }
+});
 
 function renderGrid() {
   closeEvtPopover();
@@ -1741,7 +1755,7 @@ function renderGrid() {
           const leadEl = (cat === 'match' && s.rival_crest_url)
             ? `<img src="${s.rival_crest_url}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
             : `<i class="ti ${icon}"></i>`;
-          return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" draggable="true">
+          return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
             ${leadEl}
             ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
             <span class="name" title="${(s.title || s.session_type || cat) + dur}">${s.title || s.session_type || cat}${dur}</span>${au}
@@ -1777,14 +1791,16 @@ function renderGrid() {
     btn.addEventListener('click', e => { e.stopPropagation(); openEvtModal(null, btn.dataset.addDate); });
   });
 
-  // Drag & drop within same day
-  // Reorder logic runs in dragend (not drop) to avoid the placeholder
-  // blocking the drop target and silently swallowing the event.
+  // Drag & drop:
+  //   Events WITH start_time  → cross-day move only (time defines same-day order)
+  //   Events WITHOUT start_time → same-day reorder + cross-day move (sort_order persisted)
   grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
     el.addEventListener('dragstart', e => {
-      _dragId       = el.dataset.id;
-      _dragDate     = el.dataset.date;
-      _dropTargetId = null;
+      _dragId         = el.dataset.id;
+      _dragDate       = el.dataset.date;
+      _dragHasTime    = el.dataset.hasTime === '1';
+      _dropTargetId   = null;
+      _dropTargetDate = null;
       el.classList.add('is-dragging');
       document.body.classList.add('is-dragging');
       e.dataTransfer.effectAllowed = 'move';
@@ -1794,8 +1810,11 @@ function renderGrid() {
     el.addEventListener('dragover', e => {
       e.preventDefault();
       if (el.dataset.id === _dragId) return;
-      _dropTargetId = el.dataset.id;
-      el.classList.add('drag-over');
+      // Allow same-day reorder highlight only for no-time events over same-day targets
+      if (!_dragHasTime && el.dataset.date === _dragDate) {
+        _dropTargetId = el.dataset.id;
+        el.classList.add('drag-over');
+      }
     });
 
     el.addEventListener('dragleave', e => {
@@ -1811,80 +1830,158 @@ function renderGrid() {
       el.classList.remove('is-dragging');
       document.body.classList.remove('is-dragging');
       grid.querySelectorAll('.drag-over').forEach(x => x.classList.remove('drag-over'));
+      grid.querySelectorAll('.mc-day.drag-target,.mc-day.drag-target-warn').forEach(x => x.classList.remove('drag-target','drag-target-warn'));
 
-      const srcId = _dragId, tgtId = _dropTargetId;
-      _dragId = null; _dragDate = null; _dropTargetId = null;
+      const srcId = _dragId, srcDate = _dragDate, hasTime = _dragHasTime;
+      const tgtId = _dropTargetId, tgtDate = _dropTargetDate;
+      _dragId = null; _dragDate = null; _dragHasTime = false;
+      _dropTargetId = null; _dropTargetDate = null;
 
-      if (!srcId || !tgtId || srcId === tgtId) return;
-
+      if (!srcId) return;
       const draggedSess = _sessions.find(s => s.id === srcId);
-      const targetSess  = _sessions.find(s => s.id === tgtId);
-      if (!draggedSess || !targetSess || draggedSess.session_date !== targetSess.session_date) return;
+      if (!draggedSess) return;
 
-      const dateStr = draggedSess.session_date;
-      const dayEvts = _sessions.filter(s => s.session_date === dateStr);
-      const snapshot = dayEvts.map(s => ({ id: s.id, sort_order: s.sort_order }));
+      // Cross-day move — applies to all event types
+      if (tgtDate && tgtDate !== srcDate) {
+        handleCrossDayMove(draggedSess, tgtDate);
+        return;
+      }
 
-      const dragIdx = dayEvts.findIndex(s => s.id === srcId);
-      const dropIdx = dayEvts.findIndex(s => s.id === tgtId);
-      if (dragIdx === -1 || dropIdx === -1 || dragIdx === dropIdx) return;
+      // Same-day reorder — only for no-time events
+      if (!hasTime && tgtId && tgtId !== srcId) {
+        const targetSess = _sessions.find(s => s.id === tgtId);
+        if (!targetSess || targetSess.session_date !== srcDate) return;
 
-      // Optimistic reorder
-      dayEvts.splice(dragIdx, 1);
-      dayEvts.splice(dropIdx, 0, draggedSess);
-      dayEvts.forEach((s, idx) => { s.sort_order = idx; });
+        const noTimeEvts = _sessions.filter(s => s.session_date === srcDate && !s.start_time);
+        const snapshot   = noTimeEvts.map(s => ({ id: s.id, sort_order: s.sort_order }));
 
-      const others = _sessions.filter(s => s.session_date !== dateStr);
-      _sessions = [...others, ...dayEvts].sort((a, b) => {
-        if (a.session_date < b.session_date) return -1;
-        if (a.session_date > b.session_date) return 1;
-        return (a.sort_order || 0) - (b.sort_order || 0);
-      });
+        const dragIdx = noTimeEvts.findIndex(s => s.id === srcId);
+        const dropIdx = noTimeEvts.findIndex(s => s.id === tgtId);
+        if (dragIdx === -1 || dropIdx === -1 || dragIdx === dropIdx) return;
 
-      renderGrid();
+        noTimeEvts.splice(dragIdx, 1);
+        noTimeEvts.splice(dropIdx, 0, draggedSess);
+        noTimeEvts.forEach((s, idx) => { s.sort_order = idx; });
 
-      // Persist — revert on failure
-      updateSortOrders(dateStr).catch(() => {
-        snapshot.forEach(({ id, sort_order }) => {
-          const s = _sessions.find(x => x.id === id);
-          if (s) s.sort_order = sort_order;
-        });
-        const revertDay    = _sessions.filter(s => s.session_date === dateStr)
-          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-        const revertOthers = _sessions.filter(s => s.session_date !== dateStr);
-        _sessions = [...revertOthers, ...revertDay].sort((a, b) => {
-          if (a.session_date < b.session_date) return -1;
-          if (a.session_date > b.session_date) return 1;
-          return (a.sort_order || 0) - (b.sort_order || 0);
-        });
+        _sessions = _sessions.map(s => noTimeEvts.find(x => x.id === s.id) || s).sort(sortSessions);
         renderGrid();
-      });
+
+        updateSortOrders(srcDate).catch(() => {
+          snapshot.forEach(({ id, sort_order }) => {
+            const s = _sessions.find(x => x.id === id);
+            if (s) s.sort_order = sort_order;
+          });
+          _sessions.sort(sortSessions);
+          renderGrid();
+        });
+      }
+      // Events with start_time dropped on same day: no-op (order by time preserved)
     });
+  });
+
+  // Cross-day drop zones — highlight target day column during drag
+  grid.querySelectorAll('.mc-day-events').forEach(col => {
+    col.addEventListener('dragover', e => {
+      if (!_dragId) return;
+      e.preventDefault();
+      const date = col.dataset.date;
+      if (date === _dropTargetDate) return;
+      _dropTargetDate = date;
+      grid.querySelectorAll('.mc-day.drag-target,.mc-day.drag-target-warn').forEach(x => x.classList.remove('drag-target','drag-target-warn'));
+      const dayEl = col.closest('.mc-day');
+      if (dayEl) {
+        dayEl.classList.add('drag-target');
+        if (_sessions.some(s => s.session_date === date && s.session_type === 'day_off'))
+          dayEl.classList.add('drag-target-warn');
+      }
+    });
+    col.addEventListener('dragleave', e => {
+      if (col.contains(e.relatedTarget)) return;
+      const dayEl = col.closest('.mc-day');
+      if (dayEl) dayEl.classList.remove('drag-target','drag-target-warn');
+      if (_dropTargetDate === col.dataset.date) _dropTargetDate = null;
+    });
+    col.addEventListener('drop', e => e.preventDefault());
   });
 
   // Async: paint task-dot badges (non-blocking)
   if (_calView !== 'player') loadTaskBadges();
 }
 
+// Canonical sort: timed events first (by start_time ASC), then no-time (by sort_order ASC), tiebreaker created_at ASC
+function sortSessions(a, b) {
+  if (a.session_date !== b.session_date) return a.session_date > b.session_date ? 1 : -1;
+  const aTime = a.start_time || null;
+  const bTime = b.start_time || null;
+  if (aTime && bTime) return aTime < bTime ? -1 : aTime > bTime ? 1 : 0;
+  if (aTime) return -1;
+  if (bTime) return 1;
+  const aOrd = a.sort_order ?? Infinity;
+  const bOrd = b.sort_order ?? Infinity;
+  if (aOrd !== bOrd) return aOrd - bOrd;
+  return (a.created_at || '') < (b.created_at || '') ? -1 : 1;
+}
+
+// Single-query batch update via RPC (UPDATE FROM unnest — not N requests)
 async function updateSortOrders(dateStr) {
-  const dayEvts = _sessions.filter(s => s.session_date === dateStr);
-  const results = await Promise.all(dayEvts.map((s, idx) => {
-    const table = s.source === 'event' ? 'calendar_events' : 'training_sessions';
-    return window.sb.from(table).update({ sort_order: idx }).eq('id', s.id);
-  }));
-  const failed = results.find(r => r.error);
-  if (failed) throw failed.error;
+  const noTimeEvts = _sessions.filter(s => s.session_date === dateStr && !s.start_time);
+  if (!noTimeEvts.length) return;
+  const calIds = [], calOrds = [], sessIds = [], sessOrds = [];
+  noTimeEvts.forEach((s, idx) => {
+    if (s.source === 'event') { calIds.push(s.id); calOrds.push(idx); }
+    else                      { sessIds.push(s.id); sessOrds.push(idx); }
+  });
+  const { error } = await window.sb.rpc('batch_update_sort_orders', {
+    p_calendar_ids:    calIds,
+    p_calendar_orders: calOrds,
+    p_session_ids:     sessIds,
+    p_session_orders:  sessOrds,
+    p_club_id:         _clubId
+  });
+  if (error) throw error;
+}
+
+// Cross-day move: persists date change + sort_order for no-time events
+async function handleCrossDayMove(evt, newDate) {
+  if (evt.recurrence_group_id && evt.source === 'event') {
+    const moveAll = confirm('This event repeats. Move the whole series?\n\nOK = Move all in series\nCancel = Move only this occurrence');
+    if (moveAll) {
+      const { error } = await window.sb.from('calendar_events')
+        .update({ date: newDate })
+        .eq('recurrence_group_id', evt.recurrence_group_id)
+        .eq('club_id', _clubId);
+      if (error) { showCalToast('Error: ' + error.message); return; }
+      showCalToast('Series moved.');
+      await loadSessions();
+      return;
+    }
+  }
+
+  const table   = evt.source === 'event' ? 'calendar_events' : 'training_sessions';
+  const dateCol = evt.source === 'event' ? 'date' : 'session_date';
+  const patch   = { [dateCol]: newDate };
+
+  // No-time events get placed at the end of the target day
+  if (!evt.start_time) {
+    const targetNoTime = _sessions.filter(s => s.session_date === newDate && !s.start_time);
+    patch.sort_order = targetNoTime.length;
+  }
+
+  const { error } = await window.sb.from(table).update(patch).eq('id', evt.id).eq('club_id', _clubId);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  showCalToast('Event moved.');
+  await loadSessions();
 }
 
 // ── Fetch + merge training_sessions and calendar_events ────────
 async function fetchAllEvents(dateFrom, dateTo) {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
-      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,visible_to')
+      .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,visible_to,created_at')
       .eq('club_id', _clubId)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
-      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id,visible_to')
+      .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id,visible_to,created_at')
       .eq('club_id', _clubId)
       .gte('date', dateFrom).lte('date', dateTo).order('date')
   ]);
@@ -1905,12 +2002,10 @@ async function fetchAllEvents(dateFrom, dateTo) {
     rival_crest_url: e.rival_crest_url || null,
     recurrence_group_id: e.recurrence_group_id || null,
     visible_to: e.visible_to || ['staff'],
+    created_at: e.created_at || null,
     source: 'event'
   }));
-  return { data: [...norm, ...evts].sort((a, b) => {
-    if (a.session_date !== b.session_date) return a.session_date > b.session_date ? 1 : -1;
-    return (a.sort_order || 0) - (b.sort_order || 0);
-  }) };
+  return { data: [...norm, ...evts].sort(sortSessions) };
 }
 
 // ── Load sessions for current MC ──────────────────────────────
@@ -2880,6 +2975,21 @@ async function saveEvt() {
     ? { opponent: null, home_away: null, competition: null, location: null, rival_crest_url: null }
     : {};
 
+  // sort_order transition when start_time changes between null and a value:
+  //   null → value: clear sort_order (event enters timed section, time defines order)
+  //   value → null: assign to end of no-time events for that day
+  let sortOrderPatch = {};
+  if (_editEvtId) {
+    const existingEvt  = _sessions.find(s => s.id === _editEvtId);
+    const prevStartTime = existingEvt?.start_time || null;
+    if (!prevStartTime && startTimeVal) {
+      sortOrderPatch = { sort_order: null };
+    } else if (prevStartTime && !startTimeVal) {
+      const dayNoTime = _sessions.filter(s => s.session_date === date && !s.start_time && s.id !== _editEvtId);
+      sortOrderPatch = { sort_order: dayNoTime.length };
+    }
+  }
+
   const visibleTo = getVisibleToFromChips();
   const clubId = _clubId || await window.getClubId();
   const isCalEvt = CAL_EVT_TYPES.includes(type);
@@ -2921,6 +3031,7 @@ async function saveEvt() {
       if (_pendingCrestUrl) payload.rival_crest_url = _pendingCrestUrl;
     }
     if (_editEvtId && _editEvtSource === 'event') {
+      Object.assign(payload, sortOrderPatch);
       ({ error } = await window.sb.from('calendar_events').update(payload).eq('id', _editEvtId));
     } else if (_editEvtId && _editEvtSource === 'session') {
       // Type changed from training to calendar event: migrate
@@ -2934,6 +3045,7 @@ async function saveEvt() {
   } else {
     const payload = { title, session_type: type, session_date: date, duration, notes, estimated_rpe: estimatedRpe, session_time: startTimeVal, visible_to: visibleTo };
     if (_editEvtId && _editEvtSource === 'session') {
+      Object.assign(payload, sortOrderPatch);
       ({ error } = await window.sb.from('training_sessions').update(payload).eq('id', _editEvtId));
     } else if (_editEvtId && _editEvtSource === 'event') {
       // Type changed from calendar event to training: migrate
