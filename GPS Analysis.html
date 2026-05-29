@@ -319,6 +319,7 @@
             <span class="dot"></span><i class="ti ti-cloud-download"></i>Data sources<span class="ct">4 connected</span><i class="ti ti-chevron-down"></i>
           </button>
           <button class="cm-btn is-ghost is-sm" id="gpSettingsBtn"><i class="ti ti-adjustments-horizontal" style="font-size:14px"></i>GPS settings</button>
+          <button class="cm-btn is-ghost is-sm" id="gpCatalogBtn"><i class="ti ti-list" style="font-size:14px"></i>Metrics catalog</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
         </div>
       </div>
@@ -4952,7 +4953,10 @@ function openGpsSettings() {
   const defaultMetrics = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
   const active = s.active_metrics || defaultMetrics;
 
-  const metricsHTML = Object.entries(_GPS_METRIC_LABELS).map(([k, label]) => `
+  const _catalogForSettings = window._gpCatalog?.length
+    ? window._gpCatalog
+    : Object.entries(_GPS_METRIC_LABELS).map(([k, label]) => ({ key: k, label }));
+  const metricsHTML = _catalogForSettings.map(({ key: k, label }) => `
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0">
       <input type="checkbox" name="metric" value="${k}" ${active.includes(k) ? 'checked' : ''}
         style="accent-color:var(--cm-accent);width:13px;height:13px">
@@ -5039,6 +5043,331 @@ function openGpsSettings() {
 }
 
 document.getElementById('gpSettingsBtn')?.addEventListener('click', openGpsSettings);
+
+// ── GPS Metrics Catalog ────────────────────────────────────────
+function _catSlug(s) {
+  const slug = (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/, '');
+  return /^[a-z]/.test(slug) ? slug : ('m_' + slug) || 'metric';
+}
+
+async function openGpsMetricsCatalog() {
+  const clubId = window._gpClubId;
+  if (!clubId) { showToast('Club not loaded'); return; }
+
+  const { data, error } = await window.sb
+    .from('gps_metric_definitions')
+    .select('id,key,label,unit,category,decimals,is_core,display_order,description')
+    .eq('club_id', clubId)
+    .order('display_order', { ascending: true });
+  if (error) { showToast('Error loading catalog: ' + error.message); return; }
+
+  let catalog = data || [];
+
+  const ov = document.createElement('div');
+  ov.className = 'gp-modal-overlay';
+  ov.id = 'gpCatalogModal';
+  const modal = document.createElement('div');
+  modal.className = 'gp-modal wide';
+  modal.style.cssText = 'max-height:88vh;display:flex;flex-direction:column;overflow:hidden';
+  ov.appendChild(modal);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+
+  function _sync() {
+    window._gpCatalog = [...catalog];
+    window.dispatchEvent(new CustomEvent('gps:catalog:updated', { detail: { clubId } }));
+  }
+
+  const CAT_COL = {
+    distance: 'color:var(--cm-accent)', speed: 'color:#8b5cf6',
+    acceleration: 'color:#f59e0b', load: 'color:#ef4444',
+    time: 'color:#06b6d4', count: 'color:#10b981', custom: 'color:var(--cm-fg-muted)',
+  };
+  const CATS = ['custom','distance','speed','acceleration','load','time','count'];
+
+  function _formHtml(mode, def) {
+    const slug = mode === 'edit' ? def.key : '';
+    return `<div style="padding:12px 14px;background:var(--cm-bg-soft);border-bottom:2px solid var(--cm-accent)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Label *</label>
+          <input id="mfLabel" type="text" value="${def?.label||''}" placeholder="e.g. Player Load Slow"
+            style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+          <div style="margin-top:2px;font:400 9.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted)">${mode==='add'?`key: <span id="mfKeyPrev"></span>`:(`key: <strong>${slug}</strong> (read-only)`)}</div>
+        </div>
+        <div>
+          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Unit</label>
+          <input id="mfUnit" type="text" value="${def?.unit||''}" placeholder="m, km/h, AU…"
+            style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div>
+          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Category *</label>
+          <select id="mfCategory" style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans)">
+            ${CATS.map(c=>`<option value="${c}" ${(def?.category||'custom')===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Decimals (0–4)</label>
+          <input id="mfDecimals" type="number" value="${def?.decimals??2}" min="0" max="4"
+            style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans)">
+        </div>
+      </div>
+      <div id="mfErr" style="display:none;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-danger);margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;justify-content:flex-end">
+        <button class="cm-btn is-outline is-sm" id="mfCancel">Cancel</button>
+        <button class="cm-btn is-primary is-sm" id="mfSave">${mode==='add'?'Add metric':'Save changes'}</button>
+      </div>
+    </div>`;
+  }
+
+  function _bindForm(container, mode, def) {
+    if (mode === 'add') {
+      const lbl = container.querySelector('#mfLabel');
+      const kp  = container.querySelector('#mfKeyPrev');
+      if (lbl && kp) lbl.addEventListener('input', () => { kp.textContent = _catSlug(lbl.value); });
+    }
+    container.querySelector('#mfCancel')?.addEventListener('click', () => {
+      if (mode === 'add') {
+        modal.querySelector('#catAddFormWrap').style.display = 'none';
+      } else {
+        const fr = container.closest('tr');
+        if (fr) { fr.style.display = 'none'; fr.querySelector('td').innerHTML = ''; }
+      }
+    });
+    container.querySelector('#mfSave')?.addEventListener('click', async () => {
+      const label    = container.querySelector('#mfLabel').value.trim();
+      const unit     = container.querySelector('#mfUnit').value.trim() || null;
+      const category = container.querySelector('#mfCategory').value;
+      const decimals = Math.max(0, Math.min(4, +(container.querySelector('#mfDecimals').value) || 2));
+      const errDiv   = container.querySelector('#mfErr');
+      if (!label) { errDiv.textContent = 'Label is required.'; errDiv.style.display = ''; return; }
+      const btn = container.querySelector('#mfSave');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      if (mode === 'add') {
+        const key = _catSlug(label);
+        if (!/^[a-z][a-z0-9_]*$/.test(key)) {
+          errDiv.textContent = `Generated key "${key}" is invalid — label must start with a letter.`;
+          errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Add metric'; return;
+        }
+        if (catalog.find(d => d.key === key)) {
+          errDiv.textContent = `Key "${key}" already exists.`;
+          errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Add metric'; return;
+        }
+        const newDef = {
+          club_id: clubId, key, label, unit, category, decimals, is_core: false,
+          display_order: 200 + catalog.filter(d => !d.is_core).length,
+        };
+        const { data: ins, error: e } = await window.sb.from('gps_metric_definitions').insert(newDef).select().single();
+        if (e) { errDiv.textContent = e.message; errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Add metric'; return; }
+        catalog = [...catalog, ins];
+      } else {
+        const { error: e } = await window.sb.from('gps_metric_definitions')
+          .update({ label, unit, category, decimals }).eq('id', def.id).eq('club_id', clubId);
+        if (e) { errDiv.textContent = e.message; errDiv.style.display = ''; btn.disabled = false; btn.textContent = 'Save changes'; return; }
+        catalog = catalog.map(d => d.key === def.key ? { ...d, label, unit, category, decimals } : d);
+      }
+      _sync();
+      render();
+    });
+  }
+
+  function _confirmDelete(key) {
+    const def = catalog.find(d => d.key === key);
+    if (!def || def.is_core) return;
+    const dOv = document.createElement('div');
+    dOv.className = 'gp-modal-overlay'; dOv.style.zIndex = '820';
+    const dModal = document.createElement('div');
+    dModal.className = 'gp-modal'; dModal.style.maxWidth = '420px';
+    dModal.innerHTML = `
+      <div class="gp-modal-h"><h3>Delete metric</h3></div>
+      <div class="gp-modal-body">
+        <p style="font:400 12.5px/1.6 var(--cm-font-sans);color:var(--cm-fg);margin:0 0 10px">
+          This will remove <strong>${def.label}</strong> (<code>${def.key}</code>) from the catalog.
+          Historical data linked to it will be kept but no longer visible.
+        </p>
+        <p style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-danger);margin:0 0 6px">Type <strong>DELETE</strong> to confirm</p>
+        <input id="dConfInput" type="text" placeholder="DELETE"
+          style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box;margin-bottom:8px">
+        <div id="dConfErr" style="display:none;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-danger);margin-bottom:6px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="cm-btn is-outline is-sm" id="dCancelBtn">Cancel</button>
+          <button class="cm-btn is-sm" style="background:var(--cm-danger);color:#fff;border-color:var(--cm-danger)" id="dConfBtn">Delete</button>
+        </div>
+      </div>`;
+    dOv.appendChild(dModal); document.body.appendChild(dOv);
+    dModal.querySelector('#dConfInput').focus();
+    dModal.querySelector('#dCancelBtn').addEventListener('click', () => dOv.remove());
+    dModal.querySelector('#dConfBtn').addEventListener('click', async () => {
+      if (dModal.querySelector('#dConfInput').value.trim() !== 'DELETE') {
+        dModal.querySelector('#dConfErr').textContent = 'Type DELETE exactly.';
+        dModal.querySelector('#dConfErr').style.display = ''; return;
+      }
+      const btn = dModal.querySelector('#dConfBtn');
+      btn.disabled = true; btn.textContent = 'Deleting…';
+      const { error: e } = await window.sb.from('gps_metric_definitions')
+        .delete().eq('id', def.id).eq('club_id', clubId);
+      if (e) { dModal.querySelector('#dConfErr').textContent = e.message; dModal.querySelector('#dConfErr').style.display = ''; btn.disabled = false; btn.textContent = 'Delete'; return; }
+      catalog = catalog.filter(d => d.key !== key);
+      _sync(); dOv.remove(); render();
+    });
+  }
+
+  function _showMerge(sourceKey) {
+    const src = catalog.find(d => d.key === sourceKey);
+    if (!src || src.is_core) return;
+    const targets = catalog.filter(d => d.key !== sourceKey);
+    if (!targets.length) { showToast('No other metrics to merge into'); return; }
+    const mOv = document.createElement('div');
+    mOv.className = 'gp-modal-overlay'; mOv.style.zIndex = '820';
+    const mModal = document.createElement('div');
+    mModal.className = 'gp-modal'; mModal.style.maxWidth = '440px';
+    mModal.innerHTML = `
+      <div class="gp-modal-h"><h3>Merge metric</h3></div>
+      <div class="gp-modal-body">
+        <p style="font:400 12.5px/1.6 var(--cm-font-sans);color:var(--cm-fg);margin:0 0 10px">
+          Move all data from <strong>${src.label}</strong> into another metric, then delete <strong>${src.label}</strong>.
+        </p>
+        <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px">Merge into</label>
+        <select id="mergeTarget" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-sans);margin-bottom:10px">
+          ${targets.map(t=>`<option value="${t.key}">${t.label} (${t.key})</option>`).join('')}
+        </select>
+        <div id="mergeErr" style="display:none;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-danger);margin-bottom:6px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="cm-btn is-outline is-sm" id="mCancelBtn">Cancel</button>
+          <button class="cm-btn is-primary is-sm" id="mConfBtn">Merge &amp; delete source</button>
+        </div>
+      </div>`;
+    mOv.appendChild(mModal); document.body.appendChild(mOv);
+    mModal.querySelector('#mCancelBtn').addEventListener('click', () => mOv.remove());
+    mModal.querySelector('#mConfBtn').addEventListener('click', async () => {
+      const targetKey = mModal.querySelector('#mergeTarget').value;
+      const btn = mModal.querySelector('#mConfBtn');
+      btn.disabled = true; btn.textContent = 'Merging…';
+      // Delete source rows that would conflict (report already has targetKey)
+      const { data: conflictReports } = await window.sb.from('gps_report_metrics')
+        .select('report_id').eq('club_id', clubId).eq('metric_key', targetKey);
+      const conflictIds = (conflictReports || []).map(r => r.report_id);
+      if (conflictIds.length) {
+        await window.sb.from('gps_report_metrics')
+          .delete().eq('club_id', clubId).eq('metric_key', sourceKey).in('report_id', conflictIds);
+      }
+      const { error: e1 } = await window.sb.from('gps_report_metrics')
+        .update({ metric_key: targetKey }).eq('club_id', clubId).eq('metric_key', sourceKey);
+      if (e1) { mModal.querySelector('#mergeErr').textContent = e1.message; mModal.querySelector('#mergeErr').style.display = ''; btn.disabled = false; btn.textContent = 'Merge & delete source'; return; }
+      const { error: e2 } = await window.sb.from('gps_metric_definitions')
+        .delete().eq('id', src.id).eq('club_id', clubId);
+      if (e2) { mModal.querySelector('#mergeErr').textContent = e2.message; mModal.querySelector('#mergeErr').style.display = ''; btn.disabled = false; btn.textContent = 'Merge & delete source'; return; }
+      catalog = catalog.filter(d => d.key !== sourceKey);
+      _sync(); mOv.remove(); render();
+      showToast(`Merged "${src.label}" into target`);
+    });
+  }
+
+  async function _reorder(key, dir) {
+    const cust = catalog.filter(d => !d.is_core);
+    const idx  = cust.findIndex(d => d.key === key);
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= cust.length) return;
+    const a = cust[idx], b = cust[swapIdx];
+    await Promise.all([
+      window.sb.from('gps_metric_definitions').update({ display_order: b.display_order }).eq('id', a.id).eq('club_id', clubId),
+      window.sb.from('gps_metric_definitions').update({ display_order: a.display_order }).eq('id', b.id).eq('club_id', clubId),
+    ]);
+    catalog = catalog.map(d => {
+      if (d.key === a.key) return { ...d, display_order: b.display_order };
+      if (d.key === b.key) return { ...d, display_order: a.display_order };
+      return d;
+    }).sort((x, y) => x.display_order - y.display_order);
+    _sync(); render();
+  }
+
+  function render() {
+    const cc = catalog.filter(d => d.is_core).length;
+    const cu = catalog.filter(d => !d.is_core).length;
+    const custOnly = catalog.filter(d => !d.is_core);
+    modal.innerHTML = `
+      <div class="gp-modal-h">
+        <h3>GPS metrics catalog</h3>
+        <button class="gp-modal-x" id="catClose"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="padding:10px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--cm-border-soft);flex-shrink:0">
+        <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${catalog.length} metrics · ${cc} core · ${cu} custom</span>
+        <button class="cm-btn is-outline is-sm" id="catAddBtn"><i class="ti ti-plus" style="font-size:13px"></i>Add metric</button>
+      </div>
+      <div id="catAddFormWrap" style="display:none;border-bottom:1px solid var(--cm-border-soft)"></div>
+      <div style="overflow-y:auto;flex:1">
+        <table class="gp-map-table" style="font-size:12px">
+          <thead><tr>
+            <th>Label</th><th>Key</th><th>Unit</th><th>Category</th>
+            <th style="text-align:center">Dec</th><th>Source</th><th style="min-width:160px"></th>
+          </tr></thead>
+          <tbody>${catalog.map(d => {
+            const custIdx = custOnly.indexOf(d);
+            const isFirst = custIdx === 0;
+            const isLast  = custIdx === custOnly.length - 1;
+            const src = d.is_core
+              ? `<span style="display:inline-flex;height:18px;padding:0 6px;border-radius:3px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);font:600 9.5px/18px var(--cm-font-mono);color:var(--cm-fg-muted)">core</span>`
+              : `<span style="display:inline-flex;height:18px;padding:0 6px;border-radius:3px;background:var(--cm-accent-soft);border:1px solid var(--cm-accent);font:600 9.5px/18px var(--cm-font-mono);color:var(--cm-accent)">custom</span>`;
+            const actions = d.is_core ? '' : `
+              <button class="cm-btn is-ghost cat-up" data-key="${d.key}" style="padding:1px 4px" ${isFirst?'disabled':''} title="Move up"><i class="ti ti-arrow-up" style="font-size:11px"></i></button>
+              <button class="cm-btn is-ghost cat-down" data-key="${d.key}" style="padding:1px 4px" ${isLast?'disabled':''} title="Move down"><i class="ti ti-arrow-down" style="font-size:11px"></i></button>
+              <button class="cm-btn is-ghost cat-edit" data-key="${d.key}" style="padding:1px 7px;font-size:11px">Edit</button>
+              <button class="cm-btn is-ghost cat-merge" data-key="${d.key}" style="padding:1px 7px;font-size:11px">Merge</button>
+              <button class="cm-btn is-ghost cat-delete" data-key="${d.key}" style="padding:1px 7px;font-size:11px;color:var(--cm-danger)">Delete</button>`;
+            return `<tr data-key="${d.key}">
+              <td style="font:500 12px/1 var(--cm-font-sans)">${d.label}</td>
+              <td style="font:400 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${d.key}</td>
+              <td style="font:400 11px/1 var(--cm-font-mono)">${d.unit||'—'}</td>
+              <td><span style="font:500 11px/1 var(--cm-font-sans);${CAT_COL[d.category]||''}">${d.category}</span></td>
+              <td style="text-align:center;font:500 11px/1 var(--cm-font-mono)">${d.decimals}</td>
+              <td>${src}</td>
+              <td style="white-space:nowrap">${actions}</td>
+            </tr>
+            <tr class="cat-edit-row" data-for="${d.key}" style="display:none">
+              <td colspan="7" style="padding:0"></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>`;
+
+    modal.querySelector('#catClose').addEventListener('click', () => ov.remove());
+
+    modal.querySelector('#catAddBtn').addEventListener('click', () => {
+      const wrap = modal.querySelector('#catAddFormWrap');
+      if (wrap.style.display !== 'none') { wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+      wrap.innerHTML = _formHtml('add', null);
+      _bindForm(wrap, 'add', null);
+      wrap.querySelector('#mfLabel')?.focus();
+    });
+
+    modal.querySelectorAll('.cat-edit').forEach(btn => btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const def = catalog.find(d => d.key === key);
+      // Close all open edit rows
+      modal.querySelectorAll('.cat-edit-row').forEach(r => { r.style.display = 'none'; r.querySelector('td').innerHTML = ''; });
+      const fr = modal.querySelector(`.cat-edit-row[data-for="${key}"]`);
+      if (!fr) return;
+      fr.style.display = '';
+      fr.querySelector('td').innerHTML = _formHtml('edit', def);
+      _bindForm(fr.querySelector('td'), 'edit', def);
+      fr.scrollIntoView({ block: 'nearest' });
+    }));
+
+    modal.querySelectorAll('.cat-delete').forEach(btn => btn.addEventListener('click', () => _confirmDelete(btn.dataset.key)));
+    modal.querySelectorAll('.cat-merge').forEach(btn => btn.addEventListener('click', () => _showMerge(btn.dataset.key)));
+    modal.querySelectorAll('.cat-up').forEach(btn => btn.addEventListener('click', () => _reorder(btn.dataset.key, -1)));
+    modal.querySelectorAll('.cat-down').forEach(btn => btn.addEventListener('click', () => _reorder(btn.dataset.key, 1)));
+  }
+
+  render();
+}
+
+document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetricsCatalog);
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
