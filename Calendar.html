@@ -622,6 +622,34 @@
     display:flex; align-items:center; gap:6px; flex-wrap:wrap;
   }
   .cal-epop-foot .ep-grow { flex:1; }
+  /* Task extras: avatar, priority, due date */
+  .ep-avatar {
+    width:18px; height:18px; border-radius:50%; flex-shrink:0;
+    background:var(--cm-bg-soft); border:1px solid var(--cm-border);
+    display:flex; align-items:center; justify-content:center;
+    font:600 8px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+  }
+  .ep-prio-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+  .ep-prio-dot.high   { background:var(--cm-danger); }
+  .ep-prio-dot.urgent { background:var(--cm-danger); box-shadow:0 0 0 2px color-mix(in srgb,var(--cm-danger) 20%,transparent); }
+  .ep-due {
+    font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint);
+    flex-shrink:0; white-space:nowrap;
+  }
+  .ep-due.overdue { color:var(--cm-danger); }
+  /* Modal tasks section */
+  .cal-modal-tasks { border-top:1px solid var(--cm-border-soft); padding:14px 0 6px; display:flex; flex-direction:column; gap:8px; }
+  .cal-modal-tasks-head { display:flex; align-items:center; gap:8px; }
+  .cal-modal-tasks-head h4 { font:600 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); letter-spacing:0.06em; text-transform:uppercase; flex:1; }
+  .cal-modal-task-row { display:flex; align-items:flex-start; gap:8px; padding:6px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .cal-modal-task-row:last-of-type { border-bottom:0; }
+  .cal-modal-task-row input[type=checkbox] { margin-top:2px; flex-shrink:0; accent-color:var(--cm-success); cursor:pointer; }
+  .cal-modal-task-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .cal-modal-task-title { font:500 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); }
+  .cal-modal-task-title.is-done { text-decoration:line-through; color:var(--cm-fg-muted); }
+  .cal-modal-task-meta { display:flex; align-items:center; gap:8px; font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .cal-modal-task-form { display:flex; flex-direction:column; gap:8px; padding:10px 12px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); margin-top:4px; }
+  .cal-modal-task-form-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   /* Task dot badge on mc-evt */
   .mc-evt { position:relative; }
   .mc-evt-task-dot {
@@ -1138,6 +1166,49 @@
           </div>
         </div>
       </div>
+
+      <!-- Tasks section (only shown when editing a calendar_event) -->
+      <div id="calEvtTasksSection" class="cal-modal-tasks" style="display:none">
+        <div class="cal-modal-tasks-head">
+          <h4><i class="ti ti-checkbox" style="font-size:12px;margin-right:4px"></i>Tasks</h4>
+          <span id="calEvtTasksCtr" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)"></span>
+          <button class="cm-btn is-ghost is-sm" id="calEvtTaskAdd" style="height:24px;font-size:11px"><i class="ti ti-plus" style="font-size:10px"></i>Add task</button>
+        </div>
+        <div id="calEvtTasksList" style="display:flex;flex-direction:column"></div>
+        <!-- Inline add-task form -->
+        <div id="calEvtTaskForm" class="cal-modal-task-form" style="display:none">
+          <div class="sq-modal-field" style="gap:4px">
+            <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Title</label>
+            <input type="text" id="calEvtTaskF_title" placeholder="Task description" maxlength="200" style="height:32px">
+          </div>
+          <div class="cal-modal-task-form-row">
+            <div class="sq-modal-field" style="gap:4px">
+              <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Priority</label>
+              <select id="calEvtTaskF_priority" style="height:32px">
+                <option value="low">Low</option>
+                <option value="medium" selected>Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div class="sq-modal-field" style="gap:4px">
+              <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Due date</label>
+              <input type="date" id="calEvtTaskF_due" style="height:32px">
+            </div>
+          </div>
+          <div class="sq-modal-field" style="gap:4px">
+            <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Assign to</label>
+            <select id="calEvtTaskF_assignee" style="height:32px">
+              <option value="">— Unassigned —</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end">
+            <button class="cm-btn is-ghost is-sm" id="calEvtTaskFormCancel" style="height:28px">Cancel</button>
+            <button class="cm-btn is-primary is-sm" id="calEvtTaskFormSave" style="height:28px">Add task</button>
+          </div>
+        </div>
+      </div>
+
     </div>
     <div class="sq-modal-foot">
       <button class="cm-btn is-danger is-sm" id="calEvtDelete" style="display:none"><i class="ti ti-trash" style="font-size:13px"></i>Delete</button>
@@ -1334,6 +1405,7 @@
 <script>
 // ── State ──────────────────────────────────────────────────────
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editEvtSource = null, _editMcId = null;
+let _currentUserId = null, _currentUserName = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
 let _seasonSettings = null;  // { season_start, season_end, season_name, competition } from club_settings
@@ -2003,7 +2075,7 @@ function calCrestSetInitials(name) {
   if (el) el.textContent = window.rivalInitials ? window.rivalInitials(name) : ((name || '?').split(/\s+/).slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('') || '?');
 }
 
-function openEvtModal(session, defaultDate) {
+function openEvtModal(session, defaultDate, focusTasks) {
   _editEvtId     = session?.id     || null;
   _editEvtSource = session?.source || null;
   document.getElementById('calEvtTitle').textContent = session ? 'Edit event' : 'New event';
@@ -2094,8 +2166,20 @@ function openEvtModal(session, defaultDate) {
     planLink.style.display = 'none';
   }
 
+  // Tasks section: only for editing existing calendar_events
+  const isCalEvtEdit = !!(session && session.source === 'event');
+  loadModalTasks(isCalEvtEdit ? session.id : null);
+  _wireModalTaskForm(isCalEvtEdit ? session.id : null);
+  // Hide form on open
+  const taskForm = document.getElementById('calEvtTaskForm');
+  if (taskForm) { taskForm.style.display = 'none'; _clearModalTaskForm(); }
+
   document.getElementById('calEvtBackdrop').classList.add('is-open');
-  document.getElementById('calEvtF_title').focus();
+  if (focusTasks) {
+    setTimeout(() => document.getElementById('calEvtTasksSection')?.scrollIntoView({ behavior:'smooth', block:'nearest' }), 200);
+  } else {
+    document.getElementById('calEvtF_title').focus();
+  }
 }
 function closeEvtModal() { document.getElementById('calEvtBackdrop').classList.remove('is-open'); _editEvtId = null; }
 
@@ -2310,61 +2394,130 @@ async function deleteEvtSeries(recurrenceGroupId) {
   await loadSessions();
 }
 
+// ── Tasks shared helpers ──────────────────────────────────────
+let _clubProfiles = null; // cached profiles for assigned_to dropdown
+
+async function _getClubProfiles() {
+  if (_clubProfiles) return _clubProfiles;
+  const { data } = await window.sb.from('profiles')
+    .select('id,full_name,role')
+    .eq('club_id', _clubId)
+    .order('full_name');
+  _clubProfiles = data || [];
+  return _clubProfiles;
+}
+
+const PRIO_ORDER = { urgent:0, high:1, medium:2, low:3 };
+
+function _sortTasks(tasks) {
+  return [...tasks].sort((a, b) => {
+    const aD = (a.status === 'done' || a.status === 'cancelled') ? 1 : 0;
+    const bD = (b.status === 'done' || b.status === 'cancelled') ? 1 : 0;
+    if (aD !== bD) return aD - bD;
+    const pA = PRIO_ORDER[a.priority] ?? 2, pB = PRIO_ORDER[b.priority] ?? 2;
+    if (pA !== pB) return pA - pB;
+    return (a.created_at || '') < (b.created_at || '') ? -1 : 1;
+  });
+}
+
+function _taskInitials(name) {
+  if (!name) return '';
+  const parts = name.trim().split(/\s+/);
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+}
+
+function _fmtDue(dueDateStr, isPending) {
+  if (!dueDateStr) return '';
+  const d   = new Date(dueDateStr + 'T12:00:00');
+  const now = new Date(TODAY + 'T12:00:00');
+  const over = isPending && d < now;
+  const label = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  return `<span class="ep-due${over ? ' overdue' : ''}">${label}</span>`;
+}
+
+function _prioDot(priority) {
+  if (priority === 'high')   return `<span class="ep-prio-dot high" title="High priority"></span>`;
+  if (priority === 'urgent') return `<span class="ep-prio-dot urgent" title="Urgent"></span>`;
+  return '';
+}
+
+function _renderTaskRow(t, compact = true) {
+  const isDone = t.status === 'done' || t.status === 'cancelled';
+  const isPending = !isDone;
+  const initials = _taskInitials(t.assigned_to_name);
+  const avatarHtml = initials
+    ? `<span class="ep-avatar" title="${_esc(t.assigned_to_name)}">${_esc(initials)}</span>`
+    : '';
+  const dueHtml   = _fmtDue(t.due_date, isPending);
+  const prioHtml  = _prioDot(t.priority);
+  return `<div class="cal-epop-task" data-task-id="${t.id}">
+    <input type="checkbox" ${isDone ? 'checked' : ''} data-task-toggle="${t.id}">
+    ${prioHtml}
+    <span class="ep-task-title${isDone ? ' is-done' : ''}">${_esc(t.title)}</span>
+    ${dueHtml}
+    ${avatarHtml}
+  </div>`;
+}
+
+function _updatePopCtr(ctr, tasks) {
+  if (!ctr) return;
+  const pending = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
+  const done    = tasks.filter(t => t.status === 'done' || t.status === 'cancelled').length;
+  if (!tasks.length) { ctr.style.display = 'none'; return; }
+  ctr.style.display = '';
+  if (pending) {
+    ctr.textContent = `${pending} pending · ${done} done`;
+    ctr.className   = 'ep-task-ctr';
+  } else {
+    ctr.textContent = 'All done';
+    ctr.className   = 'ep-task-ctr is-done';
+  }
+}
+
 // ── Tasks in popover ─────────────────────────────────────────
 async function loadPopTasks(pop, eventId) {
   const body = pop.querySelector('#epTasksBody');
   const ctr  = pop.querySelector('#epTaskCtr');
   if (!body) return;
 
-  const { data, error } = await window.sb.from('tasks')
-    .select('id,title,status,assigned_to_name')
+  const { data: raw, error } = await window.sb.from('tasks')
+    .select('id,title,status,priority,due_date,assigned_to,assigned_to_name,created_at')
     .eq('event_id', eventId)
-    .eq('club_id', _clubId)
-    .order('created_at');
+    .eq('club_id', _clubId);
 
-  if (error || !data) {
+  if (error) {
     body.innerHTML = `<div style="padding:4px 0;font:var(--cm-body-sm);color:var(--cm-danger)">Could not load tasks.</div>`;
     return;
   }
 
-  const pending = data.filter(t => t.status === 'pending' || t.status === 'in_progress');
-  const done    = data.filter(t => t.status === 'done' || t.status === 'cancelled');
+  const tasks = _sortTasks(raw || []);
+  _updatePopCtr(ctr, tasks);
 
-  if (ctr) {
-    if (data.length) {
-      ctr.style.display = '';
-      if (pending.length) {
-        ctr.textContent = `${pending.length} pending`;
-        ctr.className   = 'ep-task-ctr';
-      } else {
-        ctr.textContent = 'All done';
-        ctr.className   = 'ep-task-ctr is-done';
-      }
-    } else {
-      ctr.style.display = 'none';
-    }
+  const visible  = tasks.slice(0, 5);
+  const overflow = tasks.length > 5 ? tasks.length - 5 : 0;
+
+  let html = '';
+  if (!tasks.length) {
+    html = `<div style="padding:3px 0;font:var(--cm-body-sm);color:var(--cm-fg-faint)">No tasks yet</div>`;
+  } else {
+    html = visible.map(t => _renderTaskRow(t)).join('');
   }
-
-  const visible = data.slice(0, 5);
-  const overflow = data.length > 5 ? data.length - 5 : 0;
-
-  let html = visible.map(t => {
-    const isDone = t.status === 'done' || t.status === 'cancelled';
-    const assignee = t.assigned_to_name ? `<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:4px;flex-shrink:0">${_esc(t.assigned_to_name.split(' ')[0])}</span>` : '';
-    return `<div class="cal-epop-task" data-task-id="${t.id}">
-      <input type="checkbox" ${isDone ? 'checked' : ''} data-task-toggle="${t.id}" title="Toggle done">
-      <span class="ep-task-title${isDone ? ' is-done' : ''}">${_esc(t.title)}</span>
-      ${assignee}
-    </div>`;
-  }).join('');
-
   if (overflow) {
-    html += `<div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:3px 0">+${overflow} more — open event to see all</div>`;
+    html += `<div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:3px 0;cursor:pointer" id="epTaskViewAll">+${overflow} more — view all</div>`;
   }
+
+  // Profiles for assigned_to dropdown
+  const profiles = await _getClubProfiles();
+  const profOpts = profiles.map(p => `<option value="${p.id}" data-name="${_esc(p.full_name)}">${_esc(p.full_name)}</option>`).join('');
 
   html += `<div class="cal-epop-task-add" id="epTaskAddRow">
-    <input type="text" id="epTaskInput" placeholder="Add task…" maxlength="120">
-    <button id="epTaskSave" title="Save"><i class="ti ti-check" style="font-size:11px"></i></button>
+    <input type="text" id="epTaskInput" placeholder="Add task…" maxlength="200">
+    <button id="epTaskSave" title="Save task"><i class="ti ti-check" style="font-size:11px"></i></button>
+  </div>
+  <div id="epTaskAssignRow" style="display:none;padding:3px 0 2px">
+    <select id="epTaskAssignee" style="width:100%;height:26px;font:var(--cm-body-sm);border:1px solid var(--cm-border);border-radius:4px;background:var(--cm-bg-soft);color:var(--cm-fg);padding:0 6px">
+      <option value="">— Unassigned —</option>${profOpts}
+    </select>
   </div>`;
 
   body.innerHTML = html;
@@ -2375,87 +2528,299 @@ async function loadPopTasks(pop, eventId) {
       const tid    = chk.dataset.taskToggle;
       const isDone = chk.checked;
       const row    = chk.closest('.cal-epop-task');
-      const label  = row.querySelector('.ep-task-title');
-      label.classList.toggle('is-done', isDone);
-      await window.sb.from('tasks').update({ status: isDone ? 'done' : 'pending' }).eq('id', tid);
-      // Refresh badge
+      row.querySelector('.ep-task-title').classList.toggle('is-done', isDone);
+      await window.sb.from('tasks').update({ status: isDone ? 'done' : 'pending', updated_at: new Date().toISOString() }).eq('id', tid);
+      // Update cached tasks status
+      const cached = tasks.find(t => t.id === tid);
+      if (cached) cached.status = isDone ? 'done' : 'pending';
+      _updatePopCtr(ctr, tasks);
       refreshTaskBadge(eventId);
     });
   });
 
-  // Add task inline
+  // "View all" opens modal
+  const viewAll = body.querySelector('#epTaskViewAll');
+  if (viewAll) {
+    viewAll.addEventListener('click', () => {
+      const s = _sessions.find(x => x.id === eventId);
+      if (s) { closeEvtPopover(); openEvtModal(s, null, true); }
+    });
+  }
+
+  // Show assigned_to dropdown when typing
   const inp  = body.querySelector('#epTaskInput');
   const save = body.querySelector('#epTaskSave');
+  const assignRow = body.querySelector('#epTaskAssignRow');
+  inp.addEventListener('input', () => {
+    if (assignRow) assignRow.style.display = inp.value.trim() ? '' : 'none';
+  });
+
   const doSave = async () => {
     const title = inp.value.trim();
     if (!title) return;
     save.disabled = true;
+
+    const assignSel  = body.querySelector('#epTaskAssignee');
+    const assignedTo = assignSel?.value || null;
+    const assignedName = assignSel?.options[assignSel.selectedIndex]?.dataset.name || null;
+
     const { data: inserted, error: ie } = await window.sb.from('tasks').insert({
       club_id: _clubId, event_id: eventId, title,
-      status: 'pending',
-      created_by: (await window.sb.auth.getUser()).data?.user?.id || null,
-    }).select('id,title,status,assigned_to_name').single();
+      status: 'pending', priority: 'medium', category: 'event',
+      created_by: _currentUserId || null,
+      created_by_name: _currentUserName || null,
+      assigned_to: assignedTo || null,
+      assigned_to_name: assignedName || null,
+    }).select('id,title,status,priority,due_date,assigned_to,assigned_to_name,created_at').single();
+
     save.disabled = false;
     if (ie) { showCalToast('Error: ' + ie.message); return; }
+
     inp.value = '';
-    // Prepend new task
-    const row = document.createElement('div');
-    row.className = 'cal-epop-task';
-    row.dataset.taskId = inserted.id;
-    row.innerHTML = `<input type="checkbox" data-task-toggle="${inserted.id}">
-      <span class="ep-task-title">${_esc(inserted.title)}</span>`;
-    row.querySelector('input').addEventListener('change', async chk => {
-      const isDone = chk.target.checked;
-      row.querySelector('.ep-task-title').classList.toggle('is-done', isDone);
-      await window.sb.from('tasks').update({ status: isDone ? 'done' : 'pending' }).eq('id', inserted.id);
-      refreshTaskBadge(eventId);
-    });
+    if (assignRow) { assignRow.style.display = 'none'; if (assignSel) assignSel.value = ''; }
+    tasks.push(inserted);
+    _updatePopCtr(ctr, tasks);
+
+    // Insert new row before add row
     const addRow = body.querySelector('#epTaskAddRow');
-    body.insertBefore(row, addRow);
-    // Update counter
-    if (ctr) { ctr.style.display=''; ctr.textContent = (parseInt(ctr.textContent)||0)+1 + ' pending'; ctr.className='ep-task-ctr'; }
+    const rowEl  = document.createElement('div');
+    rowEl.outerHTML; // force
+    addRow.insertAdjacentHTML('beforebegin', _renderTaskRow(inserted));
+    const newRow = addRow.previousElementSibling;
+    const newChk = newRow?.querySelector('[data-task-toggle]');
+    if (newChk) {
+      newChk.addEventListener('change', async () => {
+        const isDone = newChk.checked;
+        newRow.querySelector('.ep-task-title').classList.toggle('is-done', isDone);
+        await window.sb.from('tasks').update({ status: isDone ? 'done' : 'pending', updated_at: new Date().toISOString() }).eq('id', inserted.id);
+        inserted.status = isDone ? 'done' : 'pending';
+        _updatePopCtr(ctr, tasks);
+        refreshTaskBadge(eventId);
+      });
+    }
     refreshTaskBadge(eventId);
   };
   save.addEventListener('click', doSave);
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSave(); });
 }
 
+// ── Tasks in event modal ──────────────────────────────────────
+let _modalTasksEventId = null;
+let _modalTasks        = [];
+
+async function loadModalTasks(eventId) {
+  _modalTasksEventId = eventId;
+  const section  = document.getElementById('calEvtTasksSection');
+  const list     = document.getElementById('calEvtTasksList');
+  const ctrEl    = document.getElementById('calEvtTasksCtr');
+  if (!section || !list) return;
+
+  // Only for calendar_events
+  section.style.display = eventId ? '' : 'none';
+  if (!eventId) return;
+
+  list.innerHTML = '<div style="padding:4px 0;font:var(--cm-body-sm);color:var(--cm-fg-faint)">Loading…</div>';
+
+  const { data: raw, error } = await window.sb.from('tasks')
+    .select('id,title,status,priority,due_date,assigned_to,assigned_to_name,created_at')
+    .eq('event_id', eventId)
+    .eq('club_id', _clubId);
+
+  if (error) {
+    list.innerHTML = `<div style="font:var(--cm-body-sm);color:var(--cm-danger)">Error loading tasks.</div>`;
+    return;
+  }
+  _modalTasks = _sortTasks(raw || []);
+  _renderModalTaskList(ctrEl);
+}
+
+function _renderModalTaskList(ctrEl) {
+  const list = document.getElementById('calEvtTasksList');
+  if (!list) return;
+  const eventId = _modalTasksEventId;
+  if (ctrEl) {
+    const pending = _modalTasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
+    ctrEl.textContent = _modalTasks.length
+      ? `${pending} pending · ${_modalTasks.filter(t=>t.status==='done'||t.status==='cancelled').length} done`
+      : '';
+  }
+  if (!_modalTasks.length) {
+    list.innerHTML = '<div style="padding:4px 0;font:var(--cm-body-sm);color:var(--cm-fg-faint)">No tasks yet — use Add task to create one.</div>';
+    return;
+  }
+  list.innerHTML = _modalTasks.map(t => {
+    const isDone = t.status === 'done' || t.status === 'cancelled';
+    const isPending = !isDone;
+    const prioLabel = { urgent:'URGENT', high:'HIGH', low:'LOW' }[t.priority] || '';
+    const prioColor = { urgent:'var(--cm-danger)', high:'color-mix(in srgb,var(--cm-danger) 70%,var(--cm-warning))', low:'var(--cm-fg-faint)' }[t.priority] || '';
+    const dueHtml   = _fmtDue(t.due_date, isPending);
+    const assignee  = t.assigned_to_name ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${_esc(t.assigned_to_name)}</span>` : '';
+    return `<div class="cal-modal-task-row" data-task-id="${t.id}">
+      <input type="checkbox" ${isDone ? 'checked' : ''} data-modal-task-toggle="${t.id}">
+      <div class="cal-modal-task-body">
+        <div class="cal-modal-task-title${isDone ? ' is-done' : ''}">${_esc(t.title)}</div>
+        <div class="cal-modal-task-meta">
+          ${prioLabel ? `<span style="font:600 9px/1 var(--cm-font-mono);color:${prioColor}">${prioLabel}</span>` : ''}
+          ${dueHtml}
+          ${assignee}
+        </div>
+      </div>
+      <button class="cm-btn is-ghost is-sm" style="height:22px;padding:0 6px;font-size:11px" data-modal-task-del="${t.id}" title="Delete task"><i class="ti ti-x" style="font-size:10px"></i></button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-modal-task-toggle]').forEach(chk => {
+    chk.addEventListener('change', async () => {
+      const tid = chk.dataset.modalTaskToggle;
+      const isDone = chk.checked;
+      const row = chk.closest('.cal-modal-task-row');
+      row.querySelector('.cal-modal-task-title').classList.toggle('is-done', isDone);
+      await window.sb.from('tasks').update({ status: isDone ? 'done' : 'pending', updated_at: new Date().toISOString() }).eq('id', tid);
+      const t = _modalTasks.find(x => x.id === tid);
+      if (t) t.status = isDone ? 'done' : 'pending';
+      if (ctrEl) {
+        const pending = _modalTasks.filter(x => x.status === 'pending' || x.status === 'in_progress').length;
+        const done    = _modalTasks.filter(x => x.status === 'done' || x.status === 'cancelled').length;
+        ctrEl.textContent = `${pending} pending · ${done} done`;
+      }
+      refreshTaskBadge(eventId);
+    });
+  });
+
+  list.querySelectorAll('[data-modal-task-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tid = btn.dataset.modalTaskDel;
+      if (!confirm('Delete this task?')) return;
+      await window.sb.from('tasks').delete().eq('id', tid);
+      _modalTasks = _modalTasks.filter(t => t.id !== tid);
+      _renderModalTaskList(ctrEl);
+      refreshTaskBadge(eventId);
+    });
+  });
+}
+
+function _wireModalTaskForm(eventId) {
+  const addBtn    = document.getElementById('calEvtTaskAdd');
+  const form      = document.getElementById('calEvtTaskForm');
+  const cancelBtn = document.getElementById('calEvtTaskFormCancel');
+  const saveBtn   = document.getElementById('calEvtTaskFormSave');
+  const assignSel = document.getElementById('calEvtTaskF_assignee');
+  if (!addBtn || !form) return;
+
+  // Populate assigned_to dropdown
+  _getClubProfiles().then(profiles => {
+    if (!assignSel) return;
+    assignSel.innerHTML = '<option value="">— Unassigned —</option>' +
+      profiles.map(p => `<option value="${p.id}" data-name="${_esc(p.full_name)}">${_esc(p.full_name)}</option>`).join('');
+  });
+
+  addBtn.addEventListener('click', () => {
+    form.style.display = form.style.display === 'none' ? '' : 'none';
+    if (form.style.display !== 'none') document.getElementById('calEvtTaskF_title')?.focus();
+  });
+  cancelBtn.addEventListener('click', () => { form.style.display = 'none'; _clearModalTaskForm(); });
+
+  saveBtn.addEventListener('click', async () => {
+    const title = document.getElementById('calEvtTaskF_title')?.value.trim();
+    if (!title) { showCalToast('Task title is required.'); return; }
+    const priority  = document.getElementById('calEvtTaskF_priority')?.value || 'medium';
+    const dueDate   = document.getElementById('calEvtTaskF_due')?.value || null;
+    const sel       = document.getElementById('calEvtTaskF_assignee');
+    const assignedTo   = sel?.value || null;
+    const assignedName = sel ? (sel.options[sel.selectedIndex]?.dataset.name || null) : null;
+
+    saveBtn.disabled = true;
+    const { data: inserted, error } = await window.sb.from('tasks').insert({
+      club_id: _clubId, event_id: eventId, title, priority,
+      due_date: dueDate || null, status: 'pending', category: 'event',
+      created_by: _currentUserId || null,
+      created_by_name: _currentUserName || null,
+      assigned_to: assignedTo || null,
+      assigned_to_name: assignedName || null,
+    }).select('id,title,status,priority,due_date,assigned_to,assigned_to_name,created_at').single();
+    saveBtn.disabled = false;
+    if (error) { showCalToast('Error: ' + error.message); return; }
+    _modalTasks.unshift(inserted);
+    _modalTasks = _sortTasks(_modalTasks);
+    const ctrEl = document.getElementById('calEvtTasksCtr');
+    _renderModalTaskList(ctrEl);
+    _clearModalTaskForm();
+    form.style.display = 'none';
+    refreshTaskBadge(eventId);
+    showCalToast('Task added.');
+  });
+}
+
+function _clearModalTaskForm() {
+  const f = id => document.getElementById(id);
+  if (f('calEvtTaskF_title'))    f('calEvtTaskF_title').value = '';
+  if (f('calEvtTaskF_priority')) f('calEvtTaskF_priority').value = 'medium';
+  if (f('calEvtTaskF_due'))      f('calEvtTaskF_due').value = '';
+  if (f('calEvtTaskF_assignee')) f('calEvtTaskF_assignee').value = '';
+}
+
 // Refresh the task-dot badge on a specific mc-evt after task changes
 async function refreshTaskBadge(eventId) {
+  if (!eventId || !_clubId) return;
   const { data } = await window.sb.from('tasks')
     .select('status')
     .eq('event_id', eventId)
     .eq('club_id', _clubId)
     .in('status', ['pending','in_progress']);
   const hasPending = (data || []).length > 0;
-  document.querySelectorAll(`.mc-evt[data-id="${eventId}"]`).forEach(el => {
-    let dot = el.querySelector('.mc-evt-task-dot');
-    if (hasPending && !dot) {
-      dot = document.createElement('span'); dot.className = 'mc-evt-task-dot'; el.appendChild(dot);
-    } else if (!hasPending && dot) {
+  _applyTaskDot(`[data-id="${eventId}"]`, '.mc-evt-task-dot', hasPending);
+  _applyTaskDot(`.match-marker[data-evt-id="${eventId}"]`, '.mc-evt-task-dot', hasPending);
+}
+
+function _applyTaskDot(selector, dotClass, show) {
+  document.querySelectorAll(selector).forEach(el => {
+    let dot = el.querySelector(dotClass);
+    if (show && !dot) {
+      dot = document.createElement('span');
+      dot.className = dotClass.replace('.','');
+      el.appendChild(dot);
+    } else if (!show && dot) {
       dot.remove();
     }
   });
 }
 
-// Load task badges for all visible calendar_events after rendering days
+// Load task badges for all visible events (mc-evt grid + upcoming rail + match-markers)
 async function loadTaskBadges() {
+  if (!_clubId) return;
   const eventIds = _sessions.filter(s => s.source === 'event').map(s => s.id);
-  if (!eventIds.length || !_clubId) return;
+  if (!eventIds.length) return;
+
   const { data } = await window.sb.from('tasks')
-    .select('event_id,status')
+    .select('event_id')
     .in('event_id', eventIds)
     .eq('club_id', _clubId)
     .in('status', ['pending','in_progress']);
   if (!data) return;
+
   const pendingSet = new Set(data.map(t => t.event_id));
+
+  // mc-evt grid dots
   document.querySelectorAll('.mc-evt[data-id]').forEach(el => {
     const s = _sessions.find(x => x.id === el.dataset.id);
     if (!s || s.source !== 'event') return;
-    if (pendingSet.has(s.id)) {
-      if (!el.querySelector('.mc-evt-task-dot')) {
-        const dot = document.createElement('span'); dot.className = 'mc-evt-task-dot'; el.appendChild(dot);
-      }
+    if (pendingSet.has(s.id) && !el.querySelector('.mc-evt-task-dot')) {
+      const dot = document.createElement('span'); dot.className = 'mc-evt-task-dot'; el.appendChild(dot);
+    }
+  });
+
+  // Upcoming rail dots
+  document.querySelectorAll('.upcoming-row[data-evt-id]').forEach(el => {
+    if (pendingSet.has(el.dataset.evtId) && !el.querySelector('.upcoming-task-dot')) {
+      const dot = document.createElement('span'); dot.className = 'upcoming-task-dot'; el.appendChild(dot);
+    }
+  });
+
+  // Season Ribbon match-marker dots
+  document.querySelectorAll('.match-marker[data-evt-date]').forEach(el => {
+    const s = _sessions.find(x => x.session_date === el.dataset.evtDate && x.session_type === 'match' && x.source === 'event');
+    if (s && pendingSet.has(s.id) && !el.querySelector('.mc-evt-task-dot')) {
+      const dot = document.createElement('span'); dot.className = 'mc-evt-task-dot'; el.appendChild(dot);
     }
   });
 }
@@ -3426,6 +3791,7 @@ function renderSeasonRibbon(mcs, extraMatches) {
       const marker = document.createElement('span');
       marker.className = 'match-marker is-' + cc;
       marker.style.left = first.leftStr + '%';
+      if (first.date) marker.dataset.evtDate = first.date;
       marker.title = g.items.map(i => `${i.rival} · ${compLabel(i.comp)} · ${i.isAway?'Away':'Home'}`).join(' | ');
       const leadIcon = first.crestUrl
         ? `<img src="${first.crestUrl}" style="width:12px;height:12px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
@@ -3535,7 +3901,7 @@ async function renderUpcoming() {
   // Merge sessions with match days from MCs
   const items = [];
   (sessions || []).forEach(s => {
-    items.push({ date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null, rival_crest_url: s.rival_crest_url || null });
+    items.push({ id: s.id || null, source: s.source || null, date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null, rival_crest_url: s.rival_crest_url || null });
   });
   _allMCs.forEach(mc => {
     if (!mc.match_date || mc.match_date < TODAY || mc.match_date > in14d) return;
@@ -3577,8 +3943,9 @@ async function renderUpcoming() {
     const crestChip = (isMatch && item.rival_crest_url)
       ? `<img src="${item.rival_crest_url}" style="width:16px;height:16px;border-radius:50%;object-fit:contain;flex-shrink:0;margin-right:2px;vertical-align:middle" onerror="this.style.display='none'" alt="">`
       : '';
+    const evtIdAttr = (item.source === 'event' && item.id) ? ` data-evt-id="${item.id}"` : '';
     return `
-      <div class="upcoming-row">
+      <div class="upcoming-row"${evtIdAttr}>
         <div class="upcoming-date" style="${dStyle}"><div class="m" style="${mStyle}">${month}</div><div class="d" style="${mStyle}">${day}</div></div>
         <div class="upcoming-body">
           <div class="upcoming-title" style="display:flex;align-items:center;gap:5px">${crestChip}${item.title}</div>
@@ -3978,6 +4345,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   _clubId = await window.getClubId();
+  _currentUserId   = profile?.id        || null;
+  _currentUserName = profile?.full_name || null;
   if (club) window.applyClubTheme();
 
   // Counts
