@@ -266,6 +266,8 @@
   .gp-map-sel.is-yellow { border-color:var(--cm-warning); background:rgba(245,158,11,.08); }
   .gp-map-table tr.matched-custom td:first-child { border-left:3px solid var(--cm-accent); }
   .gp-map-sel.is-blue { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .gp-map-table tr.matched-attr td:first-child { border-left:3px solid var(--cm-info); }
+  .gp-map-sel.is-attr { border-color:var(--cm-info); background:var(--cm-info-bg); }
   .gp-create-form-row td { padding:0 !important; }
   .gp-create-metric-form { padding:12px 14px; background:var(--cm-bg-soft); border-bottom:2px solid var(--cm-accent); }
   /* Step 3 grid table — display:contents rows align perfectly with the header */
@@ -3284,7 +3286,14 @@ window.renderView = async function () {
   }
 
   // Build grouped <select> options for the column mapping dropdown
-  // Groups: Player fields / Core metrics (from catalog) / Custom metrics / Special / Ignore / Create new
+  // Groups: Player fields / Core metrics (from catalog) / Custom metrics / Session attributes / Special / Ignore / Create new
+  const SESSION_ATTR_OPTIONS = [
+    { key: 'rival',       label: 'Rival' },
+    { key: 'md_code',     label: 'MD-code' },
+    { key: 'competition', label: 'Competition' },
+    { key: 'venue',       label: 'Venue (home / away)' },
+  ];
+
   function _buildSelOptions(selectedVal) {
     const pfKeys      = window.GPS_PLAYER_FIELD_KEYS || new Set();
     const pfEntries   = _aliasDb.filter(e => pfKeys.has(e.metric_key));
@@ -3302,16 +3311,21 @@ window.renderView = async function () {
       : _aliasDb.filter(e => !pfKeys.has(e.metric_key) && e.category !== 'date')
           .map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('');
 
+    const attrHtml = SESSION_ATTR_OPTIONS.map(a => opt(`__attr__${a.key}`, a.label)).join('') +
+      `<option value="__attr_custom__"${'__attr_custom__' === selectedVal ? ' selected' : ''}>Custom attribute…</option>`;
+
     return `<option value="__ignore__"${'__ignore__' === selectedVal ? ' selected' : ''}>— Ignore this column —</option>
       <option value="__create__"${'__create__' === selectedVal ? ' selected' : ''}>+ Create new metric...</option>
       <optgroup label="── Player fields ──">${pfEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>
       <optgroup label="── Core metrics ──">${coreHtml}</optgroup>
       ${custMetrics.length ? `<optgroup label="── Custom metrics ──">${custMetrics.map(d => opt(d.key, d.label + (d.unit ? ` (${d.unit})` : ''))).join('')}</optgroup>` : ''}
+      <optgroup label="── Session attributes ──">${attrHtml}</optgroup>
       ${specEntries.length ? `<optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>` : ''}`;
   }
 
   function _s2RowCls(c, catalog) {
     if (c.excluded) return '';
+    if (c.attribute) return 'matched-attr';
     const def  = catalog.find(d => d.key === c.metric);
     const conf = c.confidence;
     if (def && !def.is_core && (conf === 'high' || conf === 'saved' || conf === 'medium')) return 'matched-custom';
@@ -3321,6 +3335,7 @@ window.renderView = async function () {
   }
 
   function _s2SelCls(metricKey, conf, catalog) {
+    if (metricKey && (metricKey.startsWith('__attr__') || metricKey === '__attr_custom__')) return 'is-attr';
     const def = catalog.find(d => d.key === metricKey);
     if (def && !def.is_core) return 'is-blue';
     if (conf === 'high' || conf === 'saved') return 'is-green';
@@ -3339,6 +3354,7 @@ window.renderView = async function () {
         Map each file column to a ClavaMetrics metric.
         <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-success)"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Core</span>
         <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-accent);margin-left:8px"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Custom${custCount ? ` (${custCount})` : ''}</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-info);margin-left:8px"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Session attribute</span>
         <span style="display:inline-flex;align-items:center;gap:4px;color:#b45309;margin-left:8px"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Possible match</span>
       </p>
       <div style="overflow-x:auto">
@@ -3358,8 +3374,8 @@ window.renderView = async function () {
           }
           const conf     = c.confidence;
           const rowCls   = _s2RowCls(c, catalog);
-          const selCls   = _s2SelCls(c.metric, conf, catalog);
-          const selected = c.metric || '__ignore__';
+          const selected = c.attribute ? `__attr__${c.attribute}` : (c.metric || '__ignore__');
+          const selCls   = _s2SelCls(selected, conf, catalog);
           const tooltip  = conf === 'high' || conf === 'saved'
             ? 'Auto-matched (exact)'
             : conf === 'medium'
@@ -3388,10 +3404,22 @@ window.renderView = async function () {
           _showCreateMetricForm(ci, e.target);
           return;
         }
-        // Clear any open create form for this column
+        if (val === '__attr_custom__') {
+          _showCreateAttrForm(ci, e.target);
+          return;
+        }
+        // Clear any open inline form for this column
         body.querySelector(`.gp-create-inline[data-ci="${ci}"]`).innerHTML = '';
-        _wizState.columnMap[ci].metric = val === '__ignore__' ? null : val;
-        e.target.className = 'gp-map-sel ' + _s2SelCls(val, 'high', _wizState.metricCatalog || []);
+        if (val.startsWith('__attr__')) {
+          const attrKey = val.slice(8);
+          _wizState.columnMap[ci].attribute = attrKey;
+          _wizState.columnMap[ci].metric    = null;
+          e.target.className = 'gp-map-sel is-attr';
+        } else {
+          _wizState.columnMap[ci].attribute = null;
+          _wizState.columnMap[ci].metric    = val === '__ignore__' ? null : val;
+          e.target.className = 'gp-map-sel ' + _s2SelCls(val, 'high', _wizState.metricCatalog || []);
+        }
       });
     });
     body.querySelectorAll('.gp-conv-inp').forEach(inp => {
@@ -3523,6 +3551,60 @@ window.renderView = async function () {
       sel.className = 'gp-map-sel is-blue';
       _wizState.columnMap[ci].metric = key;
 
+      inlineDiv.innerHTML = '';
+    });
+  }
+
+  function _showCreateAttrForm(ci, sel) {
+    const inlineDiv = document.querySelector(`.gp-create-inline[data-ci="${ci}"]`);
+    if (!inlineDiv) return;
+    document.querySelectorAll('.gp-create-inline').forEach(d => { if (+d.dataset.ci !== ci) d.innerHTML = ''; });
+
+    inlineDiv.innerHTML = `
+      <div class="gp-create-metric-form" style="margin-top:6px;border-bottom-color:var(--cm-info)">
+        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-info);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Custom session attribute</div>
+        <div style="margin-bottom:8px">
+          <label style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:3px">Key * <span style="font-weight:400;text-transform:none">(snake_case, e.g. weather_condition)</span></label>
+          <input id="naKey${ci}" type="text" placeholder="e.g. weather_condition"
+            style="width:100%;padding:5px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans);box-sizing:border-box">
+        </div>
+        <div id="naErr${ci}" style="display:none;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-danger);margin-bottom:6px"></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="cm-btn is-outline is-sm" id="naCancel${ci}">Cancel</button>
+          <button class="cm-btn is-primary is-sm" id="naSave${ci}">Use attribute</button>
+        </div>
+      </div>`;
+
+    const keyInp = document.getElementById(`naKey${ci}`);
+    keyInp.focus();
+
+    document.getElementById(`naCancel${ci}`).addEventListener('click', () => {
+      inlineDiv.innerHTML = '';
+      sel.value = _wizState.columnMap[ci]?.attribute
+        ? `__attr__${_wizState.columnMap[ci].attribute}`
+        : (_wizState.columnMap[ci]?.metric || '__ignore__');
+    });
+
+    document.getElementById(`naSave${ci}`).addEventListener('click', () => {
+      const key    = keyInp.value.trim().toLowerCase().replace(/\s+/g, '_');
+      const errDiv = document.getElementById(`naErr${ci}`);
+      if (!key) { errDiv.textContent = 'Key is required.'; errDiv.style.display = ''; return; }
+      if (!/^[a-z][a-z0-9_]*$/.test(key)) {
+        errDiv.textContent = `"${key}" is invalid — must start with a letter, only a-z 0-9 _.`;
+        errDiv.style.display = ''; return;
+      }
+      _wizState.columnMap[ci].attribute = key;
+      _wizState.columnMap[ci].metric    = null;
+      // Rebuild the select so the custom key appears as selected
+      sel.innerHTML = _buildSelOptions(`__attr__${key}`);
+      // The custom key isn't in SESSION_ATTR_OPTIONS so we add it manually as selected
+      const customOpt = document.createElement('option');
+      customOpt.value = `__attr__${key}`;
+      customOpt.textContent = key;
+      customOpt.selected = true;
+      sel.querySelector('optgroup[label="── Session attributes ──"]')?.prepend(customOpt);
+      sel.value = `__attr__${key}`;
+      sel.className = 'gp-map-sel is-attr';
       inlineDiv.innerHTML = '';
     });
   }
