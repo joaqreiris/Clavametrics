@@ -663,8 +663,64 @@
       </div>
 
       <!-- ── PLAYER WEEK REPORT ─────────────────────────────────────────────── -->
+      <!-- ── PLAYER WEEK REPORT ─────────────────────────────────────────────── -->
       <div class="gp-view" data-view="player_week" id="view-player-week">
-        <div class="gp-empty" style="padding:64px">Player Week Report — coming soon</div>
+
+        <!-- Filter bar -->
+        <div class="gp-dash-bar" id="pw-filter-bar">
+          <i class="ti ti-user" style="color:var(--cm-accent);font-size:16px"></i>
+          <span class="h">Player Week</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:16px">
+            <select class="gp-table-filter" id="pw-player-filter" style="min-width:160px">
+              <option value="">Select player...</option>
+            </select>
+            <select class="gp-table-filter" id="pw-mc-filter" style="min-width:160px">
+              <option value="current">Current microcycle</option>
+            </select>
+          </div>
+          <div id="pw-next-match" style="margin-left:12px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)"></div>
+          <div class="right">
+            <button class="pill" id="pw-export-btn"><i class="ti ti-download"></i>Export</button>
+            <button class="pill" id="pw-add-card-btn"><i class="ti ti-plus"></i>Add card</button>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="pw-empty" style="display:none;padding:48px;text-align:center">
+          <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Select a player to see their week</div>
+        </div>
+
+        <!-- KPI row -->
+        <div class="gp-dash-kpi-row" id="pw-kpi-row"></div>
+
+        <!-- Day-by-day table -->
+        <div class="gp-c" data-size="full" style="margin-bottom:14px">
+          <div class="gp-c-h">
+            <span class="ttl" id="pw-table-title">Week data by day</span>
+            <span class="sub" id="pw-table-sub"></span>
+          </div>
+          <div class="gp-c-b" style="padding:0">
+            <div class="gp-table-scroll" id="pw-table-scroll" style="overflow:auto"></div>
+          </div>
+        </div>
+
+        <!-- High Intensity chart -->
+        <div class="gp-c" data-size="full" style="margin-bottom:14px">
+          <div class="gp-c-h">
+            <span class="ttl">High Intensity Actions</span>
+            <span class="sub">HSR + VHSR + Sprints (m) · Acc+Dec (n)</span>
+          </div>
+          <div class="gp-c-b" style="height:240px;position:relative">
+            <canvas id="pw-hi-chart"></canvas>
+          </div>
+        </div>
+
+        <!-- Optional cards -->
+        <div class="gp-dash-section">
+          <div class="gp-dash-section-title">Optional cards</div>
+          <div class="gp-optional-grid" id="pw-optional-grid"></div>
+          <button class="gp-add-btn" id="pw-add-opt-card"><i class="ti ti-plus"></i> Add card</button>
+        </div>
       </div>
 
       <!-- ── LOAD MONITORING ────────────────────────────────────────────────── -->
@@ -3406,6 +3462,7 @@ window.renderView = async function () {
 
     return `<option value="__ignore__"${'__ignore__' === selectedVal ? ' selected' : ''}>— Ignore this column —</option>
       <option value="__create__"${'__create__' === selectedVal ? ' selected' : ''}>+ Create new metric...</option>
+      <option value="__attribute__"${'__attribute__' === selectedVal ? ' selected' : ''}>+ Add session attribute...</option>
       <optgroup label="── Player fields ──">${pfEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>
       <optgroup label="── Core metrics ──">${coreHtml}</optgroup>
       ${custMetrics.length ? `<optgroup label="── Custom metrics ──">${custMetrics.map(d => opt(d.key, d.label + (d.unit ? ` (${d.unit})` : ''))).join('')}</optgroup>` : ''}
@@ -3527,7 +3584,7 @@ window.renderView = async function () {
           _showCreateMetricForm(ci, e.target);
           return;
         }
-        if (val === '__attr_custom__') {
+        if (val === '__attribute__' || val === '__attr_custom__') {
           _showCreateAttrForm(ci, e.target);
           return;
         }
