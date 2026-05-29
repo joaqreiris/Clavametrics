@@ -314,13 +314,28 @@ Important columns:
 - session_type
 - coach_id
 - notes
+- is_historical (boolean, default false) — migration 033: sessions imported from
+  past periods. Excluded from Calendar, Sessions History, and Daily Planning but
+  fully available for GPS charts, baselines, and comparisons.
+- session_attributes (jsonb, default '{}') — migration 036: extensible per-session
+  metadata. Conventional keys: rival (text), md_code (text, e.g. "MD-1"/"MD+2"),
+  competition (text), venue (text "home"/"away"). Not a constraint — clubs can
+  store any key. GIN index idx_training_sessions_attributes enables @> filtering.
+  Written by the import pipeline when columns are mapped to "Session attribute".
 
-Examples:
-- Gym
-- Recovery
-- Tactical
-- Match
-- Conditioning
+Session resolve key (used by import pipeline):
+  UNIQUE by (club_id, session_date, session_type, is_historical)
+
+Examples of session_type:
+- training
+- match
+- gym
+- recovery
+- tactical
+- conditioning
+
+Note: session_type = 'match' is required for a session to feed match baselines
+(getMatchBaseline / getMatchBaselineBatch in assets/gps-baseline.js).
 
 ---
 
@@ -714,6 +729,36 @@ Player availability depends on:
 - modified training flags
 
 ---
+
+## GPS hybrid model (core columns + EAV)
+
+GPS data uses a hybrid model introduced in bloque 7 (migrations 034, 035):
+
+- **Core metrics (13):** stored as typed columns in `gps_reports`.
+  Keys: total_distance, high_speed_distance, very_high_speed_distance,
+  sprint_distance, sprint_count, max_speed, avg_speed, accelerations,
+  decelerations, player_load, hmld, time_played, distance_per_minute.
+  UNIQUE constraint: (player_id, session_id).
+
+- **Custom metrics:** stored as rows in `gps_report_metrics` (EAV).
+  Defined per-club in `gps_metric_definitions` (is_core = false).
+  UNIQUE constraint: (report_id, metric_key).
+
+Reading: `getReportsForSession()` in assets/gps-reader.js merges both
+sources into a flat `metrics` dict — callers use `report.metrics[key]`
+regardless of where the metric lives.
+
+## Match baseline (Miguel et al. 2022)
+
+`getMatchBaseline(player_id, metric, clubId)` in assets/gps-baseline.js:
+- Fetches the player's values for that metric across sessions where
+  training_sessions.session_type = 'match'.
+- Takes the mean of the top-N values (N from club_gps_settings.baseline_n,
+  default 5; minimum 3 matches required for any result).
+- For core metrics: queries gps_reports column directly.
+- For custom metrics: two-step via gps_reports → gps_report_metrics EAV.
+- is_historical sessions ARE included (historical match data is valid for
+  baseline calculation).
 
 ## Load monitoring
 
