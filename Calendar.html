@@ -658,6 +658,16 @@
   }
   /* Task dot on upcoming rows */
   .upcoming-row { position:relative; }
+  .upcoming-filter-badge { display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;padding:0 3px;background:var(--cm-accent);color:#fff;border-radius:7px;font:600 9px/1 var(--cm-font-mono);margin-left:3px;vertical-align:middle; }
+  .upcoming-filter-drop { background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);box-shadow:0 6px 20px rgba(0,0,0,.13);z-index:320;padding:6px 0;max-height:320px;overflow-y:auto; }
+  .upcoming-filt-acts { display:flex;gap:10px;padding:4px 10px 6px;border-bottom:1px solid var(--cm-border-soft);margin-bottom:4px; }
+  .upcoming-filt-act { font:500 11px/1 var(--cm-font-sans);color:var(--cm-accent);cursor:pointer; }
+  .upcoming-filt-act:hover { text-decoration:underline; }
+  .upcoming-filt-group { padding:6px 10px 2px;font:600 9.5px/1 var(--cm-font-mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-fg-muted); }
+  .upcoming-filt-row { display:flex;align-items:center;gap:7px;padding:4px 10px;cursor:pointer;font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg); }
+  .upcoming-filt-row:hover { background:var(--cm-bg-soft); }
+  .upcoming-filt-row input { flex-shrink:0;accent-color:var(--cm-accent);width:13px;height:13px; }
+  .upcoming-filt-row span { text-transform:capitalize; }
   .upcoming-task-dot {
     width:6px; height:6px; border-radius:50%; background:var(--cm-warning);
     flex-shrink:0; margin-left:4px;
@@ -846,6 +856,9 @@
               <h3>Upcoming</h3>
               <span class="sub">next 14 days</span>
               <div class="right">
+                <div style="position:relative">
+                  <button class="cm-btn is-ghost is-sm" id="upcomingFilterBtn" style="gap:5px"><i class="ti ti-filter" style="font-size:11px"></i>Filter<span id="upcomingFilterBadge" class="upcoming-filter-badge" style="display:none"></span></button>
+                </div>
                 <button class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button>
               </div>
             </div>
@@ -2300,7 +2313,7 @@ function showEvtPopover(anchor, session) {
     }
   }
 
-  const tasksSection = (!isPlayerView && isCalEvt)
+  const tasksSection = (!isPlayerView)
     ? `<div class="cal-epop-tasks" id="epTasksWrap">
          <div class="cal-epop-tasks-head" id="epTasksHead">
            <i class="ti ti-checkbox"></i>Tasks
@@ -2357,7 +2370,7 @@ function showEvtPopover(anchor, session) {
   });
 
   // Tasks collapsible
-  if (!isPlayerView && isCalEvt) {
+  if (!isPlayerView) {
     const tasksHead = pop.querySelector('#epTasksHead');
     const tasksBody = pop.querySelector('#epTasksBody');
     const chevron   = pop.querySelector('#epTasksChevron');
@@ -2368,7 +2381,7 @@ function showEvtPopover(anchor, session) {
       _tasksOpen = !_tasksOpen;
       tasksBody.style.display = _tasksOpen ? '' : 'none';
       chevron.className = _tasksOpen ? 'ti ti-chevron-up' : 'ti ti-chevron-down';
-      if (_tasksOpen && !_tasksLoaded) { _tasksLoaded = true; loadPopTasks(pop, session.id); }
+      if (_tasksOpen && !_tasksLoaded) { _tasksLoaded = true; loadPopTasks(pop, session.id, session.source); }
       _positionPop(pop, anchor, 288);
     });
   }
@@ -2475,10 +2488,15 @@ function _updatePopCtr(ctr, tasks) {
 }
 
 // ── Tasks in popover ─────────────────────────────────────────
-async function loadPopTasks(pop, eventId) {
+async function loadPopTasks(pop, eventId, sessionSource) {
   const body = pop.querySelector('#epTasksBody');
   const ctr  = pop.querySelector('#epTaskCtr');
   if (!body) return;
+
+  if (sessionSource === 'session') {
+    body.innerHTML = `<div style="padding:4px 0;font:var(--cm-body-sm);color:var(--cm-fg-faint)">Re-save this event via the New Event modal to enable tasks.</div>`;
+    return;
+  }
 
   const { data: raw, error } = await window.sb.from('tasks')
     .select('id,title,status,priority,due_date,assigned_to,assigned_to_name,created_at')
@@ -3438,14 +3456,39 @@ async function renderMonthView() {
   for (let i = 0; i < firstDay; i++)
     html += `<div style="min-height:80px;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft);background:var(--cm-bg-sunk);opacity:0.4"></div>`;
 
+  // MC highlighting palette (only existing --cm-* variables, no new colors)
+  const MC_PAL = [
+    { bg:'color-mix(in srgb,var(--cm-accent) 7%,var(--cm-surface))',   pillBg:'color-mix(in srgb,var(--cm-accent) 15%,var(--cm-surface))',   pillClr:'var(--cm-accent)' },
+    { bg:'color-mix(in srgb,var(--cm-success) 6%,var(--cm-surface))',  pillBg:'color-mix(in srgb,var(--cm-success) 14%,var(--cm-surface))',  pillClr:'var(--cm-success)' },
+    { bg:'color-mix(in srgb,var(--cm-warning) 6%,var(--cm-surface))',  pillBg:'color-mix(in srgb,var(--cm-warning) 14%,var(--cm-surface))',  pillClr:'var(--cm-warning)' },
+    { bg:'color-mix(in srgb,var(--cm-info) 5%,var(--cm-surface))',     pillBg:'color-mix(in srgb,var(--cm-info) 13%,var(--cm-surface))',     pillClr:'var(--cm-info)' },
+    { bg:'color-mix(in srgb,var(--cm-violet) 5%,var(--cm-surface))',   pillBg:'color-mix(in srgb,var(--cm-violet) 12%,var(--cm-surface))',   pillClr:'var(--cm-violet)' },
+  ];
+  const mcInMonth  = _allMCs.filter(mc => mc.start_date <= monthEnd && mc.end_date >= monthStart);
+  const mcPalMap   = {};
+  mcInMonth.forEach((mc, i) => { mcPalMap[mc.id] = MC_PAL[i % MC_PAL.length]; });
+  const mcFirstDay = {};
+  mcInMonth.forEach(mc => { mcFirstDay[mc.id] = mc.start_date >= monthStart ? mc.start_date : monthStart; });
+
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const isToday = dateStr === TODAY;
     const col = (day + firstDay - 1) % 7;
     const noBR = col === 6 ? ';border-right:0' : '';
     const daySess = sessMap[dateStr] || [];
-    html += `<div style="min-height:80px;padding:6px 8px;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft)${noBR};background:${isToday?'color-mix(in srgb, var(--cm-accent) 5%, var(--cm-surface))':'var(--cm-surface)'}">
+    const dayMc  = mcInMonth.find(mc => mc.start_date <= dateStr && mc.end_date >= dateStr) || null;
+    const mcPal  = dayMc ? mcPalMap[dayMc.id] : null;
+    const mcAttr = dayMc ? ` data-mc-id="${dayMc.id}"` : '';
+    const bgClr  = isToday ? 'color-mix(in srgb,var(--cm-accent) 5%,var(--cm-surface))' : (mcPal ? mcPal.bg : 'var(--cm-surface)');
+    let mcPillHtml = '';
+    if (dayMc && mcFirstDay[dayMc.id] === dateStr) {
+      const isCont   = dayMc.start_date < monthStart;
+      const pillLbl  = (isCont ? '← ' : '') + (dayMc.name || 'MC ' + dayMc.id) + (isCont ? ' cont.' : '');
+      mcPillHtml = `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:0.05em;text-transform:uppercase;padding:2px 5px;border-radius:3px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:${mcPal.pillBg};color:${mcPal.pillClr}">${_esc(pillLbl)}</div>`;
+    }
+    html += `<div style="min-height:80px;padding:6px 8px;border-right:1px solid var(--cm-border-soft);border-bottom:1px solid var(--cm-border-soft)${noBR};background:${bgClr}"${mcAttr}>
       <div style="font:600 14px/1 var(--cm-font-sans);color:${isToday?'var(--cm-accent)':'var(--cm-fg-strong)'};margin-bottom:4px">${day}</div>
+      ${mcPillHtml}
       ${daySess.map(s => {
         const cat = focusToClass(s.session_type);
         const bg2 = EVT_BG[cat]  || EVT_BG.training;
@@ -3456,6 +3499,24 @@ async function renderMonthView() {
   }
   html += '</div>';
   document.getElementById('calMonthGrid').innerHTML = html;
+
+  // MC hover-highlight: mousing over any day highlights all days of the same MC
+  const monthGrid = document.getElementById('calMonthGrid');
+  monthGrid.querySelectorAll('[data-mc-id]').forEach(cell => {
+    const mcId = cell.dataset.mcId;
+    const pal  = mcPalMap[mcId];
+    if (!pal) return;
+    cell.addEventListener('mouseover', () => {
+      monthGrid.querySelectorAll('[data-mc-id]').forEach(c => {
+        if (c.dataset.mcId === mcId) { c.style.outline = `1.5px solid ${pal.pillClr}`; c.style.outlineOffset = '-1.5px'; }
+      });
+    });
+    cell.addEventListener('mouseout', () => {
+      monthGrid.querySelectorAll('[data-mc-id]').forEach(c => {
+        if (c.dataset.mcId === mcId) { c.style.outline = ''; c.style.outlineOffset = ''; }
+      });
+    });
+  });
 }
 
 function handleMonthEvtClick(sid) {
@@ -3890,56 +3951,82 @@ function showMatchPopover(anchor, items) {
 }
 
 // ── Upcoming Events ───────────────────────────────────────────
-async function renderUpcoming() {
+// ── Upcoming filters ──────────────────────────────────────────
+const UPCOMING_FILTER_GROUPS = [
+  { label:'Training',  types:['tactical','gym','recovery','walkthrough'] },
+  { label:'Match',     types:['match'] },
+  { label:'Meals',     types:['breakfast','lunch','dinner'] },
+  { label:'Logistics', types:['hotel_checkin','hotel_checkout','bus_departure','bus_arrival','travel'] },
+  { label:'Other',     types:['press','medical_check','scouting','video_session','meeting','evaluation','day_off','other'] },
+];
+const UPCOMING_ALL_TYPES     = UPCOMING_FILTER_GROUPS.flatMap(g => g.types);
+const UPCOMING_DEFAULT_HIDDEN = new Set(['breakfast','lunch','dinner']);
+let _upcomingAllItems    = [];
+let _upcomingActFilters  = null; // Set of visible types (lazily loaded)
+
+function _upcomingFiltersKey() {
+  return `clava.upcoming.filters.${_clubId||'x'}.${_currentUserId||'x'}`;
+}
+function _loadUpcomingFilters() {
+  if (_upcomingActFilters) return _upcomingActFilters;
+  try {
+    const raw = localStorage.getItem(_upcomingFiltersKey());
+    if (raw) { _upcomingActFilters = new Set(JSON.parse(raw)); return _upcomingActFilters; }
+  } catch {}
+  _upcomingActFilters = new Set(UPCOMING_ALL_TYPES.filter(t => !UPCOMING_DEFAULT_HIDDEN.has(t)));
+  return _upcomingActFilters;
+}
+function _saveUpcomingFilters() {
+  try { localStorage.setItem(_upcomingFiltersKey(), JSON.stringify([..._upcomingActFilters])); } catch {}
+}
+function _updateUpcomingFilterBadge() {
+  const badge = document.getElementById('upcomingFilterBadge');
+  if (!badge) return;
+  const hidden = UPCOMING_ALL_TYPES.filter(t => !_upcomingActFilters?.has(t)).length;
+  badge.textContent = hidden;
+  badge.style.display = hidden > 0 ? '' : 'none';
+}
+
+const _UPCOMING_TYPE_LABELS = {
+  match:'MATCH', training:'TRAINING', gym:'GYM', travel:'TRAVEL', recovery:'RECOVERY',
+  tactical:'TRAINING', conditioning:'TRAINING', physical:'TRAINING', other:'OTHER',
+  breakfast:'BREAKFAST', lunch:'LUNCH', dinner:'DINNER',
+  hotel_checkin:'CHECK-IN', hotel_checkout:'CHECK-OUT',
+  bus_departure:'BUS DEP', bus_arrival:'BUS ARR',
+  press:'PRESS', medical_check:'MEDICAL',
+  walkthrough:'WALKTHRU', scouting:'SCOUTING',
+  day_off:'DAY OFF', meeting:'MEETING', evaluation:'EVAL', video_session:'VIDEO',
+};
+
+function _renderUpcomingFiltered() {
   const container = document.getElementById('calUpcomingList');
   if (!container) return;
-
-  const in14d = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
-
-  const { data: sessions } = await fetchAllEvents(TODAY, in14d);
-
-  // Merge sessions with match days from MCs
-  const items = [];
-  (sessions || []).forEach(s => {
-    items.push({ id: s.id || null, source: s.source || null, date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null, rival_crest_url: s.rival_crest_url || null });
+  const filters = _loadUpcomingFilters();
+  // 'conditioning' treated same as 'tactical' for filter purposes
+  const visible = _upcomingAllItems.filter(item => {
+    const t = item.type;
+    return filters.has(t) || (t === 'conditioning' && filters.has('tactical'));
   });
-  _allMCs.forEach(mc => {
-    if (!mc.match_date || mc.match_date < TODAY || mc.match_date > in14d) return;
-    if (!items.find(i => i.date === mc.match_date && i.type === 'match')) {
-      items.push({ date: mc.match_date, title: `vs ${mc.rival || 'Match'}`, type: 'match', isAway: mc.home_away === 'away' });
-    }
-  });
-  items.sort((a, b) => a.date > b.date ? 1 : -1);
-
-  if (!items.length) {
-    container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No upcoming events in the next 14 days</div>';
+  if (!visible.length) {
+    container.innerHTML = _upcomingAllItems.length
+      ? '<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No events match current filters</div>'
+      : '<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No upcoming events in the next 14 days</div>';
+    _updateUpcomingFilterBadge();
     return;
   }
-
-  const TYPE_LABELS = {
-    match:'MATCH', training:'TRAINING', gym:'GYM', travel:'TRAVEL', recovery:'RECOVERY',
-    tactical:'TRAINING', conditioning:'TRAINING', physical:'TRAINING', other:'OTHER',
-    breakfast:'BREAKFAST', lunch:'LUNCH', dinner:'DINNER',
-    hotel_checkin:'CHECK-IN', hotel_checkout:'CHECK-OUT',
-    bus_departure:'BUS DEP', bus_arrival:'BUS ARR',
-    press:'PRESS', medical_check:'MEDICAL',
-    walkthrough:'WALKTHRU', scouting:'SCOUTING',
-    day_off:'DAY OFF', meeting:'MEETING', evaluation:'EVAL', video_session:'VIDEO',
-  };
-
-  container.innerHTML = items.slice(0, 6).map(item => {
-    const d      = new Date(item.date + 'T12:00:00');
-    const month  = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-    const day    = d.getDate();
-    const label  = TYPE_LABELS[item.type] || (item.type || 'EVENT').toUpperCase().replace(/_/g,' ');
-    const cat    = focusToClass(item.type);
+  container.innerHTML = visible.slice(0, 6).map(item => {
+    const d        = new Date(item.date + 'T12:00:00');
+    const month    = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const day      = d.getDate();
+    const label    = _UPCOMING_TYPE_LABELS[item.type] || (item.type || 'EVENT').toUpperCase().replace(/_/g,' ');
+    const cat      = focusToClass(item.type);
     const badgeBg  = EVT_BG[cat]  || EVT_BG.training;
     const badgeClr = EVT_CLR[cat] || EVT_CLR.training;
-    const isMatch = item.type === 'match';
-    const dStyle = isMatch ? 'background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)' : '';
-    const mStyle = isMatch ? 'color:var(--cm-danger)' : '';
+    const isMatch  = item.type === 'match';
+    const dStyle   = isMatch ? 'background:var(--cm-danger-bg);border-color:var(--cm-danger-bd)' : '';
+    const mStyle   = isMatch ? 'color:var(--cm-danger)' : '';
     const loc      = isMatch ? (item.isAway ? 'Away' : 'Home') : '';
-    const timeChip  = item.start_time ? `<span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${item.start_time.slice(0,5)}</span>` : '';
+    const timeChip = item.start_time ? `<span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${item.start_time.slice(0,5)}</span>` : '';
     const crestChip = (isMatch && item.rival_crest_url)
       ? `<img src="${item.rival_crest_url}" style="width:16px;height:16px;border-radius:50%;object-fit:contain;flex-shrink:0;margin-right:2px;vertical-align:middle" onerror="this.style.display='none'" alt="">`
       : '';
@@ -3954,6 +4041,91 @@ async function renderUpcoming() {
         <div></div>
       </div>`;
   }).join('');
+  _updateUpcomingFilterBadge();
+}
+
+function _initUpcomingFilter() {
+  const btn = document.getElementById('upcomingFilterBtn');
+  if (!btn) return;
+  _loadUpcomingFilters();
+  _updateUpcomingFilterBadge();
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const existing = document.getElementById('upcomingFilterDrop');
+    if (existing) { existing.remove(); return; }
+
+    const drop = document.createElement('div');
+    drop.id = 'upcomingFilterDrop';
+    drop.className = 'upcoming-filter-drop';
+
+    let html = `<div class="upcoming-filt-acts">
+      <span class="upcoming-filt-act" id="ufSelAll">Select all</span>
+      <span class="upcoming-filt-act" id="ufSelNone">Select none</span>
+    </div>`;
+    UPCOMING_FILTER_GROUPS.forEach(grp => {
+      html += `<div class="upcoming-filt-group">${grp.label}</div>`;
+      grp.types.forEach(type => {
+        const chk = _upcomingActFilters?.has(type) ? 'checked' : '';
+        html += `<label class="upcoming-filt-row"><input type="checkbox" data-type="${type}" ${chk}><span>${type.replace(/_/g,' ')}</span></label>`;
+      });
+    });
+    drop.innerHTML = html;
+
+    // Position fixed, right-aligned below button
+    const r = btn.getBoundingClientRect();
+    drop.style.cssText = `position:fixed;right:${Math.round(window.innerWidth-r.right)}px;top:${Math.round(r.bottom+4)}px;width:190px`;
+    document.body.appendChild(drop);
+
+    drop.querySelectorAll('input[data-type]').forEach(chk => {
+      chk.addEventListener('change', () => {
+        const t = chk.dataset.type;
+        if (chk.checked) _upcomingActFilters.add(t); else _upcomingActFilters.delete(t);
+        _saveUpcomingFilters();
+        _renderUpcomingFiltered();
+      });
+    });
+    drop.querySelector('#ufSelAll')?.addEventListener('click', () => {
+      UPCOMING_ALL_TYPES.forEach(t => _upcomingActFilters.add(t));
+      _saveUpcomingFilters();
+      _renderUpcomingFiltered();
+      drop.querySelectorAll('input[data-type]').forEach(c => { c.checked = true; });
+    });
+    drop.querySelector('#ufSelNone')?.addEventListener('click', () => {
+      _upcomingActFilters.clear();
+      _saveUpcomingFilters();
+      _renderUpcomingFiltered();
+      drop.querySelectorAll('input[data-type]').forEach(c => { c.checked = false; });
+    });
+
+    const closeDrop = ev => {
+      if (!drop.contains(ev.target) && ev.target !== btn) { drop.remove(); document.removeEventListener('click', closeDrop); }
+    };
+    setTimeout(() => document.addEventListener('click', closeDrop), 0);
+  });
+}
+
+async function renderUpcoming() {
+  const container = document.getElementById('calUpcomingList');
+  if (!container) return;
+
+  const in14d = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+  const { data: sessions } = await fetchAllEvents(TODAY, in14d);
+
+  _upcomingAllItems = [];
+  (sessions || []).forEach(s => {
+    _upcomingAllItems.push({ id: s.id || null, source: s.source || null, date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null, rival_crest_url: s.rival_crest_url || null });
+  });
+  _allMCs.forEach(mc => {
+    if (!mc.match_date || mc.match_date < TODAY || mc.match_date > in14d) return;
+    if (!_upcomingAllItems.find(i => i.date === mc.match_date && i.type === 'match')) {
+      _upcomingAllItems.push({ date: mc.match_date, title: `vs ${mc.rival || 'Match'}`, type: 'match', isAway: mc.home_away === 'away' });
+    }
+  });
+  _upcomingAllItems.sort((a, b) => a.date > b.date ? 1 : -1);
+
+  _loadUpcomingFilters();
+  _renderUpcomingFiltered();
 }
 
 // ── Calendar KPIs ─────────────────────────────────────────────
@@ -4391,6 +4563,7 @@ document.addEventListener('DOMContentLoaded', () => {
   await loadSeasonSettings();
   renderSeasonRibbon(_allMCs, _matchSessions);
   renderCalKPIs(_allMCs);
+  _initUpcomingFilter();
   renderUpcoming(); // async, loads sessions from DB
 
   // Default to current/most recent MC
