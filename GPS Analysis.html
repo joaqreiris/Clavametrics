@@ -3035,88 +3035,342 @@ window.renderView = async function () {
     return { player: best, score: bestScore, confidence };
   }
 
+  // ── Step 3 UX helpers ──────────────────────────────────────
+  const _S3_HIGH = 0.85;
+  const _S3_MED  = 0.60;
+
+  // Category based on score (independent of match.confidence)
+  function _s3Cat(match) {
+    const s = match.score || 0;
+    return s > _S3_HIGH ? 'matched' : s >= _S3_MED ? 'verify' : 'unmatched';
+  }
+
+  // Read current counts from live DOM (data-cat is updated as user confirms/adds)
+  function _s3Counts(list) {
+    let unmatched = 0, verify = 0, matched = 0;
+    list.querySelectorAll('.gp-match-row').forEach(r => {
+      const c = r.dataset.cat;
+      if (c === 'unmatched') unmatched++;
+      else if (c === 'verify') verify++;
+      else matched++;
+    });
+    return { all: unmatched + verify + matched, unmatched, verify, matched };
+  }
+
+  // Update bulk-action buttons and tab counters
+  function _refreshS3Bar(body) {
+    const list = body.querySelector('#wizMatchList');
+    if (!list) return;
+    const { all, unmatched, verify, matched } = _s3Counts(list);
+    body.querySelectorAll('.s3-tab').forEach(tab => {
+      const f = tab.dataset.filter;
+      const n = f === 'all' ? all : f === 'unmatched' ? unmatched : f === 'verify' ? verify : matched;
+      const span = tab.querySelector('.s3-tc');
+      if (span) span.textContent = n;
+    });
+    const addBtn  = body.querySelector('#s3AddAllBtn');
+    const confBtn = body.querySelector('#s3ConfirmAllBtn');
+    if (addBtn)  {
+      addBtn.style.display = unmatched > 0 ? '' : 'none';
+      const sp = addBtn.querySelector('.s3-bc');
+      if (sp) sp.textContent = unmatched;
+    }
+    if (confBtn) {
+      confBtn.style.display = verify > 0 ? '' : 'none';
+      const sp = confBtn.querySelector('.s3-bc');
+      if (sp) sp.textContent = verify;
+    }
+  }
+
+  // Show/hide rows by category; update tab active style
+  function _applyS3Filter(body, filter) {
+    const list = body.querySelector('#wizMatchList');
+    if (!list) return;
+    list.querySelectorAll('.gp-match-row').forEach(r => {
+      r.style.display = (filter === 'all' || r.dataset.cat === filter) ? '' : 'none';
+    });
+    body.querySelectorAll('.s3-tab').forEach(tab => {
+      const on = tab.dataset.filter === filter;
+      tab.classList.toggle('is-on', on);
+      tab.style.background  = on ? 'var(--cm-accent-soft)' : 'var(--cm-bg-soft)';
+      tab.style.borderColor = on ? 'var(--cm-accent)'      : 'var(--cm-border)';
+      tab.style.color       = on ? 'var(--cm-accent)'      : 'var(--cm-fg-muted)';
+    });
+  }
+
+  // Build a single player-match row element
+  function _buildS3Row(rawKey, match) {
+    const p      = match.player;
+    const score  = match.score || 0;
+    const cat    = _s3Cat(match);
+    const pctStr = Math.round(score * 100) + '%';
+    const badgeCls = score > _S3_HIGH ? 'high' : score >= _S3_MED ? 'medium' : 'low';
+
+    // Left column — player info from the CSV file
+    const fileDisplay = [
+      match.rawJersey   ? `#${match.rawJersey}` : '',
+      match.rawName     || '',
+      match.rawPosition || '',
+    ].filter(Boolean).join(' · ') || rawKey;
+
+    // Squad match column
+    let matchColHtml;
+    if (cat === 'unmatched') {
+      const closest = p
+        ? `<button class="gp-closest-toggle" data-key="${rawKey}"
+             style="display:block;margin-top:3px;background:none;border:none;font:500 10.5px/1 var(--cm-font-sans);color:var(--cm-accent);cursor:pointer;text-decoration:underline;padding:0">
+             View closest match (${pctStr})</button>
+           <div class="gp-closest-detail" style="display:none;margin-top:4px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)">
+             ${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}
+           </div>`
+        : '';
+      matchColHtml = `<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">No match found in squad</span>${closest}`;
+    } else {
+      const pLabel  = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : '—';
+      const prefix  = cat === 'verify'
+        ? `<div style="font:600 9px/1 var(--cm-font-mono);text-transform:uppercase;color:#b45309;letter-spacing:.04em;margin-bottom:3px">Possible match — verify</div>`
+        : '';
+      matchColHtml = `${prefix}<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${pLabel}</span>`;
+    }
+
+    // Actions column
+    let actionsHtml;
+    if (cat === 'matched') {
+      actionsHtml = `<span class="gp-match-badge high">Auto-matched</span>`;
+    } else if (cat === 'verify' && p) {
+      actionsHtml = `
+        <button class="gp-match-confirm" data-key="${rawKey}" data-pid="${p.id}">Confirm</button>
+        <button class="gp-match-confirm" style="margin-left:4px" data-key="${rawKey}" data-create="1">Add as new</button>`;
+    } else {
+      actionsHtml = `<button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add to squad</button>`;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'gp-match-row';
+    row.style.cssText = 'display:grid;grid-template-columns:220px 58px 1fr auto;gap:10px;align-items:start';
+    row.dataset.key = rawKey;
+    row.dataset.cat = cat;
+    row.innerHTML = `
+      <div style="font:500 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg);word-break:break-word">${fileDisplay}</div>
+      <span class="gp-match-badge ${badgeCls}" style="justify-self:start;margin-top:2px">${pctStr}</span>
+      <div>${matchColHtml}</div>
+      <div class="gp-match-actions">${actionsHtml}</div>`;
+
+    if (cat === 'matched' && p) {
+      _renderPositionWarning(row.querySelector('.gp-match-actions'), rawKey, match, p);
+    }
+    return row;
+  }
+
+  // Bulk: insert all unmatched players into DB
+  async function _bulkAddUnmatched(body, list) {
+    const unmatchedRows = [...list.querySelectorAll('.gp-match-row[data-cat="unmatched"]')];
+    if (!unmatchedRows.length) return;
+    const n = unmatchedRows.length;
+
+    await new Promise(resolve => {
+      const ov = makeModal(
+        `Add ${n} new player${n !== 1 ? 's' : ''} to squad?`,
+        `<p style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 16px">
+          These players will be created using the name and position from the file.<br>
+          You can edit their details later in Squad.
+        </p>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="bulkAddCancel" class="cm-btn is-outline is-sm">Cancel</button>
+          <button id="bulkAddConfirm" class="cm-btn is-primary is-sm">Add ${n} player${n !== 1 ? 's' : ''}</button>
+        </div>`
+      );
+      ov.querySelector('#bulkAddCancel').addEventListener('click', () => { ov.remove(); resolve(false); });
+      ov.querySelector('#bulkAddConfirm').addEventListener('click', async () => {
+        ov.remove();
+        const { confirmedMap } = _wizState;
+        const POSITIONS = ['GK','CB','FB','MF','WG','ST'];
+        let added = 0;
+        for (const rowEl of unmatchedRows) {
+          const key   = rowEl.dataset.key;
+          const match = _wizState.playerMatches[key];
+          if (!match) continue;
+          const parts = (match.rawName || key).trim().split(/\s+/);
+          const fn    = parts.slice(0, -1).join(' ') || parts[0] || '';
+          const ln    = parts.length > 1 ? parts.slice(-1)[0] : parts[0] || '';
+          const pos   = match.rawPosition
+            ? POSITIONS.find(p => p.toLowerCase() === match.rawPosition.toLowerCase().slice(0, 2)) || 'MF'
+            : 'MF';
+          const insertObj = {
+            club_id: _wizState.clubId, first_name: fn, last_name: ln,
+            position: pos, number: match.rawJersey || null, status: 'available',
+          };
+          if (match.rawExtGpsId) insertObj.external_gps_id = match.rawExtGpsId;
+          const { data, error } = await window.sb.from('players').insert(insertObj).select('id').single();
+          if (error) { showToast(`Error adding "${match.rawName || key}": ${error.message}`); continue; }
+          confirmedMap[key] = data.id;
+          _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: match.rawJersey || null });
+          rowEl.setAttribute('data-cat', 'matched');
+          const actEl = rowEl.querySelector('.gp-match-actions');
+          if (actEl) actEl.innerHTML = `<span class="gp-match-badge high">Created</span>`;
+          added++;
+        }
+        showToast(`Added ${added} player${added !== 1 ? 's' : ''} to squad`);
+        _refreshS3Bar(body);
+        const activeTab = body.querySelector('.s3-tab.is-on');
+        if (activeTab) _applyS3Filter(body, activeTab.dataset.filter);
+        resolve(true);
+      });
+    });
+  }
+
+  // Bulk: confirm all verify-category rows that have a player suggestion
+  function _bulkConfirmVerify(body, list) {
+    const verifyRows = [...list.querySelectorAll('.gp-match-row[data-cat="verify"]')];
+    const { confirmedMap } = _wizState;
+    let confirmed = 0;
+    verifyRows.forEach(rowEl => {
+      const key   = rowEl.dataset.key;
+      const match = _wizState.playerMatches[key];
+      if (!match?.player) return;
+      confirmedMap[key] = match.player.id;
+      rowEl.setAttribute('data-cat', 'matched');
+      const actEl = rowEl.querySelector('.gp-match-actions');
+      if (actEl) {
+        actEl.innerHTML = `<span class="gp-match-badge high">Confirmed</span>`;
+        _renderPositionWarning(actEl, key, match, match.player);
+      }
+      confirmed++;
+    });
+    showToast(`Confirmed ${confirmed} match${confirmed !== 1 ? 'es' : ''}`);
+    _refreshS3Bar(body);
+    const activeTab = body.querySelector('.s3-tab.is-on');
+    if (activeTab) _applyS3Filter(body, activeTab.dataset.filter);
+  }
+
+  // ── Step 3 — Player matching ───────────────────────────────
   function renderStep3(body, footer) {
     const { playerMatches, confirmedMap } = _wizState;
     const entries = Object.entries(playerMatches);
 
     if (!entries.length) {
       body.innerHTML = `<p style="color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">No player name column detected — all rows will be imported without player assignment.<br>Go back and map a column to <strong>Player name</strong>.</p>`;
-    } else {
-      body.innerHTML = `<div id="wizMatchList"></div>`;
-      const list = body.querySelector('#wizMatchList');
-
-      entries.forEach(([rawKey, match]) => {
-        const row = document.createElement('div');
-        row.className = 'gp-match-row';
-        row.dataset.key = rawKey;
-
-        const p = match.player;
-        const pLabel  = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : 'No match';
-        const pctStr  = Math.round(match.score * 100) + '%';
-        const display = [match.rawJersey ? `#${match.rawJersey}` : '', match.rawName].filter(Boolean).join(' · ') || rawKey;
-
-        // Auto-confirm high confidence
-        if (match.confidence === 'high' && p) confirmedMap[rawKey] = p.id;
-
-        row.innerHTML = `
-          <div style="min-width:130px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${display}</div>
-          <span class="gp-match-badge ${match.confidence}">${pctStr}</span>
-          <div style="flex:1;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${pLabel}</div>
-          <div class="gp-match-actions"></div>`;
-
-        const actions = row.querySelector('.gp-match-actions');
-
-        if (match.confidence === 'high' && p) {
-          actions.innerHTML = `<span class="gp-match-badge high">Auto-matched</span>`;
-          // Position conflict check for auto-matched players
-          _renderPositionWarning(actions, rawKey, match, p);
-        } else if (match.confidence === 'medium' && p) {
-          actions.innerHTML = `
-            <button class="gp-match-confirm" data-key="${rawKey}" data-pid="${p.id}">Confirm match</button>
-            <button class="gp-match-confirm" style="margin-left:4px" data-key="${rawKey}" data-create="1">Create new player</button>`;
-        } else {
-          actions.innerHTML = `<button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add to squad</button>`;
-        }
-
-        list.appendChild(row);
-      });
-
-      list.addEventListener('click', e => {
-        const btn = e.target.closest('[data-key]');
-        if (!btn) return;
-        const key   = btn.dataset.key;
-        const match = _wizState.playerMatches[key];
-        if (btn.dataset.pid && !btn.dataset.create) {
-          confirmedMap[key] = btn.dataset.pid;
-          btn.className = 'gp-match-confirm is-ok';
-          btn.textContent = 'Confirmed';
-          btn.nextElementSibling?.remove();
-          // Show position warning after manual confirmation
-          const actions = btn.closest('.gp-match-actions');
-          if (actions && match) _renderPositionWarning(actions, key, match, match.player);
-        } else if (btn.classList.contains('gp-pos-keep')) {
-          btn.closest('.gp-pos-warn')?.remove();
-        } else if (btn.classList.contains('gp-pos-update')) {
-          const newPos = btn.dataset.pos;
-          const pid    = confirmedMap[key];
-          if (pid) {
-            window.sb.from('players').update({ position: newPos })
-              .eq('id', pid).eq('club_id', _wizState.clubId)
-              .then(({ error }) => {
-                if (error) showToast('Could not update position: ' + error.message);
-                else {
-                  const sp = _wizState.squadPlayers.find(x => x.id === pid);
-                  if (sp) sp.position = newPos;
-                  btn.closest('.gp-pos-warn')?.remove();
-                  showToast(`Position updated to ${newPos}`);
-                }
-              });
-          }
-        } else if (btn.dataset.create) {
-          showCreatePlayerForm(key, btn, match);
-        }
-      });
+      footer.innerHTML = `
+        <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 3 of 5</span>
+        <div class="right">
+          <button class="cm-btn is-outline is-sm" id="wizBack3">Back</button>
+          <button class="cm-btn is-primary is-sm" id="wizNext3">Next: Session info</button>
+        </div>`;
+      footer.querySelector('#wizBack3').addEventListener('click', () => setWizStep(2));
+      footer.querySelector('#wizNext3').addEventListener('click', () => setWizStep(4));
+      return;
     }
+
+    // Auto-confirm all high-score matches upfront
+    entries.forEach(([key, match]) => {
+      if (_s3Cat(match) === 'matched' && match.player) confirmedMap[key] = match.player.id;
+    });
+
+    const TAB_BASE = 'padding:3px 10px;border:1px solid var(--cm-border);border-radius:4px;font:500 10.5px/1.4 var(--cm-font-sans);cursor:pointer;background:var(--cm-bg-soft);color:var(--cm-fg-muted)';
+
+    body.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--cm-border-soft)">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button id="s3AddAllBtn" class="cm-btn is-outline is-sm" style="display:none">
+            Add all unmatched to squad (<span class="s3-bc">0</span>)
+          </button>
+          <button id="s3ConfirmAllBtn" class="cm-btn is-outline is-sm" style="display:none">
+            Confirm all possible matches (<span class="s3-bc">0</span>)
+          </button>
+        </div>
+        <div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">
+          <button class="s3-tab" data-filter="all"       style="${TAB_BASE}">All (<span class="s3-tc">0</span>)</button>
+          <button class="s3-tab" data-filter="unmatched" style="${TAB_BASE}">Unmatched (<span class="s3-tc">0</span>)</button>
+          <button class="s3-tab" data-filter="verify"    style="${TAB_BASE}">Verify (<span class="s3-tc">0</span>)</button>
+          <button class="s3-tab" data-filter="matched"   style="${TAB_BASE}">Matched (<span class="s3-tc">0</span>)</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:220px 58px 1fr auto;gap:10px;padding:0 0 6px;border-bottom:1px solid var(--cm-border)">
+        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Player from file</div>
+        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Conf.</div>
+        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Best squad match</div>
+        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Action</div>
+      </div>
+      <div id="wizMatchList"></div>`;
+
+    const list = body.querySelector('#wizMatchList');
+    entries.forEach(([rawKey, match]) => list.appendChild(_buildS3Row(rawKey, match)));
+
+    // Compute counts and set smart default filter
+    _refreshS3Bar(body);
+    const { unmatched, verify } = _s3Counts(list);
+    _applyS3Filter(body, unmatched > 0 ? 'unmatched' : verify > 0 ? 'verify' : 'all');
+
+    // Single delegated click handler
+    body.addEventListener('click', async e => {
+      // Filter tabs
+      const tab = e.target.closest('.s3-tab');
+      if (tab?.dataset.filter) { _applyS3Filter(body, tab.dataset.filter); return; }
+
+      // Bulk add all unmatched
+      if (e.target.closest('#s3AddAllBtn')) { await _bulkAddUnmatched(body, list); return; }
+
+      // Bulk confirm all verify
+      if (e.target.closest('#s3ConfirmAllBtn')) { _bulkConfirmVerify(body, list); return; }
+
+      // "View closest" toggle
+      const toggleBtn = e.target.closest('.gp-closest-toggle');
+      if (toggleBtn) {
+        const detail = toggleBtn.closest('.gp-match-row')?.querySelector('.gp-closest-detail');
+        if (detail) {
+          const open = detail.style.display !== 'none';
+          detail.style.display = open ? 'none' : 'block';
+          toggleBtn.textContent = open
+            ? `View closest match (${Math.round((_wizState.playerMatches[toggleBtn.dataset.key]?.score || 0) * 100)}%)`
+            : 'Hide closest match';
+        }
+        return;
+      }
+
+      // Individual row buttons
+      const btn = e.target.closest('[data-key]');
+      if (!btn) return;
+      const key   = btn.dataset.key;
+      const match = _wizState.playerMatches[key];
+      const rowEl = [...list.querySelectorAll('.gp-match-row')].find(r => r.dataset.key === key);
+      const actEl = rowEl?.querySelector('.gp-match-actions');
+
+      if (btn.dataset.pid && !btn.dataset.create) {
+        // Confirm single verify match
+        confirmedMap[key] = btn.dataset.pid;
+        if (actEl) actEl.innerHTML = `<span class="gp-match-badge high">Confirmed</span>`;
+        rowEl?.setAttribute('data-cat', 'matched');
+        if (actEl && match) _renderPositionWarning(actEl, key, match, match.player);
+        _refreshS3Bar(body);
+        const activeTab = body.querySelector('.s3-tab.is-on');
+        if (activeTab) _applyS3Filter(body, activeTab.dataset.filter);
+      } else if (btn.classList.contains('gp-pos-keep')) {
+        btn.closest('.gp-pos-warn')?.remove();
+      } else if (btn.classList.contains('gp-pos-update')) {
+        const newPos = btn.dataset.pos;
+        const pid    = confirmedMap[key];
+        if (pid) {
+          window.sb.from('players').update({ position: newPos })
+            .eq('id', pid).eq('club_id', _wizState.clubId)
+            .then(({ error }) => {
+              if (error) showToast('Could not update position: ' + error.message);
+              else {
+                const sp = _wizState.squadPlayers.find(x => x.id === pid);
+                if (sp) sp.position = newPos;
+                btn.closest('.gp-pos-warn')?.remove();
+                showToast(`Position updated to ${newPos}`);
+              }
+            });
+        }
+      } else if (btn.dataset.create) {
+        showCreatePlayerForm(key, btn, match, () => {
+          rowEl?.setAttribute('data-cat', 'matched');
+          _refreshS3Bar(body);
+          const activeTab = body.querySelector('.s3-tab.is-on');
+          if (activeTab) _applyS3Filter(body, activeTab.dataset.filter);
+        });
+      }
+    });
 
     footer.innerHTML = `
       <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 3 of 5</span>
@@ -3143,7 +3397,7 @@ window.renderView = async function () {
     actionsEl.appendChild(warn);
   }
 
-  function showCreatePlayerForm(key, btn, matchData) {
+  function showCreatePlayerForm(key, btn, matchData, onCreated) {
     const wrap = btn.closest('.gp-match-row').querySelector('.gp-match-actions');
     if (!wrap) return;
     // Autocomplete from player fields in the CSV row
@@ -3182,6 +3436,7 @@ window.renderView = async function () {
       _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num, external_gps_id: matchData?.rawExtGpsId || null });
       wrap.innerHTML = `<span class="gp-match-badge high">Created &amp; matched</span>`;
       showToast(`Player ${fn} ${ln} added to squad`);
+      onCreated?.();
     });
   }
 
