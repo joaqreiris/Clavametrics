@@ -550,6 +550,90 @@
               max-width:none !important; box-sizing:border-box !important; }
     .cal-player-banner { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
+
+  /* === Unified event popover === */
+  .cal-epop {
+    position:fixed; background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:0 8px 28px rgba(0,0,0,.16);
+    z-index:310; width:288px; overflow:hidden;
+  }
+  .cal-epop-head {
+    padding:10px 12px 8px; border-bottom:1px solid var(--cm-border-soft);
+    display:flex; align-items:center; gap:8px;
+  }
+  .cal-epop-head .ep-crest {
+    width:26px; height:26px; border-radius:50%; object-fit:contain; flex-shrink:0;
+    border:1px solid var(--cm-border-soft);
+  }
+  .cal-epop-head .ep-icon {
+    width:26px; height:26px; border-radius:6px; background:var(--cm-bg-soft);
+    border:1px solid var(--cm-border-soft); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .cal-epop-head .ep-icon .ti { font-size:13px; }
+  .cal-epop-title { font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; min-width:0; }
+  .cal-epop-type  { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:1px; }
+  .cal-epop-body  { padding:9px 12px; display:flex; flex-direction:column; gap:5px; }
+  .cal-epop-row   { display:flex; align-items:center; gap:6px; font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .cal-epop-row .ti { font-size:11px; flex-shrink:0; }
+  .cal-epop-notes {
+    font:var(--cm-body-sm); color:var(--cm-fg); background:var(--cm-bg-soft);
+    border-radius:4px; padding:5px 8px; white-space:pre-wrap; word-break:break-word;
+    border:1px solid var(--cm-border-soft); margin-top:2px;
+  }
+  /* Tasks section */
+  .cal-epop-tasks { border-top:1px solid var(--cm-border-soft); }
+  .cal-epop-tasks-head {
+    display:flex; align-items:center; gap:6px; padding:7px 12px 6px;
+    cursor:pointer; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+    user-select:none;
+  }
+  .cal-epop-tasks-head:hover { color:var(--cm-fg); }
+  .cal-epop-tasks-head .ti { font-size:12px; }
+  .cal-epop-tasks-head .ep-task-ctr {
+    margin-left:auto; font:500 10px/1 var(--cm-font-mono);
+    padding:1px 5px; border-radius:3px;
+    background:var(--cm-warning-bg); color:var(--cm-warning); border:1px solid var(--cm-warning-bd);
+  }
+  .cal-epop-tasks-head .ep-task-ctr.is-done {
+    background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd);
+  }
+  .cal-epop-tasks-body { padding:2px 12px 8px; display:flex; flex-direction:column; gap:3px; }
+  .cal-epop-task { display:flex; align-items:center; gap:7px; padding:3px 0; }
+  .cal-epop-task input[type=checkbox] { flex-shrink:0; cursor:pointer; accent-color:var(--cm-success); width:13px; height:13px; }
+  .cal-epop-task .ep-task-title { flex:1; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg); min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal-epop-task .ep-task-title.is-done { text-decoration:line-through; color:var(--cm-fg-muted); }
+  .cal-epop-task-add { display:flex; align-items:center; gap:5px; padding:3px 0 0; }
+  .cal-epop-task-add input {
+    flex:1; height:26px; padding:0 8px; border-radius:4px;
+    border:1px solid var(--cm-border); background:var(--cm-bg-soft);
+    font:var(--cm-body-sm); color:var(--cm-fg); outline:none;
+  }
+  .cal-epop-task-add input:focus { border-color:var(--cm-accent); }
+  .cal-epop-task-add button {
+    height:26px; padding:0 8px; border-radius:4px; border:1px solid var(--cm-border);
+    background:var(--cm-bg-soft); font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+    cursor:pointer; flex-shrink:0;
+  }
+  .cal-epop-task-add button:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  /* Footer */
+  .cal-epop-foot {
+    border-top:1px solid var(--cm-border-soft); padding:7px 12px 9px;
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  }
+  .cal-epop-foot .ep-grow { flex:1; }
+  /* Task dot badge on mc-evt */
+  .mc-evt { position:relative; }
+  .mc-evt-task-dot {
+    position:absolute; top:3px; right:3px; width:5px; height:5px;
+    border-radius:50%; background:var(--cm-warning); pointer-events:none; flex-shrink:0;
+  }
+  /* Task dot on upcoming rows */
+  .upcoming-row { position:relative; }
+  .upcoming-task-dot {
+    width:6px; height:6px; border-radius:50%; background:var(--cm-warning);
+    flex-shrink:0; margin-left:4px;
+  }
 </style>
 </head>
 <body class="cm">
@@ -1470,6 +1554,8 @@ document.addEventListener('DOMContentLoaded', () => {
 let _dragId = null, _dragDate = null, _dropTargetId = null;
 
 function renderGrid() {
+  closeEvtPopover();
+  closeMatchPopover();
   const mc = _allMCs[_mcIdx];
   const grid = document.getElementById('calDaysGrid');
   if (!mc || !grid) return;
@@ -1594,11 +1680,12 @@ function renderGrid() {
   }
   grid.innerHTML = html;
 
-  // Wire event clicks
+  // Wire event clicks — open popover (not modal directly)
   grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
       const s = _sessions.find(x => x.id === el.dataset.id);
-      if (s) openEvtModal(s);
+      if (s) showEvtPopover(el, s);
     });
   });
   grid.querySelectorAll('[data-add-date]').forEach(btn => {
@@ -1689,6 +1776,9 @@ function renderGrid() {
       });
     });
   });
+
+  // Async: paint task-dot badges (non-blocking)
+  if (_calView !== 'player') loadTaskBadges();
 }
 
 async function updateSortOrders(dateStr) {
@@ -2008,6 +2098,367 @@ function openEvtModal(session, defaultDate) {
   document.getElementById('calEvtF_title').focus();
 }
 function closeEvtModal() { document.getElementById('calEvtBackdrop').classList.remove('is-open'); _editEvtId = null; }
+
+// ── Unified event popover ─────────────────────────────────────
+let _evtPop = null;
+
+function closeEvtPopover() {
+  if (_evtPop) { _evtPop.remove(); _evtPop = null; }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeEvtPopover(); closeMatchPopover(); }
+});
+
+function _positionPop(pop, anchor, width) {
+  requestAnimationFrame(() => {
+    const popH = pop.offsetHeight;
+    const rect = anchor.getBoundingClientRect();
+    let top = rect.bottom + 6;
+    if (top + popH > window.innerHeight - 10) top = rect.top - popH - 6;
+    let left = rect.left - width / 2 + anchor.offsetWidth / 2;
+    left = Math.max(8, Math.min(window.innerWidth - width - 8, left));
+    pop.style.top  = top  + 'px';
+    pop.style.left = left + 'px';
+  });
+  setTimeout(() => {
+    document.addEventListener('click', function _cp(e) {
+      if (!pop.contains(e.target)) { closeEvtPopover(); closeMatchPopover(); document.removeEventListener('click', _cp); }
+    });
+  }, 0);
+}
+
+const EVT_TYPE_LABELS = {
+  tactical:'Training', gym:'Gym', match:'Match', recovery:'Recovery', travel:'Travel',
+  meeting:'Meeting', evaluation:'Evaluation', video_session:'Video session',
+  breakfast:'Breakfast', lunch:'Lunch', dinner:'Dinner',
+  hotel_checkin:'Hotel check-in', hotel_checkout:'Hotel check-out',
+  bus_departure:'Bus departure', bus_arrival:'Bus arrival',
+  press:'Press conference', medical_check:'Medical check',
+  walkthrough:'Walkthrough', scouting:'Scouting', day_off:'Day off', other:'Other',
+  conditioning:'Training',
+};
+
+function _fmtDateStr(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { weekday:'short', day:'numeric', month:'short' });
+}
+function _fmtTime(timeStr) { return timeStr ? timeStr.slice(0,5) : ''; }
+
+function showEvtPopover(anchor, session) {
+  closeEvtPopover();
+  const isPlayerView = _calView === 'player';
+  const cat    = focusToClass(session.session_type);
+  const icon   = EVT_ICONS[cat] || 'ti-calendar';
+  const typeLabel = EVT_TYPE_LABELS[session.session_type] || session.session_type || '';
+  const title  = session.title || typeLabel;
+  const date   = session.session_date;
+  const timeStr = _fmtTime(session.start_time);
+  const dur    = session.duration ? `${session.duration}′` : '';
+  const isCalEvt = session.source === 'event';
+
+  // Header: crest for match, icon otherwise
+  let headVisual;
+  if (cat === 'match' && session.rival_crest_url) {
+    headVisual = `<img class="ep-crest" src="${session.rival_crest_url}" onerror="this.style.display='none'" alt="">`;
+  } else {
+    headVisual = `<span class="ep-icon"><i class="ti ${icon}"></i></span>`;
+  }
+
+  // Notes preview (first 2 lines)
+  let notesHtml = '';
+  if (session.notes) {
+    const lines = session.notes.split('\n').filter(l => l.trim());
+    const preview = lines.slice(0,2).join('\n');
+    const more    = lines.length > 2 ? `<div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px">+${lines.length-2} more lines</div>` : '';
+    notesHtml = `<div class="cal-epop-notes">${_esc(preview)}${more}</div>`;
+  }
+
+  // Body rows (type-specific)
+  const rows = [];
+  if (timeStr || dur) {
+    const pieces = [timeStr, dur].filter(Boolean);
+    rows.push(`<div class="cal-epop-row"><i class="ti ti-clock"></i><span>${pieces.join(' · ')}</span></div>`);
+  }
+  if (cat === 'match') {
+    if (session.competition) rows.push(`<div class="cal-epop-row"><i class="ti ${compIcon(compClass(session.competition))}"></i><span>${compLabel(compClass(session.competition))}</span></div>`);
+    if (session.home_away)   rows.push(`<div class="cal-epop-row"><i class="ti ${session.home_away==='away'?'ti-plane':'ti-home'}"></i><span>${session.home_away==='away'?'Away':'Home'}</span></div>`);
+    if (session.location)    rows.push(`<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(session.location)}</span></div>`);
+  } else if (cat === 'training' || cat === 'gym') {
+    if (session.location)     rows.push(`<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(session.location)}</span></div>`);
+    if (session.estimated_rpe) rows.push(`<div class="cal-epop-row"><i class="ti ti-activity"></i><span>RPE ${session.estimated_rpe}</span></div>`);
+  } else if (cat === 'travel') {
+    if (session.location)   rows.push(`<div class="cal-epop-row"><i class="ti ti-route"></i><span>${_esc(session.location)}</span></div>`);
+  } else {
+    if (session.location)   rows.push(`<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(session.location)}</span></div>`);
+  }
+
+  // Planning link
+  let planBtn = '';
+  if (!isPlayerView) {
+    if (cat === 'gym' && date) {
+      planBtn = `<a class="cm-btn is-ghost is-sm" href="Gym Planner.html?date=${date}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-barbell" style="font-size:11px"></i>Gym Planner</a>`;
+    } else if (cat === 'training' && date) {
+      planBtn = `<a class="cm-btn is-ghost is-sm" href="Daily Planning.html?date=${date}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-clipboard-list" style="font-size:11px"></i>Daily Planning</a>`;
+    } else if (cat === 'match' && isCalEvt) {
+      planBtn = `<a class="cm-btn is-ghost is-sm" href="Lineup.html?match=${session.id}" style="height:26px;text-decoration:none;font-size:11.5px"><i class="ti ti-users" style="font-size:11px"></i>Lineup</a>`;
+    }
+  }
+
+  // Delete with recurrence check
+  let delBtn = '';
+  if (!isPlayerView) {
+    if (session.recurrence_group_id) {
+      delBtn = `<button class="cm-btn is-danger is-sm" id="epDelBtn" data-recur="1" style="height:26px;font-size:11.5px"><i class="ti ti-trash" style="font-size:11px"></i>Delete</button>`;
+    } else {
+      delBtn = `<button class="cm-btn is-danger is-sm" id="epDelBtn" style="height:26px;font-size:11.5px"><i class="ti ti-trash" style="font-size:11px"></i>Delete</button>`;
+    }
+  }
+
+  const tasksSection = (!isPlayerView && isCalEvt)
+    ? `<div class="cal-epop-tasks" id="epTasksWrap">
+         <div class="cal-epop-tasks-head" id="epTasksHead">
+           <i class="ti ti-checkbox"></i>Tasks
+           <span class="ep-task-ctr" id="epTaskCtr" style="display:none"></span>
+           <i class="ti ti-chevron-down" id="epTasksChevron" style="margin-left:auto"></i>
+         </div>
+         <div class="cal-epop-tasks-body" id="epTasksBody" style="display:none">
+           <div style="padding:6px 0;font:var(--cm-body-sm);color:var(--cm-fg-faint)">Loading…</div>
+         </div>
+       </div>`
+    : '';
+
+  const pop = document.createElement('div');
+  pop.className = 'cal-epop';
+  pop.innerHTML = `
+    <div class="cal-epop-head">
+      ${headVisual}
+      <div style="min-width:0;flex:1">
+        <div class="cal-epop-title">${_esc(title)}</div>
+        <div class="cal-epop-type">${_fmtDateStr(date)}${typeLabel ? ' · ' + typeLabel : ''}</div>
+      </div>
+    </div>
+    ${rows.length || notesHtml ? `<div class="cal-epop-body">${rows.join('')}${notesHtml}</div>` : ''}
+    ${tasksSection}
+    ${(!isPlayerView) ? `<div class="cal-epop-foot">
+      <div class="ep-grow"></div>
+      ${planBtn}
+      ${delBtn}
+      <button class="cm-btn is-primary is-sm" id="epEditBtn" style="height:26px;font-size:11.5px"><i class="ti ti-edit" style="font-size:11px"></i>Edit event</button>
+    </div>` : ''}
+  `;
+
+  document.body.appendChild(pop);
+  _evtPop = pop;
+  _positionPop(pop, anchor, 288);
+
+  // Wire edit button
+  const editBtn = pop.querySelector('#epEditBtn');
+  if (editBtn) editBtn.addEventListener('click', () => { closeEvtPopover(); openEvtModal(session); });
+
+  // Wire delete button
+  const delBtnEl = pop.querySelector('#epDelBtn');
+  if (delBtnEl) delBtnEl.addEventListener('click', async () => {
+    if (delBtnEl.dataset.recur) {
+      const choice = confirm('Delete all events in this series? Click OK for all, Cancel to delete only this one.');
+      closeEvtPopover();
+      if (choice) await deleteEvtSeries(session.recurrence_group_id);
+      else        await deleteEvt(session.id, session.source);
+    } else {
+      if (!confirm('Delete this event?')) return;
+      closeEvtPopover();
+      await deleteEvt(session.id, session.source);
+    }
+  });
+
+  // Tasks collapsible
+  if (!isPlayerView && isCalEvt) {
+    const tasksHead = pop.querySelector('#epTasksHead');
+    const tasksBody = pop.querySelector('#epTasksBody');
+    const chevron   = pop.querySelector('#epTasksChevron');
+    let _tasksOpen  = false;
+    let _tasksLoaded = false;
+
+    tasksHead.addEventListener('click', () => {
+      _tasksOpen = !_tasksOpen;
+      tasksBody.style.display = _tasksOpen ? '' : 'none';
+      chevron.className = _tasksOpen ? 'ti ti-chevron-up' : 'ti ti-chevron-down';
+      if (_tasksOpen && !_tasksLoaded) { _tasksLoaded = true; loadPopTasks(pop, session.id); }
+      _positionPop(pop, anchor, 288);
+    });
+  }
+}
+
+function _esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Delete helpers used by popover ────────────────────────────
+async function deleteEvt(id, source) {
+  const table = (source === 'session') ? 'training_sessions' : 'calendar_events';
+  const { error } = await window.sb.from(table).delete().eq('id', id);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  showCalToast('Event deleted.');
+  await loadSessions();
+}
+
+async function deleteEvtSeries(recurrenceGroupId) {
+  const { error } = await window.sb.from('calendar_events').delete().eq('recurrence_group_id', recurrenceGroupId);
+  if (error) { showCalToast('Error: ' + error.message); return; }
+  showCalToast('Series deleted.');
+  await loadSessions();
+}
+
+// ── Tasks in popover ─────────────────────────────────────────
+async function loadPopTasks(pop, eventId) {
+  const body = pop.querySelector('#epTasksBody');
+  const ctr  = pop.querySelector('#epTaskCtr');
+  if (!body) return;
+
+  const { data, error } = await window.sb.from('tasks')
+    .select('id,title,status,assigned_to_name')
+    .eq('event_id', eventId)
+    .eq('club_id', _clubId)
+    .order('created_at');
+
+  if (error || !data) {
+    body.innerHTML = `<div style="padding:4px 0;font:var(--cm-body-sm);color:var(--cm-danger)">Could not load tasks.</div>`;
+    return;
+  }
+
+  const pending = data.filter(t => t.status === 'pending' || t.status === 'in_progress');
+  const done    = data.filter(t => t.status === 'done' || t.status === 'cancelled');
+
+  if (ctr) {
+    if (data.length) {
+      ctr.style.display = '';
+      if (pending.length) {
+        ctr.textContent = `${pending.length} pending`;
+        ctr.className   = 'ep-task-ctr';
+      } else {
+        ctr.textContent = 'All done';
+        ctr.className   = 'ep-task-ctr is-done';
+      }
+    } else {
+      ctr.style.display = 'none';
+    }
+  }
+
+  const visible = data.slice(0, 5);
+  const overflow = data.length > 5 ? data.length - 5 : 0;
+
+  let html = visible.map(t => {
+    const isDone = t.status === 'done' || t.status === 'cancelled';
+    const assignee = t.assigned_to_name ? `<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:4px;flex-shrink:0">${_esc(t.assigned_to_name.split(' ')[0])}</span>` : '';
+    return `<div class="cal-epop-task" data-task-id="${t.id}">
+      <input type="checkbox" ${isDone ? 'checked' : ''} data-task-toggle="${t.id}" title="Toggle done">
+      <span class="ep-task-title${isDone ? ' is-done' : ''}">${_esc(t.title)}</span>
+      ${assignee}
+    </div>`;
+  }).join('');
+
+  if (overflow) {
+    html += `<div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:3px 0">+${overflow} more — open event to see all</div>`;
+  }
+
+  html += `<div class="cal-epop-task-add" id="epTaskAddRow">
+    <input type="text" id="epTaskInput" placeholder="Add task…" maxlength="120">
+    <button id="epTaskSave" title="Save"><i class="ti ti-check" style="font-size:11px"></i></button>
+  </div>`;
+
+  body.innerHTML = html;
+
+  // Toggle task status
+  body.querySelectorAll('[data-task-toggle]').forEach(chk => {
+    chk.addEventListener('change', async () => {
+      const tid    = chk.dataset.taskToggle;
+      const isDone = chk.checked;
+      const row    = chk.closest('.cal-epop-task');
+      const label  = row.querySelector('.ep-task-title');
+      label.classList.toggle('is-done', isDone);
+      await window.sb.from('tasks').update({ status: isDone ? 'done' : 'pending' }).eq('id', tid);
+      // Refresh badge
+      refreshTaskBadge(eventId);
+    });
+  });
+
+  // Add task inline
+  const inp  = body.querySelector('#epTaskInput');
+  const save = body.querySelector('#epTaskSave');
+  const doSave = async () => {
+    const title = inp.value.trim();
+    if (!title) return;
+    save.disabled = true;
+    const { data: inserted, error: ie } = await window.sb.from('tasks').insert({
+      club_id: _clubId, event_id: eventId, title,
+      status: 'pending',
+      created_by: (await window.sb.auth.getUser()).data?.user?.id || null,
+    }).select('id,title,status,assigned_to_name').single();
+    save.disabled = false;
+    if (ie) { showCalToast('Error: ' + ie.message); return; }
+    inp.value = '';
+    // Prepend new task
+    const row = document.createElement('div');
+    row.className = 'cal-epop-task';
+    row.dataset.taskId = inserted.id;
+    row.innerHTML = `<input type="checkbox" data-task-toggle="${inserted.id}">
+      <span class="ep-task-title">${_esc(inserted.title)}</span>`;
+    row.querySelector('input').addEventListener('change', async chk => {
+      const isDone = chk.target.checked;
+      row.querySelector('.ep-task-title').classList.toggle('is-done', isDone);
+      await window.sb.from('tasks').update({ status: isDone ? 'done' : 'pending' }).eq('id', inserted.id);
+      refreshTaskBadge(eventId);
+    });
+    const addRow = body.querySelector('#epTaskAddRow');
+    body.insertBefore(row, addRow);
+    // Update counter
+    if (ctr) { ctr.style.display=''; ctr.textContent = (parseInt(ctr.textContent)||0)+1 + ' pending'; ctr.className='ep-task-ctr'; }
+    refreshTaskBadge(eventId);
+  };
+  save.addEventListener('click', doSave);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') doSave(); });
+}
+
+// Refresh the task-dot badge on a specific mc-evt after task changes
+async function refreshTaskBadge(eventId) {
+  const { data } = await window.sb.from('tasks')
+    .select('status')
+    .eq('event_id', eventId)
+    .eq('club_id', _clubId)
+    .in('status', ['pending','in_progress']);
+  const hasPending = (data || []).length > 0;
+  document.querySelectorAll(`.mc-evt[data-id="${eventId}"]`).forEach(el => {
+    let dot = el.querySelector('.mc-evt-task-dot');
+    if (hasPending && !dot) {
+      dot = document.createElement('span'); dot.className = 'mc-evt-task-dot'; el.appendChild(dot);
+    } else if (!hasPending && dot) {
+      dot.remove();
+    }
+  });
+}
+
+// Load task badges for all visible calendar_events after rendering days
+async function loadTaskBadges() {
+  const eventIds = _sessions.filter(s => s.source === 'event').map(s => s.id);
+  if (!eventIds.length || !_clubId) return;
+  const { data } = await window.sb.from('tasks')
+    .select('event_id,status')
+    .in('event_id', eventIds)
+    .eq('club_id', _clubId)
+    .in('status', ['pending','in_progress']);
+  if (!data) return;
+  const pendingSet = new Set(data.map(t => t.event_id));
+  document.querySelectorAll('.mc-evt[data-id]').forEach(el => {
+    const s = _sessions.find(x => x.id === el.dataset.id);
+    if (!s || s.source !== 'event') return;
+    if (pendingSet.has(s.id)) {
+      if (!el.querySelector('.mc-evt-task-dot')) {
+        const dot = document.createElement('span'); dot.className = 'mc-evt-task-dot'; el.appendChild(dot);
+      }
+    }
+  });
+}
 
 async function saveEvt() {
   const saving = document.getElementById('calEvtSaving');
@@ -2950,6 +3401,7 @@ function renderSeasonRibbon(mcs, extraMatches) {
       .map(m => ({
         pctVal:   parseFloat(pct(m.date)),
         leftStr:  pct(m.date),
+        date:     m.date,
         isAway:   m.isAway,
         comp:     m.comp,
         rival:    m.rival,
@@ -2993,46 +3445,65 @@ function renderSeasonRibbon(mcs, extraMatches) {
   });
 }
 
-// ── Match chip popover ────────────────────────────────────────
+// ── Match chip popover (uses unified .cal-epop) ───────────────
 let _matchPop = null;
 function closeMatchPopover() { if (_matchPop) { _matchPop.remove(); _matchPop = null; } }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMatchPopover(); });
 
 function showMatchPopover(anchor, items) {
+  closeEvtPopover();
   closeMatchPopover();
-  const COMP_CLR = { liga: 'var(--cm-success)', copa: 'var(--cm-warning)', inter: 'var(--cm-info)', amistoso: 'var(--cm-fg-faint)' };
-  const pop = document.createElement('div');
-  pop.style.cssText = 'position:fixed;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:0 8px 24px rgba(0,0,0,.16);z-index:300;width:260px;overflow:hidden';
 
-  pop.innerHTML = items.map((item, i) => {
-    const d = new Date(item.date + 'T12:00:00');
-    const dateFmt = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  const pop = document.createElement('div');
+  pop.className = 'cal-epop';
+
+  const first = items[0];
+  const headCrest = first.crestUrl
+    ? `<img class="ep-crest" src="${first.crestUrl}" onerror="this.style.display='none'" alt="">`
+    : `<span class="ep-icon"><i class="ti ti-ball-football"></i></span>`;
+
+  const itemsHtml = items.map((item, i) => {
     const cc      = item.comp || 'liga';
-    const compClr = COMP_CLR[cc] || COMP_CLR.liga;
     const haIcon  = item.isAway ? 'ti-plane' : 'ti-home';
     const haLbl   = item.isAway ? 'Away' : 'Home';
-    const haBg    = item.isAway ? 'var(--cm-info-bg)'     : 'var(--cm-success-bg)';
-    const haClr   = item.isAway ? 'var(--cm-info)'        : 'var(--cm-success)';
-    const haBd    = item.isAway ? 'var(--cm-info-bd)'     : 'var(--cm-success-bd)';
-    const editBtn = item.isFromMc && item.mcData
-      ? `<div style="margin-top:8px"><button class="cm-btn is-ghost is-sm" style="height:26px" data-pop-edit="${item.mcData.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit microcycle</button></div>`
+    const haBg    = item.isAway ? 'var(--cm-info-bg)'    : 'var(--cm-success-bg)';
+    const haClr   = item.isAway ? 'var(--cm-info)'       : 'var(--cm-success)';
+    const haBd    = item.isAway ? 'var(--cm-info-bd)'    : 'var(--cm-success-bd)';
+    const dateFmt = _fmtDateStr(item.date);
+    const timeStr = item.mcData?.match_time ? ' · ' + item.mcData.match_time.slice(0,5) : '';
+    const border  = i > 0 ? 'border-top:1px solid var(--cm-border-soft);' : '';
+    const editMcBtn = item.isFromMc && item.mcData
+      ? `<button class="cm-btn is-ghost is-sm" style="height:26px;margin-top:6px;font-size:11.5px" data-pop-edit="${item.mcData.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit microcycle</button>`
       : '';
-    return `<div style="padding:12px 14px${i > 0 ? ';border-top:1px solid var(--cm-border-soft)' : ''}">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="font:600 14px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1">vs ${item.rival}</span>
-        <span style="display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border-radius:3px;font:600 9px/1 var(--cm-font-mono);background:${haBg};color:${haClr};border:1px solid ${haBd}"><i class="ti ${haIcon}" style="font-size:9px"></i>${haLbl}</span>
+    // Find matching calendar_event for this match date (to allow Edit event)
+    const matchEvt = _sessions.find(s => s.session_date === item.date && s.session_type === 'match');
+    const editEvtBtn = matchEvt
+      ? `<button class="cm-btn is-primary is-sm" style="height:26px;font-size:11.5px" data-pop-edit-evt="${matchEvt.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit event</button>`
+      : '';
+    return `<div style="padding:10px 12px;${border}">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+        <span style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);flex:1">vs ${_esc(item.rival)}</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;height:17px;padding:0 5px;border-radius:3px;font:600 9px/1 var(--cm-font-mono);background:${haBg};color:${haClr};border:1px solid ${haBd}"><i class="ti ${haIcon}" style="font-size:9px"></i>${haLbl}</span>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;font:500 11px/1.5 var(--cm-font-mono);color:var(--cm-fg-muted)">
-        <i class="ti ${compIcon(cc)}" style="font-size:11px;color:${compClr}"></i>
-        <span>${compLabel(cc)} · ${dateFmt}${item.mcData?.match_time ? ' · ' + item.mcData.match_time.slice(0,5) : ''}</span>
-      </div>
-      ${item.mcData?.stadium ? `<div style="display:flex;align-items:center;gap:6px;font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px"><i class="ti ti-map-pin" style="font-size:11px"></i><span>${item.mcData.stadium}</span></div>` : ''}
-      ${editBtn}
+      <div class="cal-epop-row"><i class="ti ${compIcon(cc)}"></i><span>${compLabel(cc)} · ${dateFmt}${timeStr}</span></div>
+      ${item.mcData?.stadium ? `<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(item.mcData.stadium)}</span></div>` : ''}
+      ${(editMcBtn || editEvtBtn) ? `<div style="display:flex;gap:5px;margin-top:6px">${editMcBtn}${editEvtBtn}</div>` : ''}
     </div>`;
   }).join('');
 
+  pop.innerHTML = `
+    <div class="cal-epop-head">
+      ${headCrest}
+      <div style="min-width:0;flex:1">
+        <div class="cal-epop-title">Match${items.length > 1 ? 'es (' + items.length + ')' : ''}</div>
+        <div class="cal-epop-type">Season Ribbon</div>
+      </div>
+    </div>
+    <div style="max-height:320px;overflow-y:auto">${itemsHtml}</div>
+  `;
+
   document.body.appendChild(pop);
   _matchPop = pop;
+  _evtPop   = pop; // share slot so click-outside logic in _positionPop closes it
 
   pop.querySelectorAll('[data-pop-edit]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3041,23 +3512,15 @@ function showMatchPopover(anchor, items) {
     });
   });
 
-  const rect = anchor.getBoundingClientRect();
-  const popW = 260;
-  requestAnimationFrame(() => {
-    const popH = pop.offsetHeight;
-    let top  = rect.bottom + 6;
-    if (top + popH > window.innerHeight - 10) top = rect.top - popH - 6;
-    let left = rect.left - popW / 2 + anchor.offsetWidth / 2;
-    left = Math.max(8, Math.min(window.innerWidth - popW - 8, left));
-    pop.style.top  = top  + 'px';
-    pop.style.left = left + 'px';
+  pop.querySelectorAll('[data-pop-edit-evt]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const evtId = btn.dataset.popEditEvt;
+      const s = _sessions.find(x => x.id === evtId);
+      if (s) { closeMatchPopover(); openEvtModal(s); }
+    });
   });
 
-  setTimeout(() => {
-    document.addEventListener('click', function _cp(e) {
-      if (!pop.contains(e.target)) { closeMatchPopover(); document.removeEventListener('click', _cp); }
-    });
-  }, 0);
+  _positionPop(pop, anchor, 288);
 }
 
 // ── Upcoming Events ───────────────────────────────────────────
