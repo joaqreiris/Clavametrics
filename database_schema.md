@@ -210,6 +210,26 @@ Canonical target_metric values:
 
 ---
 
+# TABLE: club_gps_settings
+
+Purpose:
+Per-club configuration for GPS baseline calculation and active metrics display.
+Reference: migration 029.
+
+Important columns:
+- club_id (uuid PK → clubs.id)
+- baseline_n (integer, 3-10, default 5) — number of best match sessions for personal reference
+- baseline_mode (text: 'personal'|'position', default 'personal') — personal (Miguel et al. 2022) or positional avg
+- active_metrics (text[]) — GPS metrics visible in Z-score matrix / ranking picker
+- updated_at (timestamptz)
+
+Rules:
+- baseline_n BETWEEN 3 AND 10 (CHECK constraint)
+- baseline_mode IN ('personal','position') (CHECK constraint)
+- One row per club; UPSERT on save
+
+---
+
 # TABLE: training_sessions
 
 Purpose:

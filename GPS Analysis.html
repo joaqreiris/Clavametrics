@@ -300,6 +300,7 @@
           <button class="gp-src-btn" id="srcBtn">
             <span class="dot"></span><i class="ti ti-cloud-download"></i>Data sources<span class="ct">4 connected</span><i class="ti ti-chevron-down"></i>
           </button>
+          <button class="cm-btn is-ghost is-sm" id="gpSettingsBtn"><i class="ti ti-adjustments-horizontal" style="font-size:14px"></i>GPS settings</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
         </div>
       </div>
@@ -986,7 +987,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
 
   // Baseline pill
   else if (ic.includes('ti-target')) {
-    makePopover(pill, ['vs Role','vs Squad','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
+    makePopover(pill, ['vs Role','vs Squad','vs Personal','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
       window.gpState.baseline = item.label;
       pill.innerHTML = `<i class="ti ti-target"></i>${item.label}`;
       showToast(`Baseline → ${item.label}`);
@@ -1297,37 +1298,9 @@ window.refreshDashboard = async function (opts = {}) {
     if (kpiVals[2]) kpiVals[2].innerHTML = `${first.sprint_distance ?? '—'}`;
   }
 
-  // Radar chart
-  const radarCanvas = document.getElementById('gpsRadar');
-  const radarEmpty  = document.getElementById('gpsRadarEmpty');
-  if (radarCanvas && reports.length >= 2) {
-    Chart.getChart(radarCanvas)?.destroy();
-    const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
-    const LABELS  = ['Distance','HSR','Sprints','Top speed','Accel','Load'];
-    const mu_fn   = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
-    const sd_fn   = (arr,m) => Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length)||1;
-    const stats   = METRICS.map(m => { const v=reports.map(r=>+(r[m]||0)); const mu=mu_fn(v); return {mu,sigma:sd_fn(v,mu)}; });
-    const sel     = (window.gpState.playerId ? reports.find(r=>r.player_id===window.gpState.playerId) : null) || reports[0];
-    const zs      = METRICS.map((m,i) => +((+(sel[m]||0)-stats[i].mu)/stats[i].sigma).toFixed(2));
-    const accent  = getComputedStyle(document.documentElement).getPropertyValue('--cm-accent').trim() || '#22c55e';
-    new Chart(radarCanvas, {
-      type: 'radar',
-      data: { labels: LABELS, datasets: [
-        { label:'Squad avg', data:Array(6).fill(0), borderColor:'rgba(128,128,128,0.3)', backgroundColor:'rgba(128,128,128,0.06)', borderDash:[4,3], borderWidth:1.5, pointRadius:0 },
-        { label: sel.players ? `${(sel.players.first_name||'')[0]}. ${sel.players.last_name||''}` : 'Player',
-          data:zs, borderColor:accent, backgroundColor:'rgba(34,197,94,0.12)', borderWidth:2,
-          pointRadius:4, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5 },
-      ]},
-      options: { responsive:true, maintainAspectRatio:true,
-        scales: { r:{ min:-3,max:3, ticks:{display:false,stepSize:1}, grid:{color:'rgba(128,128,128,0.18)'}, angleLines:{color:'rgba(128,128,128,0.18)'}, pointLabels:{color:'rgba(128,128,128,0.8)',font:{size:11}} } },
-        plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>` z = ${ctx.parsed.r>0?'+':''}${ctx.parsed.r.toFixed(2)}`}} },
-      },
-    });
-    radarCanvas.style.display = '';
-    if (radarEmpty) radarEmpty.style.display = 'none';
-  } else if (radarCanvas) {
-    radarCanvas.style.display = 'none';
-    if (radarEmpty) radarEmpty.style.display = 'block';
+  // Radar chart — delegate to _updateRadar (supports personal baseline mode when defined)
+  if (typeof _updateRadar === 'function') {
+    _updateRadar(reports, window.gpState);
   }
 
   // Match group KPIs
@@ -1353,6 +1326,10 @@ window.refreshDashboard = async function (opts = {}) {
   const clubId   = await window.getClubId();
   if (club) window.applyClubTheme();
   window._gpClubId = clubId;
+  // Load per-club GPS settings (baseline N, mode, active metrics)
+  if (typeof loadGpsSettings === 'function') {
+    window._gpSettings = await loadGpsSettings(clubId);
+  }
   await window.refreshDashboard();
 })();
 </script>
@@ -1952,30 +1929,114 @@ function _updateIndKpis(reports, state) {
   if (kv[2]) kv[2].innerHTML = `${sel.sprint_distance ?? '—'}`;
 }
 
-function _updateRadar(reports, state) {
-  const canvas = document.getElementById('gpsRadar');
-  if (!canvas || reports.length < 2) return;
+async function _updateRadar(reports, state) {
+  const canvas     = document.getElementById('gpsRadar');
+  const radarEmpty = document.getElementById('gpsRadarEmpty');
+  if (!canvas) return;
   Chart.getChart(canvas)?.destroy();
+
   const METRICS = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
   const LABELS  = ['Distance','HSR','Sprints','Top speed','Accel','Load'];
-  const mu_fn   = arr => arr.reduce((a,b) => a+b, 0) / arr.length;
-  const sd_fn   = (arr,m) => Math.sqrt(arr.map(v=>(v-m)**2).reduce((a,b)=>a+b,0)/arr.length) || 1;
-  const stats   = METRICS.map(m => { const vals=reports.map(r=>+(r[m]||0)); const mu=mu_fn(vals); return {mu,sigma:sd_fn(vals,mu)}; });
-  const sel     = (state.playerId ? reports.find(r=>r.player_id===state.playerId) : null) || reports[0];
-  const zs      = METRICS.map((m,i) => +((+(sel[m]||0)-stats[i].mu)/stats[i].sigma).toFixed(2));
+  const sel     = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
   const accent  = _accentHex();
+
+  const usePersonal = (
+    (window._gpSettings?.baseline_mode === 'personal' || state.baseline === 'vs Personal') &&
+    sel?.player_id && window._gpClubId &&
+    typeof window.getMatchBaseline === 'function'
+  );
+
+  if (usePersonal) {
+    // Fetch personal baselines in parallel
+    const baselines = {};
+    await Promise.all(METRICS.map(async m => {
+      baselines[m] = await window.getMatchBaseline(sel.player_id, m, window._gpClubId);
+    }));
+
+    const hasSome = METRICS.some(m => baselines[m]?.baseline != null);
+    if (!hasSome) {
+      canvas.style.display = 'none';
+      if (radarEmpty) {
+        radarEmpty.textContent = 'Personal baseline available after 3 official matches (Miguel et al. 2022)';
+        radarEmpty.style.display = 'block';
+      }
+      return;
+    }
+
+    // ratio = player_value / baseline; fallback to squad z-norm if no baseline for that metric
+    const mu_fn  = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const sd_fn  = (arr, mu) => Math.sqrt(arr.map(v => (v - mu) ** 2).reduce((a, b) => a + b, 0) / arr.length) || 1;
+    const sqStats = METRICS.map(m => { const v = reports.map(r => +(r[m]||0)); const mu = mu_fn(v); return { mu, sigma: sd_fn(v, mu) }; });
+
+    const playerData = METRICS.map((m, i) => {
+      const val = +(sel[m] || 0);
+      const bl  = baselines[m];
+      if (bl?.baseline) return +(val / bl.baseline).toFixed(2);
+      // Fallback: remap z-score from [-3,3] → [0,2] so scale is consistent
+      const z = (val - sqStats[i].mu) / sqStats[i].sigma;
+      return +(Math.max(0, z + 1)).toFixed(2); // shift so mean≈1
+    });
+
+    const selName = sel.players ? `${(sel.players.first_name||'')[0]}. ${sel.players.last_name||''}` : 'Player';
+    canvas.style.display = '';
+    if (radarEmpty) radarEmpty.style.display = 'none';
+
+    new Chart(canvas, {
+      type: 'radar',
+      data: { labels: LABELS, datasets: [
+        { label: 'Personal baseline', data: Array(6).fill(1),
+          borderColor: 'rgba(128,128,128,0.35)', backgroundColor: 'rgba(128,128,128,0.05)',
+          borderDash: [4, 3], borderWidth: 1.5, pointRadius: 0 },
+        { label: selName, data: playerData, borderColor: accent,
+          backgroundColor: 'rgba(34,197,94,0.12)', borderWidth: 2,
+          pointRadius: 4, pointBackgroundColor: accent, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
+      ]},
+      options: { responsive: true, maintainAspectRatio: true,
+        scales: { r: { min: 0, max: 2, ticks: { display: false, stepSize: 0.5 },
+          grid: { color: 'rgba(128,128,128,0.18)' },
+          angleLines: { color: 'rgba(128,128,128,0.18)' },
+          pointLabels: { color: 'rgba(128,128,128,0.8)', font: { size: 11 } } } },
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: ctx => {
+            if (ctx.datasetIndex === 0) return ' Personal baseline (1.0×)';
+            const m   = METRICS[ctx.dataIndex];
+            const bl  = baselines[m];
+            const cnt = bl?.count ?? 0;
+            const conf = bl?.confidence === 'high' ? '✓' : bl?.confidence === 'medium' ? '~' : '—';
+            return ` ${ctx.parsed.r.toFixed(2)}× baseline (${cnt} matches ${conf}) · Miguel et al. 2022`;
+          }}}},
+      },
+    });
+    return;
+  }
+
+  // ── Default: squad z-score mode ───────────────────────────────
+  if (reports.length < 2) {
+    canvas.style.display = 'none';
+    if (radarEmpty) { radarEmpty.textContent = 'No GPS data for this session'; radarEmpty.style.display = 'block'; }
+    return;
+  }
+  const mu_fn  = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const sd_fn  = (arr, mu) => Math.sqrt(arr.map(v => (v - mu) ** 2).reduce((a, b) => a + b, 0) / arr.length) || 1;
+  const stats  = METRICS.map(m => { const vals = reports.map(r => +(r[m]||0)); const mu = mu_fn(vals); return { mu, sigma: sd_fn(vals, mu) }; });
+  const zs     = METRICS.map((m, i) => +((+(sel[m]||0) - stats[i].mu) / stats[i].sigma).toFixed(2));
+  canvas.style.display = '';
+  if (radarEmpty) radarEmpty.style.display = 'none';
   new Chart(canvas, {
     type: 'radar',
     data: { labels: LABELS, datasets: [
-      { label:'Squad avg', data:Array(6).fill(0), borderColor:'rgba(128,128,128,0.3)', backgroundColor:'rgba(128,128,128,0.06)', borderDash:[4,3], borderWidth:1.5, pointRadius:0 },
+      { label: 'Squad avg', data: Array(6).fill(0), borderColor: 'rgba(128,128,128,0.3)', backgroundColor: 'rgba(128,128,128,0.06)', borderDash: [4, 3], borderWidth: 1.5, pointRadius: 0 },
       { label: sel.players ? `${(sel.players.first_name||'')[0]}. ${sel.players.last_name||''}` : 'Player',
-        data:zs, borderColor:accent, backgroundColor:'rgba(34,197,94,0.12)', borderWidth:2,
-        pointRadius:4, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5 }
+        data: zs, borderColor: accent, backgroundColor: 'rgba(34,197,94,0.12)', borderWidth: 2,
+        pointRadius: 4, pointBackgroundColor: accent, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
     ]},
-    options: { responsive:true, maintainAspectRatio:true,
-      scales: { r:{ min:-3,max:3, ticks:{display:false,stepSize:1}, grid:{color:'rgba(128,128,128,0.18)'}, angleLines:{color:'rgba(128,128,128,0.18)'}, pointLabels:{color:'rgba(128,128,128,0.8)',font:{size:11}} } },
-      plugins: { legend:{display:false}, tooltip:{callbacks:{label:ctx=>` z = ${ctx.parsed.r>0?'+':''}${ctx.parsed.r.toFixed(2)}`}} }
-    }
+    options: { responsive: true, maintainAspectRatio: true,
+      scales: { r: { min: -3, max: 3, ticks: { display: false, stepSize: 1 },
+        grid: { color: 'rgba(128,128,128,0.18)' }, angleLines: { color: 'rgba(128,128,128,0.18)' },
+        pointLabels: { color: 'rgba(128,128,128,0.8)', font: { size: 11 } } } },
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` z = ${ctx.parsed.r > 0 ? '+' : ''}${ctx.parsed.r.toFixed(2)}` } } },
+    },
   });
 }
 
@@ -2148,7 +2209,7 @@ window.renderView = async function () {
   if (!reports.length) return;
   window._gpReports = reports;
   _updateIndKpis(reports, state);
-  _updateRadar(reports, state);
+  await _updateRadar(reports, state);
   _updateZTable(reports, state);
   _updateSquadRanking(reports);
   _renderScatter(reports);
@@ -3129,6 +3190,7 @@ window.renderView = async function () {
       });
 
       showToast(`Imported ${insertable.length} GPS reports · ${uniquePlayers} players`);
+      window.dispatchEvent(new CustomEvent('gps:reports:updated', { detail: { clubId } }));
 
     } catch (e) {
       finishWithError('Error: ' + (e.message || String(e)));
@@ -3213,16 +3275,31 @@ async function renderMatchMax(report) {
   ];
 
   const rows = await Promise.all(METRICS.map(async m => {
-    const val    = +(report[m.key] || 0);
-    const bl     = await window.getMatchBaseline(pid, m.key, clubId);
-    const ratio  = bl.baseline ? +(val / bl.baseline).toFixed(2) : null;
-    const pct    = ratio ? Math.min(ratio / 1.5 * 100, 100) : 0;
-    const warnCls = ratio > 1.1 ? (ratio > 1.2 ? 'danger' : 'warn') : '';
+    const val     = +(report[m.key] || 0);
+    const bl      = await window.getMatchBaseline(pid, m.key, clubId);
+    const ratio   = bl.baseline ? +(val / bl.baseline).toFixed(2) : null;
+    // 1.0× (match baseline) = pin at 75%; >1.33× clips to 100%; <0.5× ≈ far left
+    const pct     = ratio ? Math.min(Math.round(ratio * 75), 100) : 0;
+    const warnCls = ratio > 1.2 ? 'danger' : ratio > 1.1 ? 'warn' : '';
+    const conf    = bl.confidence === 'high' ? '✓' : bl.confidence === 'medium' ? '~' : '';
     const tooltip = bl.warning
       ? bl.warning
-      : `Baseline: avg of best ${bl.count} matches (Miguel et al. 2022)`;
-    return { ...m, val, ratio, pct, warnCls, tooltip, hasBaseline: !!bl.baseline };
+      : `Baseline ${conf}: avg of best ${bl.count} matches (Miguel et al. 2022)`;
+    return { ...m, val, ratio, pct, warnCls, tooltip, hasBaseline: !!bl.baseline, bl };
   }));
+
+  // Card-level empty state when ALL metrics lack match data
+  const allMissing = rows.every(r => !r.hasBaseline);
+  if (allMissing) {
+    const msg = rows[0]?.bl?.warning || 'Insufficient match data for baseline';
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0;text-align:center">
+        <i class="ti ti-info-circle" style="font-size:22px;color:var(--cm-fg-muted)"></i>
+        <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">${msg}</div>
+        <div style="font:500 10.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)">Needs ≥3 official matches · Miguel et al. 2022</div>
+      </div>`;
+    return;
+  }
 
   container.innerHTML = rows.map(r => `
     <div class="gp-xm-row" title="${r.tooltip}">
@@ -3401,6 +3478,133 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     annotateKpiCards();
   }
 };
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// GPS Settings — loadGpsSettings + openGpsSettings modal
+// ══════════════════════════════════════════════════════════════
+
+const _GPS_METRIC_LABELS = {
+  total_distance:           'Total distance',
+  high_speed_distance:      'High speed distance',
+  very_high_speed_distance: 'Very high speed',
+  sprint_distance:          'Sprint distance',
+  accelerations:            'Accelerations',
+  decelerations:            'Decelerations',
+  max_speed:                'Max speed',
+  player_load:              'Player load',
+  hmld:                     'HMLD',
+  time_played:              'Time played',
+  avg_speed:                'Avg speed',
+};
+
+async function loadGpsSettings(clubId) {
+  if (!clubId) return { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+  try {
+    const { data } = await window.sb.from('club_gps_settings')
+      .select('baseline_n, baseline_mode, active_metrics')
+      .eq('club_id', clubId).maybeSingle();
+    return data || { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+  } catch {
+    return { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+  }
+}
+
+function openGpsSettings() {
+  const s = window._gpSettings || { baseline_n: 5, baseline_mode: 'personal', active_metrics: null };
+  const n    = s.baseline_n ?? 5;
+  const mode = s.baseline_mode || 'personal';
+  const defaultMetrics = ['total_distance','high_speed_distance','sprint_distance','max_speed','accelerations','player_load'];
+  const active = s.active_metrics || defaultMetrics;
+
+  const metricsHTML = Object.entries(_GPS_METRIC_LABELS).map(([k, label]) => `
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0">
+      <input type="checkbox" name="metric" value="${k}" ${active.includes(k) ? 'checked' : ''}
+        style="accent-color:var(--cm-accent);width:13px;height:13px">
+      <span style="font:400 12px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${label}</span>
+    </label>`).join('');
+
+  const body = `
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div>
+        <div style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Reference matches (N)</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input id="gpsSettingsN" type="number" min="3" max="10" value="${n}"
+            style="width:60px;height:28px;padding:0 8px;border-radius:5px;border:1px solid var(--cm-border-soft);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 13px/1 var(--cm-font-sans);text-align:center">
+          <span style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Best N official matches for personal baseline (3–10)</span>
+        </div>
+      </div>
+      <div>
+        <div style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Baseline mode</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <label style="display:flex;align-items:baseline;gap:8px;cursor:pointer">
+            <input type="radio" name="gpsMode" value="personal" ${mode === 'personal' ? 'checked' : ''}
+              style="accent-color:var(--cm-accent);margin-top:1px;flex-shrink:0">
+            <span>
+              <span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">Personal</span>
+              <span style="font:400 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)"> — player's own best matches (Miguel et al. 2022)</span>
+            </span>
+          </label>
+          <label style="display:flex;align-items:baseline;gap:8px;cursor:pointer">
+            <input type="radio" name="gpsMode" value="position" ${mode === 'position' ? 'checked' : ''}
+              style="accent-color:var(--cm-accent);margin-top:1px;flex-shrink:0">
+            <span>
+              <span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">Position average</span>
+              <span style="font:400 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)"> — positional mean across squad</span>
+            </span>
+          </label>
+        </div>
+      </div>
+      <div>
+        <div style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Active metrics in Z-score matrix</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">${metricsHTML}</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:4px;border-top:1px solid var(--cm-border-soft)">
+        <button class="cm-btn is-outline is-sm" id="gpsSettingsCancel">Cancel</button>
+        <button class="cm-btn is-primary is-sm" id="gpsSettingsSave">Save settings</button>
+      </div>
+    </div>`;
+
+  const ov = makeModal('GPS Settings', body);
+
+  document.getElementById('gpsSettingsCancel').addEventListener('click', () => ov.remove());
+
+  document.getElementById('gpsSettingsSave').addEventListener('click', async () => {
+    const rawN       = parseInt(document.getElementById('gpsSettingsN').value, 10);
+    const baseline_n = Math.min(10, Math.max(3, isNaN(rawN) ? 5 : rawN));
+    const baseline_mode   = document.querySelector('input[name="gpsMode"]:checked')?.value || 'personal';
+    const active_metrics  = [...document.querySelectorAll('input[name="metric"]:checked')].map(i => i.value);
+
+    const clubId = window._gpClubId;
+    if (!clubId) return;
+
+    const btn = document.getElementById('gpsSettingsSave');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const { error } = await window.sb.from('club_gps_settings').upsert(
+      { club_id: clubId, baseline_n, baseline_mode, active_metrics, updated_at: new Date().toISOString() },
+      { onConflict: 'club_id' }
+    );
+
+    if (error) {
+      showToast('Error saving settings: ' + error.message);
+      btn.disabled = false;
+      btn.textContent = 'Save settings';
+      return;
+    }
+
+    window._gpSettings = { baseline_n, baseline_mode, active_metrics };
+    window.invalidateSettingsCache?.(clubId);
+    window.invalidateBaselineCache?.();
+    ov.remove();
+    showToast('GPS settings saved');
+    window.renderView?.();
+  });
+}
+
+document.getElementById('gpSettingsBtn')?.addEventListener('click', openGpsSettings);
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
