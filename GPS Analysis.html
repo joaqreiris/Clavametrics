@@ -13,6 +13,7 @@
 <script src="assets/gps-science.js"></script>
 <script src="assets/gps-baseline.js"></script>
 <script src="assets/gps-parsers.js"></script>
+<script src="assets/gps-aliases.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -2235,39 +2236,24 @@ window.renderView = async function () {
 (function () {
   'use strict';
 
-  // ── Constants ──────────────────────────────────────────────
-  const TARGET_METRICS = [
-    'player_name','jersey_number','session_date','position',
-    'total_distance','high_speed_distance','very_high_speed_distance',
-    'sprint_distance','accelerations','decelerations','max_speed',
-    'player_load','hmld','time_played',
-  ];
-
-  const METRIC_ALIASES = {
-    total_distance: ['total distance','dist total','td (m)','distancia total','total dist',
-      'distance (m)','distance','total_distance','distancia','td','distance (km)'],
-    high_speed_distance: ['high speed distance','hsr','hsr (m)','high speed running',
-      'high-speed distance','dist hsr','distance >19.8km/h','distance >5.5m/s','zone 4+5','z4+z5'],
-    very_high_speed_distance: ['very high speed distance','vhsr','vhsr (m)',
-      'very high speed running','zone 5','z5','distance >25km/h'],
-    sprint_distance: ['sprint distance','sprint (m)','sprint dist',
-      'distance >25.2km/h','distance >7m/s','sprint'],
-    accelerations: ['accelerations','accel','total accelerations','acc',
-      'aceleraciones','high accel','no. of accelerations'],
-    decelerations: ['decelerations','decel','total decelerations','dec','desaceleraciones'],
-    max_speed: ['max speed','maximum speed','peak speed','vel máx','velocidad máxima',
-      'top speed','max vel','max_speed (km/h)','peak speed (km/h)','max velocity'],
-    player_load: ['player load','playerload','carga jugador','training load',
-      'load','session load','total load'],
-    hmld: ['hmld','high metabolic load distance','high metabolic','hml distance'],
-    time_played: ['time played','playing time','time (min)','duration','minutes',
-      'playing minutes','mins','min played'],
-    player_name: ['player name','player','name','nombre','nombre jugador',
-      'athlete','atleta','jugador','athlete name','full name'],
-    jersey_number: ['jersey number','number','shirt number','jersey','shirt',
-      'dorsal','número','no.','#'],
-    session_date: ['session date','date','fecha','fecha sesión','training date','match date'],
-    position: ['position','pos','posición','posicion','playing position'],
+  // ── Constants — built from gps-aliases.js ──────────────────
+  const _aliasDb = window.GPS_BUILTIN_ALIASES || [];
+  const TARGET_METRICS = _aliasDb.map(e => e.metric_key);
+  // metric_key → array of aliases (for legacy callers)
+  const METRIC_ALIASES = Object.fromEntries(_aliasDb.map(e => [e.metric_key, e.aliases]));
+  // Human-readable labels for the dropdown
+  const METRIC_LABEL = {
+    player_name: 'Player name', player_first_name: 'First name',
+    player_last_name: 'Last name', jersey_number: 'Jersey #',
+    position: 'Position', player_external_gps_id: 'External GPS ID',
+    session_date: 'Session date',
+    total_distance: 'Total distance', high_speed_distance: 'HSR distance',
+    very_high_speed_distance: 'VHSR distance', sprint_distance: 'Sprint distance',
+    hmld: 'HMLD', distance_per_minute: 'Distance / min',
+    max_speed: 'Max speed', avg_speed: 'Avg speed',
+    accelerations: 'Accelerations', decelerations: 'Decelerations',
+    sprint_count: 'Sprint count', player_load: 'Player load',
+    time_played: 'Time played',
   };
 
   // Unit auto-detection for distance metrics — if header contains 'km', conversion = 1000
@@ -2320,29 +2306,60 @@ window.renderView = async function () {
     return mx ? 1 - _lev(a, b) / mx : 1;
   }
 
+  // ── Category hint — infer expected category from column name ─
+  function _categoryHint(nc) {
+    if (/\b(duration|time|minutes?|mins?)\b/.test(nc))           return 'time';
+    if (/\b(distance|dist)\b|\(m\)|\(km\)/.test(nc))            return 'distance';
+    if (/\b(speed|velocity|vel|km\/h)\b/.test(nc))              return 'speed';
+    if (/\b(acc?el|decel)\b/.test(nc))                          return ['acceleration', 'count'];
+    if (/\b(count|efforts?|n sprints?|num )\b/.test(nc))        return 'count';
+    if (/\bload\b/.test(nc))                                    return 'load';
+    if (/\b(position|jersey|shirt|dorsal|pos\b)\b/.test(nc) ||
+        /\b(player|athlete|nombre|jugador|first name|last name|surname)\b/.test(nc))
+      return 'player_field';
+    return null; // no hint → allow all
+  }
+
+  function _catOk(hint, cat) {
+    if (!hint) return true;
+    return Array.isArray(hint) ? hint.includes(cat) : hint === cat;
+  }
+
   // ── Column auto-match ──────────────────────────────────────
   function autoMatchColumn(colName, existingMappings) {
     const nc = _norm(colName);
-    // Check saved mappings first
+    // Saved mapping takes priority (user previously set it for this provider)
     const saved = existingMappings.find(m => _norm(m.source_column_name) === nc);
-    if (saved) return { metric: saved.target_metric, confidence: 'saved', conversion: saved.unit_conversion || 1 };
+    if (saved) return { metric: saved.target_metric, confidence: 'saved', score: 1, conversion: saved.unit_conversion || 1 };
 
-    let best = null, bestScore = 0;
-    for (const [metric, aliases] of Object.entries(METRIC_ALIASES)) {
-      for (const alias of aliases) {
-        const score = _sim(nc, alias);
-        if (score > bestScore) { bestScore = score; best = metric; }
+    const normFn = window.normalizeAlias || _norm;
+    const catHint = _categoryHint(nc);
+
+    // 1 ── Exact alias match (player fields checked first via array order)
+    for (const entry of _aliasDb) {
+      if (!_catOk(catHint, entry.category)) continue;
+      for (const alias of entry.aliases) {
+        if (normFn(alias) === nc) {
+          return { metric: entry.metric_key, confidence: 'high', score: 1, conversion: detectConversion(colName, entry.metric_key) };
+        }
       }
     }
-    if (bestScore >= 0.88) {
-      const conversion = detectConversion(colName, best);
-      return { metric: best, confidence: 'high', conversion };
+
+    // 2 ── Fuzzy match with category filtering
+    // Threshold: 0.75 when we have a category hint, 0.85 when we don't.
+    const THRESHOLD = catHint ? 0.75 : 0.85;
+    let best = null, bestScore = 0;
+    for (const entry of _aliasDb) {
+      if (!_catOk(catHint, entry.category)) continue;
+      for (const alias of entry.aliases) {
+        const s = _sim(nc, normFn(alias));
+        if (s > bestScore) { bestScore = s; best = entry.metric_key; }
+      }
     }
-    if (bestScore >= 0.65) {
-      const conversion = detectConversion(colName, best);
-      return { metric: best, confidence: 'medium', conversion };
+    if (bestScore >= THRESHOLD) {
+      return { metric: best, confidence: 'medium', score: bestScore, conversion: detectConversion(colName, best) };
     }
-    return { metric: null, confidence: 'none', conversion: 1 };
+    return { metric: null, confidence: 'none', score: bestScore, conversion: 1 };
   }
 
   function detectConversion(colName, metric) {
@@ -2830,19 +2847,32 @@ window.renderView = async function () {
       const match = autoMatchColumn(col, labelMappings);
       _wizState.columnMap[i] = {
         sourceCol: col, metric: match.metric,
-        confidence: match.confidence, conversion: match.conversion,
+        confidence: match.confidence, score: match.score || 0,
+        conversion: match.conversion,
         parseFormat, colType, excluded: false,
       };
     });
   }
 
+  // Build grouped <select> options for the column mapping dropdown
+  function _buildSelOptions(selectedVal) {
+    const pfKeys = window.GPS_PLAYER_FIELD_KEYS || new Set();
+    const pfEntries   = _aliasDb.filter(e => pfKeys.has(e.metric_key));
+    const coreEntries = _aliasDb.filter(e => !pfKeys.has(e.metric_key) && e.category !== 'date');
+    const specEntries = _aliasDb.filter(e => e.category === 'date');
+    const opt = m => {
+      const label = METRIC_LABEL[m] || m;
+      return `<option value="${m}"${m === selectedVal ? ' selected' : ''}>${label}</option>`;
+    };
+    return `<option value="__ignore__"${'__ignore__' === selectedVal ? ' selected' : ''}>— Ignore this column —</option>
+      <optgroup label="── Player fields ──">${pfEntries.map(e => opt(e.metric_key)).join('')}</optgroup>
+      <optgroup label="── Core metrics ──">${coreEntries.map(e => opt(e.metric_key)).join('')}</optgroup>
+      ${specEntries.length ? `<optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key)).join('')}</optgroup>` : ''}`;
+  }
+
   function renderStep2(body, footer) {
     const { columnMap } = _wizState;
     const rows = Object.entries(columnMap);
-
-    const selOptions = ['__ignore__', ...TARGET_METRICS].map(m =>
-      `<option value="${m}">${m === '__ignore__' ? '— Ignore this column —' : m}</option>`
-    ).join('');
 
     body.innerHTML = `
       <p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">
@@ -2865,14 +2895,19 @@ window.renderView = async function () {
               <td style="color:var(--cm-fg-faint);font:500 11.5px/1 var(--cm-font-mono)">—</td>
             </tr>`;
           }
-          const conf  = c.confidence;
+          const conf   = c.confidence;
           const rowCls = conf === 'high' || conf === 'saved' ? 'matched-auto' : conf === 'medium' ? 'matched-guess' : 'matched-none';
           const selCls = conf === 'high' || conf === 'saved' ? 'is-green' : conf === 'medium' ? 'is-yellow' : '';
           const selected = c.metric || '__ignore__';
+          const tooltip  = conf === 'high' || conf === 'saved'
+            ? 'Auto-matched (exact alias)'
+            : conf === 'medium'
+            ? `Possible match · score ${Math.round((c.score || 0) * 100)}%`
+            : 'No match — ignored by default';
           return `<tr class="${rowCls}" data-ci="${i}">
             <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${c.sourceCol}</td>
-            <td><select class="gp-map-sel ${selCls}" data-ci="${i}">
-              ${selOptions.replace(`value="${selected}"`, `value="${selected}" selected`)}
+            <td><select class="gp-map-sel ${selCls}" data-ci="${i}" title="${tooltip}">
+              ${_buildSelOptions(selected)}
             </select></td>
             <td><input type="number" class="gp-conv-inp" data-ci="${i}" value="${c.conversion}"
               step="0.001" min="0.001" style="width:80px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-mono)"></td>
@@ -2934,43 +2969,69 @@ window.renderView = async function () {
   // ── Step 3 — Player matching ───────────────────────────────
   function buildPlayerMatches() {
     const { rows, headerRow, columnMap, squadPlayers } = _wizState;
-    const playerNameIdx = Object.entries(columnMap).find(([, c]) => c.metric === 'player_name')?.[0];
-    const jerseyIdx     = Object.entries(columnMap).find(([, c]) => c.metric === 'jersey_number')?.[0];
+
+    const _colOf = metric => Object.entries(columnMap).find(([, c]) => c.metric === metric)?.[0];
+    const playerNameIdx  = _colOf('player_name');
+    const firstNameIdx   = _colOf('player_first_name');
+    const lastNameIdx    = _colOf('player_last_name');
+    const jerseyIdx      = _colOf('jersey_number');
+    const positionIdx    = _colOf('position');
+    const extGpsIdIdx    = _colOf('player_external_gps_id');
 
     const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
     const seen = new Set();
     const matches = {};
 
     dataRows.forEach(row => {
-      const rawName   = String(row[playerNameIdx] ?? '').trim();
-      const rawJersey = String(row[jerseyIdx]     ?? '').trim();
-      const key = rawName || rawJersey;
+      let rawName   = playerNameIdx  != null ? String(row[+playerNameIdx]  ?? '').trim() : '';
+      const rawFirst = firstNameIdx  != null ? String(row[+firstNameIdx]   ?? '').trim() : '';
+      const rawLast  = lastNameIdx   != null ? String(row[+lastNameIdx]    ?? '').trim() : '';
+      if (!rawName && (rawFirst || rawLast)) rawName = (rawFirst + ' ' + rawLast).trim();
+
+      const rawJersey   = jerseyIdx    != null ? String(row[+jerseyIdx]    ?? '').trim() : '';
+      const rawPosition = positionIdx  != null ? String(row[+positionIdx]  ?? '').trim() : '';
+      const rawExtGpsId = extGpsIdIdx  != null ? String(row[+extGpsIdIdx]  ?? '').trim() : '';
+
+      // Jersey is the primary key when mapped; fall back to name
+      const key = rawJersey || rawName;
       if (!key || seen.has(key)) return;
       seen.add(key);
-      matches[key] = findBestMatch(rawName, rawJersey, squadPlayers);
+
+      matches[key] = {
+        ...findBestMatch(rawName, rawJersey, rawExtGpsId, squadPlayers),
+        rawName, rawJersey, rawPosition, rawExtGpsId,
+      };
     });
+
     _wizState.playerMatches = matches;
-    _wizState.confirmedMap  = {}; // key → player_id (null = create new)
+    _wizState.confirmedMap  = {}; // key → player_id
   }
 
-  function findBestMatch(rawName, rawJersey, squad) {
+  function findBestMatch(rawName, rawJersey, rawExtGpsId, squad) {
     let best = null, bestScore = 0;
     squad.forEach(p => {
-      // External GPS ID match (exact)
-      if (p.external_gps_id && (p.external_gps_id === rawName || p.external_gps_id === rawJersey)) {
-        best = p; bestScore = 1.01; return;
+      let score = 0;
+
+      // 1. External GPS ID — exact
+      if (rawExtGpsId && p.external_gps_id && p.external_gps_id === rawExtGpsId) {
+        score = 1.1;
+      } else {
+        // 2. Jersey number — exact
+        const jerseyOk = rawJersey && p.number &&
+          String(p.number) === rawJersey.replace(/\D/g, '');
+        if (jerseyOk) {
+          score = 1.0;
+        } else if (rawName) {
+          // 3. Name fuzzy
+          const full1  = _norm(p.first_name + ' ' + p.last_name);
+          const full2  = _norm(p.last_name  + ' ' + p.first_name);
+          const full3  = _norm((p.first_name?.[0] || '') + ' ' + p.last_name);
+          score = Math.max(_sim(_norm(rawName), full1), _sim(_norm(rawName), full2), _sim(_norm(rawName), full3));
+        }
       }
-      const full1 = _norm(p.first_name + ' ' + p.last_name);
-      const full2 = _norm(p.last_name + ' ' + p.first_name);
-      const full3 = _norm((p.first_name[0] || '') + ' ' + p.last_name);
-      const target = _norm(rawName);
-      const s = Math.max(_sim(target, full1), _sim(target, full2), _sim(target, full3));
-      // Jersey bonus
-      const jerseyMatch = rawJersey && String(p.number) === rawJersey.replace(/\D/g, '');
-      const score = s + (jerseyMatch ? 0.1 : 0);
       if (score > bestScore) { bestScore = score; best = p; }
     });
-    const confidence = bestScore > 0.95 ? 'high' : bestScore > 0.65 ? 'medium' : 'low';
+    const confidence = bestScore >= 1.0 ? 'high' : bestScore > 0.65 ? 'medium' : 'low';
     return { player: best, score: bestScore, confidence };
   }
 
@@ -2979,7 +3040,7 @@ window.renderView = async function () {
     const entries = Object.entries(playerMatches);
 
     if (!entries.length) {
-      body.innerHTML = `<p style="color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">No player name column detected — all rows will be imported without player assignment.<br>Go back and map a column to <strong>player_name</strong>.</p>`;
+      body.innerHTML = `<p style="color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">No player name column detected — all rows will be imported without player assignment.<br>Go back and map a column to <strong>Player name</strong>.</p>`;
     } else {
       body.innerHTML = `<div id="wizMatchList"></div>`;
       const list = body.querySelector('#wizMatchList');
@@ -2990,16 +3051,16 @@ window.renderView = async function () {
         row.dataset.key = rawKey;
 
         const p = match.player;
-        const pLabel = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : 'No match';
-        const badgeCls = match.confidence;
-        const pctStr   = Math.round(match.score * 100) + '%';
+        const pLabel  = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : 'No match';
+        const pctStr  = Math.round(match.score * 100) + '%';
+        const display = [match.rawJersey ? `#${match.rawJersey}` : '', match.rawName].filter(Boolean).join(' · ') || rawKey;
 
         // Auto-confirm high confidence
         if (match.confidence === 'high' && p) confirmedMap[rawKey] = p.id;
 
         row.innerHTML = `
-          <div style="min-width:130px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${rawKey}</div>
-          <span class="gp-match-badge ${badgeCls}">${pctStr}</span>
+          <div style="min-width:130px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${display}</div>
+          <span class="gp-match-badge ${match.confidence}">${pctStr}</span>
           <div style="flex:1;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)" id="matchLbl_${CSS.escape(rawKey)}">${pLabel}</div>
           <div id="matchActions_${CSS.escape(rawKey)}"></div>`;
 
@@ -3007,13 +3068,14 @@ window.renderView = async function () {
 
         if (match.confidence === 'high' && p) {
           actions.innerHTML = `<span class="gp-match-badge high">Auto-matched</span>`;
+          // Position conflict check for auto-matched players
+          _renderPositionWarning(actions, rawKey, match, p);
         } else if (match.confidence === 'medium' && p) {
           actions.innerHTML = `
             <button class="gp-match-confirm" data-key="${rawKey}" data-pid="${p.id}">Confirm match</button>
             <button class="gp-match-confirm" style="margin-left:4px" data-key="${rawKey}" data-create="1">Create new player</button>`;
         } else {
           actions.innerHTML = `<button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add to squad</button>`;
-          row.innerHTML = row.innerHTML; // ensure rendered
         }
 
         list.appendChild(row);
@@ -3022,14 +3084,36 @@ window.renderView = async function () {
       list.addEventListener('click', e => {
         const btn = e.target.closest('[data-key]');
         if (!btn) return;
-        const key = btn.dataset.key;
+        const key   = btn.dataset.key;
+        const match = _wizState.playerMatches[key];
         if (btn.dataset.pid && !btn.dataset.create) {
           confirmedMap[key] = btn.dataset.pid;
           btn.className = 'gp-match-confirm is-ok';
           btn.textContent = 'Confirmed';
           btn.nextElementSibling?.remove();
+          // Show position warning after manual confirmation
+          const actions = btn.closest(`#matchActions_${CSS.escape(key)}`);
+          if (actions && match) _renderPositionWarning(actions, key, match, match.player);
+        } else if (btn.classList.contains('gp-pos-keep')) {
+          btn.closest('.gp-pos-warn')?.remove();
+        } else if (btn.classList.contains('gp-pos-update')) {
+          const newPos = btn.dataset.pos;
+          const pid    = confirmedMap[key];
+          if (pid) {
+            window.sb.from('players').update({ position: newPos })
+              .eq('id', pid).eq('club_id', _wizState.clubId)
+              .then(({ error }) => {
+                if (error) showToast('Could not update position: ' + error.message);
+                else {
+                  const sp = _wizState.squadPlayers.find(x => x.id === pid);
+                  if (sp) sp.position = newPos;
+                  btn.closest('.gp-pos-warn')?.remove();
+                  showToast(`Position updated to ${newPos}`);
+                }
+              });
+          }
         } else if (btn.dataset.create) {
-          showCreatePlayerForm(key, btn);
+          showCreatePlayerForm(key, btn, match);
         }
       });
     }
@@ -3044,17 +3128,41 @@ window.renderView = async function () {
     footer.querySelector('#wizNext3').addEventListener('click', () => setWizStep(4));
   }
 
-  function showCreatePlayerForm(key, btn) {
+  // Show inline position conflict warning after a player is matched
+  function _renderPositionWarning(actionsEl, key, match, player) {
+    if (!match.rawPosition || !player?.position) return;
+    if (_norm(match.rawPosition) === _norm(player.position)) return;
+    const squadPos = player.position;
+    const csvPos   = match.rawPosition;
+    const warn = document.createElement('div');
+    warn.className = 'gp-pos-warn';
+    warn.style.cssText = 'margin-top:5px;padding:5px 8px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:5px;font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap';
+    warn.innerHTML = `<span><i class="ti ti-alert-triangle" style="color:var(--cm-warning)"></i> Squad: <strong>${squadPos}</strong> · File says <strong>${csvPos}</strong></span>
+      <button class="gp-pos-keep gp-match-confirm" data-key="${key}" style="padding:2px 7px;font-size:10.5px">Keep ${squadPos}</button>
+      <button class="gp-pos-update gp-match-confirm" data-key="${key}" data-pos="${csvPos}" style="padding:2px 7px;font-size:10.5px">Update to ${csvPos}</button>`;
+    actionsEl.appendChild(warn);
+  }
+
+  function showCreatePlayerForm(key, btn, matchData) {
     const wrap = btn.closest('.gp-match-row').querySelector(`#matchActions_${CSS.escape(key)}`);
     if (!wrap) return;
+    // Autocomplete from player fields in the CSV row
+    const nameParts = (matchData?.rawName || '').split(' ');
+    const fnGuess   = nameParts.slice(0, -1).join(' ') || '';
+    const lnGuess   = nameParts.slice(-1)[0] || (key.includes(' ') ? key.split(' ').slice(-1)[0] : key);
+    const numGuess  = matchData?.rawJersey  || '';
+    const POSITIONS = ['GK','CB','FB','MF','WG','ST'];
+    const posGuess  = matchData?.rawPosition
+      ? POSITIONS.find(p => p.toLowerCase() === matchData.rawPosition.toLowerCase().slice(0, 2)) || 'MF'
+      : 'MF';
     wrap.innerHTML = `
       <div class="gp-imp-form" style="grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:0;margin-top:4px">
-        <div><label>First name</label><input id="cpFN_${CSS.escape(key)}" placeholder="First"></div>
-        <div><label>Last name</label><input id="cpLN_${CSS.escape(key)}" placeholder="Last" value="${key.split(' ').slice(-1)[0]}"></div>
+        <div><label>First name</label><input id="cpFN_${CSS.escape(key)}" placeholder="First" value="${fnGuess}"></div>
+        <div><label>Last name</label><input id="cpLN_${CSS.escape(key)}" placeholder="Last" value="${lnGuess}"></div>
         <div><label>Position</label><select id="cpPos_${CSS.escape(key)}">
-          ${['GK','CB','FB','MF','WG','ST'].map(p=>`<option>${p}</option>`).join('')}
+          ${POSITIONS.map(p => `<option${p === posGuess ? ' selected' : ''}>${p}</option>`).join('')}
         </select></div>
-        <div><label>#</label><input id="cpNum_${CSS.escape(key)}" placeholder="0" type="number" min="1"></div>
+        <div><label>#</label><input id="cpNum_${CSS.escape(key)}" placeholder="0" type="number" min="1" value="${numGuess}"></div>
       </div>
       <button class="gp-match-confirm" style="margin-top:6px" id="cpSave_${CSS.escape(key)}">Save &amp; match</button>`;
     wrap.querySelector(`#cpSave_${CSS.escape(key)}`).addEventListener('click', async () => {
@@ -3063,13 +3171,15 @@ window.renderView = async function () {
       const pos = wrap.querySelector(`#cpPos_${CSS.escape(key)}`).value;
       const num = wrap.querySelector(`#cpNum_${CSS.escape(key)}`).value;
       if (!fn || !ln) { showToast('First and last name required'); return; }
-      const { data, error } = await window.sb.from('players').insert({
+      const insertObj = {
         club_id: _wizState.clubId, first_name: fn, last_name: ln,
         position: pos, number: num || null, status: 'available',
-      }).select('id').single();
+      };
+      if (matchData?.rawExtGpsId) insertObj.external_gps_id = matchData.rawExtGpsId;
+      const { data, error } = await window.sb.from('players').insert(insertObj).select('id').single();
       if (error) { showToast('Error creating player: ' + error.message); return; }
       _wizState.confirmedMap[key] = data.id;
-      _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num });
+      _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num, external_gps_id: matchData?.rawExtGpsId || null });
       wrap.innerHTML = `<span class="gp-match-badge high">Created &amp; matched</span>`;
       showToast(`Player ${fn} ${ln} added to squad`);
     });
@@ -3240,20 +3350,25 @@ window.renderView = async function () {
   // ── Build rows from parsed file ────────────────────────────
   function buildInsertableRows(sessionId) {
     const { rows, headerRow, columnMap, clubId, confirmedMap } = _wizState;
-    const playerNameIdx = Object.entries(columnMap).find(([, c]) => c.metric === 'player_name')?.[0];
+    const _colOf = metric => Object.entries(columnMap).find(([, c]) => c.metric === metric)?.[0];
+    const playerNameIdx = _colOf('player_name') ?? _colOf('player_first_name');
+    const jerseyIdx     = _colOf('jersey_number');
     const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
-    const hasPlayerMapping = playerNameIdx != null;
+    const hasPlayerMapping = playerNameIdx != null || jerseyIdx != null;
     const insertable = [];
     let skippedCells = 0;
     const warnings = [];
 
     for (const row of dataRows) {
-      const rawName  = hasPlayerMapping ? String(row[+playerNameIdx] ?? '').trim() : null;
-      const playerId = rawName ? (confirmedMap[rawName] || null) : null;
+      // Key must match what buildPlayerMatches used: jersey first, name second
+      const rawJersey = jerseyIdx     != null ? String(row[+jerseyIdx]     ?? '').trim() : '';
+      const rawName   = playerNameIdx != null ? String(row[+playerNameIdx] ?? '').trim() : null;
+      const key       = rawJersey || rawName || null;
+      const playerId  = key ? (confirmedMap[key] || null) : null;
 
       // Skip rows whose player was not matched (only if we have player column)
       if (hasPlayerMapping && !playerId) {
-        if (rawName) warnings.push(`"${rawName}" not matched to a squad player — row skipped`);
+        if (key) warnings.push(`"${key}" not matched to a squad player — row skipped`);
         continue;
       }
 
@@ -3434,13 +3549,21 @@ window.renderView = async function () {
         status(`Inserting… ${Math.min(i + CHUNK, insertable.length)} / ${insertable.length}`);
       }
 
-      // ── 6. Persist external_gps_id ───────────────────────────
-      const extUpdates = Object.entries(confirmedMap)
-        .filter(([rawKey, pid]) => rawKey && pid);
-      await Promise.all(extUpdates.map(([rawKey, pid]) =>
-        window.sb.from('players').update({ external_gps_id: rawKey })
-          .eq('id', pid).eq('club_id', clubId)
-      ));
+      // ── 6. Persist external_gps_id (only when column was explicitly mapped) ─
+      const extGpsIdMapped = Object.values(_wizState.columnMap)
+        .some(c => c.metric === 'player_external_gps_id');
+      if (extGpsIdMapped) {
+        const extUpdates = Object.entries(confirmedMap)
+          .filter(([rawKey, pid]) => {
+            const pm = _wizState.playerMatches[rawKey];
+            return pid && pm?.rawExtGpsId;
+          });
+        await Promise.all(extUpdates.map(([rawKey, pid]) => {
+          const extId = _wizState.playerMatches[rawKey].rawExtGpsId;
+          return window.sb.from('players').update({ external_gps_id: extId })
+            .eq('id', pid).eq('club_id', clubId);
+        }));
+      }
 
       // ── 7. Success ───────────────────────────────────────────
       document.getElementById('wizSpinner')?.remove();
