@@ -2,12 +2,12 @@
 // Multi-format date and duration parsers for the GPS import pipeline.
 //
 // Public API:
-//   window.gpParseDate(value, format?)   → { iso, invalid, ambiguous }
+//   window.gpParseDate(value, format?)    → { iso, invalid, ambiguous }
 //   window.gpParseDuration(value, format?) → { minutes, invalid }
-//   window.gpDetectColType(samples, colName?) → { type, format, ambiguousDateFormat }
+//   window.gpDetectColType(samples)       → { type, format, ambiguousDateFormat }
 //   window.gpAnalyzeCols(rows, headerRow) → array[colIndex] of { type, format, invalidCount, sampleCount, ambiguousDateFormat }
 //   window.gpFmtDisplay(type, value, format?) → display string for preview cells
-//   window.gpFormatLabel(fmt) → human-readable format label
+//   window.gpFormatLabel(fmt)             → human-readable format label
 //   window.GPS_PARSE_DATE_FORMATS, window.GPS_PARSE_DURATION_FORMATS
 
 (function () {
@@ -170,11 +170,15 @@
    *
    * Formats tried in order:
    *   1. JS Date object from Excel time serial (year 1899/1900, SheetJS cellDates:true)
-   *   2. Numeric Excel time fraction  (0.052 ≈ 75 min)
+   *   2. Numeric Excel time fraction  (value in (0,1) with high precision ≈ 0.052)
    *   3. Plain number  (75, 75.5 → already in minutes)
    *   4. HH:MM:SS string  (hours may exceed 24: "90:15:00")
    *   5. HH:MM string  (default) or MM:SS (if format=MMSS)
    *   6. Explicit unit: "75 min", "1.25 h", "4500 s"
+   *   7. Plain number string
+   *
+   * IMPORTANT: SheetJS 0.20 creates time-serial Date objects using new Date(year, month, day, h, m, s)
+   * (LOCAL constructor), so we use getHours()/getMinutes()/getSeconds() (local), not UTC.
    */
   function parseDuration(value, format) {
     if (value === null || value === undefined || value === '') {
@@ -182,14 +186,17 @@
     }
     const fmt = format || DURATION_FORMATS.AUTO;
 
-    // 1. Date object — time serial from SheetJS (year 1899/1900 UTC)
+    // 1. Date object — time serial from SheetJS (year 1899/1900, local constructor)
+    //    SheetJS creates: new Date(1899, 11, 30, hours, minutes, seconds)
+    //    Use LOCAL getters — UTC getters are timezone-shifted and produce wrong values.
     if (value instanceof Date) {
       if (isNaN(value)) return { minutes: null, invalid: true };
-      const yr = value.getUTCFullYear();
+      // Check local year (matches SheetJS's local constructor)
+      const yr = value.getFullYear();
       if (yr === 1899 || yr === 1900) {
-        const h = value.getUTCHours();
-        const m = value.getUTCMinutes();
-        const s = value.getUTCSeconds();
+        const h = value.getHours();    // LOCAL — correct for SheetJS local constructor
+        const m = value.getMinutes();
+        const s = value.getSeconds();
         return { minutes: +(h * 60 + m + s / 60).toFixed(2), invalid: false };
       }
       return { minutes: null, invalid: true };
@@ -199,7 +206,7 @@
     if (typeof value === 'number') {
       if (value < 0) return { minutes: null, invalid: true };
       if (fmt === DURATION_FORMATS.EXCEL_TIME ||
-          (fmt === DURATION_FORMATS.AUTO && value >= 0 && value < 2)) {
+          (fmt === DURATION_FORMATS.AUTO && value > 0 && value < 1)) {
         // Excel time fraction: multiply by 1440 min/day
         return { minutes: +(value * 1440).toFixed(2), invalid: false };
       }
@@ -212,20 +219,27 @@
 
     const s = String(value).trim();
 
-    // 4. HH:MM:SS (H may be > 24)
-    const hmsM = s.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+    // 4. HH:MM:SS — hours may exceed 24 (e.g. "90:00:00" = 90 minutes is not a valid case,
+    //    but "01:15:15" = 75.25 minutes is correct)
+    const hmsM = s.match(/^(\d+):(\d{2}):(\d{2})$/);
     if (hmsM) {
-      if (fmt === DURATION_FORMATS.HHMMSS || fmt === DURATION_FORMATS.AUTO) {
-        const [, h, m, sec] = hmsM.map(Number);
-        if (m < 60 && sec < 60) return { minutes: +(h * 60 + m + sec / 60).toFixed(2), invalid: false };
+      const h   = +hmsM[1];
+      const m   = +hmsM[2];
+      const sec = +hmsM[3];
+      // Validate minute and second components
+      if (m < 60 && sec < 60) {
+        if (fmt === DURATION_FORMATS.HHMMSS || fmt === DURATION_FORMATS.AUTO) {
+          return { minutes: +(h * 60 + m + sec / 60).toFixed(2), invalid: false };
+        }
       }
       return { minutes: null, invalid: true };
     }
 
     // 5. HH:MM or MM:SS
-    const hmM = s.match(/^(\d+):(\d{1,2})$/);
+    const hmM = s.match(/^(\d+):(\d{2})$/);
     if (hmM) {
-      const [, a, b] = hmM.map(Number);
+      const a = +hmM[1];
+      const b = +hmM[2];
       if (b >= 60) return { minutes: null, invalid: true };
       if (fmt === DURATION_FORMATS.MMSS) {
         return { minutes: +(a + b / 60).toFixed(2), invalid: false };
@@ -237,7 +251,7 @@
       return { minutes: null, invalid: true };
     }
 
-    // 6. Explicit unit: "75 min", "1.25 h", "4500 s"
+    // 6. Explicit unit: "75 min", "1.25 h", "4500 s", "75.5min"
     const unitM = s.match(/^(\d+(?:\.\d+)?)\s*(min(?:utes?)?|h(?:ours?)?|s(?:ec(?:onds?)?)?)$/i);
     if (unitM) {
       const v = +unitM[1], unit = unitM[2].toLowerCase();
@@ -259,20 +273,24 @@
 
   // ── detectColumnType ─────────────────────────────────────────
 
-  // Header-name hints (used as tie-breaker below threshold)
-  const _DATE_HINTS = /\b(?:date|fecha|dat[ue]|dag)\b/i;
-  const _DUR_HINTS  = /\b(?:time|duration|played|min(?:utes?)?|tiempo|dauer)\b/i;
-
   /**
-   * Infer the most likely type for a column from its sample values.
+   * Infer the most likely type for a column from sample values.
+   * Column names are NOT used — only content decides.
    *
-   * samples  : array of raw cell values (ideally first 20 non-empty)
-   * colName  : optional header string, used as a tie-breaking hint
+   * samples : array of raw cell values (first 20 non-empty)
+   *
+   * Duration is only detected when content explicitly shows it:
+   *   • JS Date objects with local year 1899/1900 (SheetJS time serials)
+   *   • Numbers in (0, 1) with ≥4 decimal places (Excel time fraction, e.g. 0.0521)
+   *   • Strings matching ^\d+:\d{2}(:\d{2})?$  (HH:MM:SS or HH:MM format)
+   *   • Strings matching explicit time units (min, h, hr, s, sec)
+   *
+   * Plain integers (sprint counts, effort counts, distances) are NOT treated as duration.
    *
    * Returns { type: 'date'|'duration'|'number'|'text', format, ambiguousDateFormat }
    */
-  function detectColumnType(samples, colName) {
-    const THRESHOLD = 0.70;
+  function detectColumnType(samples) {
+    const THRESHOLD = 0.60;
     const nonEmpty  = samples.filter(v => v !== null && v !== undefined && v !== '');
     if (!nonEmpty.length) return { type: 'text', format: null, ambiguousDateFormat: false };
 
@@ -280,28 +298,34 @@
     let ambigDate = 0;
 
     for (const v of nonEmpty) {
-      // JS Date object from SheetJS
+      // ── JS Date objects from SheetJS ──
       if (v instanceof Date) {
-        const yr = v.getUTCFullYear();
+        const yr = v.getFullYear(); // local year, matches SheetJS local constructor
         if (yr === 1899 || yr === 1900) { durV++;  continue; }
         if (yr >  1900)                 { dateV++; continue; }
         numV++;
         continue;
       }
 
-      // Numeric: distinguish plausible date serials from plain numbers
+      // ── Numbers ──
       if (typeof v === 'number') {
         if (Number.isInteger(v) && v >= 18000 && v <= 73000) {
-          dateV++; // plausible 1950-2099 date serial
-        } else if (v >= 0 && v < 2) {
-          durV++;  // plausible Excel time fraction
+          // Plausible Excel date serial (1950-2099)
+          dateV++;
+        } else if (v > 0 && v < 1 && _hasManyDecimals(v)) {
+          // Plausible Excel time fraction (e.g. 0.052257 for 01:15:15)
+          // Integers and low-precision numbers (0, 1, 2 sprint counts) do NOT qualify
+          durV++;
         } else {
           numV++;
         }
         continue;
       }
 
-      // String: try date first, then colon/unit duration, then number
+      // ── Strings ──
+      const sv = String(v).trim();
+
+      // Try date first
       const dr = parseDate(v, DATE_FORMATS.AUTO);
       if (!dr.invalid && dr.iso) {
         dateV++;
@@ -309,21 +333,25 @@
         continue;
       }
 
-      const sv = String(v).trim();
-      // Only colon-delimited or explicit-unit strings vote as duration
-      // (bare number strings fall through to numV to avoid misclassifying load/speed cols)
-      if (/^\d+:\d{1,2}(:\d{1,2})?$|^\d+(?:\.\d+)?\s*(?:min|h(?:our)?|sec)/i.test(sv)) {
+      // Duration: only colon-delimited or explicit-unit strings
+      // Bare number strings fall through to numV — avoids misclassifying distance/load/speed cols
+      if (/^\d+:\d{2}(:\d{2})?$/.test(sv)) {
+        // Colon-delimited (HH:MM:SS or HH:MM)
+        const dd = parseDuration(v, DURATION_FORMATS.AUTO);
+        if (!dd.invalid && dd.minutes !== null) { durV++; continue; }
+      } else if (/^\d+(?:\.\d+)?\s*(?:min(?:utes?)?|h(?:ours?|r)?|s(?:ec(?:onds?)?)?)$/i.test(sv)) {
+        // Explicit time unit string
         const dd = parseDuration(v, DURATION_FORMATS.AUTO);
         if (!dd.invalid && dd.minutes !== null) { durV++; continue; }
       }
 
+      // Number string
       const n = +sv;
       if (!isNaN(n) && isFinite(n)) { numV++; continue; }
-      // else: text — no vote for date/duration/number
+      // else: text — no vote
     }
 
     const total = nonEmpty.length;
-    const hint  = colName ? String(colName) : '';
 
     if (dateV / total >= THRESHOLD) {
       return {
@@ -339,11 +367,14 @@
       return { type: 'number', format: null, ambiguousDateFormat: false };
     }
 
-    // Below threshold: use column-name hints
-    if (_DATE_HINTS.test(hint)) return { type: 'date',     format: DATE_FORMATS.AUTO,     ambiguousDateFormat: false };
-    if (_DUR_HINTS.test(hint))  return { type: 'duration', format: DURATION_FORMATS.AUTO, ambiguousDateFormat: false };
-
     return { type: 'text', format: null, ambiguousDateFormat: false };
+  }
+
+  // True if a number has ≥4 significant decimal digits (e.g. 0.0521 but not 0.5 or 0.05)
+  function _hasManyDecimals(v) {
+    const s = String(v);
+    const dot = s.indexOf('.');
+    return dot !== -1 && s.length - dot - 1 >= 4;
   }
 
   // ── analyzeColumns ───────────────────────────────────────────
@@ -363,9 +394,8 @@
     const out  = [];
 
     for (let i = 0; i < hdr.length; i++) {
-      const colName = String(hdr[i] || '');
       const samples = data.map(r => r[i]).filter(v => v !== null && v !== undefined && v !== '');
-      const info    = detectColumnType(samples, colName);
+      const info    = detectColumnType(samples);
 
       let invalidCount = 0;
       for (const v of samples) {
@@ -383,7 +413,7 @@
   /**
    * Render a raw cell value as a human-readable string for the preview table.
    *
-   * type  : 'date' | 'duration' | 'number' | 'text'
+   * type  : 'date' | 'duration' | 'number' | 'text' | 'ignore'
    * value : raw cell value
    * format: optional format hint
    */
@@ -392,7 +422,7 @@
 
     if (type === 'date') {
       const r = parseDate(value, format);
-      return r.iso || String(value); // show raw when unparseable so the user sees the problem
+      return r.iso || String(value);
     }
 
     if (type === 'duration') {
@@ -405,11 +435,10 @@
       return String(value);
     }
 
-    // number / text — but still normalise stray Date objects
+    // number / text / ignore — normalise stray Date objects so the preview is readable
     if (value instanceof Date && !isNaN(value)) {
-      const yr = value.getUTCFullYear();
+      const yr = value.getFullYear();
       if (yr === 1899 || yr === 1900) {
-        // Time value in a non-duration column — show as duration anyway
         const r = parseDuration(value);
         if (r.minutes !== null) {
           const m = Math.floor(r.minutes);
@@ -417,7 +446,7 @@
           return s > 0 ? `${m}m ${s}s` : `${m} min`;
         }
       }
-      return _isoDate(yr, value.getUTCMonth() + 1, value.getUTCDate());
+      return _isoDate(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
     }
 
     return String(value ?? '');

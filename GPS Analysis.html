@@ -2393,7 +2393,7 @@ window.renderView = async function () {
     let existingMappings = [];
     if (clubId) {
       const { data } = await window.sb.from('gps_column_mappings')
-        .select('source_column_name,target_metric,unit_conversion,source_label,parse_format')
+        .select('source_column_name,target_metric,unit_conversion,source_label,parse_format,column_type')
         .eq('club_id', clubId);
       existingMappings = data || [];
     }
@@ -2571,14 +2571,20 @@ window.renderView = async function () {
     if (typeof gpAnalyzeCols === 'function' && _wizState.colTypesHeader !== headerRow) {
       _wizState.colTypes      = gpAnalyzeCols(rows, headerRow);
       _wizState.colTypesHeader = headerRow;
+      // Record auto-detected type so "Auto" option can show it in the label
+      _wizState.colTypes.forEach(ct => { if (ct) ct.autoType = ct.type; });
 
-      // Apply saved parse_format from previous imports for this provider
+      // Apply saved parse_format / column_type from previous imports for this provider
       const labelMappings = (_wizState.existingMappings || [])
         .filter(m => m.source_label === _wizState.sourceLabel);
       hdr.forEach((col, i) => {
         if (!col || !_wizState.colTypes[i]) return;
         const saved = labelMappings.find(m => _norm(m.source_column_name) === _norm(col));
-        if (saved?.parse_format) _wizState.colTypes[i].format = saved.parse_format;
+        if (saved?.parse_format)  _wizState.colTypes[i].format     = saved.parse_format;
+        if (saved?.column_type) {
+          _wizState.colTypes[i].manualType = saved.column_type;
+          _wizState.colTypes[i].type       = saved.column_type;
+        }
       });
     }
 
@@ -2604,10 +2610,24 @@ window.renderView = async function () {
     const SEL_STYLE = 'margin-top:3px;width:100%;padding:2px 5px;border:1px solid var(--cm-border-soft);border-radius:3px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 9.5px/1.4 var(--cm-font-mono)';
 
     function makeHeaderCell(ci, label) {
-      const ct      = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
-      const type    = ct.type;
-      const fmt     = ct.format;
-      const invalid = ct.invalidCount || 0;
+      const ct         = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
+      const type       = ct.type;
+      const fmt        = ct.format;
+      const invalid    = ct.invalidCount || 0;
+      const manualType = ct.manualType || '';
+      const autoLabel  = ct.autoType ? `Auto · ${ct.autoType}` : 'Auto';
+
+      const TYPE_OPTIONS = [
+        { v: '',         l: autoLabel   },
+        { v: 'date',     l: 'Date'      },
+        { v: 'duration', l: 'Duration'  },
+        { v: 'number',   l: 'Number'    },
+        { v: 'text',     l: 'Text'      },
+        { v: 'ignore',   l: 'Ignore'    },
+      ];
+      const typeOpts = TYPE_OPTIONS.map(o =>
+        `<option value="${o.v}"${o.v === manualType ? ' selected' : ''}>${o.l}</option>`).join('');
+      const typeSel = `<select class="gp-col-type-sel" data-ci="${ci}" style="${SEL_STYLE}">${typeOpts}</select>`;
 
       let badge = '', hint = '', dropdown = '', ambigNote = '';
 
@@ -2634,6 +2654,7 @@ window.renderView = async function () {
 
       return `<th style="min-width:100px;max-width:180px;vertical-align:top;padding:6px 8px;font-weight:normal">
         <div style="font:600 11.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${label}</div>
+        ${typeSel}
         ${hint}${ambigNote}${dropdown}${badge}
       </th>`;
     }
@@ -2674,6 +2695,28 @@ window.renderView = async function () {
         }
         ct.invalidCount = inv;
         // Keep colTypesHeader so analyzeColumns is NOT re-run on re-render
+        renderPreviewTable(rows, headerRow);
+      });
+    });
+
+    // Type override selector: change detected type per column
+    wrap.querySelectorAll('.gp-col-type-sel').forEach(sel => {
+      sel.addEventListener('change', e => {
+        const ci     = +e.target.dataset.ci;
+        const chosen = e.target.value;
+        if (!_wizState.colTypes[ci]) _wizState.colTypes[ci] = { type: 'text', autoType: 'text', format: null };
+        const ct        = _wizState.colTypes[ci];
+        ct.manualType   = chosen || null;
+        ct.type         = chosen || ct.autoType || 'text';
+        ct.format       = null; // reset format when type changes
+        const samples   = rows.slice(headerRow + 1, headerRow + 21)
+          .map(r => r[ci]).filter(v => v !== null && v !== undefined && v !== '');
+        let inv = 0;
+        for (const v of samples) {
+          if (ct.type === 'date'     && window.gpParseDate?.(v, null)?.invalid)     inv++;
+          if (ct.type === 'duration' && window.gpParseDuration?.(v, null)?.invalid) inv++;
+        }
+        ct.invalidCount = inv;
         renderPreviewTable(rows, headerRow);
       });
     });
@@ -2719,14 +2762,20 @@ window.renderView = async function () {
     _wizState.columnMap = {};
     hdr.forEach((col, i) => {
       if (!col) return;
-      const match  = autoMatchColumn(col, labelMappings);
-      const saved  = labelMappings.find(m => _norm(m.source_column_name) === _norm(col));
+      const saved     = labelMappings.find(m => _norm(m.source_column_name) === _norm(col));
+      const colType   = colTypes?.[i]?.manualType || null;
       // parse_format: prefer DB-saved value, then user override from preview, then auto
       const parseFormat = saved?.parse_format || colTypes?.[i]?.format || null;
+      // If user manually set to 'ignore', skip matching
+      if (colType === 'ignore') {
+        _wizState.columnMap[i] = { sourceCol: col, metric: '__ignore__', confidence: 'manual', conversion: 1, parseFormat: null, colType };
+        return;
+      }
+      const match = autoMatchColumn(col, labelMappings);
       _wizState.columnMap[i] = {
         sourceCol: col, metric: match.metric,
         confidence: match.confidence, conversion: match.conversion,
-        parseFormat,
+        parseFormat, colType,
       };
     });
   }
@@ -2805,6 +2854,7 @@ window.renderView = async function () {
           unit_conversion: c.conversion, updated_at: new Date().toISOString(),
         };
         if (c.parseFormat) rec.parse_format = c.parseFormat;
+        if (c.colType)     rec.column_type  = c.colType;
         return rec;
       });
     if (!upserts.length) return;
