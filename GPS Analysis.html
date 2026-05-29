@@ -15,6 +15,7 @@
 <script src="assets/gps-parsers.js"></script>
 <script src="assets/gps-aliases.js"></script>
 <script src="assets/gps-reader.js"></script>
+<script src="assets/gps-acwr.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -293,6 +294,32 @@
   .gp-wiz-footer .right { margin-left:auto; display:flex; gap:8px; }
   .gp-drop.drag-over { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
   .gp-demo-tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg-muted); font:600 9px/1 var(--cm-font-mono); flex-shrink:0; }
+
+  /* ── Load Monitoring (ACWR) ─────────────────────────────────── */
+  .gp-lm-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
+  .gp-gauges-row { display:flex; gap:12px; flex-wrap:wrap; width:100%; padding:6px 0; }
+  .gp-gauge-wrap { flex:1; min-width:130px; max-width:200px; display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .lm-alert-list { display:flex; flex-direction:column; gap:6px; padding:10px 14px; }
+  .lm-alert { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; border-radius:var(--cm-r-3); border:1px solid; }
+  .lm-alert .ti { font-size:16px; flex-shrink:0; margin-top:1px; }
+  .lm-alert .la-title { font:600 12.5px/1.3 var(--cm-font-sans); }
+  .lm-alert .la-body  { font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:2px; }
+  .lm-alert.risk    { background:rgba(248,113,113,.08); border-color:rgba(248,113,113,.3); color:var(--cm-danger); }
+  .lm-alert.caution { background:rgba(251,191,36,.08);  border-color:rgba(251,191,36,.3);  color:var(--cm-warning); }
+  .lm-alert.info    { background:rgba(99,102,241,.07);  border-color:rgba(99,102,241,.25); color:var(--cm-info); }
+  .lm-tbl { width:100%; border-collapse:collapse; font:500 12px/1.4 var(--cm-font-sans); }
+  .lm-tbl th { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; padding:6px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--cm-border); cursor:pointer; }
+  .lm-tbl th:first-child { text-align:left; cursor:default; }
+  .lm-tbl th.is-sort { color:var(--cm-accent); }
+  .lm-tbl td { padding:5px 10px; text-align:right; border-bottom:1px solid var(--cm-border-soft); }
+  .lm-tbl td:first-child { text-align:left; }
+  .lm-tbl tr:hover td { background:var(--cm-bg-soft); }
+  .lm-z { display:inline-flex; align-items:center; justify-content:center; min-width:52px; padding:2px 6px; border-radius:4px; font:700 11.5px/1.4 var(--cm-font-mono); }
+  .lm-z.under   { background:rgba(99,102,241,.15);   color:#818cf8; }
+  .lm-z.sweet   { background:rgba(74,222,128,.18);   color:var(--cm-success); }
+  .lm-z.caution { background:rgba(251,191,36,.18);   color:var(--cm-warning); }
+  .lm-z.risk    { background:rgba(248,113,113,.2);   color:var(--cm-danger); }
+  .lm-z.insuff  { background:var(--cm-bg-soft); color:var(--cm-fg-faint); }
 
   /* ── Player Week Report ─────────────────────────────────────── */
   .gp-pw-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
@@ -841,9 +868,72 @@
         </div>
       </div>
 
-      <!-- MATCH · GROUP -->
+      <!-- MATCH · GROUP / LOAD MONITORING -->
       <div class="gp-view" data-view="mgrp">
+
+        <!-- Load Monitoring — filters bar -->
+        <div class="gp-lm-bar" id="lmBar">
+          <select class="sc-sel" id="lm-refdate">
+            <option value="today">As of today</option>
+            <option value="custom">Custom date...</option>
+          </select>
+          <input type="date" class="sc-sel" id="lm-custom-date" style="display:none">
+          <select class="sc-sel" id="lm-metric">
+            <option value="player_load">Player Load (recommended)</option>
+            <option value="total_distance">Total Distance</option>
+            <option value="high_speed_distance">HSR</option>
+            <option value="sprint_count">Sprints</option>
+          </select>
+          <button class="pill" id="lm-refresh-btn" style="height:30px"><i class="ti ti-refresh"></i>Refresh</button>
+          <span class="sc-info" id="lm-info">Select a metric and click Refresh</span>
+        </div>
+
         <div class="gp-grid is-edit">
+
+          <!-- NEW: Risk alerts -->
+          <div class="gp-c" data-size="full" id="card-lm-alerts">
+            <div class="gp-c-h">
+              <span class="ttl">Risk alerts</span>
+              <span class="sub" id="lm-alerts-sub">automatic detection · Gabbett 2016</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="lm-alerts-body" style="padding:0">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Click Refresh to calculate ACWR.</div>
+            </div>
+          </div>
+
+          <!-- NEW: ACWR gauges row (team) -->
+          <div class="gp-c" data-size="full" id="card-lm-gauges">
+            <div class="gp-c-h">
+              <span class="ttl">ACWR gauges</span>
+              <span class="sub">team average · 7d acute / 28d chronic</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="lm-gauges-body" style="padding:10px 14px">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Click Refresh to calculate ACWR.</div>
+            </div>
+          </div>
+
+          <!-- NEW: ACWR by player table -->
+          <div class="gp-c" data-size="full" id="card-lm-table">
+            <div class="gp-c-h">
+              <span class="ttl">ACWR by player</span>
+              <span class="sub">zone coloring: under · sweet · caution · risk</span>
+              <div class="right">
+                <select class="sc-sel" id="lm-zone-filter" style="height:24px;font-size:11px">
+                  <option value="all">All players</option>
+                  <option value="risk">Risk only</option>
+                  <option value="caution">Caution+</option>
+                </select>
+                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
+                <button><i class="ti ti-dots"></i></button>
+              </div>
+            </div>
+            <div class="gp-c-b" id="lm-table-body" style="overflow-x:auto;padding:0">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Click Refresh to calculate ACWR.</div>
+            </div>
+          </div>
+
           <div class="gp-c" data-size="sm"><div class="gp-c-h"><span class="ttl">Total distance</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-kpi"><div class="l"><i class="ti ti-route"></i>squad · 90′</div><div class="v">112.4 <sub>km</sub></div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+4%</span> vs 28d</div></div>
           </div>
@@ -6309,6 +6399,234 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   });
 
   if (document.querySelector('.gp-view[data-view="ind"].is-on')) pwInit();
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     LOAD MONITORING (vista mgrp) — ACWR gauges + tabla + alertas
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  const fmtAcwr = v => v != null ? v.toFixed(2) : '—';
+
+  // SVG semicircular gauge (value 0–2.0, zones from gpsACWR.ACWR_ZONES)
+  function _gaugeSVG(value, label) {
+    const cx = 100, cy = 92, r = 68, sw = 12, max = 2.0;
+    const zones = window.gpsACWR?.ACWR_ZONES || [];
+
+    function pt(v) {
+      const a = Math.PI * (1 - v / max);
+      return [+(cx + r * Math.cos(a)).toFixed(1), +(cy - r * Math.sin(a)).toFixed(1)];
+    }
+    function arc(v1, v2, color) {
+      const [x1, y1] = pt(v1), [x2, y2] = pt(Math.min(v2, max));
+      const span = (v2 - v1) / max;
+      const large = span > 0.5 ? 1 : 0;
+      return `<path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="butt"/>`;
+    }
+
+    const v   = Math.min(max, Math.max(0, value ?? 0));
+    const [nx, ny] = pt(v);
+    const zone = window.gpsACWR?.getZone(v) || null;
+    const zoneColors = { under:'rgba(139,92,246,.4)', sweet:'rgba(74,222,128,.5)', caution:'rgba(251,191,36,.6)', risk:'rgba(248,113,113,.5)' };
+
+    return `<svg viewBox="0 0 200 110" style="width:100%;max-width:170px;display:block;margin:0 auto">
+      ${arc(0,   0.8, zoneColors.under)}
+      ${arc(0.8, 1.3, zoneColors.sweet)}
+      ${arc(1.3, 1.5, zoneColors.caution)}
+      ${arc(1.5, 2.0, zoneColors.risk)}
+      ${value != null ? `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="var(--cm-fg)" stroke-width="2.5" stroke-linecap="round"/>` : ''}
+      <circle cx="${cx}" cy="${cy}" r="3.5" fill="var(--cm-fg)"/>
+      <text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="20" font-weight="700" fill="var(--cm-fg-strong)" font-family="Geist,system-ui">${fmtAcwr(value)}</text>
+      <text x="${cx}" y="${cy-7}" text-anchor="middle" font-size="8.5" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${zone?.label || ''}</text>
+      <text x="${cx}" y="${cy+9}" text-anchor="middle" font-size="9" fill="var(--cm-fg-muted)" font-family="Geist Mono,monospace">${label}</text>
+      <text x="22" y="106" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">0</text>
+      <text x="178" y="106" text-anchor="end" font-size="8" fill="var(--cm-fg-faint)" font-family="Geist Mono,monospace">2.0</text>
+    </svg>`;
+  }
+
+  // ── DOM ──────────────────────────────────────────────────────
+  const refdateSel  = document.getElementById('lm-refdate');
+  const customDate  = document.getElementById('lm-custom-date');
+  const metricSel   = document.getElementById('lm-metric');
+  const refreshBtn  = document.getElementById('lm-refresh-btn');
+  const lmInfo      = document.getElementById('lm-info');
+  const alertsBody  = document.getElementById('lm-alerts-body');
+  const gaugesBody  = document.getElementById('lm-gauges-body');
+  const tableBody   = document.getElementById('lm-table-body');
+  const zoneFilter  = document.getElementById('lm-zone-filter');
+  if (!refreshBtn) return;
+
+  let _playerAcwrData = null;
+  let _playerMap      = {};
+  let _lmSortKey      = 'player_load';
+  let _lmSortDir      = -1;
+
+  // ── load ─────────────────────────────────────────────────────
+  async function lmLoad() {
+    lmInfo.textContent = 'Calculating ACWR...';
+    alertsBody.innerHTML = gaugesBody.innerHTML = tableBody.innerHTML =
+      '<div style="padding:16px;color:var(--cm-fg-muted)">Calculating...</div>';
+
+    try {
+      const clubId = await window.getClubId?.();
+      if (!clubId || !window.sb || !window.gpsACWR) { lmInfo.textContent = 'Not ready.'; return; }
+
+      const refDate = refdateSel.value === 'custom' ? (customDate.value || null) : null;
+
+      const [teamAcwr, playerAcwr, players] = await Promise.all([
+        window.gpsACWR.calculateTeamACWR({ clubId, refDate }),
+        window.gpsACWR.calculatePlayerACWR({ clubId, refDate }),
+        window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive'),
+      ]);
+
+      _playerMap = Object.fromEntries((players.data || []).map(p => [p.id, p]));
+      _playerAcwrData = playerAcwr || {};
+
+      const metricKey = metricSel.value || 'player_load';
+      lmInfo.textContent = `Ref: ${refDate || 'today'} · ${Object.keys(_playerAcwrData).length} players`;
+
+      _renderGauges(teamAcwr);
+      _renderAlerts(metricKey);
+      _renderTable();
+    } catch (e) { console.error('lmLoad:', e); lmInfo.textContent = 'Error calculating ACWR.'; }
+  }
+
+  // ── gauges ───────────────────────────────────────────────────
+  function _renderGauges(teamAcwr) {
+    if (!teamAcwr) { gaugesBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No training data in the last 28 days.</div>'; return; }
+    const metrics = window.gpsACWR.ACWR_METRICS || [];
+    gaugesBody.innerHTML = `<div class="gp-gauges-row">${
+      metrics.map(m => `<div class="gp-gauge-wrap">${_gaugeSVG(teamAcwr[m.key], m.label)}</div>`).join('')
+    }</div>`;
+  }
+
+  // ── alerts ───────────────────────────────────────────────────
+  function _renderAlerts(metricKey) {
+    if (!_playerAcwrData || !Object.keys(_playerAcwrData).length) {
+      alertsBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No data.</div>'; return;
+    }
+    const getZone = window.gpsACWR.getZone;
+    const alerts  = [];
+
+    // Players in high risk
+    const riskPlayers = Object.entries(_playerAcwrData)
+      .filter(([, d]) => d[metricKey] != null && getZone(d[metricKey])?.cls === 'risk')
+      .sort((a, b) => b[1][metricKey] - a[1][metricKey]);
+    if (riskPlayers.length) {
+      const metricLabel = (window.gpsACWR.ACWR_METRICS.find(m => m.key === metricKey)?.label) || metricKey;
+      const names = riskPlayers.map(([pid, d]) => {
+        const p = _playerMap[pid] || {};
+        return `${p.last_name || pid} (${fmtAcwr(d[metricKey])})`;
+      }).join(' · ');
+      alerts.push({ cls: 'risk', icon: 'ti-alert-triangle', title: `${riskPlayers.length} player${riskPlayers.length > 1 ? 's' : ''} in HIGH RISK zone for ${metricLabel}`, body: names });
+    }
+
+    // Players in caution
+    const cautionPlayers = Object.entries(_playerAcwrData)
+      .filter(([, d]) => d[metricKey] != null && getZone(d[metricKey])?.cls === 'caution');
+    if (cautionPlayers.length) {
+      const metricLabel = (window.gpsACWR.ACWR_METRICS.find(m => m.key === metricKey)?.label) || metricKey;
+      const names = cautionPlayers.map(([pid]) => (_playerMap[pid]?.last_name || pid)).join(', ');
+      alerts.push({ cls: 'caution', icon: 'ti-alert-circle', title: `${cautionPlayers.length} player${cautionPlayers.length > 1 ? 's' : ''} in CAUTION zone for ${metricLabel}`, body: names });
+    }
+
+    // Insufficient data
+    const insuffPlayers = Object.entries(_playerAcwrData).filter(([, d]) => d.insufficient);
+    if (insuffPlayers.length) {
+      const names = insuffPlayers.map(([pid]) => (_playerMap[pid]?.last_name || pid)).join(', ');
+      alerts.push({ cls: 'info', icon: 'ti-info-circle', title: `${insuffPlayers.length} player${insuffPlayers.length > 1 ? 's' : ''} with insufficient data (<4 sessions in 28 days)`, body: names });
+    }
+
+    if (!alerts.length) {
+      alertsBody.innerHTML = '<div class="lm-alert-list"><div style="color:var(--cm-success);font:600 12.5px/1.3 var(--cm-font-sans);padding:10px 14px">All players in sweet spot or under-training. No alerts.</div></div>';
+      return;
+    }
+
+    alertsBody.innerHTML = `<div class="lm-alert-list">${alerts.map(a =>
+      `<div class="lm-alert ${a.cls}"><i class="ti ${a.icon}"></i><div><div class="la-title">${a.title}</div><div class="la-body">${a.body}</div></div></div>`
+    ).join('')}</div>`;
+  }
+
+  // ── table ────────────────────────────────────────────────────
+  function _renderTable() {
+    if (!_playerAcwrData || !Object.keys(_playerAcwrData).length) {
+      tableBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No data.</div>'; return;
+    }
+    const metrics  = window.gpsACWR.ACWR_METRICS || [];
+    const getZone  = window.gpsACWR.getZone;
+    const filter   = zoneFilter?.value || 'all';
+
+    let entries = Object.entries(_playerAcwrData);
+
+    // Zone filter
+    if (filter === 'risk') {
+      entries = entries.filter(([, d]) => metrics.some(m => getZone(d[m.key])?.cls === 'risk'));
+    } else if (filter === 'caution') {
+      entries = entries.filter(([, d]) => metrics.some(m => ['caution','risk'].includes(getZone(d[m.key])?.cls)));
+    }
+
+    // Sort
+    entries.sort((a, b) => {
+      if (_lmSortKey === 'player') {
+        const an = (_playerMap[a[0]]?.last_name || '');
+        const bn = (_playerMap[b[0]]?.last_name || '');
+        return an.localeCompare(bn) * _lmSortDir;
+      }
+      const av = a[1][_lmSortKey] ?? -1;
+      const bv = b[1][_lmSortKey] ?? -1;
+      return (av - bv) * _lmSortDir;
+    });
+
+    const headers = `<tr>
+      <th data-key="player" style="text-align:left">Player</th>
+      <th data-key="sessCount" style="text-align:right">Sessions</th>
+      ${metrics.map(m => `<th data-key="${m.key}">ACWR ${m.label}</th>`).join('')}
+    </tr>`;
+
+    const rows = entries.map(([pid, d]) => {
+      const p    = _playerMap[pid] || {};
+      const name = `${p.last_name || ''} ${(p.first_name||'')[0]||''}.`.trim();
+      const pos  = p.position ? `<span style="font-size:10px;color:var(--cm-fg-muted)"> · ${p.position}</span>` : '';
+      const sessWarn = d.insufficient ? ' <i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:11px" title="Insufficient data"></i>' : '';
+
+      const cells = metrics.map(m => {
+        const v   = d[m.key];
+        const z   = getZone(v);
+        const cls = d.insufficient ? 'insuff' : (z?.cls || 'neu');
+        return `<td><span class="lm-z ${cls}">${fmtAcwr(v)}</span></td>`;
+      }).join('');
+
+      return `<tr>
+        <td>${name}${pos}</td>
+        <td style="text-align:right">${d.sessCount}${sessWarn}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    tableBody.innerHTML = `<table class="lm-tbl"><thead>${headers}</thead><tbody>${rows}</tbody></table>`;
+
+    tableBody.querySelectorAll('th[data-key]').forEach(th => {
+      th.addEventListener('click', () => {
+        if (_lmSortKey === th.dataset.key) _lmSortDir *= -1; else { _lmSortKey = th.dataset.key; _lmSortDir = -1; }
+        _renderTable();
+      });
+    });
+  }
+
+  // ── events ───────────────────────────────────────────────────
+  refdateSel.addEventListener('change', () => {
+    customDate.style.display = refdateSel.value === 'custom' ? '' : 'none';
+  });
+  refreshBtn.addEventListener('click', lmLoad);
+  zoneFilter?.addEventListener('change', () => { if (_playerAcwrData) _renderTable(); });
+  metricSel.addEventListener('change', () => { if (_playerAcwrData) _renderAlerts(metricSel.value); });
+
+  window._lmInit = lmLoad;
+
+  document.getElementById('sections')?.addEventListener('click', e => {
+    if (e.target.closest('.gp-sec[data-view="mgrp"]')) setTimeout(() => { if (!_playerAcwrData) lmLoad(); }, 0);
+  });
 })();
 </script>
 
