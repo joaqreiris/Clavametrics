@@ -4310,8 +4310,11 @@ window.renderView = async function () {
   // ── Build rows from parsed file ──────────────────────────────
   // dateSessionMap: { 'YYYY-MM-DD' → session_id } or null (single-session mode)
   // singleSessionId: fallback session_id when dateSessionMap is null
+  // Returns:
+  //   insertable  — core rows for gps_reports
+  //   extrasMap   — { rowKey → [{metric_key, value}] } for gps_report_metrics
   function buildInsertableRows(dateSessionMap, singleSessionId) {
-    const { rows, headerRow, columnMap, clubId, confirmedMap } = _wizState;
+    const { rows, headerRow, columnMap, clubId, confirmedMap, metricCatalog } = _wizState;
     const _colOf = metric => Object.entries(columnMap).find(([, c]) => c.metric === metric)?.[0];
     const playerNameIdx = _colOf('player_name') ?? _colOf('player_first_name');
     const jerseyIdx     = _colOf('jersey_number');
@@ -4319,10 +4322,18 @@ window.renderView = async function () {
     const dateFmt       = dateColIdx != null ? (columnMap[dateColIdx]?.parseFormat || null) : null;
     const dataRows      = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
     const hasPlayerMapping = playerNameIdx != null || jerseyIdx != null;
+
+    // Custom metric keys: in catalog but not in gps_reports columns
+    const customMetricKeys = new Set(
+      (metricCatalog || []).filter(d => !d.is_core).map(d => d.key)
+    );
+
     const insertable = [];
+    const extrasMap  = {}; // rowKey → [{metric_key, value}]
     let skippedCells = 0;
     const warnings   = [];
     const UUID_RE    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const _rowKey    = r => `${r.player_id ?? '_'}__${r.session_id}`;
 
     for (const row of dataRows) {
       const rawJersey = jerseyIdx     != null ? String(row[+jerseyIdx]     ?? '').trim() : '';
@@ -4344,32 +4355,44 @@ window.renderView = async function () {
       }
       if (!sessionId) continue;
 
-      const rec = { club_id: clubId, session_id: sessionId, player_id: playerId };
+      const rec    = { club_id: clubId, session_id: sessionId, player_id: playerId };
+      const extras = [];
 
       for (const [ci, map] of Object.entries(columnMap)) {
-        if (!map.metric || !GPS_REPORT_COLS.has(map.metric)) continue;
+        if (!map.metric) continue;
         const raw = row[+ci];
         if (raw === '' || raw == null) continue;
 
-        if (map.metric === 'time_played' && typeof window.gpParseDuration === 'function') {
-          const pd = window.gpParseDuration(raw, map.parseFormat || null);
-          if (pd.invalid || pd.minutes === null) { skippedCells++; continue; }
-          rec.time_played = Math.round(pd.minutes);
-          continue;
-        }
+        if (GPS_REPORT_COLS.has(map.metric)) {
+          // Core metric → gps_reports column
+          if (map.metric === 'time_played' && typeof window.gpParseDuration === 'function') {
+            const pd = window.gpParseDuration(raw, map.parseFormat || null);
+            if (pd.invalid || pd.minutes === null) { skippedCells++; continue; }
+            rec.time_played = Math.round(pd.minutes);
+            continue;
+          }
+          const num = +raw * (map.conversion || 1);
+          if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
+          rec[map.metric] = GPS_INT_COLS.has(map.metric) ? Math.round(num) : +num.toFixed(4);
 
-        const num = +raw * (map.conversion || 1);
-        if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
-        rec[map.metric] = GPS_INT_COLS.has(map.metric) ? Math.round(num) : +num.toFixed(4);
+        } else if (customMetricKeys.has(map.metric)) {
+          // Custom metric → gps_report_metrics (EAV)
+          const num = +raw * (map.conversion || 1);
+          if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
+          extras.push({ metric_key: map.metric, value: +num.toFixed(4) });
+        }
+        // else: player field, session_date, __ignore__ → skip
       }
 
       if (!UUID_RE.test(rec.club_id) || !UUID_RE.test(rec.session_id)) continue;
       if (rec.player_id && !UUID_RE.test(rec.player_id)) { rec.player_id = null; }
 
       insertable.push(rec);
+      // Overwrite on duplicate key (same as dedup keeps last row)
+      if (extras.length) extrasMap[_rowKey(rec)] = extras;
     }
 
-    return { insertable, skippedCells, warnings };
+    return { insertable, extrasMap, skippedCells, warnings };
   }
 
   // ── Main import function ───────────────────────────────────
@@ -4451,7 +4474,7 @@ window.renderView = async function () {
 
       // ── 2. Build insertable rows ───────────────────────────
       setStatus('Mapping rows…');
-      const { insertable, skippedCells, warnings } = buildInsertableRows(dateSessionMap, singleSessionId);
+      const { insertable, extrasMap, skippedCells, warnings } = buildInsertableRows(dateSessionMap, singleSessionId);
 
       if (!insertable.length) {
         finishWithError('No importable rows found — check player matching and column mapping.');
@@ -4463,17 +4486,39 @@ window.renderView = async function () {
       const rowKey = r => `${r.player_id ?? '_'}__${r.session_id}`;
       const deduped = [...new Map(insertable.map(r => [rowKey(r), r])).values()];
 
-      // ── 3. Batch upsert in chunks of 500 ─────────────────
+      // ── 3. Upsert core rows → gps_reports (with RETURNING ids) ──
       const CHUNK = 500;
       let done = 0;
       setStatus('Saving GPS reports…', `0 / ${deduped.length}`);
+      const allReturned = [];
 
       for (let i = 0; i < deduped.length; i += CHUNK) {
-        const { error } = await window.sb.from('gps_reports')
-          .upsert(deduped.slice(i, i + CHUNK), { onConflict: 'player_id,session_id' });
+        const { data: returned, error } = await window.sb.from('gps_reports')
+          .upsert(deduped.slice(i, i + CHUNK), { onConflict: 'player_id,session_id' })
+          .select('id,player_id,session_id');
         if (error) throw error;
+        if (returned) allReturned.push(...returned);
         done = Math.min(i + CHUNK, deduped.length);
         setStatus('Saving GPS reports…', `${done} / ${deduped.length}`);
+      }
+
+      // ── 3b. Upsert custom metrics → gps_report_metrics ───────
+      const hasExtras = Object.keys(extrasMap).length > 0;
+      if (hasExtras && allReturned.length) {
+        setStatus('Saving custom metrics…');
+        const metricRows = [];
+        for (const report of allReturned) {
+          const extras = extrasMap[rowKey(report)];
+          if (!extras?.length) continue;
+          for (const ex of extras) {
+            metricRows.push({ report_id: report.id, club_id: clubId, metric_key: ex.metric_key, value: ex.value });
+          }
+        }
+        for (let i = 0; i < metricRows.length; i += CHUNK) {
+          const { error } = await window.sb.from('gps_report_metrics')
+            .upsert(metricRows.slice(i, i + CHUNK), { onConflict: 'report_id,metric_key' });
+          if (error) throw error;
+        }
       }
 
       // ── 4. Persist external_gps_id ───────────────────────
@@ -4491,11 +4536,14 @@ window.renderView = async function () {
 
       // ── 5. Success ────────────────────────────────────────
       document.getElementById('wizSpinner')?.remove();
-      const sessionCount   = isMultiMode ? uniqueDates.length : 1;
-      const uniquePlayers  = new Set(deduped.map(r => r.player_id).filter(Boolean)).size;
-      const sessionLabel   = isHistorical ? 'historical' : 'real';
-      const warningLines   = [...warnings.slice(0, 5), ...(skippedCells ? [`${skippedCells} cell(s) skipped (invalid values)`] : [])];
-      const firstSessionId = isMultiMode ? (dateSessionMap[uniqueDates[0]] || null) : singleSessionId;
+      const sessionCount    = isMultiMode ? uniqueDates.length : 1;
+      const uniquePlayers   = new Set(deduped.map(r => r.player_id).filter(Boolean)).size;
+      const sessionLabel    = isHistorical ? 'historical' : 'real';
+      const customMetricCount = Object.values(extrasMap).reduce((n, arr) => n + arr.length, 0);
+      const warningLines    = [...warnings.slice(0, 5), ...(skippedCells ? [`${skippedCells} cell(s) skipped (invalid values)`] : [])];
+      const firstSessionId  = isMultiMode ? (dateSessionMap[uniqueDates[0]] || null) : singleSessionId;
+      const customLine      = customMetricCount
+        ? ` · ${customMetricCount} custom metric value${customMetricCount !== 1 ? 's' : ''}` : '';
 
       document.getElementById('wizBody').innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0;text-align:center">
@@ -4503,7 +4551,7 @@ window.renderView = async function () {
           <div>
             <div style="font:600 15px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">Import complete</div>
             <div style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">
-              ${sessionCount} session${sessionCount!==1?'s':''} (${sessionLabel}) · ${deduped.length} GPS report${deduped.length!==1?'s':''} · ${uniquePlayers} player${uniquePlayers!==1?'s':''}
+              ${sessionCount} session${sessionCount!==1?'s':''} (${sessionLabel}) · ${deduped.length} GPS report${deduped.length!==1?'s':''}${customLine} · ${uniquePlayers} player${uniquePlayers!==1?'s':''}
             </div>
           </div>
           ${warningLines.length ? `
