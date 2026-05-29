@@ -3327,11 +3327,12 @@ window.renderView = async function () {
     return `<option value="__ignore__"${'__ignore__' === selectedVal ? ' selected' : ''}>— Ignore this column —</option>
       <option value="__create__"${'__create__' === selectedVal ? ' selected' : ''}>+ Create new metric...</option>
       <option value="__attribute__"${'__attribute__' === selectedVal ? ' selected' : ''}>+ Add session attribute...</option>
+      <optgroup label="── Session field ──"><option value="__session_type__"${'__session_type__' === selectedVal ? ' selected' : ''}>Session type (column)</option></optgroup>
       <optgroup label="── Player fields ──">${pfEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>
       <optgroup label="── Core metrics ──">${coreHtml}</optgroup>
       ${custMetrics.length ? `<optgroup label="── Custom metrics ──">${custMetrics.map(d => opt(d.key, d.label + (d.unit ? ` (${d.unit})` : ''))).join('')}</optgroup>` : ''}
       <optgroup label="── Session attributes ──">${attrHtml}</optgroup>
-      <optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}${opt('session_type', 'Session type')}</optgroup>`;
+      <optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>`;
   }
 
   function _s2RowCls(c, catalog) {
@@ -3418,7 +3419,7 @@ window.renderView = async function () {
           }
           const conf     = c.confidence;
           const rowCls   = _s2RowCls(c, catalog);
-          const selected = c.attribute ? `__attr__${c.attribute}` : (c.metric || '__ignore__');
+          const selected = c.attribute ? `__attr__${c.attribute}` : c.field === 'session_type' ? '__session_type__' : (c.metric || '__ignore__');
           const selCls   = _s2SelCls(selected, conf, catalog);
           const tooltip  = conf === 'high' || conf === 'saved'
             ? 'Auto-matched (exact)'
@@ -3454,14 +3455,21 @@ window.renderView = async function () {
         }
         // Clear any open inline form for this column
         body.querySelector(`.gp-create-inline[data-ci="${ci}"]`).innerHTML = '';
-        if (val.startsWith('__attr__')) {
+        if (val === '__session_type__') {
+          _wizState.columnMap[ci].field     = 'session_type';
+          _wizState.columnMap[ci].metric    = null;
+          _wizState.columnMap[ci].attribute = null;
+          e.target.className = 'gp-map-sel is-attr';
+        } else if (val.startsWith('__attr__')) {
           const attrKey = val.slice(8);
           _wizState.columnMap[ci].attribute = attrKey;
           _wizState.columnMap[ci].metric    = null;
+          _wizState.columnMap[ci].field     = null;
           e.target.className = 'gp-map-sel is-attr';
         } else {
           _wizState.columnMap[ci].attribute = null;
           _wizState.columnMap[ci].metric    = val === '__ignore__' ? null : val;
+          _wizState.columnMap[ci].field     = null;
           e.target.className = 'gp-map-sel ' + _s2SelCls(val, 'high', _wizState.metricCatalog || []);
         }
       });
@@ -4346,6 +4354,7 @@ window.renderView = async function () {
     const { uniqueDates, dateMap, doubleDates } = _buildDateMap();
     const hasDateCol   = uniqueDates.length > 0;
     const isMultiDate  = uniqueDates.length > 1;
+    const _typeColEntry = Object.entries(_wizState.columnMap || {}).find(([, c]) => c.field === 'session_type');
 
     // Heuristic: pre-select "Historical" when latest date is >30 days ago
     let suggestHistorical = false;
@@ -4493,15 +4502,14 @@ window.renderView = async function () {
         ${doubleWarning}
         <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">How should we treat these sessions?</div>
         ${choiceHTML(true, si.isHistorical)}
-        <div>
+        ${!_typeColEntry ? `<div>
           <label style="${LBL}">Session type for all dates</label>
           <select id="s4Type" style="${INP.replace('12px/1','12px/1.4')}">${typeOpts}</select>
-        </div>`;
+        </div>` : ''}`;
     }
 
     // ── Type vocabulary mapping (shown when a session_type column is mapped) ──
-    const _typeColEntry = Object.entries(_wizState.columnMap || {}).find(([, c]) => c.metric === 'session_type');
-    if (_typeColEntry) {
+    if (hasDateCol && _typeColEntry) {
       const _typeColIdx = +_typeColEntry[0];
       const _dataRows   = _wizState.rows.slice(_wizState.headerRow + 1).filter(r => r.some(c => c !== ''));
       const _rawTypes   = [...new Set(_dataRows.map(r => String(r[_typeColIdx] ?? '').trim()).filter(Boolean))];
@@ -4563,9 +4571,13 @@ window.renderView = async function () {
         si.title = body.querySelector('#s4Title')?.value.trim() || '';
       }
 
-      // Guardrail: historical data with non-match type won't feed match baselines
+      // Guardrail: warn if no session will have type='match' (baselines filter by that)
+      const _hasTypeCol = Object.entries(_wizState.columnMap || {}).some(([, c]) => c.field === 'session_type');
+      const _willHaveMatch = _hasTypeCol
+        ? Object.values(_wizState.typeMap || {}).some(t => t === 'match')
+        : si.sessionType === 'match';
       const existingNotice = body.querySelector('#s4HistoricalNotice');
-      if (si.isHistorical && si.sessionType !== 'match' && !existingNotice) {
+      if (si.isHistorical && !_willHaveMatch && !existingNotice) {
         const notice = document.createElement('div');
         notice.id = 's4HistoricalNotice';
         notice.style.cssText = 'margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3)';
@@ -4601,7 +4613,7 @@ window.renderView = async function () {
     const playerNameIdx = _colOf('player_name') ?? _colOf('player_first_name');
     const jerseyIdx     = _colOf('jersey_number');
     const dateColIdx    = _colOf('session_date');
-    const typeColIdx    = _colOf('session_type') ?? null;
+    const typeColIdx    = Object.entries(columnMap).find(([, c]) => c.field === 'session_type')?.[0] ?? null;
     const dateFmt       = dateColIdx != null ? (columnMap[dateColIdx]?.parseFormat || null) : null;
     const dataRows      = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
     const hasPlayerMapping = playerNameIdx != null || jerseyIdx != null;
@@ -4755,7 +4767,7 @@ window.renderView = async function () {
 
       if (isMultiMode) {
         dateSessionMap = {};
-        const _typeColEntry = Object.entries(_wizState.columnMap).find(([, c]) => c.metric === 'session_type');
+        const _typeColEntry = Object.entries(_wizState.columnMap).find(([, c]) => c.field === 'session_type');
 
         if (_typeColEntry) {
           // Per-row type mode: one session per unique (date, canonicalType) combo
