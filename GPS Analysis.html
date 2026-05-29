@@ -4427,6 +4427,18 @@ window.renderView = async function () {
         si.date  = body.querySelector('#s4Date')?.value  || today;
         si.title = body.querySelector('#s4Title')?.value.trim() || '';
       }
+
+      // Guardrail: historical data with non-match type won't feed match baselines
+      const existingNotice = body.querySelector('#s4HistoricalNotice');
+      if (si.isHistorical && si.sessionType !== 'match' && !existingNotice) {
+        const notice = document.createElement('div');
+        notice.id = 's4HistoricalNotice';
+        notice.style.cssText = 'margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid var(--cm-warning);border-radius:var(--cm-r-3)';
+        notice.innerHTML = `<span style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">These sessions won't feed match baselines because the type is not "Match". If these are match records, change the type above before continuing.</span>`;
+        body.appendChild(notice);
+        return; // first click shows warning; second click proceeds
+      }
+
       setWizStep(5);
       runImport();
     });
@@ -4463,8 +4475,9 @@ window.renderView = async function () {
       (metricCatalog || []).filter(d => !d.is_core).map(d => d.key)
     );
 
-    const insertable = [];
-    const extrasMap  = {}; // rowKey → [{metric_key, value}]
+    const insertable    = [];
+    const extrasMap     = {}; // rowKey → [{metric_key, value}]
+    const rawAttrsBySess = {}; // session_id → { attrKey → [values seen] }
     let skippedCells = 0;
     const warnings   = [];
     const UUID_RE    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -4494,6 +4507,16 @@ window.renderView = async function () {
       const extras = [];
 
       for (const [ci, map] of Object.entries(columnMap)) {
+        // Accumulate session attributes (grain = per session, not per player)
+        if (map.attribute) {
+          const raw = String(row[+ci] ?? '').trim();
+          if (raw) {
+            if (!rawAttrsBySess[sessionId]) rawAttrsBySess[sessionId] = {};
+            if (!rawAttrsBySess[sessionId][map.attribute]) rawAttrsBySess[sessionId][map.attribute] = [];
+            rawAttrsBySess[sessionId][map.attribute].push(raw);
+          }
+          continue;
+        }
         if (!map.metric) continue;
         const raw = row[+ci];
         if (raw === '' || raw == null) continue;
@@ -4527,7 +4550,26 @@ window.renderView = async function () {
       if (extras.length) extrasMap[_rowKey(rec)] = extras;
     }
 
-    return { insertable, extrasMap, skippedCells, warnings };
+    // Consolidate attribute values: take most frequent; warn if varies within session
+    const attrsBySession = {};
+    for (const [sid, keyMap] of Object.entries(rawAttrsBySess)) {
+      attrsBySession[sid] = {};
+      for (const [attrKey, values] of Object.entries(keyMap)) {
+        const counts = {};
+        for (const v of values) counts[v] = (counts[v] || 0) + 1;
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        const chosen = sorted[0][0];
+        if (sorted.length > 1) {
+          const dateLabel = dateSessionMap
+            ? (Object.entries(dateSessionMap).find(([, id]) => id === sid)?.[0] || sid)
+            : sid;
+          warnings.push(`Attribute "${attrKey}" varies within session ${dateLabel} — using "${chosen}"`);
+        }
+        attrsBySession[sid][attrKey] = chosen;
+      }
+    }
+
+    return { insertable, extrasMap, skippedCells, warnings, attrsBySession };
   }
 
   // ── Main import function ───────────────────────────────────
@@ -4609,7 +4651,7 @@ window.renderView = async function () {
 
       // ── 2. Build insertable rows ───────────────────────────
       setStatus('Mapping rows…');
-      const { insertable, extrasMap, skippedCells, warnings } = buildInsertableRows(dateSessionMap, singleSessionId);
+      const { insertable, extrasMap, skippedCells, warnings, attrsBySession } = buildInsertableRows(dateSessionMap, singleSessionId);
 
       if (!insertable.length) {
         finishWithError('No importable rows found — check player matching and column mapping.');
@@ -4656,6 +4698,22 @@ window.renderView = async function () {
         }
       }
 
+      // ── 3c. Write session attributes → training_sessions ─────
+      const attrSessionIds = Object.keys(attrsBySession);
+      if (attrSessionIds.length) {
+        setStatus('Saving session attributes…');
+        for (const sid of attrSessionIds) {
+          const newAttrs = attrsBySession[sid];
+          if (!Object.keys(newAttrs).length) continue;
+          const { data: existing } = await window.sb.from('training_sessions')
+            .select('session_attributes').eq('id', sid).eq('club_id', clubId).single();
+          const merged = { ...(existing?.session_attributes || {}), ...newAttrs };
+          const { error } = await window.sb.from('training_sessions')
+            .update({ session_attributes: merged }).eq('id', sid).eq('club_id', clubId);
+          if (error) throw error;
+        }
+      }
+
       // ── 4. Persist external_gps_id ───────────────────────
       const extGpsIdMapped = Object.values(_wizState.columnMap).some(c => c.metric === 'player_external_gps_id');
       if (extGpsIdMapped) {
@@ -4675,10 +4733,13 @@ window.renderView = async function () {
       const uniquePlayers   = new Set(deduped.map(r => r.player_id).filter(Boolean)).size;
       const sessionLabel    = isHistorical ? 'historical' : 'real';
       const customMetricCount = Object.values(extrasMap).reduce((n, arr) => n + arr.length, 0);
+      const attrCount       = Object.values(attrsBySession).reduce((n, a) => n + Object.keys(a).length, 0);
       const warningLines    = [...warnings.slice(0, 5), ...(skippedCells ? [`${skippedCells} cell(s) skipped (invalid values)`] : [])];
       const firstSessionId  = isMultiMode ? (dateSessionMap[uniqueDates[0]] || null) : singleSessionId;
       const customLine      = customMetricCount
         ? ` · ${customMetricCount} custom metric value${customMetricCount !== 1 ? 's' : ''}` : '';
+      const attrLine        = attrCount
+        ? ` · ${attrCount} session attribute${attrCount !== 1 ? 's' : ''}` : '';
 
       document.getElementById('wizBody').innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px 0;text-align:center">
@@ -4686,7 +4747,7 @@ window.renderView = async function () {
           <div>
             <div style="font:600 15px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">Import complete</div>
             <div style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">
-              ${sessionCount} session${sessionCount!==1?'s':''} (${sessionLabel}) · ${deduped.length} GPS report${deduped.length!==1?'s':''}${customLine} · ${uniquePlayers} player${uniquePlayers!==1?'s':''}
+              ${sessionCount} session${sessionCount!==1?'s':''} (${sessionLabel}) · ${deduped.length} GPS report${deduped.length!==1?'s':''}${customLine}${attrLine} · ${uniquePlayers} player${uniquePlayers!==1?'s':''}
             </div>
           </div>
           ${warningLines.length ? `
