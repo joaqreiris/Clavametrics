@@ -3162,7 +3162,7 @@ window.renderView = async function () {
         <span class="gp-match-badge ${badgeCls}">${pctStr}</span>
       </div>
       <div class="s3-cell">${matchColHtml}</div>
-      <div class="s3-cell gp-match-actions" style="gap:6px">${actionsHtml}</div>`;
+      <div class="s3-cell gp-match-actions" style="align-items:flex-start;justify-content:center;gap:6px">${actionsHtml}</div>`;
 
     if (cat === 'matched' && p) {
       _renderPositionWarning(row.querySelector('.gp-match-actions'), rawKey, match, p);
@@ -3170,19 +3170,45 @@ window.renderView = async function () {
     return row;
   }
 
-  // Bulk: insert all unmatched players into DB
+  // Bulk: batch-insert all unmatched players in one Supabase query
   async function _bulkAddUnmatched(body, list) {
     const unmatchedRows = [...list.querySelectorAll('.gp-match-row[data-cat="unmatched"]')];
     if (!unmatchedRows.length) return;
     const n = unmatchedRows.length;
 
+    // Build insert data first (before opening modal)
+    const POSITIONS = ['GK','CB','FB','MF','WG','ST'];
+    const rowData   = [];
+    const insertArr = [];
+    for (const rowEl of unmatchedRows) {
+      const key   = rowEl.dataset.key;
+      const match = _wizState.playerMatches[key];
+      if (!match) continue;
+      const parts = (match.rawName || key).trim().split(/\s+/);
+      const fn    = parts.slice(0, -1).join(' ') || parts[0] || '';
+      const ln    = parts.length > 1 ? parts.slice(-1)[0] : (parts[0] || '');
+      const pos   = match.rawPosition
+        ? POSITIONS.find(p => p.toLowerCase() === (match.rawPosition || '').toLowerCase().slice(0, 2)) || 'MF'
+        : 'MF';
+      const rec = { club_id: _wizState.clubId, first_name: fn, last_name: ln, position: pos, number: match.rawJersey || null, status: 'active' };
+      if (match.rawExtGpsId) rec.external_gps_id = match.rawExtGpsId;
+      rowData.push({ rowEl, key, match, fn, ln });
+      insertArr.push(rec);
+    }
+    if (!insertArr.length) return;
+
+    // Preview: first 4 names + count of remaining
+    const previewNames = rowData.slice(0, 4).map(d => d.match.rawName || d.key);
+    const previewStr   = previewNames.join(', ') + (n > 4 ? ` and ${n - 4} more` : '');
+
     await new Promise(resolve => {
       const ov = makeModal(
         `Add ${n} new player${n !== 1 ? 's' : ''} to squad?`,
-        `<p style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 16px">
-          These players will be created using the name and position from the file.<br>
-          You can edit their details later in Squad.
+        `<p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg);margin:0 0 6px">${previewStr}</p>
+        <p style="font:400 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 16px">
+          Players will be created with the name and position from the file. You can edit details later in Squad.
         </p>
+        <div id="bulkAddErr" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--cm-danger-bg);border:1px solid var(--cm-danger);border-radius:var(--cm-r-3);font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button id="bulkAddCancel" class="cm-btn is-outline is-sm">Cancel</button>
           <button id="bulkAddConfirm" class="cm-btn is-primary is-sm">Add ${n} player${n !== 1 ? 's' : ''}</button>
@@ -3190,35 +3216,35 @@ window.renderView = async function () {
       );
       ov.querySelector('#bulkAddCancel').addEventListener('click', () => { ov.remove(); resolve(false); });
       ov.querySelector('#bulkAddConfirm').addEventListener('click', async () => {
-        ov.remove();
+        const confirmBtn = ov.querySelector('#bulkAddConfirm');
+        const errDiv     = ov.querySelector('#bulkAddErr');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Adding…';
+
+        // Single batch INSERT — Supabase returns IDs in insertion order
+        const { data, error } = await window.sb.from('players').insert(insertArr).select('id');
+        if (error) {
+          errDiv.textContent = 'Error: ' + error.message;
+          errDiv.style.display = 'block';
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = `Add ${n} player${n !== 1 ? 's' : ''}`;
+          return; // modal stays open — user can retry
+        }
+
+        // Map returned IDs back to rows (Supabase preserves insertion order)
         const { confirmedMap } = _wizState;
-        const POSITIONS = ['GK','CB','FB','MF','WG','ST'];
-        let added = 0;
-        for (const rowEl of unmatchedRows) {
-          const key   = rowEl.dataset.key;
-          const match = _wizState.playerMatches[key];
-          if (!match) continue;
-          const parts = (match.rawName || key).trim().split(/\s+/);
-          const fn    = parts.slice(0, -1).join(' ') || parts[0] || '';
-          const ln    = parts.length > 1 ? parts.slice(-1)[0] : parts[0] || '';
-          const pos   = match.rawPosition
-            ? POSITIONS.find(p => p.toLowerCase() === match.rawPosition.toLowerCase().slice(0, 2)) || 'MF'
-            : 'MF';
-          const insertObj = {
-            club_id: _wizState.clubId, first_name: fn, last_name: ln,
-            position: pos, number: match.rawJersey || null, status: 'available',
-          };
-          if (match.rawExtGpsId) insertObj.external_gps_id = match.rawExtGpsId;
-          const { data, error } = await window.sb.from('players').insert(insertObj).select('id').single();
-          if (error) { showToast(`Error adding "${match.rawName || key}": ${error.message}`); continue; }
-          confirmedMap[key] = data.id;
-          _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: match.rawJersey || null });
+        (data || []).forEach((rec, i) => {
+          if (!rowData[i]) return;
+          const { rowEl, key, match, fn, ln } = rowData[i];
+          confirmedMap[key] = rec.id;
+          _wizState.squadPlayers.push({ id: rec.id, first_name: fn, last_name: ln, position: insertArr[i].position, number: match.rawJersey || null, external_gps_id: match.rawExtGpsId || null });
           rowEl.setAttribute('data-cat', 'matched');
           const actEl = rowEl.querySelector('.gp-match-actions');
           if (actEl) actEl.innerHTML = `<span class="gp-match-badge high">Created</span>`;
-          added++;
-        }
-        showToast(`Added ${added} player${added !== 1 ? 's' : ''} to squad`);
+        });
+
+        showToast(`Added ${(data || []).length} player${(data || []).length !== 1 ? 's' : ''} to squad`);
+        ov.remove();
         _refreshS3Bar(body);
         const activeTab = body.querySelector('.s3-tab.is-on');
         if (activeTab) _applyS3Filter(body, activeTab.dataset.filter);
@@ -3413,46 +3439,110 @@ window.renderView = async function () {
   }
 
   function showCreatePlayerForm(key, btn, matchData, onCreated) {
-    const wrap = btn.closest('.gp-match-row').querySelector('.gp-match-actions');
-    if (!wrap) return;
-    // Autocomplete from player fields in the CSV row
-    const nameParts = (matchData?.rawName || '').split(' ');
-    const fnGuess   = nameParts.slice(0, -1).join(' ') || '';
-    const lnGuess   = nameParts.slice(-1)[0] || (key.includes(' ') ? key.split(' ').slice(-1)[0] : key);
-    const numGuess  = matchData?.rawJersey  || '';
+    // Pre-fill from CSV data
+    const nameParts = (matchData?.rawName || '').trim().split(/\s+/);
+    const fnGuess   = nameParts.slice(0, -1).join(' ') || nameParts[0] || '';
+    const lnGuess   = nameParts.length > 1 ? nameParts.slice(-1)[0] : (nameParts[0] || '');
+    const numGuess  = matchData?.rawJersey || '';
     const POSITIONS = ['GK','CB','FB','MF','WG','ST'];
     const posGuess  = matchData?.rawPosition
-      ? POSITIONS.find(p => p.toLowerCase() === matchData.rawPosition.toLowerCase().slice(0, 2)) || 'MF'
+      ? POSITIONS.find(p => p.toLowerCase() === (matchData.rawPosition || '').toLowerCase().slice(0, 2)) || 'MF'
       : 'MF';
-    wrap.innerHTML = `
-      <div class="gp-imp-form" style="grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:0;margin-top:4px">
-        <div><label>First name</label><input class="cp-fn" placeholder="First" value="${fnGuess}"></div>
-        <div><label>Last name</label><input class="cp-ln" placeholder="Last" value="${lnGuess}"></div>
-        <div><label>Position</label><select class="cp-pos">
-          ${POSITIONS.map(p => `<option${p === posGuess ? ' selected' : ''}>${p}</option>`).join('')}
-        </select></div>
-        <div><label>#</label><input class="cp-num" placeholder="0" type="number" min="1" value="${numGuess}"></div>
-      </div>
-      <button class="gp-match-confirm cp-save" style="margin-top:6px">Save &amp; match</button>`;
-    wrap.querySelector('.cp-save').addEventListener('click', async () => {
-      const fn  = wrap.querySelector('.cp-fn').value.trim();
-      const ln  = wrap.querySelector('.cp-ln').value.trim();
-      const pos = wrap.querySelector('.cp-pos').value;
-      const num = wrap.querySelector('.cp-num').value;
-      if (!fn || !ln) { showToast('First and last name required'); return; }
+
+    // Mini-modal overlay — z-index:960 so it floats above the import modal (z-index:950)
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(8,10,12,.45);z-index:960;display:flex;align-items:center;justify-content:center';
+
+    const INP = 'width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box';
+    const LBL = 'display:block;font:600 10px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted);margin-bottom:5px';
+
+    ov.innerHTML = `
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:0 16px 48px rgba(0,0,0,.28);width:360px;max-width:94vw;padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Add new player to squad</span>
+          <button id="cpClose" style="background:none;border:none;cursor:pointer;color:var(--cm-fg-muted);font-size:16px;line-height:1;padding:2px"><i class="ti ti-x"></i></button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div>
+            <label style="${LBL}">First name *</label>
+            <input class="cp-fn" placeholder="First" value="${fnGuess}" style="${INP}">
+          </div>
+          <div>
+            <label style="${LBL}">Last name *</label>
+            <input class="cp-ln" placeholder="Last" value="${lnGuess}" style="${INP}">
+          </div>
+          <div>
+            <label style="${LBL}">Position</label>
+            <select class="cp-pos" style="${INP}">
+              ${POSITIONS.map(p => `<option${p === posGuess ? ' selected' : ''}>${p}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="${LBL}">Jersey #</label>
+            <input class="cp-num" type="number" placeholder="—" min="1" value="${numGuess}" style="${INP}">
+          </div>
+        </div>
+        <div id="cpErr" style="display:none;margin-bottom:10px;padding:7px 10px;background:var(--cm-danger-bg);border:1px solid var(--cm-danger);border-radius:var(--cm-r-3);font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button id="cpCancel" class="cm-btn is-outline is-sm">Cancel</button>
+          <button id="cpSave" class="cm-btn is-primary is-sm">Save &amp; match</button>
+        </div>
+      </div>`;
+
+    const close = () => ov.remove();
+    ov.querySelector('#cpClose').addEventListener('click', close);
+    ov.querySelector('#cpCancel').addEventListener('click', close);
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    const escHandler = e => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); } };
+    document.addEventListener('keydown', escHandler);
+
+    ov.querySelector('#cpSave').addEventListener('click', async () => {
+      const fn     = ov.querySelector('.cp-fn').value.trim();
+      const ln     = ov.querySelector('.cp-ln').value.trim();
+      const pos    = ov.querySelector('.cp-pos').value;
+      const num    = ov.querySelector('.cp-num').value;
+      const errDiv = ov.querySelector('#cpErr');
+      const saveBtn = ov.querySelector('#cpSave');
+
+      if (!fn || !ln) {
+        errDiv.textContent = 'First name and last name are required.';
+        errDiv.style.display = 'block';
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
       const insertObj = {
         club_id: _wizState.clubId, first_name: fn, last_name: ln,
-        position: pos, number: num || null, status: 'available',
+        position: pos, number: num || null, status: 'active',
       };
       if (matchData?.rawExtGpsId) insertObj.external_gps_id = matchData.rawExtGpsId;
+
       const { data, error } = await window.sb.from('players').insert(insertObj).select('id').single();
-      if (error) { showToast('Error creating player: ' + error.message); return; }
+      if (error) {
+        errDiv.textContent = 'Error creating player: ' + error.message;
+        errDiv.style.display = 'block';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & match';
+        return;
+      }
+
       _wizState.confirmedMap[key] = data.id;
-      _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num, external_gps_id: matchData?.rawExtGpsId || null });
-      wrap.innerHTML = `<span class="gp-match-badge high">Created &amp; matched</span>`;
+      _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num || null, external_gps_id: matchData?.rawExtGpsId || null });
+
+      // Update row UI
+      const rowEl = [...document.querySelectorAll('.gp-match-row')].find(r => r.dataset.key === key);
+      const actEl = rowEl?.querySelector('.gp-match-actions');
+      if (actEl) actEl.innerHTML = `<span class="gp-match-badge high">Created &amp; matched</span>`;
+
+      document.removeEventListener('keydown', escHandler);
+      close();
       showToast(`Player ${fn} ${ln} added to squad`);
       onCreated?.();
     });
+
+    document.body.appendChild(ov);
+    setTimeout(() => ov.querySelector('.cp-fn')?.focus(), 50);
   }
 
   // ── GPS report columns that can be persisted ─────────────────
