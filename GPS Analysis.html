@@ -724,18 +724,183 @@
       </div>
 
       <!-- ── LOAD MONITORING ────────────────────────────────────────────────── -->
+      <!-- ── LOAD MONITORING ────────────────────────────────────────────────── -->
       <div class="gp-view" data-view="load_monitoring" id="view-load-monitoring">
-        <div class="gp-empty" style="padding:64px">Load Monitoring — coming soon</div>
+
+        <!-- Filter bar -->
+        <div class="gp-dash-bar" id="lm-filter-bar">
+          <i class="ti ti-activity" style="color:var(--cm-accent);font-size:16px"></i>
+          <span class="h">Load Monitoring</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:16px">
+            <select class="gp-table-filter" id="lm-ref-date">
+              <option value="today">As of today</option>
+              <option value="end_of_mc">End of current MC</option>
+            </select>
+            <select class="gp-table-filter" id="lm-primary-metric">
+              <option value="player_load">Player Load (recommended)</option>
+              <option value="total_distance">Total Distance</option>
+              <option value="high_speed_distance">HSR</option>
+              <option value="sprint_distance">Sprint Distance</option>
+            </select>
+          </div>
+          <div class="right">
+            <button class="pill" id="lm-risk-only-btn">Show at-risk only</button>
+            <button class="pill" id="lm-export-btn"><i class="ti ti-download"></i>Export</button>
+          </div>
+        </div>
+
+        <!-- Alerts -->
+        <div id="lm-alerts" style="display:none;margin-bottom:14px"></div>
+
+        <!-- ACWR gauges row -->
+        <div class="gp-c" data-size="full" style="margin-bottom:14px">
+          <div class="gp-c-h">
+            <span class="ttl">Team ACWR</span>
+            <span class="sub">Acute:Chronic Workload Ratio · squad averages</span>
+            <div style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">
+              Sweet spot: 0.8–1.3 &nbsp;|&nbsp; Caution: 1.3–1.5 &nbsp;|&nbsp; High risk: &gt;1.5
+              <button class="pill" style="margin-left:8px" id="lm-about-acwr" title="About ACWR">About</button>
+            </div>
+          </div>
+          <div class="gp-c-b" style="flex-direction:row;flex-wrap:wrap;gap:16px;padding:16px">
+            <div id="lm-gauges-row" style="display:flex;gap:12px;flex-wrap:wrap;flex:1"></div>
+          </div>
+        </div>
+
+        <!-- Players table -->
+        <div class="gp-c" data-size="full" style="margin-bottom:14px">
+          <div class="gp-c-h">
+            <span class="ttl">Players ACWR</span>
+            <div class="right">
+              <input type="text" class="gp-table-search" id="lm-search" placeholder="Search players..." style="width:160px">
+              <select class="gp-table-filter" id="lm-pos-filter">
+                <option value="">All positions</option>
+                <option value="GK">GK</option><option value="DEF">DEF</option>
+                <option value="MID">MID</option><option value="ATT">ATT</option>
+              </select>
+            </div>
+          </div>
+          <div class="gp-c-b" style="padding:0">
+            <div class="gp-table-scroll" id="lm-table-scroll" style="overflow:auto"></div>
+          </div>
+        </div>
+
+        <!-- Optional cards -->
+        <div class="gp-dash-section">
+          <div class="gp-dash-section-title">Optional cards</div>
+          <div class="gp-optional-grid" id="lm-optional-grid"></div>
+          <button class="gp-add-btn" id="lm-add-opt-card"><i class="ti ti-plus"></i> Add card</button>
+        </div>
       </div>
 
       <!-- ── MATCH PERFORMANCE ──────────────────────────────────────────────── -->
       <div class="gp-view" data-view="match_performance" id="view-match-performance">
-        <div class="gp-empty" style="padding:64px">Match Performance — coming soon</div>
+
+        <!-- Filter bar -->
+        <div class="gp-dash-bar" id="mp-filter-bar">
+          <i class="ti ti-ball-football" style="color:var(--cm-accent);font-size:16px"></i>
+          <span class="h">Match Performance</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:16px">
+            <select class="gp-table-filter" id="mp-player-filter" style="min-width:160px">
+              <option value="">Select player...</option>
+            </select>
+            <select class="gp-table-filter" id="mp-range-filter">
+              <option value="season">Current season</option>
+              <option value="last_10">Last 10 matches</option>
+              <option value="last_5">Last 5 matches</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+          <div class="right">
+            <button class="pill" id="mp-export-btn"><i class="ti ti-download"></i>Export</button>
+          </div>
+        </div>
+
+        <div id="mp-empty" style="display:none;padding:48px;text-align:center">
+          <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Select a player to see their match performance</div>
+        </div>
+
+        <!-- KPI row -->
+        <div class="gp-dash-kpi-row" id="mp-kpi-row"></div>
+
+        <!-- TD per match chart -->
+        <div class="gp-c" data-size="full" style="margin-bottom:14px">
+          <div class="gp-c-h"><span class="ttl">Total Distance per match</span><span class="sub">with minutes played</span></div>
+          <div class="gp-c-b" style="height:240px;position:relative"><canvas id="mp-td-chart"></canvas></div>
+        </div>
+
+        <!-- High intensity horizontal chart -->
+        <div class="gp-c" data-size="full" style="margin-bottom:14px">
+          <div class="gp-c-h"><span class="ttl">High Intensity per match</span><span class="sub">HSR + VHSR + Sprints (m)</span></div>
+          <div class="gp-c-b" style="height:280px;position:relative"><canvas id="mp-hi-chart"></canvas></div>
+        </div>
+
+        <!-- Optional cards -->
+        <div class="gp-dash-section">
+          <div class="gp-dash-section-title">Optional cards</div>
+          <div class="gp-optional-grid" id="mp-optional-grid"></div>
+        </div>
       </div>
 
       <!-- ── MICROCYCLE COMPARE ─────────────────────────────────────────────── -->
       <div class="gp-view" data-view="microcycle_compare" id="view-mc-compare">
-        <div class="gp-empty" style="padding:64px">Microcycle Compare — coming soon</div>
+
+        <!-- Filter bar -->
+        <div class="gp-dash-bar" id="mc-filter-bar">
+          <i class="ti ti-arrows-diff" style="color:var(--cm-accent);font-size:16px"></i>
+          <span class="h">MC Compare</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:16px">
+            <select class="gp-table-filter" id="mc-md-code">
+              <option value="MD-5">MD-5</option><option value="MD-4">MD-4</option>
+              <option value="MD-3" selected>MD-3</option><option value="MD-2">MD-2</option>
+              <option value="MD-1">MD-1</option><option value="MD">MD</option>
+              <option value="MD+1">MD+1</option>
+            </select>
+            <select class="gp-table-filter" id="mc-scope">
+              <option value="vs_last">vs Last microcycle</option>
+              <option value="vs_avg_3">vs Avg last 3 MCs</option>
+              <option value="vs_avg_5">vs Avg last 5 MCs</option>
+              <option value="vs_season_avg">vs Season average</option>
+            </select>
+            <select class="gp-table-filter" id="mc-metric">
+              <option value="total_distance">Total Distance</option>
+              <option value="high_speed_distance">HSR</option>
+              <option value="sprint_distance">Sprint Distance</option>
+              <option value="player_load">Player Load</option>
+            </select>
+          </div>
+          <div class="right">
+            <button class="pill" id="mc-export-btn"><i class="ti ti-download"></i>Export CSV</button>
+          </div>
+        </div>
+
+        <div id="mc-empty" style="display:none;padding:48px;text-align:center">
+          <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Need at least 2 microcycles to compare</div>
+        </div>
+
+        <!-- Alerts -->
+        <div id="mc-alerts" style="display:none;margin-bottom:14px"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+          <!-- Comparison table -->
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h"><span class="ttl">Player comparison</span><span class="sub" id="mc-table-sub"></span></div>
+            <div class="gp-c-b" style="padding:0">
+              <div class="gp-table-scroll" id="mc-table-scroll" style="overflow:auto;max-height:400px"></div>
+            </div>
+          </div>
+          <!-- Scatter -->
+          <div class="gp-c" data-size="md">
+            <div class="gp-c-h"><span class="ttl">Scatter</span><span class="sub">Absolute vs % diff</span></div>
+            <div class="gp-c-b" style="height:300px;position:relative"><canvas id="mc-scatter-chart"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Optional cards -->
+        <div class="gp-dash-section">
+          <div class="gp-dash-section-title">Optional cards</div>
+          <div class="gp-optional-grid" id="mc-optional-grid"></div>
+        </div>
       </div>
 
       <!-- ── LEGACY MATCH · INDIVIDUAL (kept, will be refactored) ──────────── -->
@@ -5871,7 +6036,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const legacyBar = document.getElementById('gp-legacy-bar');
     if (legacyBar) legacyBar.style.display = NEW_DASHBOARDS.includes(v) ? 'none' : '';
     // Dashboard-specific init
-    if (v === 'session_control') window.scInit?.();
+    if (v === 'session_control')   window.scInit?.();
+    if (v === 'player_week')       window.pwInit?.();
+    if (v === 'load_monitoring')   window.lmInit?.();
+    if (v === 'match_performance') window.mpInit?.();
+    if (v === 'microcycle_compare')window.mcInit?.();
   });
   const editBtn = document.getElementById('editToggle');
   editBtn.addEventListener('click', () => {
@@ -6255,6 +6424,841 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       window.scInit();
     }
   })();
+  // ── PLAYER WEEK REPORT ──────────────────────────────────────────────────────
+  (() => {
+    const PW = { players: [], sessions: [], mcList: [], selectedPlayerId: null, selectedMcId: null, hiChart: null };
+    const $ = id => document.getElementById(id);
+
+    const MD_CODE_COLORS = {
+      'MD-5': 'rgba(74,222,128,0.2)', 'MD-4': 'rgba(250,204,21,0.2)',
+      'MD-3': 'rgba(251,146,60,0.2)', 'MD-2': 'rgba(250,204,21,0.15)',
+      'MD-1': 'rgba(74,222,128,0.15)', 'MD': 'rgba(239,68,68,0.2)',
+      'MD+1': 'rgba(148,163,184,0.15)', 'MD+2': 'rgba(148,163,184,0.1)',
+    };
+    const RPE_COLORS = ['','rgba(74,222,128,0.7)','rgba(74,222,128,0.7)','rgba(74,222,128,0.7)',
+      'rgba(250,204,21,0.7)','rgba(250,204,21,0.7)','rgba(250,204,21,0.7)',
+      'rgba(251,146,60,0.7)','rgba(251,146,60,0.7)','rgba(239,68,68,0.7)','rgba(239,68,68,0.7)'];
+
+    function getMDCode(sessionDate, matchDate) {
+      if (!matchDate || !sessionDate) return '—';
+      const diff = Math.round((new Date(matchDate) - new Date(sessionDate)) / 86400000);
+      if (diff === 0) return 'MD';
+      if (diff > 0)  return `MD-${diff}`;
+      return `MD+${Math.abs(diff)}`;
+    }
+
+    function pctGame(value, baseline) {
+      if (!baseline || !value) return null;
+      return Math.round((value / baseline) * 100);
+    }
+
+    function pctColor(pct) {
+      if (pct == null) return '';
+      if (pct < 30)  return 'rgba(74,222,128,0.2)';
+      if (pct < 60)  return 'rgba(250,204,21,0.2)';
+      if (pct < 90)  return 'rgba(251,146,60,0.25)';
+      return 'rgba(239,68,68,0.2)';
+    }
+
+    async function loadPlayers() {
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId) return [];
+      const { data } = await window.sb
+        .from('players')
+        .select('id, first_name, last_name, position, number')
+        .eq('club_id', clubId)
+        .eq('active', true)
+        .order('last_name');
+      return data || [];
+    }
+
+    async function loadMicrocycles() {
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId) return [];
+      const { data } = await window.sb
+        .from('microcycles')
+        .select('id, name, match_date, start_date, end_date')
+        .eq('club_id', clubId)
+        .order('start_date', { ascending: false });
+      return data || [];
+    }
+
+    async function loadWeekData(playerId, mc) {
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId || !playerId) return [];
+
+      let from = mc?.start_date, to = mc?.end_date;
+      if (!from) {
+        const d = new Date(); d.setDate(d.getDate() - 7);
+        from = d.toISOString().slice(0, 10);
+        to   = new Date().toISOString().slice(0, 10);
+      }
+
+      const { data } = await window.sb
+        .from('gps_reports')
+        .select(`*, training_sessions!inner(id, session_date, session_type, session_attributes, title)`)
+        .eq('player_id', playerId)
+        .eq('club_id', clubId)
+        .gte('training_sessions.session_date', from)
+        .lte('training_sessions.session_date', to)
+        .order('training_sessions.session_date', { ascending: true });
+
+      return (data || []).map(r => ({
+        ...r,
+        session_date:  r.training_sessions.session_date,
+        session_type:  r.training_sessions.session_type,
+        session_attrs: r.training_sessions.session_attributes || {},
+        md_code:       r.training_sessions.session_attributes?.md_code
+                       || getMDCode(r.training_sessions.session_date, mc?.match_date),
+      }));
+    }
+
+    async function loadRPE(playerId, sessionIds) {
+      if (!sessionIds.length) return {};
+      const { data } = await window.sb
+        .from('rpe')
+        .select('session_id, rpe_value')
+        .eq('player_id', playerId)
+        .in('session_id', sessionIds);
+      const map = {};
+      (data || []).forEach(r => { map[r.session_id] = r.rpe_value; });
+      return map;
+    }
+
+    function renderKPIs(rows) {
+      const row = $('pw-kpi-row');
+      row.innerHTML = '';
+      const sum  = key => rows.reduce((s, r) => s + (r[key] || 0), 0);
+      const max  = key => Math.max(...rows.map(r => r[key] || 0));
+      const KPIs = [
+        { label: 'Total Load',    val: sum('player_load').toFixed(1) + ' AU' },
+        { label: 'Total Distance',val: Math.round(sum('total_distance')).toLocaleString() + ' m' },
+        { label: 'Total HSR',     val: Math.round(sum('high_speed_distance')).toLocaleString() + ' m' },
+        { label: 'Total Sprints', val: Math.round(sum('sprint_distance')).toLocaleString() + ' m' },
+        { label: 'Acc + Dec',     val: Math.round(sum('accelerations') + sum('decelerations')) + ' n' },
+        { label: 'Max Velocity',  val: max('max_speed').toFixed(1) + ' km/h' },
+      ];
+      KPIs.forEach(k => {
+        const card = document.createElement('div');
+        card.className = 'gp-c'; card.dataset.size = 'md';
+        card.style.cssText = 'min-width:130px;flex:1';
+        card.innerHTML = `<div class="gp-c-h"><span class="ttl">${k.label}</span></div>
+          <div class="gp-c-b gp-kpi-body"><div class="gp-kpi-val">${k.val}</div></div>`;
+        row.appendChild(card);
+      });
+    }
+
+    function renderTable(rows, rpeMap, matchBaseline) {
+      const scroll = $('pw-table-scroll');
+      if (!rows.length) { scroll.innerHTML = '<div class="gp-empty">No data for this period</div>'; return; }
+
+      const tbl = document.createElement('table');
+      tbl.className = 'gp-zt';
+      const COLS = ['Date','MD_Code','RPE','Load (AU)','TD (m)','HSR (m)','SPR (m)','Acc+Dec','TD% Game','HSR% Game'];
+      const thead = document.createElement('thead');
+      const hr    = document.createElement('tr');
+      COLS.forEach(c => { const th = document.createElement('th'); th.textContent = c; hr.appendChild(th); });
+      thead.appendChild(hr); tbl.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(r => {
+        const tr  = document.createElement('tr');
+        const rpe = rpeMap[r.session_id];
+        const td  = r.total_distance;
+        const hsr = r.high_speed_distance;
+        const tdPct  = matchBaseline ? pctGame(td,  matchBaseline.total_distance)  : null;
+        const hsrPct = matchBaseline ? pctGame(hsr, matchBaseline.high_speed_distance) : null;
+
+        const mdCode  = r.md_code || '—';
+        const mdColor = MD_CODE_COLORS[mdCode] || '';
+        const rpeColor = rpe ? RPE_COLORS[Math.round(rpe)] || '' : '';
+
+        const cells = [
+          { val: r.session_date },
+          { val: mdCode,          style: `background:${mdColor};font-weight:600` },
+          { val: rpe != null ? rpe : '—', style: `background:${rpeColor}` },
+          { val: r.player_load != null ? r.player_load.toFixed(1) : '—' },
+          { val: td != null ? Math.round(td).toLocaleString() : '—' },
+          { val: hsr != null ? Math.round(hsr).toLocaleString() : '—' },
+          { val: r.sprint_distance != null ? Math.round(r.sprint_distance).toLocaleString() : '—' },
+          { val: (r.accelerations || 0) + (r.decelerations || 0) },
+          { val: tdPct  != null ? tdPct  + '%' : '—', style: `background:${pctColor(tdPct)}` },
+          { val: hsrPct != null ? hsrPct + '%' : '—', style: `background:${pctColor(hsrPct)}` },
+        ];
+
+        cells.forEach(c => {
+          const tdEl = document.createElement('td');
+          tdEl.textContent = c.val;
+          if (c.style) tdEl.style.cssText = c.style;
+          tr.appendChild(tdEl);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      scroll.innerHTML = '';
+      scroll.appendChild(tbl);
+    }
+
+    function renderHIChart(rows) {
+      if (typeof Chart === 'undefined') return;
+      if (PW.hiChart) { PW.hiChart.destroy(); PW.hiChart = null; }
+      const canvas = $('pw-hi-chart');
+      if (!canvas) return;
+      const labels = rows.map(r => r.md_code || r.session_date);
+      PW.hiChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'HSR (m)',    data: rows.map(r => r.high_speed_distance || 0),        backgroundColor: 'rgba(250,204,21,0.75)', stack: 'hi' },
+            { label: 'VHSR (m)',   data: rows.map(r => r.very_high_speed_distance || 0),   backgroundColor: 'rgba(239,68,68,0.65)',   stack: 'hi' },
+            { label: 'Sprint (m)', data: rows.map(r => r.sprint_distance || 0),            backgroundColor: 'rgba(74,222,128,0.75)', stack: 'hi' },
+            { label: 'Acc+Dec', type: 'line', data: rows.map(r => (r.accelerations || 0) + (r.decelerations || 0)),
+              borderColor: 'var(--cm-success)', backgroundColor: 'transparent', yAxisID: 'y1', pointRadius: 4 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            y:  { beginAtZero: true, stacked: true, title: { display: true, text: 'HSR | VHSR | SPR (m)' } },
+            y1: { position: 'right', beginAtZero: true, title: { display: true, text: 'Acc+Dec' }, grid: { drawOnChartArea: false } },
+          },
+          plugins: { legend: { position: 'bottom' } },
+        },
+      });
+    }
+
+    async function pwRender() {
+      const playerId = PW.selectedPlayerId;
+      const mc       = PW.mcList.find(m => m.id === PW.selectedMcId);
+      if (!playerId) { $('pw-empty').style.display = 'block'; return; }
+      $('pw-empty').style.display = 'none';
+
+      const rows   = await loadWeekData(playerId, mc);
+      const rpeMap = await loadRPE(playerId, rows.map(r => r.session_id).filter(Boolean));
+      const player = PW.players.find(p => p.id === playerId);
+
+      $('pw-table-title').textContent = player ? `${player.first_name} ${player.last_name} — week data` : 'Week data';
+      $('pw-table-sub').textContent = mc
+        ? `${mc.start_date} – ${mc.end_date} · ${mc.name || ''}`
+        : `Last 7 days · ${rows.length} sessions`;
+
+      renderKPIs(rows);
+      renderTable(rows, rpeMap, null);
+      renderHIChart(rows);
+
+      if (mc?.match_date) {
+        const daysTo = Math.ceil((new Date(mc.match_date) - new Date()) / 86400000);
+        $('pw-next-match').textContent = daysTo >= 0
+          ? `MD: ${mc.match_date} · ${daysTo} days to go`
+          : `Last MD: ${mc.match_date}`;
+      } else {
+        $('pw-next-match').textContent = '';
+      }
+    }
+
+    $('pw-player-filter')?.addEventListener('change', e => {
+      PW.selectedPlayerId = e.target.value || null;
+      if (PW.selectedPlayerId) localStorage.setItem('pw_player', PW.selectedPlayerId);
+      pwRender();
+    });
+
+    $('pw-mc-filter')?.addEventListener('change', e => {
+      PW.selectedMcId = e.target.value || null;
+      pwRender();
+    });
+
+    window.pwInit = async function pwInit() {
+      if (PW.players.length) return;
+      const [players, mcs] = await Promise.all([loadPlayers(), loadMicrocycles()]);
+      PW.players = players;
+      PW.mcList  = mcs;
+
+      const playerSel = $('pw-player-filter');
+      players.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.first_name} ${p.last_name} · #${p.number || '–'}`;
+        playerSel.appendChild(opt);
+      });
+
+      const mcSel = $('pw-mc-filter');
+      mcSel.innerHTML = '';
+      const today = new Date().toISOString().slice(0, 10);
+      mcs.forEach((mc, i) => {
+        const opt = document.createElement('option');
+        opt.value = mc.id;
+        const isCurrent = mc.start_date <= today && mc.end_date >= today;
+        opt.textContent = (mc.name || `MC ${mc.start_date}`) + (isCurrent ? ' (current)' : '');
+        if (isCurrent || i === 0) { opt.selected = true; PW.selectedMcId = mc.id; }
+        mcSel.appendChild(opt);
+      });
+
+      const savedPl = localStorage.getItem('pw_player');
+      if (savedPl && players.find(p => p.id === savedPl)) {
+        playerSel.value   = savedPl;
+        PW.selectedPlayerId = savedPl;
+        await pwRender();
+      } else {
+        $('pw-empty').style.display = 'block';
+      }
+    };
+  })();
+
+  // ── LOAD MONITORING ─────────────────────────────────────────────────────────
+  (() => {
+    const LM = { acwrData: null, riskOnly: false, posFilter: '', search: '' };
+    const $ = id => document.getElementById(id);
+
+    const ZONE_COLORS = {
+      under:   { bg: 'rgba(99,102,241,0.15)', text: 'var(--cm-info)',    label: 'Under-training' },
+      sweet:   { bg: 'rgba(74,222,128,0.15)', text: 'var(--cm-success)', label: 'Sweet spot'      },
+      caution: { bg: 'rgba(251,146,60,0.2)',  text: 'var(--cm-warning)', label: 'Caution'         },
+      risk:    { bg: 'rgba(239,68,68,0.18)',  text: 'var(--cm-danger)',   label: 'High risk'       },
+    };
+
+    function getZone(acwr, thresholds = { under: 0.8, sweet_upper: 1.3, caution_upper: 1.5 }) {
+      if (acwr == null)           return null;
+      if (acwr < thresholds.under)         return 'under';
+      if (acwr < thresholds.sweet_upper)   return 'sweet';
+      if (acwr < thresholds.caution_upper) return 'caution';
+      return 'risk';
+    }
+
+    async function calculateACWR(clubId, metricKey, refDate) {
+      const ref     = new Date(refDate);
+      const acute7  = new Date(ref); acute7.setDate(ref.getDate() - 7);
+      const chronic28 = new Date(ref); chronic28.setDate(ref.getDate() - 28);
+
+      const { data } = await window.sb.rpc('gps_batch_acwr', {
+        p_club_id:    clubId,
+        p_metric:     metricKey,
+        p_ref_date:   refDate,
+        p_acute_from: acute7.toISOString().slice(0, 10),
+        p_chronic_from: chronic28.toISOString().slice(0, 10),
+      }).catch(() => ({ data: null }));
+
+      if (data) return data;
+
+      // Fallback: client-side calculation
+      const { data: rows } = await window.sb
+        .from('gps_reports')
+        .select(`${metricKey}, player_id, training_sessions!inner(session_date)`)
+        .eq('club_id', clubId)
+        .gte('training_sessions.session_date', chronic28.toISOString().slice(0, 10))
+        .lte('training_sessions.session_date', refDate);
+
+      const playerMap = {};
+      (rows || []).forEach(r => {
+        const pid  = r.player_id;
+        const date = r.training_sessions.session_date;
+        const val  = r[metricKey];
+        if (!playerMap[pid]) playerMap[pid] = { acute: [], chronic: [] };
+        playerMap[pid].chronic.push(val);
+        if (date >= acute7.toISOString().slice(0, 10)) playerMap[pid].acute.push(val);
+      });
+
+      return Object.entries(playerMap).map(([player_id, d]) => {
+        const acute   = d.acute.length   ? d.acute.reduce((s, v) => s + v, 0)   / d.acute.length   : null;
+        const chronic = d.chronic.length ? d.chronic.reduce((s, v) => s + v, 0) / d.chronic.length : null;
+        return { player_id, acute, chronic, acwr: (acute && chronic) ? acute / chronic : null, sessions: d.chronic.length };
+      });
+    }
+
+    function renderGauges(acwrRows, metricKey) {
+      const gaugeRow = $('lm-gauges-row');
+      if (!gaugeRow) return;
+      gaugeRow.innerHTML = '';
+
+      const valid   = acwrRows.filter(r => r.acwr != null);
+      const teamAvg = valid.length ? valid.reduce((s, r) => s + r.acwr, 0) / valid.length : null;
+
+      const METRICS = ['player_load','total_distance','high_speed_distance','sprint_distance'];
+      METRICS.forEach(mKey => {
+        // For team gauge use teamAvg (simplified: only one metric at a time)
+        const avgVal = mKey === metricKey ? (teamAvg || 0) : null;
+        if (avgVal == null) return;
+        const zone  = getZone(avgVal);
+        const zInfo = zone ? ZONE_COLORS[zone] : ZONE_COLORS.sweet;
+
+        // Gauge SVG (simplified semicircle)
+        const angle = (Math.min(Math.max(avgVal, 0), 2) / 2) * 180;
+        const rad   = (angle * Math.PI / 180);
+        const nx    = 60 + 45 * Math.cos(Math.PI - rad);
+        const ny    = 70 - 45 * Math.sin(Math.PI - rad);
+
+        const div = document.createElement('div');
+        div.style.cssText = 'text-align:center;min-width:120px;flex:1';
+        div.innerHTML = `
+          <svg viewBox="0 0 120 80" style="width:120px">
+            <path d="M 15 70 A 45 45 0 0 1 105 70" fill="none" stroke="${ZONE_COLORS.under.text}" stroke-width="10" opacity="0.4"/>
+            <path d="M 35 35 A 45 45 0 0 1 85 35" fill="none" stroke="${ZONE_COLORS.sweet.text}" stroke-width="10" opacity="0.4"/>
+            <path d="M 82 32 A 45 45 0 0 1 97 52" fill="none" stroke="${ZONE_COLORS.caution.text}" stroke-width="10" opacity="0.4"/>
+            <path d="M 97 52 A 45 45 0 0 1 105 70" fill="none" stroke="${ZONE_COLORS.risk.text}" stroke-width="10" opacity="0.4"/>
+            <line x1="60" y1="70" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="var(--cm-fg-strong)" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="60" cy="70" r="3" fill="var(--cm-fg-strong)"/>
+            <text x="60" y="58" text-anchor="middle" font-size="14" font-weight="700" fill="var(--cm-fg-strong)">${avgVal.toFixed(2)}</text>
+          </svg>
+          <div style="font:600 11px/1 var(--cm-font-sans);color:${zInfo.text}">${zInfo.label}</div>
+          <div style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${mKey.replace(/_/g,' ')}</div>`;
+        gaugeRow.appendChild(div);
+      });
+    }
+
+    function renderAlerts(acwrRows, players, thresholds) {
+      const alertsEl = $('lm-alerts');
+      if (!alertsEl) return;
+      const atRisk   = acwrRows.filter(r => r.acwr != null && r.acwr > (thresholds?.caution_upper || 1.5));
+      const lowData  = acwrRows.filter(r => r.sessions < 4);
+      const messages = [];
+      if (atRisk.length) {
+        const names = atRisk.map(r => {
+          const p = players.find(pl => pl.id === r.player_id);
+          return p ? `${p.first_name[0]}. ${p.last_name}` : r.player_id;
+        });
+        messages.push(`${atRisk.length} player${atRisk.length > 1 ? 's' : ''} in HIGH RISK zone: ${names.join(', ')}`);
+      }
+      if (lowData.length) messages.push(`${lowData.length} player${lowData.length > 1 ? 's' : ''} with insufficient data (&lt;4 sessions in 28 days)`);
+      if (!messages.length) { alertsEl.style.display = 'none'; return; }
+      alertsEl.style.display = 'block';
+      alertsEl.innerHTML = messages.map(m => `
+        <div style="padding:10px 14px;border-radius:var(--cm-r-3);background:var(--cm-danger-bg);border:1px solid var(--cm-danger);color:var(--cm-danger);font:500 12px/1.4 var(--cm-font-sans);margin-bottom:6px">
+          ${m}
+        </div>`).join('');
+    }
+
+    function renderTable(acwrRows, players, thresholds) {
+      const scroll  = $('lm-table-scroll');
+      const search  = $('lm-search')?.value?.toLowerCase() || '';
+      const posF    = $('lm-pos-filter')?.value || '';
+
+      let rows = acwrRows.map(r => {
+        const p = players.find(pl => pl.id === r.player_id);
+        return { ...r, player: p, name: p ? `${p.first_name} ${p.last_name}` : '—', pos: p?.position || '' };
+      }).filter(r => {
+        if (search && !r.name.toLowerCase().includes(search)) return false;
+        if (posF && r.pos.toUpperCase().slice(0, 3) !== posF) return false;
+        if (LM.riskOnly) {
+          const zone = getZone(r.acwr, thresholds);
+          if (!zone || zone === 'sweet') return false;
+        }
+        return true;
+      });
+      rows.sort((a, b) => (b.acwr || 0) - (a.acwr || 0));
+
+      if (!rows.length) { scroll.innerHTML = '<div class="gp-empty">No players match filters</div>'; return; }
+
+      const tbl   = document.createElement('table');
+      tbl.className = 'gp-zt';
+      const COLS  = ['Player','Pos','Sessions','Acute','Chronic','ACWR (Load)'];
+      const thead = document.createElement('thead');
+      const hr    = document.createElement('tr');
+      COLS.forEach(c => { const th = document.createElement('th'); th.textContent = c; hr.appendChild(th); });
+      thead.appendChild(hr); tbl.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.forEach(r => {
+        const tr   = document.createElement('tr');
+        const zone = getZone(r.acwr, thresholds);
+        const zInfo = zone ? ZONE_COLORS[zone] : null;
+        const cells = [
+          { val: r.name, style: 'text-align:left;padding-left:12px' },
+          { val: r.pos },
+          { val: r.sessions, style: r.sessions < 4 ? 'color:var(--cm-warning)' : '' },
+          { val: r.acute   != null ? r.acute.toFixed(1)   : '—' },
+          { val: r.chronic != null ? r.chronic.toFixed(1) : '—' },
+          { val: r.acwr    != null ? r.acwr.toFixed(2)    : '—',
+            style: zInfo ? `background:${zInfo.bg};color:${zInfo.text};font-weight:700` : '' },
+        ];
+        cells.forEach(c => {
+          const td = document.createElement('td');
+          td.textContent = c.val;
+          if (c.style) td.style.cssText = c.style;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      scroll.innerHTML = '';
+      scroll.appendChild(tbl);
+    }
+
+    async function lmRender() {
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId) return;
+      const refDate  = new Date().toISOString().slice(0, 10);
+      const metric   = $('lm-primary-metric')?.value || 'player_load';
+
+      const [acwrRows, playersRes, settingsRes] = await Promise.all([
+        calculateACWR(clubId, metric, refDate),
+        window.sb.from('players').select('id, first_name, last_name, position').eq('club_id', clubId).eq('active', true),
+        window.sb.from('club_gps_settings').select('acwr_thresholds').eq('club_id', clubId).maybeSingle(),
+      ]);
+      const players    = playersRes.data || [];
+      const thresholds = settingsRes.data?.acwr_thresholds || { under: 0.8, sweet_upper: 1.3, caution_upper: 1.5 };
+
+      LM.acwrData = { rows: acwrRows, players, thresholds };
+      renderGauges(acwrRows, metric);
+      renderAlerts(acwrRows, players, thresholds);
+      renderTable(acwrRows, players, thresholds);
+    }
+
+    $('lm-primary-metric')?.addEventListener('change', lmRender);
+    $('lm-search')?.addEventListener('input', () => {
+      if (LM.acwrData) renderTable(LM.acwrData.rows, LM.acwrData.players, LM.acwrData.thresholds);
+    });
+    $('lm-pos-filter')?.addEventListener('change', () => {
+      if (LM.acwrData) renderTable(LM.acwrData.rows, LM.acwrData.players, LM.acwrData.thresholds);
+    });
+    $('lm-risk-only-btn')?.addEventListener('click', () => {
+      LM.riskOnly = !LM.riskOnly;
+      $('lm-risk-only-btn').classList.toggle('is-on', LM.riskOnly);
+      if (LM.acwrData) renderTable(LM.acwrData.rows, LM.acwrData.players, LM.acwrData.thresholds);
+    });
+    $('lm-export-btn')?.addEventListener('click', () => {
+      if (!LM.acwrData) return;
+      const { rows, players } = LM.acwrData;
+      const header = 'Player,Position,Sessions,Acute,Chronic,ACWR';
+      const csv    = [header, ...rows.map(r => {
+        const p = players.find(pl => pl.id === r.player_id);
+        return [p ? `${p.first_name} ${p.last_name}` : r.player_id, p?.position || '', r.sessions, r.acute?.toFixed(1) || '', r.chronic?.toFixed(1) || '', r.acwr?.toFixed(2) || ''].join(',');
+      })].join('\n');
+      const a = document.createElement('a');
+      a.href = 'data:text/csv,' + encodeURIComponent(csv);
+      a.download = 'load_monitoring.csv';
+      a.click();
+    });
+
+    window.lmInit = async function lmInit() {
+      if (LM.acwrData) return;
+      await lmRender();
+    };
+  })();
+
+  // ── MATCH PERFORMANCE ────────────────────────────────────────────────────────
+  (() => {
+    const MP = { players: [], matches: [], tdChart: null, hiChart: null };
+    const $ = id => document.getElementById(id);
+
+    async function loadMatchData(playerId, range) {
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId || !playerId) return [];
+      const today    = new Date().toISOString().slice(0, 10);
+      const yearStart = today.slice(0, 4) + '-01-01';
+      const from = range === 'season' ? yearStart : '2000-01-01';
+      const limit = range === 'last_10' ? 10 : range === 'last_5' ? 5 : null;
+
+      let q = window.sb
+        .from('gps_reports')
+        .select(`*, training_sessions!inner(id, session_date, title, session_type, session_attributes)`)
+        .eq('player_id', playerId)
+        .eq('club_id', clubId)
+        .eq('training_sessions.session_type', 'match')
+        .gte('training_sessions.session_date', from)
+        .order('training_sessions.session_date', { ascending: true });
+      if (limit) q = q.limit(limit);
+      const { data } = await q;
+      return (data || []).map(r => ({
+        ...r,
+        session_date: r.training_sessions.session_date,
+        rival:        r.training_sessions.session_attributes?.rival || r.training_sessions.title || 'Match',
+      }));
+    }
+
+    function renderKPIs(matches) {
+      const row = $('mp-kpi-row');
+      row.innerHTML = '';
+      if (!matches.length) return;
+      const KPIs = [
+        { label: 'Games',    val: matches.length + ' GP' },
+        { label: 'Max TD',   val: Math.round(Math.max(...matches.map(m => m.total_distance || 0))).toLocaleString() + ' m' },
+        { label: 'Max HSR',  val: Math.round(Math.max(...matches.map(m => m.high_speed_distance || 0))).toLocaleString() + ' m' },
+        { label: 'Max SPR',  val: Math.round(Math.max(...matches.map(m => m.sprint_distance || 0))).toLocaleString() + ' m' },
+        { label: 'Max Load', val: Math.max(...matches.map(m => m.player_load || 0)).toFixed(1) + ' AU' },
+        { label: 'Avg TD',   val: Math.round(matches.reduce((s, m) => s + (m.total_distance || 0), 0) / matches.length).toLocaleString() + ' m' },
+      ];
+      KPIs.forEach(k => {
+        const card = document.createElement('div');
+        card.className = 'gp-c'; card.dataset.size = 'md';
+        card.style.cssText = 'min-width:120px;flex:1';
+        card.innerHTML = `<div class="gp-c-h"><span class="ttl">${k.label}</span></div>
+          <div class="gp-c-b gp-kpi-body"><div class="gp-kpi-val">${k.val}</div></div>`;
+        row.appendChild(card);
+      });
+    }
+
+    function renderTDChart(matches) {
+      if (typeof Chart === 'undefined') return;
+      if (MP.tdChart) { MP.tdChart.destroy(); MP.tdChart = null; }
+      const canvas = $('mp-td-chart');
+      if (!canvas || !matches.length) return;
+      MP.tdChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: matches.map(m => m.rival),
+          datasets: [
+            { label: 'Total Distance (m)', data: matches.map(m => m.total_distance || 0), backgroundColor: 'var(--cm-accent)', borderRadius: 3 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true } },
+          plugins: { legend: { display: false } },
+        },
+      });
+    }
+
+    function renderHIChart(matches) {
+      if (typeof Chart === 'undefined') return;
+      if (MP.hiChart) { MP.hiChart.destroy(); MP.hiChart = null; }
+      const canvas = $('mp-hi-chart');
+      if (!canvas || !matches.length) return;
+      MP.hiChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: matches.map(m => m.rival),
+          datasets: [
+            { label: 'HSR (m)',    data: matches.map(m => m.high_speed_distance || 0),       backgroundColor: 'rgba(250,204,21,0.8)', stack: 'hi' },
+            { label: 'VHSR (m)',   data: matches.map(m => m.very_high_speed_distance || 0),  backgroundColor: 'rgba(239,68,68,0.7)',   stack: 'hi' },
+            { label: 'Sprint (m)', data: matches.map(m => m.sprint_distance || 0),           backgroundColor: 'rgba(74,222,128,0.8)', stack: 'hi' },
+          ],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          scales: { x: { beginAtZero: true, stacked: true }, y: { stacked: true } },
+          plugins: { legend: { position: 'bottom' } },
+        },
+      });
+    }
+
+    async function mpRender() {
+      const playerId = $('mp-player-filter')?.value;
+      const range    = $('mp-range-filter')?.value || 'season';
+      if (!playerId) { $('mp-empty').style.display = 'block'; return; }
+      $('mp-empty').style.display = 'none';
+      const matches = await loadMatchData(playerId, range);
+      MP.matches = matches;
+      renderKPIs(matches);
+      renderTDChart(matches);
+      renderHIChart(matches);
+    }
+
+    $('mp-player-filter')?.addEventListener('change', mpRender);
+    $('mp-range-filter')?.addEventListener('change', mpRender);
+
+    window.mpInit = async function mpInit() {
+      if (MP.players.length) return;
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId) return;
+      const { data: players } = await window.sb
+        .from('players')
+        .select('id, first_name, last_name, position, number')
+        .eq('club_id', clubId)
+        .eq('active', true)
+        .order('last_name');
+      MP.players = players || [];
+      const sel  = $('mp-player-filter');
+      MP.players.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.first_name} ${p.last_name} · #${p.number || '–'}`;
+        sel.appendChild(opt);
+      });
+      $('mp-empty').style.display = 'block';
+    };
+  })();
+
+  // ── MICROCYCLE COMPARE ───────────────────────────────────────────────────────
+  (() => {
+    const MC = { microcycles: [], data: null, scatterChart: null };
+    const $ = id => document.getElementById(id);
+
+    function diffPct(current, reference) {
+      if (!reference || reference === 0) return null;
+      return ((current - reference) / reference) * 100;
+    }
+
+    function diffColor(pct) {
+      if (pct == null) return '';
+      if (pct >  20) return 'rgba(74,222,128,0.25)';
+      if (pct >   5) return 'rgba(74,222,128,0.15)';
+      if (pct > -5)  return '';
+      if (pct > -20) return 'rgba(251,146,60,0.2)';
+      return 'rgba(239,68,68,0.2)';
+    }
+
+    async function loadMicrocycles() {
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId) return [];
+      const { data } = await window.sb
+        .from('microcycles')
+        .select('id, name, match_date, start_date, end_date')
+        .eq('club_id', clubId)
+        .order('start_date', { ascending: false });
+      return data || [];
+    }
+
+    async function loadMDData(mdCode, metric, mcs) {
+      const clubId = window.gpState?.clubId || window._currentClubId;
+      if (!clubId || !mcs.length) return [];
+      // Get reports for sessions matching this md_code across microcycles
+      // Using session_attributes->>'md_code' filter
+      const results = [];
+      for (const mc of mcs) {
+        const { data } = await window.sb
+          .from('gps_reports')
+          .select(`player_id, ${metric}, players!inner(first_name, last_name), training_sessions!inner(session_date, session_attributes)`)
+          .eq('club_id', clubId)
+          .gte('training_sessions.session_date', mc.start_date)
+          .lte('training_sessions.session_date', mc.end_date)
+          .filter('training_sessions.session_attributes->>md_code', 'eq', mdCode);
+        if (data?.length) {
+          results.push({ mc, rows: data.map(r => ({ player_id: r.player_id, name: `${r.players.first_name} ${r.players.last_name}`, value: r[metric] })) });
+        }
+      }
+      return results;
+    }
+
+    function renderTable(mcDatasets, metric) {
+      const scroll  = $('mc-table-scroll');
+      const scope   = $('mc-scope')?.value || 'vs_last';
+      const sub     = $('mc-table-sub');
+      if (mcDatasets.length < 2) {
+        scroll.innerHTML = '<div class="gp-empty">Need at least 2 microcycles with data for this MD code</div>';
+        if (sub) sub.textContent = '';
+        return;
+      }
+
+      const current  = mcDatasets[0];
+      const refs     = mcDatasets.slice(1);
+      const refLabel = scope === 'vs_last' ? refs[0].mc.name : `avg last ${refs.length} MCs`;
+      if (sub) sub.textContent = `${current.mc.name} vs ${refLabel}`;
+
+      // Build reference map per player
+      const getRefVal = (playerId) => {
+        const vals = refs.flatMap(d => d.rows.filter(r => r.player_id === playerId).map(r => r.value));
+        if (!vals.length) return null;
+        return vals.reduce((s, v) => s + v, 0) / vals.length;
+      };
+
+      const tbl   = document.createElement('table');
+      tbl.className = 'gp-zt';
+      const COLS  = ['Player', `${metric.replace(/_/g,' ')} (current)`, 'Reference', 'Diff %'];
+      const thead = document.createElement('thead');
+      const hr    = document.createElement('tr');
+      COLS.forEach(c => { const th = document.createElement('th'); th.textContent = c; hr.appendChild(th); });
+      thead.appendChild(hr); tbl.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      const rows  = [...current.rows].sort((a, b) => (b.value || 0) - (a.value || 0));
+      rows.forEach(r => {
+        const refVal = getRefVal(r.player_id);
+        const pct    = diffPct(r.value, refVal);
+        const tr     = document.createElement('tr');
+        const cells  = [
+          { val: r.name, style: 'text-align:left;padding-left:12px' },
+          { val: r.value != null ? Math.round(r.value).toLocaleString() : '—' },
+          { val: refVal  != null ? Math.round(refVal).toLocaleString()  : '—' },
+          { val: pct     != null ? (pct > 0 ? '+' : '') + pct.toFixed(0) + '%' : '—', style: `background:${diffColor(pct)};font-weight:600` },
+        ];
+        cells.forEach(c => {
+          const td = document.createElement('td');
+          td.textContent = c.val;
+          if (c.style) td.style.cssText = c.style;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      scroll.innerHTML = '';
+      scroll.appendChild(tbl);
+      return { rows: rows.map(r => ({ ...r, refVal: getRefVal(r.player_id), pct: diffPct(r.value, getRefVal(r.player_id)) })) };
+    }
+
+    function renderScatter(tableRows) {
+      if (typeof Chart === 'undefined') return;
+      if (MC.scatterChart) { MC.scatterChart.destroy(); MC.scatterChart = null; }
+      const canvas = $('mc-scatter-chart');
+      if (!canvas || !tableRows) return;
+      const metric = $('mc-metric')?.value || 'total_distance';
+      const valid  = tableRows.filter(r => r.value != null && r.pct != null);
+      const avgPct = valid.length ? valid.reduce((s, r) => s + r.pct, 0) / valid.length : 0;
+      MC.scatterChart = new Chart(canvas, {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Players',
+            data: valid.map(r => ({ x: r.pct, y: r.value, label: r.name.split(' ').map(n => n[0]).join('') })),
+            backgroundColor: 'var(--cm-accent)', pointRadius: 8,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: {
+            x: { title: { display: true, text: '% diff vs reference' } },
+            y: { title: { display: true, text: metric.replace(/_/g, ' ') } },
+          },
+          plugins: {
+            tooltip: { callbacks: { label: ctx => `${ctx.raw.label}: ${ctx.raw.y} (${ctx.raw.x > 0 ? '+' : ''}${ctx.raw.x.toFixed(0)}%)` } },
+            annotation: {
+              annotations: [{
+                type: 'line', orientation: 'vertical',
+                xMin: avgPct, xMax: avgPct,
+                borderColor: 'var(--cm-border-strong)', borderWidth: 1, borderDash: [4, 3],
+                label: { content: `Avg ${avgPct.toFixed(0)}%`, display: true, position: 'start' }
+              }]
+            }
+          },
+        },
+      });
+    }
+
+    async function mcRender() {
+      const mdCode = $('mc-md-code')?.value || 'MD-3';
+      const metric = $('mc-metric')?.value  || 'total_distance';
+      const scope  = $('mc-scope')?.value   || 'vs_last';
+      const limit  = scope === 'vs_last' ? 2 : scope === 'vs_avg_3' ? 4 : scope === 'vs_avg_5' ? 6 : MC.microcycles.length;
+      const mcs    = MC.microcycles.slice(0, limit);
+
+      if (mcs.length < 2) { $('mc-empty').style.display = 'block'; return; }
+      $('mc-empty').style.display = 'none';
+
+      const datasets = await loadMDData(mdCode, metric, mcs);
+      MC.data        = datasets;
+      const tableRows = renderTable(datasets, metric);
+      renderScatter(tableRows?.rows);
+    }
+
+    ['mc-md-code','mc-scope','mc-metric'].forEach(id => {
+      $(id)?.addEventListener('change', mcRender);
+    });
+
+    $('mc-export-btn')?.addEventListener('click', () => {
+      if (!MC.data) return;
+      const metric = $('mc-metric')?.value || 'total_distance';
+      const current = MC.data[0];
+      if (!current) return;
+      const header = 'Player,' + metric.replace(/_/g,' ') + ',Reference,Diff%';
+      const csv = [header, ...current.rows.map(r => {
+        const ref = MC.data.slice(1).flatMap(d => d.rows.filter(x => x.player_id === r.player_id).map(x => x.value));
+        const refAvg = ref.length ? ref.reduce((s, v) => s + v, 0) / ref.length : null;
+        const pct = refAvg ? ((r.value - refAvg) / refAvg * 100).toFixed(1) : '';
+        return `${r.name},${Math.round(r.value)},${refAvg ? Math.round(refAvg) : ''},${pct}`;
+      })].join('\n');
+      const a = document.createElement('a');
+      a.href = 'data:text/csv,' + encodeURIComponent(csv);
+      a.download = 'mc_compare.csv';
+      a.click();
+    });
+
+    window.mcInit = async function mcInit() {
+      if (MC.microcycles.length) return;
+      MC.microcycles = await loadMicrocycles();
+      await mcRender();
+    };
+  })();
+
   const srcDrawer = document.getElementById('srcDrawer');
   const srcOverlay = document.getElementById('srcOverlay');
   const srcBtn = document.getElementById('srcBtn');
