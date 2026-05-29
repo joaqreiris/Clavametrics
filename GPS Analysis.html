@@ -231,6 +231,13 @@
   .gp-pop-search:focus { border-color:var(--cm-accent); }
   @keyframes gp-spin { to { transform:rotate(360deg); } }
 
+  /* ── Historical indicator ─────────────────────────────────── */
+  .gp-hist-badge { display:inline-flex; align-items:center; gap:3px; height:16px; padding:0 6px; border-radius:3px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.25); color:#6366f1; font:600 9px/1 var(--cm-font-mono); letter-spacing:.03em; flex-shrink:0; }
+  .gp-hist-banner { display:none; margin-bottom:12px; padding:10px 14px; background:var(--cm-accent-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .gp-hist-banner strong { color:var(--cm-fg-strong); }
+  .gp-hist-banner.is-on { display:flex; align-items:center; gap:10px; }
+  .gp-c.has-historical { border-style:dashed; }
+
   /* ── Import wizard ────────────────────────────────────────── */
   .gp-modal.wide   { width:720px; }
   .gp-wiz-steps    { display:flex; gap:0; border-bottom:1px solid var(--cm-border-soft); padding:0 18px; }
@@ -301,7 +308,7 @@
     <section class="gp-page">
       <div class="gp-bar">
         <h1>GPS analysis</h1>
-        <span class="sub" id="gpSub">MC 14 · 22 players · last sync 8 min ago</span>
+        <span class="sub" id="gpSub">Loading…</span>
         <div class="right">
           <button class="gp-src-btn" id="srcBtn">
             <span class="dot"></span><i class="ti ti-cloud-download"></i>Data sources<span class="ct">4 connected</span><i class="ti ti-chevron-down"></i>
@@ -309,6 +316,11 @@
           <button class="cm-btn is-ghost is-sm" id="gpSettingsBtn"><i class="ti ti-adjustments-horizontal" style="font-size:14px"></i>GPS settings</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
         </div>
+      </div>
+
+      <div class="gp-hist-banner" id="histBanner">
+        <i class="ti ti-info-circle" style="font-size:16px;color:var(--cm-accent);flex-shrink:0"></i>
+        <span>Showing <strong>historical data</strong>. Import current sessions or change date range to see recent activity.</span>
       </div>
 
       <div class="gp-sections" id="sections">
@@ -320,11 +332,13 @@
 
       <div class="gp-dash-bar">
         <span class="h">Dashboard <span id="secTitle">· Individual</span></span>
-        <span class="h-sub" id="secSub">F. Domínguez · #10 · MF · vs role baseline</span>
+        <span class="h-sub" id="secSub">— · vs role baseline</span>
         <div class="right">
-          <button class="pill"><i class="ti ti-clock"></i>MC 14</button>
-          <button class="pill"><i class="ti ti-user"></i>F. Domínguez</button>
-          <button class="pill"><i class="ti ti-target"></i>vs Role</button>
+          <button class="pill" id="dateRangePill"><i class="ti ti-calendar-range"></i><span id="dateRangeLabel">Last 30 days</span></button>
+          <button class="pill" id="mcPill"><i class="ti ti-clock"></i><span id="mcLabel">All MCs</span></button>
+          <button class="pill" id="playerPill"><i class="ti ti-user"></i><span id="playerLabel">All players</span></button>
+          <button class="pill" id="baselinePill"><i class="ti ti-target"></i><span id="baselineLabel">vs Role</span></button>
+          <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines."><i class="ti ti-history"></i>Historical</button>
           <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
           <button class="pill is-on" id="editToggle"><i class="ti ti-pencil"></i>Edit layout</button>
           <button class="pill"><i class="ti ti-bookmark"></i>Saved views</button>
@@ -763,7 +777,96 @@
 // ══════════════════════════════════════════════════════════════
 
 // ── State ─────────────────────────────────────────────────────
-window.gpState = { microcycle: 'MC 14', playerId: null, baseline: 'vs Role', view: 'ind' };
+window.gpState = {
+  datePreset: 'last30',
+  dateFrom: null,
+  dateTo: null,
+  includeHistorical: false,
+  microcycle: 'All',
+  playerId: null,
+  baseline: 'vs Role',
+  view: 'ind',
+};
+
+// ── Date range helpers ────────────────────────────────────────
+function _fmtDate(d) { return d.toISOString().slice(0, 10); }
+
+function getDateRange(state) {
+  const now = new Date();
+  const s = state || window.gpState;
+  switch (s.datePreset) {
+    case 'last7':  { const f = new Date(now); f.setDate(f.getDate()-7);  return { from: _fmtDate(f), to: _fmtDate(now) }; }
+    case 'last30': { const f = new Date(now); f.setDate(f.getDate()-30); return { from: _fmtDate(f), to: _fmtDate(now) }; }
+    case 'last90': { const f = new Date(now); f.setDate(f.getDate()-90); return { from: _fmtDate(f), to: _fmtDate(now) }; }
+    case 'currentMC': {
+      const day = now.getDay() || 7;
+      const mon = new Date(now); mon.setDate(now.getDate() - day + 1);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return { from: _fmtDate(mon), to: _fmtDate(sun) };
+    }
+    case 'currentMonth': {
+      return { from: _fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)), to: _fmtDate(now) };
+    }
+    case 'currentSeason': {
+      const seasonStart = now.getMonth() >= 6
+        ? new Date(now.getFullYear(), 6, 1)
+        : new Date(now.getFullYear() - 1, 6, 1);
+      return { from: _fmtDate(seasonStart), to: _fmtDate(now) };
+    }
+    case 'allTime': return { from: '2000-01-01', to: _fmtDate(now) };
+    case 'custom':  return { from: s.dateFrom || _fmtDate(new Date(now.getFullYear(), 0, 1)), to: s.dateTo || _fmtDate(now) };
+    default:        { const f = new Date(now); f.setDate(f.getDate()-30); return { from: _fmtDate(f), to: _fmtDate(now) }; }
+  }
+}
+
+function getDatePresetLabel(state) {
+  const s = state || window.gpState;
+  const m = { last7:'Last 7 days', last30:'Last 30 days', last90:'Last 90 days', currentMC:'Current MC',
+               currentMonth:'Current month', currentSeason:'Current season', allTime:'All time' };
+  if (s.datePreset === 'custom') return `${s.dateFrom || '?'} — ${s.dateTo || '?'}`;
+  return m[s.datePreset] || 'Last 30 days';
+}
+
+// ── Prefs persistence — by (clubId, userId) ────────────────────
+function _gpPrefsKey() {
+  return `cm_gps_prefs_${window._gpClubId||'?'}_${window._gpUserId||'?'}`;
+}
+function saveGpsPrefs() {
+  const s = window.gpState;
+  const v = { datePreset:s.datePreset, dateFrom:s.dateFrom, dateTo:s.dateTo,
+              includeHistorical:s.includeHistorical, microcycle:s.microcycle,
+              playerId:s.playerId, playerName:s.playerName, baseline:s.baseline };
+  try { localStorage.setItem(_gpPrefsKey(), JSON.stringify(v)); } catch(_) {}
+}
+function loadGpsPrefs() {
+  try {
+    const raw = localStorage.getItem(_gpPrefsKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch(_) { return null; }
+}
+function applyGpsPrefs(prefs) {
+  if (!prefs) return;
+  Object.assign(window.gpState, prefs);
+  const drLabel = document.getElementById('dateRangeLabel');
+  if (drLabel) drLabel.textContent = getDatePresetLabel();
+  const mcLabel = document.getElementById('mcLabel');
+  if (mcLabel) mcLabel.textContent = (window.gpState.microcycle && window.gpState.microcycle !== 'All') ? window.gpState.microcycle : 'All MCs';
+  const plLabel = document.getElementById('playerLabel');
+  if (plLabel) plLabel.textContent = window.gpState.playerName || 'All players';
+  const histPill = document.getElementById('histPill');
+  if (histPill) histPill.classList.toggle('is-on', !!window.gpState.includeHistorical);
+  const blLabel = document.getElementById('baselineLabel');
+  if (blLabel) blLabel.textContent = window.gpState.baseline || 'vs Role';
+}
+
+// ── UI: update filter subtitle in gpSub ───────────────────────
+function _updateGpSub(playerCount, sessionCount) {
+  const sub = document.getElementById('gpSub');
+  if (!sub) return;
+  const label = getDatePresetLabel();
+  const hist  = window.gpState.includeHistorical ? ' · including historical' : '';
+  sub.textContent = `${playerCount ?? '—'} players · ${sessionCount ?? '—'} sessions · ${label}${hist}`;
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 function getISOWeek(d) {
@@ -959,50 +1062,189 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   e.stopPropagation();
   const ic = pill.querySelector('.ti')?.className || '';
 
-  // MC pill
-  if (ic.includes('ti-clock')) {
+  // ── Date range pill ────────────────────────────────────────
+  if (pill.id === 'dateRangePill') {
+    const INP_STYLE = 'padding:5px 8px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11px/1 var(--cm-font-sans);width:100%;box-sizing:border-box';
+    const pop = document.createElement('div');
+    pop.className = 'gp-popover';
+    pop.style.minWidth = '220px';
+
+    const presets = [
+      { preset: 'last7',         label: 'Last 7 days' },
+      { preset: 'last30',        label: 'Last 30 days' },
+      { preset: 'last90',        label: 'Last 90 days' },
+      { preset: 'currentMC',     label: 'Current microcycle' },
+      { preset: 'currentMonth',  label: 'Current month' },
+      { preset: 'currentSeason', label: 'Current season' },
+      { preset: 'allTime',       label: 'All time' },
+    ];
+    presets.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'gp-popover-item';
+      btn.innerHTML = `<i class="ti ti-calendar" style="font-size:13px"></i>${p.label}`;
+      if (window.gpState.datePreset === p.preset) btn.style.fontWeight = '700';
+      btn.addEventListener('click', e => {
+        e.stopPropagation(); closePop();
+        window.gpState.datePreset = p.preset;
+        document.getElementById('dateRangeLabel').textContent = p.label;
+        saveGpsPrefs();
+        window.renderView?.();
+        window.refreshDashboard?.();
+      });
+      pop.appendChild(btn);
+    });
+
+    const sep = document.createElement('div'); sep.className = 'gp-popover-sep'; pop.appendChild(sep);
+
+    const customWrap = document.createElement('div');
+    customWrap.style.cssText = 'padding:6px 10px 8px';
+    const curFrom = window.gpState.datePreset === 'custom' ? (window.gpState.dateFrom || '') : '';
+    const curTo   = window.gpState.datePreset === 'custom' ? (window.gpState.dateTo || '') : '';
+    customWrap.innerHTML = `
+      <div style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Custom range</div>
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:7px">
+        <input type="date" id="drFrom" value="${curFrom}" style="${INP_STYLE}">
+        <span style="color:var(--cm-fg-muted);flex-shrink:0;font-size:11px">—</span>
+        <input type="date" id="drTo" value="${curTo}" style="${INP_STYLE}">
+      </div>
+      <button id="drApply" style="width:100%;height:26px;border-radius:5px;border:1px solid var(--cm-accent);background:var(--cm-accent-soft);color:var(--cm-fg-strong);font:600 11.5px/1 var(--cm-font-sans);cursor:pointer">Apply</button>`;
+    pop.appendChild(customWrap);
+
+    customWrap.querySelector('#drApply').addEventListener('click', e => {
+      e.stopPropagation();
+      const f = customWrap.querySelector('#drFrom').value;
+      const t = customWrap.querySelector('#drTo').value;
+      if (!f || !t) { showToast('Select both dates'); return; }
+      if (f > t) { showToast('From must be before To'); return; }
+      closePop();
+      window.gpState.datePreset = 'custom';
+      window.gpState.dateFrom   = f;
+      window.gpState.dateTo     = t;
+      document.getElementById('dateRangeLabel').textContent = `${f} — ${t}`;
+      saveGpsPrefs();
+      window.renderView?.();
+      window.refreshDashboard?.();
+    });
+
+    _posPopover(pop, pill);
+    _pop = pop;
+    return;
+  }
+
+  // ── MC pill ────────────────────────────────────────────────
+  if (pill.id === 'mcPill') {
     const clubId = await window.getClubId();
-    const { data: sessions } = await window.sb.from('training_sessions')
+    const { from, to } = getDateRange();
+    const qry = window.sb.from('training_sessions')
       .select('session_date').eq('club_id', clubId)
-      .order('session_date', { ascending: false }).limit(60);
+      .gte('session_date', from).lte('session_date', to)
+      .order('session_date', { ascending: false }).limit(120);
+    const { data: sessions } = await qry;
     const weeks = {};
     (sessions || []).forEach(s => {
       const d = new Date(s.session_date);
       const k = `MC ${getISOWeek(d)}`;
       if (!weeks[k]) weeks[k] = { label: k, date: s.session_date };
     });
-    const mcItems = Object.values(weeks).slice(0, 10);
-    if (!mcItems.length) { showToast('No sessions found'); return; }
-    makePopover(pill, mcItems.map(w => ({ label: `${w.label}  ·  ${w.date}`, mc: w.label })), item => {
+    const mcItems = [{ label: 'All MCs', mc: 'All' }, ...Object.values(weeks).slice(0, 12).map(w => ({ label: `${w.label}  ·  ${w.date}`, mc: w.label }))];
+    makePopover(pill, mcItems, item => {
       window.gpState.microcycle = item.mc;
-      pill.innerHTML = `<i class="ti ti-clock"></i>${item.mc}`;
+      document.getElementById('mcLabel').textContent = item.mc === 'All' ? 'All MCs' : item.mc;
       showToast(`Microcycle → ${item.mc}`);
+      saveGpsPrefs();
       window.renderView?.();
     });
+    return;
   }
 
-  // Player pill
-  else if (ic.includes('ti-user')) {
+  // ── Player pill ────────────────────────────────────────────
+  if (pill.id === 'playerPill') {
     const clubId = await window.getClubId();
     const { data: players } = await window.sb.from('players')
       .select('id,first_name,last_name,position,number')
       .eq('club_id', clubId).neq('status', 'inactive').order('last_name');
     if (!players?.length) { showToast('No players found'); return; }
-    makeSearchPopover(pill, players);
+    // Inject "All players" option into search popover via wrapper
+    closePop();
+    const pop = document.createElement('div');
+    pop.className = 'gp-popover';
+    pop.style.minWidth = '250px';
+    const wrap = document.createElement('div');
+    wrap.style.padding = '4px 4px 2px';
+    const inp = document.createElement('input');
+    inp.className = 'gp-pop-search'; inp.placeholder = 'Search player…';
+    wrap.appendChild(inp); pop.appendChild(wrap);
+    const list = document.createElement('div');
+    list.style.cssText = 'max-height:220px;overflow-y:auto'; pop.appendChild(list);
+    function renderPlList(q) {
+      list.innerHTML = '';
+      const allBtn = document.createElement('button');
+      allBtn.className = 'gp-popover-item';
+      allBtn.textContent = 'All players';
+      allBtn.addEventListener('click', evt => {
+        evt.stopPropagation(); closePop();
+        window.gpState.playerId   = null;
+        window.gpState.playerName = null;
+        document.getElementById('playerLabel').textContent = 'All players';
+        saveGpsPrefs(); window.renderView?.();
+      });
+      list.appendChild(allBtn);
+      const filt = q ? players.filter(p => `${p.first_name} ${p.last_name} ${p.position||''}`.toLowerCase().includes(q.toLowerCase())) : players;
+      if (!filt.length && q) {
+        const em = document.createElement('div');
+        em.style.cssText = 'padding:8px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)';
+        em.textContent = 'No players found'; list.appendChild(em); return;
+      }
+      filt.slice(0, 20).forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'gp-popover-item';
+        btn.textContent = `${p.first_name[0]}. ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}`;
+        btn.addEventListener('click', evt => {
+          evt.stopPropagation(); closePop();
+          const name = `${p.first_name[0]}. ${p.last_name}`;
+          window.gpState.playerId   = p.id;
+          window.gpState.playerName = name;
+          document.getElementById('playerLabel').textContent = name;
+          showToast(`Player → ${name}`);
+          saveGpsPrefs(); window.renderView?.();
+        });
+        list.appendChild(btn);
+      });
+    }
+    renderPlList('');
+    inp.addEventListener('input', () => renderPlList(inp.value));
+    _posPopover(pop, pill); _pop = pop;
+    requestAnimationFrame(() => inp.focus());
+    return;
   }
 
-  // Baseline pill
-  else if (ic.includes('ti-target')) {
+  // ── Baseline pill ──────────────────────────────────────────
+  if (pill.id === 'baselinePill') {
     makePopover(pill, ['vs Role','vs Squad','vs Personal','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
       window.gpState.baseline = item.label;
-      pill.innerHTML = `<i class="ti ti-target"></i>${item.label}`;
+      document.getElementById('baselineLabel').textContent = item.label;
       showToast(`Baseline → ${item.label}`);
-      window.renderView?.();
+      saveGpsPrefs(); window.renderView?.();
     });
+    return;
   }
 
-  // Saved views pill
-  else if (ic.includes('ti-bookmark')) {
+  // ── Historical toggle pill ─────────────────────────────────
+  if (pill.id === 'histPill') {
+    window.gpState.includeHistorical = !window.gpState.includeHistorical;
+    pill.classList.toggle('is-on', window.gpState.includeHistorical);
+    const banner = document.getElementById('histBanner');
+    // Banner only shown when auto-defaulted to historical; toggle manually hides it
+    if (banner) banner.classList.remove('is-on');
+    showToast(`Historical data → ${window.gpState.includeHistorical ? 'included' : 'excluded'}`);
+    saveGpsPrefs();
+    window.renderView?.();
+    window.refreshDashboard?.();
+    return;
+  }
+
+  // ── Saved views pill ───────────────────────────────────────
+  if (ic.includes('ti-bookmark')) {
     const saved = JSON.parse(localStorage.getItem('cm_gps_layouts') || '[]');
     const svItems = [{ label: 'Save current layout…', icon: 'ti-device-floppy', action: 'save' }];
     if (saved.length) svItems.push({ sep: true });
@@ -1027,10 +1269,11 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
         showToast(`Layout "${item.data.name}" loaded`);
       }
     });
+    return;
   }
 
-  // Add card pill
-  else if (ic.includes('ti-plus')) {
+  // ── Add card pill ──────────────────────────────────────────
+  if (ic.includes('ti-plus')) {
     const addBtn = document.querySelector('.gp-view.is-on .gp-add');
     if (addBtn) openCatalog(addBtn);
   }
@@ -1194,54 +1437,57 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
 
 <script>
 // ── refreshDashboard — reusable after import ──────────────────
-// opts.sessionId: if provided, switch microcycle filter to that session's week
+// opts.sessionId: if provided, update date range to cover that session
 window.refreshDashboard = async function (opts = {}) {
   const clubId = window._gpClubId || (await window.getClubId());
   if (!clubId) return;
   window._gpClubId = clubId;
 
-  const sub = document.getElementById('gpSub');
-
-  // If a specific session was just imported, pivot the MC filter to it
+  // If a specific session was just imported, ensure the date range covers it
   if (opts.sessionId) {
     const { data: sess } = await window.sb.from('training_sessions')
-      .select('id,title,session_date,session_type').eq('id', opts.sessionId).single();
+      .select('id,session_date,is_historical').eq('id', opts.sessionId).single();
     if (sess) {
-      const wk = getISOWeek(new Date(sess.session_date));
-      window.gpState.microcycle = `MC ${wk}`;
-      document.querySelectorAll('.gp-dash-bar .pill').forEach(pill => {
-        if (pill.querySelector('.ti-clock')) {
-          pill.innerHTML = `<i class="ti ti-clock"></i>MC ${wk}`;
-        }
-      });
+      const sessDate  = sess.session_date;
+      const { from, to } = getDateRange();
+      // If session falls outside current range, switch to allTime + enable historical if needed
+      if (sessDate < from || sessDate > to) {
+        window.gpState.datePreset = 'allTime';
+        document.getElementById('dateRangeLabel').textContent = 'All time';
+      }
+      if (sess.is_historical && !window.gpState.includeHistorical) {
+        window.gpState.includeHistorical = true;
+        document.getElementById('histPill')?.classList.add('is-on');
+      }
     }
   }
 
-  // Player count subtitle
-  const { count } = await window.sb.from('players')
+  // Fetch sessions in active date range (for subtitle counts)
+  const { from, to } = getDateRange();
+  let sessQry = window.sb.from('training_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('club_id', clubId)
+    .gte('session_date', from).lte('session_date', to);
+  if (!window.gpState.includeHistorical) sessQry = sessQry.eq('is_historical', false);
+  const { count: sessionCount } = await sessQry;
+
+  const { count: playerCount } = await window.sb.from('players')
     .select('id', { count: 'exact', head: true })
     .eq('club_id', clubId).neq('status', 'inactive');
 
-  // Latest session for subtitle
-  const { data: sessions } = await window.sb.from('training_sessions')
-    .select('id,title,session_date,session_type')
-    .eq('club_id', clubId)
-    .order('session_date', { ascending: false }).limit(1);
+  _updateGpSub(playerCount, sessionCount);
 
-  const latestSession = sessions?.[0] || null;
-  if (!latestSession) {
-    if (sub) sub.textContent = `${count ?? 0} players · no sessions found`;
+  // Fetch GPS reports using the active filter state
+  const reports = await _fetchReports(window.gpState);
+
+  if (!reports?.length) {
+    // Show informative empty state
+    const sub = document.getElementById('gpSub');
+    if (sub && !sub.textContent.includes('sessions')) {
+      _updateGpSub(playerCount, 0);
+    }
     return;
   }
-  if (sub) sub.textContent = `${count ?? 0} players · ${latestSession.title || latestSession.session_type} · ${latestSession.session_date}`;
-
-  // Load GPS reports for latest session
-  const { data: reports } = await window.sb.from('gps_reports')
-    .select('player_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
-    .eq('session_id', latestSession.id).eq('club_id', clubId)
-    .order('total_distance', { ascending: false });
-
-  if (!reports?.length) return;
   window._gpReports = reports;
 
   // Z-score table (Group view)
@@ -1254,11 +1500,11 @@ window.refreshDashboard = async function (opts = {}) {
       const num  = p?.number ? `#${p.number}` : '';
       const pos  = p?.position || '—';
       const dist = r.total_distance       ? (r.total_distance / 1000).toFixed(1) + ' km' : '—';
-      const hsr  = r.high_speed_distance  ? r.high_speed_distance + ' m'                 : '—';
-      const spr  = r.sprint_distance      ? r.sprint_distance + ' m'                     : '—';
+      const hsr  = r.high_speed_distance  ? Math.round(r.high_speed_distance) + ' m'     : '—';
+      const spr  = r.sprint_distance      ? Math.round(r.sprint_distance) + ' m'         : '—';
       const spd  = r.max_speed            ? r.max_speed + ' km/h'                        : '—';
-      const acc  = r.accelerations        ?? '—';
-      const load = r.player_load          ?? '—';
+      const acc  = r.accelerations != null ? Math.round(r.accelerations) : '—';
+      const load = r.player_load  != null ? Math.round(r.player_load)   : '—';
       return `<tr>
         <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
           <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
@@ -1273,19 +1519,19 @@ window.refreshDashboard = async function (opts = {}) {
   }
 
   // Individual KPIs (first / selected player)
-  const first = reports[0];
-  if (first) {
-    const p = first.players;
+  const sel = (window.gpState.playerId ? reports.find(r => r.player_id === window.gpState.playerId) : null) || reports[0];
+  if (sel) {
+    const p = sel.players;
     const fname = p ? ((p.first_name||'') + ' ' + (p.last_name||'')).trim() : '—';
     const indSub = document.getElementById('secSub');
-    if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${latestSession.title || latestSession.session_type}`;
+    if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${getDatePresetLabel()}`;
     const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
-    if (kpiVals[0]) kpiVals[0].innerHTML = `${first.total_distance ? (first.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
-    if (kpiVals[1]) kpiVals[1].innerHTML = `${first.high_speed_distance ?? '—'} <sub>m</sub>`;
-    if (kpiVals[2]) kpiVals[2].innerHTML = `${first.sprint_distance ?? '—'}`;
+    if (kpiVals[0]) kpiVals[0].innerHTML = `${sel.total_distance ? (sel.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
+    if (kpiVals[1]) kpiVals[1].innerHTML = `${sel.high_speed_distance != null ? Math.round(sel.high_speed_distance) : '—'} <sub>m</sub>`;
+    if (kpiVals[2]) kpiVals[2].innerHTML = `${sel.sprint_distance != null ? Math.round(sel.sprint_distance) : '—'}`;
   }
 
-  // Radar chart — delegate to _updateRadar (supports personal baseline mode when defined)
+  // Radar chart
   if (typeof _updateRadar === 'function') {
     _updateRadar(reports, window.gpState);
   }
@@ -1305,18 +1551,63 @@ window.refreshDashboard = async function (opts = {}) {
   }
 };
 
+// ── Smart default — detect what data is available ─────────────
+async function _detectSmartDefault(clubId, userId) {
+  // 1. Try saved prefs (by club + user)
+  window._gpClubId = clubId;
+  window._gpUserId = userId;
+  const saved = loadGpsPrefs();
+  if (saved) return saved;
+
+  // 2. Check for recent non-historical sessions (last 30 days)
+  const d30 = new Date(); d30.setDate(d30.getDate() - 30);
+  const { count: recentCount } = await window.sb.from('training_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('club_id', clubId).eq('is_historical', false)
+    .gte('session_date', d30.toISOString().slice(0, 10));
+
+  if (recentCount > 0) {
+    return { datePreset: 'last30', includeHistorical: false, microcycle: 'All' };
+  }
+
+  // 3. No recent sessions — check for any historical sessions
+  const { count: histCount } = await window.sb.from('training_sessions')
+    .select('id', { count: 'exact', head: true })
+    .eq('club_id', clubId).eq('is_historical', true);
+
+  if (histCount > 0) {
+    return { datePreset: 'allTime', includeHistorical: true, microcycle: 'All', _showHistBanner: true };
+  }
+
+  // 4. No data at all — default to last30, historical OFF
+  return { datePreset: 'last30', includeHistorical: false, microcycle: 'All' };
+}
+
 // ── Initial page load ─────────────────────────────────────────
 (async () => {
   const ok = await window.requireAuth();
   if (!ok) return;
-  const [, club] = await Promise.all([window.getProfile(), window.getClub()]);
-  const clubId   = await window.getClubId();
+  const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
   if (club) window.applyClubTheme();
   window._gpClubId = clubId;
+  window._gpUserId = profile?.id || null;
+
   // Load per-club GPS settings (baseline N, mode, active metrics)
   if (typeof loadGpsSettings === 'function') {
     window._gpSettings = await loadGpsSettings(clubId);
   }
+
+  // Apply smart default / saved prefs
+  const prefs = await _detectSmartDefault(clubId, window._gpUserId);
+  applyGpsPrefs(prefs);
+
+  // Show historical banner if auto-detected
+  if (prefs._showHistBanner) {
+    const banner = document.getElementById('histBanner');
+    if (banner) banner.classList.add('is-on');
+  }
+
   await window.refreshDashboard();
 })();
 </script>
@@ -1624,24 +1915,30 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   _renderVelProfile();
 
   // ── Historical data for ACWR / TSB / MC heatmap / Match vs Training
+  // Always use a 84-day window (or full range if allTime) for these time-series charts.
+  // Baselines always include historical matches regardless of the toggle — more data = more accurate.
+  const { from: rangeFrom } = getDateRange(window.gpState);
   const d84 = new Date();
   d84.setDate(d84.getDate() - 84);
-  const cutoff = d84.toISOString().slice(0, 10);
+  // Use the earlier of the active range start or 84 days ago so trend charts always have context
+  const cutoff = rangeFrom < d84.toISOString().slice(0, 10) ? rangeFrom : d84.toISOString().slice(0, 10);
 
-  const [{ data: histSessions }, ] = await Promise.all([
-    window.sb.from('training_sessions')
-      .select('id,session_date,session_type,notes')
-      .eq('club_id', clubId)
-      .gte('session_date', cutoff)
-      .order('session_date', { ascending: true }),
-  ]);
+  let sciQry = window.sb.from('training_sessions')
+    .select('id,session_date,session_type,notes')
+    .eq('club_id', clubId)
+    .gte('session_date', cutoff)
+    .order('session_date', { ascending: true });
+  // Science/trend cards always fetch both historical and non-historical for trend accuracy
+  // (baselines benefit from more data regardless of the dashboard toggle)
+
+  const [{ data: histSessions }, ] = await Promise.all([sciQry]);
 
   if (!histSessions?.length) return;
 
   const hids = histSessions.map(s => s.id);
   const { data: histLoads } = await window.sb.from('gps_reports')
     .select('session_id,player_load')
-    .in('session_id', hids)
+    .in('session_id', hids.slice(0, 400))
     .eq('club_id', clubId);
 
   // Build session → avg load map
@@ -1886,34 +2183,85 @@ if (window._gpReports && window._gpClubId) {
 async function _fetchReports(state) {
   const clubId = window._gpClubId;
   if (!clubId) return [];
-  const weekNum = parseInt((state.microcycle || '').replace(/\D/g, ''), 10);
-  const { data: sessions } = await window.sb.from('training_sessions')
+  const s = state || window.gpState;
+  const { from, to } = getDateRange(s);
+
+  let qry = window.sb.from('training_sessions')
     .select('id,session_date').eq('club_id', clubId)
-    .order('session_date', { ascending: false }).limit(120);
-  const sessionIds = (sessions || [])
-    .filter(s => !isNaN(weekNum) && getISOWeek(new Date(s.session_date)) === weekNum)
-    .map(s => s.id);
-  if (!sessionIds.length) return [];
-  const { data: reports } = await window.sb.from('gps_reports')
-    .select('player_id,session_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
-    .in('session_id', sessionIds).eq('club_id', clubId)
-    .order('total_distance', { ascending: false });
-  return reports || [];
+    .gte('session_date', from).lte('session_date', to)
+    .order('session_date', { ascending: false }).limit(200);
+
+  if (!s.includeHistorical) qry = qry.eq('is_historical', false);
+
+  const { data: sessions } = await qry;
+
+  let sessionIds = (sessions || []).map(sess => sess.id);
+
+  // optional MC sub-filter
+  if (s.microcycle && s.microcycle !== 'All') {
+    const weekNum = parseInt((s.microcycle || '').replace(/\D/g, ''), 10);
+    if (!isNaN(weekNum)) {
+      sessionIds = (sessions || [])
+        .filter(sess => getISOWeek(new Date(sess.session_date)) === weekNum)
+        .map(sess => sess.id);
+    }
+  }
+
+  if (!sessionIds.length) { window._gpSessionCount = 0; return []; }
+
+  window._gpSessionCount = sessionIds.length;
+
+  // fetch in chunks if > 400 ids (Supabase .in() limit)
+  const CHUNK = 400;
+  let allReports = [];
+  for (let i = 0; i < sessionIds.length; i += CHUNK) {
+    const { data: chunk } = await window.sb.from('gps_reports')
+      .select('player_id,session_id,total_distance,high_speed_distance,sprint_distance,accelerations,decelerations,max_speed,player_load,players(first_name,last_name,number,position)')
+      .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId)
+      .order('total_distance', { ascending: false });
+    if (chunk?.length) allReports = allReports.concat(chunk);
+  }
+
+  // Aggregate per player (avg across sessions in range)
+  const byPlayer = {};
+  allReports.forEach(r => {
+    const pid = r.player_id || `_${r.session_id}`;
+    if (!byPlayer[pid]) {
+      byPlayer[pid] = { ...r, _count: 1 };
+    } else {
+      const agg = byPlayer[pid];
+      ['total_distance','high_speed_distance','sprint_distance','accelerations','decelerations','max_speed','player_load'].forEach(m => {
+        if (r[m] != null) agg[m] = (agg[m] || 0) + r[m];
+      });
+      agg._count++;
+    }
+  });
+  const aggregated = Object.values(byPlayer).map(r => {
+    const n = r._count || 1;
+    ['total_distance','high_speed_distance','sprint_distance','accelerations','decelerations','max_speed','player_load'].forEach(m => {
+      if (r[m] != null) r[m] = +(r[m] / n).toFixed(2);
+    });
+    return r;
+  });
+
+  aggregated.sort((a, b) => (b.total_distance || 0) - (a.total_distance || 0));
+  return aggregated;
 }
 
 function _updateIndKpis(reports, state) {
-  const sel = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
+  const s = state || window.gpState;
+  const sel = (s.playerId ? reports.find(r => r.player_id === s.playerId) : null) || reports[0];
   if (!sel) return;
   const p = sel.players;
   const fname = p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : '—';
   if (document.querySelector('.gp-view[data-view="ind"].is-on')) {
     const sub = document.getElementById('secSub');
-    if (sub) sub.textContent = `${fname} · ${p?.position || '—'} · ${state.microcycle}`;
+    if (sub) sub.textContent = `${fname} · ${p?.position || '—'} · ${getDatePresetLabel()}`;
   }
   const kv = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
   if (kv[0]) kv[0].innerHTML = `${sel.total_distance ? (sel.total_distance / 1000).toFixed(1) : '—'} <sub>km</sub>`;
-  if (kv[1]) kv[1].innerHTML = `${sel.high_speed_distance ?? '—'} <sub>m</sub>`;
-  if (kv[2]) kv[2].innerHTML = `${sel.sprint_distance ?? '—'}`;
+  if (kv[1]) kv[1].innerHTML = `${sel.high_speed_distance != null ? Math.round(sel.high_speed_distance) : '—'} <sub>m</sub>`;
+  if (kv[2]) kv[2].innerHTML = `${sel.sprint_distance != null ? Math.round(sel.sprint_distance) : '—'}`;
 }
 
 async function _updateRadar(reports, state) {
@@ -2193,6 +2541,11 @@ window.renderView = async function () {
   const clubId  = window._gpClubId;
   if (!clubId) return;
   const reports = await _fetchReports(state);
+
+  // Count unique sessions and players for subtitle
+  const uniquePlayers = new Set(reports.map(r => r.player_id).filter(Boolean)).size;
+  _updateGpSub(uniquePlayers || null, window._gpSessionCount || null);
+
   if (!reports.length) return;
   window._gpReports = reports;
   _updateIndKpis(reports, state);
