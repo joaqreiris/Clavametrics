@@ -295,6 +295,19 @@
   .gp-drop.drag-over { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
   .gp-demo-tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg-muted); font:600 9px/1 var(--cm-font-mono); flex-shrink:0; }
 
+  /* ── Match Performance ──────────────────────────────────────── */
+  .gp-mp-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
+  .mp-kpis { display:flex; gap:10px; flex-wrap:wrap; width:100%; padding:4px 0; }
+  .mp-kpi { flex:1; min-width:110px; display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
+  .mp-kpi .k-label { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.04em; }
+  .mp-kpi .k-val   { font:600 20px/1.1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .mp-kpi .k-val sub { font-size:11px; font-weight:500; color:var(--cm-fg-muted); margin-left:2px; }
+  .mp-kpi .k-ctx  { font:500 10.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .mp-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:3px; font:600 10px/1 var(--cm-font-mono); }
+  .mp-badge.personal-best { background:rgba(74,222,128,.15); color:var(--cm-success); }
+  .mp-badge.below-avg     { background:rgba(248,113,113,.12); color:var(--cm-danger); }
+  .mp-badge.limited-min   { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border); }
+
   /* ── Load Monitoring (ACWR) ─────────────────────────────────── */
   .gp-lm-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
   .gp-gauges-row { display:flex; gap:12px; flex-wrap:wrap; width:100%; padding:6px 0; }
@@ -783,9 +796,59 @@
         </div>
       </div>
 
-      <!-- MATCH · INDIVIDUAL -->
+      <!-- MATCH · INDIVIDUAL / MATCH PERFORMANCE -->
       <div class="gp-view" data-view="mind">
+
+        <!-- Match Performance — filters bar -->
+        <div class="gp-mp-bar" id="mpBar">
+          <select class="sc-sel" id="mp-player-sel"><option value="">Player...</option></select>
+          <select class="sc-sel" id="mp-range-sel">
+            <option value="season">Current season</option>
+            <option value="last_10">Last 10 matches</option>
+            <option value="last_5">Last 5 matches</option>
+            <option value="all">All matches</option>
+          </select>
+          <span class="sc-info" id="mp-info">Select a player to load match data</span>
+        </div>
+
         <div class="gp-grid is-edit">
+
+          <!-- NEW: Match Performance KPI row -->
+          <div class="gp-c" data-size="full" id="card-mp-kpi">
+            <div class="gp-c-h">
+              <span class="ttl">Match KPIs</span>
+              <span class="sub" id="mp-kpi-sub">season totals &amp; peaks</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="mp-kpi-body" style="padding:10px 14px">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Select a player to see match KPIs.</div>
+            </div>
+          </div>
+
+          <!-- NEW: TD per match chart -->
+          <div class="gp-c" data-size="full" id="card-mp-td">
+            <div class="gp-c-h">
+              <span class="ttl">TD per match</span>
+              <span class="sub">total distance · minutes played line</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:240px;padding:10px">
+              <canvas id="canvasMPTD"></canvas>
+            </div>
+          </div>
+
+          <!-- NEW: High intensity per match (horizontal stacked) -->
+          <div class="gp-c" data-size="full" id="card-mp-hi">
+            <div class="gp-c-h">
+              <span class="ttl">High intensity per match</span>
+              <span class="sub">HSR · VHSR · Sprint distance · horizontal bars</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="mp-hi-body" style="position:relative;min-height:200px;padding:10px">
+              <canvas id="canvasMPHI"></canvas>
+            </div>
+          </div>
+
           <div class="gp-c" data-size="lg">
             <div class="gp-c-h"><span class="ttl">Match heatmap + sprint tracks</span><span class="sub">F. Domínguez · 90′ · vs Vélez</span><span class="gp-demo-tag">Demo</span><div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-c-b">
@@ -6399,6 +6462,264 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   });
 
   if (document.querySelector('.gp-view[data-view="ind"].is-on')) pwInit();
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MATCH PERFORMANCE (vista mind) — KPIs + TD chart + HI chart
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  const fmtN = (v, d = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: d });
+
+  // ── state & DOM ──────────────────────────────────────────────
+  const _mp = { playerId: null, tdChart: null, hiChart: null };
+  let _mpInited = false;
+
+  const playerSel = document.getElementById('mp-player-sel');
+  const rangeSel  = document.getElementById('mp-range-sel');
+  const mpInfo    = document.getElementById('mp-info');
+  const kpiBody   = document.getElementById('mp-kpi-body');
+  const tdCanvas  = document.getElementById('canvasMPTD');
+  const hiCanvas  = document.getElementById('canvasMPHI');
+  if (!playerSel) return;
+
+  // ── init ─────────────────────────────────────────────────────
+  async function mpInit() {
+    if (_mpInited) return;
+    _mpInited = true;
+    try {
+      const clubId = await window.getClubId?.();
+      if (!clubId || !window.sb) return;
+      const { data: players } = await window.sb
+        .from('players').select('id,first_name,last_name,number,position')
+        .eq('club_id', clubId).neq('status','inactive').order('last_name');
+      (players || []).forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = `${p.last_name || ''} ${(p.first_name||'')[0]||''}.${p.number ? ' #'+p.number : ''}`.trim();
+        playerSel.appendChild(o);
+      });
+      if (playerSel.options.length > 1) { playerSel.selectedIndex = 1; _mp.playerId = playerSel.value; }
+      if (_mp.playerId) await _mpLoad();
+    } catch (e) { console.error('mpInit:', e); }
+  }
+
+  // ── load match data ──────────────────────────────────────────
+  async function _mpLoad() {
+    const { playerId } = _mp;
+    if (!playerId) return;
+    mpInfo.textContent = 'Loading...';
+    kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Loading...</div>';
+
+    try {
+      const clubId = await window.getClubId?.();
+
+      // Get match sessions
+      const { data: sessions } = await window.sb
+        .from('training_sessions')
+        .select('id,session_date,title,session_type')
+        .eq('club_id', clubId)
+        .eq('session_type', 'match')
+        .order('session_date', { ascending: true });
+
+      let matchSessions = sessions || [];
+
+      // Apply time range filter
+      const range = rangeSel.value;
+      if (range === 'season') {
+        const year = new Date().getFullYear();
+        matchSessions = matchSessions.filter(s => s.session_date >= `${year}-01-01`);
+      } else if (range === 'last_10') {
+        matchSessions = matchSessions.slice(-10);
+      } else if (range === 'last_5') {
+        matchSessions = matchSessions.slice(-5);
+      }
+
+      if (!matchSessions.length) {
+        mpInfo.textContent = 'No match sessions found.';
+        kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No match data for the selected range.</div>';
+        _destroyCharts();
+        return;
+      }
+
+      const sessIds = matchSessions.map(s => s.id);
+      const { data: reports } = await window.sb
+        .from('gps_reports')
+        .select('session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
+        .eq('player_id', playerId).eq('club_id', clubId)
+        .in('session_id', sessIds);
+
+      const sessMap = Object.fromEntries(matchSessions.map(s => [s.id, s]));
+      const rows = (reports || [])
+        .map(r => ({ ...r, session: sessMap[r.session_id] }))
+        .filter(r => r.session)
+        .sort((a, b) => a.session.session_date.localeCompare(b.session.session_date));
+
+      mpInfo.textContent = `${rows.length} matches · ${matchSessions[0]?.session_date || ''} → ${matchSessions[matchSessions.length-1]?.session_date || ''}`;
+      _mpRenderKPIs(rows);
+      _mpRenderTDChart(rows);
+      _mpRenderHIChart(rows);
+    } catch (e) { console.error('_mpLoad:', e); mpInfo.textContent = 'Error loading data.'; }
+  }
+
+  // ── KPIs ─────────────────────────────────────────────────────
+  function _mpRenderKPIs(rows) {
+    if (!rows.length) {
+      kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No GPS data found for this player in matches.</div>'; return;
+    }
+    const maxF = key => rows.reduce((best, r) => r[key] > (best?.val ?? -Infinity) ? { val: r[key], sess: r.session } : best, null);
+    const avgF = key => { const vals = rows.map(r => r[key]).filter(v => v != null); return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; };
+
+    const maxTD    = maxF('total_distance');
+    const maxHSR   = maxF('high_speed_distance');
+    const maxSPR   = maxF('sprint_count');
+    const maxAcDec = rows.reduce((best, r) => {
+      const v = (r.accelerations||0)+(r.decelerations||0);
+      return v > (best?.val ?? -Infinity) ? { val: v, sess: r.session } : best;
+    }, null);
+
+    const kpis = [
+      { label: 'Games',       val: rows.length,                          unit: '',      ctx: '' },
+      { label: 'Avg TD',      val: avgF('total_distance'),               unit: 'm',     ctx: '' },
+      { label: 'Max TD',      val: maxTD?.val,                           unit: 'm',     ctx: maxTD?.sess?.session_date || '' },
+      { label: 'Max HSR',     val: maxHSR?.val,                          unit: 'm',     ctx: maxHSR?.sess?.session_date || '' },
+      { label: 'Max Sprints', val: maxSPR?.val,                          unit: '',      ctx: maxSPR?.sess?.session_date || '' },
+      { label: 'Max Acc+Dec', val: maxAcDec?.val,                        unit: '',      ctx: maxAcDec?.sess?.session_date || '' },
+      { label: 'Avg Load',    val: avgF('player_load'),                  unit: 'AU',    ctx: '' },
+      { label: 'Max Speed',   val: Math.max(...rows.map(r=>r.max_speed||0)), unit: 'km/h', ctx: '' },
+    ];
+
+    kpiBody.innerHTML = `<div class="mp-kpis">${kpis.map(k =>
+      `<div class="mp-kpi"><span class="k-label">${k.label}</span><span class="k-val">${fmtN(k.val, k.unit==='km/h'?1:0)}${k.unit?`<sub>${k.unit}</sub>`:''}</span>${k.ctx?`<span class="k-ctx">${k.ctx}</span>`:''}</div>`
+    ).join('')}</div>`;
+  }
+
+  // ── TD per match chart ────────────────────────────────────────
+  function _mpRenderTDChart(rows) {
+    if (!tdCanvas || typeof Chart === 'undefined') return;
+    if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
+    if (!rows.length) return;
+
+    const labels  = rows.map(r => r.session?.title ? r.session.title.slice(0,10) : r.session?.session_date?.slice(5) || '');
+    const td      = rows.map(r => r.total_distance || 0);
+    const minutes = rows.map(r => r.time_played || null);
+    const avgTD   = td.reduce((s,v)=>s+v,0)/td.length;
+
+    _mp.tdChart = new Chart(tdCanvas, {
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'bar', label: 'Total Distance (m)', data: td,
+            backgroundColor: rows.map(r => (r.total_distance||0) >= avgTD * 1.1 ? 'rgba(74,222,128,.7)' : 'rgba(99,179,237,.65)'),
+            order: 2,
+          },
+          {
+            type: 'line', label: 'Min played', data: minutes,
+            borderColor: 'var(--cm-warning)', backgroundColor: 'transparent',
+            pointRadius: 5, pointBackgroundColor: 'var(--cm-warning)',
+            yAxisID: 'y1', tension: 0, order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { grid: { display: false } },
+          y:  { beginAtZero: true, title: { display: true, text: 'TD (m)' } },
+          y1: { position: 'right', beginAtZero: true, max: 120, title: { display: true, text: 'Min played' }, grid: { drawOnChartArea: false } },
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              afterBody: ctx => {
+                const r = rows[ctx[0]?.dataIndex];
+                if (!r) return [];
+                return [
+                  `Date: ${r.session?.session_date || ''}`,
+                  r.total_distance >= avgTD * 1.1 ? 'Above avg (+10%)' : '',
+                ].filter(Boolean);
+              },
+            },
+          },
+        },
+        onClick: (e, elements) => {
+          if (!elements.length) return;
+          const r = rows[elements[0].index];
+          if (!r?.session?.id) return;
+          // Drill-down: switch to Session Control and select this session
+          const grpBtn = document.querySelector('.gp-sec[data-view="grp"]');
+          if (grpBtn) {
+            grpBtn.click();
+            setTimeout(() => {
+              const dateSel = document.getElementById('sc-date-sel');
+              if (dateSel) {
+                dateSel.value = r.session.session_date;
+                dateSel.dispatchEvent(new Event('change'));
+              }
+            }, 200);
+          }
+        },
+      },
+    });
+  }
+
+  // ── High Intensity per match (horizontal stacked) ─────────────
+  function _mpRenderHIChart(rows) {
+    if (!hiCanvas || typeof Chart === 'undefined') return;
+    if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
+    if (!rows.length) return;
+
+    // Limit to 15 matches max for readability; show most recent
+    const display = rows.slice(-15);
+    const labels  = display.map(r => r.session?.title ? r.session.title.slice(0,12) : r.session?.session_date?.slice(5) || '');
+    const hsr     = display.map(r => r.high_speed_distance || 0);
+    const vhsr    = display.map(r => r.very_high_speed_distance || 0);
+    const spr     = display.map(r => r.sprint_distance || 0);
+
+    // Dynamic height based on number of matches
+    hiCanvas.parentElement.style.minHeight = `${Math.max(180, display.length * 28)}px`;
+
+    _mp.hiChart = new Chart(hiCanvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: 'HSR (m)',    data: hsr,  backgroundColor: 'rgba(251,191,36,.75)', stack: 'hi' },
+          { label: 'VHSR (m)',   data: vhsr, backgroundColor: 'rgba(232,121,249,.7)', stack: 'hi' },
+          { label: 'Sprint (m)', data: spr,  backgroundColor: 'rgba(74,222,128,.7)',  stack: 'hi' },
+        ],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { stacked: true, beginAtZero: true, title: { display: true, text: 'Distance (m)' } },
+          y: { stacked: true, grid: { display: false } },
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  function _destroyCharts() {
+    if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
+    if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
+  }
+
+  // ── events ───────────────────────────────────────────────────
+  playerSel.addEventListener('change', () => { _mp.playerId = playerSel.value || null; if (_mp.playerId) _mpLoad(); });
+  rangeSel.addEventListener('change',  () => { if (_mp.playerId) _mpLoad(); });
+
+  window._mpInit = mpInit;
+
+  document.getElementById('sections')?.addEventListener('click', e => {
+    if (e.target.closest('.gp-sec[data-view="mind"]')) setTimeout(mpInit, 0);
+  });
 })();
 </script>
 
