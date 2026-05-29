@@ -256,7 +256,11 @@
   .gp-map-sel   { width:100%; padding:4px 7px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); color:var(--cm-fg); font:500 11.5px/1 var(--cm-font-sans); }
   .gp-map-sel.is-green { border-color:var(--cm-success); background:var(--cm-success-bg); }
   .gp-map-sel.is-yellow { border-color:var(--cm-warning); background:rgba(245,158,11,.08); }
-  .gp-match-row  { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--cm-border-soft); }
+  /* Step 3 grid table — display:contents rows align perfectly with the header */
+  .gp-match-row           { display:contents; }
+  .s3-hdr-cell            { padding:10px 16px; font:600 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .s3-cell                { padding:12px 16px; border-bottom:1px solid var(--cm-border-soft); display:flex; flex-direction:column; justify-content:center; gap:4px; min-width:0; overflow:hidden; }
+  .gp-match-row:hover > .s3-cell { background:var(--cm-bg-soft); }
   .gp-match-badge{ display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); }
   .gp-match-badge.high   { background:var(--cm-success-bg); color:var(--cm-success); }
   .gp-match-badge.medium { background:rgba(245,158,11,.12); color:#b45309; }
@@ -3106,55 +3110,59 @@ window.renderView = async function () {
     const pctStr = Math.round(score * 100) + '%';
     const badgeCls = score > _S3_HIGH ? 'high' : score >= _S3_MED ? 'medium' : 'low';
 
-    // Left column — player info from the CSV file
-    const fileDisplay = [
+    // Col 1 — player from file: name on first line, secondary info on second
+    const nameLine = match.rawName || rawKey;
+    const subLine  = [
       match.rawJersey   ? `#${match.rawJersey}` : '',
-      match.rawName     || '',
       match.rawPosition || '',
-    ].filter(Boolean).join(' · ') || rawKey;
+    ].filter(Boolean).join(' · ');
 
-    // Squad match column
+    // Col 3 — squad match info (varies by confidence tier)
     let matchColHtml;
     if (cat === 'unmatched') {
       const closest = p
         ? `<button class="gp-closest-toggle" data-key="${rawKey}"
-             style="display:block;margin-top:3px;background:none;border:none;font:500 10.5px/1 var(--cm-font-sans);color:var(--cm-accent);cursor:pointer;text-decoration:underline;padding:0">
+             style="background:none;border:none;font:500 10.5px/1 var(--cm-font-sans);color:var(--cm-accent);cursor:pointer;text-decoration:underline;padding:0;text-align:left">
              View closest match (${pctStr})</button>
-           <div class="gp-closest-detail" style="display:none;margin-top:4px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)">
+           <div class="gp-closest-detail" style="display:none;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)">
              ${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}
            </div>`
         : '';
       matchColHtml = `<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">No match found in squad</span>${closest}`;
     } else {
-      const pLabel  = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : '—';
-      const prefix  = cat === 'verify'
-        ? `<div style="font:600 9px/1 var(--cm-font-mono);text-transform:uppercase;color:#b45309;letter-spacing:.04em;margin-bottom:3px">Possible match — verify</div>`
+      const pLabel = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : '—';
+      const prefix = cat === 'verify'
+        ? `<span style="font:600 9px/1 var(--cm-font-mono);text-transform:uppercase;color:#b45309;letter-spacing:.04em">Possible match — verify</span>`
         : '';
       matchColHtml = `${prefix}<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${pLabel}</span>`;
     }
 
-    // Actions column
+    // Col 4 — action buttons
     let actionsHtml;
     if (cat === 'matched') {
       actionsHtml = `<span class="gp-match-badge high">Auto-matched</span>`;
     } else if (cat === 'verify' && p) {
       actionsHtml = `
         <button class="gp-match-confirm" data-key="${rawKey}" data-pid="${p.id}">Confirm</button>
-        <button class="gp-match-confirm" style="margin-left:4px" data-key="${rawKey}" data-create="1">Add as new</button>`;
+        <button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add as new</button>`;
     } else {
       actionsHtml = `<button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add to squad</button>`;
     }
 
     const row = document.createElement('div');
     row.className = 'gp-match-row';
-    row.style.cssText = 'display:grid;grid-template-columns:220px 58px 1fr auto;gap:10px;align-items:start';
     row.dataset.key = rawKey;
     row.dataset.cat = cat;
     row.innerHTML = `
-      <div style="font:500 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg);word-break:break-word">${fileDisplay}</div>
-      <span class="gp-match-badge ${badgeCls}" style="justify-self:start;margin-top:2px">${pctStr}</span>
-      <div>${matchColHtml}</div>
-      <div class="gp-match-actions">${actionsHtml}</div>`;
+      <div class="s3-cell">
+        <span style="font:600 12px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${nameLine}</span>
+        ${subLine ? `<span style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${subLine}</span>` : ''}
+      </div>
+      <div class="s3-cell" style="align-items:center;justify-content:center">
+        <span class="gp-match-badge ${badgeCls}">${pctStr}</span>
+      </div>
+      <div class="s3-cell">${matchColHtml}</div>
+      <div class="s3-cell gp-match-actions" style="gap:6px">${actionsHtml}</div>`;
 
     if (cat === 'matched' && p) {
       _renderPositionWarning(row.querySelector('.gp-match-actions'), rawKey, match, p);
@@ -3266,32 +3274,39 @@ window.renderView = async function () {
       if (_s3Cat(match) === 'matched' && match.player) confirmedMap[key] = match.player.id;
     });
 
-    const TAB_BASE = 'padding:3px 10px;border:1px solid var(--cm-border);border-radius:4px;font:500 10.5px/1.4 var(--cm-font-sans);cursor:pointer;background:var(--cm-bg-soft);color:var(--cm-fg-muted)';
+    const TAB_BASE  = 'padding:3px 10px;border:1px solid var(--cm-border);border-radius:4px;font:500 10.5px/1.4 var(--cm-font-sans);cursor:pointer;background:var(--cm-bg-soft);color:var(--cm-fg-muted)';
+    // Shared grid template — must be identical on header and body grids
+    const GRID_COLS = 'minmax(200px,1.5fr) 72px minmax(240px,2fr) 190px';
 
     body.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--cm-border-soft)">
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button id="s3AddAllBtn" class="cm-btn is-outline is-sm" style="display:none">
-            Add all unmatched to squad (<span class="s3-bc">0</span>)
-          </button>
-          <button id="s3ConfirmAllBtn" class="cm-btn is-outline is-sm" style="display:none">
-            Confirm all possible matches (<span class="s3-bc">0</span>)
-          </button>
+      <!-- Sticky block: action bar + column headers scroll with wizBody -->
+      <div id="s3Sticky" style="position:sticky;top:0;z-index:2;background:var(--cm-bg)">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-bottom:12px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button id="s3AddAllBtn" class="cm-btn is-outline is-sm" style="display:none">
+              Add all unmatched to squad (<span class="s3-bc">0</span>)
+            </button>
+            <button id="s3ConfirmAllBtn" class="cm-btn is-outline is-sm" style="display:none">
+              Confirm all possible matches (<span class="s3-bc">0</span>)
+            </button>
+          </div>
+          <div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">
+            <button class="s3-tab" data-filter="all"       style="${TAB_BASE}">All (<span class="s3-tc">0</span>)</button>
+            <button class="s3-tab" data-filter="unmatched" style="${TAB_BASE}">Unmatched (<span class="s3-tc">0</span>)</button>
+            <button class="s3-tab" data-filter="verify"    style="${TAB_BASE}">Verify (<span class="s3-tc">0</span>)</button>
+            <button class="s3-tab" data-filter="matched"   style="${TAB_BASE}">Matched (<span class="s3-tc">0</span>)</button>
+          </div>
         </div>
-        <div style="display:flex;gap:4px;margin-left:auto;flex-wrap:wrap">
-          <button class="s3-tab" data-filter="all"       style="${TAB_BASE}">All (<span class="s3-tc">0</span>)</button>
-          <button class="s3-tab" data-filter="unmatched" style="${TAB_BASE}">Unmatched (<span class="s3-tc">0</span>)</button>
-          <button class="s3-tab" data-filter="verify"    style="${TAB_BASE}">Verify (<span class="s3-tc">0</span>)</button>
-          <button class="s3-tab" data-filter="matched"   style="${TAB_BASE}">Matched (<span class="s3-tc">0</span>)</button>
+        <!-- Column header row — same grid-template-columns as #wizMatchList -->
+        <div style="display:grid;grid-template-columns:${GRID_COLS};background:var(--cm-bg-soft);border-top:1px solid var(--cm-border-soft);border-bottom:2px solid var(--cm-border);border-radius:var(--cm-r-3) var(--cm-r-3) 0 0">
+          <div class="s3-hdr-cell">Player from file</div>
+          <div class="s3-hdr-cell" style="text-align:center">Conf.</div>
+          <div class="s3-hdr-cell">Best squad match</div>
+          <div class="s3-hdr-cell">Action</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:220px 58px 1fr auto;gap:10px;padding:0 0 6px;border-bottom:1px solid var(--cm-border)">
-        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Player from file</div>
-        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Conf.</div>
-        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Best squad match</div>
-        <div style="font:600 9.5px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted)">Action</div>
-      </div>
-      <div id="wizMatchList"></div>`;
+      <!-- Body grid — display:contents rows are direct grid children -->
+      <div id="wizMatchList" style="display:grid;grid-template-columns:${GRID_COLS};border:1px solid var(--cm-border-soft);border-top:none;border-radius:0 0 var(--cm-r-3) var(--cm-r-3);overflow-x:auto"></div>`;
 
     const list = body.querySelector('#wizMatchList');
     entries.forEach(([rawKey, match]) => list.appendChild(_buildS3Row(rawKey, match)));
