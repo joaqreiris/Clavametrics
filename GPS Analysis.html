@@ -293,6 +293,39 @@
   .gp-wiz-footer .right { margin-left:auto; display:flex; gap:8px; }
   .gp-drop.drag-over { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
   .gp-demo-tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg-muted); font:600 9px/1 var(--cm-font-mono); flex-shrink:0; }
+
+  /* ── Session Control ─────────────────────────────────────────── */
+  .gp-sc-bar { display:flex; align-items:center; gap:8px; padding:0 0 12px 0; flex-wrap:wrap; }
+  .sc-sel { height:30px; padding:0 10px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-surface); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .sc-sel:focus { outline:none; border-color:var(--cm-accent); }
+  .sc-info { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:auto; }
+  .gp-sc-kpis { display:flex; gap:10px; flex-wrap:wrap; width:100%; padding:4px 0; }
+  .gp-sc-kpi { flex:1; min-width:120px; display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
+  .gp-sc-kpi .k-label { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.04em; }
+  .gp-sc-kpi .k-val { font:600 22px/1.1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .gp-sc-kpi .k-val sub { font-size:12px; font-weight:500; color:var(--cm-fg-muted); margin-left:2px; }
+  .gp-sc-kpi .k-cmp { font:500 11px/1 var(--cm-font-sans); }
+  .gp-sc-kpi .k-cmp.up { color:var(--cm-success); }
+  .gp-sc-kpi .k-cmp.dn { color:var(--cm-danger); }
+  .gp-sc-kpi .k-cmp.neu { color:var(--cm-fg-muted); }
+  .sc-tbl { width:100%; border-collapse:collapse; font:500 12px/1.4 var(--cm-font-sans); }
+  .sc-tbl th { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; padding:6px 10px; text-align:right; cursor:pointer; white-space:nowrap; border-bottom:1px solid var(--cm-border); }
+  .sc-tbl th:first-child { text-align:left; cursor:default; }
+  .sc-tbl th.is-sort { color:var(--cm-accent); }
+  .sc-tbl td { padding:5px 10px; text-align:right; border-bottom:1px solid var(--cm-border-soft); }
+  .sc-tbl td:first-child { text-align:left; }
+  .sc-tbl tr:hover td { background:var(--cm-bg-soft); }
+  .sc-tbl tr.is-highlighted td { background:var(--cm-accent-soft); }
+  .sc-tbl .sc-zc { display:inline-block; min-width:54px; padding:2px 6px; border-radius:4px; text-align:right; font:600 11.5px/1.4 var(--cm-font-mono); }
+  .sc-tbl .sc-zc.high  { background:rgba(74,222,128,.22); color:var(--cm-success); }
+  .sc-tbl .sc-zc.mhigh { background:rgba(74,222,128,.12); color:var(--cm-success); }
+  .sc-tbl .sc-zc.warn  { background:rgba(251,191,36,.13);  color:var(--cm-warning); }
+  .sc-tbl .sc-zc.neu   { background:transparent; color:var(--cm-fg-muted); }
+  .sc-tbl .sc-zc.low   { background:rgba(251,146,60,.12); color:var(--cm-warning); }
+  .sc-tbl .sc-zc.mlow  { background:rgba(248,113,113,.13); color:var(--cm-danger); }
+  .sc-tbl .sc-zc.vlow  { background:rgba(248,113,113,.22); color:var(--cm-danger); }
+  .sc-player-cell { display:flex; align-items:center; gap:8px; }
+  .sc-player-cell .gp-mav { width:26px; height:26px; border-radius:50%; background:var(--cm-accent-soft); color:var(--cm-accent); font:700 10px/26px var(--cm-font-sans); text-align:center; flex-shrink:0; }
 </style>
 </head>
 <body class="cm">
@@ -473,7 +506,47 @@
 
       <!-- GROUP -->
       <div class="gp-view" data-view="grp">
+
+        <!-- Session Control — filters bar -->
+        <div class="gp-sc-bar" id="scBar">
+          <select class="sc-sel" id="sc-mc-sel"><option value="">All MCs</option></select>
+          <select class="sc-sel" id="sc-date-sel"><option value="">Date...</option></select>
+          <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
+          <span class="sc-info" id="sc-info">Loading sessions...</span>
+        </div>
+
         <div class="gp-grid is-edit">
+
+          <!-- NEW: Session KPI row -->
+          <div class="gp-c" data-size="full" id="card-session-kpi">
+            <div class="gp-c-h">
+              <span class="ttl">Session KPI row</span>
+              <span class="sub" id="sc-kpi-sub">group averages</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="sc-kpi-body" style="padding:10px 14px">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Select a session above to see group KPIs.</div>
+            </div>
+          </div>
+
+          <!-- NEW: Session table -->
+          <div class="gp-c" data-size="full" id="card-session-table">
+            <div class="gp-c-h">
+              <span class="ttl">Session table</span>
+              <span class="sub">one row per player</span>
+              <div class="right">
+                <select class="sc-sel" id="sc-color-mode" style="height:24px;font-size:11px">
+                  <option value="zscore">Color: group z-score</option>
+                  <option value="none">Color: off</option>
+                </select>
+                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
+                <button><i class="ti ti-dots"></i></button>
+              </div>
+            </div>
+            <div class="gp-c-b" id="sc-table-body" style="overflow-x:auto;padding:0">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Select a session to see player data.</div>
+            </div>
+          </div>
 
           <div class="gp-c" data-size="full">
             <div class="gp-c-h">
@@ -5861,6 +5934,293 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   srcBtn.addEventListener('click', openSrc);
   document.getElementById('srcClose').addEventListener('click', closeSrc);
   srcOverlay.addEventListener('click', closeSrc);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SESSION CONTROL (vista grp) — filtros + KPIs + tabla
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  // ── helpers ──────────────────────────────────────────────────
+  const fmt = (v, dec = 0) => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('en', { maximumFractionDigits: dec });
+
+  function calcZScores(values) {
+    const valid = values.filter(v => v != null && !isNaN(v));
+    if (valid.length < 2) return values.map(() => null);
+    const mean = valid.reduce((s, v) => s + v, 0) / valid.length;
+    const std  = Math.sqrt(valid.reduce((s, v) => s + (v - mean) ** 2, 0) / valid.length) || 1;
+    return values.map(v => (v == null || isNaN(v)) ? null : (v - mean) / std);
+  }
+
+  function zClass(z) {
+    if (z == null) return 'neu';
+    if (z > 2)    return 'high';
+    if (z > 1)    return 'mhigh';
+    if (z > 0.5)  return 'warn';
+    if (z > -0.5) return 'neu';
+    if (z > -1)   return 'low';
+    if (z > -2)   return 'mlow';
+    return 'vlow';
+  }
+
+  function cmpArrow(val, prev) {
+    if (prev == null || prev === 0) return '';
+    const pct = ((val - prev) / prev * 100).toFixed(0);
+    const cls = val >= prev ? 'up' : 'dn';
+    const icon = val >= prev ? 'ti-arrow-up-right' : 'ti-arrow-down-right';
+    return `<span class="k-cmp ${cls}"><i class="ti ${icon}"></i>${val >= prev ? '+' : ''}${pct}%</span>`;
+  }
+
+  // ── state ────────────────────────────────────────────────────
+  const _st = { mc: '', date: '', sessionId: null, sortKey: 'total_distance', sortDir: -1, highlightedRow: null };
+  let _allSessions = [];
+  let _lastReports = [];
+  let _initialized  = false;
+
+  // ── DOM refs ─────────────────────────────────────────────────
+  const mcSel    = document.getElementById('sc-mc-sel');
+  const dateSel  = document.getElementById('sc-date-sel');
+  const sessSel  = document.getElementById('sc-sess-sel');
+  const scInfo   = document.getElementById('sc-info');
+  const kpiBody  = document.getElementById('sc-kpi-body');
+  const tblBody  = document.getElementById('sc-table-body');
+  const colorSel = document.getElementById('sc-color-mode');
+
+  if (!mcSel) return; // guard if grp view not present
+
+  // ── init (called on first switch to grp tab) ──────────────────
+  async function scInit() {
+    if (_initialized) return;
+    _initialized = true;
+    try {
+      const clubId = await window.getClubId?.();
+      if (!clubId || !window.sb) { scInfo.textContent = 'Not connected.'; return; }
+
+      // Load all sessions
+      const { data: sessions } = await window.sb
+        .from('training_sessions')
+        .select('id, session_date, title, session_type')
+        .eq('club_id', clubId)
+        .order('session_date', { ascending: false });
+
+      _allSessions = sessions || [];
+      if (!_allSessions.length) { scInfo.textContent = 'No sessions found.'; return; }
+
+      // Populate MC selector
+      const mcs = [...new Set(_allSessions.map(s => s.title?.match?.(/MC\s*\d+/i)?.[0]).filter(Boolean))];
+      mcs.forEach(mc => { const o = document.createElement('option'); o.value = mc; o.textContent = mc; mcSel.appendChild(o); });
+
+      // Auto-select latest date
+      const latestDate = _allSessions[0].session_date;
+      _st.date = latestDate;
+      _buildDateOptions('');
+      dateSel.value = latestDate;
+      _buildSessionOptions(latestDate);
+      // auto-pick first session
+      if (sessSel.options.length > 1) {
+        sessSel.selectedIndex = 1;
+        _st.sessionId = sessSel.value;
+        await _loadSessionData(_st.sessionId);
+      }
+    } catch (e) { console.error('scInit:', e); scInfo.textContent = 'Error loading sessions.'; }
+  }
+
+  function _buildDateOptions(mc) {
+    const filtered = mc ? _allSessions.filter(s => s.title?.includes(mc)) : _allSessions;
+    const dates = [...new Set(filtered.map(s => s.session_date))].sort((a, b) => b.localeCompare(a));
+    dateSel.innerHTML = '<option value="">Date...</option>';
+    dates.forEach(d => { const o = document.createElement('option'); o.value = d; o.textContent = d; dateSel.appendChild(o); });
+  }
+
+  function _buildSessionOptions(date) {
+    const sessions = _allSessions.filter(s => s.session_date === date);
+    sessSel.innerHTML = '<option value="">Session...</option>';
+    sessions.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.title || s.session_type || s.id.slice(0, 8); sessSel.appendChild(o); });
+  }
+
+  // ── load session data ─────────────────────────────────────────
+  async function _loadSessionData(sessionId) {
+    if (!sessionId) return;
+    scInfo.textContent = 'Loading...';
+    kpiBody.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted)">Loading...</div>';
+    tblBody.innerHTML = '';
+
+    try {
+      const clubId = await window.getClubId?.();
+      const { data: reports } = await window.sb
+        .from('gps_reports')
+        .select('player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
+        .eq('session_id', sessionId)
+        .eq('club_id', clubId);
+
+      const { data: players } = await window.sb
+        .from('players')
+        .select('id, first_name, last_name, number, position')
+        .eq('club_id', clubId)
+        .neq('status', 'inactive');
+
+      const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
+      _lastReports = (reports || []).map(r => ({ ...r, player: playerMap[r.player_id] || {} }));
+
+      const sess = _allSessions.find(s => s.id === sessionId);
+      scInfo.textContent = `${sess?.session_date || ''} · ${_lastReports.length} players`;
+
+      _renderKPIs(_lastReports);
+      _renderTable(_lastReports);
+    } catch (e) { console.error('_loadSessionData:', e); scInfo.textContent = 'Error loading data.'; }
+  }
+
+  // ── render KPIs ───────────────────────────────────────────────
+  function _renderKPIs(reports) {
+    if (!reports.length) { kpiBody.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted)">No data for this session.</div>'; return; }
+
+    const avg = key => {
+      const vals = reports.map(r => r[key]).filter(v => v != null && !isNaN(v));
+      return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+    };
+    const max = key => {
+      const vals = reports.map(r => r[key]).filter(v => v != null && !isNaN(v));
+      return vals.length ? Math.max(...vals) : null;
+    };
+
+    const kpis = [
+      { label: 'Avg Total Distance', val: avg('total_distance'),             unit: 'm',    dec: 0 },
+      { label: 'Avg HSR',            val: avg('high_speed_distance'),        unit: 'm',    dec: 0 },
+      { label: 'Avg VHSR',           val: avg('very_high_speed_distance'),   unit: 'm',    dec: 0 },
+      { label: 'Avg Sprints',        val: avg('sprint_count'),               unit: '',     dec: 1 },
+      { label: 'Avg Acc+Dec',        val: (() => { const a = avg('accelerations'), d = avg('decelerations'); return (a != null && d != null) ? a + d : null; })(), unit: '', dec: 1 },
+      { label: 'Avg Player Load',    val: avg('player_load'),                unit: 'AU',   dec: 1 },
+      { label: 'Max Speed',          val: max('max_speed'),                  unit: 'km/h', dec: 1 },
+    ];
+
+    kpiBody.innerHTML = `<div class="gp-sc-kpis">${kpis.map(k => `
+      <div class="gp-sc-kpi">
+        <span class="k-label">${k.label}</span>
+        <span class="k-val">${k.val != null ? fmt(k.val, k.dec) : '—'}${k.unit ? `<sub>${k.unit}</sub>` : ''}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  // ── render table ──────────────────────────────────────────────
+  const COLS = [
+    { key: 'player_name',             label: 'Player',    metric: false },
+    { key: 'total_distance',          label: 'TD (m)',    metric: true,  dec: 0 },
+    { key: 'high_speed_distance',     label: 'HSR (m)',   metric: true,  dec: 0 },
+    { key: 'very_high_speed_distance',label: 'VHSR (m)',  metric: true,  dec: 0 },
+    { key: 'sprint_count',            label: 'SPR',       metric: true,  dec: 0 },
+    { key: 'accdec',                  label: 'Acc+Dec',   metric: true,  dec: 0, computed: r => (r.accelerations || 0) + (r.decelerations || 0) },
+    { key: 'max_speed',               label: 'Max Spd',   metric: true,  dec: 1 },
+    { key: 'player_load',             label: 'Load (AU)', metric: true,  dec: 1 },
+    { key: 'time_played',             label: 'Min',       metric: true,  dec: 0 },
+  ];
+
+  function _renderTable(reports) {
+    if (!reports.length) { tblBody.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted)">No player data.</div>'; return; }
+    const colorMode = colorSel?.value || 'zscore';
+
+    // compute values + z-scores per metric column
+    const metricCols = COLS.filter(c => c.metric);
+    const colValues  = {}; // key → [values per report]
+    metricCols.forEach(col => {
+      colValues[col.key] = reports.map(r => col.computed ? col.computed(r) : r[col.key]);
+    });
+    const colZScores = {};
+    metricCols.forEach(col => { colZScores[col.key] = calcZScores(colValues[col.key]); });
+
+    // sort
+    const sorted = [...reports].sort((a, b) => {
+      if (_st.sortKey === 'player_name') {
+        const an = `${a.player.last_name || ''} ${a.player.first_name || ''}`;
+        const bn = `${b.player.last_name || ''} ${b.player.first_name || ''}`;
+        return an.localeCompare(bn) * _st.sortDir;
+      }
+      const col = COLS.find(c => c.key === _st.sortKey);
+      const av  = col?.computed ? col.computed(a) : a[_st.sortKey];
+      const bv  = col?.computed ? col.computed(b) : b[_st.sortKey];
+      return ((av ?? -Infinity) - (bv ?? -Infinity)) * _st.sortDir;
+    });
+
+    const rows = sorted.map((r, rowIdx) => {
+      const origIdx = reports.indexOf(r);
+      const p = r.player;
+      const name = p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '—';
+      const initials = `${(p.first_name || '')[0] || ''}${(p.last_name || '')[0] || ''}`.toUpperCase();
+      const pos = p.position || '';
+      const num = p.number ? `#${p.number}` : '';
+      const isHL = r.player_id === _st.highlightedRow;
+
+      const cells = metricCols.map((col, ci) => {
+        const rawVal = col.computed ? col.computed(r) : r[col.key];
+        const z      = colZScores[col.key]?.[origIdx];
+        const zCls   = colorMode === 'zscore' ? zClass(z) : 'neu';
+        const txt    = rawVal != null ? fmt(rawVal, col.dec) : '—';
+        return `<td><span class="sc-zc ${zCls}">${txt}</span></td>`;
+      }).join('');
+
+      return `<tr data-player-id="${r.player_id}" class="${isHL ? 'is-highlighted' : ''}" style="cursor:pointer">
+        <td><div class="sc-player-cell"><div class="gp-mav">${initials}</div><div><div style="font-weight:600">${name}</div><div style="font-size:10.5px;color:var(--cm-fg-muted)">${pos}${pos && num ? ' · ' : ''}${num}</div></div></div></td>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    const headers = COLS.map(c => {
+      const isSorted = _st.sortKey === c.key;
+      return `<th class="${isSorted ? 'is-sort' : ''}" data-key="${c.key}">${c.label}${isSorted ? (_st.sortDir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
+    }).join('');
+
+    tblBody.innerHTML = `<table class="sc-tbl"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+
+    // sort on header click
+    tblBody.querySelectorAll('th[data-key]').forEach(th => {
+      th.addEventListener('click', () => {
+        const k = th.dataset.key;
+        if (_st.sortKey === k) _st.sortDir *= -1; else { _st.sortKey = k; _st.sortDir = -1; }
+        _renderTable(_lastReports);
+      });
+    });
+
+    // highlight row on click
+    tblBody.querySelectorAll('tr[data-player-id]').forEach(tr => {
+      tr.addEventListener('click', () => {
+        _st.highlightedRow = _st.highlightedRow === tr.dataset.playerId ? null : tr.dataset.playerId;
+        _renderTable(_lastReports);
+      });
+    });
+  }
+
+  // ── filter event listeners ────────────────────────────────────
+  mcSel.addEventListener('change', () => {
+    _st.mc = mcSel.value;
+    _buildDateOptions(_st.mc);
+    dateSel.selectedIndex = 0;
+    sessSel.innerHTML = '<option value="">Session...</option>';
+    _st.sessionId = null;
+  });
+
+  dateSel.addEventListener('change', () => {
+    _st.date = dateSel.value;
+    _buildSessionOptions(_st.date);
+    sessSel.selectedIndex = _allSessions.filter(s => s.session_date === _st.date).length === 1 ? 1 : 0;
+    if (sessSel.selectedIndex === 1) { _st.sessionId = sessSel.value; _loadSessionData(_st.sessionId); }
+  });
+
+  sessSel.addEventListener('change', () => {
+    _st.sessionId = sessSel.value || null;
+    if (_st.sessionId) _loadSessionData(_st.sessionId);
+  });
+
+  colorSel?.addEventListener('change', () => { if (_lastReports.length) _renderTable(_lastReports); });
+
+  // ── hook into tab switch ──────────────────────────────────────
+  window._scInit = scInit;
+
+  document.getElementById('sections')?.addEventListener('click', e => {
+    const b = e.target.closest('.gp-sec[data-view="grp"]');
+    if (b) setTimeout(scInit, 0);
+  });
+
+  // also auto-init if grp is the active view on load
+  if (document.querySelector('.gp-view[data-view="grp"].is-on')) scInit();
+})();
 </script>
 </body>
 </html>
