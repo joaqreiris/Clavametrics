@@ -1571,8 +1571,20 @@ function renderTasks(tasks) {
       .gte('match_date', today).order('match_date', { ascending: true }).limit(1).maybeSingle(),
   ]);
   const _nm1 = _nextEvtRes.data  ? { date: _nextEvtRes.data.date,       rival: _nextEvtRes.data.opponent || (_nextEvtRes.data.title||'').replace(/^vs\s*/i,''), homeAway: _nextEvtRes.data.home_away, rival_crest_url: _nextEvtRes.data.rival_crest_url || null  } : null;
-  const _nm2 = _nextMcRes.data   ? { date: _nextMcRes.data.match_date,  rival: _nextMcRes.data.rival,                                                           homeAway: _nextMcRes.data.home_away  } : null;
+  const _nm2 = _nextMcRes.data   ? { date: _nextMcRes.data.match_date,  rival: _nextMcRes.data.rival,                                                           homeAway: _nextMcRes.data.home_away, rival_crest_url: null } : null;
   const _hubNextMatch = _nm1 && _nm2 ? (_nm1.date <= _nm2.date ? _nm1 : _nm2) : (_nm1 || _nm2);
+
+  // Fallback: if no crest URL in the event/MC, try opponent_branding
+  if (_hubNextMatch && !_hubNextMatch.rival_crest_url && _hubNextMatch.rival) {
+    window.sb.from('opponent_branding').select('crest_url')
+      .eq('club_id', clubId).ilike('opponent_name', _hubNextMatch.rival.trim()).maybeSingle()
+      .then(({ data }) => {
+        if (data?.crest_url) {
+          _hubNextMatch.rival_crest_url = data.crest_url;
+          _populateExtras(); // re-render KPI with the crest
+        }
+      });
+  }
 
   renderGreetSub(mcRes.data, todaySessionRes.data, today, _hubNextMatch);
 
