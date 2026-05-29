@@ -109,6 +109,7 @@
   .gp-c[data-size="lg"]   { grid-column: span 8; }
   .gp-c[data-size="full"] { grid-column: span 12; }
   @media (max-width:1000px) { .gp-c, .gp-c[data-size] { grid-column: span 12; } }
+  .gp-c.is-dragging { opacity:0.4; outline:2px dashed var(--cm-accent); outline-offset:2px; }
 
   .gp-c-h { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); }
   .gp-c-h .ttl { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
@@ -332,10 +333,11 @@
       </div>
 
       <div class="gp-sections" id="sections">
-        <button class="gp-sec is-on" data-view="ind"><div class="row"><i class="ti ti-user"></i>Individual</div><div class="sub">vs role / position</div></button>
-        <button class="gp-sec" data-view="grp"><div class="row"><i class="ti ti-users-group"></i>Group</div><div class="sub">squad-wide</div></button>
-        <button class="gp-sec" data-view="mind"><div class="row"><i class="ti ti-ball-football"></i>Match · individual</div><div class="sub">per-player performance</div></button>
-        <button class="gp-sec" data-view="mgrp"><div class="row"><i class="ti ti-trophy"></i>Match · group</div><div class="sub">team KPIs</div></button>
+        <button class="gp-sec is-on" data-view="ind"><div class="row"><i class="ti ti-user"></i>Player Week Report</div><div class="sub">week vs match reference</div></button>
+        <button class="gp-sec" data-view="grp"><div class="row"><i class="ti ti-users-group"></i>Session Control</div><div class="sub">daily training review</div></button>
+        <button class="gp-sec" data-view="mind"><div class="row"><i class="ti ti-ball-football"></i>Match Performance</div><div class="sub">per-player season</div></button>
+        <button class="gp-sec" data-view="mgrp"><div class="row"><i class="ti ti-activity-heartbeat"></i>Load Monitoring</div><div class="sub">ACWR &amp; risk zones</div></button>
+        <button class="gp-sec" data-view="mc"><div class="row"><i class="ti ti-arrows-diff"></i>Microcycle Compare</div><div class="sub">MC vs MC diff</div></button>
       </div>
 
       <div class="gp-dash-bar">
@@ -743,6 +745,13 @@
         </div>
       </div>
 
+      <!-- MICROCYCLE COMPARE -->
+      <div class="gp-view" data-view="mc">
+        <div class="gp-grid is-edit">
+          <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>MC diff · scatter · trend</small></button>
+        </div>
+      </div>
+
     </section>
   </main>
 </div>
@@ -1008,10 +1017,11 @@ function showToast(msg) {
 
 // ── Card catalog ──────────────────────────────────────────────
 const GP_CATALOG = {
-  ind:  ['Distance KPI','HSR KPI','Sprints KPI','Radar profile','× match max','Weekly bars','ACWR chart','Speed zones','Accel/Decel asym','Personal baseline trend'],
-  grp:  ['Z-score matrix','Squad ranking','Load vs HSR scatter','Team heatmap','Position box plot','Outliers card','Position radar','Squad readiness'],
-  mind: ['Match heatmap','Distance per min','Velocity profile','Sprint zonal grid','Halves drop-off','Recovery between sprints'],
-  mgrp: ['Total distance','HSR squad','Sprints','Us vs opponent','Team heatmap','Match vs training delivered'],
+  ind:  ['Distance KPI','HSR KPI','Sprints KPI','Radar profile','× match max','Weekly bars','ACWR chart','Speed zones','Accel/Decel asym','Personal baseline trend','Player week table','High intensity actions'],
+  grp:  ['Z-score matrix','Squad ranking','Load vs HSR scatter','Team heatmap','Position box plot','Outliers card','Position radar','Squad readiness','Session KPI row','Session table'],
+  mind: ['Match heatmap','Distance per min','Velocity profile','Sprint zonal grid','Halves drop-off','Recovery between sprints','TD per match','High intensity per match'],
+  mgrp: ['Total distance','HSR squad','Sprints','Us vs opponent','Team heatmap','Match vs training delivered','ACWR gauges row','ACWR by player','Risk alerts'],
+  mc:   ['MC diff table','MC diff scatter','Diff by metric','MD trend'],
 };
 
 function openCatalog(insertBefore) {
@@ -1031,6 +1041,88 @@ function openCatalog(insertBefore) {
     modal.remove();
   }));
 }
+
+// ── Dashboard layout persistence ──────────────────────────────
+const _DASHBOARD_IDS = {
+  ind: 'player_week', grp: 'session_control',
+  mind: 'match_performance', mgrp: 'load_monitoring', mc: 'microcycle_compare',
+};
+
+async function saveLayout(viewKey) {
+  const did = _DASHBOARD_IDS[viewKey];
+  if (!did || !window.sb) return;
+  try {
+    const uid = (await window.sb.auth.getUser())?.data?.user?.id;
+    const cid = await window.getClubId?.();
+    if (!uid || !cid) return;
+    const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
+    if (!grid) return;
+    const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => ({
+      card_id: el.dataset.cardId || el.querySelector('.ttl')?.textContent?.trim() || String(idx),
+      size: el.dataset.size || 'md',
+      position: idx,
+      config: (() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(),
+    }));
+    await window.sb.from('gps_dashboard_layouts').upsert(
+      { user_id: uid, club_id: cid, dashboard_id: did, layout, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,club_id,dashboard_id' }
+    );
+  } catch (err) { console.warn('saveLayout:', err); }
+}
+
+async function loadLayout(viewKey) {
+  const did = _DASHBOARD_IDS[viewKey];
+  if (!did || !window.sb) return null;
+  try {
+    const uid = (await window.sb.auth.getUser())?.data?.user?.id;
+    const cid = await window.getClubId?.();
+    if (!uid || !cid) return null;
+    const { data } = await window.sb.from('gps_dashboard_layouts')
+      .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
+    return data?.layout || null;
+  } catch (err) { console.warn('loadLayout:', err); return null; }
+}
+
+// ── Drag & drop for card grids ─────────────────────────────────
+function initGridDragDrop(gridEl, viewKey) {
+  let dragging = null;
+
+  gridEl.addEventListener('dragstart', e => {
+    const card = e.target.closest('.gp-c[draggable="true"]');
+    if (!card) return;
+    dragging = card;
+    setTimeout(() => card.classList.add('is-dragging'), 0);
+  });
+
+  gridEl.addEventListener('dragend', () => {
+    dragging?.classList.remove('is-dragging');
+    dragging = null;
+  });
+
+  gridEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    if (!dragging) return;
+    const target = e.target.closest('.gp-c');
+    if (!target || target === dragging) return;
+    const rect = target.getBoundingClientRect();
+    const after = e.clientX > rect.left + rect.width / 2;
+    if (after) target.after(dragging); else target.before(dragging);
+  });
+
+  gridEl.addEventListener('drop', e => {
+    e.preventDefault();
+    saveLayout(viewKey);
+  });
+
+  gridEl.querySelectorAll('.gp-c').forEach(c => {
+    if (!c.getAttribute('draggable')) c.setAttribute('draggable', 'true');
+  });
+}
+
+document.querySelectorAll('.gp-view').forEach(view => {
+  const grid = view.querySelector('.gp-grid');
+  if (grid) initGridDragDrop(grid, view.dataset.view);
+});
 
 // ── 1. Export button ──────────────────────────────────────────
 const exportBtn = document.querySelector('.gp-bar .right .cm-btn.is-outline');
@@ -5724,10 +5816,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
 <script>
   const titles = {
-    ind: ['· Individual', 'F. Domínguez · #10 · MF · vs role baseline'],
-    grp: ['· Group', 'Squad-wide · 8 starters · vs role baselines'],
-    mind: ['· Match · individual', 'F. Domínguez · 90′ · vs Vélez · 14 May'],
-    mgrp: ['· Match · group', 'Clava FC vs Vélez · team KPIs'],
+    ind:  ['· Player Week Report', '— week vs match reference'],
+    grp:  ['· Session Control',    '— daily training review · squad-wide'],
+    mind: ['· Match Performance',  '— player season analysis'],
+    mgrp: ['· Load Monitoring',    '— ACWR · acute:chronic workload ratio'],
+    mc:   ['· Microcycle Compare', '— MD code comparison vs previous MCs'],
   };
   document.getElementById('sections').addEventListener('click', (e) => {
     const b = e.target.closest('.gp-sec'); if (!b) return;
@@ -5736,7 +5829,9 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const v = b.dataset.view;
     document.querySelectorAll('.gp-view').forEach(x => x.classList.toggle('is-on', x.dataset.view === v));
     window.gpState.view = v;
-    document.getElementById('secTitle').textContent = titles[v][0];
+    document.getElementById('secTitle').textContent = titles[v]?.[0] || '';
+    const subEl = document.getElementById('secSub');
+    if (subEl && titles[v]?.[1]) subEl.textContent = titles[v][1];
     // Re-render with cached data when switching sections (avoids re-fetch overhead)
     if (window._gpReports?.length) {
       _updateSquadRanking(window._gpReports);

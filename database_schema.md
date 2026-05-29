@@ -784,6 +784,32 @@ Main dashboard metrics include:
 
 ---
 
+# TABLE: gps_dashboard_layouts
+
+Purpose:
+Persists per-user, per-club, per-dashboard card layouts for GPS Analysis dashboards.
+
+Important columns:
+- id (uuid, PK)
+- user_id (uuid, FK auth.users ON DELETE CASCADE)
+- club_id (uuid, FK clubs ON DELETE CASCADE)
+- dashboard_id (text) — 'player_week' | 'session_control' | 'match_performance' | 'load_monitoring' | 'microcycle_compare'
+- layout (jsonb) — array of { card_id, size, position, config }
+- updated_at (timestamptz)
+
+UNIQUE constraint: (user_id, club_id, dashboard_id)
+
+View key → dashboard_id mapping:
+- ind  → player_week
+- grp  → session_control
+- mind → match_performance
+- mgrp → load_monitoring
+- mc   → microcycle_compare
+
+Migration: migration-package/sql-migrations/020_gps_dashboard_layouts.sql
+
+---
+
 # DEVELOPMENT RULES
 
 NEVER:
