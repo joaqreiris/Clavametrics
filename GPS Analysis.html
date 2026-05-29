@@ -11,6 +11,7 @@
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="assets/gps-science.js"></script>
+<script src="assets/gps-baseline.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -227,6 +228,49 @@
   .gp-pop-search { width:100%; padding:5px 8px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); color:var(--cm-fg); font:500 12px/1 var(--cm-font-sans); box-sizing:border-box; outline:none; }
   .gp-pop-search:focus { border-color:var(--cm-accent); }
   @keyframes gp-spin { to { transform:rotate(360deg); } }
+
+  /* ── Import wizard ────────────────────────────────────────── */
+  .gp-modal.wide   { width:720px; }
+  .gp-wiz-steps    { display:flex; gap:0; border-bottom:1px solid var(--cm-border-soft); padding:0 18px; }
+  .gp-wiz-step     { padding:10px 14px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); border-bottom:2px solid transparent; cursor:default; }
+  .gp-wiz-step.is-on   { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
+  .gp-wiz-step.is-done { color:var(--cm-success); }
+  .gp-wiz-pane     { display:none; }
+  .gp-wiz-pane.is-on { display:block; }
+  .gp-imp-info     { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; margin-bottom:14px; }
+  .gp-imp-info-cell{ padding:9px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
+  .gp-imp-info-cell .l { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:4px; }
+  .gp-imp-info-cell .v { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .gp-imp-preview  { overflow-x:auto; border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
+  .gp-imp-preview table { border-collapse:collapse; width:100%; font:500 11.5px/1 var(--cm-font-sans); }
+  .gp-imp-preview th   { padding:6px 8px; background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); color:var(--cm-fg-muted); font-weight:600; font-size:11px; text-align:left; white-space:nowrap; }
+  .gp-imp-preview td   { padding:5px 8px; border-bottom:1px solid var(--cm-border-soft); color:var(--cm-fg); white-space:nowrap; }
+  .gp-map-table    { width:100%; border-collapse:collapse; }
+  .gp-map-table th { padding:6px 8px; font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.05em; text-align:left; border-bottom:1px solid var(--cm-border); }
+  .gp-map-table td { padding:5px 8px; border-bottom:1px solid var(--cm-border-soft); }
+  .gp-map-table tr.matched-auto td:first-child { border-left:3px solid var(--cm-success); }
+  .gp-map-table tr.matched-guess td:first-child { border-left:3px solid var(--cm-warning); }
+  .gp-map-table tr.matched-none  td:first-child { border-left:3px solid var(--cm-border-strong); }
+  .gp-map-sel   { width:100%; padding:4px 7px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); color:var(--cm-fg); font:500 11.5px/1 var(--cm-font-sans); }
+  .gp-map-sel.is-green { border-color:var(--cm-success); background:var(--cm-success-bg); }
+  .gp-map-sel.is-yellow { border-color:var(--cm-warning); background:rgba(245,158,11,.08); }
+  .gp-match-row  { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .gp-match-badge{ display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); }
+  .gp-match-badge.high   { background:var(--cm-success-bg); color:var(--cm-success); }
+  .gp-match-badge.medium { background:rgba(245,158,11,.12); color:#b45309; }
+  .gp-match-badge.low    { background:var(--cm-danger-bg); color:var(--cm-danger); }
+  .gp-match-confirm { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 9px; border-radius:5px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg); font:500 11.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .gp-match-confirm:hover { border-color:var(--cm-accent); }
+  .gp-match-confirm.is-ok { background:var(--cm-success-bg); border-color:var(--cm-success); color:var(--cm-success); }
+  .gp-imp-form   { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px 0; }
+  .gp-imp-form label { font:600 11px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); display:block; margin-bottom:4px; }
+  .gp-imp-form input, .gp-imp-form select {
+    width:100%; padding:7px 10px; border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-3); background:var(--cm-bg-soft); color:var(--cm-fg);
+    font:500 12px/1 var(--cm-font-sans); box-sizing:border-box; }
+  .gp-wiz-footer { display:flex; align-items:center; gap:8px; padding:12px 18px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
+  .gp-wiz-footer .right { margin-left:auto; display:flex; gap:8px; }
+  .gp-drop.drag-over { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
 </style>
 </head>
 <body class="cm">
@@ -2039,6 +2083,960 @@ window.renderView = async function () {
   if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
   if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
   _rerenderScienceCards(reports, clubId);
+};
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// GPS Import Pipeline — Bloques 1–4
+// Upload CSV/XLSX → column mapping → player matching → INSERT
+// SheetJS loaded lazily when drawer opens
+// ══════════════════════════════════════════════════════════════
+
+(function () {
+  'use strict';
+
+  // ── Constants ──────────────────────────────────────────────
+  const TARGET_METRICS = [
+    'player_name','jersey_number','session_date','position',
+    'total_distance','high_speed_distance','very_high_speed_distance',
+    'sprint_distance','accelerations','decelerations','max_speed',
+    'player_load','hmld','time_played',
+  ];
+
+  const METRIC_ALIASES = {
+    total_distance: ['total distance','dist total','td (m)','distancia total','total dist',
+      'distance (m)','distance','total_distance','distancia','td','distance (km)'],
+    high_speed_distance: ['high speed distance','hsr','hsr (m)','high speed running',
+      'high-speed distance','dist hsr','distance >19.8km/h','distance >5.5m/s','zone 4+5','z4+z5'],
+    very_high_speed_distance: ['very high speed distance','vhsr','vhsr (m)',
+      'very high speed running','zone 5','z5','distance >25km/h'],
+    sprint_distance: ['sprint distance','sprint (m)','sprint dist',
+      'distance >25.2km/h','distance >7m/s','sprint'],
+    accelerations: ['accelerations','accel','total accelerations','acc',
+      'aceleraciones','high accel','no. of accelerations'],
+    decelerations: ['decelerations','decel','total decelerations','dec','desaceleraciones'],
+    max_speed: ['max speed','maximum speed','peak speed','vel máx','velocidad máxima',
+      'top speed','max vel','max_speed (km/h)','peak speed (km/h)','max velocity'],
+    player_load: ['player load','playerload','carga jugador','training load',
+      'load','session load','total load'],
+    hmld: ['hmld','high metabolic load distance','high metabolic','hml distance'],
+    time_played: ['time played','playing time','time (min)','duration','minutes',
+      'playing minutes','mins','min played'],
+    player_name: ['player name','player','name','nombre','nombre jugador',
+      'athlete','atleta','jugador','athlete name','full name'],
+    jersey_number: ['jersey number','number','shirt number','jersey','shirt',
+      'dorsal','número','no.','#'],
+    session_date: ['session date','date','fecha','fecha sesión','training date','match date'],
+    position: ['position','pos','posición','posicion','playing position'],
+  };
+
+  // Unit auto-detection for distance metrics — if header contains 'km', conversion = 1000
+  const DISTANCE_METRICS = new Set([
+    'total_distance','high_speed_distance','very_high_speed_distance',
+    'sprint_distance','hmld',
+  ]);
+
+  // ── State ──────────────────────────────────────────────────
+  let _wizState = {};
+
+  // ── Load SheetJS lazily ────────────────────────────────────
+  let _xlsxLoading = false;
+  let _xlsxReady   = false;
+
+  function loadXLSX() {
+    return new Promise((res, rej) => {
+      if (_xlsxReady) { res(); return; }
+      if (_xlsxLoading) { const t = setInterval(() => { if (_xlsxReady) { clearInterval(t); res(); } }, 50); return; }
+      _xlsxLoading = true;
+      const s = document.createElement('script');
+      s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+      s.onload = () => { _xlsxReady = true; res(); };
+      s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  // ── Fuzzy string similarity (normalised Levenshtein) ───────
+  function _norm(s) {
+    return (s || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function _lev(a, b) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, (_, i) =>
+      Array.from({ length: n + 1 }, (_, j) => i ? (j ? 0 : i) : j));
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
+          : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    return dp[m][n];
+  }
+
+  function _sim(a, b) {
+    a = _norm(a); b = _norm(b);
+    const mx = Math.max(a.length, b.length);
+    return mx ? 1 - _lev(a, b) / mx : 1;
+  }
+
+  // ── Column auto-match ──────────────────────────────────────
+  function autoMatchColumn(colName, existingMappings) {
+    const nc = _norm(colName);
+    // Check saved mappings first
+    const saved = existingMappings.find(m => _norm(m.source_column_name) === nc);
+    if (saved) return { metric: saved.target_metric, confidence: 'saved', conversion: saved.unit_conversion || 1 };
+
+    let best = null, bestScore = 0;
+    for (const [metric, aliases] of Object.entries(METRIC_ALIASES)) {
+      for (const alias of aliases) {
+        const score = _sim(nc, alias);
+        if (score > bestScore) { bestScore = score; best = metric; }
+      }
+    }
+    if (bestScore >= 0.88) {
+      const conversion = detectConversion(colName, best);
+      return { metric: best, confidence: 'high', conversion };
+    }
+    if (bestScore >= 0.65) {
+      const conversion = detectConversion(colName, best);
+      return { metric: best, confidence: 'medium', conversion };
+    }
+    return { metric: null, confidence: 'none', conversion: 1 };
+  }
+
+  function detectConversion(colName, metric) {
+    if (!DISTANCE_METRICS.has(metric)) return 1;
+    if (/\bkm\b/i.test(colName)) return 1000;
+    return 1;
+  }
+
+  // ── Parse file with SheetJS ────────────────────────────────
+  async function parseFile(file) {
+    await loadXLSX();
+    return new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const wb   = XLSX.read(ev.target.result, { type: 'array', cellDates: true });
+          const ws   = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+          res(rows);
+        } catch (e) { rej(e); }
+      };
+      reader.onerror = rej;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  // ── Auto-detect session type from filename ─────────────────
+  function detectSessionType(filename) {
+    const n = filename.toLowerCase();
+    if (/match|partido|game|vs|md\d/i.test(n)) return 'match';
+    if (/train|entreno|entren|session/i.test(n)) return 'training';
+    return 'auto';
+  }
+
+  // ── Open import wizard ─────────────────────────────────────
+  async function openImportWizard(file) {
+    showToast('Parsing file…');
+    let rows;
+    try { rows = await parseFile(file); }
+    catch (e) { showToast('Error parsing file: ' + e.message); return; }
+
+    if (!rows || rows.length < 2) { showToast('File is empty or has no data rows'); return; }
+
+    const sessionTypeGuess = detectSessionType(file.name);
+    const clubId = window._gpClubId || (await window.getClubId());
+
+    // Load existing mappings from DB
+    let existingMappings = [];
+    if (clubId) {
+      const { data } = await window.sb.from('gps_column_mappings')
+        .select('source_column_name,target_metric,unit_conversion,source_label')
+        .eq('club_id', clubId);
+      existingMappings = data || [];
+    }
+
+    _wizState = {
+      file, rows, clubId, existingMappings,
+      headerRow: 0,          // 0-based index
+      sessionType: sessionTypeGuess,
+      matchDate: '',
+      sourceLabel: guessSourceLabel(file.name),
+      columnMap: {},          // colIndex → { metric, conversion }
+      playerMap: {},          // rawName → player_id
+      squadPlayers: [],
+    };
+
+    // Load squad
+    if (clubId) {
+      const { data } = await window.sb.from('players')
+        .select('id,first_name,last_name,number,position,external_gps_id')
+        .eq('club_id', clubId).neq('status', 'inactive');
+      _wizState.squadPlayers = data || [];
+    }
+
+    buildWizard();
+  }
+
+  function guessSourceLabel(filename) {
+    const n = filename.toLowerCase();
+    if (/statsports|sonra/i.test(n))  return 'StatSports';
+    if (/catapult|openfield/i.test(n)) return 'Catapult Vector';
+    if (/polar/i.test(n))              return 'Polar Team Pro';
+    if (/wimu/i.test(n))               return 'WIMU PRO';
+    return 'Custom export';
+  }
+
+  // ── Build wizard modal ─────────────────────────────────────
+  function buildWizard() {
+    document.getElementById('gpImportModal')?.remove();
+
+    const ov = document.createElement('div');
+    ov.className = 'gp-modal-overlay';
+    ov.id = 'gpImportModal';
+
+    const modal = document.createElement('div');
+    modal.className = 'gp-modal wide';
+    modal.style.maxHeight = '85vh';
+
+    modal.innerHTML = `
+      <div class="gp-modal-h">
+        <h3>Import GPS data</h3>
+        <button class="gp-modal-x" id="wizClose"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="gp-wiz-steps">
+        <div class="gp-wiz-step is-on" data-step="1">1 · Preview</div>
+        <div class="gp-wiz-step" data-step="2">2 · Map columns</div>
+        <div class="gp-wiz-step" data-step="3">3 · Match players</div>
+        <div class="gp-wiz-step" data-step="4">4 · Import</div>
+      </div>
+      <div class="gp-modal-body" id="wizBody" style="overflow-y:auto;max-height:calc(85vh - 160px)"></div>
+      <div class="gp-wiz-footer" id="wizFooter"></div>`;
+
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    modal.querySelector('#wizClose').addEventListener('click', () => ov.remove());
+
+    ov.appendChild(modal);
+    document.body.appendChild(ov);
+    renderWizStep(1);
+  }
+
+  function setWizStep(n) {
+    document.querySelectorAll('.gp-wiz-step').forEach(el => {
+      const s = +el.dataset.step;
+      el.classList.toggle('is-on', s === n);
+      el.classList.toggle('is-done', s < n);
+    });
+    renderWizStep(n);
+  }
+
+  // ── Step 1 — Preview ───────────────────────────────────────
+  function renderWizStep(n) {
+    const body   = document.getElementById('wizBody');
+    const footer = document.getElementById('wizFooter');
+    if (!body || !footer) return;
+
+    if (n === 1) renderStep1(body, footer);
+    else if (n === 2) renderStep2(body, footer);
+    else if (n === 3) renderStep3(body, footer);
+    else if (n === 4) renderStep4(body, footer);
+  }
+
+  function renderStep1(body, footer) {
+    const { file, rows, headerRow, sessionType, sourceLabel } = _wizState;
+    const hRow  = rows[headerRow] || [];
+    const nCols = hRow.length;
+    const nRows = rows.length - headerRow - 1;
+
+    body.innerHTML = `
+      <div class="gp-imp-info">
+        <div class="gp-imp-info-cell"><div class="l">File</div><div class="v" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${file.name}">${file.name}</div></div>
+        <div class="gp-imp-info-cell"><div class="l">Size</div><div class="v">${(file.size/1024).toFixed(0)} KB</div></div>
+        <div class="gp-imp-info-cell"><div class="l">Rows</div><div class="v" id="nRows">${nRows}</div></div>
+        <div class="gp-imp-info-cell"><div class="l">Columns</div><div class="v">${nCols}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div>
+          <label style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px">Header row</label>
+          <input type="number" id="wizHeaderRow" min="1" max="${rows.length}" value="${headerRow+1}"
+            style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
+        </div>
+        <div>
+          <label style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px">Session type</label>
+          <select id="wizSessionType" style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
+            <option value="auto" ${sessionType==='auto'?'selected':''}>Auto-detect from filename</option>
+            <option value="match" ${sessionType==='match'?'selected':''}>Match (official)</option>
+            <option value="training" ${sessionType==='training'?'selected':''}>Training session</option>
+          </select>
+        </div>
+      </div>
+      <div id="wizMatchDateRow" style="display:${sessionType==='match'?'block':'none'};margin-bottom:14px">
+        <label style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px">Match date (YYYY-MM-DD)</label>
+        <input type="date" id="wizMatchDate" value="${_wizState.matchDate}"
+          style="padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);display:block;margin-bottom:5px">Provider / source label</label>
+        <input type="text" id="wizSourceLabel" value="${sourceLabel}"
+          placeholder="e.g. Catapult Vector, StatSports CSV…"
+          style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
+      </div>
+      <div class="gp-imp-preview" id="wizPreviewTable"></div>`;
+
+    renderPreviewTable(rows, headerRow);
+
+    body.querySelector('#wizHeaderRow').addEventListener('input', e => {
+      const v = Math.max(1, Math.min(+e.target.value, rows.length));
+      _wizState.headerRow = v - 1;
+      document.getElementById('nRows').textContent = rows.length - v;
+      renderPreviewTable(rows, _wizState.headerRow);
+    });
+    body.querySelector('#wizSessionType').addEventListener('change', e => {
+      _wizState.sessionType = e.target.value;
+      document.getElementById('wizMatchDateRow').style.display =
+        e.target.value === 'match' ? 'block' : 'none';
+    });
+    body.querySelector('#wizMatchDate')?.addEventListener('change', e => { _wizState.matchDate = e.target.value; });
+    body.querySelector('#wizSourceLabel').addEventListener('input', e => { _wizState.sourceLabel = e.target.value; });
+
+    footer.innerHTML = `
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 1 of 4</span>
+      <div class="right">
+        <button class="cm-btn is-outline is-sm" onclick="document.getElementById('gpImportModal')?.remove()">Cancel</button>
+        <button class="cm-btn is-primary is-sm" id="wizNext1">Next: Map columns</button>
+      </div>`;
+    footer.querySelector('#wizNext1').addEventListener('click', () => {
+      _wizState.sessionType  = body.querySelector('#wizSessionType').value;
+      _wizState.matchDate    = body.querySelector('#wizMatchDate')?.value || '';
+      _wizState.sourceLabel  = body.querySelector('#wizSourceLabel').value.trim() || 'Custom export';
+      buildColumnMap();
+      setWizStep(2);
+    });
+  }
+
+  function renderPreviewTable(rows, headerRow) {
+    const wrap = document.getElementById('wizPreviewTable');
+    if (!wrap) return;
+    const hdr  = rows[headerRow] || [];
+    const data = rows.slice(headerRow + 1, headerRow + 11);
+    wrap.innerHTML = `<table>
+      <thead><tr>${hdr.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${data.map(r => `<tr>${hdr.map((_, i) => `<td>${r[i] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  // ── Step 2 — Column mapping ────────────────────────────────
+  function buildColumnMap() {
+    const { rows, headerRow, existingMappings, sourceLabel } = _wizState;
+    const hdr = rows[headerRow] || [];
+    const labelMappings = existingMappings.filter(m => m.source_label === sourceLabel);
+    _wizState.columnMap = {};
+    hdr.forEach((col, i) => {
+      if (!col) return;
+      const match = autoMatchColumn(col, labelMappings);
+      _wizState.columnMap[i] = { sourceCol: col, metric: match.metric, confidence: match.confidence, conversion: match.conversion };
+    });
+  }
+
+  function renderStep2(body, footer) {
+    const { columnMap } = _wizState;
+    const rows = Object.entries(columnMap);
+
+    const selOptions = ['__ignore__', ...TARGET_METRICS].map(m =>
+      `<option value="${m}">${m === '__ignore__' ? '— Ignore this column —' : m}</option>`
+    ).join('');
+
+    body.innerHTML = `
+      <p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">
+        Map each file column to a ClavaMetrics metric.
+        <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-success)"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Auto-matched</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;color:#b45309;margin-left:8px"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Possible match (verify)</span>
+      </p>
+      <div style="overflow-x:auto">
+      <table class="gp-map-table">
+        <thead><tr><th>File column</th><th>Map to metric</th><th>Unit conversion</th></tr></thead>
+        <tbody>${rows.map(([i, c]) => {
+          const conf  = c.confidence;
+          const rowCls = conf === 'high' || conf === 'saved' ? 'matched-auto' : conf === 'medium' ? 'matched-guess' : 'matched-none';
+          const selCls = conf === 'high' || conf === 'saved' ? 'is-green' : conf === 'medium' ? 'is-yellow' : '';
+          const selected = c.metric || '__ignore__';
+          return `<tr class="${rowCls}" data-ci="${i}">
+            <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${c.sourceCol}</td>
+            <td><select class="gp-map-sel ${selCls}" data-ci="${i}">
+              ${selOptions.replace(`value="${selected}"`, `value="${selected}" selected`)}
+            </select></td>
+            <td><input type="number" class="gp-conv-inp" data-ci="${i}" value="${c.conversion}"
+              step="0.001" min="0.001" style="width:80px;padding:4px 6px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-mono)"></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>`;
+
+    body.querySelectorAll('.gp-map-sel').forEach(sel => {
+      sel.addEventListener('change', e => {
+        const ci = +e.target.dataset.ci;
+        _wizState.columnMap[ci].metric = e.target.value === '__ignore__' ? null : e.target.value;
+        e.target.className = 'gp-map-sel';
+      });
+    });
+    body.querySelectorAll('.gp-conv-inp').forEach(inp => {
+      inp.addEventListener('change', e => {
+        const ci = +e.target.dataset.ci;
+        _wizState.columnMap[ci].conversion = +e.target.value || 1;
+      });
+    });
+
+    footer.innerHTML = `
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 2 of 4</span>
+      <div class="right">
+        <button class="cm-btn is-outline is-sm" id="wizBack2">Back</button>
+        <button class="cm-btn is-primary is-sm" id="wizNext2">Next: Match players</button>
+      </div>`;
+    footer.querySelector('#wizBack2').addEventListener('click', () => setWizStep(1));
+    footer.querySelector('#wizNext2').addEventListener('click', async () => {
+      await saveMappingsToDB();
+      buildPlayerMatches();
+      setWizStep(3);
+    });
+  }
+
+  async function saveMappingsToDB() {
+    const { clubId, sourceLabel, columnMap } = _wizState;
+    if (!clubId) return;
+    const upserts = Object.values(columnMap)
+      .filter(c => c.metric && c.metric !== '__ignore__')
+      .map(c => ({
+        club_id: clubId, source_label: sourceLabel,
+        source_column_name: c.sourceCol, target_metric: c.metric,
+        unit_conversion: c.conversion, updated_at: new Date().toISOString(),
+      }));
+    if (!upserts.length) return;
+    await window.sb.from('gps_column_mappings').upsert(upserts, { onConflict: 'club_id,source_label,source_column_name' });
+  }
+
+  // ── Step 3 — Player matching ───────────────────────────────
+  function buildPlayerMatches() {
+    const { rows, headerRow, columnMap, squadPlayers } = _wizState;
+    const playerNameIdx = Object.entries(columnMap).find(([, c]) => c.metric === 'player_name')?.[0];
+    const jerseyIdx     = Object.entries(columnMap).find(([, c]) => c.metric === 'jersey_number')?.[0];
+
+    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const seen = new Set();
+    const matches = {};
+
+    dataRows.forEach(row => {
+      const rawName   = String(row[playerNameIdx] ?? '').trim();
+      const rawJersey = String(row[jerseyIdx]     ?? '').trim();
+      const key = rawName || rawJersey;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      matches[key] = findBestMatch(rawName, rawJersey, squadPlayers);
+    });
+    _wizState.playerMatches = matches;
+    _wizState.confirmedMap  = {}; // key → player_id (null = create new)
+  }
+
+  function findBestMatch(rawName, rawJersey, squad) {
+    let best = null, bestScore = 0;
+    squad.forEach(p => {
+      // External GPS ID match (exact)
+      if (p.external_gps_id && (p.external_gps_id === rawName || p.external_gps_id === rawJersey)) {
+        best = p; bestScore = 1.01; return;
+      }
+      const full1 = _norm(p.first_name + ' ' + p.last_name);
+      const full2 = _norm(p.last_name + ' ' + p.first_name);
+      const full3 = _norm((p.first_name[0] || '') + ' ' + p.last_name);
+      const target = _norm(rawName);
+      const s = Math.max(_sim(target, full1), _sim(target, full2), _sim(target, full3));
+      // Jersey bonus
+      const jerseyMatch = rawJersey && String(p.number) === rawJersey.replace(/\D/g, '');
+      const score = s + (jerseyMatch ? 0.1 : 0);
+      if (score > bestScore) { bestScore = score; best = p; }
+    });
+    const confidence = bestScore > 0.95 ? 'high' : bestScore > 0.65 ? 'medium' : 'low';
+    return { player: best, score: bestScore, confidence };
+  }
+
+  function renderStep3(body, footer) {
+    const { playerMatches, confirmedMap } = _wizState;
+    const entries = Object.entries(playerMatches);
+
+    if (!entries.length) {
+      body.innerHTML = `<p style="color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">No player name column detected — all rows will be imported without player assignment.<br>Go back and map a column to <strong>player_name</strong>.</p>`;
+    } else {
+      body.innerHTML = `<div id="wizMatchList"></div>`;
+      const list = body.querySelector('#wizMatchList');
+
+      entries.forEach(([rawKey, match]) => {
+        const row = document.createElement('div');
+        row.className = 'gp-match-row';
+        row.dataset.key = rawKey;
+
+        const p = match.player;
+        const pLabel = p ? `${p.first_name} ${p.last_name} · #${p.number || '?'} · ${p.position || '—'}` : 'No match';
+        const badgeCls = match.confidence;
+        const pctStr   = Math.round(match.score * 100) + '%';
+
+        // Auto-confirm high confidence
+        if (match.confidence === 'high' && p) confirmedMap[rawKey] = p.id;
+
+        row.innerHTML = `
+          <div style="min-width:130px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${rawKey}</div>
+          <span class="gp-match-badge ${badgeCls}">${pctStr}</span>
+          <div style="flex:1;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)" id="matchLbl_${CSS.escape(rawKey)}">${pLabel}</div>
+          <div id="matchActions_${CSS.escape(rawKey)}"></div>`;
+
+        const actions = row.querySelector(`#matchActions_${CSS.escape(rawKey)}`);
+
+        if (match.confidence === 'high' && p) {
+          actions.innerHTML = `<span class="gp-match-badge high">Auto-matched</span>`;
+        } else if (match.confidence === 'medium' && p) {
+          actions.innerHTML = `
+            <button class="gp-match-confirm" data-key="${rawKey}" data-pid="${p.id}">Confirm match</button>
+            <button class="gp-match-confirm" style="margin-left:4px" data-key="${rawKey}" data-create="1">Create new player</button>`;
+        } else {
+          actions.innerHTML = `<button class="gp-match-confirm" data-key="${rawKey}" data-create="1">Add to squad</button>`;
+          row.innerHTML = row.innerHTML; // ensure rendered
+        }
+
+        list.appendChild(row);
+      });
+
+      list.addEventListener('click', e => {
+        const btn = e.target.closest('[data-key]');
+        if (!btn) return;
+        const key = btn.dataset.key;
+        if (btn.dataset.pid && !btn.dataset.create) {
+          confirmedMap[key] = btn.dataset.pid;
+          btn.className = 'gp-match-confirm is-ok';
+          btn.textContent = 'Confirmed';
+          btn.nextElementSibling?.remove();
+        } else if (btn.dataset.create) {
+          showCreatePlayerForm(key, btn);
+        }
+      });
+    }
+
+    footer.innerHTML = `
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 3 of 4</span>
+      <div class="right">
+        <button class="cm-btn is-outline is-sm" id="wizBack3">Back</button>
+        <button class="cm-btn is-primary is-sm" id="wizNext3">Import data</button>
+      </div>`;
+    footer.querySelector('#wizBack3').addEventListener('click', () => setWizStep(2));
+    footer.querySelector('#wizNext3').addEventListener('click', () => { setWizStep(4); runImport(); });
+  }
+
+  function showCreatePlayerForm(key, btn) {
+    const wrap = btn.closest('.gp-match-row').querySelector(`#matchActions_${CSS.escape(key)}`);
+    if (!wrap) return;
+    wrap.innerHTML = `
+      <div class="gp-imp-form" style="grid-template-columns:1fr 1fr 1fr 80px;gap:6px;padding:0;margin-top:4px">
+        <div><label>First name</label><input id="cpFN_${CSS.escape(key)}" placeholder="First"></div>
+        <div><label>Last name</label><input id="cpLN_${CSS.escape(key)}" placeholder="Last" value="${key.split(' ').slice(-1)[0]}"></div>
+        <div><label>Position</label><select id="cpPos_${CSS.escape(key)}">
+          ${['GK','CB','FB','MF','WG','ST'].map(p=>`<option>${p}</option>`).join('')}
+        </select></div>
+        <div><label>#</label><input id="cpNum_${CSS.escape(key)}" placeholder="0" type="number" min="1"></div>
+      </div>
+      <button class="gp-match-confirm" style="margin-top:6px" id="cpSave_${CSS.escape(key)}">Save &amp; match</button>`;
+    wrap.querySelector(`#cpSave_${CSS.escape(key)}`).addEventListener('click', async () => {
+      const fn  = wrap.querySelector(`#cpFN_${CSS.escape(key)}`).value.trim();
+      const ln  = wrap.querySelector(`#cpLN_${CSS.escape(key)}`).value.trim();
+      const pos = wrap.querySelector(`#cpPos_${CSS.escape(key)}`).value;
+      const num = wrap.querySelector(`#cpNum_${CSS.escape(key)}`).value;
+      if (!fn || !ln) { showToast('First and last name required'); return; }
+      const { data, error } = await window.sb.from('players').insert({
+        club_id: _wizState.clubId, first_name: fn, last_name: ln,
+        position: pos, number: num || null, status: 'available',
+      }).select('id').single();
+      if (error) { showToast('Error creating player: ' + error.message); return; }
+      _wizState.confirmedMap[key] = data.id;
+      _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num });
+      wrap.innerHTML = `<span class="gp-match-badge high">Created &amp; matched</span>`;
+      showToast(`Player ${fn} ${ln} added to squad`);
+    });
+  }
+
+  // ── Step 4 — Import ────────────────────────────────────────
+  function renderStep4(body) {
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:32px 0">
+        <i class="ti ti-loader-2" id="wizSpinner" style="font-size:32px;color:var(--cm-accent);animation:gp-spin 1s linear infinite"></i>
+        <div id="wizImportStatus" style="font:500 13px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center">Preparing import…</div>
+      </div>`;
+  }
+
+  async function runImport() {
+    const status = txt => {
+      const el = document.getElementById('wizImportStatus');
+      if (el) el.textContent = txt;
+    };
+
+    try {
+      const { rows, headerRow, columnMap, sessionType, matchDate, clubId, confirmedMap } = _wizState;
+      const hdr = rows[headerRow] || [];
+
+      status('Resolving session…');
+
+      // Find or create session
+      let sessionId = await resolveSession(sessionType, matchDate, clubId);
+      if (!sessionId) { status('Could not create session. Aborting.'); return; }
+
+      status('Mapping rows…');
+      const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+
+      const playerNameIdx = Object.entries(columnMap).find(([, c]) => c.metric === 'player_name')?.[0];
+      const insertable    = [];
+
+      for (const row of dataRows) {
+        const rawName  = String(row[playerNameIdx] ?? '').trim();
+        const playerId = confirmedMap[rawName] || null;
+
+        const rec = { club_id: clubId, session_id: sessionId, player_id: playerId };
+        for (const [ci, map] of Object.entries(columnMap)) {
+          if (!map.metric || map.metric === '__ignore__' || map.metric === 'player_name'
+              || map.metric === 'jersey_number' || map.metric === 'session_date' || map.metric === 'position') continue;
+          const raw = row[+ci];
+          if (raw === '' || raw == null) continue;
+          rec[map.metric] = +(+raw * map.conversion).toFixed(4);
+        }
+        insertable.push(rec);
+      }
+
+      if (!insertable.length) { status('No importable rows found.'); return; }
+
+      status(`Checking for duplicates…`);
+      // Check existing
+      const { data: existing } = await window.sb.from('gps_reports')
+        .select('id,player_id').eq('session_id', sessionId).eq('club_id', clubId);
+
+      if (existing?.length) {
+        const choice = confirm(`${existing.length} row(s) already exist for this session.\n\nOK = Replace existing rows\nCancel = Abort import`);
+        if (!choice) { status('Import cancelled.'); return; }
+        const ids = existing.map(r => r.id);
+        await window.sb.from('gps_reports').delete().in('id', ids);
+      }
+
+      status(`Inserting ${insertable.length} rows…`);
+      const chunkSize = 50;
+      for (let i = 0; i < insertable.length; i += chunkSize) {
+        const { error } = await window.sb.from('gps_reports').insert(insertable.slice(i, i + chunkSize));
+        if (error) throw error;
+      }
+
+      // Save external_gps_id for future auto-matching
+      for (const [rawKey, playerId] of Object.entries(confirmedMap)) {
+        if (playerId && rawKey) {
+          await window.sb.from('players').update({ external_gps_id: rawKey })
+            .eq('id', playerId).eq('club_id', clubId);
+        }
+      }
+
+      document.getElementById('wizSpinner')?.remove();
+      status(`Import complete — ${insertable.length} rows inserted.`);
+      document.getElementById('wizFooter').innerHTML = `
+        <div class="right">
+          <button class="cm-btn is-primary is-sm" onclick="document.getElementById('gpImportModal')?.remove();window.renderView?.()">Done</button>
+        </div>`;
+
+      showToast(`Imported ${insertable.length} GPS rows`);
+      window._gpClubId = clubId;
+      window.renderView?.();
+
+    } catch (e) {
+      document.getElementById('wizImportStatus').textContent = 'Error: ' + e.message;
+      document.getElementById('wizSpinner')?.remove();
+    }
+  }
+
+  async function resolveSession(sessionType, matchDate, clubId) {
+    const effectiveType = sessionType === 'auto' ? 'training' : sessionType;
+    const dateToUse     = matchDate || new Date().toISOString().slice(0, 10);
+
+    // Check if a session already exists for this date + type
+    const { data: existing } = await window.sb.from('training_sessions')
+      .select('id').eq('club_id', clubId)
+      .eq('session_date', dateToUse).eq('session_type', effectiveType).limit(1);
+    if (existing?.length) return existing[0].id;
+
+    // Create new session
+    const { data, error } = await window.sb.from('training_sessions').insert({
+      club_id: clubId, title: `GPS import · ${dateToUse}`,
+      session_date: dateToUse, session_type: effectiveType,
+    }).select('id').single();
+    if (error) { showToast('Session create error: ' + error.message); return null; }
+    return data.id;
+  }
+
+  // ── Wire up Browse files button + drag-and-drop ────────────
+  function initUploadHandlers() {
+    const dropZone = document.querySelector('.gp-drop');
+    if (!dropZone) return;
+
+    // Hidden file input
+    const fileInput = Object.assign(document.createElement('input'), {
+      type: 'file', accept: '.csv,.tsv,.xlsx,.xls', style: 'display:none',
+    });
+    document.body.appendChild(fileInput);
+
+    const handleFile = f => { if (f) openImportWizard(f); };
+
+    fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+
+    // Browse files button
+    const browseBtn = dropZone.querySelector('.cm-btn.is-outline');
+    if (browseBtn) {
+      const newBtn = browseBtn.cloneNode(true);
+      browseBtn.replaceWith(newBtn);
+      newBtn.addEventListener('click', e => { e.stopPropagation(); fileInput.click(); });
+    }
+
+    // Click on drop zone (not on buttons)
+    dropZone.addEventListener('click', e => {
+      if (e.target.closest('.cm-btn')) return;
+      fileInput.click();
+    });
+
+    // Drag-and-drop
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    });
+  }
+
+  // Lazy-init when drawer opens
+  const _origOpenSrc = window._gpOpenSrc;
+  document.getElementById('srcBtn')?.addEventListener('click', () => {
+    loadXLSX().catch(() => {});
+    initUploadHandlers();
+  }, { once: true });
+
+  // Also init immediately in case drawer is already open
+  document.addEventListener('DOMContentLoaded', () => initUploadHandlers(), { once: true });
+  if (document.readyState !== 'loading') initUploadHandlers();
+
+})();
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// BLOQUE 5+6 — × match max + weekly bars + baseline settings
+// ══════════════════════════════════════════════════════════════
+
+// ── × Match max ───────────────────────────────────────────────
+// Reads real gps_reports + getMatchBaseline for selected player
+async function renderMatchMax(report) {
+  const container = document.querySelector('.gp-xm');
+  if (!container) return;
+  const clubId  = window._gpClubId;
+  const pid     = report?.player_id;
+  if (!pid || !clubId) return;
+
+  const METRICS = [
+    { key:'total_distance',    label:'Dist',    icon:'ti-route',         scale: v => +(v/1000).toFixed(2) + '×', raw: true },
+    { key:'high_speed_distance', label:'HSR',   icon:'ti-bolt',          scale: v => v + '×', raw: true },
+    { key:'sprint_distance',   label:'Sprints', icon:'ti-flame',         scale: v => v + '×', raw: true },
+    { key:'max_speed',         label:'Top sp',  icon:'ti-gauge',         scale: v => v + '×', raw: true },
+    { key:'accelerations',     label:'Accel',   icon:'ti-arrow-up-right',scale: v => v + '×', raw: true },
+    { key:'player_load',       label:'Load',    icon:'ti-activity',      scale: v => v + '×', raw: true },
+  ];
+
+  const rows = await Promise.all(METRICS.map(async m => {
+    const val    = +(report[m.key] || 0);
+    const bl     = await window.getMatchBaseline(pid, m.key, clubId);
+    const ratio  = bl.baseline ? +(val / bl.baseline).toFixed(2) : null;
+    const pct    = ratio ? Math.min(ratio / 1.5 * 100, 100) : 0;
+    const warnCls = ratio > 1.1 ? (ratio > 1.2 ? 'danger' : 'warn') : '';
+    const tooltip = bl.warning
+      ? bl.warning
+      : `Baseline: avg of best ${bl.count} matches (Miguel et al. 2022)`;
+    return { ...m, val, ratio, pct, warnCls, tooltip, hasBaseline: !!bl.baseline };
+  }));
+
+  container.innerHTML = rows.map(r => `
+    <div class="gp-xm-row" title="${r.tooltip}">
+      <span class="gp-xm-l"><i class="ti ${r.icon}"></i>${r.label}</span>
+      <span class="gp-xm-t">
+        <span class="th" style="left:50%"></span>
+        <span class="th" style="left:75%"></span>
+        ${r.hasBaseline
+          ? `<span class="pin" style="left:${r.pct}%"><span class="pd"></span></span>`
+          : `<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding-left:6px">No data</span>`}
+      </span>
+      <span class="gp-xm-v ${r.warnCls}">${r.hasBaseline ? r.ratio + '×' : '—'}</span>
+    </div>`).join('');
+}
+
+// ── Weekly volume bars ─────────────────────────────────────────
+async function renderWeeklyBars(state) {
+  const container = document.querySelector('.gp-bars');
+  if (!container) return;
+  const clubId = window._gpClubId;
+  if (!clubId) return;
+
+  const parseWeek = mc => parseInt((mc || '').replace(/\D/g, ''), 10);
+  const curWeek   = parseWeek(state.microcycle);
+  const prevWeek  = curWeek - 1;
+
+  // Get sessions from last 3 weeks to cover current and prev
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 21);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  const { data: sessions } = await window.sb.from('training_sessions')
+    .select('id,session_date,session_type')
+    .eq('club_id', clubId).gte('session_date', cutoffStr)
+    .order('session_date', { ascending: true });
+  if (!sessions?.length) return;
+
+  function isoWeek(d) {
+    const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    dt.setUTCDate(dt.getUTCDate() + 4 - (dt.getUTCDay() || 7));
+    const y0 = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+    return Math.ceil((((dt - y0) / 86400000) + 1) / 7);
+  }
+
+  const pid = state.playerId;
+  const sessionIds = sessions.map(s => s.id);
+  const { data: loads } = await window.sb.from('gps_reports')
+    .select('session_id,player_id,player_load,total_distance')
+    .in('session_id', sessionIds).eq('club_id', clubId);
+
+  const loadBySid = {};
+  (loads || []).forEach(r => {
+    if (pid && r.player_id !== pid) return;
+    if (!loadBySid[r.session_id]) loadBySid[r.session_id] = 0;
+    loadBySid[r.session_id] += (r.player_load || 0);
+  });
+
+  // Build day-by-day loads for cur & prev week, keyed by weekday (0=Sun..6=Sat)
+  const byDay = { cur: {}, prev: {} };
+  sessions.forEach(s => {
+    const d  = new Date(s.session_date);
+    const wk = isoWeek(d);
+    const wd = d.getUTCDay();
+    const isMatch = s.session_type === 'match';
+    const load = loadBySid[s.id] || 0;
+    if (wk === curWeek)  { if (!byDay.cur[wd])  byDay.cur[wd]  = { load:0, isMatch:false }; byDay.cur[wd].load  += load; if (isMatch) byDay.cur[wd].isMatch  = true; }
+    if (wk === prevWeek) { if (!byDay.prev[wd]) byDay.prev[wd] = { load:0, isMatch:false }; byDay.prev[wd].load += load; if (isMatch) byDay.prev[wd].isMatch = true; }
+  });
+
+  const DAYS = [0,1,2,3,4,5,6]; // Sun–Sat
+  const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // find max for scale
+  const allVals = DAYS.flatMap(d => [(byDay.cur[d]?.load || 0), (byDay.prev[d]?.load || 0)]);
+  const maxVal  = Math.max(...allVals, 1);
+
+  const curTotal  = DAYS.reduce((s, d) => s + (byDay.cur[d]?.load || 0), 0);
+  const prevTotal = DAYS.reduce((s, d) => s + (byDay.prev[d]?.load || 0), 0);
+  const wowPct    = prevTotal ? Math.round((curTotal - prevTotal) / prevTotal * 100) : null;
+  const wowCol    = wowPct == null ? '' : wowPct > 10 ? 'var(--cm-warning)' : wowPct < -10 ? 'var(--cm-danger)' : 'var(--cm-success)';
+
+  // Determine a base date for the current week to get day-of-month labels
+  const today = new Date();
+  const todayDay = today.getUTCDay();
+  const curWeekSunday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - todayDay));
+
+  container.innerHTML = DAYS.map(wd => {
+    const cur  = byDay.cur[wd]  || { load:0, isMatch:false };
+    const prev = byDay.prev[wd] || { load:0 };
+    const curH  = Math.round((cur.load  / maxVal) * 100);
+    const prevH = Math.round((prev.load / maxVal) * 100);
+    const dayLabel = new Date(curWeekSunday.getTime() + wd * 86400000)
+      .toLocaleDateString('en-US', { weekday:'short', day:'numeric' });
+    const barCls = cur.isMatch ? 'mt' : 'curr';
+    return `<div class="gr">
+      <div class="stack">
+        <div class="b prev" style="height:${prevH}%"></div>
+        <div class="b ${barCls}" style="height:${Math.max(curH, cur.load > 0 ? 2 : 0)}%"></div>
+      </div>
+      <span class="lbl">${dayLabel}</span>
+    </div>`;
+  }).join('');
+
+  // Update cumulative legend
+  const leg = container.nextElementSibling;
+  if (leg) {
+    const cumEl = leg.querySelector('strong');
+    if (cumEl) cumEl.textContent = Math.round(curTotal) + ' AU';
+    const wowEl = leg.querySelector('span[style*="warning"], span[style*="success"], span[style*="danger"]');
+    if (wowEl && wowPct != null) {
+      wowEl.style.color = wowCol;
+      wowEl.textContent = (wowPct >= 0 ? '+' : '') + wowPct + '%';
+    }
+  }
+}
+
+// ── Hook renderView to also update × match max + weekly bars ──
+const _origRenderView = window.renderView;
+window.renderView = async function () {
+  await _origRenderView?.();
+  const state   = window.gpState;
+  const reports = window._gpReports;
+  if (!reports?.length) return;
+  const sel = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
+  if (sel) renderMatchMax(sel);
+  renderWeeklyBars(state);
+};
+
+// ── Baseline tooltip for KPI cards ────────────────────────────
+async function annotateKpiCards() {
+  const state   = window.gpState;
+  const reports = window._gpReports;
+  if (!reports?.length) return;
+  const sel = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
+  if (!sel?.player_id || !window._gpClubId) return;
+
+  const BL_MAP = [
+    { kpiIdx: 0, metric: 'total_distance' },
+    { kpiIdx: 1, metric: 'high_speed_distance' },
+    { kpiIdx: 2, metric: 'sprint_distance' },
+  ];
+
+  for (const { kpiIdx, metric } of BL_MAP) {
+    const bl  = await window.getMatchBaseline(sel.player_id, metric, window._gpClubId);
+    const kpi = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi')[kpiIdx];
+    if (!kpi) continue;
+    let blLine = kpi.querySelector('.gp-bl-line');
+    if (!blLine) {
+      blLine = document.createElement('div');
+      blLine.className = 'gp-bl-line';
+      blLine.style.cssText = 'font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:5px;display:flex;align-items:center;gap:4px';
+      kpi.querySelector('.t')?.after(blLine);
+    }
+    if (bl.baseline) {
+      const raw = +(sel[metric] || 0);
+      const unit = metric === 'total_distance' ? 'km' : 'm';
+      const blDisp = metric === 'total_distance' ? (bl.baseline / 1000).toFixed(1) : Math.round(bl.baseline);
+      const conf = bl.confidence === 'high' ? '✓' : '~';
+      blLine.title = 'Baseline: avg of best matches · Miguel et al. 2022';
+      blLine.innerHTML = `<i class="ti ti-target" style="font-size:10px"></i>Baseline ${blDisp} ${unit} ${conf} (${bl.count} matches)`;
+    } else if (bl.warning) {
+      blLine.innerHTML = `<i class="ti ti-info-circle" style="font-size:10px;color:var(--cm-warning)"></i>${bl.warning}`;
+    }
+  }
+}
+
+// Trigger on initial load after IIFE completes
+const _origScienceCards = window.gpRenderScienceCards;
+window.gpRenderScienceCards = async function (reports, clubId) {
+  await _origScienceCards?.(reports, clubId);
+  const state = window.gpState;
+  const sel   = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
+  if (sel) {
+    renderMatchMax(sel);
+    renderWeeklyBars(state);
+    annotateKpiCards();
+  }
 };
 </script>
 

@@ -86,6 +86,7 @@ Important columns:
 - dominant_foot
 - status
 - photo_url
+- external_gps_id (text, nullable) — stable GPS device player ID (migration 028); auto-match on next import without fuzzy search. INDEX: idx_players_ext_gps(club_id, external_gps_id) WHERE external_gps_id IS NOT NULL
 
 Relationships:
 - players.club_id -> clubs.id
@@ -167,11 +168,45 @@ Important columns:
 - decelerations
 - max_speed
 - player_load
+- avg_speed
+- very_high_speed_distance (numeric, nullable) — added migration 028
+- hmld (numeric, nullable) — High Metabolic Load Distance, migration 028
+- time_played (numeric, nullable) — minutes played, migration 028
 - created_at
 
 Relationships:
 - gps_reports.player_id -> players.id
 - gps_reports.session_id -> training_sessions.id
+
+---
+
+# TABLE: gps_column_mappings
+
+Purpose:
+Persists per-club, per-provider column-name → canonical metric mapping.
+Enables automatic column matching on subsequent imports from the same source.
+Reference: migration 028.
+
+Important columns:
+- id (uuid)
+- club_id (uuid, FK clubs)
+- source_label (text) — free-form provider name, e.g. "Catapult Vector", "StatSports CSV"
+- source_column_name (text) — exact column header from the file
+- target_metric (text) — canonical metric name in gps_reports
+- unit_conversion (numeric, default 1.0) — multiply raw value before storing (e.g. 1000 for km → m)
+- created_at, updated_at
+
+Constraints:
+- UNIQUE(club_id, source_label, source_column_name)
+
+Indexes:
+- idx_gps_mappings_club(club_id)
+
+Canonical target_metric values:
+  total_distance, high_speed_distance, very_high_speed_distance,
+  sprint_distance, accelerations, decelerations, max_speed,
+  player_load, hmld, time_played, player_name, jersey_number,
+  session_date, position
 
 ---
 
