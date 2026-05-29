@@ -2643,7 +2643,7 @@ window.renderView = async function () {
     player_name: 'Player name', player_first_name: 'First name',
     player_last_name: 'Last name', jersey_number: 'Jersey #',
     position: 'Position', player_external_gps_id: 'External GPS ID',
-    session_date: 'Session date',
+    session_date: 'Session date', session_type: 'Session type',
     total_distance: 'Total distance', high_speed_distance: 'HSR distance',
     very_high_speed_distance: 'VHSR distance', sprint_distance: 'Sprint distance',
     hmld: 'HMLD', distance_per_minute: 'Distance / min',
@@ -2957,7 +2957,7 @@ window.renderView = async function () {
           <select id="wizSessionType" style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans)">
             <option value="auto" ${sessionType==='auto'?'selected':''}>Auto-detect from filename</option>
             <option value="match" ${sessionType==='match'?'selected':''}>Match (official)</option>
-            <option value="training" ${sessionType==='training'?'selected':''}>Training session</option>
+            <option value="conditioning" ${(sessionType==='conditioning'||sessionType==='training')?'selected':''}>Training session</option>
           </select>
         </div>
       </div>
@@ -3330,7 +3330,7 @@ window.renderView = async function () {
       <optgroup label="── Core metrics ──">${coreHtml}</optgroup>
       ${custMetrics.length ? `<optgroup label="── Custom metrics ──">${custMetrics.map(d => opt(d.key, d.label + (d.unit ? ` (${d.unit})` : ''))).join('')}</optgroup>` : ''}
       <optgroup label="── Session attributes ──">${attrHtml}</optgroup>
-      ${specEntries.length ? `<optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}</optgroup>` : ''}`;
+      <optgroup label="── Special ──">${specEntries.map(e => opt(e.metric_key, METRIC_LABEL[e.metric_key] || e.metric_key)).join('')}${opt('session_type', 'Session type')}</optgroup>`;
   }
 
   function _s2RowCls(c, catalog) {
@@ -3353,13 +3353,46 @@ window.renderView = async function () {
     return '';
   }
 
+  // Auto-detect number locale from numeric columns. Run once; user can override.
+  function _detectDecimalSep(rows, headerRow, columnMap, catalog) {
+    const numericCols = Object.entries(columnMap).filter(([, c]) => {
+      const m = c.metric;
+      if (!m || m === 'time_played') return false;
+      if (GPS_REPORT_COLS.has(m)) return true;
+      if ((catalog || []).some(d => d.key === m && !d.is_core)) return true;
+      return false;
+    }).map(([i]) => +i);
+    if (!numericCols.length) return 'dot';
+    const dataRows = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+    const COMMA_DEC = /,\d{1,2}(\D|$)/;
+    for (const row of dataRows.slice(0, 100)) {
+      for (const ci of numericCols) {
+        if (COMMA_DEC.test(String(row[ci] ?? '').trim())) return 'comma';
+      }
+    }
+    return 'dot';
+  }
+
   function renderStep2(body, footer) {
     const { columnMap } = _wizState;
     const catalog = _wizState.metricCatalog || [];
     const rows = Object.entries(columnMap);
     const custCount = catalog.filter(d => !d.is_core).length;
 
+    // Auto-detect decimal separator once; user can override via selector
+    if (!_wizState.decimalSep) {
+      _wizState.decimalSep = _detectDecimalSep(_wizState.rows, _wizState.headerRow, columnMap, catalog);
+    }
+    const INP_SM = 'padding:5px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-sans)';
+
     body.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
+        <span style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);white-space:nowrap">Number format</span>
+        <select id="wizDecimalSep" style="${INP_SM}">
+          <option value="dot"${_wizState.decimalSep === 'dot' ? ' selected' : ''}>1,234.56 — dot decimal (US / UK)</option>
+          <option value="comma"${_wizState.decimalSep === 'comma' ? ' selected' : ''}>1.234,56 — comma decimal (European)</option>
+        </select>
+      </div>
       <p style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">
         Map each file column to a ClavaMetrics metric.
         <span style="display:inline-flex;align-items:center;gap:4px;color:var(--cm-success)"><span style="width:8px;height:8px;border-radius:2px;background:currentColor;display:inline-block"></span>Core</span>
@@ -3437,6 +3470,9 @@ window.renderView = async function () {
         const ci = +e.target.dataset.ci;
         _wizState.columnMap[ci].conversion = +e.target.value || 1;
       });
+    });
+    body.querySelector('#wizDecimalSep')?.addEventListener('change', e => {
+      _wizState.decimalSep = e.target.value;
     });
 
     footer.innerHTML = `
@@ -4304,7 +4340,7 @@ window.renderView = async function () {
   async function renderStep4Session(body, footer) {
     const { clubId, sessionType, columnMap } = _wizState;
     const today   = new Date().toISOString().slice(0, 10);
-    const initType = sessionType === 'auto' ? 'training' : (sessionType || 'training');
+    const initType = sessionType === 'auto' ? 'conditioning' : (sessionType || 'conditioning');
 
     const { uniqueDates, dateMap, doubleDates } = _buildDateMap();
     const hasDateCol   = uniqueDates.length > 0;
@@ -4462,6 +4498,55 @@ window.renderView = async function () {
         </div>`;
     }
 
+    // ── Type vocabulary mapping (shown when a session_type column is mapped) ──
+    const _typeColEntry = Object.entries(_wizState.columnMap || {}).find(([, c]) => c.metric === 'session_type');
+    if (_typeColEntry) {
+      const _typeColIdx = +_typeColEntry[0];
+      const _dataRows   = _wizState.rows.slice(_wizState.headerRow + 1).filter(r => r.some(c => c !== ''));
+      const _rawTypes   = [...new Set(_dataRows.map(r => String(r[_typeColIdx] ?? '').trim()).filter(Boolean))];
+      if (_rawTypes.length) {
+        // Build heuristic map on first render; preserve on re-render
+        if (!_wizState.typeMap) {
+          const _h = { match: 'match', official: 'match', game: 'match', partido: 'match',
+                       rehab: 'recovery', recovery: 'recovery', dvg: 'recovery',
+                       gym: 'gym', tactical: 'tactical', conditioning: 'conditioning',
+                       friendly: 'match' };
+          _wizState.typeMap = {};
+          for (const rt of _rawTypes) {
+            const nc = rt.toLowerCase();
+            const hit = Object.entries(_h).find(([k]) => nc.includes(k));
+            _wizState.typeMap[rt] = hit ? hit[1] : 'conditioning';
+          }
+        }
+        const _typeRowsHTML = _rawTypes.map(rt => {
+          const canon = _wizState.typeMap[rt] || 'conditioning';
+          const _topts = SESSION_TYPES.map(t => `<option value="${t}"${t === canon ? ' selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('');
+          return `<tr>
+            <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg);padding:5px 8px">"${rt}"</td>
+            <td style="padding:5px 4px;color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans)">→</td>
+            <td style="padding:5px 8px">
+              <select class="gp-typemap-sel" data-raw="${rt.replace(/"/g,'&quot;')}"
+                style="padding:4px 8px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 11.5px/1 var(--cm-font-sans)">
+                ${_topts}
+              </select>
+            </td>
+          </tr>`;
+        }).join('');
+        body.insertAdjacentHTML('beforeend', `
+          <div style="margin-top:12px;padding:10px 12px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
+            <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">
+              Map session types — <span style="font-weight:400;text-transform:none">map "Official Match" → Match so it feeds baselines</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse"><tbody>${_typeRowsHTML}</tbody></table>
+          </div>`);
+        body.querySelectorAll('.gp-typemap-sel').forEach(sel => {
+          sel.addEventListener('change', e => {
+            _wizState.typeMap[e.target.dataset.raw] = e.target.value;
+          });
+        });
+      }
+    }
+
     footer.innerHTML = `
       <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 4 of 5</span>
       <div class="right">
@@ -4471,7 +4556,7 @@ window.renderView = async function () {
     footer.querySelector('#wizBack4').addEventListener('click', () => setWizStep(3));
     footer.querySelector('#wizNext4').addEventListener('click', () => {
       si.isHistorical  = body.querySelector('[name="s4mode"]:checked')?.value === 'historical';
-      si.sessionType   = body.querySelector('#s4Type')?.value || 'training';
+      si.sessionType   = body.querySelector('#s4Type')?.value || 'conditioning';
       if (si.mode === 'single') {
         si.date  = body.querySelector('#s4Date')?.value  || today;
         si.title = body.querySelector('#s4Title')?.value.trim() || '';
@@ -4515,6 +4600,7 @@ window.renderView = async function () {
     const playerNameIdx = _colOf('player_name') ?? _colOf('player_first_name');
     const jerseyIdx     = _colOf('jersey_number');
     const dateColIdx    = _colOf('session_date');
+    const typeColIdx    = _colOf('session_type') ?? null;
     const dateFmt       = dateColIdx != null ? (columnMap[dateColIdx]?.parseFormat || null) : null;
     const dataRows      = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
     const hasPlayerMapping = playerNameIdx != null || jerseyIdx != null;
@@ -4548,7 +4634,15 @@ window.renderView = async function () {
       if (dateColIdx != null && dateSessionMap) {
         const rawDate = String(row[+dateColIdx] || '').trim();
         const parsed  = window.gpParseDate ? window.gpParseDate(rawDate, dateFmt) : null;
-        if (parsed?.iso && !parsed.invalid) sessionId = dateSessionMap[parsed.iso] || singleSessionId;
+        if (parsed?.iso && !parsed.invalid) {
+          if (typeColIdx != null) {
+            const rawType  = String(row[+typeColIdx] ?? '').trim();
+            const canon    = (_wizState.typeMap || {})[rawType] || 'other';
+            sessionId = dateSessionMap[`${parsed.iso}__${canon}`] || singleSessionId;
+          } else {
+            sessionId = dateSessionMap[parsed.iso] || singleSessionId;
+          }
+        }
       }
       if (!sessionId) continue;
 
@@ -4578,14 +4672,22 @@ window.renderView = async function () {
             rec.time_played = Math.round(pd.minutes);
             continue;
           }
-          const num = +raw * (map.conversion || 1);
-          if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
+          const _np = window.gpParseNumber
+            ? window.gpParseNumber(raw, { decimal: _wizState.decimalSep || 'dot' })
+            : { value: +raw, invalid: !isFinite(+raw) || isNaN(+raw) };
+          if (_np.invalid || _np.value === null) { skippedCells++; continue; }
+          const num = _np.value * (map.conversion || 1);
+          if (!isFinite(num)) { skippedCells++; continue; }
           rec[map.metric] = GPS_INT_COLS.has(map.metric) ? Math.round(num) : +num.toFixed(4);
 
         } else if (customMetricKeys.has(map.metric)) {
           // Custom metric → gps_report_metrics (EAV)
-          const num = +raw * (map.conversion || 1);
-          if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
+          const _np = window.gpParseNumber
+            ? window.gpParseNumber(raw, { decimal: _wizState.decimalSep || 'dot' })
+            : { value: +raw, invalid: !isFinite(+raw) || isNaN(+raw) };
+          if (_np.invalid || _np.value === null) { skippedCells++; continue; }
+          const num = _np.value * (map.conversion || 1);
+          if (!isFinite(num)) { skippedCells++; continue; }
           extras.push({ metric_key: map.metric, value: +num.toFixed(4) });
         }
         // else: player field, session_date, __ignore__ → skip
@@ -4651,34 +4753,69 @@ window.renderView = async function () {
       let singleSessionId = null;
 
       if (isMultiMode) {
-        // One session per unique date
         dateSessionMap = {};
-        setStatus('Creating sessions…', `0 / ${uniqueDates.length}`);
+        const _typeColEntry = Object.entries(_wizState.columnMap).find(([, c]) => c.metric === 'session_type');
 
-        for (let i = 0; i < uniqueDates.length; i++) {
-          const date = uniqueDates[i];
-          const type = sessionType || 'training';
-
-          // Try to find existing session for this date + type + historical flag
-          const { data: existing } = await window.sb.from('training_sessions')
-            .select('id')
-            .eq('club_id', clubId).eq('session_date', date)
-            .eq('session_type', type).eq('is_historical', isHistorical)
-            .limit(1);
-
-          let sessionId = existing?.[0]?.id || null;
-
-          if (!sessionId) {
-            const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
-            const { data: newSess, error } = await window.sb.from('training_sessions')
-              .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical })
-              .select('id').single();
-            if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
-            sessionId = newSess.id;
+        if (_typeColEntry) {
+          // Per-row type mode: one session per unique (date, canonicalType) combo
+          const _tci     = +_typeColEntry[0];
+          const _dcIdx   = Object.entries(_wizState.columnMap).find(([, c]) => c.metric === 'session_date')?.[0];
+          const _dateFmt = _dcIdx != null ? (_wizState.columnMap[+_dcIdx]?.parseFormat || null) : null;
+          const _typeMap = _wizState.typeMap || {};
+          const _drows   = _wizState.rows.slice(_wizState.headerRow + 1).filter(r => r.some(c => c !== ''));
+          const _sessSet = {};
+          for (const row of _drows) {
+            if (!_dcIdx) continue;
+            const rawDate  = String(row[+_dcIdx] || '').trim();
+            const parsed   = window.gpParseDate ? window.gpParseDate(rawDate, _dateFmt) : null;
+            if (!parsed?.iso || parsed.invalid) continue;
+            const rawType  = String(row[+_tci] ?? '').trim();
+            const canon    = _typeMap[rawType] || 'other';
+            const k        = `${parsed.iso}__${canon}`;
+            if (!_sessSet[k]) _sessSet[k] = { date: parsed.iso, type: canon };
           }
+          const _uniqueSess = Object.values(_sessSet).sort((a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type));
+          setStatus('Creating sessions…', `0 / ${_uniqueSess.length}`);
 
-          dateSessionMap[date] = sessionId;
-          setStatus('Creating sessions…', `${i + 1} / ${uniqueDates.length}`);
+          for (let i = 0; i < _uniqueSess.length; i++) {
+            const { date, type } = _uniqueSess[i];
+            const { data: existing } = await window.sb.from('training_sessions')
+              .select('id').eq('club_id', clubId).eq('session_date', date)
+              .eq('session_type', type).eq('is_historical', isHistorical).limit(1);
+            let sessionId = existing?.[0]?.id || null;
+            if (!sessionId) {
+              const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
+              const { data: newSess, error } = await window.sb.from('training_sessions')
+                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical })
+                .select('id').single();
+              if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
+              sessionId = newSess.id;
+            }
+            dateSessionMap[`${date}__${type}`] = sessionId;
+            setStatus('Creating sessions…', `${i + 1} / ${_uniqueSess.length}`);
+          }
+        } else {
+          // Original path: one session per unique date, single global type
+          const type = sessionType || 'conditioning';
+          setStatus('Creating sessions…', `0 / ${uniqueDates.length}`);
+
+          for (let i = 0; i < uniqueDates.length; i++) {
+            const date = uniqueDates[i];
+            const { data: existing } = await window.sb.from('training_sessions')
+              .select('id').eq('club_id', clubId).eq('session_date', date)
+              .eq('session_type', type).eq('is_historical', isHistorical).limit(1);
+            let sessionId = existing?.[0]?.id || null;
+            if (!sessionId) {
+              const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
+              const { data: newSess, error } = await window.sb.from('training_sessions')
+                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical })
+                .select('id').single();
+              if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
+              sessionId = newSess.id;
+            }
+            dateSessionMap[date] = sessionId;
+            setStatus('Creating sessions…', `${i + 1} / ${uniqueDates.length}`);
+          }
         }
       } else {
         // Single-session mode (no date column or manual date)
@@ -4687,7 +4824,7 @@ window.renderView = async function () {
 
         if (!singleSessionId) {
           const date  = sessionInfo.date  || new Date().toISOString().slice(0, 10);
-          const type  = sessionInfo.sessionType || sessionType || 'training';
+          const type  = sessionInfo.sessionType || sessionType || 'conditioning';
           const title = sessionInfo.title || `GPS import · ${date}`;
           const payload = { club_id: clubId, title, session_date: date, session_type: type, is_historical: !!isHistorical };
           const { data: newSess, error } = await window.sb.from('training_sessions')
@@ -4778,13 +4915,13 @@ window.renderView = async function () {
 
       // ── 5. Success ────────────────────────────────────────
       document.getElementById('wizSpinner')?.remove();
-      const sessionCount    = isMultiMode ? uniqueDates.length : 1;
+      const sessionCount    = isMultiMode ? Object.keys(dateSessionMap).length : 1;
       const uniquePlayers   = new Set(deduped.map(r => r.player_id).filter(Boolean)).size;
       const sessionLabel    = isHistorical ? 'historical' : 'real';
       const customMetricCount = Object.values(extrasMap).reduce((n, arr) => n + arr.length, 0);
       const attrCount       = Object.values(attrsBySession).reduce((n, a) => n + Object.keys(a).length, 0);
       const warningLines    = [...warnings.slice(0, 5), ...(skippedCells ? [`${skippedCells} cell(s) skipped (invalid values)`] : [])];
-      const firstSessionId  = isMultiMode ? (dateSessionMap[uniqueDates[0]] || null) : singleSessionId;
+      const firstSessionId  = isMultiMode ? (Object.values(dateSessionMap)[0] || null) : singleSessionId;
       const customLine      = customMetricCount
         ? ` · ${customMetricCount} custom metric value${customMetricCount !== 1 ? 's' : ''}` : '';
       const attrLine        = attrCount

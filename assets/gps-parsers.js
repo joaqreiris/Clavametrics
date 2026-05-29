@@ -474,11 +474,34 @@
     return _FMT_LABELS[fmt] || 'Auto-detect';
   }
 
+  // ── Number parser — locale-aware ────────────────────────────
+  // opts.decimal: 'dot' (US/default) | 'comma' (European: . = thousands, , = decimal)
+  // Returns { value: number|null, invalid: bool }
+  function parseNumber(raw, opts) {
+    if (raw == null) return { value: null, invalid: true };
+    let s = String(raw).trim();
+    if (!s) return { value: null, invalid: true };
+    const decimal = (opts && opts.decimal) || 'dot';
+    if (decimal === 'comma') {
+      // European: remove dot thousands separators, then comma → decimal point
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US/default: remove comma thousands separators
+      s = s.replace(/,/g, '');
+    }
+    // Strip residual non-numeric chars (units glued to value, e.g. "28.2m")
+    s = s.replace(/[^0-9.\-+eE]/g, '');
+    const n = Number(s);
+    if (!isFinite(n) || isNaN(n)) return { value: null, invalid: true };
+    return { value: n, invalid: false };
+  }
+
   // ── Expose public API ────────────────────────────────────────
   window.GPS_PARSE_DATE_FORMATS     = DATE_FORMATS;
   window.GPS_PARSE_DURATION_FORMATS = DURATION_FORMATS;
   window.gpParseDate     = parseDate;
   window.gpParseDuration = parseDuration;
+  window.gpParseNumber   = parseNumber;
   window.gpDetectColType = detectColumnType;
   window.gpAnalyzeCols   = analyzeColumns;
   window.gpFmtDisplay    = gpFmtDisplay;
