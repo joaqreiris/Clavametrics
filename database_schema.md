@@ -319,9 +319,13 @@ Important columns:
   fully available for GPS charts, baselines, and comparisons.
 - session_attributes (jsonb, default '{}') — migration 036: extensible per-session
   metadata. Conventional keys: rival (text), md_code (text, e.g. "MD-1"/"MD+2"),
-  competition (text), venue (text "home"/"away"). Not a constraint — clubs can
+  competition (text), venue (text "home"/"away"), microcycle (text, e.g. "MC 08" —
+  label from GPS CSV; NOT the microcycle_id FK). Not a constraint — clubs can
   store any key. GIN index idx_training_sessions_attributes enables @> filtering.
   Written by the import pipeline when columns are mapped to "Session attribute".
+- microcycle_id (text, FK → microcycles.id ON DELETE SET NULL) — links to the
+  microcycles planning entity (rival, match_date, stadium). Distinct from the
+  "MC 08" label stored in session_attributes; set by Daily Planning, not import.
 
 Session resolve key (used by import pipeline):
   UNIQUE by (club_id, session_date, session_type, is_historical)
