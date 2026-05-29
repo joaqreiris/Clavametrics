@@ -2393,7 +2393,7 @@ window.renderView = async function () {
     let existingMappings = [];
     if (clubId) {
       const { data } = await window.sb.from('gps_column_mappings')
-        .select('source_column_name,target_metric,unit_conversion,source_label,parse_format,column_type')
+        .select('source_column_name,target_metric,unit_conversion,source_label,parse_format,column_type,excluded')
         .eq('club_id', clubId);
       existingMappings = data || [];
     }
@@ -2527,6 +2527,10 @@ window.renderView = async function () {
           placeholder="e.g. Catapult Vector, StatSports CSV…"
           style="width:100%;padding:6px 10px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);background:var(--cm-bg-soft);color:var(--cm-fg);font:500 12px/1 var(--cm-font-sans);box-sizing:border-box">
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <button id="wizExclAll" class="cm-btn is-outline is-sm" style="font:500 10.5px/1.4 var(--cm-font-sans)">Exclude all</button>
+        <button id="wizInclAll" class="cm-btn is-outline is-sm" style="font:500 10.5px/1.4 var(--cm-font-sans)">Include all</button>
+      </div>
       <div class="gp-imp-preview" id="wizPreviewTable"></div>`;
 
     renderPreviewTable(rows, headerRow);
@@ -2544,9 +2548,18 @@ window.renderView = async function () {
     });
     body.querySelector('#wizMatchDate')?.addEventListener('change', e => { _wizState.matchDate = e.target.value; });
     body.querySelector('#wizSourceLabel').addEventListener('input', e => { _wizState.sourceLabel = e.target.value; });
+    body.querySelector('#wizExclAll').addEventListener('click', () => {
+      const hdr = _wizState.rows[_wizState.headerRow] || [];
+      (_wizState.colTypes || []).forEach((ct, i) => { if (ct && hdr[i]) ct.excluded = true; });
+      renderPreviewTable(_wizState.rows, _wizState.headerRow);
+    });
+    body.querySelector('#wizInclAll').addEventListener('click', () => {
+      (_wizState.colTypes || []).forEach(ct => { if (ct) ct.excluded = false; });
+      renderPreviewTable(_wizState.rows, _wizState.headerRow);
+    });
 
     footer.innerHTML = `
-      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 1 of 5</span>
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Step 1 of 5 &middot; <span id="wizColCounter"></span></span>
       <div class="right">
         <button class="cm-btn is-outline is-sm" onclick="document.getElementById('gpImportModal')?.remove()">Cancel</button>
         <button class="cm-btn is-primary is-sm" id="wizNext1">Next: Map columns</button>
@@ -2585,6 +2598,7 @@ window.renderView = async function () {
           _wizState.colTypes[i].manualType = saved.column_type;
           _wizState.colTypes[i].type       = saved.column_type;
         }
+        if (saved?.excluded) _wizState.colTypes[i].excluded = true;
       });
     }
 
@@ -2611,11 +2625,30 @@ window.renderView = async function () {
 
     function makeHeaderCell(ci, label) {
       const ct         = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
+      const excluded   = ct.excluded || false;
       const type       = ct.type;
       const fmt        = ct.format;
       const invalid    = ct.invalidCount || 0;
       const manualType = ct.manualType || '';
       const autoLabel  = ct.autoType ? `Auto · ${ct.autoType}` : 'Auto';
+
+      const EXCL_BTN = `<button class="gp-col-excl" data-ci="${ci}"
+        title="${excluded ? 'Click to include' : 'Exclude column'}"
+        style="flex-shrink:0;display:inline-flex;align-items:center;background:none;border:none;padding:1px 3px;cursor:pointer;font-size:13px;line-height:1;border-radius:3px;color:${excluded ? 'var(--cm-fg-muted)' : 'var(--cm-fg-faint)'}">
+        <i class="ti ${excluded ? 'ti-eye' : 'ti-eye-off'}"></i>
+      </button>`;
+
+      const labelRow = `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px">
+        <div style="font:600 11.5px/1.2 var(--cm-font-sans);color:${excluded ? 'var(--cm-fg-muted)' : 'var(--cm-fg-strong)'}">${label}</div>
+        ${EXCL_BTN}
+      </div>`;
+
+      if (excluded) {
+        return `<th style="min-width:100px;max-width:180px;vertical-align:top;padding:6px 8px;font-weight:normal;opacity:0.45;background:var(--cm-bg-soft)">
+          ${labelRow}
+          <span style="display:inline-block;margin-top:3px;padding:1px 5px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:3px;font:600 9.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">excluded</span>
+        </th>`;
+      }
 
       const TYPE_OPTIONS = [
         { v: '',         l: autoLabel   },
@@ -2653,14 +2686,17 @@ window.renderView = async function () {
       }
 
       return `<th style="min-width:100px;max-width:180px;vertical-align:top;padding:6px 8px;font-weight:normal">
-        <div style="font:600 11.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${label}</div>
+        ${labelRow}
         ${typeSel}
         ${hint}${ambigNote}${dropdown}${badge}
       </th>`;
     }
 
     function renderCell(ci, value) {
-      const ct   = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
+      const ct = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
+      if (ct.excluded) {
+        return `<td style="opacity:0.45;background:var(--cm-bg-soft);color:var(--cm-fg-muted)">${String(value ?? '')}</td>`;
+      }
       const disp = (typeof gpFmtDisplay === 'function')
         ? gpFmtDisplay(ct.type, value, ct.format)
         : String(value ?? '');
@@ -2721,6 +2757,22 @@ window.renderView = async function () {
       });
     });
 
+    // Exclude toggle button
+    wrap.querySelectorAll('.gp-col-excl').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ci = +btn.dataset.ci;
+        if (!_wizState.colTypes[ci]) _wizState.colTypes[ci] = { type: 'text', format: null };
+        _wizState.colTypes[ci].excluded = !_wizState.colTypes[ci].excluded;
+        renderPreviewTable(rows, headerRow);
+      });
+    });
+
+    // Update column counter in step-1 footer
+    const _totalCols = hdr.filter(h => h).length;
+    const _exclCols  = (_wizState.colTypes || []).reduce((n, ct, i) => n + ((ct?.excluded && hdr[i]) ? 1 : 0), 0);
+    const _counter   = document.getElementById('wizColCounter');
+    if (_counter) _counter.textContent = `${_totalCols - _exclCols} of ${_totalCols} columns`;
+
     // Invalid badge: show modal listing unparseable rows
     wrap.querySelectorAll('.gp-col-inv').forEach(badge => {
       badge.addEventListener('click', () => {
@@ -2762,20 +2814,24 @@ window.renderView = async function () {
     _wizState.columnMap = {};
     hdr.forEach((col, i) => {
       if (!col) return;
-      const saved     = labelMappings.find(m => _norm(m.source_column_name) === _norm(col));
-      const colType   = colTypes?.[i]?.manualType || null;
+      const saved       = labelMappings.find(m => _norm(m.source_column_name) === _norm(col));
+      const colType     = colTypes?.[i]?.manualType || null;
+      const isExcluded  = !!(colTypes?.[i]?.excluded);
       // parse_format: prefer DB-saved value, then user override from preview, then auto
       const parseFormat = saved?.parse_format || colTypes?.[i]?.format || null;
-      // If user manually set to 'ignore', skip matching
-      if (colType === 'ignore') {
-        _wizState.columnMap[i] = { sourceCol: col, metric: '__ignore__', confidence: 'manual', conversion: 1, parseFormat: null, colType };
+      // Excluded or manually-ignored columns bypass auto-matching
+      if (isExcluded || colType === 'ignore') {
+        _wizState.columnMap[i] = {
+          sourceCol: col, metric: null, confidence: 'manual', conversion: 1,
+          parseFormat: null, colType, excluded: isExcluded,
+        };
         return;
       }
       const match = autoMatchColumn(col, labelMappings);
       _wizState.columnMap[i] = {
         sourceCol: col, metric: match.metric,
         confidence: match.confidence, conversion: match.conversion,
-        parseFormat, colType,
+        parseFormat, colType, excluded: false,
       };
     });
   }
@@ -2798,6 +2854,17 @@ window.renderView = async function () {
       <table class="gp-map-table">
         <thead><tr><th>File column</th><th>Map to metric</th><th>Unit conversion</th></tr></thead>
         <tbody>${rows.map(([i, c]) => {
+          if (c.excluded) {
+            return `<tr data-ci="${i}" style="opacity:0.45">
+              <td style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${c.sourceCol}
+                <span style="margin-left:6px;padding:1px 4px;border:1px solid var(--cm-border);border-radius:3px;font:600 9px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)">excluded in preview</span>
+              </td>
+              <td><select disabled style="opacity:0.5;padding:4px 6px;border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-mono)">
+                <option>— Excluded in preview —</option>
+              </select></td>
+              <td style="color:var(--cm-fg-faint);font:500 11.5px/1 var(--cm-font-mono)">—</td>
+            </tr>`;
+          }
           const conf  = c.confidence;
           const rowCls = conf === 'high' || conf === 'saved' ? 'matched-auto' : conf === 'medium' ? 'matched-guess' : 'matched-none';
           const selCls = conf === 'high' || conf === 'saved' ? 'is-green' : conf === 'medium' ? 'is-yellow' : '';
@@ -2846,15 +2913,18 @@ window.renderView = async function () {
     const { clubId, sourceLabel, columnMap } = _wizState;
     if (!clubId) return;
     const upserts = Object.values(columnMap)
-      .filter(c => c.metric && c.metric !== '__ignore__')
+      .filter(c => (c.metric && c.metric !== '__ignore__') || c.excluded)
       .map(c => {
         const rec = {
           club_id: clubId, source_label: sourceLabel,
-          source_column_name: c.sourceCol, target_metric: c.metric,
-          unit_conversion: c.conversion, updated_at: new Date().toISOString(),
+          source_column_name: c.sourceCol,
+          target_metric: c.excluded ? '__ignore__' : c.metric,
+          unit_conversion: c.conversion || 1,
+          updated_at: new Date().toISOString(),
         };
         if (c.parseFormat) rec.parse_format = c.parseFormat;
         if (c.colType)     rec.column_type  = c.colType;
+        if (c.excluded)    rec.excluded     = true;
         return rec;
       });
     if (!upserts.length) return;
