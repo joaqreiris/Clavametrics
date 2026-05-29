@@ -477,7 +477,7 @@
 let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
 let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false;
 
-const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'DM', WG:'WG', ST:'ST', CM:'MF', CF:'ST' };
+const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'DM', WG:'WG', ST:'ST', CM:'MF', CF:'CF' };
 
 function _gpFmt(dateStr) {
   const d = new Date(dateStr + 'T12:00:00');
@@ -740,9 +740,12 @@ async function gpLoadAthletes(dateStr) {
       .catch(() => ({ data: [] }))
   ]);
 
-  const availMap  = Object.fromEntries((availRes.data || []).map(a => [a.player_id, a.status]));
-  const adaptedIds = new Set((treatRes.data || []).filter(t => t.adaptation_notes).map(t => t.player_id));
-  const hasAvail  = (availRes.data || []).length > 0;
+  const availMap   = Object.fromEntries((availRes.data || []).map(a => [a.player_id, a.status]));
+  const adaptNotes = Object.fromEntries(
+    (treatRes.data || []).filter(t => t.adaptation_notes).map(t => [t.player_id, t.adaptation_notes])
+  );
+  const adaptedIds = new Set(Object.keys(adaptNotes));
+  const hasAvail   = (availRes.data || []).length > 0;
 
   const active = _gpPlayers.filter(p => {
     if (!hasAvail) return true;
@@ -762,7 +765,10 @@ async function gpLoadAthletes(dateStr) {
       const surname  = (`${p.first_name} ${p.last_name}`).trim().split(' ').pop();
       const num      = p.number ? ` #${p.number}` : '';
       const pos      = _GP_POS_MAP[(p.position || '').toUpperCase()] || (p.position || '').toUpperCase() || '';
-      const adapt    = adaptedIds.has(p.id) ? ` <span style="color:var(--cm-warning);font-weight:700">·adapt</span>` : '';
+      const adaptNote = adaptNotes[p.id];
+      const adapt     = adaptNote
+        ? ` <span title="${adaptNote.replace(/"/g, "'")}" style="color:var(--cm-warning);font-weight:700;cursor:help">·adapt</span>`
+        : '';
       return `<span class="gp-ath-pill"><span class="av">${initials}</span><span class="pos">${pos}</span>${surname}${num}${adapt}</span>`;
     }).join('');
     pillsEl.innerHTML = allPill + pills;
