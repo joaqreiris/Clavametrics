@@ -12,6 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="assets/gps-science.js"></script>
 <script src="assets/gps-baseline.js"></script>
+<script src="assets/gps-parsers.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -2392,7 +2393,7 @@ window.renderView = async function () {
     let existingMappings = [];
     if (clubId) {
       const { data } = await window.sb.from('gps_column_mappings')
-        .select('source_column_name,target_metric,unit_conversion,source_label')
+        .select('source_column_name,target_metric,unit_conversion,source_label,parse_format')
         .eq('club_id', clubId);
       existingMappings = data || [];
     }
@@ -2403,9 +2404,11 @@ window.renderView = async function () {
       sessionType: sessionTypeGuess,
       matchDate: '',
       sourceLabel: guessSourceLabel(file.name),
-      columnMap: {},          // colIndex → { metric, conversion }
+      columnMap: {},          // colIndex → { metric, conversion, parseFormat }
       playerMap: {},          // rawName → player_id
       squadPlayers: [],
+      colTypes: [],           // colIndex → { type, format, invalidCount, … } from gps-parsers
+      colTypesHeader: -1,     // headerRow value when colTypes was last computed
     };
 
     // Load squad
@@ -2560,24 +2563,171 @@ window.renderView = async function () {
   function renderPreviewTable(rows, headerRow) {
     const wrap = document.getElementById('wizPreviewTable');
     if (!wrap) return;
+
     const hdr  = rows[headerRow] || [];
     const data = rows.slice(headerRow + 1, headerRow + 11);
+
+    // Re-analyze only when header row changes; preserve user-set format overrides
+    if (typeof gpAnalyzeCols === 'function' && _wizState.colTypesHeader !== headerRow) {
+      _wizState.colTypes      = gpAnalyzeCols(rows, headerRow);
+      _wizState.colTypesHeader = headerRow;
+
+      // Apply saved parse_format from previous imports for this provider
+      const labelMappings = (_wizState.existingMappings || [])
+        .filter(m => m.source_label === _wizState.sourceLabel);
+      hdr.forEach((col, i) => {
+        if (!col || !_wizState.colTypes[i]) return;
+        const saved = labelMappings.find(m => _norm(m.source_column_name) === _norm(col));
+        if (saved?.parse_format) _wizState.colTypes[i].format = saved.parse_format;
+      });
+    }
+
+    const DATE_FMTS = window.GPS_PARSE_DATE_FORMATS     || {};
+    const DUR_FMTS  = window.GPS_PARSE_DURATION_FORMATS  || {};
+
+    const DATE_OPTIONS = [
+      { v: DATE_FMTS.AUTO,         l: 'Auto-detect'  },
+      { v: DATE_FMTS.DMY,          l: 'DD/MM/YYYY'   },
+      { v: DATE_FMTS.MDY,          l: 'MM/DD/YYYY'   },
+      { v: DATE_FMTS.YMD,          l: 'YYYY-MM-DD'   },
+      { v: DATE_FMTS.EXCEL_SERIAL, l: 'Excel serial' },
+    ];
+    const DUR_OPTIONS = [
+      { v: DUR_FMTS.AUTO,       l: 'Auto-detect'        },
+      { v: DUR_FMTS.HHMMSS,     l: 'HH:MM:SS'           },
+      { v: DUR_FMTS.HHMM,       l: 'HH:MM'              },
+      { v: DUR_FMTS.MMSS,       l: 'MM:SS'              },
+      { v: DUR_FMTS.MINUTES,    l: 'Minutes'            },
+      { v: DUR_FMTS.EXCEL_TIME, l: 'Excel time'         },
+    ];
+
+    const SEL_STYLE = 'margin-top:3px;width:100%;padding:2px 5px;border:1px solid var(--cm-border-soft);border-radius:3px;background:var(--cm-bg-soft);color:var(--cm-fg);font:500 9.5px/1.4 var(--cm-font-mono)';
+
+    function makeHeaderCell(ci, label) {
+      const ct      = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
+      const type    = ct.type;
+      const fmt     = ct.format;
+      const invalid = ct.invalidCount || 0;
+
+      let badge = '', hint = '', dropdown = '', ambigNote = '';
+
+      if (type === 'date') {
+        hint = `<div style="font:600 9px/1 var(--cm-font-mono);color:var(--cm-accent);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">date</div>`;
+        const opts = DATE_OPTIONS.map(o =>
+          `<option value="${o.v}"${o.v === fmt ? ' selected' : ''}>${o.l}</option>`).join('');
+        dropdown = `<select class="gp-col-fmt-sel" data-ci="${ci}" style="${SEL_STYLE}">${opts}</select>`;
+        if (ct.ambiguousDateFormat) {
+          ambigNote = `<div style="font:500 9px/1.3 var(--cm-font-mono);color:var(--cm-warning);margin-top:2px">ambiguous · using DD/MM</div>`;
+        }
+      } else if (type === 'duration') {
+        hint = `<div style="font:600 9px/1 var(--cm-font-mono);color:var(--cm-success);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">duration</div>`;
+        const opts = DUR_OPTIONS.map(o =>
+          `<option value="${o.v}"${o.v === fmt ? ' selected' : ''}>${o.l}</option>`).join('');
+        dropdown = `<select class="gp-col-fmt-sel" data-ci="${ci}" style="${SEL_STYLE}">${opts}</select>`;
+      }
+
+      if (invalid > 0) {
+        badge = `<span class="gp-col-inv" data-ci="${ci}"
+          style="display:inline-block;margin-top:3px;padding:1px 5px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:3px;font:600 9.5px/1.4 var(--cm-font-mono);color:var(--cm-danger);cursor:pointer;white-space:nowrap"
+          title="Click to view unparseable values">${invalid} invalid</span>`;
+      }
+
+      return `<th style="min-width:100px;max-width:180px;vertical-align:top;padding:6px 8px;font-weight:normal">
+        <div style="font:600 11.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${label}</div>
+        ${hint}${ambigNote}${dropdown}${badge}
+      </th>`;
+    }
+
+    function renderCell(ci, value) {
+      const ct   = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
+      const disp = (typeof gpFmtDisplay === 'function')
+        ? gpFmtDisplay(ct.type, value, ct.format)
+        : String(value ?? '');
+      let invalid = false;
+      if (value !== '' && value != null) {
+        if (ct.type === 'date')     invalid = window.gpParseDate?.(value, ct.format)?.invalid ?? false;
+        if (ct.type === 'duration') invalid = window.gpParseDuration?.(value, ct.format)?.invalid ?? false;
+      }
+      return `<td${invalid ? ' style="color:var(--cm-danger)"' : ''}>${disp}</td>`;
+    }
+
     wrap.innerHTML = `<table>
-      <thead><tr>${hdr.map(h => `<th>${h}</th>`).join('')}</tr></thead>
-      <tbody>${data.map(r => `<tr>${hdr.map((_, i) => `<td>${r[i] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody>
+      <thead><tr>${hdr.map((h, i) => makeHeaderCell(i, h)).join('')}</tr></thead>
+      <tbody>${data.map(r => `<tr>${hdr.map((_, i) => renderCell(i, r[i] ?? '')).join('')}</tr>`).join('')}</tbody>
     </table>`;
+
+    // Format dropdown: update colType.format and re-render (preserving other overrides)
+    wrap.querySelectorAll('.gp-col-fmt-sel').forEach(sel => {
+      sel.addEventListener('change', e => {
+        const ci = +e.target.dataset.ci;
+        if (!_wizState.colTypes[ci]) return;
+        _wizState.colTypes[ci].format = e.target.value;
+
+        // Recount invalids across preview rows with the new format
+        const ct      = _wizState.colTypes[ci];
+        const samples = rows.slice(headerRow + 1, headerRow + 21)
+          .map(r => r[ci]).filter(v => v !== null && v !== undefined && v !== '');
+        let inv = 0;
+        for (const v of samples) {
+          if (ct.type === 'date'     && window.gpParseDate?.(v, ct.format)?.invalid)     inv++;
+          if (ct.type === 'duration' && window.gpParseDuration?.(v, ct.format)?.invalid) inv++;
+        }
+        ct.invalidCount = inv;
+        // Keep colTypesHeader so analyzeColumns is NOT re-run on re-render
+        renderPreviewTable(rows, headerRow);
+      });
+    });
+
+    // Invalid badge: show modal listing unparseable rows
+    wrap.querySelectorAll('.gp-col-inv').forEach(badge => {
+      badge.addEventListener('click', () => {
+        const ci       = +badge.dataset.ci;
+        const ct       = (_wizState.colTypes || [])[ci] || { type: 'text', format: null };
+        const allData  = rows.slice(headerRow + 1).filter(r => r.some(c => c !== ''));
+        const badRows  = [];
+        allData.forEach((row, ri) => {
+          const v = row[ci];
+          if (v === '' || v == null) return;
+          const bad = ct.type === 'date'     ? window.gpParseDate?.(v, ct.format)?.invalid
+                    : ct.type === 'duration' ? window.gpParseDuration?.(v, ct.format)?.invalid
+                    : false;
+          if (bad) badRows.push({ row: ri + 1, value: String(v) });
+        });
+        const listHtml = badRows.slice(0, 20).map(b =>
+          `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid var(--cm-border-soft)">
+            <span style="font:500 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:44px;flex-shrink:0">Row ${b.row}</span>
+            <span style="font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-danger);word-break:break-all">${b.value}</span>
+          </div>`
+        ).join('') + (badRows.length > 20 ? `<div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:6px">+${badRows.length - 20} more rows</div>` : '');
+        makeModal(
+          `${hdr[ci] || `Column ${ci}`} — ${badRows.length} unparseable value${badRows.length !== 1 ? 's' : ''}`,
+          `<div style="font:400 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px">
+            These values could not be parsed as <strong>${ct.type}</strong>. They will be skipped during import.
+            Change the format dropdown above to fix parsing.
+          </div>
+          <div style="overflow-y:auto;max-height:260px">${listHtml}</div>`
+        );
+      });
+    });
   }
 
   // ── Step 2 — Column mapping ────────────────────────────────
   function buildColumnMap() {
-    const { rows, headerRow, existingMappings, sourceLabel } = _wizState;
+    const { rows, headerRow, existingMappings, sourceLabel, colTypes } = _wizState;
     const hdr = rows[headerRow] || [];
     const labelMappings = existingMappings.filter(m => m.source_label === sourceLabel);
     _wizState.columnMap = {};
     hdr.forEach((col, i) => {
       if (!col) return;
-      const match = autoMatchColumn(col, labelMappings);
-      _wizState.columnMap[i] = { sourceCol: col, metric: match.metric, confidence: match.confidence, conversion: match.conversion };
+      const match  = autoMatchColumn(col, labelMappings);
+      const saved  = labelMappings.find(m => _norm(m.source_column_name) === _norm(col));
+      // parse_format: prefer DB-saved value, then user override from preview, then auto
+      const parseFormat = saved?.parse_format || colTypes?.[i]?.format || null;
+      _wizState.columnMap[i] = {
+        sourceCol: col, metric: match.metric,
+        confidence: match.confidence, conversion: match.conversion,
+        parseFormat,
+      };
     });
   }
 
@@ -2648,11 +2798,15 @@ window.renderView = async function () {
     if (!clubId) return;
     const upserts = Object.values(columnMap)
       .filter(c => c.metric && c.metric !== '__ignore__')
-      .map(c => ({
-        club_id: clubId, source_label: sourceLabel,
-        source_column_name: c.sourceCol, target_metric: c.metric,
-        unit_conversion: c.conversion, updated_at: new Date().toISOString(),
-      }));
+      .map(c => {
+        const rec = {
+          club_id: clubId, source_label: sourceLabel,
+          source_column_name: c.sourceCol, target_metric: c.metric,
+          unit_conversion: c.conversion, updated_at: new Date().toISOString(),
+        };
+        if (c.parseFormat) rec.parse_format = c.parseFormat;
+        return rec;
+      });
     if (!upserts.length) return;
     await window.sb.from('gps_column_mappings').upsert(upserts, { onConflict: 'club_id,source_label,source_column_name' });
   }
@@ -2989,6 +3143,16 @@ window.renderView = async function () {
         if (!map.metric || !GPS_REPORT_COLS.has(map.metric)) continue;
         const raw = row[+ci];
         if (raw === '' || raw == null) continue;
+
+        // time_played arrives as a duration (HH:MM:SS, Excel time fraction, Date object, etc.)
+        if (map.metric === 'time_played' && typeof window.gpParseDuration === 'function') {
+          const pd = window.gpParseDuration(raw, map.parseFormat || null);
+          if (pd.invalid || pd.minutes === null) { skippedCells++; continue; }
+          rec.time_played = Math.round(pd.minutes);
+          continue;
+        }
+
+        // All other GPS metrics are numeric
         const num = +raw * (map.conversion || 1);
         if (!isFinite(num) || isNaN(num)) { skippedCells++; continue; }
         rec[map.metric] = GPS_INT_COLS.has(map.metric) ? Math.round(num) : +num.toFixed(4);
