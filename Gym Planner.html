@@ -213,7 +213,7 @@
         <div class="t"><span class="l">Warm-up</span><span class="v" id="gpTotWarmup">—</span><span class="delta" id="gpTotWarmupDelta"></span></div>
         <div class="t"><span class="l">Plyometrics</span><span class="v" id="gpTotPlyo">—</span><span class="delta" id="gpTotPlyoDelta"></span></div>
         <div class="t"><span class="l">Main work</span><span class="v" id="gpTotMain">—</span><span class="delta" id="gpTotMainDelta"></span></div>
-        <div class="t"><span class="l">Tonnage</span><span class="v">—<sub>kg</sub></span><span class="delta" style="color:var(--cm-fg-faint)">pending</span></div>
+        <div class="t"><span class="l">Tonnage</span><span class="v" id="gpTotTonnage">—<sub>kg</sub></span><span class="delta" id="gpTotTonDelta"></span></div>
         <div class="t"><span class="l">Athletes</span><span class="v" id="gpTotAthletes">—</span><span class="delta" id="gpTotAthletesDelta"></span></div>
         <div class="t"><span class="l">Planned AU</span><span class="v" id="gpTotAu">—<sub>AU</sub></span><span class="delta" id="gpTotAuNote" style="color:var(--cm-fg-muted)"></span></div>
       </div>
@@ -237,6 +237,8 @@
           <span class="ct" id="gpWarmupCt">—</span>
           <span class="sub">RAMP protocol · raise-activate-mobilise-potentiate</span>
           <div class="right">
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
+            <input type="number" id="gpWarmupMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
             <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
           </div>
         </div>
@@ -301,7 +303,11 @@
           <h3>Plyometrics &amp; power</h3>
           <span class="ct" id="gpPlyCt">—</span>
           <span class="sub">Track contact type (extensive / intensive)</span>
-          <div class="right"><button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button></div>
+          <div class="right">
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
+            <input type="number" id="gpPlyoMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
+            <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+          </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
           <table class="gp-tbl">
@@ -355,6 +361,8 @@
           <span class="ct" id="gpMainCt">—</span>
           <span class="sub">Mode toggle per row: SR = sets×reps · VBT = velocity-based</span>
           <div class="right">
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
+            <input type="number" id="gpMainMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
             <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
             <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-bolt" style="font-size:13px"></i>Pull from VITRUVE</button>
           </div>
@@ -481,56 +489,114 @@ function _gpAddDays(dateStr, n) {
   return d.toISOString().split('T')[0];
 }
 
-// ── Totals recalc (derived from DOM table rows) ──────────────────────────
+// ── Totals recalc (derived live from DOM table rows + duration inputs) ───
 function gpRecalcTotals() {
   const warmupBody = document.getElementById('gpWarmupBody');
   const mainBody   = document.getElementById('gpMainBody');
   const plyoBody   = document.getElementById('gpPlyoBody');
 
-  // Warm-up: row count + sum of Sets column (col index 2)
+  // ── Warm-up: row count, sum Sets col (col 2) ──
   const warmupRows = warmupBody ? warmupBody.querySelectorAll('tr').length : 0;
   const warmupSets = warmupBody ? [...warmupBody.querySelectorAll('tr')].reduce((s, tr) => {
     const inp = tr.querySelectorAll('td')[2]?.querySelector('input');
     return s + (parseInt(inp?.value) || 0);
   }, 0) : 0;
+  const warmupMin = parseInt(document.getElementById('gpWarmupMin')?.value) || 0;
 
-  // Main work: row count + parse leading number from "4 × 5" (col index 3)
+  // ── Main work: row count, parse "4 × 5" sets (col 3), tonnage & %1RM ──
+  // Sets×Reps: leading integer before "×". Tonnage: sets × reps × load_kg.
+  // Load rules: skip BW (bodyweight), "+N" (relative), non-numeric.
+  // Reps "/leg" are doubled (both legs counted). "22 kg·DB" → 22 kg.
+  // Avg %1RM: mean of .pct spans whose text matches "\d+%".
   const mainRows = mainBody ? mainBody.querySelectorAll('tr').length : 0;
-  const mainSets = mainBody ? [...mainBody.querySelectorAll('tr')].reduce((s, tr) => {
-    const inp = tr.querySelectorAll('td')[3]?.querySelector('input');
-    const m   = (inp?.value || '').match(/^(\d+)/);
-    return s + (m ? parseInt(m[1]) : 0);
-  }, 0) : 0;
+  let mainSets = 0, tonnage = 0;
+  const pctValues = [];
+  if (mainBody) {
+    [...mainBody.querySelectorAll('tr')].forEach(tr => {
+      const cells   = tr.querySelectorAll('td');
+      const srVal   = cells[3]?.querySelector('input')?.value || '';
+      const loadVal = (cells[4]?.querySelector('input')?.value || '').trim();
 
-  // Plyo: row count + sum contacts (col index 4)
+      // Parse "4 × 5", "3 × 8/leg", "4 × 3" — leading digit is sets
+      const srM = srVal.match(/^(\d+)\s*[×x]\s*(\d+)(\/leg)?/i);
+      if (srM) {
+        const sets = parseInt(srM[1]);
+        const reps = parseInt(srM[2]) * (srM[3] ? 2 : 1);
+        mainSets += sets;
+        // Tonnage: skip BW, "+N", empty or non-numeric loads
+        if (loadVal && !/^BW$/i.test(loadVal) && !/^\+/.test(loadVal)) {
+          const lm = loadVal.match(/^(\d+(?:\.\d+)?)/);
+          if (lm) {
+            const load = parseFloat(lm[1]);
+            if (load > 0) tonnage += sets * reps * load;
+          }
+        }
+      } else {
+        // Fallback: just count leading sets number without reps
+        const sm = srVal.match(/^(\d+)/);
+        if (sm) mainSets += parseInt(sm[1]);
+      }
+
+      // %1RM from .pct span — only pure "N%" (not "—")
+      const pctEl = cells[5]?.querySelector('.pct');
+      if (pctEl) {
+        const pm = pctEl.textContent.match(/^(\d+)%$/);
+        if (pm) pctValues.push(parseInt(pm[1]));
+      }
+    });
+  }
+  const avgPct = pctValues.length
+    ? Math.round(pctValues.reduce((a, b) => a + b, 0) / pctValues.length)
+    : null;
+  const mainMin = parseInt(document.getElementById('gpMainMin')?.value) || 0;
+
+  // ── Plyometrics: row count, sum Contacts col (col 4) ──
   const plyoRows     = plyoBody ? plyoBody.querySelectorAll('tr').length : 0;
   const plyoContacts = plyoBody ? [...plyoBody.querySelectorAll('tr')].reduce((s, tr) => {
     const inp = tr.querySelectorAll('td')[4]?.querySelector('input');
     return s + (parseInt(inp?.value) || 0);
   }, 0) : 0;
+  const plyoMin = parseInt(document.getElementById('gpPlyoMin')?.value) || 0;
 
-  // Update totals bar
-  const elWu    = document.getElementById('gpTotWarmup');
-  const elWuD   = document.getElementById('gpTotWarmupDelta');
-  const elPl    = document.getElementById('gpTotPlyo');
-  const elPlD   = document.getElementById('gpTotPlyoDelta');
-  const elMw    = document.getElementById('gpTotMain');
-  const elMwD   = document.getElementById('gpTotMainDelta');
+  // ── Update totals bar ──
+  const elWu   = document.getElementById('gpTotWarmup');
+  const elWuD  = document.getElementById('gpTotWarmupDelta');
+  const elPl   = document.getElementById('gpTotPlyo');
+  const elPlD  = document.getElementById('gpTotPlyoDelta');
+  const elMw   = document.getElementById('gpTotMain');
+  const elMwD  = document.getElementById('gpTotMainDelta');
+  const elTon  = document.getElementById('gpTotTonnage');
+  const elTonD = document.getElementById('gpTotTonDelta');
 
-  if (elWu)  elWu.textContent  = warmupRows || '—';
-  if (elWuD) elWuD.textContent = warmupRows ? `${warmupSets} sets · —min` : '';
-  if (elPl)  elPl.textContent  = plyoRows || '—';
-  if (elPlD) elPlD.textContent = plyoRows  ? `${plyoContacts} contacts` : '';
-  if (elMw)  elMw.textContent  = mainRows  || '—';
-  if (elMwD) elMwD.textContent = mainRows  ? `${mainSets} sets · —min` : '';
+  // .v shows duration (min) when the coach fills it in, otherwise exercise count
+  if (elWu)  elWu.innerHTML  = warmupMin ? `${warmupMin}<sub>min</sub>` : (warmupRows ? `${warmupRows}` : '—');
+  if (elWuD) elWuD.textContent = warmupRows ? `${warmupRows} movements · ${warmupSets} sets` : '';
 
-  // Update card header badges
+  if (elPl)  elPl.innerHTML  = plyoMin ? `${plyoMin}<sub>min</sub>` : (plyoRows ? `${plyoRows}` : '—');
+  if (elPlD) elPlD.textContent = plyoRows ? `${plyoRows} jumps · ${plyoContacts} contacts` : '';
+
+  if (elMw)  elMw.innerHTML  = mainMin ? `${mainMin}<sub>min</sub>` : (mainRows ? `${mainRows}` : '—');
+  if (elMwD) elMwD.textContent = mainRows ? `${mainRows} exercises · ${mainSets} sets` : '';
+
+  if (elTon)  elTon.innerHTML  = tonnage ? `${Math.round(tonnage).toLocaleString('en-US')}<sub>kg</sub>` : '—<sub>kg</sub>';
+  if (elTonD) elTonD.textContent = avgPct ? `avg ${avgPct}% 1RM` : '';
+
+  // ── Update card header badges ──
   const wuCt   = document.getElementById('gpWarmupCt');
   const plCt   = document.getElementById('gpPlyCt');
   const mainCt = document.getElementById('gpMainCt');
-  if (wuCt)   wuCt.textContent   = warmupRows ? `${warmupRows} · ${warmupSets} sets` : '—';
-  if (plCt)   plCt.textContent   = plyoRows   ? `${plyoRows} · ${plyoContacts} contacts` : '—';
-  if (mainCt) mainCt.textContent = mainRows   ? `${mainRows} · ${mainSets} sets` : '—';
+
+  const _wuParts = [`${warmupRows} movements`];
+  if (warmupMin) _wuParts.push(`${warmupMin} min`);
+  if (wuCt) wuCt.textContent = warmupRows ? _wuParts.join(' · ') : '—';
+
+  const _plParts = [`${plyoRows} jumps`, `${plyoContacts} contacts`];
+  if (plyoMin) _plParts.push(`${plyoMin} min`);
+  if (plCt) plCt.textContent = plyoRows ? _plParts.join(' · ') : '—';
+
+  const _mwParts = [`${mainRows} exercises`, `${mainSets} sets`];
+  if (mainMin) _mwParts.push(`${mainMin} min`);
+  if (mainCt) mainCt.textContent = mainRows ? _mwParts.join(' · ') : '—';
 
   gpUpdateAu();
 }
