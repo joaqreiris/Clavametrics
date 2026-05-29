@@ -291,37 +291,12 @@ Important columns:
 - baseline_n (integer, 3-10, default 5) — number of best match sessions for personal reference
 - baseline_mode (text: 'personal'|'position', default 'personal') — personal (Miguel et al. 2022) or positional avg
 - active_metrics (text[]) — GPS metrics visible in Z-score matrix / ranking picker
-- acwr_thresholds (jsonb, migration 020) — ACWR zone limits. Default: {"under":0.8,"sweet_upper":1.3,"caution_upper":1.5} (Gabbett 2016)
 - updated_at (timestamptz)
 
 Rules:
 - baseline_n BETWEEN 3 AND 10 (CHECK constraint)
 - baseline_mode IN ('personal','position') (CHECK constraint)
 - One row per club; UPSERT on save
-
----
-
-# TABLE: gps_dashboard_layouts
-
-Purpose:
-Stores per-user, per-club, per-dashboard card layout for the GPS Analysis dashboards.
-Each of the 5 dashboards (session_control, player_week, load_monitoring, match_performance,
-microcycle_compare) has an independent layout per user.
-Reference: migration 020.
-
-Important columns:
-- id (uuid PK)
-- user_id (uuid → auth.users.id)
-- club_id (uuid → clubs.id)
-- dashboard_id (text) — 'session_control' | 'player_week' | 'load_monitoring' | 'match_performance' | 'microcycle_compare'
-- layout (jsonb) — array of card objects: [{card_id, type, size, position, config:{...}}]
-- updated_at (timestamptz)
-
-Rules:
-- UNIQUE (user_id, club_id, dashboard_id) — one layout per user per dashboard per club
-- RLS: users can only read/write their own rows (auth.uid() = user_id)
-- layout defaults to '[]' (empty = use default layout for that dashboard)
-- card sizes: 'S' | 'M' | 'L' | 'full'
 
 ---
 
