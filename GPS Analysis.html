@@ -545,7 +545,7 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="sm">
+          <div class="gp-c" data-size="sm" data-card-id="kpi-distance" data-metric-key="total_distance">
             <div class="gp-c-h"><span class="ttl">Distance</span><span class="sub">90′</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-kpi"><div class="l"><i class="ti ti-route"></i>vs MF baseline</div><div class="v">11.4 <sub>km</sub></div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+12%</span> · z = +1.2</div></div>
           </div>
@@ -1464,7 +1464,7 @@ async function saveLayout(viewKey) {
       card_id: el.dataset.cardId || el.querySelector('.ttl')?.textContent?.trim() || String(idx),
       size: el.dataset.size || 'md',
       position: idx,
-      config: (() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(),
+      config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
     }));
     await window.sb.from('gps_dashboard_layouts').upsert(
       { user_id: uid, club_id: cid, dashboard_id: did, layout, updated_at: new Date().toISOString() },
@@ -1484,6 +1484,112 @@ async function loadLayout(viewKey) {
       .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
     return data?.layout || null;
   } catch (err) { console.warn('loadLayout:', err); return null; }
+}
+
+// ── Apply saved layout to a view (metric_key per card) ─────────
+async function applyLayoutToView(viewKey) {
+  const layout = await loadLayout(viewKey);
+  if (!layout?.length) return;
+  const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
+  if (!grid) return;
+  for (const { card_id, config } of layout) {
+    if (!config?.metric_key) continue;
+    const card = grid.querySelector(`[data-card-id="${card_id}"]`);
+    if (card) card.dataset.metricKey = config.metric_key;
+  }
+}
+
+// ── KPI card rendering helpers ──────────────────────────────────
+const _KPI_CORE_COLS = new Set([
+  'total_distance','high_speed_distance','very_high_speed_distance',
+  'sprint_distance','accelerations','decelerations','max_speed',
+  'player_load','avg_speed','hmld','time_played','sprint_count','distance_per_minute',
+]);
+
+function _fmtKpiValue(value, unit, metricKey) {
+  if (value == null) return '—';
+  if (metricKey === 'total_distance') return `${(value / 1000).toFixed(1)} <sub>km</sub>`;
+  if (['high_speed_distance','very_high_speed_distance','sprint_distance','hmld'].includes(metricKey))
+    return `${Math.round(value)} <sub>m</sub>`;
+  if (['max_speed','avg_speed','distance_per_minute'].includes(metricKey))
+    return `${(+value).toFixed(2)} <sub>${unit || 'km/h'}</sub>`;
+  if (unit) return `${+value % 1 === 0 ? Math.round(value) : (+value).toFixed(1)} <sub>${unit}</sub>`;
+  return `${Math.round(value)}`;
+}
+
+async function renderKpiCard(cardEl, metricKey, sel) {
+  if (!cardEl || !sel) return;
+  const kpi = cardEl.querySelector('.gp-kpi');
+  if (!kpi) return;
+
+  let value;
+  if (_KPI_CORE_COLS.has(metricKey)) {
+    value = sel[metricKey] ?? null;
+  } else {
+    try {
+      const cid = window._gpClubId;
+      const { from, to } = getDateRange();
+      const { data: rpts } = await window.sb.from('gps_reports')
+        .select('id, training_sessions!inner(session_date)')
+        .eq('club_id', cid).eq('player_id', sel.player_id)
+        .gte('training_sessions.session_date', from)
+        .lte('training_sessions.session_date', to);
+      const rids = (rpts || []).map(r => r.id);
+      if (rids.length) {
+        const { data: rows } = await window.sb.from('gps_report_metrics')
+          .select('value').in('report_id', rids).eq('metric_key', metricKey);
+        const vals = (rows || []).map(r => r.value).filter(v => v != null);
+        value = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      }
+    } catch (e) { console.warn('renderKpiCard custom fetch:', e); }
+  }
+
+  const catalog = window._gpCatalog || [];
+  const entry = catalog.find(m => m.key === metricKey);
+  const label = entry?.label || metricKey.replace(/_/g, ' ');
+  const unit  = entry?.unit  || '';
+
+  const ttl = cardEl.querySelector('.ttl');
+  if (ttl) ttl.textContent = label;
+
+  const vEl = kpi.querySelector('.v');
+  if (vEl) vEl.innerHTML = _fmtKpiValue(value, unit, metricKey);
+}
+
+async function openChangeMetricModal(card) {
+  const clubId  = window._gpClubId || await window.getClubId?.();
+  const catalog = typeof window.getCatalog === 'function' ? await window.getCatalog(clubId) : [];
+  const current = card.dataset.metricKey || 'total_distance';
+  const opts = catalog
+    .filter(m => m.category !== 'date')
+    .map(m => `<option value="${m.key}"${m.key === current ? ' selected' : ''}>${m.label}${m.unit ? ' (' + m.unit + ')' : ''}</option>`)
+    .join('');
+
+  const ov = makeModal('Change metric',
+    `<div style="padding:4px 0 12px">
+      <label style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:block;margin-bottom:8px">Select metric</label>
+      <select id="_cmMetricSel" style="width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 13px/1.4 var(--cm-font-sans)">${opts}</select>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="_cmMetricCancel" class="cm-btn is-outline" style="font-size:13px">Cancel</button>
+      <button id="_cmMetricApply"  class="cm-btn is-filled"  style="font-size:13px">Apply</button>
+    </div>`
+  );
+
+  ov.querySelector('#_cmMetricCancel')?.addEventListener('click', () => ov.remove());
+  ov.querySelector('#_cmMetricApply')?.addEventListener('click', async () => {
+    const newMetric = ov.querySelector('#_cmMetricSel')?.value;
+    if (!newMetric) return;
+    ov.remove();
+    card.dataset.metricKey = newMetric;
+    const selPlayer = (window._gpReports || []).find(r => r.player_id === window.gpState?.playerId)
+                   || (window._gpReports || [])[0];
+    if (selPlayer) await renderKpiCard(card, newMetric, selPlayer);
+    if (typeof annotateKpiCards === 'function') await annotateKpiCards();
+    const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
+    await saveLayout(view);
+    showToast('Metric updated · saved');
+  });
 }
 
 // ── Drag & drop for card grids ─────────────────────────────────
@@ -1805,6 +1911,9 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       showToast('Card duplicated');
     } else if (item.label === 'Remove') {
       card.remove();
+    } else if (item.label === 'Change metric') {
+      if (!card.dataset.cardId) { showToast('Change metric not available for this card'); return; }
+      openChangeMetricModal(card);
     } else {
       console.log('TODO:', item.label);
       showToast(item.label + ' — coming soon');
@@ -2034,7 +2143,9 @@ window.refreshDashboard = async function (opts = {}) {
     const indSub = document.getElementById('secSub');
     if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${getDatePresetLabel()}`;
     const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
-    if (kpiVals[0]) kpiVals[0].innerHTML = `${sel.total_distance ? (sel.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
+    const distCard = document.querySelector('.gp-view[data-view="ind"] .gp-c[data-card-id="kpi-distance"]');
+    if (distCard) renderKpiCard(distCard, distCard.dataset.metricKey || 'total_distance', sel);
+    else if (kpiVals[0]) kpiVals[0].innerHTML = `${sel.total_distance ? (sel.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
     if (kpiVals[1]) kpiVals[1].innerHTML = `${sel.high_speed_distance != null ? Math.round(sel.high_speed_distance) : '—'} <sub>m</sub>`;
     if (kpiVals[2]) kpiVals[2].innerHTML = `${sel.sprint_distance != null ? Math.round(sel.sprint_distance) : '—'}`;
   }
@@ -2121,6 +2232,7 @@ async function _detectSmartDefault(clubId, userId) {
     if (banner) banner.classList.add('is-on');
   }
 
+  await applyLayoutToView('ind');
   await window.refreshDashboard();
 })();
 </script>
@@ -5714,8 +5826,9 @@ async function annotateKpiCards() {
   const sel = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
   if (!sel?.player_id || !window._gpClubId) return;
 
+  const _distCard = document.querySelector('.gp-view[data-view="ind"] .gp-c[data-card-id="kpi-distance"]');
   const BL_MAP = [
-    { kpiIdx: 0, metric: 'total_distance' },
+    { kpiIdx: 0, metric: _distCard?.dataset.metricKey || 'total_distance' },
     { kpiIdx: 1, metric: 'high_speed_distance' },
     { kpiIdx: 2, metric: 'sprint_distance' },
   ];
