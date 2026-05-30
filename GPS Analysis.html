@@ -1996,7 +1996,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
     makePopover(pick, opts, item => {
       const wbCard = document.getElementById('card-weekly-bars');
       if (wbCard) wbCard.dataset.metricKey = item.metric;
-      renderWeeklyBars(window.gpState);
+      renderWeeklyBars(window.gpState).catch(e => console.warn('renderWeeklyBars:', e));
       saveLayout('ind');
       showToast(`Weekly bars → ${item.label}`);
     });
@@ -2044,7 +2044,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       if (pick.closest('#card-weekly-bars')) {
         const wbCard = document.getElementById('card-weekly-bars');
         if (wbCard) wbCard.dataset.metricKey = item.metric;
-        renderWeeklyBars(window.gpState);
+        renderWeeklyBars(window.gpState).catch(e => console.warn('renderWeeklyBars:', e));
         saveLayout('ind');
       }
       showToast(`Metric → ${item.label}`);
@@ -5930,7 +5930,7 @@ window.renderView = async function () {
   if (!reports?.length) return;
   const sel = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
   if (sel) renderMatchMax(sel);
-  renderWeeklyBars(state);
+  renderWeeklyBars(state).catch(e => console.warn('renderWeeklyBars (renderView):', e));
 };
 
 // ── Baseline tooltip for KPI cards ────────────────────────────
@@ -6007,7 +6007,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   const sel   = (state.playerId ? reports.find(r => r.player_id === state.playerId) : null) || reports[0];
   if (sel) {
     renderMatchMax(sel);
-    renderWeeklyBars(state);
+    renderWeeklyBars(state).catch(e => console.warn('renderWeeklyBars (scienceCards):', e));
     annotateKpiCards();
   }
 };
@@ -6675,7 +6675,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _pw.mcKey    = mcSel.value || null;
       await _pwInitTableCols();
       if (_pw.playerId && _pw.mcKey) await _pwLoad();
-      renderWeeklyBars(window.gpState);
+      await renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId });
     } catch (e) { console.error('pwInit:', e); }
   }
 
@@ -7242,12 +7242,14 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   playerSel.addEventListener('change', () => {
     _pw.playerId = playerSel.value || null;
     if (_pw.playerId && _pw.mcKey) _pwLoad();
-    renderWeeklyBars(window.gpState);
+    renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
+      .catch(e => console.warn('renderWeeklyBars (playerSel):', e));
   });
   mcSel.addEventListener('change', () => {
     _pw.mcKey = mcSel.value || null;
     if (_pw.playerId && _pw.mcKey) _pwLoad();
-    renderWeeklyBars(window.gpState);
+    renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
+      .catch(e => console.warn('renderWeeklyBars (mcSel):', e));
   });
 
   window._pwInit = pwInit;
