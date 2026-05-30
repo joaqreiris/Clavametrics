@@ -408,12 +408,18 @@
   .pw-km-item:hover { background:var(--cm-bg-soft); }
   .pw-km-item.is-on { color:var(--cm-accent); font-weight:600; }
   .pw-km-item .km-tag { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:auto; }
-  .pw-tbl { width:100%; border-collapse:collapse; font:500 12px/1.4 var(--cm-font-sans); }
+  .pw-tbl { min-width:100%; border-collapse:collapse; font:500 12px/1.4 var(--cm-font-sans); }
   .pw-tbl th { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; padding:6px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--cm-border); }
   .pw-tbl th:first-child { text-align:left; }
   .pw-tbl td { padding:5px 10px; text-align:right; border-bottom:1px solid var(--cm-border-soft); }
   .pw-tbl td:first-child { text-align:left; }
   .pw-tbl tr:last-child td { border-bottom:none; }
+  /* Sticky fixed columns + compact padding for first 3 */
+  .pw-tbl th:nth-child(-n+3),.pw-tbl td:nth-child(-n+3) { padding-left:7px; padding-right:7px; }
+  .pw-tbl thead th:nth-child(1),.pw-tbl tbody td:nth-child(1) { position:sticky; left:0; z-index:3; background:var(--cm-bg); }
+  .pw-tbl thead th:nth-child(2),.pw-tbl tbody td:nth-child(2) { position:sticky; z-index:3; background:var(--cm-bg); }
+  .pw-tbl thead th:nth-child(3),.pw-tbl tbody td:nth-child(3) { position:sticky; z-index:3; background:var(--cm-bg); }
+  .pw-tbl thead th:nth-child(1),.pw-tbl thead th:nth-child(2),.pw-tbl thead th:nth-child(3) { z-index:4; }
   .pw-md { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:3px; font:700 10.5px/1 var(--cm-font-mono); }
   .pw-md.md-5 { background:rgba(74,222,128,.15); color:var(--cm-success); }
   .pw-md.md-4 { background:rgba(251,191,36,.15); color:var(--cm-warning); }
@@ -6989,6 +6995,15 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     }).join('');
 
     tblBody.innerHTML = `<table class="pw-tbl"><thead>${header}</thead><tbody>${body}</tbody></table>`;
+    requestAnimationFrame(() => {
+      const ths = tblBody.querySelectorAll('.pw-tbl thead th');
+      if (ths.length >= 2) {
+        const l1 = ths[0].offsetWidth;
+        const l2 = l1 + ths[1].offsetWidth;
+        tblBody.querySelectorAll('.pw-tbl tr > :nth-child(2)').forEach(el => { el.style.left = l1 + 'px'; });
+        tblBody.querySelectorAll('.pw-tbl tr > :nth-child(3)').forEach(el => { el.style.left = l2 + 'px'; });
+      }
+    });
   }
 
   // ── Column panel — load / save ────────────────────────────────
@@ -7092,9 +7107,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const rect = btn?.getBoundingClientRect();
     if (rect) {
       const panelW = 272, vw = window.innerWidth, margin = 8;
-      const left = Math.max(margin, Math.min(rect.left, vw - panelW - margin));
-      panel.style.top  = `${rect.bottom + 6}px`;
-      panel.style.left = `${left}px`;
+      // Right-align panel to button's right edge, clamped so it never exits viewport
+      const left = Math.max(margin, Math.min(rect.right - panelW, vw - panelW - margin));
+      const maxH = Math.max(200, window.innerHeight - rect.bottom - 12);
+      panel.style.top     = `${rect.bottom + 6}px`;
+      panel.style.left    = `${left}px`;
+      panel.style.maxHeight = `min(80vh, ${maxH}px)`;
     }
 
     _pwBindColPanel(panel);
