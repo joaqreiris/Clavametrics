@@ -5840,6 +5840,31 @@ async function annotateKpiCards() {
     const bl  = await window.getMatchBaseline(sel.player_id, metric, window._gpClubId);
     const kpi = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi')[kpiIdx];
     if (!kpi) continue;
+
+    // Raw value for this player (core metrics only; custom metrics show no variation)
+    const val = _KPI_CORE_COLS?.has(metric) ? +(sel[metric] ?? 0) : null;
+
+    // ── Variation indicator (.t): pct vs baseline + z-score vs squad ─
+    const tEl = kpi.querySelector('.t');
+    if (tEl && val != null && bl.baseline) {
+      const pct    = (val - bl.baseline) / bl.baseline * 100;
+      const sqVals = (window._gpReports || []).map(r => +(r[metric] || 0)).filter(v => v > 0);
+      const mu     = sqVals.length ? sqVals.reduce((a, b) => a + b, 0) / sqVals.length : val;
+      const sig    = sqVals.length > 1
+        ? Math.sqrt(sqVals.map(v => (v - mu) ** 2).reduce((a, b) => a + b, 0) / sqVals.length) || 1
+        : 1;
+      const z      = (val - mu) / sig;
+      const pSign  = pct >= 0 ? '+' : '';
+      const zSign  = z   >= 0 ? '+' : '';
+      const cls    = Math.abs(z) > 1.5 ? 'warn' : pct >= 0 ? 'up' : 'down';
+      const arrow  = pct >= 0 ? 'ti-arrow-up-right' : 'ti-arrow-down-right';
+      const flag   = Math.abs(z) >= 2 ? ` <span style="color:var(--cm-danger);font-weight:600">flag</span>` : '';
+      tEl.innerHTML = `<span class="d ${cls}"><i class="ti ${arrow}"></i>${pSign}${Math.round(pct)}%</span> · z = ${zSign}${z.toFixed(1)}${flag}`;
+    } else if (tEl) {
+      tEl.innerHTML = '';
+    }
+
+    // ── Baseline line (.gp-bl-line) ───────────────────────────────────
     let blLine = kpi.querySelector('.gp-bl-line');
     if (!blLine) {
       blLine = document.createElement('div');
