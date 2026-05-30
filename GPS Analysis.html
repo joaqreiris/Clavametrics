@@ -6654,17 +6654,22 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _pwCurrentRows   = rows;
       _pwCurrentClubId = clubId;
 
-      // Match baseline for %Game
-      let baseline = null;
+      // Match baseline for %Game — fetch for every active pct column's baseKey
+      let baseline = {};
       if (typeof window.getMatchBaseline === 'function') {
         try {
-          baseline = {
-            total_distance:      await window.getMatchBaseline(playerId, 'total_distance', clubId),
-            high_speed_distance: await window.getMatchBaseline(playerId, 'high_speed_distance', clubId),
-            sprint_count:        await window.getMatchBaseline(playerId, 'sprint_count', clubId),
-            accDec:              await window.getMatchBaseline(playerId, 'accelerations', clubId),
-          };
-        } catch { baseline = null; }
+          const pctKeys = [...new Set(
+            _pwTableMetricCols
+              .filter(c => c.type === 'pct' && c.baseKey)
+              .map(c => c.baseKey)
+          )];
+          if (pctKeys.length) {
+            const results = await Promise.all(
+              pctKeys.map(k => window.getMatchBaseline(playerId, k, clubId))
+            );
+            pctKeys.forEach((k, i) => { baseline[k] = results[i]; });
+          }
+        } catch { baseline = {}; }
       }
 
       _pwRenderKPIs(rows);
@@ -6992,7 +6997,9 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (e.target.closest('#pw-col-x')) { _pwCloseColPanel(); return; }
       if (e.target.closest('#pw-col-save')) {
         _pwSaveTableCols();
-        if (_pwCurrentRows.length) _pwRenderTable(_pwCurrentRows, _pwCurrentBaseline);
+        // Re-run full load so baselines for new %Game columns are fetched
+        if (_pw.playerId && _pw.mcKey) _pwLoad();
+        else if (_pwCurrentRows.length) _pwRenderTable(_pwCurrentRows, _pwCurrentBaseline);
         _pwCloseColPanel();
         return;
       }
