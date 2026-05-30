@@ -6284,6 +6284,17 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return `MD+${Math.abs(diff)}`;
   }
 
+  function _mdCodeForSession(s, matchDate) {
+    if (s.match_day_offset != null) {
+      const n = s.match_day_offset;
+      if (n === 0) return 'MD';
+      return n < 0 ? `MD${n}` : `MD+${n}`;
+    }
+    const attrCode = s.session_attributes?.md_code;
+    if (attrCode) return attrCode;
+    return mdCode(s.session_date, matchDate);
+  }
+
   function mdCssKey(code) {
     if (!code) return 'md-plus';
     if (code === 'MD')    return 'md-0';
@@ -6310,7 +6321,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // ── state ────────────────────────────────────────────────────
   const _pw = { playerId: null, mcKey: null, chartInst: null };
   let _pwInited = false;
-  let _allSess  = []; // all training_sessions for club
+  let _mcList   = [];
+  let _mcMap    = {};
 
   // ── DOM ──────────────────────────────────────────────────────
   const playerSel  = document.getElementById('pw-player-sel');
@@ -6329,14 +6341,15 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) return;
 
-      const [{ data: players }, { data: sessions }] = await Promise.all([
+      const [{ data: players }, { data: mcs }] = await Promise.all([
         window.sb.from('players').select('id,first_name,last_name,number,position')
           .eq('club_id', clubId).neq('status','inactive').order('last_name'),
-        window.sb.from('training_sessions').select('id,session_date,session_type,title')
-          .eq('club_id', clubId).order('session_date', { ascending: false }).limit(300),
+        window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
+          .eq('club_id', clubId).order('start_date', { ascending: false }).limit(50),
       ]);
 
-      _allSess = sessions || [];
+      _mcList = mcs || [];
+      _mcMap  = Object.fromEntries(_mcList.map(mc => [mc.id, mc]));
 
       (players || []).forEach(p => {
         const o = document.createElement('option');
@@ -6345,23 +6358,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         playerSel.appendChild(o);
       });
 
-      // Build MC options from ISO weeks
-      const weeks = {};
-      _allSess.forEach(s => {
-        const d = new Date(s.session_date + 'T00:00:00');
-        const wk = getISOWeek(d);
-        const yr = d.getFullYear();
-        const key = `${yr}-W${String(wk).padStart(2,'0')}`;
-        if (!weeks[key]) weeks[key] = { wk, yr, from: s.session_date, to: s.session_date };
-        else {
-          if (s.session_date < weeks[key].from) weeks[key].from = s.session_date;
-          if (s.session_date > weeks[key].to)   weeks[key].to   = s.session_date;
-        }
-      });
-      Object.entries(weeks).slice(0, 20).forEach(([key, v]) => {
+      _mcList.forEach(mc => {
         const o = document.createElement('option');
-        o.value = key;
-        o.textContent = `MC ${v.wk}  ·  ${v.from}`;
+        o.value = mc.id;
+        o.textContent = mc.name || mc.start_date || mc.id;
         mcSel.appendChild(o);
       });
 
@@ -6379,58 +6379,61 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     if (!playerId || !mcKey) return;
     try {
       const clubId = await window.getClubId?.();
-      const [yr, wStr] = mcKey.split('-W');
-      const wk = parseInt(wStr, 10);
-      const mon = isoWeekMonday(wk, parseInt(yr, 10));
-      const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
-      const from = mon.toISOString().slice(0,10);
-      const to   = sun.toISOString().slice(0,10);
+      if (!clubId) return;
 
-      // Sessions in this week
-      const weekSess = _allSess.filter(s => s.session_date >= from && s.session_date <= to);
-      const matchSess = weekSess.find(s => s.session_type === 'match');
-      const matchDate = matchSess?.session_date || null;
+      const mc        = _mcMap[mcKey];
+      const matchDate = mc?.match_date || null;
+      const rival     = mc?.rival     || '';
 
-      // Update next match banner
       nextMatch.innerHTML = matchDate
-        ? `vs <strong>${matchSess?.title || 'match'}</strong> · MD on ${matchDate}`
+        ? `vs <strong>${rival || 'match'}</strong> · MD on ${matchDate}`
         : 'No match in this MC';
 
-      if (!weekSess.length) {
-        kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No sessions this week.</div>';
+      // Sessions for this microcycle via microcycle_id FK
+      const { data: sessList } = await window.sb
+        .from('training_sessions')
+        .select('id,session_date,session_type,session_attributes,match_day_offset')
+        .eq('club_id', clubId).eq('microcycle_id', mcKey)
+        .order('session_date');
+
+      const sessions = sessList || [];
+
+      if (!sessions.length) {
+        kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No hay sesiones en este microciclo.</div>';
         tblBody.innerHTML = '';
         return;
       }
 
-      const sessIds = weekSess.map(s => s.id);
+      const sessIds = sessions.map(s => s.id);
 
-      // Load gps_reports + rpe in parallel
+      // GPS reports + RPE in parallel
       const [{ data: reports }, { data: rpeRows }] = await Promise.all([
         window.sb.from('gps_reports')
           .select('session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
           .eq('player_id', playerId).eq('club_id', clubId).in('session_id', sessIds),
-        window.sb.from('rpe').select('session_id,rpe_value').eq('player_id', playerId).in('session_id', sessIds).catch(() => ({ data: [] })),
+        window.sb.from('rpe')
+          .select('session_id,rpe,load')
+          .eq('player_id', playerId).in('session_id', sessIds),
       ]);
 
-      const rpeMap = Object.fromEntries((rpeRows || []).map(r => [r.session_id, r.rpe_value]));
+      const rpeMap = Object.fromEntries((rpeRows || []).map(r => [r.session_id, r.rpe]));
 
-      // Merge sessions with reports
-      const rows = weekSess.map(s => ({
+      const rows = sessions.map(s => ({
         session: s,
         report:  (reports || []).find(r => r.session_id === s.id) || null,
         rpe:     rpeMap[s.id] ?? null,
-        mdCode:  mdCode(s.session_date, matchDate),
-      })).sort((a, b) => a.session.session_date.localeCompare(b.session.session_date));
+        mdCode:  _mdCodeForSession(s, matchDate),
+      }));
 
-      // Load match baseline for %Game
+      // Match baseline for %Game
       let baseline = null;
       if (typeof window.getMatchBaseline === 'function') {
         try {
           baseline = {
-            total_distance:          await window.getMatchBaseline(playerId, 'total_distance', clubId),
-            high_speed_distance:     await window.getMatchBaseline(playerId, 'high_speed_distance', clubId),
-            sprint_count:            await window.getMatchBaseline(playerId, 'sprint_count', clubId),
-            accDec:                  await window.getMatchBaseline(playerId, 'accelerations', clubId),
+            total_distance:      await window.getMatchBaseline(playerId, 'total_distance', clubId),
+            high_speed_distance: await window.getMatchBaseline(playerId, 'high_speed_distance', clubId),
+            sprint_count:        await window.getMatchBaseline(playerId, 'sprint_count', clubId),
+            accDec:              await window.getMatchBaseline(playerId, 'accelerations', clubId),
           };
         } catch { baseline = null; }
       }
@@ -6444,7 +6447,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // ── KPIs ─────────────────────────────────────────────────────
   function _pwRenderKPIs(rows) {
     const reports = rows.map(r => r.report).filter(Boolean);
-    if (!reports.length) { kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No GPS data for this player this week.</div>'; return; }
+    if (!reports.length) { kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Sin datos GPS para este jugador en este microciclo.</div>'; return; }
 
     const sum  = key => reports.reduce((s, r) => s + (r[key] || 0), 0);
     const maxV = key => Math.max(...reports.map(r => r[key] || 0));
@@ -6549,9 +6552,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   mcSel.addEventListener('change',     () => { _pw.mcKey    = mcSel.value || null;    if (_pw.playerId && _pw.mcKey) _pwLoad(); });
 
   window._pwInit = pwInit;
+  window._pwLoad = _pwLoad;
 
   document.getElementById('sections')?.addEventListener('click', e => {
-    if (e.target.closest('.gp-sec[data-view="ind"]')) setTimeout(pwInit, 0);
+    if (!e.target.closest('.gp-sec[data-view="ind"]')) return;
+    if (!_pwInited) { setTimeout(pwInit, 0); return; }
+    if (_pw.playerId && _pw.mcKey) _pwLoad();
   });
 
   if (document.querySelector('.gp-view[data-view="ind"].is-on')) pwInit();
