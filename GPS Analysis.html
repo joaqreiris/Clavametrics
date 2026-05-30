@@ -1554,6 +1554,9 @@ async function renderKpiCard(cardEl, metricKey, sel) {
 
   const vEl = kpi.querySelector('.v');
   if (vEl) vEl.innerHTML = _fmtKpiValue(value, unit, metricKey);
+
+  const tEl = kpi.querySelector('.t');
+  if (tEl) tEl.innerHTML = '';
 }
 
 async function openChangeMetricModal(card) {
@@ -2903,7 +2906,7 @@ async function _fetchReports(state) {
   });
   const aggregated = Object.values(byPlayer).map(r => {
     const n = r._count || 1;
-    ['total_distance','high_speed_distance','sprint_distance','accelerations','decelerations','max_speed','player_load'].forEach(m => {
+    ['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','sprint_count','accelerations','decelerations','max_speed','avg_speed','player_load','hmld','time_played','distance_per_minute'].forEach(m => {
       if (r[m] != null) r[m] = +(r[m] / n).toFixed(2);
     });
     return r;
@@ -5845,12 +5848,14 @@ async function annotateKpiCards() {
       kpi.querySelector('.t')?.after(blLine);
     }
     if (bl.baseline) {
-      const raw = +(sel[metric] || 0);
-      const unit = metric === 'total_distance' ? 'km' : 'm';
-      const blDisp = metric === 'total_distance' ? (bl.baseline / 1000).toFixed(1) : Math.round(bl.baseline);
+      const catEntry = (window._gpCatalog || []).find(e => e.key === metric);
+      const unit = catEntry?.unit ?? (metric === 'total_distance' ? 'km' : metric.includes('distance') ? 'm' : '');
+      const decs = catEntry?.decimals ?? (metric === 'total_distance' ? 1 : 0);
+      const blRaw = metric === 'total_distance' ? bl.baseline / 1000 : bl.baseline;
+      const blDisp = decs === 0 ? Math.round(blRaw) : blRaw.toFixed(decs);
       const conf = bl.confidence === 'high' ? '✓' : '~';
       blLine.title = 'Baseline: avg of best matches · Miguel et al. 2022';
-      blLine.innerHTML = `<i class="ti ti-target" style="font-size:10px"></i>Baseline ${blDisp} ${unit} ${conf} (${bl.count} matches)`;
+      blLine.innerHTML = `<i class="ti ti-target" style="font-size:10px"></i>Baseline ${blDisp}${unit ? ' ' + unit : ''} ${conf} (${bl.count} matches)`;
     } else if (bl.warning) {
       blLine.innerHTML = `<i class="ti ti-info-circle" style="font-size:10px;color:var(--cm-warning)"></i>${bl.warning}`;
     }
