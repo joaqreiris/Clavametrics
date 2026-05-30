@@ -623,32 +623,25 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="full">
+          <div class="gp-c" data-size="full" id="card-weekly-bars" data-card-id="weekly-bars" data-metric-key="player_load">
             <div class="gp-c-h">
               <span class="ttl">Weekly volume · wk-on-wk</span>
               <div class="gp-c-picks" style="margin-left:6px">
-                <span class="gp-c-pick is-accent">Player load <i class="ti ti-chevron-down"></i></span>
-                <span class="gp-c-pick">MC 14 vs MC 13 <i class="ti ti-chevron-down"></i></span>
-                <span class="gp-c-pick">Bars <i class="ti ti-chevron-down"></i></span>
+                <span class="gp-c-pick is-accent" data-wb-metric-pick>Player load <i class="ti ti-chevron-down"></i></span>
+                <span class="gp-c-pick" data-wb-mc-pick>— vs — <i class="ti ti-chevron-down"></i></span>
               </div>
               <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b">
-              <div class="gp-bars">
-                <div class="gr"><div class="stack"><div class="b prev" style="height:8%"></div><div class="b curr" style="height:0%"></div></div><span class="lbl">Sun 11</span></div>
-                <div class="gr"><div class="stack"><div class="b prev" style="height:18%"></div><div class="b curr" style="height:22%"></div></div><span class="lbl">Mon 12</span></div>
-                <div class="gr"><div class="stack"><div class="b prev" style="height:60%"></div><div class="b curr" style="height:54%"></div></div><span class="lbl">Tue 13</span></div>
-                <div class="gr"><div class="stack"><div class="b prev" style="height:80%"></div><div class="b curr" style="height:92%"></div></div><span class="lbl">Wed 14</span></div>
-                <div class="gr"><div class="stack"><div class="b prev" style="height:52%"></div><div class="b curr" style="height:62%"></div></div><span class="lbl">Thu 15</span></div>
-                <div class="gr"><div class="stack"><div class="b prev" style="height:40%"></div><div class="b curr" style="height:32%"></div></div><span class="lbl">Fri 16</span></div>
-                <div class="gr"><div class="stack"><div class="b prev" style="height:96%"></div><div class="b mt" style="height:24%"></div></div><span class="lbl">Sat 17</span></div>
+              <div class="gp-bars" id="gp-bars-container">
+                <div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Select a player and microcycle above.</div>
               </div>
-              <div style="display:flex; gap:14px; margin-top:10px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted)">
-                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-bg-sunk);border:1px solid var(--cm-border-soft)"></span>Prev MC 13</span>
-                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-accent)"></span>Current MC 14</span>
+              <div class="gp-bars-legend" style="display:flex; gap:14px; margin-top:10px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted)">
+                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-bg-sunk);border:1px solid var(--cm-border-soft)"></span><span data-prev-mc>Prev MC</span></span>
+                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-accent)"></span><span data-cur-mc>Current MC</span></span>
                 <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-danger)"></span>Match</span>
                 <div style="flex:1"></div>
-                <span>Cumulative <strong style="color:var(--cm-fg)">1,478 AU</strong> · <span style="color:var(--cm-warning)">+6%</span></span>
+                <span>Cumulative <strong class="gp-wbar-total" style="color:var(--cm-fg)">—</strong> · <span class="gp-wbar-wow">—</span></span>
               </div>
             </div>
           </div>
@@ -1935,9 +1928,10 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   if (!btn?.querySelector('.ti-dots')) return;
   e.stopPropagation();
   const card = btn.closest('.gp-c');
+  const isPwTable = card?.id === 'card-pw-table';
   makePopover(btn, [
     { label: 'Duplicate',     icon: 'ti-copy' },
-    { label: 'Change metric', icon: 'ti-chart-bar' },
+    ...(!isPwTable ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
     { label: 'Change viz',    icon: 'ti-chart-area' },
     { label: 'Export CSV',    icon: 'ti-table-export' },
     { label: 'Remove',        icon: 'ti-trash' },
@@ -2031,7 +2025,13 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       if (pick.closest('#card-squad-rank') && window._gpReports?.length) {
         _updateSquadRanking(window._gpReports, item.metric);
       }
-      showToast(`Ranking by → ${item.label}`);
+      if (pick.closest('#card-weekly-bars')) {
+        const wbCard = document.getElementById('card-weekly-bars');
+        if (wbCard) wbCard.dataset.metricKey = item.metric;
+        renderWeeklyBars(window.gpState);
+        saveLayout('ind');
+      }
+      showToast(`Metric → ${item.label}`);
     });
   } else {
     showToast('Configuration — coming soon');
@@ -5744,83 +5744,121 @@ async function renderMatchMax(report) {
 }
 
 // ── Weekly volume bars ─────────────────────────────────────────
+// Uses microcycle_id (not ISO week) — compares selected MC vs previous.
+const _WB_CORE_COLS = new Set([
+  'total_distance','high_speed_distance','very_high_speed_distance',
+  'sprint_distance','accelerations','decelerations','max_speed',
+  'player_load','avg_speed','hmld','time_played','sprint_count','distance_per_minute',
+]);
+
 async function renderWeeklyBars(state) {
-  const container = document.querySelector('.gp-bars');
+  const container = document.getElementById('gp-bars-container');
   if (!container) return;
   const clubId = window._gpClubId;
   if (!clubId) return;
 
-  const parseWeek = mc => parseInt((mc || '').replace(/\D/g, ''), 10);
-  const curWeek   = parseWeek(state.microcycle);
-  const prevWeek  = curWeek - 1;
+  // Resolve current and previous MC from pw-mc-sel
+  const mcSelEl = document.getElementById('pw-mc-sel');
+  const curMcId = mcSelEl?.value;
+  if (!curMcId) return;
 
-  // Get sessions from last 3 weeks to cover current and prev
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 21);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const mcList = window._pwMcList || [];
+  const curIdx = mcList.findIndex(mc => mc.id === curMcId);
+  const curMc  = mcList[curIdx];
+  const prevMc = curIdx >= 0 && curIdx < mcList.length - 1 ? mcList[curIdx + 1] : null;
 
-  const { data: sessions } = await window.sb.from('training_sessions')
-    .select('id,session_date,session_type')
-    .eq('club_id', clubId).gte('session_date', cutoffStr)
-    .order('session_date', { ascending: true });
-  if (!sessions?.length) return;
+  // Metric to display (from card data attribute)
+  const card = document.getElementById('card-weekly-bars');
+  const metricKey = card?.dataset.metricKey || 'player_load';
 
-  function isoWeek(d) {
-    const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    dt.setUTCDate(dt.getUTCDate() + 4 - (dt.getUTCDay() || 7));
-    const y0 = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
-    return Math.ceil((((dt - y0) / 86400000) + 1) / 7);
+  container.innerHTML = '<div style="padding:12px;color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">Loading…</div>';
+
+  // Fetch sessions for both MCs in parallel
+  const [{ data: curSess }, { data: prevSess }] = await Promise.all([
+    window.sb.from('training_sessions')
+      .select('id,session_date,session_type')
+      .eq('club_id', clubId).eq('microcycle_id', curMcId)
+      .order('session_date'),
+    prevMc
+      ? window.sb.from('training_sessions')
+          .select('id,session_date,session_type')
+          .eq('club_id', clubId).eq('microcycle_id', prevMc.id)
+          .order('session_date')
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const allSids = [...(curSess || []).map(s => s.id), ...(prevSess || []).map(s => s.id)];
+  if (!allSids.length) {
+    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No sessions found for this microcycle.</div>';
+    return;
   }
 
+  // Fetch metric values
   const pid = state.playerId;
-  const sessionIds = sessions.map(s => s.id);
-  const { data: loads } = await window.sb.from('gps_reports')
-    .select('session_id,player_id,player_load,total_distance')
-    .in('session_id', sessionIds).eq('club_id', clubId);
-
   const loadBySid = {};
-  (loads || []).forEach(r => {
-    if (pid && r.player_id !== pid) return;
-    if (!loadBySid[r.session_id]) loadBySid[r.session_id] = 0;
-    loadBySid[r.session_id] += (r.player_load || 0);
-  });
 
-  // Build day-by-day loads for cur & prev week, keyed by weekday (0=Sun..6=Sat)
+  if (_WB_CORE_COLS.has(metricKey)) {
+    const { data: rpts } = await window.sb.from('gps_reports')
+      .select(`session_id,player_id,${metricKey}`)
+      .in('session_id', allSids).eq('club_id', clubId);
+    (rpts || []).forEach(r => {
+      if (pid && r.player_id !== pid) return;
+      loadBySid[r.session_id] = (loadBySid[r.session_id] || 0) + (r[metricKey] || 0);
+    });
+  } else {
+    // Custom EAV metric: resolve via gps_report_metrics
+    const { data: coreRows } = await window.sb.from('gps_reports')
+      .select('id,session_id,player_id').in('session_id', allSids).eq('club_id', clubId);
+    const filtered = pid ? (coreRows || []).filter(r => r.player_id === pid) : (coreRows || []);
+    const rptToSid = Object.fromEntries(filtered.map(r => [r.id, r.session_id]));
+    const rptIds   = filtered.map(r => r.id);
+    if (rptIds.length) {
+      const { data: eav } = await window.sb.from('gps_report_metrics')
+        .select('report_id,value').in('report_id', rptIds).eq('metric_key', metricKey);
+      (eav || []).forEach(r => {
+        const sid = rptToSid[r.report_id];
+        if (sid) loadBySid[sid] = (loadBySid[sid] || 0) + (+r.value || 0);
+      });
+    }
+  }
+
+  // Map to weekday buckets (0=Sun … 6=Sat)
   const byDay = { cur: {}, prev: {} };
-  sessions.forEach(s => {
-    const d  = new Date(s.session_date);
-    const wk = isoWeek(d);
-    const wd = d.getUTCDay();
-    const isMatch = s.session_type === 'match';
-    const load = loadBySid[s.id] || 0;
-    if (wk === curWeek)  { if (!byDay.cur[wd])  byDay.cur[wd]  = { load:0, isMatch:false }; byDay.cur[wd].load  += load; if (isMatch) byDay.cur[wd].isMatch  = true; }
-    if (wk === prevWeek) { if (!byDay.prev[wd]) byDay.prev[wd] = { load:0, isMatch:false }; byDay.prev[wd].load += load; if (isMatch) byDay.prev[wd].isMatch = true; }
+  const curDateByWd = {};
+  (curSess || []).forEach(s => {
+    const wd = new Date(s.session_date + 'T00:00:00').getDay();
+    if (!byDay.cur[wd]) { byDay.cur[wd] = { load:0, isMatch:false }; curDateByWd[wd] = s.session_date; }
+    byDay.cur[wd].load += loadBySid[s.id] || 0;
+    if (s.session_type === 'match') byDay.cur[wd].isMatch = true;
+  });
+  (prevSess || []).forEach(s => {
+    const wd = new Date(s.session_date + 'T00:00:00').getDay();
+    if (!byDay.prev[wd]) byDay.prev[wd] = { load:0, isMatch:false };
+    byDay.prev[wd].load += loadBySid[s.id] || 0;
+    if (s.session_type === 'match') byDay.prev[wd].isMatch = true;
   });
 
-  const DAYS = [0,1,2,3,4,5,6]; // Sun–Sat
-  const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const DAYS      = [0,1,2,3,4,5,6];
+  const DAY_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const activeDays = DAYS.filter(d => byDay.cur[d] || byDay.prev[d]);
+  const render    = activeDays.length ? activeDays : DAYS;
 
-  // find max for scale
-  const allVals = DAYS.flatMap(d => [(byDay.cur[d]?.load || 0), (byDay.prev[d]?.load || 0)]);
-  const maxVal  = Math.max(...allVals, 1);
+  const allVals   = render.flatMap(d => [(byDay.cur[d]?.load||0),(byDay.prev[d]?.load||0)]);
+  const maxVal    = Math.max(...allVals, 1);
+  const curTotal  = render.reduce((s,d) => s+(byDay.cur[d]?.load||0), 0);
+  const prevTotal = render.reduce((s,d) => s+(byDay.prev[d]?.load||0), 0);
+  const wowPct    = prevTotal ? Math.round((curTotal-prevTotal)/prevTotal*100) : null;
+  const wowCol    = wowPct == null ? 'var(--cm-fg-muted)' : wowPct > 10 ? 'var(--cm-warning)' : wowPct < -10 ? 'var(--cm-danger)' : 'var(--cm-success)';
 
-  const curTotal  = DAYS.reduce((s, d) => s + (byDay.cur[d]?.load || 0), 0);
-  const prevTotal = DAYS.reduce((s, d) => s + (byDay.prev[d]?.load || 0), 0);
-  const wowPct    = prevTotal ? Math.round((curTotal - prevTotal) / prevTotal * 100) : null;
-  const wowCol    = wowPct == null ? '' : wowPct > 10 ? 'var(--cm-warning)' : wowPct < -10 ? 'var(--cm-danger)' : 'var(--cm-success)';
-
-  // Determine a base date for the current week to get day-of-month labels
-  const today = new Date();
-  const todayDay = today.getUTCDay();
-  const curWeekSunday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - todayDay));
-
-  container.innerHTML = DAYS.map(wd => {
+  container.innerHTML = render.map(wd => {
     const cur  = byDay.cur[wd]  || { load:0, isMatch:false };
     const prev = byDay.prev[wd] || { load:0 };
     const curH  = Math.round((cur.load  / maxVal) * 100);
     const prevH = Math.round((prev.load / maxVal) * 100);
-    const dayLabel = new Date(curWeekSunday.getTime() + wd * 86400000)
-      .toLocaleDateString('en-US', { weekday:'short', day:'numeric' });
+    const rawDate = curDateByWd[wd];
+    const dayLabel = rawDate
+      ? new Date(rawDate + 'T00:00:00').toLocaleDateString('en-US',{weekday:'short',day:'numeric'})
+      : DAY_SHORT[wd];
     const barCls = cur.isMatch ? 'mt' : 'curr';
     return `<div class="gr">
       <div class="stack">
@@ -5829,18 +5867,41 @@ async function renderWeeklyBars(state) {
       </div>
       <span class="lbl">${dayLabel}</span>
     </div>`;
-  }).join('');
+  }).join('') || '<div style="padding:16px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No GPS data for this MC.</div>';
 
-  // Update cumulative legend
-  const leg = container.nextElementSibling;
-  if (leg) {
-    const cumEl = leg.querySelector('strong');
-    if (cumEl) cumEl.textContent = Math.round(curTotal) + ' AU';
-    const wowEl = leg.querySelector('span[style*="warning"], span[style*="success"], span[style*="danger"]');
-    if (wowEl && wowPct != null) {
-      wowEl.style.color = wowCol;
-      wowEl.textContent = (wowPct >= 0 ? '+' : '') + wowPct + '%';
+  // Update legend
+  const legEl = container.closest('.gp-c-b')?.querySelector('.gp-bars-legend');
+  if (legEl) {
+    const curMcEl  = legEl.querySelector('[data-cur-mc]');
+    const prevMcEl = legEl.querySelector('[data-prev-mc]');
+    if (curMcEl)  curMcEl.textContent  = `Current ${curMc?.name  || '—'}`;
+    if (prevMcEl) prevMcEl.textContent = `Prev ${prevMc?.name || '—'}`;
+    const cumEl = legEl.querySelector('.gp-wbar-total');
+    if (cumEl) {
+      const cat  = (window._gpCatalog || []).find(d => d.key === metricKey);
+      const unit = metricKey === 'total_distance' ? 'km' : (cat?.unit || 'AU');
+      const val  = metricKey === 'total_distance' ? (curTotal/1000).toFixed(1) : Math.round(curTotal);
+      cumEl.textContent = `${val} ${unit}`;
     }
+    const wowEl = legEl.querySelector('.gp-wbar-wow');
+    if (wowEl) {
+      wowEl.style.color   = wowCol;
+      wowEl.textContent   = wowPct != null ? (wowPct >= 0 ? '+' : '') + wowPct + '%' : '—';
+    }
+  }
+
+  // Update the MC vs MC pick label and card header metric pick
+  const mcPickEl     = document.querySelector('[data-wb-mc-pick]');
+  const metricPickEl = document.querySelector('[data-wb-metric-pick]');
+  if (mcPickEl) {
+    const curName  = curMc?.name  || '—';
+    const prevName = prevMc?.name || '—';
+    mcPickEl.innerHTML = `${curName} vs ${prevName} <i class="ti ti-chevron-down"></i>`;
+  }
+  if (metricPickEl) {
+    const cat = (window._gpCatalog || []).find(d => d.key === metricKey);
+    const label = cat?.label || metricKey;
+    metricPickEl.innerHTML = `${label} <i class="ti ti-chevron-down"></i>`;
   }
 }
 
@@ -6575,6 +6636,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       _mcList = mcs || [];
       _mcMap  = Object.fromEntries(_mcList.map(mc => [mc.id, mc]));
+      window._pwMcList = _mcList;
+      window._pwMcMap  = _mcMap;
 
       (players || []).forEach(p => {
         const o = document.createElement('option');
@@ -6957,12 +7020,14 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     document.body.appendChild(panel);
     _pwColPanel = panel;
 
-    // Position below the Columns button
+    // Position below the Columns button, clamped to viewport
     const btn  = document.getElementById('pw-col-btn');
     const rect = btn?.getBoundingClientRect();
     if (rect) {
+      const panelW = 272, vw = window.innerWidth, margin = 8;
+      const left = Math.max(margin, Math.min(rect.left, vw - panelW - margin));
       panel.style.top  = `${rect.bottom + 6}px`;
-      panel.style.left = `${Math.min(rect.left, window.innerWidth - 284)}px`;
+      panel.style.left = `${left}px`;
     }
 
     _pwBindColPanel(panel);
@@ -6976,6 +7041,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     panel.addEventListener('click', e => {
       const rmBtn = e.target.closest('[data-rm-idx]');
       if (rmBtn) {
+        e.stopPropagation();
         const idx = +rmBtn.dataset.rmIdx;
         _pwTableMetricCols.splice(idx, 1);
         _pwRefreshColPanel();
@@ -6984,6 +7050,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       // Add column
       const addEl = e.target.closest('[data-add-key]');
       if (addEl) {
+        e.stopPropagation();
         _pwTableMetricCols.push({
           key:     addEl.dataset.addKey,
           label:   addEl.dataset.addLabel,
@@ -7004,6 +7071,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         return;
       }
       if (e.target.closest('#pw-col-reset')) {
+        e.stopPropagation();
         _pwTableMetricCols = _PW_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
         _pwRefreshColPanel();
         return;
@@ -7154,8 +7222,16 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── events ───────────────────────────────────────────────────
-  playerSel.addEventListener('change', () => { _pw.playerId = playerSel.value || null; if (_pw.playerId && _pw.mcKey) _pwLoad(); });
-  mcSel.addEventListener('change',     () => { _pw.mcKey    = mcSel.value || null;    if (_pw.playerId && _pw.mcKey) _pwLoad(); });
+  playerSel.addEventListener('change', () => {
+    _pw.playerId = playerSel.value || null;
+    if (_pw.playerId && _pw.mcKey) _pwLoad();
+    renderWeeklyBars(window.gpState);
+  });
+  mcSel.addEventListener('change', () => {
+    _pw.mcKey = mcSel.value || null;
+    if (_pw.playerId && _pw.mcKey) _pwLoad();
+    renderWeeklyBars(window.gpState);
+  });
 
   window._pwInit = pwInit;
   window._pwLoad = _pwLoad;
