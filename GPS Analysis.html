@@ -363,10 +363,20 @@
   .pw-next-match { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:auto; }
   .pw-next-match strong { color:var(--cm-fg); }
   .pw-kpis { display:flex; gap:10px; flex-wrap:wrap; width:100%; padding:4px 0; }
-  .pw-kpi { flex:1; min-width:110px; display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
-  .pw-kpi .k-label { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.04em; }
+  .pw-kpi { flex:1; min-width:110px; display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); position:relative; }
+  .pw-kpi .k-label { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.04em; padding-right:18px; }
   .pw-kpi .k-val   { font:600 20px/1.1 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .pw-kpi .k-val sub { font-size:11px; font-weight:500; color:var(--cm-fg-muted); margin-left:2px; }
+  .pw-kpi-menu-btn { position:absolute; top:6px; right:6px; width:18px; height:18px; border:0; background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:4px; opacity:0; transition:opacity 120ms; padding:0; }
+  .pw-kpi:hover .pw-kpi-menu-btn { opacity:1; }
+  .pw-kpi-menu-btn:hover { background:var(--cm-bg); color:var(--cm-fg); }
+  .pw-kpi-menu-btn .ti { font-size:11px; }
+  .pw-km-popup { position:fixed; background:var(--cm-bg); border:1px solid var(--cm-border-strong); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.25); z-index:9999; min-width:210px; max-height:320px; overflow-y:auto; padding:6px; }
+  .pw-km-popup-hd { font:600 10px/1 var(--cm-font-sans); text-transform:uppercase; letter-spacing:.06em; color:var(--cm-fg-muted); padding:4px 8px 8px; }
+  .pw-km-item { display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:5px; cursor:pointer; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .pw-km-item:hover { background:var(--cm-bg-soft); }
+  .pw-km-item.is-on { color:var(--cm-accent); font-weight:600; }
+  .pw-km-item .km-tag { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:auto; }
   .pw-tbl { width:100%; border-collapse:collapse; font:500 12px/1.4 var(--cm-font-sans); }
   .pw-tbl th { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; padding:6px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--cm-border); }
   .pw-tbl th:first-child { text-align:left; }
@@ -6320,9 +6330,23 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
   // ── state ────────────────────────────────────────────────────
   const _pw = { playerId: null, mcKey: null, chartInst: null };
-  let _pwInited = false;
-  let _mcList   = [];
-  let _mcMap    = {};
+  let _pwInited    = false;
+  let _mcList      = [];
+  let _mcMap       = {};
+  let _pwCurrentRows   = [];
+  let _pwCurrentClubId = null;
+  // Per-slot metric-key overrides (idx → metricKey). Persists for the page session.
+  const _pwKpiOverride = {};
+
+  // Default chip config (6 slots, matches original hardcoded kpis array)
+  const _PW_DEFAULT_CHIPS = [
+    { key: 'player_load',         label: 'Int Load',       unit: 'AU',   dec: 0, agg: 'sum'   },
+    { key: 'total_distance',      label: 'Total Distance', unit: 'km',   dec: 2, agg: 'sum_km'},
+    { key: 'high_speed_distance', label: 'Total HSR',      unit: 'm',    dec: 0, agg: 'sum'   },
+    { key: 'sprint_count',        label: 'Total Sprints',  unit: '',     dec: 0, agg: 'sum'   },
+    { key: 'acc_dec',             label: 'Acc + Dec',      unit: '',     dec: 0, agg: 'accdec'},
+    { key: 'max_speed',           label: 'Max Velocity',   unit: 'km/h', dec: 1, agg: 'max'   },
+  ];
 
   // ── DOM ──────────────────────────────────────────────────────
   const playerSel  = document.getElementById('pw-player-sel');
@@ -6409,7 +6433,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       // GPS reports + RPE in parallel
       const [{ data: reports }, { data: rpeRows }] = await Promise.all([
         window.sb.from('gps_reports')
-          .select('session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
+          .select('id,session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
           .eq('player_id', playerId).eq('club_id', clubId).in('session_id', sessIds),
         window.sb.from('rpe')
           .select('session_id,rpe,load')
@@ -6424,6 +6448,9 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         rpe:     rpeMap[s.id] ?? null,
         mdCode:  _mdCodeForSession(s, matchDate),
       }));
+
+      _pwCurrentRows   = rows;
+      _pwCurrentClubId = clubId;
 
       // Match baseline for %Game
       let baseline = null;
@@ -6444,28 +6471,143 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch (e) { console.error('_pwLoad:', e); }
   }
 
+  // ── KPI helpers ───────────────────────────────────────────────
+  function _pwResolveChipDef(idx) {
+    const override = _pwKpiOverride[idx];
+    if (!override) return _PW_DEFAULT_CHIPS[idx];
+    const cat = (window._gpCatalog || []).find(d => d.key === override);
+    return {
+      key:   override,
+      label: cat?.label || override,
+      unit:  override === 'total_distance' ? 'km' : (cat?.unit || ''),
+      dec:   override === 'total_distance' ? 2    : (cat?.decimals ?? 0),
+      agg:   override === 'max_speed' ? 'max' : 'sum',
+    };
+  }
+
+  function _pwAggVal(reports, def) {
+    if (!reports.length) return 0;
+    if (def.agg === 'accdec') return reports.reduce((s, r) => s + (r.accelerations || 0) + (r.decelerations || 0), 0);
+    if (def.agg === 'max')    return Math.max(...reports.map(r => r[def.key] || 0));
+    const raw = reports.reduce((s, r) => s + (r[def.key] || 0), 0);
+    return def.agg === 'sum_km' ? raw / 1000 : raw;
+  }
+
+  function _pwValHtml(val, def) {
+    return `${fmtN(val, def.dec)}${def.unit ? `<sub>${def.unit}</sub>` : ''}`;
+  }
+
   // ── KPIs ─────────────────────────────────────────────────────
   function _pwRenderKPIs(rows) {
     const reports = rows.map(r => r.report).filter(Boolean);
     if (!reports.length) { kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Sin datos GPS para este jugador en este microciclo.</div>'; return; }
 
-    const sum  = key => reports.reduce((s, r) => s + (r[key] || 0), 0);
-    const maxV = key => Math.max(...reports.map(r => r[key] || 0));
-    const accDec = sum('accelerations') + sum('decelerations');
+    const chips = _PW_DEFAULT_CHIPS.map((_, idx) => {
+      const def = _pwResolveChipDef(idx);
+      const val = _pwAggVal(reports, def);
+      return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${def.key}">
+        <span class="k-label">${def.label}</span>
+        <span class="k-val">${_pwValHtml(val, def)}</span>
+        <button class="pw-kpi-menu-btn" title="Change metric"><i class="ti ti-dots-vertical"></i></button>
+      </div>`;
+    });
 
-    const kpis = [
-      { label: 'Int Load',      val: sum('player_load'),             unit: 'AU',   dec: 0 },
-      { label: 'Total Distance',val: sum('total_distance') / 1000,   unit: 'km',   dec: 2 },
-      { label: 'Total HSR',     val: sum('high_speed_distance'),      unit: 'm',    dec: 0 },
-      { label: 'Total Sprints', val: sum('sprint_count'),             unit: '',     dec: 0 },
-      { label: 'Acc + Dec',     val: accDec,                         unit: '',     dec: 0 },
-      { label: 'Max Velocity',  val: maxV('max_speed'),               unit: 'km/h', dec: 1 },
-    ];
-
-    kpiBody.innerHTML = `<div class="pw-kpis">${kpis.map(k =>
-      `<div class="pw-kpi"><span class="k-label">${k.label}</span><span class="k-val">${fmtN(k.val, k.dec)}${k.unit ? `<sub>${k.unit}</sub>` : ''}</span></div>`
-    ).join('')}</div>`;
+    kpiBody.innerHTML = `<div class="pw-kpis">${chips.join('')}</div>`;
   }
+
+  // ── Change-metric popup ───────────────────────────────────────
+  let _pwKmPopup = null;
+  let _pwKmTargetIdx = -1;
+
+  function _pwShowKmPopup(idx, anchorEl) {
+    _pwCloseKmPopup();
+    _pwKmTargetIdx = idx;
+    const catalog = window._gpCatalog || [];
+    if (!catalog.length) return;
+
+    const currentKey = _pwKpiOverride[idx] || _PW_DEFAULT_CHIPS[idx]?.key;
+
+    const popup = document.createElement('div');
+    popup.className = 'pw-km-popup';
+    popup.innerHTML = `<div class="pw-km-popup-hd">Change metric</div>` +
+      catalog.map(d =>
+        `<div class="pw-km-item${d.key === currentKey ? ' is-on' : ''}" data-key="${d.key}">
+          ${d.label}
+          <span class="km-tag">${d.unit || ''}</span>
+        </div>`
+      ).join('');
+
+    document.body.appendChild(popup);
+    _pwKmPopup = popup;
+
+    const rect = anchorEl.getBoundingClientRect();
+    const top  = rect.bottom + 4;
+    const left = Math.min(rect.left, window.innerWidth - 230);
+    popup.style.top  = `${top}px`;
+    popup.style.left = `${left}px`;
+
+    popup.addEventListener('click', async e => {
+      const item = e.target.closest('.pw-km-item');
+      if (!item) return;
+      await _pwSelectMetric(_pwKmTargetIdx, item.dataset.key);
+      _pwCloseKmPopup();
+    });
+
+    setTimeout(() => document.addEventListener('click', _pwKmOutsideClick, { once: true }), 0);
+  }
+
+  function _pwKmOutsideClick(e) {
+    if (_pwKmPopup && !_pwKmPopup.contains(e.target)) _pwCloseKmPopup();
+  }
+
+  function _pwCloseKmPopup() {
+    _pwKmPopup?.remove();
+    _pwKmPopup = null;
+    document.removeEventListener('click', _pwKmOutsideClick);
+  }
+
+  // ── Apply metric change to a single chip ──────────────────────
+  async function _pwSelectMetric(idx, metricKey) {
+    _pwKpiOverride[idx] = metricKey;
+    const chip = kpiBody.querySelector(`[data-kpi-idx="${idx}"]`);
+    if (!chip) return;
+
+    const cat     = (window._gpCatalog || []).find(d => d.key === metricKey);
+    const isCore  = !cat || cat.is_core;
+    const def     = _pwResolveChipDef(idx);
+
+    let val = null;
+    if (isCore) {
+      const reports = _pwCurrentRows.map(r => r.report).filter(Boolean);
+      val = _pwAggVal(reports, def);
+    } else {
+      // Custom metric: fetch from gps_report_metrics via report IDs
+      const reportIds = _pwCurrentRows.map(r => r.report?.id).filter(Boolean);
+      if (reportIds.length && _pwCurrentClubId) {
+        const { data: eav } = await window.sb
+          .from('gps_report_metrics')
+          .select('value')
+          .in('report_id', reportIds)
+          .eq('metric_key', metricKey)
+          .eq('club_id', _pwCurrentClubId);
+        val = (eav || []).reduce((s, r) => s + (+r.value || 0), 0);
+      }
+    }
+
+    chip.dataset.metricKey = metricKey;
+    chip.querySelector('.k-label').textContent = def.label;
+    chip.querySelector('.k-val').innerHTML = _pwValHtml(val ?? 0, def);
+  }
+
+  // Delegate "..." click on kpiBody
+  kpiBody.addEventListener('click', e => {
+    const btn = e.target.closest('.pw-kpi-menu-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const chip = btn.closest('[data-kpi-idx]');
+    if (!chip) return;
+    _pwShowKmPopup(+chip.dataset.kpiIdx, btn);
+  });
 
   // ── Table ────────────────────────────────────────────────────
   function _pwRenderTable(rows, baseline) {
