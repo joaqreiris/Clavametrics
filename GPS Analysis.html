@@ -628,21 +628,14 @@
               <span class="ttl">Weekly volume · wk-on-wk</span>
               <div class="gp-c-picks" style="margin-left:6px">
                 <span class="gp-c-pick is-accent" data-wb-metric-pick>Player load <i class="ti ti-chevron-down"></i></span>
-                <span class="gp-c-pick" data-wb-mc-pick>— vs — <i class="ti ti-chevron-down"></i></span>
               </div>
               <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b">
-              <div class="gp-bars" id="gp-bars-container">
-                <div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Select a player and microcycle above.</div>
+              <div id="wkok-bars" style="display:flex;align-items:stretch;gap:6px;height:150px">
+                <div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Select a player to view wk-on-wk load change.</div>
               </div>
-              <div class="gp-bars-legend" style="display:flex; gap:14px; margin-top:10px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted)">
-                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-bg-sunk);border:1px solid var(--cm-border-soft)"></span><span data-prev-mc>Prev MC</span></span>
-                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-accent)"></span><span data-cur-mc>Current MC</span></span>
-                <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:11px;height:11px;border-radius:2px;background:var(--cm-danger)"></span>Match</span>
-                <div style="flex:1"></div>
-                <span>Cumulative <strong class="gp-wbar-total" style="color:var(--cm-fg)">—</strong> · <span class="gp-wbar-wow">—</span></span>
-              </div>
+              <div id="wkok-legend" style="margin-top:10px;font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)"></div>
             </div>
           </div>
 
@@ -1522,9 +1515,16 @@ async function applyLayoutToView(viewKey) {
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
   if (!grid) return;
   for (const { card_id, config } of layout) {
-    if (!config?.metric_key) continue;
+    if (!config) continue;
     const card = grid.querySelector(`[data-card-id="${card_id}"]`);
-    if (card) card.dataset.metricKey = config.metric_key;
+    if (!card) continue;
+    if (config.metric_key) card.dataset.metricKey = config.metric_key;
+    if (card_id === 'weekly-bars' && (config.wkok_yellow != null || config.wkok_red != null)) {
+      const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+      if (config.wkok_yellow != null) existing.wkok_yellow = config.wkok_yellow;
+      if (config.wkok_red    != null) existing.wkok_red    = config.wkok_red;
+      card.dataset.config = JSON.stringify(existing);
+    }
   }
 }
 
@@ -1929,10 +1929,12 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   if (!btn?.querySelector('.ti-dots')) return;
   e.stopPropagation();
   const card = btn.closest('.gp-c');
-  const isPwTable = card?.id === 'card-pw-table';
+  const isPwTable  = card?.id === 'card-pw-table';
+  const isWkOnWk   = card?.id === 'card-weekly-bars';
   makePopover(btn, [
     { label: 'Duplicate',     icon: 'ti-copy' },
     ...(!isPwTable ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
+    ...(isWkOnWk   ? [{ label: 'Edit thresholds', icon: 'ti-adjustments-horizontal' }] : []),
     { label: 'Change viz',    icon: 'ti-chart-area' },
     { label: 'Export CSV',    icon: 'ti-table-export' },
     { label: 'Remove',        icon: 'ti-trash' },
@@ -1947,6 +1949,8 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
     } else if (item.label === 'Change metric') {
       if (!card.dataset.cardId) { showToast('Change metric not available for this card'); return; }
       openChangeMetricModal(card);
+    } else if (item.label === 'Edit thresholds') {
+      _openWkThreshEditor(card, btn);
     } else {
       console.log('TODO:', item.label);
       showToast(item.label + ' — coming soon');
@@ -5760,8 +5764,7 @@ async function renderMatchMax(report) {
     </div>`).join('');
 }
 
-// ── Weekly volume bars ─────────────────────────────────────────
-// Uses microcycle_id (not ISO week) — compares selected MC vs previous.
+// ── Weekly volume · wk-on-wk (last-5-MC % change) ─────────────
 const _WB_CORE_COLS = new Set([
   'total_distance','high_speed_distance','very_high_speed_distance',
   'sprint_distance','accelerations','decelerations','max_speed',
@@ -5769,69 +5772,78 @@ const _WB_CORE_COLS = new Set([
 ]);
 
 async function renderWeeklyBars(state) {
-  const container = document.getElementById('gp-bars-container');
+  const container = document.getElementById('wkok-bars');
+  const legendEl  = document.getElementById('wkok-legend');
   if (!container) return;
   const clubId = window._gpClubId;
-  if (!clubId) return;
+  const pid    = state?.playerId;
 
-  // Resolve current and previous MC from pw-mc-sel
-  const mcSelEl = document.getElementById('pw-mc-sel');
-  const curMcId = mcSelEl?.value;
-  if (!curMcId) return;
-
-  const mcList = window._pwMcList || [];
-  const curIdx = mcList.findIndex(mc => mc.id === curMcId);
-  const curMc  = mcList[curIdx];
-  const prevMc = curIdx >= 0 && curIdx < mcList.length - 1 ? mcList[curIdx + 1] : null;
-
-  // Metric to display (from card data attribute)
-  const card = document.getElementById('card-weekly-bars');
-  const metricKey = card?.dataset.metricKey || 'player_load';
-
-  container.innerHTML = '<div style="padding:12px;color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">Loading…</div>';
-
-  // Fetch sessions for both MCs in parallel
-  const [{ data: curSess }, { data: prevSess }] = await Promise.all([
-    window.sb.from('training_sessions')
-      .select('id,session_date,session_type')
-      .eq('club_id', clubId).eq('microcycle_id', curMcId)
-      .order('session_date'),
-    prevMc
-      ? window.sb.from('training_sessions')
-          .select('id,session_date,session_type')
-          .eq('club_id', clubId).eq('microcycle_id', prevMc.id)
-          .order('session_date')
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const allSids = [...(curSess || []).map(s => s.id), ...(prevSess || []).map(s => s.id)];
-  if (!allSids.length) {
-    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No sessions found for this microcycle.</div>';
+  if (!clubId || !pid) {
+    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Select a player to view wk-on-wk load change.</div>';
+    if (legendEl) legendEl.innerHTML = '';
     return;
   }
 
-  // Fetch metric values
-  const pid = state.playerId;
-  const loadBySid = {};
+  const card = document.getElementById('card-weekly-bars');
+  const metricKey    = card?.dataset.metricKey || 'player_load';
+  const cfg          = (() => { try { return JSON.parse(card?.dataset.config || '{}'); } catch { return {}; } })();
+  const threshYellow = Number(cfg.wkok_yellow ?? 15);
+  const threshRed    = Number(cfg.wkok_red    ?? 20);
 
+  container.innerHTML = '<div style="padding:12px;color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">Loading…</div>';
+  if (legendEl) legendEl.innerHTML = '';
+
+  // Candidate MC ids — up to 10 newest from global list (newest-first order)
+  const mcList        = window._pwMcList || [];
+  const candidateMcIds = mcList.slice(0, 10).map(mc => mc.id);
+
+  if (!candidateMcIds.length) {
+    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No microcycles available.</div>';
+    return;
+  }
+
+  // Fetch sessions for all candidates in one query
+  const { data: allSess } = await window.sb.from('training_sessions')
+    .select('id,microcycle_id')
+    .eq('club_id', clubId)
+    .in('microcycle_id', candidateMcIds);
+
+  const sessionsByMc = {};
+  (allSess || []).forEach(s => {
+    if (!sessionsByMc[s.microcycle_id]) sessionsByMc[s.microcycle_id] = [];
+    sessionsByMc[s.microcycle_id].push(s.id);
+  });
+
+  const allSids = (allSess || []).map(s => s.id);
+  if (!allSids.length) {
+    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No session data for these microcycles.</div>';
+    return;
+  }
+
+  // Fetch metric values for the player
+  const loadBySid = {};
   if (_WB_CORE_COLS.has(metricKey)) {
     const { data: rpts } = await window.sb.from('gps_reports')
-      .select(`session_id,player_id,${metricKey}`)
-      .in('session_id', allSids).eq('club_id', clubId);
+      .select(`session_id,${metricKey}`)
+      .in('session_id', allSids)
+      .eq('club_id', clubId)
+      .eq('player_id', pid);
     (rpts || []).forEach(r => {
-      if (pid && r.player_id !== pid) return;
       loadBySid[r.session_id] = (loadBySid[r.session_id] || 0) + (r[metricKey] || 0);
     });
   } else {
-    // Custom EAV metric: resolve via gps_report_metrics
     const { data: coreRows } = await window.sb.from('gps_reports')
-      .select('id,session_id,player_id').in('session_id', allSids).eq('club_id', clubId);
-    const filtered = pid ? (coreRows || []).filter(r => r.player_id === pid) : (coreRows || []);
-    const rptToSid = Object.fromEntries(filtered.map(r => [r.id, r.session_id]));
-    const rptIds   = filtered.map(r => r.id);
+      .select('id,session_id')
+      .in('session_id', allSids)
+      .eq('club_id', clubId)
+      .eq('player_id', pid);
+    const rptToSid = Object.fromEntries((coreRows || []).map(r => [r.id, r.session_id]));
+    const rptIds   = (coreRows || []).map(r => r.id);
     if (rptIds.length) {
       const { data: eav } = await window.sb.from('gps_report_metrics')
-        .select('report_id,value').in('report_id', rptIds).eq('metric_key', metricKey);
+        .select('report_id,value')
+        .in('report_id', rptIds)
+        .eq('metric_key', metricKey);
       (eav || []).forEach(r => {
         const sid = rptToSid[r.report_id];
         if (sid) loadBySid[sid] = (loadBySid[sid] || 0) + (+r.value || 0);
@@ -5839,87 +5851,124 @@ async function renderWeeklyBars(state) {
     }
   }
 
-  // Map to weekday buckets (0=Sun … 6=Sat)
-  const byDay = { cur: {}, prev: {} };
-  const curDateByWd = {};
-  (curSess || []).forEach(s => {
-    const wd = new Date(s.session_date + 'T00:00:00').getDay();
-    if (!byDay.cur[wd]) { byDay.cur[wd] = { load:0, isMatch:false }; curDateByWd[wd] = s.session_date; }
-    byDay.cur[wd].load += loadBySid[s.id] || 0;
-    if (s.session_type === 'match') byDay.cur[wd].isMatch = true;
+  // Compute total per MC; keep only MCs that have data for this player
+  // candidateMcIds is newest-first → preserve that order, then reverse for chronological display
+  const mcTotals = candidateMcIds
+    .map(mcId => {
+      const sids  = sessionsByMc[mcId] || [];
+      const total = sids.reduce((sum, sid) => sum + (loadBySid[sid] || 0), 0);
+      return { mcId, total, hasData: sids.some(sid => loadBySid[sid] > 0) };
+    })
+    .filter(d => d.hasData)
+    .slice(0, 5)
+    .reverse(); // chronological (oldest → newest)
+
+  if (!mcTotals.length) {
+    container.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No GPS data for this player in recent microcycles.</div>';
+    return;
+  }
+
+  // Compute % change vs previous MC
+  const points = mcTotals.map((d, i) => {
+    const prev = mcTotals[i - 1];
+    const pct  = (prev && prev.total) ? Math.round((d.total - prev.total) / prev.total * 100) : null;
+    const mcName = mcList.find(m => m.id === d.mcId)?.name || '—';
+    return { mcName, total: d.total, pct };
   });
-  (prevSess || []).forEach(s => {
-    const wd = new Date(s.session_date + 'T00:00:00').getDay();
-    if (!byDay.prev[wd]) byDay.prev[wd] = { load:0, isMatch:false };
-    byDay.prev[wd].load += loadBySid[s.id] || 0;
-    if (s.session_type === 'match') byDay.prev[wd].isMatch = true;
-  });
 
-  const DAYS      = [0,1,2,3,4,5,6];
-  const DAY_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const activeDays = DAYS.filter(d => byDay.cur[d] || byDay.prev[d]);
-  const render    = activeDays.length ? activeDays : DAYS;
+  // Semaphore color by absolute % vs editable thresholds
+  function _wkCol(pct) {
+    if (pct === null) return 'var(--cm-fg-muted)';
+    const abs = Math.abs(pct);
+    if (abs <= threshYellow) return 'var(--cm-success)';
+    if (abs <= threshRed)    return 'var(--cm-warning)';
+    return 'var(--cm-danger)';
+  }
 
-  const allVals   = render.flatMap(d => [(byDay.cur[d]?.load||0),(byDay.prev[d]?.load||0)]);
-  const maxVal    = Math.max(...allVals, 1);
-  const curTotal  = render.reduce((s,d) => s+(byDay.cur[d]?.load||0), 0);
-  const prevTotal = render.reduce((s,d) => s+(byDay.prev[d]?.load||0), 0);
-  const wowPct    = prevTotal ? Math.round((curTotal-prevTotal)/prevTotal*100) : null;
-  const wowCol    = wowPct == null ? 'var(--cm-fg-muted)' : wowPct > 10 ? 'var(--cm-warning)' : wowPct < -10 ? 'var(--cm-danger)' : 'var(--cm-success)';
+  const cat      = (window._gpCatalog || []).find(d => d.key === metricKey);
+  const unit     = metricKey === 'total_distance' ? 'km' : (cat?.unit || 'AU');
+  const maxTotal = Math.max(...points.map(p => p.total), 1);
+  const BAR_MAX  = 110; // px available for bars (within 150px container minus labels)
 
-  container.innerHTML = render.map(wd => {
-    const cur  = byDay.cur[wd]  || { load:0, isMatch:false };
-    const prev = byDay.prev[wd] || { load:0 };
-    const curH  = Math.round((cur.load  / maxVal) * 100);
-    const prevH = Math.round((prev.load / maxVal) * 100);
-    const rawDate = curDateByWd[wd];
-    const dayLabel = rawDate
-      ? new Date(rawDate + 'T00:00:00').toLocaleDateString('en-US',{weekday:'short',day:'numeric'})
-      : DAY_SHORT[wd];
-    const barCls = cur.isMatch ? 'mt' : 'curr';
-    return `<div class="gr">
-      <div class="stack">
-        <div class="b prev" style="height:${prevH}%"></div>
-        <div class="b ${barCls}" style="height:${Math.max(curH, cur.load > 0 ? 2 : 0)}%"></div>
+  container.innerHTML = points.map(p => {
+    const barH   = Math.max(Math.round((p.total / maxTotal) * BAR_MAX), p.total > 0 ? 3 : 0);
+    const col    = _wkCol(p.pct);
+    const pctLbl = p.pct !== null ? (p.pct >= 0 ? '+' : '') + p.pct + '%' : '—';
+    const totalFmt = metricKey === 'total_distance'
+      ? (p.total / 1000).toFixed(1) + ' km'
+      : Math.round(p.total) + ' ' + unit;
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%">
+      <div style="height:16px;display:flex;align-items:center;justify-content:center">
+        <span style="font:700 12px/1 var(--cm-font-sans);color:${col}">${pctLbl}</span>
       </div>
-      <span class="lbl">${dayLabel}</span>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:80%">
+        <div style="background:${col};border-radius:3px 3px 0 0;height:${barH}px;transition:height .3s" title="${totalFmt}"></div>
+      </div>
+      <div style="height:20px;display:flex;align-items:center;justify-content:center">
+        <span style="font:500 10.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);text-align:center;white-space:nowrap;overflow:hidden;max-width:100%">${p.mcName}</span>
+      </div>
     </div>`;
-  }).join('') || '<div style="padding:16px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No GPS data for this MC.</div>';
+  }).join('');
 
-  // Update legend
-  const legEl = container.closest('.gp-c-b')?.querySelector('.gp-bars-legend');
-  if (legEl) {
-    const curMcEl  = legEl.querySelector('[data-cur-mc]');
-    const prevMcEl = legEl.querySelector('[data-prev-mc]');
-    if (curMcEl)  curMcEl.textContent  = `Current ${curMc?.name  || '—'}`;
-    if (prevMcEl) prevMcEl.textContent = `Prev ${prevMc?.name || '—'}`;
-    const cumEl = legEl.querySelector('.gp-wbar-total');
-    if (cumEl) {
-      const cat  = (window._gpCatalog || []).find(d => d.key === metricKey);
-      const unit = metricKey === 'total_distance' ? 'km' : (cat?.unit || 'AU');
-      const val  = metricKey === 'total_distance' ? (curTotal/1000).toFixed(1) : Math.round(curTotal);
-      cumEl.textContent = `${val} ${unit}`;
-    }
-    const wowEl = legEl.querySelector('.gp-wbar-wow');
-    if (wowEl) {
-      wowEl.style.color   = wowCol;
-      wowEl.textContent   = wowPct != null ? (wowPct >= 0 ? '+' : '') + wowPct + '%' : '—';
-    }
-  }
-
-  // Update the MC vs MC pick label and card header metric pick
-  const mcPickEl     = document.querySelector('[data-wb-mc-pick]');
+  // Metric pick label
   const metricPickEl = document.querySelector('[data-wb-metric-pick]');
-  if (mcPickEl) {
-    const curName  = curMc?.name  || '—';
-    const prevName = prevMc?.name || '—';
-    mcPickEl.innerHTML = `${curName} vs ${prevName} <i class="ti ti-chevron-down"></i>`;
-  }
   if (metricPickEl) {
-    const cat = (window._gpCatalog || []).find(d => d.key === metricKey);
-    const label = cat?.label || metricKey;
-    metricPickEl.innerHTML = `${label} <i class="ti ti-chevron-down"></i>`;
+    metricPickEl.innerHTML = `${cat?.label || metricKey} <i class="ti ti-chevron-down"></i>`;
   }
+
+  // Legend: semaphore key + ACWR note
+  if (legendEl) {
+    legendEl.innerHTML = `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-success)"></span>≤${threshYellow}% (safe)</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-warning)"></span>${threshYellow + 1}–${threshRed}% (caution)</span>
+      <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--cm-danger)"></span>&gt;${threshRed}% (spike)</span>
+      <span style="flex:1"></span>
+      <span style="font-style:italic;font-size:10.5px">Progresión de carga / ACWR principle (Gabbett) — umbrales ajustables en ···</span>
+    </div>`;
+  }
+}
+
+// ── Threshold editor popover for wk-on-wk card ────────────────
+function _openWkThreshEditor(card, anchor) {
+  const cfg    = (() => { try { return JSON.parse(card?.dataset.config || '{}'); } catch { return {}; } })();
+  const yellow = cfg.wkok_yellow ?? 15;
+  const red    = cfg.wkok_red    ?? 20;
+
+  const pop = document.createElement('div');
+  pop.className = 'gp-popover';
+  pop.style.cssText = 'min-width:210px;padding:12px 14px';
+  pop.innerHTML = `
+    <div style="font:600 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-bottom:10px">Umbrales de riesgo (%)</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span>🟡 Amarillo ≤</span>
+        <input id="wkok-thresh-y" type="number" min="1" max="98" value="${yellow}"
+          style="width:54px;padding:4px 6px;border:1px solid var(--cm-border-soft);border-radius:4px;background:var(--cm-bg-sunk);color:var(--cm-fg);font:600 12px/1 var(--cm-font-sans);text-align:center;outline:none">
+      </label>
+      <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span>🔴 Rojo &gt;</span>
+        <input id="wkok-thresh-r" type="number" min="2" max="99" value="${red}"
+          style="width:54px;padding:4px 6px;border:1px solid var(--cm-border-soft);border-radius:4px;background:var(--cm-bg-sunk);color:var(--cm-fg);font:600 12px/1 var(--cm-font-sans);text-align:center;outline:none">
+      </label>
+      <button id="wkok-thresh-save"
+        style="margin-top:2px;padding:5px 12px;background:var(--cm-accent);color:#fff;border:none;border-radius:5px;font:600 11.5px/1 var(--cm-font-sans);cursor:pointer">
+        Guardar
+      </button>
+    </div>`;
+  _posPopover(pop, anchor);
+
+  pop.querySelector('#wkok-thresh-save')?.addEventListener('click', () => {
+    const y = Math.round(parseFloat(pop.querySelector('#wkok-thresh-y').value));
+    const r = Math.round(parseFloat(pop.querySelector('#wkok-thresh-r').value));
+    if (!isFinite(y) || !isFinite(r) || y < 1 || r < 2) { showToast('Ingresá valores válidos'); return; }
+    if (r <= y) { showToast('El umbral rojo debe ser mayor que el amarillo'); return; }
+    const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+    card.dataset.config = JSON.stringify({ ...existing, wkok_yellow: y, wkok_red: r });
+    saveLayout('ind');
+    closePop();
+    renderWeeklyBars(window.gpState).catch(e => console.warn('renderWeeklyBars:', e));
+    showToast(`Umbrales: ${y}% / ${r}%`);
+  });
 }
 
 // ── Hook renderView to also update × match max + weekly bars ──
