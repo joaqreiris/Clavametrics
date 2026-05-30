@@ -1508,10 +1508,11 @@ async function loadLayout(viewKey) {
     const uid = (await window.sb.auth.getUser())?.data?.user?.id;
     const cid = await window.getClubId?.();
     if (!uid || !cid) return null;
-    const { data } = await window.sb.from('gps_dashboard_layouts')
+    const { data, error } = await window.sb.from('gps_dashboard_layouts')
       .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
+    if (error) { console.warn('loadLayout: DB error (using defaults):', error.message); return null; }
     return data?.layout || null;
-  } catch (err) { console.warn('loadLayout:', err); return null; }
+  } catch (err) { console.warn('loadLayout: unexpected error (using defaults):', err); return null; }
 }
 
 // ── Apply saved layout to a view (metric_key per card) ─────────
@@ -2286,7 +2287,7 @@ async function _detectSmartDefault(clubId, userId) {
     if (banner) banner.classList.add('is-on');
   }
 
-  await applyLayoutToView('ind');
+  await applyLayoutToView('ind').catch(e => console.warn('applyLayoutToView:', e));
   await window.refreshDashboard();
 })();
 </script>
@@ -6950,7 +6951,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         _pwTableMetricCols = card.config.columns;
         return;
       }
-    } catch {}
+    } catch (e) { console.warn('_pwInitTableCols: using defaults:', e); }
     _pwTableMetricCols = _PW_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
   }
 
