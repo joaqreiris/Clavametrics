@@ -1987,6 +1987,22 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   e.stopPropagation();
   const txt = pick.textContent.trim();
 
+  // Weekly bars metric pick — resolved by attribute, not text
+  if (pick.hasAttribute('data-wb-metric-pick')) {
+    const cat  = window._gpCatalog || [];
+    const opts = cat.length
+      ? cat.filter(d => !['time_played','distance_per_minute'].includes(d.key)).map(d => ({ label: d.label, metric: d.key }))
+      : [{ label: 'Player load', metric: 'player_load' },{ label: 'Total Distance', metric: 'total_distance' },{ label: 'HSR', metric: 'high_speed_distance' }];
+    makePopover(pick, opts, item => {
+      const wbCard = document.getElementById('card-weekly-bars');
+      if (wbCard) wbCard.dataset.metricKey = item.metric;
+      renderWeeklyBars(window.gpState);
+      saveLayout('ind');
+      showToast(`Weekly bars → ${item.label}`);
+    });
+    return;
+  }
+
   if (/Role|Squad|Self|Match peak/i.test(txt)) {
     makePopover(pick, ['vs Role','vs Squad','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
       pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
@@ -6659,6 +6675,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _pw.mcKey    = mcSel.value || null;
       await _pwInitTableCols();
       if (_pw.playerId && _pw.mcKey) await _pwLoad();
+      renderWeeklyBars(window.gpState);
     } catch (e) { console.error('pwInit:', e); }
   }
 
