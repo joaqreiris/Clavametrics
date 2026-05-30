@@ -1958,9 +1958,9 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
 let _zSortBtn = null;
 document.querySelectorAll('.gp-c-h .right > button').forEach(b => { if (b.querySelector('.ti-arrows-sort')) _zSortBtn = b; });
 if (_zSortBtn) {
-  const Z_COLS = ['Player', ..._getChartMetrics().map(d => d.label)];
   let _zSt = { col: 0, dir: 1 };
   _zSortBtn.addEventListener('click', e => {
+    const Z_COLS = ['Player', ...(typeof _getChartMetrics === 'function' ? _getChartMetrics() : []).map(d => d.label)];
     e.stopPropagation();
     _zSt.dir *= -1;
     if (_zSt.dir === 1) _zSt.col = (_zSt.col + 1) % Z_COLS.length;
