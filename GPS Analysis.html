@@ -371,6 +371,37 @@
   .pw-kpi:hover .pw-kpi-menu-btn { opacity:1; }
   .pw-kpi-menu-btn:hover { background:var(--cm-bg); color:var(--cm-fg); }
   .pw-kpi-menu-btn .ti { font-size:11px; }
+  /* Player Week — Columns button & panel */
+  .pw-col-btn { display:inline-flex; align-items:center; gap:4px; height:26px; padding:0 9px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:transparent; color:var(--cm-fg-muted); font:500 11.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .pw-col-btn:hover, .pw-col-btn.is-open { background:var(--cm-bg-soft); color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .pw-col-btn .ti { font-size:13px; }
+  .pw-col-panel { position:fixed; background:var(--cm-bg); border:1px solid var(--cm-border-strong); border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,.28); z-index:9990; width:272px; display:flex; flex-direction:column; overflow:hidden; max-height:80vh; }
+  .pw-col-ph { display:flex; align-items:center; padding:10px 12px; border-bottom:1px solid var(--cm-border); gap:8px; flex-shrink:0; }
+  .pw-col-ph .ttl { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; }
+  .pw-col-ph .x-btn { width:22px; height:22px; border:0; background:transparent; cursor:pointer; color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; border-radius:4px; padding:0; }
+  .pw-col-ph .x-btn:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .pw-col-body { overflow-y:auto; flex:1; padding:6px 8px 4px; }
+  .pw-col-sect { font:600 10px/1 var(--cm-font-sans); text-transform:uppercase; letter-spacing:.06em; color:var(--cm-fg-muted); padding:8px 4px 4px; }
+  .pw-col-item { display:flex; align-items:center; gap:6px; padding:5px 4px; border-radius:5px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .pw-col-item:not(.is-fixed):hover { background:var(--cm-bg-soft); }
+  .pw-col-item[draggable="true"] { cursor:grab; }
+  .pw-col-item.drag-over { box-shadow:0 -2px 0 var(--cm-accent); }
+  .pw-col-item.dragging { opacity:.3; }
+  .pw-col-item .drag-h { color:var(--cm-fg-muted); font-size:12px; flex-shrink:0; }
+  .pw-col-item .col-lbl { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pw-col-item .col-tag { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); flex-shrink:0; }
+  .pw-col-item .col-rm { width:18px; height:18px; border:0; background:transparent; cursor:pointer; color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; border-radius:3px; padding:0; flex-shrink:0; }
+  .pw-col-item .col-rm:hover { background:var(--cm-danger-bg); color:var(--cm-danger); }
+  .pw-col-item .col-add { width:18px; height:18px; border:0; background:transparent; cursor:pointer; color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; border-radius:3px; padding:0; flex-shrink:0; }
+  .pw-col-item .col-add:hover { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .pw-col-item.is-fixed { opacity:.55; cursor:default; }
+  .pw-col-footer { padding:8px 10px; border-top:1px solid var(--cm-border); display:flex; gap:6px; flex-shrink:0; }
+  .pw-col-footer button { flex:1; padding:5px 8px; border-radius:5px; font:500 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .pw-col-footer .btn-reset { border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); }
+  .pw-col-footer .btn-reset:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .pw-col-footer .btn-save { border:0; background:var(--cm-accent); color:#fff; font-weight:600; }
+  .pw-col-footer .btn-save:hover { opacity:.88; }
+
   .pw-km-popup { position:fixed; background:var(--cm-bg); border:1px solid var(--cm-border-strong); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.25); z-index:9999; min-width:210px; max-height:320px; overflow-y:auto; padding:6px; }
   .pw-km-popup-hd { font:600 10px/1 var(--cm-font-sans); text-transform:uppercase; letter-spacing:.06em; color:var(--cm-fg-muted); padding:4px 8px 8px; }
   .pw-km-item { display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:5px; cursor:pointer; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
@@ -522,11 +553,15 @@
           </div>
 
           <!-- NEW: Player week table (day-by-day) -->
-          <div class="gp-c" data-size="full" id="card-pw-table">
+          <div class="gp-c" data-size="full" id="card-pw-table" data-card-id="pw-table">
             <div class="gp-c-h">
               <span class="ttl">Player week table</span>
               <span class="sub">day by day · MD_Code · RPE · %Game</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+              <div class="right">
+                <button class="pw-col-btn" id="pw-col-btn" title="Manage columns"><i class="ti ti-columns"></i> Columns</button>
+                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
+                <button><i class="ti ti-dots"></i></button>
+              </div>
             </div>
             <div class="gp-c-b" id="pw-tbl-body" style="overflow-x:auto;padding:0">
               <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Select a player and microcycle.</div>
@@ -6440,6 +6475,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   function _mdCodeForSession(s, matchDate) {
     if (s.match_day_offset != null) {
       const n = s.match_day_offset;
+      // DB stores the value as a formatted string ("MD", "MD-5", "MD+1") or a number
+      if (typeof n === 'string') return n || '—';
       if (n === 0) return 'MD';
       return n < 0 ? `MD${n}` : `MD+${n}`;
     }
@@ -6491,6 +6528,27 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     { key: 'max_speed',           label: 'Max Velocity',   unit: 'km/h', dec: 1, agg: 'max'   },
   ];
 
+  // ── Table column state ────────────────────────────────────────
+  // Fixed columns (always shown, not removable/reorderable)
+  const _PW_FIXED_COLS = [
+    { key: 'date',   label: 'Date',    fixed: true },
+    { key: 'mdcode', label: 'MD Code', fixed: true },
+    { key: 'rpe',    label: 'RPE',     fixed: true },
+  ];
+
+  // Default metric columns (mirrors the original hardcoded table)
+  const _PW_DEFAULT_METRIC_COLS = [
+    { key: 'player_load',         label: 'Load',    type: 'metric' },
+    { key: 'total_distance',      label: 'TD (m)',  type: 'metric' },
+    { key: 'high_speed_distance', label: 'HSR (m)', type: 'metric' },
+    { key: 'sprint_count',        label: 'SPR (n)', type: 'metric' },
+    { key: 'acc_dec',             label: 'Acc+Dec', type: 'metric' },
+  ];
+
+  // Mutable per-session copy; loaded from layout on init
+  let _pwTableMetricCols  = _PW_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
+  let _pwCurrentBaseline  = null;
+
   // ── DOM ──────────────────────────────────────────────────────
   const playerSel  = document.getElementById('pw-player-sel');
   const mcSel      = document.getElementById('pw-mc-sel');
@@ -6536,6 +6594,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (mcSel.options.length > 1)     mcSel.selectedIndex = 1;
       _pw.playerId = playerSel.value || null;
       _pw.mcKey    = mcSel.value || null;
+      await _pwInitTableCols();
       if (_pw.playerId && _pw.mcKey) await _pwLoad();
     } catch (e) { console.error('pwInit:', e); }
   }
@@ -6752,52 +6811,307 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     _pwShowKmPopup(+chip.dataset.kpiIdx, btn);
   });
 
+  // ── Table cell renderer (one cell, given a column def and row) ──
+  function _pwCellHtml(col, row, baseline) {
+    const r = row.report;
+    if (col.key === 'date')   return row.session.session_date;
+    if (col.key === 'mdcode') {
+      const code = row.mdCode || '—';
+      return `<span class="pw-md ${mdCssKey(row.mdCode)}">${code}</span>`;
+    }
+    if (col.key === 'rpe') return row.rpe != null ? `<span class="pw-rpe ${rpeCls(row.rpe)}">${row.rpe}</span>` : '—';
+    if (!r) return '—';
+    if (col.key === 'acc_dec') return fmtN((r.accelerations || 0) + (r.decelerations || 0), 0);
+    if (col.type === 'pct') {
+      const bl = baseline?.[col.baseKey]?.baseline;
+      const raw = r[col.baseKey];
+      if (!bl || raw == null) return '—';
+      const pct = Math.round(raw / bl * 100);
+      return `<span class="pw-pct ${pctCls(pct)}">${pct}%</span>`;
+    }
+    // Regular metric column
+    const cat = (window._gpCatalog || []).find(d => d.key === col.key);
+    const dec = cat?.decimals ?? 0;
+    const val = r[col.key];
+    return val != null ? fmtN(val, dec) : '—';
+  }
+
   // ── Table ────────────────────────────────────────────────────
   function _pwRenderTable(rows, baseline) {
-    const showPct = !!(baseline?.total_distance);
+    _pwCurrentBaseline = baseline;
+    const allCols = [..._PW_FIXED_COLS, ..._pwTableMetricCols];
 
-    const header = `<tr>
-      <th style="text-align:left">Date</th>
-      <th style="text-align:left">MD Code</th>
-      <th>RPE</th>
-      <th>Load (AU)</th>
-      <th>TD (m)</th>
-      <th>HSR (m)</th>
-      <th>SPR (n)</th>
-      <th>Acc+Dec</th>
-      ${showPct ? '<th>TD%Game</th><th>HSR%Game</th>' : ''}
-    </tr>`;
+    const thAlign = col => (col.key === 'date' ? 'text-align:left' : col.key === 'mdcode' ? 'text-align:center' : 'text-align:right');
+    const tdAlign = col => (col.key === 'date' ? 'text-align:left' : col.key === 'mdcode' ? 'text-align:center' : 'text-align:right');
+
+    const header = `<tr>${allCols.map(c => `<th style="${thAlign(c)}">${c.label}</th>`).join('')}</tr>`;
 
     const body = rows.map(row => {
-      const r    = row.report;
-      const code = row.mdCode || '—';
-      const cssK = mdCssKey(row.mdCode);
-      const rpe  = row.rpe;
-      const accDec = r ? (r.accelerations || 0) + (r.decelerations || 0) : null;
-
-      let pctTD = '', pctHSR = '';
-      if (showPct && r) {
-        const td = baseline.total_distance > 0 ? Math.round(r.total_distance / baseline.total_distance * 100) : null;
-        const hsr = baseline.high_speed_distance > 0 ? Math.round(r.high_speed_distance / baseline.high_speed_distance * 100) : null;
-        pctTD  = td  != null ? `<span class="pw-pct ${pctCls(td)}">${td}%</span>`   : '—';
-        pctHSR = hsr != null ? `<span class="pw-pct ${pctCls(hsr)}">${hsr}%</span>` : '—';
-      }
-
-      return `<tr>
-        <td>${row.session.session_date}</td>
-        <td><span class="pw-md ${cssK}">${code}</span></td>
-        <td>${rpe != null ? `<span class="pw-rpe ${rpeCls(rpe)}">${rpe}</span>` : '—'}</td>
-        <td>${r ? fmtN(r.player_load, 0) : '—'}</td>
-        <td>${r ? fmtN(r.total_distance, 0) : '—'}</td>
-        <td>${r ? fmtN(r.high_speed_distance, 0) : '—'}</td>
-        <td>${r ? fmtN(r.sprint_count, 0) : '—'}</td>
-        <td>${r && accDec != null ? fmtN(accDec, 0) : '—'}</td>
-        ${showPct ? `<td>${pctTD}</td><td>${pctHSR}</td>` : ''}
-      </tr>`;
+      const cells = allCols.map(c =>
+        `<td style="${tdAlign(c)}">${_pwCellHtml(c, row, baseline)}</td>`
+      ).join('');
+      return `<tr>${cells}</tr>`;
     }).join('');
 
     tblBody.innerHTML = `<table class="pw-tbl"><thead>${header}</thead><tbody>${body}</tbody></table>`;
   }
+
+  // ── Column panel — load / save ────────────────────────────────
+  async function _pwInitTableCols() {
+    try {
+      const layout = await loadLayout('ind');
+      const card   = layout?.find(c => c.card_id === 'pw-table');
+      if (card?.config?.columns?.length) {
+        _pwTableMetricCols = card.config.columns;
+        return;
+      }
+    } catch {}
+    _pwTableMetricCols = _PW_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
+  }
+
+  function _pwSaveTableCols() {
+    const cardEl = document.getElementById('card-pw-table');
+    if (cardEl) cardEl.dataset.config = JSON.stringify({ columns: _pwTableMetricCols });
+    saveLayout('ind');
+  }
+
+  // ── Column panel — UI ─────────────────────────────────────────
+  let _pwColPanel  = null;
+  let _pwColDragSrc = null;
+
+  function _pwOpenColPanel() {
+    if (_pwColPanel) { _pwCloseColPanel(); return; }
+    document.getElementById('pw-col-btn')?.classList.add('is-open');
+
+    const catalog = window._gpCatalog || [];
+    const activeKeys = new Set(_pwTableMetricCols.map(c => c.key));
+
+    // Build available catalog items (not already active, not fixed)
+    const fixedKeys = new Set(_PW_FIXED_COLS.map(c => c.key).concat(['acc_dec']));
+    const available = [
+      { key: 'acc_dec', label: 'Acc+Dec', type: 'metric', group: 'core' },
+      ...catalog.map(d => ({
+        key: d.key, label: `${d.label}${d.unit ? ' ('+d.unit+')' : ''}`,
+        type: 'metric', group: d.is_core ? 'core' : 'custom',
+      })),
+      // %Game variants for all numeric catalog metrics (step B will use these)
+      ...catalog.filter(d => d.unit).map(d => ({
+        key: d.key + '_pct', label: `${d.label} %Game`,
+        type: 'pct', baseKey: d.key, group: 'pct',
+      })),
+    ].filter(d => !activeKeys.has(d.key));
+
+    const byGroup = g => available.filter(d => d.group === g);
+
+    const renderActive = () => [
+      ..._PW_FIXED_COLS.map(c => `
+        <div class="pw-col-item is-fixed">
+          <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
+          <span class="col-lbl">${c.label}</span>
+          <span class="col-tag">fixed</span>
+        </div>`),
+      ..._pwTableMetricCols.map((c, i) => `
+        <div class="pw-col-item" draggable="true" data-col-idx="${i}">
+          <i class="ti ti-grip-vertical drag-h"></i>
+          <span class="col-lbl">${c.label}</span>
+          <span class="col-tag">${c.type === 'pct' ? '%' : ''}</span>
+          <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
+        </div>`),
+    ].join('');
+
+    const renderAvailGroup = (items, title) => !items.length ? '' : `
+      <div class="pw-col-sect">${title}</div>
+      ${items.map(d => `
+        <div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}" data-add-type="${d.type}" data-add-base="${d.baseKey || ''}">
+          <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
+          <span class="col-lbl">${d.label}</span>
+          <button class="col-add" title="Add column"><i class="ti ti-plus" style="font-size:10px"></i></button>
+        </div>`).join('')}`;
+
+    const panel = document.createElement('div');
+    panel.className = 'pw-col-panel';
+    panel.id = 'pw-col-panel-el';
+    panel.innerHTML = `
+      <div class="pw-col-ph">
+        <span class="ttl">Table columns</span>
+        <button class="x-btn" id="pw-col-x"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="pw-col-body" id="pw-col-body">
+        <div class="pw-col-sect">Active columns</div>
+        <div id="pw-col-active">${renderActive()}</div>
+        <div class="pw-col-sect" style="margin-top:10px">Add column</div>
+        ${renderAvailGroup(byGroup('core'),   'Core metrics')}
+        ${renderAvailGroup(byGroup('custom'), 'Custom metrics')}
+        ${renderAvailGroup(byGroup('pct'),    '% of Match')}
+      </div>
+      <div class="pw-col-footer">
+        <button class="btn-reset" id="pw-col-reset">Reset</button>
+        <button class="btn-save"  id="pw-col-save">Save &amp; apply</button>
+      </div>`;
+
+    document.body.appendChild(panel);
+    _pwColPanel = panel;
+
+    // Position below the Columns button
+    const btn  = document.getElementById('pw-col-btn');
+    const rect = btn?.getBoundingClientRect();
+    if (rect) {
+      panel.style.top  = `${rect.bottom + 6}px`;
+      panel.style.left = `${Math.min(rect.left, window.innerWidth - 284)}px`;
+    }
+
+    _pwBindColPanel(panel);
+    setTimeout(() => document.addEventListener('click', _pwColOutside, { once: true }), 0);
+  }
+
+  function _pwBindColPanel(panel) {
+    const activeEl = panel.querySelector('#pw-col-active');
+
+    // Remove column
+    panel.addEventListener('click', e => {
+      const rmBtn = e.target.closest('[data-rm-idx]');
+      if (rmBtn) {
+        const idx = +rmBtn.dataset.rmIdx;
+        _pwTableMetricCols.splice(idx, 1);
+        _pwRefreshColPanel();
+        return;
+      }
+      // Add column
+      const addEl = e.target.closest('[data-add-key]');
+      if (addEl) {
+        _pwTableMetricCols.push({
+          key:     addEl.dataset.addKey,
+          label:   addEl.dataset.addLabel,
+          type:    addEl.dataset.addType,
+          baseKey: addEl.dataset.addBase || undefined,
+        });
+        _pwRefreshColPanel();
+        return;
+      }
+      // Footer buttons
+      if (e.target.closest('#pw-col-x')) { _pwCloseColPanel(); return; }
+      if (e.target.closest('#pw-col-save')) {
+        _pwSaveTableCols();
+        if (_pwCurrentRows.length) _pwRenderTable(_pwCurrentRows, _pwCurrentBaseline);
+        _pwCloseColPanel();
+        return;
+      }
+      if (e.target.closest('#pw-col-reset')) {
+        _pwTableMetricCols = _PW_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
+        _pwRefreshColPanel();
+        return;
+      }
+    });
+
+    // Drag-and-drop reordering of active columns
+    panel.addEventListener('dragstart', e => {
+      const item = e.target.closest('[draggable][data-col-idx]');
+      if (!item) return;
+      _pwColDragSrc = +item.dataset.colIdx;
+      item.classList.add('dragging');
+    });
+    panel.addEventListener('dragend', e => {
+      const item = e.target.closest('[draggable]');
+      item?.classList.remove('dragging');
+      panel.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+    panel.addEventListener('dragover', e => {
+      e.preventDefault();
+      const item = e.target.closest('[draggable][data-col-idx]');
+      if (!item || +item.dataset.colIdx === _pwColDragSrc) return;
+      panel.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      item.classList.add('drag-over');
+    });
+    panel.addEventListener('drop', e => {
+      e.preventDefault();
+      const item = e.target.closest('[draggable][data-col-idx]');
+      if (!item) return;
+      const dst = +item.dataset.colIdx;
+      if (_pwColDragSrc === dst) return;
+      const moved = _pwTableMetricCols.splice(_pwColDragSrc, 1)[0];
+      _pwTableMetricCols.splice(dst, 0, moved);
+      _pwColDragSrc = null;
+      _pwRefreshColPanel();
+    });
+  }
+
+  function _pwRefreshColPanel() {
+    if (!_pwColPanel) return;
+    const catalog   = window._gpCatalog || [];
+    const activeKeys = new Set(_pwTableMetricCols.map(c => c.key));
+    const fixedKeys  = new Set(_PW_FIXED_COLS.map(c => c.key).concat(['acc_dec']));
+
+    const available = [
+      { key: 'acc_dec', label: 'Acc+Dec', type: 'metric', group: 'core' },
+      ...catalog.map(d => ({
+        key: d.key, label: `${d.label}${d.unit ? ' ('+d.unit+')' : ''}`,
+        type: 'metric', group: d.is_core ? 'core' : 'custom',
+      })),
+      ...catalog.filter(d => d.unit).map(d => ({
+        key: d.key + '_pct', label: `${d.label} %Game`,
+        type: 'pct', baseKey: d.key, group: 'pct',
+      })),
+    ].filter(d => !activeKeys.has(d.key));
+
+    const byGroup = g => available.filter(d => d.group === g);
+
+    const renderAvailGroup = (items, title) => !items.length ? '' : `
+      <div class="pw-col-sect">${title}</div>
+      ${items.map(d => `
+        <div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}" data-add-type="${d.type}" data-add-base="${d.baseKey || ''}">
+          <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
+          <span class="col-lbl">${d.label}</span>
+          <button class="col-add" title="Add column"><i class="ti ti-plus" style="font-size:10px"></i></button>
+        </div>`).join('')}`;
+
+    const activeEl = _pwColPanel.querySelector('#pw-col-active');
+    if (activeEl) activeEl.innerHTML = [
+      ..._PW_FIXED_COLS.map(c => `
+        <div class="pw-col-item is-fixed">
+          <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
+          <span class="col-lbl">${c.label}</span>
+          <span class="col-tag">fixed</span>
+        </div>`),
+      ..._pwTableMetricCols.map((c, i) => `
+        <div class="pw-col-item" draggable="true" data-col-idx="${i}">
+          <i class="ti ti-grip-vertical drag-h"></i>
+          <span class="col-lbl">${c.label}</span>
+          <span class="col-tag">${c.type === 'pct' ? '%' : ''}</span>
+          <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
+        </div>`),
+    ].join('');
+
+    // Refresh available section (below the active list)
+    const body = _pwColPanel.querySelector('#pw-col-body');
+    // Remove all elements after #pw-col-active
+    const activeNode = body.querySelector('#pw-col-active');
+    while (activeNode.nextSibling) activeNode.nextSibling.remove();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = `
+      <div class="pw-col-sect" style="margin-top:10px">Add column</div>
+      ${renderAvailGroup(byGroup('core'),   'Core metrics')}
+      ${renderAvailGroup(byGroup('custom'), 'Custom metrics')}
+      ${renderAvailGroup(byGroup('pct'),    '% of Match')}`;
+    while (tmp.firstChild) body.appendChild(tmp.firstChild);
+  }
+
+  function _pwCloseColPanel() {
+    _pwColPanel?.remove();
+    _pwColPanel = null;
+    document.getElementById('pw-col-btn')?.classList.remove('is-open');
+    document.removeEventListener('click', _pwColOutside);
+  }
+
+  function _pwColOutside(e) {
+    if (_pwColPanel && !_pwColPanel.contains(e.target) && e.target.id !== 'pw-col-btn' && !e.target.closest('#pw-col-btn')) {
+      _pwCloseColPanel();
+    }
+  }
+
+  document.getElementById('pw-col-btn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    _pwOpenColPanel();
+  });
 
   // ── Chart ────────────────────────────────────────────────────
   function _pwRenderChart(rows) {
