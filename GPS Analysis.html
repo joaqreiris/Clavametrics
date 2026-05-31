@@ -8758,14 +8758,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return 'vlow';
   }
 
-  function cmpArrow(val, prev) {
-    if (prev == null || prev === 0) return '';
-    const pct = ((val - prev) / prev * 100).toFixed(0);
-    const cls = val >= prev ? 'up' : 'dn';
-    const icon = val >= prev ? 'ti-arrow-up-right' : 'ti-arrow-down-right';
-    return `<span class="k-cmp ${cls}"><i class="ti ${icon}"></i>${val >= prev ? '+' : ''}${pct}%</span>`;
-  }
-
   // ── state ────────────────────────────────────────────────────
   const _st = { mc: '', date: '', sessionId: null, compareSessionId: null, sortKey: 'player_name', sortDir: 1, highlightedRow: null };
   let _allSessions = [];
@@ -9485,7 +9477,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
   compareSel?.addEventListener('change', () => {
     _st.compareSessionId = compareSel.value || null;
-    // comparison rendering handled by future z-score card; state is already in window._scState
+    // comparison rendering lives in the temporal z-score card (card-sc-zscore-temporal)
+    window._ztRender?.();
   });
 
   // ── annotate player vs baseline KPI cards ─────────────────────
@@ -9591,84 +9584,78 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 <!-- ═══════════════════════════════════════════════════════════
      VARIACIÓN VS SESIONES EQUIVALENTES — z-score temporal
      Session Control (grp). Card id: sc-zscore-temporal
-     Compara la sesión seleccionada contra las últimas N sesiones
-     del mismo MD code (session_type o sufijo de título).
-     Por defecto plantel; si hay jugador seleccionado → ese jugador.
-     N = 10 sesiones equivalentes mínimo 3 para calcular z.
+     Resumen squad-level: avg plantel sesión actual vs avg plantel
+     de las últimas N sesiones del mismo MD code.
+     N = 10, mínimo 3 para calcular z.
+     El compareSel ("Compare with") dispara re-render via window._ztRender.
 ═══════════════════════════════════════════════════════════ -->
 <script>
 (function () {
-  // ── Config ────────────────────────────────────────────────────
-  const _ZT_N = 10;
+  const _ZT_N   = 10;
   const _ZT_MIN = 3;
 
-  // Core metrics that are directly in gps_reports columns
+  // Metrics available directly in gps_reports columns
   const _ZT_CORE_COLS = new Set([
     'total_distance','high_speed_distance','very_high_speed_distance',
     'sprint_distance','sprint_count','max_speed',
     'accelerations','decelerations','player_load','time_played',
   ]);
 
-  // Metrics that use MAX aggregation (pico) vs AVG (acumulable)
-  const _ZT_PEAK_METRICS = new Set(['max_speed']);
+  // max aggregation (pico); everything else = avg (acumulable)
+  const _ZT_PEAK = new Set(['max_speed']);
 
-  const _ZT_DEFAULT_METRICS = [
-    'total_distance', 'high_speed_distance', 'sprint_count', 'player_load', 'max_speed',
+  const _ZT_DEFAULTS = [
+    'total_distance','high_speed_distance','sprint_count','player_load','max_speed',
   ];
 
-  let _ztMetrics = [..._ZT_DEFAULT_METRICS];
+  let _ztMetrics = [..._ZT_DEFAULTS];
 
-  // ── Helpers ──────────────────────────────────────────────────
+  // ── label / unit / format helpers ────────────────────────────
   function _ztLabel(key) {
     const cat = (window._gpCatalog || []).find(d => d.key === key);
     if (cat?.label) return cat.label;
-    const fallback = {
-      total_distance: 'Total Distance', high_speed_distance: 'HSR',
-      very_high_speed_distance: 'VHSR', sprint_distance: 'Sprint Dist',
-      sprint_count: 'Sprints', max_speed: 'Max Speed',
-      accelerations: 'Accelerations', decelerations: 'Decelerations',
-      player_load: 'Player Load', time_played: 'Time Played',
-    };
-    return fallback[key] || key.replace(/_/g, ' ');
+    return { total_distance:'Total Distance', high_speed_distance:'HSR',
+             very_high_speed_distance:'VHSR', sprint_distance:'Sprint Dist',
+             sprint_count:'Sprints', max_speed:'Max Speed',
+             accelerations:'Accelerations', decelerations:'Decelerations',
+             player_load:'Player Load', time_played:'Time Played' }[key]
+           || key.replace(/_/g,' ');
   }
 
   function _ztUnit(key) {
-    const cat = (window._gpCatalog || []).find(d => d.key === key);
-    return cat?.unit || '';
+    return (window._gpCatalog || []).find(d => d.key === key)?.unit || '';
   }
 
   function _ztFmt(v, key) {
     if (v == null || isNaN(v)) return '—';
-    const cat = (window._gpCatalog || []).find(d => d.key === key);
-    const dec = cat?.decimals ?? (key === 'max_speed' ? 1 : 0);
+    const dec = (window._gpCatalog || []).find(d => d.key === key)?.decimals
+              ?? (key === 'max_speed' ? 1 : 0);
     return Number(v).toFixed(dec);
   }
 
-  // Aggregate a metric across a set of reports for one session
-  function _ztAgg(reports, key) {
-    if (!reports.length) return null;
+  // squad avg (or max for pico metrics) of one session's reports
+  function _ztSquadAgg(reports, key) {
     const vals = reports.map(r => r[key]).filter(v => v != null && !isNaN(v));
     if (!vals.length) return null;
-    if (_ZT_PEAK_METRICS.has(key)) return Math.max(...vals);
-    return vals.reduce((s, v) => s + v, 0) / vals.length;
+    return _ZT_PEAK.has(key) ? Math.max(...vals)
+                              : vals.reduce((s,v) => s+v, 0) / vals.length;
   }
 
-  // Extract the MD code used to match equivalent sessions
-  function _ztMatchKey(session) {
-    if (!session) return null;
-    return session.session_type || session.title?.match?.(/MD[-\s]?\d+/i)?.[0] || session.title?.slice?.(-4) || null;
+  // Extract MD code from a session (e.g. "MD-1", "MD+1", "MD")
+  function _ztMdCode(sess) {
+    if (!sess) return null;
+    return sess.session_type
+        || sess.title?.match?.(/MD[-+]?\d*/i)?.[0]
+        || sess.title?.slice?.(-4)
+        || null;
   }
 
-  // z-score class based on magnitude (green < 1, amber 1–2, red ≥ 2)
   function _ztZClass(z) {
     if (z == null) return 'neu';
     const a = Math.abs(z);
-    if (a < 1) return 'ok';
-    if (a < 2) return 'warn';
-    return 'high';
+    return a < 1 ? 'ok' : a < 2 ? 'warn' : 'high';
   }
 
-  // Interpretive text
   function _ztInterpret(z, mdCode) {
     if (z == null) return 'sin datos suficientes';
     const a   = Math.abs(z);
@@ -9680,7 +9667,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return `muy ${dir} de lo habitual${md}`;
   }
 
-  // ── Main render ──────────────────────────────────────────────
+  // ── Main render (squad-only summary) ────────────────────────
   async function renderZt() {
     const body = document.getElementById('sc-zt-body');
     const nEl  = document.getElementById('sc-zt-n');
@@ -9700,79 +9687,61 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = window._gpClubId || await window.getClubId?.();
       if (!clubId) return;
 
-      // Load all sessions for this club (lightweight)
-      const { data: allSess, error: sessErr } = await window.sb
+      // Fetch all sessions (lightweight — id, date, type, title only)
+      const { data: allSess, error: sErr } = await window.sb
         .from('training_sessions')
-        .select('id, session_date, session_type, title')
+        .select('id,session_date,session_type,title')
         .eq('club_id', clubId)
         .order('session_date', { ascending: false });
-      if (sessErr) throw sessErr;
+      if (sErr) throw sErr;
 
-      const current = (allSess || []).find(s => s.id === sessionId);
+      const current  = (allSess || []).find(s => s.id === sessionId);
       if (!current) { body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Sesión no encontrada.</div>'; return; }
 
-      const matchKey = _ztMatchKey(current);
-      const mdCode   = matchKey || null;
+      const matchKey = _ztMdCode(current);
 
-      // Find last _ZT_N equivalent sessions strictly before current date
-      const equivalents = (allSess || [])
-        .filter(s => {
-          if (s.id === sessionId) return false;
-          if (s.session_date >= current.session_date) return false;
-          if (!matchKey) return false;
-          return s.session_type === matchKey || s.title?.endsWith?.(matchKey);
-        })
-        .slice(0, _ZT_N);
+      // Last _ZT_N sessions with same MD code, strictly before current date
+      const equivalents = (allSess || []).filter(s => {
+        if (s.id === sessionId)                     return false;
+        if (s.session_date >= current.session_date) return false;
+        if (!matchKey)                               return false;
+        return s.session_type === matchKey || s.title?.endsWith?.(matchKey);
+      }).slice(0, _ZT_N);
 
       if (nEl) nEl.textContent = equivalents.length;
 
       if (equivalents.length < _ZT_MIN) {
-        body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Se necesitan al menos ${_ZT_MIN} sesiones equivalentes (encontradas: ${equivalents.length}).</div>`;
+        body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
+          Se necesitan al menos ${_ZT_MIN} sesiones equivalentes (encontradas: ${equivalents.length}).
+        </div>`;
         return;
       }
 
-      // Fetch reports for current session + all equivalents in one query
+      // Batch-fetch reports for current + all equivalents
       const allIds = [sessionId, ...equivalents.map(s => s.id)];
-      const { data: reports, error: rptErr } = await window.sb
+      const { data: reports, error: rErr } = await window.sb
         .from('gps_reports')
-        .select('session_id, player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
+        .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
         .in('session_id', allIds)
         .eq('club_id', clubId);
-      if (rptErr) throw rptErr;
+      if (rErr) throw rErr;
 
-      const playerId = document.getElementById('sc-player-sel')?.value || null;
+      // Squad avg of current session per metric
+      const curRpts = (reports || []).filter(r => r.session_id === sessionId);
 
-      // Compute current value (squad avg or player-specific)
-      const curReports = (reports || []).filter(r => r.session_id === sessionId);
-      const curVals    = {};
+      // Historical series: one squad-avg value per equivalent session
+      const histSeries = {};
       for (const key of _ztMetrics) {
-        if (!_ZT_CORE_COLS.has(key)) continue;
-        if (playerId) {
-          const pr = curReports.find(r => r.player_id === playerId);
-          curVals[key] = pr?.[key] ?? null;
-        } else {
-          curVals[key] = _ztAgg(curReports, key);
-        }
+        if (!_ZT_CORE_COLS.has(key)) { histSeries[key] = []; continue; }
+        histSeries[key] = equivalents
+          .map(s => _ztSquadAgg((reports || []).filter(r => r.session_id === s.id), key))
+          .filter(v => v != null && !isNaN(v));
       }
 
-      // Compute historical values (one avg/max per equivalent session)
-      const histByMetric = {};
-      for (const key of _ztMetrics) {
-        if (!_ZT_CORE_COLS.has(key)) { histByMetric[key] = []; continue; }
-        histByMetric[key] = equivalents.map(s => {
-          const sessRpts = (reports || []).filter(r => r.session_id === s.id);
-          if (playerId) {
-            const pr = sessRpts.find(r => r.player_id === playerId);
-            return pr?.[key] ?? null;
-          }
-          return _ztAgg(sessRpts, key);
-        }).filter(v => v != null && !isNaN(v));
-      }
-
-      // Build rows HTML
+      // Build metric rows
       const rows = _ztMetrics.map(key => {
-        const hist = histByMetric[key] || [];
-        const cur  = curVals[key];
+        const cur  = _ztSquadAgg(curRpts, key);
+        const hist = histSeries[key] || [];
 
         if (hist.length < _ZT_MIN || cur == null) {
           return `<div class="sc-zt-row">
@@ -9782,33 +9751,26 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           </div>`;
         }
 
-        const mean = hist.reduce((s, v) => s + v, 0) / hist.length;
-        const std  = Math.sqrt(hist.reduce((s, v) => s + (v - mean) ** 2, 0) / hist.length) || null;
-        const z    = std && std > 0 ? (cur - mean) / std : null;
+        const mean  = hist.reduce((s,v) => s+v, 0) / hist.length;
+        const variance = hist.reduce((s,v) => s + (v-mean)**2, 0) / hist.length;
+        const std   = Math.sqrt(variance);
+        const z     = std > 0 ? (cur - mean) / std : null;
 
         const sign  = z != null ? (z >= 0 ? '+' : '') : '';
         const zTxt  = z != null ? `${sign}${z.toFixed(1)}` : '—';
-        const cls   = _ztZClass(z);
-        const iText = _ztInterpret(z, mdCode);
         const unit  = _ztUnit(key);
-        const curFmt = _ztFmt(cur, key);
-        const meanFmt = _ztFmt(mean, key);
+        const title = `Actual: ${_ztFmt(cur,key)}${unit?' '+unit:''} · Media equiv.: ${_ztFmt(mean,key)}${unit?' '+unit:''} (n=${hist.length})`;
 
-        return `<div class="sc-zt-row" title="Actual: ${curFmt}${unit ? ' ' + unit : ''} · Media equiv.: ${meanFmt}${unit ? ' ' + unit : ''} (n=${hist.length})">
+        return `<div class="sc-zt-row" title="${title}">
           <span class="sc-zt-label">${_ztLabel(key)}</span>
-          <span class="gp-zc ${cls}" style="width:52px">${zTxt}</span>
-          <span class="sc-zt-text">${iText}</span>
+          <span class="gp-zc ${_ztZClass(z)}" style="width:52px">${zTxt}</span>
+          <span class="sc-zt-text">${_ztInterpret(z, matchKey)}</span>
         </div>`;
       });
 
-      const modeLabel = playerId ? (() => {
-        const opt = document.getElementById('sc-player-sel')?.querySelector(`option[value="${playerId}"]`);
-        return opt?.textContent || 'jugador';
-      })() : 'plantel';
-
       body.innerHTML = `
         <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
-          ${modeLabel} · ${mdCode || 'sesión'} · N = ${equivalents.length}
+          plantel · ${matchKey || 'sesión'} · N = ${equivalents.length}
         </div>
         ${rows.join('')}`;
 
@@ -9818,79 +9780,72 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     }
   }
 
+  // Expose so the SC IIFE compareSel handler can call it
+  window._ztRender = renderZt;
+
   // ── Metric editor modal ──────────────────────────────────────
   function openZtMetricsModal() {
-    const catalog = (window._gpCatalog || []).filter(d => _ZT_CORE_COLS.has(d.key) || _ZT_CORE_COLS.has(d.key));
-    const keys = catalog.length
-      ? catalog.filter(d => _ZT_CORE_COLS.has(d.key)).map(d => d.key)
-      : [..._ZT_CORE_COLS];
+    const availKeys = (window._gpCatalog || []).filter(d => _ZT_CORE_COLS.has(d.key)).map(d => d.key);
+    const keys = availKeys.length ? availKeys : [..._ZT_CORE_COLS];
 
     const items = keys.map(k => {
-      const checked = _ztMetrics.includes(k) ? 'checked' : '';
-      const lbl = _ztLabel(k);
+      const on = _ztMetrics.includes(k);
       return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
-        <input type="checkbox" value="${k}" ${checked} style="width:14px;height:14px;accent-color:var(--cm-accent)">
-        ${lbl}
+        <input type="checkbox" value="${k}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
+        ${_ztLabel(k)}${_ztUnit(k) ? ` <span style="color:var(--cm-fg-faint);font-size:10.5px">${_ztUnit(k)}</span>` : ''}
       </label>`;
     }).join('');
 
     const ov = makeModal('Métricas — Variación vs equivalentes',
       `<div style="max-height:320px;overflow-y:auto;padding:4px 0 12px">${items}</div>
        <div style="display:flex;gap:8px;justify-content:flex-end">
-         <button id="_ztMetCancel" class="cm-btn is-outline" style="font-size:13px">Cancel</button>
-         <button id="_ztMetApply"  class="cm-btn is-filled"  style="font-size:13px">Apply</button>
+         <button id="_ztCancel" class="cm-btn is-outline" style="font-size:13px">Cancel</button>
+         <button id="_ztApply"  class="cm-btn is-filled"  style="font-size:13px">Apply</button>
        </div>`
     );
 
-    ov.querySelector('#_ztMetCancel')?.addEventListener('click', () => ov.remove());
-    ov.querySelector('#_ztMetApply')?.addEventListener('click', () => {
+    ov.querySelector('#_ztCancel')?.addEventListener('click', () => ov.remove());
+    ov.querySelector('#_ztApply')?.addEventListener('click', () => {
       const checked = [...ov.querySelectorAll('input[type=checkbox]:checked')].map(el => el.value);
       if (!checked.length) { showToast('Select at least one metric'); return; }
       _ztMetrics = checked;
-      // Persist in card dataset + save layout
       const card = document.getElementById('card-sc-zscore-temporal');
       if (card) {
-        const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
-        card.dataset.config = JSON.stringify({ ...existing, metrics: _ztMetrics });
-        saveLayout('grp').catch(e => console.warn('saveLayout zt:', e));
+        const cfg = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+        card.dataset.config = JSON.stringify({ ...cfg, metrics: _ztMetrics });
+        saveLayout('grp').catch(e => console.warn('zt saveLayout:', e));
       }
       ov.remove();
       renderZt();
     });
   }
 
-  // ── Init: restore persisted metrics + wire events ────────────
+  // ── Init ─────────────────────────────────────────────────────
   async function ztInit() {
+    // Restore persisted metric selection
     try {
       const layout = await loadLayout('grp');
       const saved  = layout?.find(c => c.card_id === 'sc-zscore-temporal');
       if (saved?.config?.metrics?.length) _ztMetrics = saved.config.metrics;
-    } catch (e) { /* use defaults */ }
+    } catch { /* defaults */ }
 
     document.getElementById('sc-zt-edit-btn')?.addEventListener('click', openZtMetricsModal);
 
-    // Re-render on session change
-    document.getElementById('sc-sess-sel')?.addEventListener('change', () => {
-      setTimeout(renderZt, 80); // slight delay so _scState.sessionId is updated
-    });
+    // Session change → re-render (slight delay so _scState.sessionId is updated)
+    document.getElementById('sc-sess-sel')?.addEventListener('change', () => setTimeout(renderZt, 80));
 
-    // Re-render on player change
-    document.getElementById('sc-player-sel')?.addEventListener('change', () => {
-      setTimeout(renderZt, 40);
-    });
+    // compareSel change → re-render (compareSel now drives the z-score card, NOT the table)
+    document.getElementById('sc-compare-sel')?.addEventListener('change', () => setTimeout(renderZt, 60));
 
-    // Re-render when grp tab is activated (in case session was already selected)
+    // grp tab activation
     document.getElementById('sections')?.addEventListener('click', e => {
       if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(renderZt, 300);
     });
 
-    // Auto-render if grp is already active
+    // Auto-render if grp is already active on load
     if (document.querySelector('.gp-view[data-view="grp"].is-on')) {
-      const tryRender = () => {
-        if (window._scState?.sessionId) renderZt();
-        else setTimeout(tryRender, 500);
-      };
-      setTimeout(tryRender, 600);
+      const poll = () => window._scState?.sessionId ? renderZt() : setTimeout(poll, 500);
+      setTimeout(poll, 600);
     }
   }
 
