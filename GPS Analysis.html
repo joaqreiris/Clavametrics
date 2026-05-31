@@ -649,7 +649,7 @@
           <div class="gp-c" data-size="md" id="card-acwr">
             <div class="gp-c-h">
               <span class="ttl">ACWR</span>
-              <span class="sub">8-week · squad avg load</span>
+              <span class="sub">8-week · player load</span>
               <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b" style="position:relative;min-height:190px">
@@ -6732,6 +6732,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       await _pwInitTableCols();
       if (_pw.playerId && _pw.mcKey) await _pwLoad();
       await renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId });
+      if (_pw.playerId) _pwUpdateAcwr(_pw.playerId).catch(e => console.warn('_pwUpdateAcwr (init):', e));
     } catch (e) { console.error('pwInit:', e); }
   }
 
@@ -7306,12 +7307,95 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     });
   }
 
+  // ── ACWR chart — player scope ────────────────────────────────
+  async function _pwUpdateAcwr(playerId) {
+    const canvas = document.getElementById('canvasACWR');
+    if (!canvas || !window.gpScience || !window.sb) return;
+    const clubId = await window.getClubId?.();
+    if (!clubId || !playerId) return;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 56);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data: sessions } = await window.sb
+      .from('training_sessions')
+      .select('id,session_date')
+      .eq('club_id', clubId)
+      .gte('session_date', cutoffStr)
+      .order('session_date', { ascending: true });
+
+    if (!sessions?.length) return;
+    const sessDateMap = Object.fromEntries(sessions.map(s => [s.id, s.session_date]));
+
+    const { data: rpts } = await window.sb
+      .from('gps_reports')
+      .select('session_id,player_load')
+      .eq('club_id', clubId)
+      .eq('player_id', playerId)
+      .in('session_id', sessions.map(s => s.id));
+
+    const daily = (rpts || [])
+      .map(r => ({ date: sessDateMap[r.session_id], load: r.player_load || 0 }))
+      .filter(d => d.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const sub = document.querySelector('#card-acwr .sub');
+    if (sub) sub.textContent = '8-week · player load';
+
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+
+    if (!daily.length) {
+      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    const acwrData = window.gpScience.acwr(daily);
+    const accent   = _accentHex();
+    new Chart(canvas, {
+      type: 'line',
+      plugins: [_acwrBandsPlugin],
+      data: {
+        labels: acwrData.map(d => d.date.slice(5)),
+        datasets: [{
+          label: 'ACWR',
+          data: acwrData.map(d => d.ratio),
+          borderColor: accent,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: acwrData.map(d =>
+            !d.ratio ? 'transparent' :
+            d.ratio > 1.5 ? '#ef4444' :
+            d.ratio > 1.3 ? '#f59e0b' : accent
+          ),
+          tension: 0.35,
+        }],
+      },
+      options: {
+        ..._chartDefaults,
+        scales: {
+          x: { ..._chartDefaults.scales.x },
+          y: { ..._chartDefaults.scales.y, min: 0, max: 2,
+               ticks: { ..._chartDefaults.scales.y.ticks, stepSize: 0.5,
+                        callback: v => v === 0.8 ? '0.8 ✓' : v === 1.3 ? '1.3 ⚠' : v === 1.5 ? '1.5 ✗' : v } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ACWR ${ctx.parsed.y?.toFixed(2)}` } },
+        },
+      },
+    });
+  }
+
   // ── events ───────────────────────────────────────────────────
   playerSel.addEventListener('change', () => {
     _pw.playerId = playerSel.value || null;
     if (_pw.playerId && _pw.mcKey) _pwLoad();
     renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
       .catch(e => console.warn('renderWeeklyBars (playerSel):', e));
+    if (_pw.playerId) _pwUpdateAcwr(_pw.playerId).catch(e => console.warn('_pwUpdateAcwr:', e));
   });
   mcSel.addEventListener('change', () => {
     _pw.mcKey = mcSel.value || null;
