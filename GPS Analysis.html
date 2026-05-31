@@ -712,7 +712,7 @@
         <div class="gp-grid is-edit">
 
           <!-- NEW: Session KPI row -->
-          <div class="gp-c" data-size="full" id="card-session-kpi">
+          <div class="gp-c" data-size="full" id="card-session-kpi" data-card-id="session-kpi">
             <div class="gp-c-h">
               <span class="ttl">Session KPI row</span>
               <span class="sub" id="sc-kpi-sub">group averages</span>
@@ -738,11 +738,12 @@
           </div>
 
           <!-- NEW: Session table -->
-          <div class="gp-c" data-size="full" id="card-session-table">
+          <div class="gp-c" data-size="full" id="card-session-table" data-card-id="session-table">
             <div class="gp-c-h">
               <span class="ttl">Session table</span>
               <span class="sub">one row per player</span>
               <div class="right">
+                <button class="pw-col-btn" id="sc-col-btn" title="Manage columns"><i class="ti ti-columns"></i> Columns</button>
                 <select class="sc-sel" id="sc-color-mode" style="height:24px;font-size:11px">
                   <option value="zscore">Color: group z-score</option>
                   <option value="none">Color: off</option>
@@ -8735,11 +8736,66 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── state ────────────────────────────────────────────────────
-  const _st = { mc: '', date: '', sessionId: null, compareSessionId: null, sortKey: 'total_distance', sortDir: -1, highlightedRow: null };
+  const _st = { mc: '', date: '', sessionId: null, compareSessionId: null, sortKey: 'player_name', sortDir: 1, highlightedRow: null };
   let _allSessions = [];
   let _lastReports = [];
   let _initialized  = false;
+  let _scCurrentClubId = null;
   window._scState = _st; // expose for cards to read compareSessionId etc.
+
+  // ── KPI chip state ────────────────────────────────────────────
+  const _scKpiOverride = {}; // idx → metricKey
+  const _SC_DEFAULT_CHIPS = [
+    { key: 'total_distance',           label: 'Avg Distance',  unit: 'm',    dec: 0, agg: 'avg' },
+    { key: 'high_speed_distance',      label: 'Avg HSR',       unit: 'm',    dec: 0, agg: 'avg' },
+    { key: 'very_high_speed_distance', label: 'Avg VHSR',      unit: 'm',    dec: 0, agg: 'avg' },
+    { key: 'sprint_count',             label: 'Avg Sprints',   unit: '',     dec: 1, agg: 'avg' },
+    { key: 'acc_dec',                  label: 'Avg Acc+Dec',   unit: '',     dec: 1, agg: 'accdec_avg' },
+    { key: 'player_load',              label: 'Avg Load',      unit: 'AU',   dec: 1, agg: 'avg' },
+    { key: 'max_speed',                label: 'Max Speed',     unit: 'km/h', dec: 1, agg: 'max' },
+  ];
+
+  function _scResolveChipDef(idx) {
+    const override = _scKpiOverride[idx];
+    if (!override) return _SC_DEFAULT_CHIPS[idx];
+    const cat = (window._gpCatalog || []).find(d => d.key === override);
+    return {
+      key:   override,
+      label: cat?.label || override,
+      unit:  cat?.unit  || '',
+      dec:   cat?.decimals ?? 0,
+      agg:   override === 'max_speed' ? 'max' : 'avg',
+    };
+  }
+
+  function _scAggVal(reports, def) {
+    if (!reports.length) return null;
+    if (def.agg === 'max') {
+      const vals = reports.map(r => r[def.key] || 0);
+      return Math.max(...vals);
+    }
+    if (def.agg === 'accdec_avg') {
+      const vals = reports.map(r => (r.accelerations || 0) + (r.decelerations || 0));
+      return vals.reduce((s, v) => s + v, 0) / vals.length;
+    }
+    // avg
+    const vals = reports.map(r => r[def.key]).filter(v => v != null && !isNaN(v));
+    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  }
+
+  // ── Table column state ────────────────────────────────────────
+  const _SC_FIXED_COL = { key: 'player_name', label: 'Player' };
+  const _SC_DEFAULT_METRIC_COLS = [
+    { key: 'total_distance',           label: 'TD (m)',    dec: 0 },
+    { key: 'high_speed_distance',      label: 'HSR (m)',   dec: 0 },
+    { key: 'very_high_speed_distance', label: 'VHSR (m)',  dec: 0 },
+    { key: 'sprint_count',             label: 'SPR',       dec: 0 },
+    { key: 'accdec',                   label: 'Acc+Dec',   dec: 0, computed: r => (r.accelerations || 0) + (r.decelerations || 0) },
+    { key: 'max_speed',                label: 'Max Spd',   dec: 1 },
+    { key: 'player_load',              label: 'Load (AU)', dec: 1 },
+    { key: 'time_played',              label: 'Min',       dec: 0 },
+  ];
+  let _scTableMetricCols = _SC_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
 
   // ── DOM refs ─────────────────────────────────────────────────
   const mcSel     = document.getElementById('sc-mc-sel');
@@ -8761,6 +8817,9 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     try {
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) { scInfo.textContent = 'Not connected.'; return; }
+
+      // Load persisted layout (KPI slots + table cols)
+      await Promise.all([_scInitKpiSlots(), _scInitTableCols()]);
 
       // Load all sessions
       const { data: sessions } = await window.sb
@@ -8837,9 +8896,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     try {
       const clubId = await window.getClubId?.();
+      _scCurrentClubId = clubId;
       const { data: reports } = await window.sb
         .from('gps_reports')
-        .select('player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
+        .select('id, player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
         .eq('session_id', sessionId)
         .eq('club_id', clubId);
 
@@ -8888,61 +8948,37 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch (e) { console.error('_loadSessionData:', e); scInfo.textContent = 'Error loading data.'; }
   }
 
-  // ── render KPIs ───────────────────────────────────────────────
+  // ── render KPIs (chip-based, metric-swappable) ───────────────
   function _renderKPIs(reports) {
     if (!reports.length) { kpiBody.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted)">No data for this session.</div>'; return; }
-
-    const avg = key => {
-      const vals = reports.map(r => r[key]).filter(v => v != null && !isNaN(v));
-      return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
-    };
-    const max = key => {
-      const vals = reports.map(r => r[key]).filter(v => v != null && !isNaN(v));
-      return vals.length ? Math.max(...vals) : null;
-    };
-
-    const kpis = [
-      { label: 'Avg Total Distance', val: avg('total_distance'),             unit: 'm',    dec: 0 },
-      { label: 'Avg HSR',            val: avg('high_speed_distance'),        unit: 'm',    dec: 0 },
-      { label: 'Avg VHSR',           val: avg('very_high_speed_distance'),   unit: 'm',    dec: 0 },
-      { label: 'Avg Sprints',        val: avg('sprint_count'),               unit: '',     dec: 1 },
-      { label: 'Avg Acc+Dec',        val: (() => { const a = avg('accelerations'), d = avg('decelerations'); return (a != null && d != null) ? a + d : null; })(), unit: '', dec: 1 },
-      { label: 'Avg Player Load',    val: avg('player_load'),                unit: 'AU',   dec: 1 },
-      { label: 'Max Speed',          val: max('max_speed'),                  unit: 'km/h', dec: 1 },
-    ];
-
-    kpiBody.innerHTML = `<div class="gp-sc-kpis">${kpis.map(k => `
-      <div class="gp-sc-kpi">
-        <span class="k-label">${k.label}</span>
-        <span class="k-val">${k.val != null ? fmt(k.val, k.dec) : '—'}${k.unit ? `<sub>${k.unit}</sub>` : ''}</span>
-      </div>`).join('')}</div>`;
+    try {
+      const chips = _SC_DEFAULT_CHIPS.map((_, idx) => {
+        const def = _scResolveChipDef(idx);
+        const val = _scAggVal(reports, def);
+        const txt = val != null ? fmt(val, def.dec) : '—';
+        return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${def.key}">
+          <span class="k-label">${def.label}</span>
+          <span class="k-val">${txt}${def.unit ? `<sub>${def.unit}</sub>` : ''}</span>
+          <button class="pw-kpi-menu-btn" title="Change metric"><i class="ti ti-dots-vertical"></i></button>
+        </div>`;
+      });
+      kpiBody.innerHTML = `<div class="pw-kpis">${chips.join('')}</div>`;
+    } catch (e) { console.error('_renderKPIs (SC):', e); }
   }
 
-  // ── render table ──────────────────────────────────────────────
-  const COLS = [
-    { key: 'player_name',             label: 'Player',    metric: false },
-    { key: 'total_distance',          label: 'TD (m)',    metric: true,  dec: 0 },
-    { key: 'high_speed_distance',     label: 'HSR (m)',   metric: true,  dec: 0 },
-    { key: 'very_high_speed_distance',label: 'VHSR (m)',  metric: true,  dec: 0 },
-    { key: 'sprint_count',            label: 'SPR',       metric: true,  dec: 0 },
-    { key: 'accdec',                  label: 'Acc+Dec',   metric: true,  dec: 0, computed: r => (r.accelerations || 0) + (r.decelerations || 0) },
-    { key: 'max_speed',               label: 'Max Spd',   metric: true,  dec: 1 },
-    { key: 'player_load',             label: 'Load (AU)', metric: true,  dec: 1 },
-    { key: 'time_played',             label: 'Min',       metric: true,  dec: 0 },
-  ];
-
+  // ── render table (dynamic columns) ──────────────────────────
   function _renderTable(reports) {
     if (!reports.length) { tblBody.innerHTML = '<div style="padding:20px;color:var(--cm-fg-muted)">No player data.</div>'; return; }
-    const colorMode = colorSel?.value || 'zscore';
+    try {
+    const colorMode  = colorSel?.value || 'zscore';
+    const activeCols = [_SC_FIXED_COL, ..._scTableMetricCols];
 
-    // compute values + z-scores per metric column
-    const metricCols = COLS.filter(c => c.metric);
-    const colValues  = {}; // key → [values per report]
-    metricCols.forEach(col => {
-      colValues[col.key] = reports.map(r => col.computed ? col.computed(r) : r[col.key]);
-    });
+    // z-scores per metric column
     const colZScores = {};
-    metricCols.forEach(col => { colZScores[col.key] = calcZScores(colValues[col.key]); });
+    _scTableMetricCols.forEach(col => {
+      const vals = reports.map(r => col.computed ? col.computed(r) : r[col.key]);
+      colZScores[col.key] = calcZScores(vals);
+    });
 
     // sort
     const sorted = [...reports].sort((a, b) => {
@@ -8951,26 +8987,26 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         const bn = `${b.player.last_name || ''} ${b.player.first_name || ''}`;
         return an.localeCompare(bn) * _st.sortDir;
       }
-      const col = COLS.find(c => c.key === _st.sortKey);
+      const col = _scTableMetricCols.find(c => c.key === _st.sortKey);
       const av  = col?.computed ? col.computed(a) : a[_st.sortKey];
       const bv  = col?.computed ? col.computed(b) : b[_st.sortKey];
       return ((av ?? -Infinity) - (bv ?? -Infinity)) * _st.sortDir;
     });
 
-    const rows = sorted.map((r, rowIdx) => {
+    const rows = sorted.map(r => {
       const origIdx = reports.indexOf(r);
       const p = r.player;
-      const name = p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '—';
+      const name     = p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '—';
       const initials = `${(p.first_name || '')[0] || ''}${(p.last_name || '')[0] || ''}`.toUpperCase();
       const pos = p.position || '';
       const num = p.number ? `#${p.number}` : '';
       const isHL = r.player_id === _st.highlightedRow;
 
-      const cells = metricCols.map((col, ci) => {
+      const cells = _scTableMetricCols.map(col => {
         const rawVal = col.computed ? col.computed(r) : r[col.key];
         const z      = colZScores[col.key]?.[origIdx];
         const zCls   = colorMode === 'zscore' ? zClass(z) : 'neu';
-        const txt    = rawVal != null ? fmt(rawVal, col.dec) : '—';
+        const txt    = rawVal != null ? fmt(rawVal, col.dec ?? 0) : '—';
         return `<td><span class="sc-zc ${zCls}">${txt}</span></td>`;
       }).join('');
 
@@ -8980,14 +9016,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       </tr>`;
     }).join('');
 
-    const headers = COLS.map(c => {
+    const headers = activeCols.map(c => {
       const isSorted = _st.sortKey === c.key;
       return `<th class="${isSorted ? 'is-sort' : ''}" data-key="${c.key}">${c.label}${isSorted ? (_st.sortDir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
     }).join('');
 
     tblBody.innerHTML = `<table class="sc-tbl"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
 
-    // sort on header click
     tblBody.querySelectorAll('th[data-key]').forEach(th => {
       th.addEventListener('click', () => {
         const k = th.dataset.key;
@@ -8996,13 +9031,312 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       });
     });
 
-    // highlight row on click
     tblBody.querySelectorAll('tr[data-player-id]').forEach(tr => {
       tr.addEventListener('click', () => {
         _st.highlightedRow = _st.highlightedRow === tr.dataset.playerId ? null : tr.dataset.playerId;
         _renderTable(_lastReports);
       });
     });
+    } catch (e) { console.error('_renderTable (SC):', e); }
+  }
+
+  // ── SC KPI: change-metric popup (reuses pw-km-popup CSS) ──────
+  let _scKmPopup = null;
+  let _scKmTargetIdx = -1;
+
+  function _scShowKmPopup(idx, anchorEl) {
+    _scCloseKmPopup();
+    _scKmTargetIdx = idx;
+    const catalog = window._gpCatalog || [];
+    if (!catalog.length) { showToast('Catalog not loaded yet'); return; }
+    const currentKey = _scKpiOverride[idx] || _SC_DEFAULT_CHIPS[idx]?.key;
+    const popup = document.createElement('div');
+    popup.className = 'pw-km-popup';
+    popup.innerHTML = `<div class="pw-km-popup-hd">Change metric</div>` +
+      catalog.map(d =>
+        `<div class="pw-km-item${d.key === currentKey ? ' is-on' : ''}" data-key="${d.key}">
+          ${d.label}<span class="km-tag">${d.unit || ''}</span>
+        </div>`
+      ).join('');
+    document.body.appendChild(popup);
+    _scKmPopup = popup;
+    const rect = anchorEl.getBoundingClientRect();
+    popup.style.top  = `${rect.bottom + 4}px`;
+    popup.style.left = `${Math.min(rect.left, window.innerWidth - 230)}px`;
+    popup.addEventListener('click', async e => {
+      const item = e.target.closest('.pw-km-item');
+      if (!item) return;
+      await _scSelectMetric(_scKmTargetIdx, item.dataset.key);
+      _scCloseKmPopup();
+    });
+    setTimeout(() => document.addEventListener('click', _scKmOutside, { once: true }), 0);
+  }
+
+  function _scKmOutside(e) { if (_scKmPopup && !_scKmPopup.contains(e.target)) _scCloseKmPopup(); }
+  function _scCloseKmPopup() {
+    _scKmPopup?.remove(); _scKmPopup = null;
+    document.removeEventListener('click', _scKmOutside);
+  }
+
+  async function _scSelectMetric(idx, metricKey) {
+    _scKpiOverride[idx] = metricKey;
+    const chip = kpiBody.querySelector(`[data-kpi-idx="${idx}"]`);
+    if (!chip) return;
+    const def = _scResolveChipDef(idx);
+    let val = null;
+    const cat = (window._gpCatalog || []).find(d => d.key === metricKey);
+    const isCore = !cat || cat.is_core;
+    if (isCore) {
+      val = _scAggVal(_lastReports, def);
+    } else {
+      // custom metric: fetch from gps_report_metrics
+      const reportIds = _lastReports.map(r => r.id).filter(Boolean);
+      if (reportIds.length && _scCurrentClubId) {
+        try {
+          const { data: eav } = await window.sb
+            .from('gps_report_metrics')
+            .select('value')
+            .in('report_id', reportIds)
+            .eq('metric_key', metricKey)
+            .eq('club_id', _scCurrentClubId);
+          const vals = (eav || []).map(r => +r.value || 0).filter(v => !isNaN(v));
+          val = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+        } catch { val = null; }
+      }
+    }
+    chip.dataset.metricKey = metricKey;
+    chip.querySelector('.k-label').textContent = def.label;
+    chip.querySelector('.k-val').innerHTML = `${val != null ? fmt(val, def.dec) : '—'}${def.unit ? `<sub>${def.unit}</sub>` : ''}`;
+    _scSaveKpiSlots();
+  }
+
+  kpiBody.addEventListener('click', e => {
+    const btn = e.target.closest('.pw-kpi-menu-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const chip = btn.closest('[data-kpi-idx]');
+    if (chip) _scShowKmPopup(+chip.dataset.kpiIdx, btn);
+  });
+
+  // ── SC table: column panel ─────────────────────────────────────
+  let _scColPanel  = null;
+  let _scColDragSrc = null;
+
+  function _scOpenColPanel() {
+    if (_scColPanel) { _scCloseColPanel(); return; }
+    document.getElementById('sc-col-btn')?.classList.add('is-open');
+    const catalog    = window._gpCatalog || [];
+    const activeKeys = new Set(_scTableMetricCols.map(c => c.key));
+
+    const available = [
+      { key: 'accdec', label: 'Acc+Dec', group: 'core' },
+      ...catalog.map(d => ({
+        key: d.key, label: `${d.label}${d.unit ? ' ('+d.unit+')' : ''}`, group: d.is_core ? 'core' : 'custom',
+      })),
+    ].filter(d => !activeKeys.has(d.key));
+
+    const byGroup = g => available.filter(d => d.group === g);
+
+    const renderActive = () => [
+      `<div class="pw-col-item is-fixed">
+        <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
+        <span class="col-lbl">Player</span><span class="col-tag">fixed</span>
+      </div>`,
+      ..._scTableMetricCols.map((c, i) =>
+        `<div class="pw-col-item" draggable="true" data-col-idx="${i}">
+          <i class="ti ti-grip-vertical drag-h"></i>
+          <span class="col-lbl">${c.label}</span>
+          <span class="col-tag"></span>
+          <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
+        </div>`),
+    ].join('');
+
+    const renderAvailGroup = (items, title) => !items.length ? '' : `
+      <div class="pw-col-sect">${title}</div>
+      ${items.map(d =>
+        `<div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}">
+          <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
+          <span class="col-lbl">${d.label}</span>
+          <button class="col-add" title="Add column"><i class="ti ti-plus" style="font-size:10px"></i></button>
+        </div>`).join('')}`;
+
+    const panel = document.createElement('div');
+    panel.className = 'pw-col-panel';
+    panel.id = 'sc-col-panel-el';
+    panel.innerHTML = `
+      <div class="pw-col-ph">
+        <span class="ttl">Table columns</span>
+        <button class="x-btn" id="sc-col-x"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="pw-col-body" id="sc-col-body">
+        <div class="pw-col-sect">Active columns</div>
+        <div id="sc-col-active">${renderActive()}</div>
+        <div class="pw-col-sect" style="margin-top:10px">Add column</div>
+        ${renderAvailGroup(byGroup('core'),   'Core metrics')}
+        ${renderAvailGroup(byGroup('custom'), 'Custom metrics')}
+      </div>
+      <div class="pw-col-footer">
+        <button class="btn-reset" id="sc-col-reset">Reset</button>
+        <button class="btn-save"  id="sc-col-save">Save &amp; apply</button>
+      </div>`;
+
+    document.body.appendChild(panel);
+    _scColPanel = panel;
+
+    const btn  = document.getElementById('sc-col-btn');
+    const rect = btn?.getBoundingClientRect();
+    if (rect) {
+      const panelW = 272, vw = window.innerWidth, margin = 8;
+      const left = Math.max(margin, Math.min(rect.right - panelW, vw - panelW - margin));
+      const maxH = Math.max(200, window.innerHeight - rect.bottom - 12);
+      panel.style.top       = `${rect.bottom + 6}px`;
+      panel.style.left      = `${left}px`;
+      panel.style.maxHeight = `min(80vh, ${maxH}px)`;
+    }
+
+    _scBindColPanel(panel);
+    setTimeout(() => document.addEventListener('click', _scColOutside, { once: true }), 0);
+  }
+
+  function _scBindColPanel(panel) {
+    panel.addEventListener('click', e => {
+      const rmBtn = e.target.closest('[data-rm-idx]');
+      if (rmBtn) {
+        e.stopPropagation();
+        _scTableMetricCols.splice(+rmBtn.dataset.rmIdx, 1);
+        _scRefreshColPanel(); return;
+      }
+      const addEl = e.target.closest('[data-add-key]');
+      if (addEl) {
+        e.stopPropagation();
+        _scTableMetricCols.push({ key: addEl.dataset.addKey, label: addEl.dataset.addLabel, dec: 0 });
+        _scRefreshColPanel(); return;
+      }
+      if (e.target.closest('#sc-col-x')) { _scCloseColPanel(); return; }
+      if (e.target.closest('#sc-col-save')) {
+        _scSaveTableCols();
+        if (_lastReports.length) _renderTable(_lastReports);
+        _scCloseColPanel(); return;
+      }
+      if (e.target.closest('#sc-col-reset')) {
+        e.stopPropagation();
+        _scTableMetricCols = _SC_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
+        _scRefreshColPanel(); return;
+      }
+    });
+
+    panel.addEventListener('dragstart', e => {
+      const item = e.target.closest('[draggable][data-col-idx]');
+      if (!item) return;
+      _scColDragSrc = +item.dataset.colIdx;
+      item.classList.add('dragging');
+    });
+    panel.addEventListener('dragend', e => {
+      e.target.closest('[draggable]')?.classList.remove('dragging');
+      panel.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+    panel.addEventListener('dragover', e => {
+      e.preventDefault();
+      const item = e.target.closest('[draggable][data-col-idx]');
+      if (!item || +item.dataset.colIdx === _scColDragSrc) return;
+      panel.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      item.classList.add('drag-over');
+    });
+    panel.addEventListener('drop', e => {
+      e.preventDefault();
+      const item = e.target.closest('[draggable][data-col-idx]');
+      if (!item) return;
+      const dst = +item.dataset.colIdx;
+      if (_scColDragSrc === dst) return;
+      const moved = _scTableMetricCols.splice(_scColDragSrc, 1)[0];
+      _scTableMetricCols.splice(dst, 0, moved);
+      _scColDragSrc = null;
+      _scRefreshColPanel();
+    });
+  }
+
+  function _scRefreshColPanel() {
+    if (!_scColPanel) return;
+    const catalog    = window._gpCatalog || [];
+    const activeKeys = new Set(_scTableMetricCols.map(c => c.key));
+    const available  = [
+      { key: 'accdec', label: 'Acc+Dec', group: 'core' },
+      ...catalog.map(d => ({ key: d.key, label: `${d.label}${d.unit ? ' ('+d.unit+')' : ''}`, group: d.is_core ? 'core' : 'custom' })),
+    ].filter(d => !activeKeys.has(d.key));
+    const byGroup = g => available.filter(d => d.group === g);
+
+    const activeEl = _scColPanel.querySelector('#sc-col-active');
+    if (activeEl) activeEl.innerHTML = [
+      `<div class="pw-col-item is-fixed"><i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i><span class="col-lbl">Player</span><span class="col-tag">fixed</span></div>`,
+      ..._scTableMetricCols.map((c, i) =>
+        `<div class="pw-col-item" draggable="true" data-col-idx="${i}">
+          <i class="ti ti-grip-vertical drag-h"></i>
+          <span class="col-lbl">${c.label}</span><span class="col-tag"></span>
+          <button class="col-rm" data-rm-idx="${i}" title="Remove"><i class="ti ti-x" style="font-size:10px"></i></button>
+        </div>`),
+    ].join('');
+
+    const renderAvailGroup = (items, title) => !items.length ? '' : `
+      <div class="pw-col-sect">${title}</div>
+      ${items.map(d =>
+        `<div class="pw-col-item" data-add-key="${d.key}" data-add-label="${d.label}">
+          <i class="ti ti-grip-vertical drag-h" style="visibility:hidden"></i>
+          <span class="col-lbl">${d.label}</span>
+          <button class="col-add" title="Add"><i class="ti ti-plus" style="font-size:10px"></i></button>
+        </div>`).join('')}`;
+
+    const body = _scColPanel.querySelector('#sc-col-body');
+    const activeNode = body.querySelector('#sc-col-active');
+    while (activeNode.nextSibling) activeNode.nextSibling.remove();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = `<div class="pw-col-sect" style="margin-top:10px">Add column</div>
+      ${renderAvailGroup(byGroup('core'), 'Core metrics')}
+      ${renderAvailGroup(byGroup('custom'), 'Custom metrics')}`;
+    while (tmp.firstChild) body.appendChild(tmp.firstChild);
+  }
+
+  function _scCloseColPanel() {
+    _scColPanel?.remove(); _scColPanel = null;
+    document.getElementById('sc-col-btn')?.classList.remove('is-open');
+    document.removeEventListener('click', _scColOutside);
+  }
+
+  function _scColOutside(e) {
+    if (_scColPanel && !_scColPanel.contains(e.target) && !e.target.closest('#sc-col-btn')) _scCloseColPanel();
+  }
+
+  document.getElementById('sc-col-btn')?.addEventListener('click', e => {
+    e.stopPropagation(); _scOpenColPanel();
+  });
+
+  // ── SC layout load / save ─────────────────────────────────────
+  async function _scInitKpiSlots() {
+    try {
+      const layout = await loadLayout('grp');
+      const card = layout?.find(c => c.card_id === 'session-kpi');
+      if (card?.config?.kpi_overrides) Object.assign(_scKpiOverride, card.config.kpi_overrides);
+    } catch (e) { console.warn('_scInitKpiSlots:', e); }
+  }
+
+  function _scSaveKpiSlots() {
+    const cardEl = document.getElementById('card-session-kpi');
+    if (cardEl) cardEl.dataset.config = JSON.stringify({ kpi_overrides: _scKpiOverride });
+    saveLayout('grp');
+  }
+
+  async function _scInitTableCols() {
+    try {
+      const layout = await loadLayout('grp');
+      const card = layout?.find(c => c.card_id === 'session-table');
+      if (card?.config?.columns?.length) { _scTableMetricCols = card.config.columns; return; }
+    } catch (e) { console.warn('_scInitTableCols:', e); }
+    _scTableMetricCols = _SC_DEFAULT_METRIC_COLS.map(c => ({ ...c }));
+  }
+
+  function _scSaveTableCols() {
+    const cardEl = document.getElementById('card-session-table');
+    if (cardEl) cardEl.dataset.config = JSON.stringify({ columns: _scTableMetricCols });
+    saveLayout('grp');
   }
 
   // ── filter event listeners ────────────────────────────────────
