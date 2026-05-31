@@ -106,6 +106,24 @@
   .gp-dash-bar[data-view="ind"] #playerPill,
   .gp-dash-bar[data-view="ind"] #baselinePill,
   .gp-dash-bar[data-view="ind"] #histPill { display:none; }
+  /* Session Control view: show sc-filter-group, hide ind pills */
+  #sc-filter-group { display:none; }
+  .gp-dash-bar[data-view="grp"] #sc-filter-group { display:contents; }
+  /* sc-info inside dash-bar: no auto-margin (right div handles alignment) */
+  #sc-filter-group .sc-info, #sc-filter-group #sc-info { margin-left:0; }
+  .gp-dash-bar[data-view="grp"] #dateRangePill,
+  .gp-dash-bar[data-view="grp"] #mcPill,
+  .gp-dash-bar[data-view="grp"] #playerPill,
+  .gp-dash-bar[data-view="grp"] #baselinePill,
+  .gp-dash-bar[data-view="grp"] #histPill { display:none; }
+  /* Other views: show no filter group */
+  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #pw-filter-group,
+  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #sc-filter-group { display:none; }
+  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #dateRangePill,
+  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #mcPill,
+  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #playerPill,
+  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #baselinePill,
+  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #histPill { display:none; }
   /* pw-next-match inside gp-dash-bar: no margin-left:auto (right div handles alignment) */
   .gp-dash-bar #pw-next-match { margin-left:0; }
   /* Player Week Report: action buttons always on their own row, separated from filters */
@@ -543,6 +561,14 @@
           <select class="sc-sel" id="pw-mc-sel"><option value="">Microcycle...</option></select>
           <span class="pw-next-match" id="pw-next-match"></span>
         </span>
+        <span id="sc-filter-group">
+          <select class="sc-sel" id="sc-mc-sel"><option value="">All MCs</option></select>
+          <select class="sc-sel" id="sc-date-sel"><option value="">Date...</option></select>
+          <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
+          <select class="sc-sel" id="sc-compare-sel" title="Select an equivalent session from a previous MC to compare"><option value="">Compare with...</option></select>
+          <select class="sc-sel" id="sc-player-sel" title="Optional: zoom into a specific player"><option value="">All players</option></select>
+          <span class="sc-info" id="sc-info"></span>
+        </span>
         <div class="right">
           <button class="pill" id="dateRangePill"><i class="ti ti-calendar-range"></i><span id="dateRangeLabel">Last 30 days</span></button>
           <button class="pill" id="mcPill"><i class="ti ti-clock"></i><span id="mcLabel">All MCs</span></button>
@@ -682,15 +708,6 @@
 
       <!-- GROUP -->
       <div class="gp-view" data-view="grp">
-
-        <!-- Session Control — filters bar -->
-        <div class="gp-sc-bar" id="scBar">
-          <select class="sc-sel" id="sc-mc-sel"><option value="">All MCs</option></select>
-          <select class="sc-sel" id="sc-date-sel"><option value="">Date...</option></select>
-          <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
-          <select class="sc-sel" id="sc-player-sel"><option value="">Player...</option></select>
-          <span class="sc-info" id="sc-info">Loading sessions...</span>
-        </div>
 
         <div class="gp-grid is-edit">
 
@@ -8718,20 +8735,22 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── state ────────────────────────────────────────────────────
-  const _st = { mc: '', date: '', sessionId: null, sortKey: 'total_distance', sortDir: -1, highlightedRow: null };
+  const _st = { mc: '', date: '', sessionId: null, compareSessionId: null, sortKey: 'total_distance', sortDir: -1, highlightedRow: null };
   let _allSessions = [];
   let _lastReports = [];
   let _initialized  = false;
+  window._scState = _st; // expose for cards to read compareSessionId etc.
 
   // ── DOM refs ─────────────────────────────────────────────────
-  const mcSel    = document.getElementById('sc-mc-sel');
-  const dateSel  = document.getElementById('sc-date-sel');
-  const sessSel  = document.getElementById('sc-sess-sel');
-  const playerSel = document.getElementById('sc-player-sel');
-  const scInfo   = document.getElementById('sc-info');
-  const kpiBody  = document.getElementById('sc-kpi-body');
-  const tblBody  = document.getElementById('sc-table-body');
-  const colorSel = document.getElementById('sc-color-mode');
+  const mcSel     = document.getElementById('sc-mc-sel');
+  const dateSel   = document.getElementById('sc-date-sel');
+  const sessSel   = document.getElementById('sc-sess-sel');
+  const compareSel = document.getElementById('sc-compare-sel');
+  const playerSel  = document.getElementById('sc-player-sel');
+  const scInfo    = document.getElementById('sc-info');
+  const kpiBody   = document.getElementById('sc-kpi-body');
+  const tblBody   = document.getElementById('sc-table-body');
+  const colorSel  = document.getElementById('sc-color-mode');
 
   if (!mcSel) return; // guard if grp view not present
 
@@ -8783,6 +8802,30 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const sessions = _allSessions.filter(s => s.session_date === date);
     sessSel.innerHTML = '<option value="">Session...</option>';
     sessions.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.title || s.session_type || s.id.slice(0, 8); sessSel.appendChild(o); });
+  }
+
+  // Build "Compare with" selector: same session_type from earlier dates
+  function _buildCompareOptions(sessionId) {
+    if (!compareSel) return;
+    compareSel.innerHTML = '<option value="">Compare with...</option>';
+    if (!sessionId) return;
+    const current = _allSessions.find(s => s.id === sessionId);
+    if (!current) return;
+    // Match on session_type first; fall back to last 4 chars of title (e.g. "MD-3")
+    const matchKey = current.session_type || current.title?.slice(-4) || null;
+    const candidates = _allSessions.filter(s => {
+      if (s.id === sessionId) return false;
+      if (matchKey) {
+        return s.session_type === matchKey || s.title?.endsWith(matchKey);
+      }
+      return true; // no type: show all other sessions (capped)
+    }).slice(0, 30);
+    candidates.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = `${s.session_date} · ${s.title || s.session_type || s.id.slice(0, 8)}`;
+      compareSel.appendChild(o);
+    });
   }
 
   // ── load session data ─────────────────────────────────────────
@@ -8838,6 +8881,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         }
       }
 
+      _buildCompareOptions(sessionId);
       _renderKPIs(_lastReports);
       _renderTable(_lastReports);
       await annotateScKpiCards();
@@ -8985,6 +9029,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   colorSel?.addEventListener('change', () => { if (_lastReports.length) _renderTable(_lastReports); });
 
   playerSel?.addEventListener('change', () => { annotateScKpiCards(); });
+
+  compareSel?.addEventListener('change', () => {
+    _st.compareSessionId = compareSel.value || null;
+    // comparison rendering handled by future z-score card; state is already in window._scState
+  });
 
   // ── annotate player vs baseline KPI cards ─────────────────────
   async function annotateScKpiCards() {
