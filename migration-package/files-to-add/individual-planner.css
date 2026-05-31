@@ -1,0 +1,146 @@
+/* Individual Performance Planner — module-specific styles
+   Loaded AFTER rehab-planner.css so we can reuse:
+   - .rp-* layout (shell, athlete strip, kanban, side panel, views)
+   - Use .ip- prefix for the distinct components below
+   ============================================================ */
+
+/* — KPI strip on top of week (planned vs actual vs squad) — */
+.ip-kpis {
+  display:grid; grid-template-columns:repeat(5, 1fr); gap:10px;
+  margin-bottom:14px;
+}
+.ip-kpi {
+  position:relative;
+  background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4);
+  padding:12px 14px 13px; box-shadow:var(--cm-shadow-1);
+  display:flex; flex-direction:column; gap:6px;
+}
+.ip-kpi .l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); display:flex; align-items:center; gap:5px; }
+.ip-kpi .l .ti { font-size:12px; }
+.ip-kpi .v { font:600 22px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+.ip-kpi .v sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:3px; }
+.ip-kpi .delta {
+  font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted);
+  display:flex; align-items:center; gap:4px;
+}
+.ip-kpi .delta.up    { color:#15803D; }
+.ip-kpi .delta.down  { color:#B45309; }
+.ip-kpi .delta.flat  { color:var(--cm-fg-muted); }
+.ip-kpi .delta .ti { font-size:12px; }
+
+/* mini sparkline at the bottom of a KPI card */
+.ip-spark {
+  height:18px; display:flex; align-items:flex-end; gap:2px;
+  margin-top:auto;
+}
+.ip-spark .bar { flex:1; background:#CBD5E1; border-radius:1.5px 1.5px 0 0; min-height:2px; }
+.ip-spark .bar.is-now { background:var(--cm-accent); }
+.ip-spark .bar.is-target { background:var(--cm-fg-faint); opacity:0.6; }
+
+/* ─────────────────────────────────────────────
+   SQUAD COMPARISON panel  (replaces criteria/library)
+   ───────────────────────────────────────────── */
+.ip-compare-row {
+  display:grid; grid-template-columns:1fr auto;
+  gap:6px 10px; align-items:center;
+  padding:9px 0;
+  border-bottom:1px solid var(--cm-border-soft);
+}
+.ip-compare-row:last-child { border-bottom:0; padding-bottom:0; }
+.ip-compare-row .name {
+  font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg);
+  display:flex; align-items:center; gap:6px;
+}
+.ip-compare-row .name .ti { font-size:13px; color:var(--cm-fg-muted); }
+.ip-compare-row .mine {
+  font:600 13.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong);
+  letter-spacing:-0.01em;
+}
+.ip-compare-row .mine sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:3px; }
+
+.ip-compare-bar {
+  grid-column:1 / -1;
+  position:relative;
+  height:6px; background:var(--cm-bg-soft); border-radius:3px;
+  margin-top:3px;
+  overflow:hidden;
+}
+.ip-compare-bar .squad {
+  position:absolute; left:0; top:0; bottom:0;
+  background:repeating-linear-gradient(45deg, #CBD5E1 0 4px, #E2E8F0 4px 8px);
+  border-radius:3px;
+}
+.ip-compare-bar .self {
+  position:absolute; left:0; top:0; bottom:0;
+  background:var(--cm-accent);
+  border-radius:3px;
+}
+.ip-compare-bar .squad-marker {
+  position:absolute; top:-2px; bottom:-2px;
+  width:2px; background:#64748B;
+  border-radius:1px;
+}
+.ip-compare-bar .squad-marker::after {
+  content:'squad'; position:absolute; bottom:-14px; left:50%; transform:translateX(-50%);
+  font:500 8.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:#64748B; white-space:nowrap;
+}
+
+.ip-compare-foot {
+  margin-top:10px; padding-top:10px; border-top:1px solid var(--cm-border-soft);
+  display:flex; align-items:center; gap:8px;
+  font:var(--cm-body-sm); color:var(--cm-fg-muted);
+}
+.ip-compare-foot .legend { display:flex; align-items:center; gap:10px; }
+.ip-compare-foot .legend .sw { display:inline-flex; align-items:center; gap:5px; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); letter-spacing:0.04em; text-transform:uppercase; }
+.ip-compare-foot .legend .sw .ch { width:14px; height:6px; border-radius:2px; background:var(--cm-accent); }
+.ip-compare-foot .legend .sw .ch.squad { background:repeating-linear-gradient(45deg, #CBD5E1 0 3px, #E2E8F0 3px 6px); }
+
+/* ─────────────────────────────────────────────
+   BENCHMARKS panel  (1RM / sprint / VBT)
+   ───────────────────────────────────────────── */
+.ip-bench-row {
+  display:grid; grid-template-columns:1fr auto auto;
+  gap:6px 10px; align-items:center;
+  padding:9px 0;
+  border-bottom:1px solid var(--cm-border-soft);
+}
+.ip-bench-row:last-child { border-bottom:0; padding-bottom:0; }
+.ip-bench-row .name { font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); display:flex; align-items:center; gap:6px; }
+.ip-bench-row .name .ti { font-size:13px; color:var(--cm-fg-muted); }
+.ip-bench-row .v { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.005em; }
+.ip-bench-row .v sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+.ip-bench-row .trend {
+  display:inline-flex; align-items:center; gap:3px;
+  font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+  letter-spacing:0.04em;
+  padding:3px 6px; border-radius:4px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft);
+}
+.ip-bench-row .trend.up { color:#15803D; background:var(--cm-success-bg); border-color:var(--cm-success-bd); }
+.ip-bench-row .trend.down { color:#B45309; background:var(--cm-warning-bg); border-color:var(--cm-warning-bd); }
+.ip-bench-row .trend .ti { font-size:11px; }
+
+/* ─────────────────────────────────────────────
+   In-block VBT / load-target pill
+   ───────────────────────────────────────────── */
+.rp-vbt-pill {
+  display:inline-flex; align-items:center; gap:3px;
+  height:18px; padding:0 6px; border-radius:3px;
+  background:#EEF2FF; color:#3730A3; border:1px solid #C7D2FE;
+  font:600 10px/1 var(--cm-font-mono); letter-spacing:0.02em;
+}
+.rp-vbt-pill .l { color:#818CF8; font-weight:500; }
+.rp-vbt-pill .v { color:inherit; }
+
+/* benchmark / training-phase overrides for macro */
+.rp-macro-bar.reintro { background:#64748B; }
+.rp-macro-bar.cap     { background:#3B82F6; }
+.rp-macro-bar.intens  { background:#F59E0B; }
+.rp-macro-bar.maint   { background:#15803D; }
+
+/* in-block goal chip */
+.rp-block-goal {
+  padding-left:8px; margin-top:5px;
+  display:flex; align-items:center; gap:4px;
+  font:500 10.5px/1.2 var(--cm-font-mono); color:#1D4ED8;
+}
+.rp-block-goal .ti { font-size:11px; }
