@@ -8949,7 +8949,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       // Load all sessions
       const { data: sessions } = await window.sb
         .from('training_sessions')
-        .select('id, session_date, title, session_type')
+        .select('id, session_date, title, session_type, match_day_offset, session_attributes')
         .eq('club_id', clubId)
         .order('session_date', { ascending: false });
 
@@ -8988,26 +8988,43 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     sessions.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.title || s.session_type || s.id.slice(0, 8); sessSel.appendChild(o); });
   }
 
-  // Build "Compare with" selector: same session_type from earlier dates
+  // Extract MD code from a session object (match_day_offset has priority)
+  function _getMdCode(s) {
+    const off = s?.match_day_offset;
+    if (off != null) {
+      if (typeof off === 'string') return off || null;
+      if (off === 0) return 'MD';
+      return off < 0 ? `MD${off}` : `MD+${off}`;
+    }
+    return s?.session_attributes?.md_code || null;
+  }
+
+  // Build "Compare with" selector: only sessions with the same MD code, strictly before current date
   function _buildCompareOptions(sessionId) {
     if (!compareSel) return;
     compareSel.innerHTML = '<option value="">Compare with...</option>';
     if (!sessionId) return;
     const current = _allSessions.find(s => s.id === sessionId);
     if (!current) return;
-    // Match on session_type first; fall back to last 4 chars of title (e.g. "MD-3")
-    const matchKey = current.session_type || current.title?.slice(-4) || null;
-    const candidates = _allSessions.filter(s => {
-      if (s.id === sessionId) return false;
-      if (matchKey) {
-        return s.session_type === matchKey || s.title?.endsWith(matchKey);
-      }
-      return true; // no type: show all other sessions (capped)
-    }).slice(0, 30);
+    const mdCode = _getMdCode(current);
+    if (!mdCode) {
+      compareSel.innerHTML = '<option value="">Sin MD code — no hay comparación disponible</option>';
+      return;
+    }
+    const candidates = _allSessions.filter(s =>
+      s.id !== sessionId &&
+      s.session_date < current.session_date &&
+      _getMdCode(s) === mdCode
+    ).slice(0, 30);
+    if (!candidates.length) {
+      compareSel.innerHTML = `<option value="">Sin sesiones ${mdCode} anteriores</option>`;
+      return;
+    }
+    compareSel.innerHTML = '<option value="">Compare with...</option>';
     candidates.forEach(s => {
       const o = document.createElement('option');
       o.value = s.id;
-      o.textContent = `${s.session_date} · ${s.title || s.session_type || s.id.slice(0, 8)}`;
+      o.textContent = `${s.session_date} · ${s.title || mdCode}`;
       compareSel.appendChild(o);
     });
   }
@@ -9703,13 +9720,16 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
                               : vals.reduce((s,v) => s+v, 0) / vals.length;
   }
 
-  // Extract MD code from a session (e.g. "MD-1", "MD+1", "MD")
+  // Extract MD code from a session (match_day_offset > session_attributes.md_code)
   function _ztMdCode(sess) {
     if (!sess) return null;
-    return sess.session_type
-        || sess.title?.match?.(/MD[-+]?\d*/i)?.[0]
-        || sess.title?.slice?.(-4)
-        || null;
+    const off = sess.match_day_offset;
+    if (off != null) {
+      if (typeof off === 'string') return off || null;
+      if (off === 0) return 'MD';
+      return off < 0 ? `MD${off}` : `MD+${off}`;
+    }
+    return sess.session_attributes?.md_code || null;
   }
 
   function _ztZClass(z) {
@@ -9749,10 +9769,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = window._gpClubId || await window.getClubId?.();
       if (!clubId) return;
 
-      // Fetch all sessions (lightweight — id, date, type, title only)
+      // Fetch all sessions (lightweight — id, date, type, title + MD code fields)
       const { data: allSess, error: sErr } = await window.sb
         .from('training_sessions')
-        .select('id,session_date,session_type,title')
+        .select('id,session_date,session_type,title,match_day_offset,session_attributes')
         .eq('club_id', clubId)
         .order('session_date', { ascending: false });
       if (sErr) throw sErr;
@@ -9762,19 +9782,26 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       const matchKey = _ztMdCode(current);
 
-      // Last _ZT_N sessions with same MD code, strictly before current date
-      const equivalents = (allSess || []).filter(s => {
-        if (s.id === sessionId)                     return false;
-        if (s.session_date >= current.session_date) return false;
-        if (!matchKey)                               return false;
-        return s.session_type === matchKey || s.title?.endsWith?.(matchKey);
-      }).slice(0, _ZT_N);
+      // Last _ZT_N sessions with the exact same MD code, strictly before current date
+      const equivalents = (allSess || []).filter(s =>
+        s.id !== sessionId &&
+        s.session_date < current.session_date &&
+        matchKey != null &&
+        _ztMdCode(s) === matchKey
+      ).slice(0, _ZT_N);
 
       if (nEl) nEl.textContent = equivalents.length;
 
+      if (!matchKey) {
+        body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
+          Sin MD code definido para esta sesión — no se puede calcular variación temporal.
+        </div>`;
+        return;
+      }
+
       if (equivalents.length < _ZT_MIN) {
         body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
-          Se necesitan al menos ${_ZT_MIN} sesiones equivalentes (encontradas: ${equivalents.length}).
+          Sin sesiones ${matchKey} equivalentes suficientes (encontradas: ${equivalents.length}, mínimo: ${_ZT_MIN}).
         </div>`;
         return;
       }
