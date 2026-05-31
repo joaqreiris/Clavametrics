@@ -3024,10 +3024,6 @@ function _updateIndKpis(reports, state) {
   if (!sel) return;
   const p = sel.players;
   const fname = p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : '—';
-  if (document.querySelector('.gp-view[data-view="ind"].is-on')) {
-    const sub = document.getElementById('secSub');
-    if (sub) sub.textContent = `${fname} · ${p?.position || '—'} · ${getDatePresetLabel()}`;
-  }
   const kv = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
   if (kv[0]) kv[0].innerHTML = `${sel.total_distance ? (sel.total_distance / 1000).toFixed(1) : '—'} <sub>km</sub>`;
   if (kv[1]) kv[1].innerHTML = `${sel.high_speed_distance != null ? Math.round(sel.high_speed_distance) : '—'} <sub>m</sub>`;
