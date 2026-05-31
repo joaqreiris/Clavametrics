@@ -601,19 +601,6 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="sm" data-card-id="kpi-distance" data-metric-key="total_distance">
-            <div class="gp-c-h"><span class="ttl">Distance</span><span class="sub">90′</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
-            <div class="gp-kpi"><div class="l"><i class="ti ti-route"></i>vs MF baseline</div><div class="v">11.4 <sub>km</sub></div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+12%</span> · z = +1.2</div></div>
-          </div>
-          <div class="gp-c" data-size="sm">
-            <div class="gp-c-h"><span class="ttl">HSR</span><span class="sub">&gt;19.8 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
-            <div class="gp-kpi"><div class="l"><i class="ti ti-bolt"></i>vs MF baseline</div><div class="v" style="color:var(--cm-danger)">624 <sub>m</sub></div><div class="t"><span class="d warn"><i class="ti ti-arrow-up-right"></i>+34%</span> · z = +1.8 <span style="color:var(--cm-danger);font-weight:600">flag</span></div></div>
-          </div>
-          <div class="gp-c" data-size="sm">
-            <div class="gp-c-h"><span class="ttl">Sprints</span><span class="sub">&gt;25.2 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
-            <div class="gp-kpi"><div class="l"><i class="ti ti-flame"></i>count</div><div class="v">19</div><div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+5</span> · z = +0.8</div></div>
-          </div>
-
           <div class="gp-c" data-size="lg">
             <div class="gp-c-h">
               <span class="ttl">Radar profile</span>
@@ -701,6 +688,7 @@
           <select class="sc-sel" id="sc-mc-sel"><option value="">All MCs</option></select>
           <select class="sc-sel" id="sc-date-sel"><option value="">Date...</option></select>
           <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
+          <select class="sc-sel" id="sc-player-sel"><option value="">Player...</option></select>
           <span class="sc-info" id="sc-info">Loading sessions...</span>
         </div>
 
@@ -716,6 +704,20 @@
             <div class="gp-c-b" id="sc-kpi-body" style="padding:10px 14px">
               <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:20px">Select a session above to see group KPIs.</div>
             </div>
+          </div>
+
+          <!-- Player vs baseline KPIs (session-scoped) -->
+          <div class="gp-c" data-size="sm" data-card-id="sc-kpi-distance" data-metric-key="total_distance">
+            <div class="gp-c-h"><span class="ttl">Distance</span><span class="sub">vs MF baseline</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-route"></i>vs MF baseline</div><div class="v">—</div><div class="t"></div></div>
+          </div>
+          <div class="gp-c" data-size="sm" data-card-id="sc-kpi-hsr" data-metric-key="high_speed_distance">
+            <div class="gp-c-h"><span class="ttl">HSR</span><span class="sub">&gt;19.8 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-bolt"></i>vs MF baseline</div><div class="v">—</div><div class="t"></div></div>
+          </div>
+          <div class="gp-c" data-size="sm" data-card-id="sc-kpi-sprints" data-metric-key="sprint_distance">
+            <div class="gp-c-h"><span class="ttl">Sprints</span><span class="sub">&gt;25.2 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-kpi"><div class="l"><i class="ti ti-flame"></i>vs MF baseline</div><div class="v">—</div><div class="t"></div></div>
           </div>
 
           <!-- NEW: Session table -->
@@ -1457,8 +1459,8 @@ function showToast(msg) {
 
 // ── Card catalog ──────────────────────────────────────────────
 const GP_CATALOG = {
-  ind:  ['Distance KPI','HSR KPI','Sprints KPI','Radar profile','× match max','Weekly bars','ACWR chart','Speed zones','Accel/Decel asym','Personal baseline trend','Player week table','High intensity actions'],
-  grp:  ['Z-score matrix','Squad ranking','Load vs HSR scatter','Team heatmap','Position box plot','Outliers card','Position radar','Squad readiness','Session KPI row','Session table'],
+  ind:  ['Radar profile','× match max','Weekly bars','ACWR chart','Speed zones','Accel/Decel asym','Personal baseline trend','Player week table','High intensity actions'],
+  grp:  ['Distance KPI','HSR KPI','Sprints KPI','Z-score matrix','Squad ranking','Load vs HSR scatter','Team heatmap','Position box plot','Outliers card','Position radar','Squad readiness','Session KPI row','Session table'],
   mind: ['Match heatmap','Distance per min','Velocity profile','Sprint zonal grid','Halves drop-off','Recovery between sprints','TD per match','High intensity per match'],
   mgrp: ['Total distance','HSR squad','Sprints','Us vs opponent','Team heatmap','Match vs training delivered','ACWR gauges row','ACWR by player','Risk alerts'],
   mc:   ['MC diff table','MC diff scatter','Diff by metric','MD trend'],
@@ -8648,6 +8650,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   const mcSel    = document.getElementById('sc-mc-sel');
   const dateSel  = document.getElementById('sc-date-sel');
   const sessSel  = document.getElementById('sc-sess-sel');
+  const playerSel = document.getElementById('sc-player-sel');
   const scInfo   = document.getElementById('sc-info');
   const kpiBody  = document.getElementById('sc-kpi-body');
   const tblBody  = document.getElementById('sc-table-body');
@@ -8732,8 +8735,35 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const sess = _allSessions.find(s => s.id === sessionId);
       scInfo.textContent = `${sess?.session_date || ''} · ${_lastReports.length} players`;
 
+      // populate player selector
+      const prevPlayerId = playerSel?.value;
+      if (playerSel) {
+        playerSel.innerHTML = '<option value="">Player...</option>';
+        [..._lastReports]
+          .sort((a, b) => {
+            const an = `${a.player.last_name || ''} ${a.player.first_name || ''}`;
+            const bn = `${b.player.last_name || ''} ${b.player.first_name || ''}`;
+            return an.localeCompare(bn);
+          })
+          .forEach(r => {
+            const p = r.player;
+            const name = (p.first_name || p.last_name) ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : r.player_id.slice(0, 8);
+            const o = document.createElement('option');
+            o.value = r.player_id;
+            o.textContent = `${name}${p.number ? ' #' + p.number : ''}`;
+            playerSel.appendChild(o);
+          });
+        // keep previous selection if still present, else auto-select first
+        if (prevPlayerId && playerSel.querySelector(`option[value="${prevPlayerId}"]`)) {
+          playerSel.value = prevPlayerId;
+        } else if (_lastReports.length > 0) {
+          playerSel.selectedIndex = 1;
+        }
+      }
+
       _renderKPIs(_lastReports);
       _renderTable(_lastReports);
+      await annotateScKpiCards();
     } catch (e) { console.error('_loadSessionData:', e); scInfo.textContent = 'Error loading data.'; }
   }
 
@@ -8876,6 +8906,95 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   });
 
   colorSel?.addEventListener('change', () => { if (_lastReports.length) _renderTable(_lastReports); });
+
+  playerSel?.addEventListener('change', () => { annotateScKpiCards(); });
+
+  // ── annotate player vs baseline KPI cards ─────────────────────
+  async function annotateScKpiCards() {
+    const SC_KPI_MAP = [
+      { cardId: 'sc-kpi-distance', metric: 'total_distance',     icon: 'ti-route', unit: 'km', decimals: 1, divisor: 1000 },
+      { cardId: 'sc-kpi-hsr',     metric: 'high_speed_distance',  icon: 'ti-bolt',  unit: 'm',  decimals: 0, divisor: 1 },
+      { cardId: 'sc-kpi-sprints', metric: 'sprint_distance',      icon: 'ti-flame', unit: 'm',  decimals: 0, divisor: 1 },
+    ];
+
+    const playerId = playerSel?.value;
+    if (!playerId || !_lastReports.length) {
+      SC_KPI_MAP.forEach(({ cardId }) => {
+        const kpi = document.querySelector(`.gp-view[data-view="grp"] .gp-c[data-card-id="${cardId}"] .gp-kpi`);
+        if (!kpi) return;
+        const vEl = kpi.querySelector('.v'); if (vEl) vEl.innerHTML = '—';
+        const tEl = kpi.querySelector('.t'); if (tEl) tEl.innerHTML = '';
+        const bl = kpi.querySelector('.gp-bl-line'); if (bl) bl.innerHTML = '';
+      });
+      return;
+    }
+
+    const rpt = _lastReports.find(r => r.player_id === playerId);
+    if (!rpt) return;
+
+    const clubId = await window.getClubId?.();
+    if (!clubId || typeof window.getMatchBaseline !== 'function') return;
+
+    for (const { cardId, metric, unit, decimals, divisor } of SC_KPI_MAP) {
+      const card = document.querySelector(`.gp-view[data-view="grp"] .gp-c[data-card-id="${cardId}"]`);
+      if (!card) continue;
+      const kpi = card.querySelector('.gp-kpi');
+      if (!kpi) continue;
+
+      const rawVal  = rpt[metric] ?? null;
+      const dispVal = rawVal != null ? rawVal / divisor : null;
+
+      const vEl = kpi.querySelector('.v');
+      if (vEl) {
+        if (dispVal == null) {
+          vEl.innerHTML = '—';
+        } else {
+          const formatted = decimals === 0 ? Math.round(dispVal) : dispVal.toFixed(decimals);
+          vEl.innerHTML = `${formatted} <sub>${unit}</sub>`;
+        }
+      }
+
+      const bl = await window.getMatchBaseline(playerId, metric, clubId);
+
+      const tEl = kpi.querySelector('.t');
+      if (tEl && rawVal != null && bl?.baseline) {
+        const pct   = (rawVal - bl.baseline) / bl.baseline * 100;
+        const sqVals = _lastReports.map(r => +(r[metric] || 0)).filter(v => v > 0);
+        const mu    = sqVals.length ? sqVals.reduce((a, b) => a + b, 0) / sqVals.length : rawVal;
+        const sig   = sqVals.length > 1
+          ? Math.sqrt(sqVals.map(v => (v - mu) ** 2).reduce((a, b) => a + b, 0) / sqVals.length) || 1
+          : 1;
+        const z     = (rawVal - mu) / sig;
+        const pSign = pct >= 0 ? '+' : '';
+        const zSign = z   >= 0 ? '+' : '';
+        const cls   = Math.abs(z) > 1.5 ? 'warn' : pct >= 0 ? 'up' : 'down';
+        const arrow = pct >= 0 ? 'ti-arrow-up-right' : 'ti-arrow-down-right';
+        const flag  = Math.abs(z) >= 2 ? ` <span style="color:var(--cm-danger);font-weight:600">flag</span>` : '';
+        tEl.innerHTML = `<span class="d ${cls}"><i class="ti ${arrow}"></i>${pSign}${Math.round(pct)}%</span> · z = ${zSign}${z.toFixed(1)}${flag}`;
+      } else if (tEl) {
+        tEl.innerHTML = '';
+      }
+
+      let blLine = kpi.querySelector('.gp-bl-line');
+      if (!blLine) {
+        blLine = document.createElement('div');
+        blLine.className = 'gp-bl-line';
+        blLine.style.cssText = 'font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:5px;display:flex;align-items:center;gap:4px';
+        kpi.querySelector('.t')?.after(blLine);
+      }
+      if (bl?.baseline) {
+        const blRaw  = divisor === 1000 ? bl.baseline / 1000 : bl.baseline;
+        const blDisp = decimals === 0 ? Math.round(blRaw) : blRaw.toFixed(decimals);
+        const conf   = bl.confidence === 'high' ? '✓' : '~';
+        blLine.title = 'Baseline: avg of best matches · Miguel et al. 2022';
+        blLine.innerHTML = `<i class="ti ti-target" style="font-size:10px"></i>Baseline ${blDisp}${unit ? ' ' + unit : ''} ${conf} (${bl.count} matches)`;
+      } else if (bl?.warning) {
+        blLine.innerHTML = `<i class="ti ti-info-circle" style="font-size:10px;color:var(--cm-warning)"></i>${bl.warning}`;
+      } else {
+        blLine.innerHTML = '';
+      }
+    }
+  }
 
   // ── hook into tab switch ──────────────────────────────────────
   window._scInit = scInit;
