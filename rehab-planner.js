@@ -231,8 +231,15 @@
           totalDur += b.dur || 0;
           const block = document.createElement('div');
           block.className = 'rp-block t-' + b.type + (b.selected ? ' is-selected' : '');
-          block.dataset.dayIdx = di;
+          block.dataset.dayIdx   = di;
           block.dataset.blockIdx = bi;
+          block.dataset.sessionId  = b._id || '';
+          block.dataset.blockName  = b.name;
+          block.dataset.blockType  = b.type;
+          block.dataset.blockDur   = b.dur;
+          block.dataset.blockEx    = b.exercises || 0;
+          block.dataset.blockAu    = b.au || 0;
+          block.dataset.blockNotes = b.notes || '';
           let gpsHtml = '';
           if (b.gps && b.gps.length) {
             gpsHtml = `<div class="rp-block-gps">${b.gps.map(g => `<span class="rp-gps-pill${g.warn ? ' warn' : ''}"><span class="l">${g.l}</span><span class="v">${g.v}</span></span>`).join('')}</div>`;

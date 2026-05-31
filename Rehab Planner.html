@@ -668,32 +668,142 @@
 
   api.setWeekData(rpBuildWeek(weekStart, sessions || []));
 
-  // ── Add block → save to rehab_sessions ──
+  // ── Add block / Edit block → rehab_sessions ──
   const TYPE_COLOR_MAP = {
     warmup:'#10B981', myo:'#A78BFA', mob:'#06B6D4', act:'#22C55E',
     str:'#DC2626', plyo:'#F59E0B', skills:'#3B82F6', field:'#15803D',
     cond:'#EA580C', cool:'#64748B', assess:'#0EA5E9'
   };
-  window.addEventListener('blockdrawer:save', async ev => {
-    const d = ev.detail;
-    if (!d.dayDate) return;
-    const { error: insErr } = await window.sb.from('rehab_sessions').insert({
-      plan_id:      planId,
-      club_id:      clubId,
-      date:         d.dayDate,
-      name:         d.name,
-      color:        TYPE_COLOR_MAP[d.type] || '#64748B',
-      duration_min: d.duration,
-      block_count:  d.exercises?.length || 0,
-      notes:        d.notes || null
-    });
-    if (insErr) { console.warn('[planner] session insert error', insErr); return; }
+
+  async function rpReloadWeek() {
     const { data: fresh } = await window.sb
       .from('rehab_sessions').select('*').eq('plan_id', planId)
       .gte('date', weekStart.toISOString().slice(0,10))
       .lte('date', weekEnd.toISOString().slice(0,10)).order('date');
     api.setWeekData(rpBuildWeek(weekStart, fresh || []));
+  }
+
+  window.addEventListener('blockdrawer:save', async ev => {
+    const d = ev.detail;
+    const sid = window._rpSel?.sessionId;
+    if (d.mode === 'edit' && sid) {
+      // Update existing session
+      await window.sb.from('rehab_sessions').update({
+        name:         d.name,
+        color:        TYPE_COLOR_MAP[d.type] || '#64748B',
+        duration_min: d.duration,
+        block_count:  d.exercises?.length || 0,
+        notes:        d.notes || null
+      }).eq('id', sid);
+    } else {
+      // Insert new session
+      if (!d.dayDate) return;
+      const { error } = await window.sb.from('rehab_sessions').insert({
+        plan_id:      planId,
+        club_id:      clubId,
+        date:         d.dayDate,
+        name:         d.name,
+        color:        TYPE_COLOR_MAP[d.type] || '#64748B',
+        duration_min: d.duration,
+        block_count:  d.exercises?.length || 0,
+        notes:        d.notes || null
+      });
+      if (error) { console.warn('[planner] session insert error', error); return; }
+    }
+    await rpReloadWeek();
   });
+
+  // ── Block click → side panel ──
+  const TYPE_LABEL_MAP = {
+    warmup:'Warm-up', myo:'Myofascial', mob:'Mobility', act:'Activation',
+    str:'Strength', plyo:'Plyometrics', skills:'Skills', field:'On-field',
+    cond:'Conditioning', cool:'Cooldown', assess:'Assessment'
+  };
+
+  document.addEventListener('click', e => {
+    const block = e.target.closest('.rp-block');
+    if (!block) return;
+    const type  = block.dataset.blockType  || 'str';
+    const name  = block.dataset.blockName  || '—';
+    const dur   = block.dataset.blockDur   || '—';
+    const ex    = block.dataset.blockEx    || 0;
+    const au    = block.dataset.blockAu    || '—';
+    const notes = block.dataset.blockNotes || '';
+    const sid   = block.dataset.sessionId  || '';
+    const dayCard = block.closest('.rp-day');
+    const dayDate = dayCard?.dataset.date || '';
+    const dowEl = dayCard?.querySelector('.dow');
+    const domEl = dayCard?.querySelector('.dom');
+    const dayLabel = dowEl ? `${dowEl.textContent.replace(/·.*/,'').trim()}, ${domEl?.textContent||''}` : '—';
+
+    window._rpSel = { sessionId: sid, name, type, dur: +dur, notes, dayDate };
+
+    const panelB = document.querySelector('.rp-panel-card .rp-panel-b');
+    if (!panelB) return;
+    panelB.innerHTML = `
+      <div class="rp-bd-title">
+        <span class="swatch" style="background:${TYPE_COLOR_MAP[type]||'#64748B'}"></span>${name}
+      </div>
+      <div class="rp-bd-sub">
+        <span>${dayLabel}</span><span class="sep">·</span>
+        <span>${TYPE_LABEL_MAP[type]||type}</span><span class="sep">·</span>
+        <span>${dur} min</span>
+      </div>
+      <div class="rp-bd-metrics">
+        <div class="rp-bd-metric"><div class="l">Duration</div><div class="v">${dur}<sub>min</sub></div></div>
+        <div class="rp-bd-metric"><div class="l">Blocks</div><div class="v">${ex}</div></div>
+        <div class="rp-bd-metric"><div class="l">AU</div><div class="v">${au}</div></div>
+      </div>
+      ${notes ? `<div class="rp-bd-section"><div class="rp-bd-section-h">Notes</div>
+        <div style="font:var(--cm-body-sm);color:var(--cm-fg-muted);line-height:1.45">${notes}</div></div>` : ''}
+      ${!sid ? `<div style="margin-top:12px;padding:10px 12px;background:var(--cm-bg-soft);border-radius:var(--cm-r-2);font:var(--cm-body-sm);color:var(--cm-fg-muted)">
+        <i class="ti ti-info-circle"></i> Demo block — add a real session to enable edit &amp; delete.</div>` : ''}
+    `;
+  });
+
+  // ── Side panel action buttons ──
+  const editBtn   = document.querySelector('.rp-panel-card .ic-btn[title="Edit block"]');
+  const copyBtn   = document.querySelector('.rp-panel-card .ic-btn[title="Duplicate"]');
+  const deleteBtn = document.querySelector('.rp-panel-card .ic-btn[title="Remove"]');
+
+  if (editBtn) {
+    editBtn.removeAttribute('onclick');
+    editBtn.addEventListener('click', () => {
+      const s = window._rpSel;
+      if (!s?.sessionId) return;
+      window.openBlockDrawer({
+        context: plan.kind === 'preventive' ? 'prev' : 'rehab',
+        day: s.dayDate, dayDate: s.dayDate,
+        existing: { type: s.type, name: s.name, duration: s.dur, notes: s.notes, exerciseIds: [] }
+      });
+    });
+  }
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const s = window._rpSel;
+      if (!s?.sessionId) return;
+      await window.sb.from('rehab_sessions').insert({
+        plan_id: planId, club_id: clubId, date: s.dayDate,
+        name: s.name + ' (copy)', color: TYPE_COLOR_MAP[s.type] || '#64748B',
+        duration_min: s.dur, notes: s.notes || null
+      });
+      await rpReloadWeek();
+    });
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      const s = window._rpSel;
+      if (!s?.sessionId) return;
+      if (!confirm(`Delete "${s.name}"?`)) return;
+      await window.sb.from('rehab_sessions').delete().eq('id', s.sessionId);
+      window._rpSel = null;
+      const panelB = document.querySelector('.rp-panel-card .rp-panel-b');
+      if (panelB) panelB.innerHTML = `<div style="padding:8px 0;font:var(--cm-body-sm);color:var(--cm-fg-muted)">Select a block to see details.</div>`;
+      await rpReloadWeek();
+    });
+  }
 
   // ── Save plan button ──
   const saveBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
