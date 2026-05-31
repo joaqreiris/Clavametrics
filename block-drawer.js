@@ -513,6 +513,7 @@
       step: existing ? 3 : 1,   // jump straight to parameters when editing
       context: opts.context || 'rehab',
       dayLabel: opts.day || (existing && existing.day) || '',
+      dayDate:  opts.dayDate || '',
       type: existing ? existing.type : null,
       region: 'All', equip: 'Any', customOnly: false, query: '',
       selected: existing && existing.exerciseIds ? existing.exerciseIds.slice() : [],
@@ -569,6 +570,7 @@
       }),
       au: computeAU()
     };
+    payload.dayDate = state.dayDate;
     window.dispatchEvent(new CustomEvent('blockdrawer:save', { detail: payload }));
     close();
   }
@@ -598,7 +600,7 @@
       const dom = dayCard.querySelector('.dom');
       if (dow && dom) day = dow.textContent.replace(/·.*$/,'').trim() + ', ' + dom.textContent;
     }
-    open({ context: ctx, day });
+    open({ context: ctx, day, dayDate: dayCard?.dataset.date || '' });
   });
 
   // ─── Public API ───

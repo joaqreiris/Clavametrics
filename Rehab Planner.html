@@ -668,6 +668,33 @@
 
   api.setWeekData(rpBuildWeek(weekStart, sessions || []));
 
+  // ── Add block → save to rehab_sessions ──
+  const TYPE_COLOR_MAP = {
+    warmup:'#10B981', myo:'#A78BFA', mob:'#06B6D4', act:'#22C55E',
+    str:'#DC2626', plyo:'#F59E0B', skills:'#3B82F6', field:'#15803D',
+    cond:'#EA580C', cool:'#64748B', assess:'#0EA5E9'
+  };
+  window.addEventListener('blockdrawer:save', async ev => {
+    const d = ev.detail;
+    if (!d.dayDate) return;
+    const { error: insErr } = await window.sb.from('rehab_sessions').insert({
+      plan_id:      planId,
+      club_id:      clubId,
+      date:         d.dayDate,
+      name:         d.name,
+      color:        TYPE_COLOR_MAP[d.type] || '#64748B',
+      duration_min: d.duration,
+      block_count:  d.exercises?.length || 0,
+      notes:        d.notes || null
+    });
+    if (insErr) { console.warn('[planner] session insert error', insErr); return; }
+    const { data: fresh } = await window.sb
+      .from('rehab_sessions').select('*').eq('plan_id', planId)
+      .gte('date', weekStart.toISOString().slice(0,10))
+      .lte('date', weekEnd.toISOString().slice(0,10)).order('date');
+    api.setWeekData(rpBuildWeek(weekStart, fresh || []));
+  });
+
   // ── Save plan button ──
   const saveBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
   if (saveBtn) {
@@ -726,7 +753,7 @@ function rpBuildWeek(weekStart, sessions) {
         notes: s.notes || '',
         _id:  s.id
       }));
-    return { dow, dom: date.getDate(), today: isToday, blocks };
+    return { dow, dom: date.getDate(), today: isToday, blocks, iso };
   });
 }
 

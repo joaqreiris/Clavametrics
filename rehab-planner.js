@@ -203,6 +203,7 @@
     WEEK.forEach((day, di) => {
       const card = document.createElement('div');
       card.className = 'rp-day' + (day.rest ? ' is-rest' : '') + (day.today ? ' is-today' : '');
+      if (day.iso) card.dataset.date = day.iso;
       // header
       const head = document.createElement('div');
       head.className = 'rp-day-h';
