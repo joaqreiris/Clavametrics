@@ -108,6 +108,14 @@
   .gp-dash-bar[data-view="ind"] #histPill { display:none; }
   /* pw-next-match inside gp-dash-bar: no margin-left:auto (right div handles alignment) */
   .gp-dash-bar #pw-next-match { margin-left:0; }
+  /* Player Week Report: action buttons always on their own row, separated from filters */
+  .gp-dash-bar[data-view="ind"] .right {
+    flex-basis: 100%;
+    margin-left: 0;
+    border-top: 1px solid var(--cm-border-soft);
+    padding-top: 8px;
+    margin-top: 2px;
+  }
 
   .gp-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:14px; }
   .gp-grid.is-edit .gp-c { outline:1.5px dashed var(--cm-border-strong); outline-offset:-2px; }
@@ -2216,7 +2224,9 @@ window.refreshDashboard = async function (opts = {}) {
     const p = sel.players;
     const fname = p ? ((p.first_name||'') + ' ' + (p.last_name||'')).trim() : '—';
     const indSub = document.getElementById('secSub');
-    if (indSub) indSub.textContent = `${fname} · ${p?.position || '—'} · ${getDatePresetLabel()}`;
+    if (indSub && document.querySelector('.gp-view.is-on')?.dataset.view !== 'ind') {
+      indSub.textContent = `${fname} · ${p?.position || '—'} · ${getDatePresetLabel()}`;
+    }
     const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
     const distCard = document.querySelector('.gp-view[data-view="ind"] .gp-c[data-card-id="kpi-distance"]');
     if (distCard) renderKpiCard(distCard, distCard.dataset.metricKey || 'total_distance', sel);
@@ -6825,7 +6835,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── state ────────────────────────────────────────────────────
-  const _pw = { playerId: null, mcKey: null, chartInst: null };
+  const _pw = { playerId: null, mcKey: null, chartInst: null, playersList: [] };
   let _pwInited    = false;
   let _mcList      = [];
   let _mcMap       = {};
@@ -6874,6 +6884,18 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   const pwCanvas   = document.getElementById('canvasPWChart');
   if (!playerSel) return;
 
+  function _pwSyncLabel() {
+    const indSub = document.getElementById('secSub');
+    if (!indSub) return;
+    const player = _pw.playersList.find(p => p.id === _pw.playerId);
+    if (player) {
+      const name = `${player.first_name || ''} ${player.last_name || ''}`.trim();
+      indSub.textContent = `${name} · ${player.position || '—'}`;
+    } else {
+      indSub.textContent = '— week vs match reference';
+    }
+  }
+
   // ── init ─────────────────────────────────────────────────────
   async function pwInit() {
     if (_pwInited) return;
@@ -6894,7 +6916,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       window._pwMcList = _mcList;
       window._pwMcMap  = _mcMap;
 
-      (players || []).forEach(p => {
+      _pw.playersList = players || [];
+      _pw.playersList.forEach(p => {
         const o = document.createElement('option');
         o.value = p.id;
         o.textContent = `${p.last_name || ''} ${(p.first_name || '')[0] || ''}.${p.number ? ' #' + p.number : ''}`.trim();
@@ -6912,6 +6935,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (mcSel.options.length > 1)     mcSel.selectedIndex = 1;
       _pw.playerId = playerSel.value || null;
       _pw.mcKey    = mcSel.value || null;
+      _pwSyncLabel();
       await _pwInitTableCols();
       if (_pw.playerId && _pw.mcKey) await _pwLoad();
       await renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId });
@@ -7575,6 +7599,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // ── events ───────────────────────────────────────────────────
   playerSel.addEventListener('change', () => {
     _pw.playerId = playerSel.value || null;
+    _pwSyncLabel();
     if (_pw.playerId && _pw.mcKey) _pwLoad();
     renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
       .catch(e => console.warn('renderWeeklyBars (playerSel):', e));
@@ -7592,6 +7617,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
   document.getElementById('sections')?.addEventListener('click', e => {
     if (!e.target.closest('.gp-sec[data-view="ind"]')) return;
+    _pwSyncLabel();
     if (!_pwInited) { setTimeout(pwInit, 0); return; }
     if (_pw.playerId && _pw.mcKey) _pwLoad();
   });
