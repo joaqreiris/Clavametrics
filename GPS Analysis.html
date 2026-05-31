@@ -99,6 +99,15 @@
   .gp-dash-bar .pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
   .gp-dash-bar .pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
   .gp-dash-bar .pill .ti { font-size:13px; }
+  /* Player Week view: show pw-filter-group, hide global player/MC/baseline/hist pills */
+  #pw-filter-group { display:none; }
+  .gp-dash-bar[data-view="ind"] #pw-filter-group { display:contents; }
+  .gp-dash-bar[data-view="ind"] #mcPill,
+  .gp-dash-bar[data-view="ind"] #playerPill,
+  .gp-dash-bar[data-view="ind"] #baselinePill,
+  .gp-dash-bar[data-view="ind"] #histPill { display:none; }
+  /* pw-next-match inside gp-dash-bar: no margin-left:auto (right div handles alignment) */
+  .gp-dash-bar #pw-next-match { margin-left:0; }
 
   .gp-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:14px; }
   .gp-grid.is-edit .gp-c { outline:1.5px dashed var(--cm-border-strong); outline-offset:-2px; }
@@ -518,9 +527,14 @@
         <button class="gp-sec" data-view="mc"><div class="row"><i class="ti ti-arrows-diff"></i>Microcycle Compare</div><div class="sub">MC vs MC diff</div></button>
       </div>
 
-      <div class="gp-dash-bar">
+      <div class="gp-dash-bar" data-view="ind">
         <span class="h">Dashboard <span id="secTitle">· Individual</span></span>
         <span class="h-sub" id="secSub">— · vs role baseline</span>
+        <span id="pw-filter-group">
+          <select class="sc-sel" id="pw-player-sel"><option value="">Player...</option></select>
+          <select class="sc-sel" id="pw-mc-sel"><option value="">Microcycle...</option></select>
+          <span class="pw-next-match" id="pw-next-match"></span>
+        </span>
         <div class="right">
           <button class="pill" id="dateRangePill"><i class="ti ti-calendar-range"></i><span id="dateRangeLabel">Last 30 days</span></button>
           <button class="pill" id="mcPill"><i class="ti ti-clock"></i><span id="mcLabel">All MCs</span></button>
@@ -536,13 +550,6 @@
 
       <!-- INDIVIDUAL / PLAYER WEEK REPORT -->
       <div class="gp-view is-on" data-view="ind">
-
-        <!-- Player Week — filters bar -->
-        <div class="gp-pw-bar" id="pwBar">
-          <select class="sc-sel" id="pw-player-sel"><option value="">Player...</option></select>
-          <select class="sc-sel" id="pw-mc-sel"><option value="">Microcycle...</option></select>
-          <span class="pw-next-match" id="pw-next-match"></span>
-        </div>
 
         <div class="gp-grid is-edit">
 
@@ -6721,6 +6728,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     b.classList.add('is-on');
     const v = b.dataset.view;
     document.querySelectorAll('.gp-view').forEach(x => x.classList.toggle('is-on', x.dataset.view === v));
+    document.querySelector('.gp-dash-bar').dataset.view = v;
     window.gpState.view = v;
     document.getElementById('secTitle').textContent = titles[v]?.[0] || '';
     const subEl = document.getElementById('secSub');
