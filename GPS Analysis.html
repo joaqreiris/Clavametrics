@@ -2529,6 +2529,7 @@ function _renderPosRadar(reports) {
 
   if (!datasets.length) return;
 
+  Chart.getChart(canvas)?.destroy();
   new Chart(canvas, {
     type: 'radar',
     data: { labels: LABELS, datasets },
@@ -2596,6 +2597,7 @@ function _renderVelProfile() {
   // Mark sprint minutes (speed > 20 km/h approx)
   const sprints = spd.map((v, i) => v > 18 ? v : null);
 
+  Chart.getChart(canvas)?.destroy();
   new Chart(canvas, {
     type: 'line',
     data: {
@@ -2693,6 +2695,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // ── ACWR chart ────────────────────────────────────────────
   const canvasACWR = document.getElementById('canvasACWR');
   if (canvasACWR && window.gpScience) {
+    Chart.getChart(canvasACWR)?.destroy();
     const acwrData = window.gpScience.acwr(daily);
     const accent   = _accentHex();
     new Chart(canvasACWR, {
@@ -2734,6 +2737,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // ── Fitness · Fatigue · Form (CTL/ATL/TSB) ───────────────
   const canvasTSB = document.getElementById('canvasTSB');
   if (canvasTSB && window.gpScience) {
+    Chart.getChart(canvasTSB)?.destroy();
     const tsbData = window.gpScience.trainingStressBalance(daily);
     new Chart(canvasTSB, {
       type: 'line',
@@ -2858,6 +2862,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     const trainRatio = trainAvg && matchSession.load ? (trainAvg / matchSession.load) : 0.7;
     const trainVals  = matchVals.map(v => v * trainRatio);
 
+    Chart.getChart(canvasMvT)?.destroy();
     new Chart(canvasMvT, {
       type: 'bar',
       data: {
