@@ -615,16 +615,11 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="md">
-            <div class="gp-c-h"><span class="ttl">× match max</span><span class="sub">this week vs match peak</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+          <div class="gp-c" data-size="md" id="card-xmatch" data-card-id="xmatch">
+            <div class="gp-c-h"><span class="ttl">× match avg</span><span class="sub">× partido promedio · semana</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-c-b">
               <div class="gp-xm">
-                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-route"></i>Dist</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:64%"><span class="pd"></span></span></span><span class="gp-xm-v">0.86×</span></div>
-                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-bolt"></i>HSR</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:80%"><span class="pd"></span></span></span><span class="gp-xm-v warn">1.07×</span></div>
-                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-flame"></i>Sprints</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:74%"><span class="pd"></span></span></span><span class="gp-xm-v">0.98×</span></div>
-                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-gauge"></i>Top sp</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:60%"><span class="pd"></span></span></span><span class="gp-xm-v">0.81×</span></div>
-                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-arrow-up-right"></i>Accel</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:88%"><span class="pd"></span></span></span><span class="gp-xm-v danger">1.18×</span></div>
-                <div class="gp-xm-row"><span class="gp-xm-l"><i class="ti ti-activity"></i>Load</span><span class="gp-xm-t"><span class="th" style="left:50%"></span><span class="th" style="left:75%"></span><span class="pin" style="left:71%"><span class="pd"></span></span></span><span class="gp-xm-v">0.94×</span></div>
+                <div style="padding:8px 0;color:var(--cm-fg-muted);font:500 11px/1.4 var(--cm-font-sans)">Select a player and microcycle.</div>
               </div>
             </div>
           </div>
@@ -1531,6 +1526,10 @@ async function applyLayoutToView(viewKey) {
       if (config.wkok_red    != null) existing.wkok_red    = config.wkok_red;
       card.dataset.config = JSON.stringify(existing);
     }
+    if (card_id === 'xmatch' && config.metrics?.length) {
+      const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+      card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
+    }
   }
 }
 
@@ -1937,10 +1936,12 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   const card = btn.closest('.gp-c');
   const isPwTable  = card?.id === 'card-pw-table';
   const isWkOnWk   = card?.id === 'card-weekly-bars';
+  const isXmatch   = card?.id === 'card-xmatch';
   makePopover(btn, [
     { label: 'Duplicate',     icon: 'ti-copy' },
-    ...(!isPwTable ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
+    ...(!isPwTable && !isXmatch ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
     ...(isWkOnWk   ? [{ label: 'Edit thresholds', icon: 'ti-adjustments-horizontal' }] : []),
+    ...(isXmatch   ? [{ label: 'Edit metrics',    icon: 'ti-layout-list' }] : []),
     { label: 'Change viz',    icon: 'ti-chart-area' },
     { label: 'Export CSV',    icon: 'ti-table-export' },
     { label: 'Remove',        icon: 'ti-trash' },
@@ -1957,6 +1958,8 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       openChangeMetricModal(card);
     } else if (item.label === 'Edit thresholds') {
       _openWkThreshEditor(card, btn);
+    } else if (item.label === 'Edit metrics') {
+      _openXmatchMetricsEditor(card, btn);
     } else {
       console.log('TODO:', item.label);
       showToast(item.label + ' — coming soon');
@@ -5708,42 +5711,144 @@ window.renderView = async function () {
 
 <script>
 // ══════════════════════════════════════════════════════════════
-// BLOQUE 5+6 — × match max + weekly bars + baseline settings
+// BLOQUE 5+6 — × match avg + weekly bars + baseline settings
 // ══════════════════════════════════════════════════════════════
 
-// ── × Match max ───────────────────────────────────────────────
-// Reads real gps_reports + getMatchBaseline for selected player
+// ── × Match avg (weekly MC total ÷ match avg) ─────────────────
+// Metrics that use MAX (not SUM) because they are peak values per session
+const _XM_PEAK_METRICS = new Set(['max_speed','avg_speed','distance_per_minute']);
+
+// Core columns available directly in gps_reports
+const _XM_CORE_KEYS = new Set([
+  'total_distance','high_speed_distance','very_high_speed_distance',
+  'sprint_distance','sprint_count','accelerations','decelerations',
+  'max_speed','player_load','avg_speed','hmld','time_played','distance_per_minute',
+]);
+
+const _XM_DEFAULT_METRICS = [
+  { key:'total_distance',      label:'Dist',    icon:'ti-route' },
+  { key:'high_speed_distance', label:'HSR',     icon:'ti-bolt' },
+  { key:'sprint_distance',     label:'Sprints', icon:'ti-flame' },
+  { key:'max_speed',           label:'Top sp',  icon:'ti-gauge' },
+  { key:'accelerations',       label:'Accel',   icon:'ti-arrow-up-right' },
+  { key:'player_load',         label:'Load',    icon:'ti-activity' },
+];
+
+function _xmMetricMeta(key) {
+  const ICON = {
+    total_distance:'ti-route', high_speed_distance:'ti-bolt',
+    very_high_speed_distance:'ti-bolt', sprint_distance:'ti-flame',
+    sprint_count:'ti-flame', max_speed:'ti-gauge', avg_speed:'ti-gauge',
+    accelerations:'ti-arrow-up-right', decelerations:'ti-arrow-down-right',
+    player_load:'ti-activity', hmld:'ti-heart-rate-monitor',
+    time_played:'ti-clock', distance_per_minute:'ti-chart-line',
+  };
+  const LABEL = {
+    total_distance:'Dist', high_speed_distance:'HSR',
+    very_high_speed_distance:'VHSR', sprint_distance:'Sprints',
+    sprint_count:'Sprints #', max_speed:'Top sp', avg_speed:'Avg sp',
+    accelerations:'Accel', decelerations:'Decel', player_load:'Load',
+    hmld:'HMLD', time_played:'Min', distance_per_minute:'Dist/min',
+  };
+  const cat = (window._gpCatalog || []).find(d => d.key === key);
+  return { icon: ICON[key] || 'ti-chart-bar', label: LABEL[key] || cat?.label || key };
+}
+
+let _xmLastReport = null;
+
 async function renderMatchMax(report) {
+  _xmLastReport = report;
   const container = document.querySelector('.gp-xm');
   if (!container) return;
-  const clubId  = window._gpClubId;
-  const pid     = report?.player_id;
+  const clubId = window._gpClubId;
+  const pid    = report?.player_id;
   if (!pid || !clubId) return;
 
-  const METRICS = [
-    { key:'total_distance',    label:'Dist',    icon:'ti-route',         scale: v => +(v/1000).toFixed(2) + '×', raw: true },
-    { key:'high_speed_distance', label:'HSR',   icon:'ti-bolt',          scale: v => v + '×', raw: true },
-    { key:'sprint_distance',   label:'Sprints', icon:'ti-flame',         scale: v => v + '×', raw: true },
-    { key:'max_speed',         label:'Top sp',  icon:'ti-gauge',         scale: v => v + '×', raw: true },
-    { key:'accelerations',     label:'Accel',   icon:'ti-arrow-up-right',scale: v => v + '×', raw: true },
-    { key:'player_load',       label:'Load',    icon:'ti-activity',      scale: v => v + '×', raw: true },
-  ];
+  // Read metric list from card config
+  const card       = document.getElementById('card-xmatch');
+  const cfg        = (() => { try { return JSON.parse(card?.dataset.config || '{}'); } catch { return {}; } })();
+  const metricKeys = cfg.metrics?.length ? cfg.metrics : _XM_DEFAULT_METRICS.map(m => m.key);
 
-  const rows = await Promise.all(METRICS.map(async m => {
-    const val     = +(report[m.key] || 0);
-    const bl      = await window.getMatchBaseline(pid, m.key, clubId);
+  // Get current MC id
+  const curMcId = document.getElementById('pw-mc-sel')?.value;
+
+  // Aggregate metric values across all sessions in the MC
+  const aggregated = {};
+
+  if (curMcId) {
+    container.innerHTML = '<div style="padding:8px 0;color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-sans)">Loading…</div>';
+
+    const { data: mcSess } = await window.sb.from('training_sessions')
+      .select('id')
+      .eq('club_id', clubId)
+      .eq('microcycle_id', curMcId);
+    const sids = (mcSess || []).map(s => s.id);
+
+    if (sids.length) {
+      // Core metrics: fetch all in one query
+      const coreKeys = metricKeys.filter(k => _XM_CORE_KEYS.has(k));
+      if (coreKeys.length) {
+        const { data: rpts } = await window.sb.from('gps_reports')
+          .select(`session_id,${coreKeys.join(',')}`)
+          .in('session_id', sids)
+          .eq('club_id', clubId)
+          .eq('player_id', pid);
+        coreKeys.forEach(k => {
+          const vals = (rpts || []).map(r => +(r[k] || 0)).filter(v => v > 0);
+          aggregated[k] = _XM_PEAK_METRICS.has(k)
+            ? (vals.length ? Math.max(...vals) : 0)   // peak: take max across sessions
+            : vals.reduce((s, v) => s + v, 0);        // accumulable: sum across sessions
+        });
+      }
+      // Custom EAV metrics
+      const customKeys = metricKeys.filter(k => !_XM_CORE_KEYS.has(k));
+      if (customKeys.length) {
+        const { data: coreRows } = await window.sb.from('gps_reports')
+          .select('id,session_id')
+          .in('session_id', sids)
+          .eq('club_id', clubId)
+          .eq('player_id', pid);
+        const rptIds = (coreRows || []).map(r => r.id);
+        if (rptIds.length) {
+          const { data: eav } = await window.sb.from('gps_report_metrics')
+            .select('report_id,metric_key,value')
+            .in('report_id', rptIds)
+            .in('metric_key', customKeys);
+          customKeys.forEach(k => {
+            const vals = (eav || []).filter(r => r.metric_key === k).map(r => +(r.value) || 0).filter(v => v > 0);
+            aggregated[k] = _XM_PEAK_METRICS.has(k)
+              ? (vals.length ? Math.max(...vals) : 0)
+              : vals.reduce((s, v) => s + v, 0);
+          });
+        }
+      }
+    }
+  } else {
+    // No MC selected — fall back to single report values
+    metricKeys.forEach(k => { aggregated[k] = +(report[k] || 0); });
+  }
+
+  // Fetch baselines for all metrics in parallel
+  const baselineResults = await Promise.all(
+    metricKeys.map(k => window.getMatchBaseline(pid, k, clubId))
+  );
+
+  const rows = metricKeys.map((k, i) => {
+    const { icon, label } = _xmMetricMeta(k);
+    const val     = aggregated[k] || 0;
+    const bl      = baselineResults[i];
     const ratio   = bl.baseline ? +(val / bl.baseline).toFixed(2) : null;
-    // 1.0× (match baseline) = pin at 75%; >1.33× clips to 100%; <0.5× ≈ far left
-    const pct     = ratio ? Math.min(Math.round(ratio * 75), 100) : 0;
+    // 1.0× (match baseline) = pin at 75%; >1.33× clips to 100%
+    const pct     = ratio != null ? Math.min(Math.round(ratio * 75), 100) : 0;
     const warnCls = ratio > 1.2 ? 'danger' : ratio > 1.1 ? 'warn' : '';
+    const isPeak  = _XM_PEAK_METRICS.has(k);
     const conf    = bl.confidence === 'high' ? '✓' : bl.confidence === 'medium' ? '~' : '';
     const tooltip = bl.warning
       ? bl.warning
-      : `Baseline ${conf}: avg of best ${bl.count} matches (Miguel et al. 2022)`;
-    return { ...m, val, ratio, pct, warnCls, tooltip, hasBaseline: !!bl.baseline, bl };
-  }));
+      : `${isPeak ? 'Pico' : 'Total MC'} · Baseline ${conf}: promedio ${bl.count} partidos`;
+    return { icon, label, ratio, pct, warnCls, tooltip, hasBaseline: !!bl.baseline, bl };
+  });
 
-  // Card-level empty state when ALL metrics lack match data
   const allMissing = rows.every(r => !r.hasBaseline);
   if (allMissing) {
     const msg = rows[0]?.bl?.warning || 'Insufficient match data for baseline';
@@ -5751,7 +5856,7 @@ async function renderMatchMax(report) {
       <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0;text-align:center">
         <i class="ti ti-info-circle" style="font-size:22px;color:var(--cm-fg-muted)"></i>
         <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">${msg}</div>
-        <div style="font:500 10.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)">Needs ≥3 official matches · Miguel et al. 2022</div>
+        <div style="font:500 10.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)">Needs ≥3 official matches</div>
       </div>`;
     return;
   }
@@ -5768,6 +5873,56 @@ async function renderMatchMax(report) {
       </span>
       <span class="gp-xm-v ${r.warnCls}">${r.hasBaseline ? r.ratio + '×' : '—'}</span>
     </div>`).join('');
+}
+
+// ── Metrics editor popover for × match avg card ───────────────
+function _openXmatchMetricsEditor(card, anchor) {
+  const cfg    = (() => { try { return JSON.parse(card?.dataset.config || '{}'); } catch { return {}; } })();
+  const active = new Set(cfg.metrics || _XM_DEFAULT_METRICS.map(m => m.key));
+
+  const all = [
+    ..._XM_DEFAULT_METRICS,
+    ...(window._gpCatalog || [])
+      .filter(d => !_XM_DEFAULT_METRICS.find(m => m.key === d.key))
+      .map(d => { const meta = _xmMetricMeta(d.key); return { key: d.key, label: meta.label, icon: meta.icon }; }),
+  ];
+
+  const pop = document.createElement('div');
+  pop.className = 'gp-popover';
+  pop.style.cssText = 'min-width:190px;max-height:300px;overflow-y:auto;padding:4px 0';
+
+  function buildPop() {
+    pop.innerHTML = `<div style="padding:6px 12px 4px;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.4px">Métricas visibles</div>`;
+    all.forEach(m => {
+      const isOn = active.has(m.key);
+      const row  = document.createElement('div');
+      row.className = 'gp-popover-item';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;user-select:none';
+      row.innerHTML = `
+        <span style="width:13px;height:13px;border-radius:3px;border:1.5px solid var(--cm-border-soft);background:${isOn ? 'var(--cm-accent)' : 'transparent'};display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">
+          ${isOn ? '<i class="ti ti-check" style="font-size:9px;color:#fff"></i>' : ''}
+        </span>
+        <span>${m.label}${_XM_PEAK_METRICS.has(m.key) ? ' <span style="font-size:9.5px;color:var(--cm-fg-muted)">(pico)</span>' : ''}</span>`;
+      row.addEventListener('click', e => {
+        e.stopPropagation();
+        if (isOn) {
+          if (active.size <= 1) { showToast('Debe haber al menos una métrica'); return; }
+          active.delete(m.key);
+        } else {
+          active.add(m.key);
+        }
+        const ex = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+        card.dataset.config = JSON.stringify({ ...ex, metrics: [...active] });
+        saveLayout('ind');
+        if (_xmLastReport) renderMatchMax(_xmLastReport).catch(() => {});
+        pop.remove();
+        _openXmatchMetricsEditor(card, anchor);
+      });
+      pop.appendChild(row);
+    });
+  }
+  buildPop();
+  _posPopover(pop, anchor);
 }
 
 // ── Weekly volume · wk-on-wk (last-5-MC % change) ─────────────
