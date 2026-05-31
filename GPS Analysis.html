@@ -2641,13 +2641,20 @@ function _renderVelProfile() {
 }
 
 // ── Async rendering (needs DB fetches) ────────────────────────
+function _showCardError(cardId, err) {
+  const card = document.getElementById(cardId);
+  const body = card?.querySelector('.gp-c-b');
+  if (body) body.innerHTML = '<div style="display:flex;align-items:center;gap:6px;padding:14px;color:var(--cm-danger);font:500 11.5px/1.4 var(--cm-font-sans)"><i class="ti ti-alert-triangle" style="font-size:14px;flex-shrink:0"></i>Error al cargar esta tarjeta</div>';
+  console.error('[GPS card ' + cardId + ']', err);
+}
+
 window.gpRenderScienceCards = async function (reports, clubId) {
-  // Synchronous cards first
-  _renderVzones(reports);
-  _renderOutliers(reports);
-  _renderPosRadar(reports);
-  _renderHalfDropoff();
-  _renderVelProfile();
+  // Synchronous cards first — each isolated so one failure never cascades
+  try { _renderVzones(reports);   } catch(e) { _showCardError('card-vzones', e); }
+  try { _renderOutliers(reports); } catch(e) { _showCardError('card-outliers', e); }
+  try { _renderPosRadar(reports); } catch(e) { _showCardError('card-pos-radar', e); }
+  try { _renderHalfDropoff();     } catch(e) { _showCardError('card-half-drop', e); }
+  try { _renderVelProfile();      } catch(e) { _showCardError('card-vel-profile', e); }
 
   // ── Historical data for ACWR / TSB / MC heatmap / Match vs Training
   // Always use a 84-day window (or full range if allTime) for these time-series charts.
@@ -2693,6 +2700,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   if (!daily.length) return;
 
   // ── ACWR chart ────────────────────────────────────────────
+  try {
   const canvasACWR = document.getElementById('canvasACWR');
   if (canvasACWR && window.gpScience) {
     Chart.getChart(canvasACWR)?.destroy();
@@ -2733,8 +2741,10 @@ window.gpRenderScienceCards = async function (reports, clubId) {
       }
     });
   }
+  } catch(e) { _showCardError('card-acwr', e); }
 
   // ── Fitness · Fatigue · Form (CTL/ATL/TSB) ───────────────
+  try {
   const canvasTSB = document.getElementById('canvasTSB');
   if (canvasTSB && window.gpScience) {
     Chart.getChart(canvasTSB)?.destroy();
@@ -2782,8 +2792,10 @@ window.gpRenderScienceCards = async function (reports, clubId) {
       }
     });
   }
+  } catch(e) { _showCardError('card-tsb', e); }
 
   // ── MC heatmap ────────────────────────────────────────────
+  try {
   const mcBody = document.getElementById('mcHeatBody');
   if (mcBody && daily.length) {
     const last8 = daily.slice(-8);
@@ -2834,8 +2846,10 @@ window.gpRenderScienceCards = async function (reports, clubId) {
 
     mcBody.appendChild(tbl);
   }
+  } catch(e) { _showCardError('card-mc-heat', e); }
 
   // ── Match demands vs training delivered ───────────────────
+  try {
   const canvasMvT = document.getElementById('canvasMatchVsTrain');
   if (canvasMvT && daily.length) {
     // Last MD session (highest load, or session_type='Match')
@@ -2899,6 +2913,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
       }
     });
   }
+  } catch(e) { _showCardError('card-match-vs-train', e); }
 
   // init size toggles for all new cards
   document.querySelectorAll('#card-acwr, #card-tsb, #card-vzones, #card-mc-heat, #card-pos-radar, #card-outliers, #card-half-drop, #card-vel-profile, #card-match-vs-train').forEach(c => initSizeToggles(c));
