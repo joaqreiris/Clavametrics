@@ -457,7 +457,7 @@
     .not('status', 'in', '("cleared","archived")');
   if (error) { console.warn('[rehab] query error:', error); return; }
 
-  const all  = plans || [];
+  const all   = plans || [];
   const rehab = all.filter(p => p.kind === 'rehab');
   const prev  = all.filter(p => p.kind === 'preventive');
 
@@ -473,9 +473,9 @@
     if (s.includes('M')) return 'mf';
     return 'df';
   };
-  const fmt  = d => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'2-digit'}) : '—';
-  const dxOf = i => i ? [i.injury_type, i.body_area, i.severity].filter(Boolean).join(' · ') : '—';
-  const dayN = i => i?.start_date ? Math.max(0, Math.floor((today - new Date(i.start_date))/DAY)) : null;
+  const fmt     = d => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'2-digit'}) : '—';
+  const dxOf    = i => i ? [i.injury_type, i.body_area, i.severity].filter(Boolean).join(' · ') : '—';
+  const dayN    = i => i?.start_date ? Math.max(0, Math.floor((today - new Date(i.start_date))/DAY)) : null;
   const rtpDays = i => i?.expected_return ? Math.ceil((new Date(i.expected_return) - today)/DAY) : null;
   const ownersHtml = list => (list||[]).map(o =>
     `<span class="av-mini ${o.role}">${ini(o.profiles?.full_name)}</span>`).join('');
@@ -488,7 +488,7 @@
   const rehabRows = rehab.map(p => {
     const inj = p.injuries, d = dayN(inj), rd = rtpDays(inj);
     const near = rd != null && rd <= 7;
-    return `<tr data-name="${full(p.players).toLowerCase()}" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
+    return `<tr data-kind="rehab" data-name="${full(p.players).toLowerCase()}" data-status="${p.status}" data-rtp="${rd ?? 9999}" data-near="${near?'1':'0'}" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
       <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${ini(full(p.players))}</div>
         <div class="who"><div class="name">${full(p.players)}</div><div class="pos">${p.players?.position||''}</div></div></div></td>
       <td><span class="po-pill is-rehab"><i class="ti ti-activity-heartbeat"></i>Rehab</span></td>
@@ -507,7 +507,7 @@
   // ── render preventive ──
   const prevRows = prev.map(p => {
     const left = (p.programme_total_weeks||0) - (p.programme_week||0);
-    return `<tr data-name="${full(p.players).toLowerCase()}" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
+    return `<tr data-kind="preventive" data-name="${full(p.players).toLowerCase()}" data-status="${p.status}" data-rtp="${left}" data-near="0" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
       <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${ini(full(p.players))}</div>
         <div class="who"><div class="name">${full(p.players)}</div><div class="pos">${p.players?.position||''}</div></div></div></td>
       <td><span class="po-pill is-prev"><i class="ti ti-shield-half-filled"></i>Preventive</span></td>
@@ -552,8 +552,175 @@
   if (ctx) ctx.innerHTML = `<span><strong>${all.length}</strong> active</span>
     <span style="color:var(--cm-fg-faint)">·</span>
     <span><strong>${rehab.length}</strong> rehab · <strong>${prev.length}</strong> preventive</span>`;
-  const counts = [all.length, rehab.length, prev.length, nearRTP.length, blocked.length];
-  document.querySelectorAll('.po-filter-pills button .count').forEach((el,i)=>{ if(counts[i]!=null) el.textContent = counts[i]; });
+  const pillCounts = [all.length, rehab.length, prev.length, nearRTP.length, blocked.length];
+  document.querySelectorAll('.po-filter-pills button .count').forEach((el,i)=>{ if(pillCounts[i]!=null) el.textContent = pillCounts[i]; });
+
+  // ── CONTROLS ──
+  let activeFilter = 'all';
+  let searchTerm   = '';
+  let sortMode     = 'rtp';
+  const sortLabels = { rtp: 'RTP estimate', name: 'Athlete name', status: 'Status' };
+
+  function filterPass(row) {
+    const name   = row.dataset.name   || '';
+    const kind   = row.dataset.kind;
+    const status = row.dataset.status;
+    const near   = row.dataset.near === '1';
+    if (searchTerm && !name.includes(searchTerm)) return false;
+    if (activeFilter === 'rehab'       && kind !== 'rehab')                      return false;
+    if (activeFilter === 'preventive'  && kind !== 'preventive')                 return false;
+    if (activeFilter === 'near_rtp'    && !near && status !== 'near_rtp')        return false;
+    if (activeFilter === 'blocked'     && status !== 'blocked')                  return false;
+    return true;
+  }
+
+  function sortTbody(tbody) {
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+      if (sortMode === 'name')   return (a.dataset.name||'').localeCompare(b.dataset.name||'');
+      if (sortMode === 'status') return (a.dataset.status||'').localeCompare(b.dataset.status||'');
+      return Number(a.dataset.rtp||9999) - Number(b.dataset.rtp||9999);
+    });
+    rows.forEach(r => tbody.appendChild(r));
+  }
+
+  function applyFilters() {
+    document.querySelectorAll('.po-tbl').forEach(tbl => {
+      const tbody = tbl.querySelector('tbody');
+      if (!tbody) return;
+      sortTbody(tbody);
+      let visible = 0;
+      tbody.querySelectorAll('tr').forEach(row => {
+        const show = filterPass(row);
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      const wrap   = tbl.closest('.po-table-wrap');
+      const header = wrap?.previousElementSibling;
+      if (wrap)   wrap.style.display   = visible ? '' : 'none';
+      if (header?.classList.contains('po-section-h')) {
+        header.style.display = visible ? '' : 'none';
+        const cnt = header.querySelector('span[style*="font-weight"]');
+        if (cnt) cnt.textContent = `· ${visible}`;
+      }
+    });
+    // sync pill active state
+    document.querySelectorAll('.po-filter-pills button').forEach(btn =>
+      btn.classList.toggle('is-on', btn.dataset.filter === activeFilter));
+  }
+
+  // Pill filter buttons
+  const filterKeys = ['all', 'rehab', 'preventive', 'near_rtp', 'blocked'];
+  document.querySelectorAll('.po-filter-pills button').forEach((btn, i) => {
+    btn.dataset.filter = filterKeys[i] || 'all';
+    btn.addEventListener('click', () => { activeFilter = btn.dataset.filter; applyFilters(); });
+  });
+
+  // Search input + "/" shortcut
+  const searchInput = document.querySelector('.po-search input');
+  if (searchInput) {
+    document.addEventListener('keydown', e => {
+      if (e.key === '/' && document.activeElement !== searchInput && e.target.tagName !== 'INPUT') {
+        e.preventDefault(); searchInput.focus();
+      }
+      if (e.key === 'Escape' && document.activeElement === searchInput) {
+        searchInput.value = ''; searchTerm = ''; applyFilters(); searchInput.blur();
+      }
+    });
+    searchInput.addEventListener('input', e => {
+      searchTerm = e.target.value.toLowerCase().trim();
+      applyFilters();
+    });
+  }
+
+  // Sort label cycling
+  const sortLbl = document.querySelector('.po-filters strong');
+  if (sortLbl) {
+    sortLbl.style.cssText += ';cursor:pointer;text-decoration:underline;text-underline-offset:3px';
+    sortLbl.title = 'Click to change sort';
+    sortLbl.addEventListener('click', () => {
+      const modes = ['rtp','name','status'];
+      sortMode = modes[(modes.indexOf(sortMode) + 1) % modes.length];
+      sortLbl.textContent = sortLabels[sortMode];
+      applyFilters();
+    });
+  }
+
+  // Export CSV
+  const exportBtn = document.querySelector('.hub-topbar .cm-btn.is-secondary');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const rows = Array.from(document.querySelectorAll('.po-tbl tbody tr'))
+        .filter(r => r.style.display !== 'none');
+      if (!rows.length) return;
+      const esc = v => `"${(v||'').replace(/"/g,'""')}"`;
+      const lines = ['Kind,Athlete,Phase,RTP / Programme,Status',
+        ...rows.map(r => [
+          r.dataset.kind,
+          r.querySelector('.who .name')?.textContent,
+          r.querySelector('.po-phase-pill')?.textContent,
+          r.querySelector('.po-rtp .v')?.textContent,
+          r.querySelector('.po-status .lbl')?.textContent
+        ].map(esc).join(','))
+      ].join('\n');
+      const a = Object.assign(document.createElement('a'), {
+        href: 'data:text/csv;charset=utf-8,' + encodeURIComponent(lines),
+        download: `rehab-plans-${new Date().toISOString().slice(0,10)}.csv`
+      });
+      a.click();
+    });
+  }
+
+  // History link
+  const historyLink = document.querySelector('a[href="#"]');
+  if (historyLink) {
+    historyLink.addEventListener('click', async e => {
+      e.preventDefault();
+      const existing = document.getElementById('po-history-panel');
+      if (existing) { existing.remove(); return; }
+
+      const { data: hist } = await window.sb
+        .from('rehab_plans')
+        .select('kind, status, phase, updated_at, players(first_name, last_name)')
+        .eq('club_id', clubId)
+        .in('status', ['cleared','archived'])
+        .order('updated_at', { ascending: false })
+        .limit(30);
+
+      const panel = document.createElement('div');
+      panel.id = 'po-history-panel';
+      panel.style.cssText = 'margin-top:18px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);overflow:hidden';
+
+      const hdr = `<div style="padding:10px 16px;background:var(--cm-bg-soft);border-bottom:1px solid var(--cm-border);display:flex;justify-content:space-between;align-items:center">
+        <span style="font:var(--cm-body-sm);font-weight:600">Plan history · cleared &amp; archived</span>
+        <button onclick="document.getElementById('po-history-panel').remove()" style="background:none;border:none;cursor:pointer;color:var(--cm-fg-muted);font-size:18px;line-height:1">&times;</button>
+      </div>`;
+
+      if (!hist?.length) {
+        panel.innerHTML = hdr + `<div style="padding:24px;text-align:center;font:var(--cm-body-sm);color:var(--cm-fg-muted)">No cleared or archived plans yet.</div>`;
+      } else {
+        const rows = hist.map(h => {
+          const name = h.players ? `${h.players.first_name||''} ${h.players.last_name||''}`.trim() : '—';
+          const date = new Date(h.updated_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+          const badge = h.kind === 'rehab'
+            ? '<span class="po-pill is-rehab" style="font-size:11px"><i class="ti ti-activity-heartbeat"></i>Rehab</span>'
+            : '<span class="po-pill is-prev" style="font-size:11px"><i class="ti ti-shield-half-filled"></i>Preventive</span>';
+          const st = h.status === 'cleared'
+            ? '<span class="po-status ok"><span class="dot"></span><span class="lbl">Cleared</span></span>'
+            : '<span class="po-status" style="opacity:.5"><span class="dot"></span><span class="lbl">Archived</span></span>';
+          return `<tr><td style="padding:8px 16px">${name}</td><td>${badge}</td><td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${h.phase||'—'}</td><td>${st}</td><td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${date}</td></tr>`;
+        }).join('');
+        panel.innerHTML = hdr + `<table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>`;
+      }
+
+      const infoBanner = document.querySelector('.po-doc > div[style*="dashed"]');
+      infoBanner ? infoBanner.after(panel) : document.querySelector('.po-doc').appendChild(panel);
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
+
+  // Initial sort
+  document.querySelectorAll('.po-tbl tbody').forEach(sortTbody);
 })();
 </script>
 
