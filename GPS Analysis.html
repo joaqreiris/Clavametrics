@@ -6936,6 +6936,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (_pw.playerId && _pw.mcKey) await _pwLoad();
       await renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId });
       if (_pw.playerId) _pwUpdateAcwr(_pw.playerId).catch(e => console.warn('_pwUpdateAcwr (init):', e));
+      if (_pw.playerId) _pwUpdateTsb(_pw.playerId).catch(e => console.warn('_pwUpdateTsb (init):', e));
     } catch (e) { console.error('pwInit:', e); }
   }
 
@@ -7592,6 +7593,97 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     });
   }
 
+  // ── Fitness · Fatigue · Form — per-player TSB ────────────────
+  async function _pwUpdateTsb(playerId) {
+    const canvas = document.getElementById('canvasTSB');
+    if (!canvas || !window.gpScience || !window.sb) return;
+    const clubId = await window.getClubId?.();
+    if (!clubId || !playerId) return;
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 84);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const { data: sessions } = await window.sb
+      .from('training_sessions')
+      .select('id,session_date')
+      .eq('club_id', clubId)
+      .gte('session_date', cutoffStr)
+      .order('session_date', { ascending: true });
+
+    if (!sessions?.length) return;
+    const sessDateMap = Object.fromEntries(sessions.map(s => [s.id, s.session_date]));
+
+    const { data: rpts } = await window.sb
+      .from('gps_reports')
+      .select('session_id,player_load')
+      .eq('club_id', clubId)
+      .eq('player_id', playerId)
+      .in('session_id', sessions.map(s => s.id));
+
+    const daily = (rpts || [])
+      .map(r => ({ date: sessDateMap[r.session_id], load: r.player_load || 0 }))
+      .filter(d => d.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const sub = document.querySelector('#card-tsb .sub');
+
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+
+    if (!daily.length) {
+      if (sub) sub.textContent = 'CTL / ATL / TSB';
+      canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    if (sub) sub.textContent = '12-week · player load';
+
+    const tsbData = window.gpScience.trainingStressBalance(daily);
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: tsbData.map(d => d.date.slice(5)),
+        datasets: [
+          {
+            label: 'CTL (Fitness)',
+            data: tsbData.map(d => d.ctl),
+            borderColor: '#22c55e',
+            backgroundColor: 'transparent',
+            borderWidth: 2, pointRadius: 0, tension: 0.35,
+          },
+          {
+            label: 'ATL (Fatigue)',
+            data: tsbData.map(d => d.atl),
+            borderColor: '#f59e0b',
+            backgroundColor: 'transparent',
+            borderWidth: 2, pointRadius: 0, tension: 0.35,
+          },
+          {
+            label: 'TSB (Form)',
+            data: tsbData.map(d => d.tsb),
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99,102,241,0.07)',
+            fill: true,
+            borderWidth: 1.5, pointRadius: 0, tension: 0.35,
+          },
+        ]
+      },
+      options: {
+        ..._chartDefaults,
+        plugins: {
+          legend: { display: true, position: 'bottom',
+            labels: { font: { size: 10 }, boxWidth: 12, padding: 8, color: 'rgba(128,128,128,0.8)' } },
+          tooltip: { mode: 'index', intersect: false },
+        },
+        scales: {
+          x: { ..._chartDefaults.scales.x },
+          y: { ..._chartDefaults.scales.y },
+        },
+      }
+    });
+  }
+
   // ── events ───────────────────────────────────────────────────
   playerSel.addEventListener('change', () => {
     _pw.playerId = playerSel.value || null;
@@ -7600,6 +7692,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
       .catch(e => console.warn('renderWeeklyBars (playerSel):', e));
     if (_pw.playerId) _pwUpdateAcwr(_pw.playerId).catch(e => console.warn('_pwUpdateAcwr:', e));
+    if (_pw.playerId) _pwUpdateTsb(_pw.playerId).catch(e => console.warn('_pwUpdateTsb:', e));
   });
   mcSel.addEventListener('change', () => {
     _pw.mcKey = mcSel.value || null;
