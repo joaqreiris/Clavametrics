@@ -7016,6 +7016,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _pwRenderKPIs(rows);
       _pwRenderTable(rows, baseline);
       _pwRenderChart(rows);
+      _pwRenderVzones(rows);
     } catch (e) { console.error('_pwLoad:', e); }
   }
 
@@ -7509,6 +7510,64 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
       },
     });
+  }
+
+  // ── Velocity zones — player × MC scope ──────────────────────
+  function _pwRenderVzones(rows) {
+    const body = document.getElementById('vzonesBody');
+    if (!body || !window.gpScience) return;
+
+    body.innerHTML = '';
+    const sub = document.querySelector('#card-vzones .sub');
+
+    const reports = rows.map(r => r.report).filter(Boolean);
+    if (!reports.length) {
+      if (sub) sub.textContent = 'player · MC week';
+      body.innerHTML = '<div style="color:var(--cm-fg-muted);font:500 11px/1.4 var(--cm-font-sans);padding:12px 0">No GPS data for this MC.</div>';
+      return;
+    }
+
+    const mc = _mcMap[_pw.mcKey];
+    if (sub) sub.textContent = `MC total · ${mc?.name || 'week'}`;
+
+    const totals = [0, 0, 0, 0, 0];
+    reports.forEach(r => {
+      window.gpScience.velocityZones(r).forEach((z, i) => { totals[i] += z.dist; });
+    });
+
+    const labels = ['Z1 <7', 'Z2 7-14', 'Z3 14-20', 'Z4 20-25', 'Z5 >25'];
+    const colors = ['#64748b', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444'];
+
+    const labelRow = document.createElement('div');
+    labelRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px';
+    labels.forEach((l, i) => {
+      const sp = document.createElement('span');
+      sp.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)';
+      sp.innerHTML = `<span style="width:8px;height:8px;border-radius:2px;background:${colors[i]};display:inline-block"></span>${l}`;
+      labelRow.appendChild(sp);
+    });
+    body.appendChild(labelRow);
+
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;height:22px;border-radius:5px;overflow:hidden;width:100%';
+    totals.forEach((v, i) => {
+      const seg = document.createElement('div');
+      seg.style.cssText = `flex:${v || 0.01};background:${colors[i]};transition:flex 400ms ease`;
+      seg.title = `${labels[i]}: ${v} m`;
+      bar.appendChild(seg);
+    });
+    body.appendChild(bar);
+
+    const valRow = document.createElement('div');
+    valRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:6px';
+    totals.forEach((v, i) => {
+      const sp = document.createElement('span');
+      sp.style.cssText = 'font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg)';
+      sp.textContent = `${v} m`;
+      sp.title = labels[i];
+      valRow.appendChild(sp);
+    });
+    body.appendChild(valRow);
   }
 
   // ── ACWR chart — player scope ────────────────────────────────
