@@ -534,25 +534,245 @@
 (async () => {
   const ok = await window.requireAuth();
   if (!ok) return;
-  const clubId = await window.getClubId();
-  window.applyClubTheme?.();
+  const [clubId] = await Promise.all([window.getClubId(), window.applyClubTheme?.()]);
 
-  // Populate player select if it exists in the page
-  const selects = document.querySelectorAll('select[id*="player"], select[name*="player"], .rp-player-select');
-  if (!selects.length) return;
-  const players = await window.getActivePlayers(clubId);
-  selects.forEach(sel => {
-    const first = sel.options[0];
-    sel.innerHTML = '';
-    if (first) sel.appendChild(first);
-    players.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = `${window.formatPlayerName(p)} · #${p.number || '—'} · ${p.position || '—'}`;
-      sel.appendChild(opt);
+  const planId = new URLSearchParams(location.search).get('plan');
+  if (!planId) return; // no plan param → stay on picker
+
+  const { data: plan, error } = await window.sb
+    .from('rehab_plans')
+    .select(`
+      id, kind, phase, phase_type, status, diagnosis, start_date, rtp_estimate, rtp_window_days,
+      programme_week, programme_total_weeks, source_label, risk_metric,
+      players ( first_name, last_name, position, number ),
+      injuries ( id, injury_type, body_area, severity, start_date, expected_return ),
+      rehab_plan_owners ( role, profiles ( full_name ) )
+    `)
+    .eq('id', planId)
+    .single();
+
+  if (error || !plan) { console.warn('[planner] plan not found', error); return; }
+
+  // ── Wait for __rpApi (set on DOMContentLoaded by rehab-planner.js) ──
+  await new Promise(r => { if (window.__rpApi) return r(); document.addEventListener('DOMContentLoaded', r); });
+  const api = window.__rpApi;
+
+  // ── Show planner (skip picker) ──
+  api.showPlanner();
+  api.setMode(plan.kind); // sets panel visibility & re-renders with mock data (overwritten below)
+
+  // ── Helpers ──
+  const TODAY = new Date(); TODAY.setHours(0,0,0,0);
+  const DAY   = 86400000;
+  const ini   = n => (n||'').split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
+  const full  = p => p ? `${p.first_name||''} ${p.last_name||''}`.trim() : '—';
+  const fmt   = d => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+
+  const pl   = plan.players;
+  const inj  = plan.injuries;
+  const name = full(pl);
+  const dayN = inj?.start_date ? Math.max(0, Math.floor((TODAY - new Date(inj.start_date))/DAY)) : null;
+
+  // ── Athlete avatar ──
+  const avEl = document.querySelector('.rp-athlete-av');
+  if (avEl) avEl.textContent = ini(name);
+
+  // ── Name + mode tag (preserve the tag element) ──
+  const nameEl = document.querySelector('.rp-athlete-id .name');
+  if (nameEl) {
+    const tag = document.getElementById('mode-tag');
+    nameEl.innerHTML = '';
+    nameEl.appendChild(document.createTextNode(name + ' '));
+    if (tag) nameEl.appendChild(tag);
+  }
+
+  // ── Context ──
+  const ctxEl = document.getElementById('athlete-ctx');
+  if (ctxEl) {
+    if (plan.kind === 'rehab') {
+      const dx = [inj?.injury_type, inj?.body_area, inj?.severity].filter(Boolean).join(' · ') || plan.diagnosis || '—';
+      ctxEl.innerHTML =
+        `<span><strong>${pl?.position||'—'}</strong></span>
+         <span class="sep">·</span><span>${dx}</span>
+         ${inj?.start_date?`<span class="sep">·</span><span>Sustained <strong>${fmt(inj.start_date)}</strong></span>`:''}
+         ${dayN!=null?`<span class="sep">·</span><span>Day <strong>${dayN}</strong> of rehab</span>`:''}`;
+    } else {
+      ctxEl.innerHTML =
+        `<span><strong>${pl?.position||'—'}</strong></span>
+         <span class="sep">·</span><span>${plan.diagnosis||plan.source_label||'—'}</span>
+         <span class="sep">·</span><span>Programme week <strong>${plan.programme_week||'—'}</strong> of ${plan.programme_total_weeks||'—'}</span>
+         ${plan.risk_metric?`<span class="sep">·</span><span>Risk: <strong>${plan.risk_metric}</strong></span>`:''}`;
+    }
+  }
+
+  // ── Stats strip ──
+  const stats = document.querySelectorAll('.rp-athlete-stat');
+  if (stats[0]) {
+    if (plan.kind === 'rehab' && inj?.expected_return) {
+      stats[0].querySelector('.v').innerHTML = `${fmt(inj.expected_return)}<sub>±${plan.rtp_window_days||0}d</sub>`;
+    } else if (plan.kind === 'preventive') {
+      stats[0].querySelector('.l').textContent = 'Programme';
+      stats[0].querySelector('.v').innerHTML = `W${plan.programme_week||'—'}<sub>/${plan.programme_total_weeks||'—'}</sub>`;
+    }
+  }
+
+  // ── Owners ──
+  const teamEl = document.querySelector('.rp-athlete-team');
+  if (teamEl && plan.rehab_plan_owners?.length) {
+    teamEl.innerHTML = plan.rehab_plan_owners
+      .map(o => `<span class="av-mini ${o.role}">${ini(o.profiles?.full_name)}</span>`)
+      .join('') + '<span class="label">Owners</span>';
+  }
+
+  // ── Crumb ──
+  const crumbEl = document.getElementById('crumb-now');
+  if (crumbEl) crumbEl.textContent = `${name} · ${plan.kind==='rehab'?'Rehab plan':'Preventive plan'}`;
+
+  // ── Link row ──
+  const linkRehab = document.getElementById('linkrow-rehab');
+  if (linkRehab && plan.kind === 'rehab' && inj) {
+    const a = linkRehab.querySelector('a[href*="Injur"]');
+    if (a) {
+      a.href = `Injuries.html?injury=${inj.id}`;
+      a.textContent = `Injury — ${[inj.injury_type, inj.body_area].filter(Boolean).join(' ')}`;
+    }
+  }
+
+  // ── Phase bar (rehab) ──
+  if (plan.kind === 'rehab' && inj?.id) {
+    const { data: phases } = await window.sb
+      .from('injury_phases')
+      .select('phase_number, phase_name, status, duration_days')
+      .eq('injury_id', inj.id)
+      .order('phase_number');
+    if (phases?.length) rpBuildPhasebar(phases, dayN);
+  }
+
+  // ── Trainbar (preventive) ──
+  if (plan.kind === 'preventive') rpBuildTrainbar(plan);
+
+  // ── Week pager label ──
+  const weekStart = rpMonday(TODAY);
+  const weekEnd   = new Date(weekStart.getTime() + 6*DAY);
+  const wkEl = document.querySelector('.rp-week-pager .label');
+  if (wkEl) wkEl.innerHTML = `Week ${rpWeekNum(weekStart)} <span class="sub">${fmt(weekStart)} – ${fmt(weekEnd)}</span>`;
+
+  // ── Sessions for current week ──
+  const { data: sessions } = await window.sb
+    .from('rehab_sessions')
+    .select('*')
+    .eq('plan_id', planId)
+    .gte('date', weekStart.toISOString().slice(0,10))
+    .lte('date', weekEnd.toISOString().slice(0,10))
+    .order('date');
+
+  api.setWeekData(rpBuildWeek(weekStart, sessions || []));
+
+  // ── Save plan button ──
+  const saveBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<i class="ti ti-loader-2"></i> Saving…';
+      const { error: err } = await window.sb.from('rehab_plans')
+        .update({ updated_at: new Date().toISOString() }).eq('id', planId);
+      saveBtn.disabled = false;
+      if (err) {
+        saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Save plan';
+      } else {
+        saveBtn.innerHTML = '<i class="ti ti-check"></i> Saved';
+        setTimeout(() => { saveBtn.innerHTML = '<i class="ti ti-device-floppy"></i> Save plan'; }, 2000);
+      }
     });
-  });
+  }
 })();
+
+// ─── Planner helpers (module-scoped, called from IIFE above) ───
+
+function rpMonday(d) {
+  const day = d.getDay();
+  const m = new Date(d.getTime() + (day===0 ? -6 : 1-day) * 86400000);
+  m.setHours(0,0,0,0);
+  return m;
+}
+
+function rpWeekNum(d) {
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  return Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7);
+}
+
+function rpBuildWeek(weekStart, sessions) {
+  const DAY = 86400000;
+  const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const COLOR_TYPE = {
+    '#10B981':'warmup','#A78BFA':'myo','#06B6D4':'mob','#22C55E':'act',
+    '#DC2626':'str','#F59E0B':'plyo','#3B82F6':'skills','#15803D':'field',
+    '#EA580C':'cond','#64748B':'cool','#0EA5E9':'assess'
+  };
+  const today = new Date(); today.setHours(0,0,0,0);
+  return DAYS.map((dow, i) => {
+    const date = new Date(weekStart.getTime() + i * DAY);
+    const iso  = date.toISOString().slice(0,10);
+    const isToday = date.getTime() === today.getTime();
+    const blocks = sessions
+      .filter(s => s.date === iso)
+      .map(s => ({
+        type: COLOR_TYPE[s.color] || 'str',
+        name: s.name || 'Session',
+        dur:  s.duration_min || 30,
+        exercises: s.block_count || 0,
+        au:   0,
+        resp: 'physio',
+        notes: s.notes || '',
+        _id:  s.id
+      }));
+    return { dow, dom: date.getDate(), today: isToday, blocks };
+  });
+}
+
+function rpBuildPhasebar(phases, currentDay) {
+  const track = document.querySelector('.rp-phase-track');
+  if (!track) return;
+  const marker = track.querySelector('.rp-phase-marker');
+  Array.from(track.children).forEach(c => { if (!c.classList.contains('rp-phase-marker')) c.remove(); });
+
+  const n = phases.length;
+  const totalDays = phases.reduce((s, p) => s + (p.duration_days||7), 0);
+  let dayAccum = 0, curIdx = 0, curStart = 0;
+
+  phases.forEach((ph, i) => {
+    const d = ph.duration_days || 7;
+    if (ph.status === 'in_progress') { curIdx = i; curStart = dayAccum; }
+    const pill = ph.status==='done'
+      ? '<span class="pill"><i class="ti ti-check"></i>Done</span>'
+      : ph.status==='in_progress' ? '<span class="pill">Now</span>' : '<span class="pill">Planned</span>';
+    const dLabel = dayAccum===0 ? `D1–D${d} · ${d}d` : `D${dayAccum+1}–D${dayAccum+d} · ${d}d`;
+    const el = Object.assign(document.createElement('div'), {
+      className: 'rp-phase' + (ph.status==='done'?' is-done':ph.status==='in_progress'?' is-current':''),
+      innerHTML: `<div class="ph-i">${pill}</div><div class="name">${ph.phase_name||`Phase ${ph.phase_number}`}</div><div class="days">${dLabel}</div>`
+    });
+    track.insertBefore(el, marker || null);
+    dayAccum += d;
+  });
+
+  if (marker && currentDay != null) {
+    const phD = phases[curIdx]?.duration_days || 7;
+    const posInPhase = Math.min(Math.max(0, currentDay - curStart), phD);
+    marker.style.left = `${((curIdx/n) + (posInPhase/phD/n)) * 100}%`;
+    marker.dataset.label = `DAY ${currentDay}`;
+    track.appendChild(marker);
+  }
+
+  const doneCount = phases.filter(p => p.status==='done').length;
+  const sumEl = document.querySelector('.rp-phasebar-head .summary');
+  if (sumEl) sumEl.innerHTML = `${totalDays} days planned · <strong>Day ${currentDay??'—'}</strong> · ${doneCount} of ${n} phases cleared`;
+}
+
+function rpBuildTrainbar(plan) {
+  const sumEl = document.querySelector('.rp-trainbar-h .summary');
+  if (sumEl) sumEl.innerHTML =
+    `${plan.programme_total_weeks||'—'}-week block · <strong>Week ${plan.programme_week||'—'} of ${plan.programme_total_weeks||'—'}</strong> · risk flag: <strong>${plan.risk_metric||plan.diagnosis||'—'}</strong>`;
+}
 </script>
 </body>
 </html>

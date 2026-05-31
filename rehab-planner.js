@@ -487,10 +487,13 @@
       block.classList.add('is-selected');
     });
 
-    // Expose for tweaks panel
+    // Expose for tweaks panel + Supabase wiring
     window.__rpApi = {
       setMode: applyMode,
       showView,
+      showPlanner,
+      showPicker,
+      setWeekData: (data) => { WEEK = data; renderKanban(); renderTable(); renderTimeline(); },
       setShowPhasebar: (on) => { $('#phasebar').style.display = on ? '' : 'none'; },
       setShowCriteria: (on) => {
         const c = $('#criteria-card');
