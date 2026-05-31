@@ -763,7 +763,7 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="full">
+          <div class="gp-c" data-size="full" id="card-zscore-matrix" data-card-id="zscore-matrix">
             <div class="gp-c-h">
               <span class="ttl">Z-score matrix</span>
               <span class="sub">8 starters · 6 metrics · vs role baseline</span>
@@ -786,7 +786,7 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="md" id="card-squad-rank">
+          <div class="gp-c" data-size="md" id="card-squad-rank" data-card-id="squad-rank">
             <div class="gp-c-h">
               <span class="ttl">Squad ranking</span>
               <div class="gp-c-picks" style="margin-left:6px">
@@ -809,7 +809,7 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="md">
+          <div class="gp-c" data-size="md" id="card-load-scatter" data-card-id="load-scatter">
             <div class="gp-c-h">
               <span class="ttl">Load vs HSR · scatter</span>
               <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
@@ -844,7 +844,7 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="md">
+          <div class="gp-c" data-size="md" id="card-team-heatmap" data-card-id="team-heatmap">
             <div class="gp-c-h"><span class="ttl">Team heatmap</span><span class="sub">avg position</span><span class="gp-demo-tag">Demo</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-c-b">
               <div class="gp-pitch">
@@ -858,7 +858,7 @@
           </div>
 
           <!-- Microcycle heatmap -->
-          <div class="gp-c" data-size="full" id="card-mc-heat">
+          <div class="gp-c" data-size="full" id="card-mc-heat" data-card-id="mc-heat">
             <div class="gp-c-h">
               <span class="ttl">Microcycle load heatmap</span>
               <span class="sub">last 6 sessions · squad avg player load</span>
@@ -868,7 +868,7 @@
           </div>
 
           <!-- Position radar -->
-          <div class="gp-c" data-size="md" id="card-pos-radar">
+          <div class="gp-c" data-size="md" id="card-pos-radar" data-card-id="pos-radar">
             <div class="gp-c-h">
               <span class="ttl">Position profile</span>
               <span class="sub">avg per position · last session</span>
@@ -880,7 +880,7 @@
           </div>
 
           <!-- Outliers z > |2| -->
-          <div class="gp-c" data-size="md" id="card-outliers">
+          <div class="gp-c" data-size="md" id="card-outliers" data-card-id="outliers">
             <div class="gp-c-h">
               <span class="ttl">Outliers</span>
               <span class="sub">z &gt; |2| · last session</span>
@@ -1517,20 +1517,24 @@ const GP_CARD_DEFS = {
     { name: 'Personal baseline trend', id: null,                stub: true  },
   ],
   grp: [
-    { name: 'Distance KPI',     id: 'card-sc-kpi-distance', stub: false },
-    { name: 'HSR KPI',          id: 'card-sc-kpi-hsr',      stub: false },
-    { name: 'Sprints KPI',      id: 'card-sc-kpi-sprints',  stub: false },
-    { name: 'Variación vs equivalentes', id: 'card-sc-zscore-temporal', stub: false },
-    { name: 'Z-score matrix',   id: null, stub: true },
-    { name: 'Squad ranking',    id: null, stub: true },
-    { name: 'Load vs HSR scatter', id: null, stub: true },
-    { name: 'Team heatmap',     id: null, stub: true },
-    { name: 'Position box plot',id: null, stub: true },
-    { name: 'Outliers card',    id: null, stub: true },
-    { name: 'Position radar',   id: null, stub: true },
-    { name: 'Squad readiness',  id: null, stub: true },
-    { name: 'Session KPI row',  id: null, stub: true },
-    { name: 'Session table',    id: null, stub: true },
+    // ── Default-visible cards (shown on first load) ──
+    { name: 'Session KPI row',          id: 'card-session-kpi',          stub: false },
+    { name: 'Session table',            id: 'card-session-table',        stub: false },
+    { name: 'Variación vs equivalentes',id: 'card-sc-zscore-temporal',   stub: false },
+    // ── Add-card only (stashed by default) ──
+    { name: 'Distance KPI',             id: 'card-sc-kpi-distance',      stub: false },
+    { name: 'HSR KPI',                  id: 'card-sc-kpi-hsr',           stub: false },
+    { name: 'Sprints KPI',              id: 'card-sc-kpi-sprints',       stub: false },
+    { name: 'Z-score matrix',           id: 'card-zscore-matrix',        stub: false },
+    { name: 'Squad ranking',            id: 'card-squad-rank',           stub: false },
+    { name: 'Load vs HSR scatter',      id: 'card-load-scatter',         stub: false },
+    { name: 'Team heatmap',             id: 'card-team-heatmap',         stub: false },
+    { name: 'Microcycle heatmap',       id: 'card-mc-heat',              stub: false },
+    { name: 'Position profile',         id: 'card-pos-radar',            stub: false },
+    { name: 'Outliers',                 id: 'card-outliers',             stub: false },
+    // ── Not yet implemented ──
+    { name: 'Position box plot',        id: null,                        stub: true },
+    { name: 'Squad readiness',          id: null,                        stub: true },
   ],
   mind: [
     { name: 'Match heatmap',              id: null, stub: true },
@@ -1593,6 +1597,8 @@ function openCatalog(insertBefore) {
       insertBefore.parentNode.insertBefore(card, insertBefore);
       modal.remove();
       showToast(`${def.name} added`);
+      const currentView = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
+      saveLayout(currentView).catch(e => console.warn('saveLayout on add:', e));
     });
   });
 }
@@ -1665,6 +1671,60 @@ async function applyLayoutToView(viewKey) {
       card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
     }
   }
+}
+
+// ── Grp view: apply default visibility + restore stash state ─────
+// Default visible: session-kpi, session-table, sc-zscore-temporal.
+// On first load (no saved layout): stash the rest + save defaults.
+// On subsequent loads: stash any card absent from saved layout.
+const _GRP_DEFAULTS = new Set([
+  'card-session-kpi', 'card-session-table', 'card-sc-zscore-temporal',
+]);
+
+async function applyGrpDefaultLayout() {
+  const grid = document.querySelector('.gp-view[data-view="grp"] .gp-grid');
+  if (!grid) return;
+  const defs = (GP_CARD_DEFS.grp || []).filter(d => d.id && !d.stub);
+
+  try {
+    const layout = await loadLayout('grp');
+
+    if (!layout?.length) {
+      // First load — stash everything except the three defaults
+      for (const def of defs) {
+        if (_GRP_DEFAULTS.has(def.id)) continue;
+        const card = document.getElementById(def.id);
+        if (card) { _cardStash.set(def.id, card); card.remove(); }
+      }
+      // Persist the initial minimal layout
+      await saveLayout('grp').catch(e => console.warn('applyGrpDefaultLayout save:', e));
+      return;
+    }
+
+    // Restore: stash cards not present in saved layout
+    const activeIds = new Set(layout.map(c => c.card_id));
+    for (const def of defs) {
+      const card = document.getElementById(def.id);
+      if (!card) continue;
+      const dcid = card.dataset.cardId || '';
+      if (!activeIds.has(dcid)) {
+        _cardStash.set(def.id, card);
+        card.remove();
+      }
+    }
+
+    // Restore metric_key / config per card (delegates to applyLayoutToView logic)
+    for (const { card_id, config } of layout) {
+      if (!config) continue;
+      const card = grid.querySelector(`[data-card-id="${card_id}"]`);
+      if (!card) continue;
+      if (config.metric_key) card.dataset.metricKey = config.metric_key;
+      if (card_id === 'sc-zscore-temporal' && config.metrics?.length) {
+        const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+        card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
+      }
+    }
+  } catch (e) { console.warn('applyGrpDefaultLayout:', e); }
 }
 
 // ── KPI card rendering helpers ──────────────────────────────────
@@ -2093,6 +2153,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
         _cardStash.set(card.id, card);
         card.remove();
         showToast('Card removed — recoverable via Add card');
+        saveLayout(view).catch(e => console.warn('saveLayout on remove:', e));
       } else {
         card.remove();
       }
@@ -2446,6 +2507,7 @@ async function _detectSmartDefault(clubId, userId) {
   }
 
   await applyLayoutToView('ind').catch(e => console.warn('applyLayoutToView:', e));
+  await applyGrpDefaultLayout().catch(e => console.warn('applyGrpDefaultLayout:', e));
   await window.refreshDashboard();
 })();
 </script>
