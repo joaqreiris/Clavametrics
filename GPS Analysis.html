@@ -590,7 +590,7 @@
           </div>
 
           <!-- NEW: High Intensity Actions chart -->
-          <div class="gp-c" data-size="full" id="card-pw-chart">
+          <div class="gp-c" data-size="full" id="card-pw-chart" data-card-id="pw-chart">
             <div class="gp-c-h">
               <span class="ttl">High Intensity Actions</span>
               <span class="sub">HSR · VHSR · Sprint + Acc+Dec</span>
@@ -601,7 +601,7 @@
             </div>
           </div>
 
-          <div class="gp-c" data-size="lg">
+          <div class="gp-c" data-size="lg" id="card-radar" data-card-id="radar">
             <div class="gp-c-h">
               <span class="ttl">Radar profile</span>
               <span class="sub">vs MF baseline · z-normalized</span>
@@ -643,7 +643,7 @@
           </div>
 
           <!-- ACWR chart -->
-          <div class="gp-c" data-size="md" id="card-acwr">
+          <div class="gp-c" data-size="md" id="card-acwr" data-card-id="acwr">
             <div class="gp-c-h">
               <span class="ttl">ACWR</span>
               <span class="sub">8-week · player load</span>
@@ -667,7 +667,7 @@
           </div>
 
           <!-- Velocity zones distribution -->
-          <div class="gp-c" data-size="sm" id="card-vzones">
+          <div class="gp-c" data-size="sm" id="card-vzones" data-card-id="vzones">
             <div class="gp-c-h">
               <span class="ttl">Velocity zones</span>
               <span class="sub">squad avg · last session</span>
@@ -707,15 +707,15 @@
           </div>
 
           <!-- Player vs baseline KPIs (session-scoped) -->
-          <div class="gp-c" data-size="sm" data-card-id="sc-kpi-distance" data-metric-key="total_distance">
+          <div class="gp-c" data-size="sm" id="card-sc-kpi-distance" data-card-id="sc-kpi-distance" data-metric-key="total_distance">
             <div class="gp-c-h"><span class="ttl">Distance</span><span class="sub">vs MF baseline</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-kpi"><div class="l"><i class="ti ti-route"></i>vs MF baseline</div><div class="v">—</div><div class="t"></div></div>
           </div>
-          <div class="gp-c" data-size="sm" data-card-id="sc-kpi-hsr" data-metric-key="high_speed_distance">
+          <div class="gp-c" data-size="sm" id="card-sc-kpi-hsr" data-card-id="sc-kpi-hsr" data-metric-key="high_speed_distance">
             <div class="gp-c-h"><span class="ttl">HSR</span><span class="sub">&gt;19.8 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-kpi"><div class="l"><i class="ti ti-bolt"></i>vs MF baseline</div><div class="v">—</div><div class="t"></div></div>
           </div>
-          <div class="gp-c" data-size="sm" data-card-id="sc-kpi-sprints" data-metric-key="sprint_distance">
+          <div class="gp-c" data-size="sm" id="card-sc-kpi-sprints" data-card-id="sc-kpi-sprints" data-metric-key="sprint_distance">
             <div class="gp-c-h"><span class="ttl">Sprints</span><span class="sub">&gt;25.2 km/h</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-kpi"><div class="l"><i class="ti ti-flame"></i>vs MF baseline</div><div class="v">—</div><div class="t"></div></div>
           </div>
@@ -1458,30 +1458,98 @@ function showToast(msg) {
 }
 
 // ── Card catalog ──────────────────────────────────────────────
-const GP_CATALOG = {
-  ind:  ['Radar profile','× match max','Weekly bars','ACWR chart','Speed zones','Accel/Decel asym','Personal baseline trend','Player week table','High intensity actions'],
-  grp:  ['Distance KPI','HSR KPI','Sprints KPI','Z-score matrix','Squad ranking','Load vs HSR scatter','Team heatmap','Position box plot','Outliers card','Position radar','Squad readiness','Session KPI row','Session table'],
-  mind: ['Match heatmap','Distance per min','Velocity profile','Sprint zonal grid','Halves drop-off','Recovery between sprints','TD per match','High intensity per match'],
-  mgrp: ['Total distance','HSR squad','Sprints','Us vs opponent','Team heatmap','Match vs training delivered','ACWR gauges row','ACWR by player','Risk alerts'],
-  mc:   ['MC diff table','MC diff scatter','Diff by metric','MD trend'],
+// Each entry: { name, id (DOM element id), stub }
+// stub:true → no implementation yet, shown disabled
+const GP_CARD_DEFS = {
+  ind: [
+    { name: 'Radar profile',           id: 'card-radar',        stub: false },
+    { name: '× match max',             id: 'card-xmatch',       stub: false },
+    { name: 'Weekly bars',             id: 'card-weekly-bars',  stub: false },
+    { name: 'ACWR chart',              id: 'card-acwr',         stub: false },
+    { name: 'Speed zones',             id: 'card-vzones',       stub: false },
+    { name: 'Player week table',       id: 'card-pw-table',     stub: false },
+    { name: 'High intensity actions',  id: 'card-pw-chart',     stub: false },
+    { name: 'Accel/Decel asym',        id: null,                stub: true  },
+    { name: 'Personal baseline trend', id: null,                stub: true  },
+  ],
+  grp: [
+    { name: 'Distance KPI',     id: 'card-sc-kpi-distance', stub: false },
+    { name: 'HSR KPI',          id: 'card-sc-kpi-hsr',      stub: false },
+    { name: 'Sprints KPI',      id: 'card-sc-kpi-sprints',  stub: false },
+    { name: 'Z-score matrix',   id: null, stub: true },
+    { name: 'Squad ranking',    id: null, stub: true },
+    { name: 'Load vs HSR scatter', id: null, stub: true },
+    { name: 'Team heatmap',     id: null, stub: true },
+    { name: 'Position box plot',id: null, stub: true },
+    { name: 'Outliers card',    id: null, stub: true },
+    { name: 'Position radar',   id: null, stub: true },
+    { name: 'Squad readiness',  id: null, stub: true },
+    { name: 'Session KPI row',  id: null, stub: true },
+    { name: 'Session table',    id: null, stub: true },
+  ],
+  mind: [
+    { name: 'Match heatmap',              id: null, stub: true },
+    { name: 'Distance per min',           id: null, stub: true },
+    { name: 'Velocity profile',           id: null, stub: true },
+    { name: 'Sprint zonal grid',          id: null, stub: true },
+    { name: 'Halves drop-off',            id: null, stub: true },
+    { name: 'Recovery between sprints',   id: null, stub: true },
+    { name: 'TD per match',               id: null, stub: true },
+    { name: 'High intensity per match',   id: null, stub: true },
+  ],
+  mgrp: [
+    { name: 'Total distance',                 id: null, stub: true },
+    { name: 'HSR squad',                      id: null, stub: true },
+    { name: 'Sprints',                        id: null, stub: true },
+    { name: 'Us vs opponent',                 id: null, stub: true },
+    { name: 'Team heatmap',                   id: null, stub: true },
+    { name: 'Match vs training delivered',    id: null, stub: true },
+    { name: 'ACWR gauges row',                id: null, stub: true },
+    { name: 'ACWR by player',                 id: null, stub: true },
+    { name: 'Risk alerts',                    id: null, stub: true },
+  ],
+  mc: [
+    { name: 'MC diff table',   id: null, stub: true },
+    { name: 'MC diff scatter', id: null, stub: true },
+    { name: 'Diff by metric',  id: null, stub: true },
+    { name: 'MD trend',        id: null, stub: true },
+  ],
 };
+
+// Stash: card elements removed from dashboard but recoverable
+const _cardStash = new Map(); // cardId → HTMLElement
 
 function openCatalog(insertBefore) {
   const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
-  const items = GP_CATALOG[view] || [];
-  const modal = makeModal('Add card',
-    `<div class="gp-catalog">${items.map(n => `<button class="gp-catalog-item" data-name="${n}">${n}</button>`).join('')}</div>`
-  );
-  modal.querySelectorAll('.gp-catalog-item').forEach(btn => btn.addEventListener('click', () => {
-    const card = document.createElement('div');
-    card.className = 'gp-c';
-    card.dataset.size = 'md';
-    card.innerHTML = `<div class="gp-c-h"><span class="ttl"></span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div><div class="gp-c-b" style="align-items:center;justify-content:center;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans)">Configure metric →</div>`;
-    card.querySelector('.ttl').textContent = btn.dataset.name;
-    initSizeToggles(card);
-    insertBefore.parentNode.insertBefore(card, insertBefore);
-    modal.remove();
-  }));
+  const defs = GP_CARD_DEFS[view] || [];
+
+  const html = defs.map(def => {
+    if (def.stub) {
+      return `<button class="gp-catalog-item" data-name="${def.name}" disabled style="opacity:0.45;cursor:not-allowed">${def.name}<span style="display:block;font:500 10px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px">coming soon</span></button>`;
+    }
+    const inDashboard = def.id && !!document.getElementById(def.id);
+    const inStash     = def.id && _cardStash.has(def.id);
+    if (inDashboard) {
+      return `<button class="gp-catalog-item" data-name="${def.name}" disabled style="opacity:0.45;cursor:not-allowed">${def.name}<span style="display:block;font:500 10px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:3px">ya en el dashboard</span></button>`;
+    }
+    if (!inStash) return ''; // card not yet stashed & not a stub — shouldn't happen
+    return `<button class="gp-catalog-item" data-name="${def.name}">${def.name}</button>`;
+  }).filter(Boolean).join('');
+
+  const modal = makeModal('Add card', `<div class="gp-catalog">${html || '<p style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:8px 0">All cards are already on the dashboard.</p>'}</div>`);
+
+  modal.querySelectorAll('.gp-catalog-item:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const def = defs.find(d => d.name === btn.dataset.name);
+      if (!def || !def.id) return;
+      const card = _cardStash.get(def.id);
+      if (!card) return;
+      _cardStash.delete(def.id);
+      insertBefore.parentNode.insertBefore(card, insertBefore);
+      modal.remove();
+      showToast(`${def.name} added`);
+    });
+  });
 }
 
 // ── Dashboard layout persistence ──────────────────────────────
@@ -1969,7 +2037,16 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       card.after(clone);
       showToast('Card duplicated');
     } else if (item.label === 'Remove') {
-      card.remove();
+      const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
+      const defs = GP_CARD_DEFS[view] || [];
+      const isCatalogCard = card.id && defs.some(d => d.id === card.id);
+      if (isCatalogCard) {
+        _cardStash.set(card.id, card);
+        card.remove();
+        showToast('Card removed — recoverable via Add card');
+      } else {
+        card.remove();
+      }
     } else if (item.label === 'Change metric') {
       if (!card.dataset.cardId) { showToast('Change metric not available for this card'); return; }
       openChangeMetricModal(card);
