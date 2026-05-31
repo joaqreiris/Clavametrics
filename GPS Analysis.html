@@ -8744,43 +8744,83 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   window._scState = _st; // expose for cards to read compareSessionId etc.
 
   // ── KPI chip state ────────────────────────────────────────────
-  const _scKpiOverride = {}; // idx → metricKey
+  // _scKpiOverride[idx] = { key: metricKey, agg: 'avg'|'total'|'median'|'max'|'min' }
+  const _scKpiOverride = {};
+
+  // Peak metrics: sum/median make no sport sense → only avg/max/min offered
+  const _SC_PEAK_KEYS = new Set(['max_speed','avg_speed','max_acceleration','max_deceleration','peak_speed']);
+
   const _SC_DEFAULT_CHIPS = [
-    { key: 'total_distance',           label: 'Avg Distance',  unit: 'm',    dec: 0, agg: 'avg' },
-    { key: 'high_speed_distance',      label: 'Avg HSR',       unit: 'm',    dec: 0, agg: 'avg' },
-    { key: 'very_high_speed_distance', label: 'Avg VHSR',      unit: 'm',    dec: 0, agg: 'avg' },
-    { key: 'sprint_count',             label: 'Avg Sprints',   unit: '',     dec: 1, agg: 'avg' },
-    { key: 'acc_dec',                  label: 'Avg Acc+Dec',   unit: '',     dec: 1, agg: 'accdec_avg' },
-    { key: 'player_load',              label: 'Avg Load',      unit: 'AU',   dec: 1, agg: 'avg' },
-    { key: 'max_speed',                label: 'Max Speed',     unit: 'km/h', dec: 1, agg: 'max' },
+    { key: 'total_distance',           unit: 'm',    dec: 0, agg: 'avg' },
+    { key: 'high_speed_distance',      unit: 'm',    dec: 0, agg: 'avg' },
+    { key: 'very_high_speed_distance', unit: 'm',    dec: 0, agg: 'avg' },
+    { key: 'sprint_count',             unit: '',     dec: 1, agg: 'avg' },
+    { key: 'acc_dec',                  unit: '',     dec: 1, agg: 'avg' },
+    { key: 'player_load',              unit: 'AU',   dec: 1, agg: 'avg' },
+    { key: 'max_speed',                unit: 'km/h', dec: 1, agg: 'max' },
   ];
 
+  // Short names used in chip labels
+  const _SC_METRIC_NAMES = {
+    total_distance: 'Distance', high_speed_distance: 'HSR',
+    very_high_speed_distance: 'VHSR', sprint_count: 'Sprints',
+    sprint_distance: 'Sprints (m)', acc_dec: 'Acc+Dec',
+    player_load: 'Load', max_speed: 'Speed', accelerations: 'Accels',
+    decelerations: 'Decels', time_played: 'Time', avg_speed: 'Avg Speed', hmld: 'HMLD',
+  };
+  const _SC_AGG_LABELS = { avg: 'Avg', total: 'Total', median: 'Median', max: 'Max', min: 'Min' };
+
+  function _scChipLabel(metricKey, agg) {
+    const cat      = (window._gpCatalog || []).find(d => d.key === metricKey);
+    const baseName = _SC_METRIC_NAMES[metricKey] || cat?.label || metricKey.replace(/_/g,' ');
+    return `${_SC_AGG_LABELS[agg] || 'Avg'} ${baseName}`;
+  }
+
+  // Aggregations allowed for a given metric key
+  function _scAllowedAggs(metricKey) {
+    if (_SC_PEAK_KEYS.has(metricKey)) return ['avg','max','min'];
+    return ['avg','total','median','max','min'];
+  }
+
+  // Sensible default aggregation for a metric
+  function _scDefaultAgg(metricKey) {
+    return _SC_PEAK_KEYS.has(metricKey) ? 'max' : 'avg';
+  }
+
   function _scResolveChipDef(idx) {
-    const override = _scKpiOverride[idx];
-    if (!override) return _SC_DEFAULT_CHIPS[idx];
-    const cat = (window._gpCatalog || []).find(d => d.key === override);
+    const ov = _scKpiOverride[idx];
+    const base = _SC_DEFAULT_CHIPS[idx] || _SC_DEFAULT_CHIPS[0];
+    if (!ov) return { ...base, label: _scChipLabel(base.key, base.agg) };
+    // ov can be {key, agg} or legacy plain string
+    const key = typeof ov === 'string' ? ov : ov.key;
+    const agg = typeof ov === 'string' ? _scDefaultAgg(key) : (ov.agg || _scDefaultAgg(key));
+    const cat = (window._gpCatalog || []).find(d => d.key === key);
     return {
-      key:   override,
-      label: cat?.label || override,
-      unit:  cat?.unit  || '',
+      key,
+      agg,
+      label: _scChipLabel(key, agg),
+      unit:  key === 'acc_dec' ? '' : (cat?.unit || ''),
       dec:   cat?.decimals ?? 0,
-      agg:   override === 'max_speed' ? 'max' : 'avg',
     };
   }
 
   function _scAggVal(reports, def) {
     if (!reports.length) return null;
-    if (def.agg === 'max') {
-      const vals = reports.map(r => r[def.key] || 0);
-      return Math.max(...vals);
+    const vals = def.key === 'acc_dec'
+      ? reports.map(r => (r.accelerations || 0) + (r.decelerations || 0))
+      : reports.map(r => r[def.key]).filter(v => v != null && !isNaN(v));
+    if (!vals.length) return null;
+    switch (def.agg) {
+      case 'total':  return vals.reduce((s, v) => s + v, 0);
+      case 'max':    return Math.max(...vals);
+      case 'min':    return Math.min(...vals);
+      case 'median': {
+        const s = [...vals].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
+      }
+      default:       return vals.reduce((s, v) => s + v, 0) / vals.length; // avg
     }
-    if (def.agg === 'accdec_avg') {
-      const vals = reports.map(r => (r.accelerations || 0) + (r.decelerations || 0));
-      return vals.reduce((s, v) => s + v, 0) / vals.length;
-    }
-    // avg
-    const vals = reports.map(r => r[def.key]).filter(v => v != null && !isNaN(v));
-    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
   }
 
   // ── Table column state ────────────────────────────────────────
@@ -9040,7 +9080,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch (e) { console.error('_renderTable (SC):', e); }
   }
 
-  // ── SC KPI: change-metric popup (reuses pw-km-popup CSS) ──────
+  // ── SC KPI: change-metric + agg popup (reuses pw-km-popup CSS) ─
   let _scKmPopup = null;
   let _scKmTargetIdx = -1;
 
@@ -9049,26 +9089,53 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     _scKmTargetIdx = idx;
     const catalog = window._gpCatalog || [];
     if (!catalog.length) { showToast('Catalog not loaded yet'); return; }
-    const currentKey = _scKpiOverride[idx] || _SC_DEFAULT_CHIPS[idx]?.key;
+
+    const def        = _scResolveChipDef(idx);
+    const currentKey = def.key;
+    const currentAgg = def.agg;
+    const allowed    = _scAllowedAggs(currentKey);
+
     const popup = document.createElement('div');
     popup.className = 'pw-km-popup';
-    popup.innerHTML = `<div class="pw-km-popup-hd">Change metric</div>` +
+    popup.style.minWidth = '220px';
+
+    // Section 1 — Aggregation
+    const aggHTML = `<div class="pw-km-popup-hd">Aggregation</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;padding:4px 6px 8px">
+        ${allowed.map(a =>
+          `<button class="sc-agg-btn${a === currentAgg ? ' is-on' : ''}" data-agg="${a}"
+            style="flex:1;min-width:52px;height:24px;border-radius:4px;border:1px solid var(--cm-border);
+            background:${a === currentAgg ? 'var(--cm-accent-soft)' : 'transparent'};
+            color:${a === currentAgg ? 'var(--cm-fg-strong)' : 'var(--cm-fg-muted)'};
+            font:600 11px/1 var(--cm-font-mono);cursor:pointer;padding:0 4px">
+            ${_SC_AGG_LABELS[a]}
+          </button>`
+        ).join('')}
+      </div>`;
+
+    // Section 2 — Metric
+    const metricHTML = `<div class="pw-km-popup-hd" style="border-top:1px solid var(--cm-border-soft);padding-top:8px;margin-top:2px">Metric</div>` +
       catalog.map(d =>
         `<div class="pw-km-item${d.key === currentKey ? ' is-on' : ''}" data-key="${d.key}">
           ${d.label}<span class="km-tag">${d.unit || ''}</span>
         </div>`
       ).join('');
+
+    popup.innerHTML = aggHTML + metricHTML;
     document.body.appendChild(popup);
     _scKmPopup = popup;
+
     const rect = anchorEl.getBoundingClientRect();
     popup.style.top  = `${rect.bottom + 4}px`;
     popup.style.left = `${Math.min(rect.left, window.innerWidth - 230)}px`;
+
     popup.addEventListener('click', async e => {
-      const item = e.target.closest('.pw-km-item');
-      if (!item) return;
-      await _scSelectMetric(_scKmTargetIdx, item.dataset.key);
-      _scCloseKmPopup();
+      const aggBtn = e.target.closest('[data-agg]');
+      if (aggBtn) { await _scSelectAgg(_scKmTargetIdx, aggBtn.dataset.agg); _scCloseKmPopup(); return; }
+      const item = e.target.closest('.pw-km-item[data-key]');
+      if (item) { await _scSelectMetric(_scKmTargetIdx, item.dataset.key); _scCloseKmPopup(); }
     });
+
     setTimeout(() => document.addEventListener('click', _scKmOutside, { once: true }), 0);
   }
 
@@ -9078,36 +9145,57 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     document.removeEventListener('click', _scKmOutside);
   }
 
+  // Change aggregation only, keep current metric
+  async function _scSelectAgg(idx, agg) {
+    const prev = _scKpiOverride[idx];
+    const key  = typeof prev === 'object' ? prev.key
+               : typeof prev === 'string' ? prev
+               : _SC_DEFAULT_CHIPS[idx]?.key;
+    _scKpiOverride[idx] = { key, agg };
+    await _scRefreshChip(idx);
+    _scSaveKpiSlots();
+  }
+
+  // Change metric, pick sensible default agg
   async function _scSelectMetric(idx, metricKey) {
-    _scKpiOverride[idx] = metricKey;
+    const prev = _scKpiOverride[idx];
+    const oldAgg = typeof prev === 'object' ? prev.agg : _scDefaultAgg(metricKey);
+    // If prev agg is still valid for new metric, keep it; otherwise reset to sensible default
+    const agg = _scAllowedAggs(metricKey).includes(oldAgg) ? oldAgg : _scDefaultAgg(metricKey);
+    _scKpiOverride[idx] = { key: metricKey, agg };
+    await _scRefreshChip(idx);
+    _scSaveKpiSlots();
+  }
+
+  // Recompute + update a single chip DOM element
+  async function _scRefreshChip(idx) {
     const chip = kpiBody.querySelector(`[data-kpi-idx="${idx}"]`);
     if (!chip) return;
     const def = _scResolveChipDef(idx);
     let val = null;
-    const cat = (window._gpCatalog || []).find(d => d.key === metricKey);
-    const isCore = !cat || cat.is_core;
+    const cat    = (window._gpCatalog || []).find(d => d.key === def.key);
+    const isCore = !cat || cat.is_core || def.key === 'acc_dec';
     if (isCore) {
       val = _scAggVal(_lastReports, def);
     } else {
-      // custom metric: fetch from gps_report_metrics
       const reportIds = _lastReports.map(r => r.id).filter(Boolean);
       if (reportIds.length && _scCurrentClubId) {
         try {
           const { data: eav } = await window.sb
-            .from('gps_report_metrics')
-            .select('value')
-            .in('report_id', reportIds)
-            .eq('metric_key', metricKey)
-            .eq('club_id', _scCurrentClubId);
+            .from('gps_report_metrics').select('value')
+            .in('report_id', reportIds).eq('metric_key', def.key).eq('club_id', _scCurrentClubId);
           const vals = (eav || []).map(r => +r.value || 0).filter(v => !isNaN(v));
-          val = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+          if (vals.length) {
+            // use same aggregation logic on raw vals array
+            const fakeReports = vals.map(v => ({ [def.key]: v }));
+            val = _scAggVal(fakeReports, def);
+          }
         } catch { val = null; }
       }
     }
-    chip.dataset.metricKey = metricKey;
+    chip.dataset.metricKey = def.key;
     chip.querySelector('.k-label').textContent = def.label;
     chip.querySelector('.k-val').innerHTML = `${val != null ? fmt(val, def.dec) : '—'}${def.unit ? `<sub>${def.unit}</sub>` : ''}`;
-    _scSaveKpiSlots();
   }
 
   kpiBody.addEventListener('click', e => {
