@@ -444,50 +444,116 @@
   if (!ok) return;
   const [clubId] = await Promise.all([window.getClubId(), window.applyClubTheme()]);
 
-  // ── Count active plans ─────────────────────────────────────
-  const [rehabRes, prevRes] = await Promise.all([
-    window.sb.from('rehab_protocols').select('id,status,name,injury_id,created_at,players(first_name,last_name)', { count: 'exact' })
-      .eq('club_id', clubId).eq('status', 'active'),
-    window.sb.from('preventive_routines').select('id,name,focus_area,frequency', { count: 'exact' })
-      .eq('club_id', clubId).eq('is_active', true),
-  ]);
+  const { data: plans, error } = await window.sb
+    .from('rehab_plans')
+    .select(`
+      id, kind, phase, phase_type, status, diagnosis, risk_metric, source_label,
+      programme_week, programme_total_weeks, rtp_window_days,
+      players ( first_name, last_name, position ),
+      injuries ( injury_type, body_area, severity, start_date, expected_return ),
+      rehab_plan_owners ( role, profiles ( full_name ) )
+    `)
+    .eq('club_id', clubId)
+    .not('status', 'in', '("cleared","archived")');
+  if (error) { console.warn('[rehab] query error:', error); return; }
 
-  const rehabs = rehabRes.data || [];
-  const prevs  = prevRes.data  || [];
-  const total  = rehabs.length + prevs.length;
+  const all  = plans || [];
+  const rehab = all.filter(p => p.kind === 'rehab');
+  const prev  = all.filter(p => p.kind === 'preventive');
 
-  // Update header counts
-  const ctxEl = document.querySelector('.po-head .ctx');
-  if (ctxEl && total > 0) {
-    ctxEl.innerHTML = `<span><strong>${total}</strong> active</span>
-      <span style="color:var(--cm-fg-faint)">·</span>
-      <span><strong>${rehabs.length}</strong> rehab · <strong>${prevs.length}</strong> preventive</span>`;
-  }
+  // ── helpers ──
+  const today = new Date(); today.setHours(0,0,0,0);
+  const DAY = 86400000;
+  const ini  = n => (n||'').split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2);
+  const full = p => p ? `${p.first_name||''} ${p.last_name||''}`.trim() : '—';
+  const avc  = pos => {
+    const s = (pos||'').toUpperCase();
+    if (s.includes('GK')) return 'gk';
+    if (/[FW]/.test(s) && !s.includes('CB') && !s.includes('LB') && !s.includes('RB')) return 'fw';
+    if (s.includes('M')) return 'mf';
+    return 'df';
+  };
+  const fmt  = d => d ? new Date(d).toLocaleDateString('en-US',{month:'short',day:'2-digit'}) : '—';
+  const dxOf = i => i ? [i.injury_type, i.body_area, i.severity].filter(Boolean).join(' · ') : '—';
+  const dayN = i => i?.start_date ? Math.max(0, Math.floor((today - new Date(i.start_date))/DAY)) : null;
+  const rtpDays = i => i?.expected_return ? Math.ceil((new Date(i.expected_return) - today)/DAY) : null;
+  const ownersHtml = list => (list||[]).map(o =>
+    `<span class="av-mini ${o.role}">${ini(o.profiles?.full_name)}</span>`).join('');
+  const statusHtml = s =>
+    s==='near_rtp' ? '<span class="po-status near"><span class="dot"></span><span class="lbl">Near RTP</span></span>'
+    : s==='blocked' ? '<span class="po-status blocked"><span class="dot"></span><span class="lbl">Blocked</span></span>'
+    : '<span class="po-status ok"><span class="dot"></span><span class="lbl">On track</span></span>';
 
-  // ── Populate rehab rows if table has data ─────────────────
-  const tbody = document.querySelector('.po-table tbody');
-  if (tbody && rehabs.length > 0) {
-    tbody.innerHTML = rehabs.map(r => {
-      const p    = r.players;
-      const name = p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : '—';
-      const since = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '—';
-      return `<tr>
-        <td><div class="po-player"><div class="po-av">${name.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2)}</div><div><div class="po-name">${name}</div></div></div></td>
-        <td><span class="po-badge rehab">Rehab</span></td>
-        <td>${r.name}</td>
-        <td>${since}</td>
-        <td><span class="po-status active"><span class="dot"></span>Active</span></td>
-        <td><a class="cm-btn is-ghost is-sm" href="Rehab Planner.html"><i class="ti ti-pencil"></i></a></td>
-      </tr>`;
-    }).join('') + prevs.map(r => `<tr>
-        <td>—</td>
-        <td><span class="po-badge prev">Preventive</span></td>
-        <td>${r.name}</td>
-        <td>—</td>
-        <td><span class="po-status active"><span class="dot"></span>Active</span></td>
-        <td><a class="cm-btn is-ghost is-sm" href="Rehab Planner.html"><i class="ti ti-pencil"></i></a></td>
-      </tr>`).join('');
-  }
+  // ── render rehab ──
+  const rehabRows = rehab.map(p => {
+    const inj = p.injuries, d = dayN(inj), rd = rtpDays(inj);
+    const near = rd != null && rd <= 7;
+    return `<tr data-name="${full(p.players).toLowerCase()}" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
+      <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${ini(full(p.players))}</div>
+        <div class="who"><div class="name">${full(p.players)}</div><div class="pos">${p.players?.position||''}</div></div></div></td>
+      <td><span class="po-pill is-rehab"><i class="ti ti-activity-heartbeat"></i>Rehab</span></td>
+      <td><div class="po-ctx"><div class="line1">${dxOf(inj)}</div>
+        <div class="line2">${d!=null?`<span>Day <strong>${d}</strong></span><span class="sep">·</span>`:''}
+          <span class="po-phase-pill ${p.phase_type||''}">${p.phase||''}</span></div></div></td>
+      <td><div class="po-rtp ${near?'is-near':''}">
+        <div class="v">${fmt(inj?.expected_return)}${p.rtp_window_days?`<sub>±${p.rtp_window_days}d</sub>`:''}</div>
+        <div class="meta">${rd!=null?`in ${rd} days`:'—'}</div></div></td>
+      <td><div class="po-owners">${ownersHtml(p.rehab_plan_owners)}</div></td>
+      <td><div class="po-next"><div class="name">—</div><div class="meta">No session</div></div></td>
+      <td>${statusHtml(p.status)}</td>
+      <td><i class="ti ti-chevron-right po-arrow"></i></td></tr>`;
+  }).join('');
+
+  // ── render preventive ──
+  const prevRows = prev.map(p => {
+    const left = (p.programme_total_weeks||0) - (p.programme_week||0);
+    return `<tr data-name="${full(p.players).toLowerCase()}" onclick="location.href='Rehab Planner.html?plan=${p.id}'">
+      <td><div class="po-ath"><div class="av ${avc(p.players?.position)}">${ini(full(p.players))}</div>
+        <div class="who"><div class="name">${full(p.players)}</div><div class="pos">${p.players?.position||''}</div></div></div></td>
+      <td><span class="po-pill is-prev"><i class="ti ti-shield-half-filled"></i>Preventive</span></td>
+      <td><div class="po-ctx"><div class="line1">${p.diagnosis||'—'}</div>
+        <div class="line2"><span class="po-phase-pill ${p.phase_type||''}">${p.phase||''}</span>
+          ${p.source_label?`<span class="sep">·</span><span>${p.source_label}</span>`:''}</div></div></td>
+      <td><div class="po-rtp"><div class="v">W${p.programme_week||'—'} / ${p.programme_total_weeks||'—'}</div>
+        <div class="meta">${left>0?`${left} weeks left`:'—'}</div></div></td>
+      <td><div class="po-owners">${ownersHtml(p.rehab_plan_owners)}</div></td>
+      <td><div class="po-next"><div class="name">—</div><div class="meta">No session</div></div></td>
+      <td>${statusHtml(p.status)}</td>
+      <td><i class="ti ti-chevron-right po-arrow"></i></td></tr>`;
+  }).join('');
+
+  const tbodies = document.querySelectorAll('.po-tbl tbody');
+  if (tbodies[0]) tbodies[0].innerHTML = rehabRows;
+  if (tbodies[1]) tbodies[1].innerHTML = prevRows;
+
+  // ── KPIs ──
+  const nearRTP = rehab.filter(p => { const rd = rtpDays(p.injuries); return rd!=null && rd<=7; });
+  const blocked = all.filter(p => p.status === 'blocked');
+  const byType  = t => rehab.filter(p => p.phase_type === t).length;
+  const setKpi = (i, v, brk) => {
+    const c = document.querySelectorAll('.po-kpi');
+    if (!c[i]) return;
+    c[i].querySelector('.v').textContent = v;
+    const b = c[i].querySelector('.break'); if (b && brk!=null) b.innerHTML = brk;
+  };
+  setKpi(0, rehab.length, `<strong>${byType('subacute')}</strong> acute · <strong>${byType('strength')}</strong> strength · <strong>${byType('field')}</strong> on-field`);
+  setKpi(1, nearRTP.length, nearRTP.map(p=>full(p.players)).join(' · ') || '—');
+  setKpi(2, blocked.length, blocked.map(p=>`<strong>${full(p.players)}</strong>`).join(' · ') || '—');
+  (async () => {
+    const m0 = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+    const { count } = await window.sb.from('rehab_plans')
+      .select('id', { count:'exact', head:true })
+      .eq('club_id', clubId).eq('status','cleared').gte('updated_at', m0);
+    setKpi(3, count ?? 0, null);
+  })();
+
+  // ── header + filter counts ──
+  const ctx = document.querySelector('.po-head .ctx');
+  if (ctx) ctx.innerHTML = `<span><strong>${all.length}</strong> active</span>
+    <span style="color:var(--cm-fg-faint)">·</span>
+    <span><strong>${rehab.length}</strong> rehab · <strong>${prev.length}</strong> preventive</span>`;
+  const counts = [all.length, rehab.length, prev.length, nearRTP.length, blocked.length];
+  document.querySelectorAll('.po-filter-pills button .count').forEach((el,i)=>{ if(counts[i]!=null) el.textContent = counts[i]; });
 })();
 </script>
 
