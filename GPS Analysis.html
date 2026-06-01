@@ -625,6 +625,7 @@
           <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines."><i class="ti ti-history"></i>Historical</button>
           <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
           <button class="pill is-on" id="editToggle"><i class="ti ti-pencil"></i>Edit layout</button>
+          <button class="pill" id="saveLayoutBtn"><i class="ti ti-device-floppy"></i>Save layout</button>
           <button class="pill"><i class="ti ti-bookmark"></i>Saved views</button>
           <button class="pill"><i class="ti ti-plus"></i>Add card</button>
         </div>
@@ -1391,6 +1392,13 @@ function initSizeToggles(root) {
         card.dataset.size = { S:'sm', M:'md', L:'lg', FULL:'full' }[b.textContent.trim()] || 'md';
         const view = card.closest('.gp-view')?.dataset.view;
         if (view) saveLayout(view).catch(() => {});
+        requestAnimationFrame(() => {
+          card.querySelectorAll('canvas').forEach(canvas => {
+            Chart?.getChart?.(canvas)?.resize();
+          });
+          // force reflow for non-Chart content
+          void card.querySelector('.gp-c-b')?.offsetHeight;
+        });
       }
     }))
   );
@@ -1656,7 +1664,7 @@ async function saveLayout(viewKey, overrideDid) {
     const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
     if (!grid) { console.warn(`saveLayout(${viewKey}): grid not found`); return; }
     const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => ({
-      card_id: el.dataset.cardId || el.querySelector('.ttl')?.textContent?.trim() || String(idx),
+      card_id: _deriveCardId(el, idx),
       size: el.dataset.size || 'md',
       position: idx,
       config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
@@ -1699,11 +1707,19 @@ function _applyCardSize(card, size) {
   );
 }
 
+function _deriveCardId(el, idx) {
+  return el.dataset.cardId || el.querySelector('.ttl')?.textContent?.trim() || String(idx);
+}
+
 function _reorderGrid(grid, layout) {
   if (!grid || !layout?.length) return;
   const posMap = new Map(layout.map(c => [c.card_id, c.position]));
   const cards  = [...grid.querySelectorAll('.gp-c')];
-  cards.sort((a, b) => (posMap.get(a.dataset.cardId) ?? 9999) - (posMap.get(b.dataset.cardId) ?? 9999));
+  cards.sort((a, b) => {
+    const ka = _deriveCardId(a, cards.indexOf(a));
+    const kb = _deriveCardId(b, cards.indexOf(b));
+    return (posMap.get(ka) ?? 9999) - (posMap.get(kb) ?? 9999);
+  });
   const addBtn = grid.querySelector('.gp-add');
   cards.forEach(c => grid.appendChild(c));
   if (addBtn) grid.appendChild(addBtn);
@@ -2673,6 +2689,9 @@ async function _detectSmartDefault(clubId, userId) {
   try {
     await applyLayoutToView('ind');
     await applyGrpDefaultLayout();
+    await applyLayoutToView('mind');
+    await applyLayoutToView('mgrp');
+    await applyLayoutToView('mc');
   } catch (e) {
     console.warn('applyLayout:', e);
   } finally {
@@ -7113,6 +7132,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const on = editBtn.classList.contains('is-on');
     document.querySelectorAll('.gp-grid').forEach(g => g.classList.toggle('is-edit', on));
   });
+  document.getElementById('saveLayoutBtn')?.addEventListener('click', async () => {
+    const view = document.querySelector('.gp-view.is-on')?.dataset.view;
+    if (!view) return;
+    await saveLayout(view).catch(e => console.warn('saveLayoutBtn:', e));
+    showToast('Layout guardado');
+  });
   document.querySelectorAll('.size-toggle').forEach(g => g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
@@ -7122,6 +7147,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       card.dataset.size = map[b.textContent.trim()] || 'md';
       const view = card.closest('.gp-view')?.dataset.view;
       if (view) saveLayout(view).catch(() => {});
+      requestAnimationFrame(() => {
+        card.querySelectorAll('canvas').forEach(canvas => { Chart?.getChart?.(canvas)?.resize(); });
+        void card.querySelector('.gp-c-b')?.offsetHeight;
+      });
     }
   })));
   const srcDrawer = document.getElementById('srcDrawer');
