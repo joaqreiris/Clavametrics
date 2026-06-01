@@ -2,18 +2,26 @@
    gp-ai.js — Fase 4: AI chart generator modal.
 
    Flow:
-     "Ask AI" button → modal → user types prompt → invoke Edge Function
-     → validate/fallback → window.openBuilderWithConfig(config)
+     "Ask AI" button → modal → user types prompt
+     → [cloud path: Edge Function + Claude]  when USE_CLOUD=true
+     → [local path: parsePromptHeuristic]    when USE_CLOUD=false (default)
+     → window.openBuilderWithConfig(config)
      → user reviews in builder panel → "Add card"
 
-   Fallback: if the Edge Function is unavailable or returns 422,
-   parsePromptHeuristic() is used instead (same output shape).
+   To activate Claude (requires ANTHROPIC_API_KEY secret in Supabase):
+     Change USE_CLOUD to true below, deploy the Edge Function and set
+     the secret. The rest of the code is unchanged.
 
    Privacy: only catalog metadata + the prompt are sent to Claude.
    No athlete PII leaves the client.
    ============================================================= */
 (function () {
   'use strict';
+
+  // ── Cloud toggle — flip to true once the Edge Function is deployed ───
+  // supabase functions deploy generate-card
+  // supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+  const USE_CLOUD = false;
 
   let _clubId = null;
 
@@ -157,7 +165,7 @@
       <div id="gpaiModal" class="gpai-modal" hidden>
         <div class="gpai-h">
           <span class="t">Ask AI</span>
-          <span class="badge"><i class="ti ti-sparkles"></i>Claude</span>
+          <span class="badge" id="gpaiBadge"><i class="ti ti-sparkles"></i>${USE_CLOUD ? 'Claude' : 'Smart'}</span>
           <button class="x" id="gpaiClose"><i class="ti ti-x"></i></button>
         </div>
         <div class="gpai-body" id="gpaiBody">
@@ -181,7 +189,7 @@
           </div>
         </div>
         <div class="gpai-foot" id="gpaiFoot">
-          <span class="hint"><i class="ti ti-lock"></i>Only catalog metadata is sent — no athlete data</span>
+          <span class="hint"><i class="ti ti-lock"></i>${USE_CLOUD ? 'Only catalog metadata is sent — no athlete data' : 'Runs locally — no data sent anywhere'}</span>
           <div style="flex:1"></div>
           <button class="cm-btn is-outline is-sm" id="gpaiCancel">Cancel</button>
           <button class="cm-btn is-primary is-sm" id="gpaiGen">
@@ -260,14 +268,18 @@
     setThinking(true);
 
     let config = null;
-    let usedFallback = false;
 
-    try {
-      config = await callGenerateCard(prompt, _clubId);
-    } catch (e) {
-      console.warn('gp-ai: Edge Function failed, using heuristic fallback:', e.message);
+    if (USE_CLOUD) {
+      try {
+        config = await callGenerateCard(prompt, _clubId);
+      } catch (e) {
+        console.warn('gp-ai: Edge Function failed, falling back to heuristic:', e.message);
+        config = parsePromptHeuristic(prompt);
+      }
+    } else {
+      // Small artificial delay so the thinking animation is visible
+      await new Promise(r => setTimeout(r, 900));
       config = parsePromptHeuristic(prompt);
-      usedFallback = true;
     }
 
     clearInterval(_thinkInterval);
@@ -275,19 +287,17 @@
 
     if (typeof window.openBuilderWithConfig === 'function') {
       window.openBuilderWithConfig(config);
-      if (usedFallback) {
-        setTimeout(() => {
-          // brief toast to tell user it used fallback
-          const toast = document.getElementById('gpbToast');
-          if (toast) {
-            document.getElementById('gpbToastTitle').textContent = 'AI drafted this card (offline)';
-            document.getElementById('gpbToastSub').textContent = 'Claude unavailable — used heuristic parser. Review and tweak before saving.';
-            document.getElementById('gpbToastAct').textContent = 'OK';
-            toast.classList.add('is-on');
-            setTimeout(() => toast.classList.remove('is-on'), 5000);
-          }
-        }, 300);
-      }
+      // Toast: confirm the draft is ready for review
+      setTimeout(() => {
+        const toast = document.getElementById('gpbToast');
+        if (toast) {
+          document.getElementById('gpbToastTitle').textContent = 'Chart drafted from your prompt';
+          document.getElementById('gpbToastSub').textContent   = 'Review the metrics and settings, then click Add card.';
+          document.getElementById('gpbToastAct').textContent   = 'OK';
+          toast.classList.add('is-on');
+          setTimeout(() => toast.classList.remove('is-on'), 4500);
+        }
+      }, 300);
     }
   }
 
