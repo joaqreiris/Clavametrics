@@ -1259,6 +1259,16 @@
             <div class="gp-c-b" id="mc-mono-body" style="padding:14px 16px"></div>
           </div>
 
+          <!-- Exposure context -->
+          <div class="gp-c is-table" data-size="full" id="card-mc-exposure" data-card-id="mc-exposure">
+            <div class="gp-c-h">
+              <span class="ttl">Exposure context</span>
+              <span class="sub" id="mc-exp-sub">sessions per player · comparability check</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="mc-exp-body" style="overflow-x:auto;padding:0"></div>
+          </div>
+
           <!-- Biggest movers -->
           <div class="gp-c" data-size="md" id="card-mc-movers" data-card-id="mc-movers">
             <div class="gp-c-h">
@@ -1625,6 +1635,7 @@ const GP_CARD_DEFS = {
     // ── Add-card only (stashed by default) ──
     { name: 'Diff scatter',    id: 'card-mc-scatter',     stub: false },
     // ── Add-card only (extra, not default) ──
+    { name: 'Exposure context',   id: 'card-mc-exposure', stub: false },
     { name: 'Biggest movers',     id: 'card-mc-movers',   stub: false },
     { name: 'Monotonía & strain', id: 'card-mc-monotony', stub: false },
     { name: 'Microcycle shape',   id: 'card-mc-shape',    stub: false },
@@ -8514,6 +8525,34 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       // monoData must come after currLabel/refLabel are defined
       const monoData = { curr: _foster(shapeCurr), ref: _foster(shapeRef), currLabel, refLabel };
 
+      // Exposure: sessions per player per MC (from allReports — no extra query)
+      const _currSessSet = new Set(shapeCurrSessIds);
+      const currSessCount = {};
+      for (const r of allReports) {
+        if (_currSessSet.has(r.session_id))
+          currSessCount[r.player_id] = (currSessCount[r.player_id] || 0) + 1;
+      }
+      const refSessCountByMc = refMcs.map(mc => {
+        const ids = new Set(mc.sessions.map(s => s.id));
+        const counts = {};
+        for (const r of allReports) {
+          if (ids.has(r.session_id))
+            counts[r.player_id] = (counts[r.player_id] || 0) + 1;
+        }
+        return { sessTotal: mc.sessions.length, matchCount: mc.sessions.filter(s => _getMcMdCode(s) === 'MD').length, counts };
+      });
+      const refAvgSessCount = {};
+      const _expPids = [...new Set([...Object.keys(currSessCount), ...refSessCountByMc.flatMap(m => Object.keys(m.counts))])];
+      for (const pid of _expPids) {
+        const vals = refSessCountByMc.map(m => m.counts[pid] || 0);
+        refAvgSessCount[pid] = vals.reduce((a,b) => a+b, 0) / vals.length;
+      }
+      const exposureData = {
+        currSessTotal:  currentMc.sessions.length,
+        currMatchCount: currentMc.sessions.filter(s => _getMcMdCode(s) === 'MD').length,
+        refSessCountByMc, currSessCount, refAvgSessCount, currLabel, refLabel,
+      };
+
       mcInfo.textContent = `${selectedMD} · ${currLabel} ← ref: ${refLabel} · ${playerRows.length} players`;
 
       _mcRenderMetricDiff(playerRows);
@@ -8523,6 +8562,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _mcRenderShape({ curr: shapeCurr, ref: shapeRef, labels: shapeLabels, currLabel, refLabel }, metricKey);
       _mcRenderMonotony(monoData, metricKey);
       _mcRenderMovers(playerRows, metricKey);
+      _mcRenderExposure(exposureData);
     } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = 'Error loading data.'; }
   }
 
@@ -8680,6 +8720,88 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         },
       }],
     });
+  }
+
+  // ── Exposure context ──────────────────────────────────────────
+  const _mcExpBody = document.getElementById('mc-exp-body');
+  const _mcExpSub  = document.getElementById('mc-exp-sub');
+
+  function _mcRenderExposure({ currSessTotal, currMatchCount, refSessCountByMc,
+                                currSessCount, refAvgSessCount, currLabel, refLabel }) {
+    if (!_mcExpBody) return;
+    try {
+      if (_mcExpSub) _mcExpSub.textContent = 'sessions per player · comparability check';
+
+      const allPids = [...new Set([
+        ...Object.keys(currSessCount),
+        ...refSessCountByMc.flatMap(m => Object.keys(m.counts)),
+      ])].sort((a, b) => {
+        const pa = _playerMap[a], pb = _playerMap[b];
+        return (pa?.last_name || '').localeCompare(pb?.last_name || '');
+      });
+
+      if (!allPids.length) {
+        _mcExpBody.innerHTML = '<p style="padding:14px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No data.</p>';
+        return;
+      }
+
+      // Ref aggregated totals (avg)
+      const refSessTotalAvg  = refSessCountByMc.reduce((s,m) => s + m.sessTotal, 0)  / refSessCountByMc.length;
+      const refMatchCountAvg = refSessCountByMc.reduce((s,m) => s + m.matchCount, 0) / refSessCountByMc.length;
+
+      function _matchFlag(n) {
+        return n >= 2 ? ' <i class="ti ti-alert-triangle" style="color:var(--cm-warning);font-size:11px" title="Double matchweek"></i>' : '';
+      }
+
+      function _bar(done, total) {
+        if (!total) return '—';
+        const pct = Math.round(done / total * 100);
+        const col = pct >= 80 ? 'var(--cm-success)' : pct >= 60 ? 'var(--cm-warning)' : 'var(--cm-danger)';
+        return `<div style="display:flex;align-items:center;gap:5px">
+          <div style="width:52px;height:6px;background:var(--cm-bg-sunk);border-radius:3px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${col};border-radius:3px"></div>
+          </div>
+          <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${done}/${total}</span>
+        </div>`;
+      }
+
+      const thS = 'font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--cm-border)';
+      const thL = thS + ';text-align:left';
+
+      const infoRow = (label, curr, refAvg, warn) =>
+        `<span style="font:500 11px/1.4 var(--cm-font-sans)">${label}:</span> ` +
+        `<strong>${curr}${warn ? _matchFlag(curr) : ''}</strong> ` +
+        `<span style="color:var(--cm-fg-muted)">· ref avg ${refAvg % 1 === 0 ? refAvg : refAvg.toFixed(1)}${warn ? _matchFlag(refAvg) : ''}</span>`;
+
+      const headerInfo = `<div style="padding:10px 14px 8px;font:500 11.5px/1.8 var(--cm-font-sans);border-bottom:1px solid var(--cm-border);display:flex;flex-wrap:wrap;gap:16px">
+        <span>${infoRow('Sessions', currSessTotal, refSessTotalAvg, false)}</span>
+        <span>${infoRow('Matches', currMatchCount, refMatchCountAvg, true)}</span>
+        <span style="color:var(--cm-fg-muted);font-size:10.5px">Comparing: <em>${currLabel}</em> vs <em>${refLabel}</em></span>
+      </div>`;
+
+      const bodyRows = allPids.map(pid => {
+        const p    = _playerMap[pid] || {};
+        const name = `${p.last_name || ''}${p.first_name ? ' ' + p.first_name[0] + '.' : ''}`.trim() || pid.slice(0,8);
+        const pos  = p.position ? `<span style="color:var(--cm-fg-muted);font-size:10px"> · ${p.position}</span>` : '';
+        const curr = currSessCount[pid] || 0;
+        const ref  = refAvgSessCount[pid] != null ? refAvgSessCount[pid] : null;
+        return `<tr>
+          <td style="padding:5px 10px;white-space:nowrap"><strong>${name}</strong>${pos}</td>
+          <td style="padding:5px 10px;text-align:right">${_bar(curr, currSessTotal)}</td>
+          <td style="padding:5px 10px;text-align:right">${ref != null ? _bar(Math.round(ref), Math.round(refSessTotalAvg)) : '—'}</td>
+        </tr>`;
+      }).join('');
+
+      _mcExpBody.innerHTML = headerInfo + `
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr>
+            <th style="${thL}">Player</th>
+            <th style="${thS}">Current (${currSessTotal} sess.)</th>
+            <th style="${thS}">Ref avg (${Math.round(refSessTotalAvg)} sess.)</th>
+          </tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>`;
+    } catch (e) { console.error('_mcRenderExposure:', e); }
   }
 
   // ── Biggest movers ────────────────────────────────────────────
