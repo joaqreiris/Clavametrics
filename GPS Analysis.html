@@ -135,7 +135,8 @@
     margin-top: 2px;
   }
 
-  .gp-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:14px; }
+  .gp-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:14px; opacity:0; transition:opacity 120ms; }
+  .gp-grid.layout-ready { opacity:1; }
   .gp-grid.is-edit .gp-c { outline:1.5px dashed var(--cm-border-strong); outline-offset:-2px; }
   .gp-grid.is-edit .gp-c:hover { outline-color:var(--cm-accent); }
 
@@ -1552,12 +1553,14 @@ function makeModal(title, bodyHTML) {
 }
 
 // ── Toast ─────────────────────────────────────────────────────
-function showToast(msg) {
+function showToast(msg, isError = false) {
   const t = document.createElement('div');
   t.className = 'gp-toast';
+  if (isError) t.style.cssText = 'border-color:var(--cm-danger,#ef4444);color:var(--cm-danger,#ef4444)';
   t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => { t.classList.add('fade'); setTimeout(() => t.remove(), 400); }, 2200);
+  const delay = isError ? 4000 : 2200;
+  setTimeout(() => { t.classList.add('fade'); setTimeout(() => t.remove(), 400); }, delay);
 }
 
 // ── Card catalog ──────────────────────────────────────────────
@@ -1628,6 +1631,33 @@ const GP_CARD_DEFS = {
 // Stash: card elements removed from dashboard but recoverable
 const _cardStash = new Map(); // cardId → HTMLElement
 
+// Stash every catalog card for viewKey whose data-card-id is NOT in activeIds.
+function _stashAbsentCards(viewKey, activeIds) {
+  const defs = (GP_CARD_DEFS[viewKey] || []).filter(d => d.id && !d.stub);
+  for (const def of defs) {
+    const card = document.getElementById(def.id);
+    if (!card) continue;
+    if (!activeIds.has(card.dataset.cardId || '')) {
+      _cardStash.set(def.id, card);
+      card.remove();
+    }
+  }
+}
+
+// Bring cards from stash into grid for every card_id present in activeIds.
+function _unstashToGrid(viewKey, activeIds, grid) {
+  const defs = (GP_CARD_DEFS[viewKey] || []).filter(d => d.id && !d.stub);
+  const addBtn = grid.querySelector('.gp-add');
+  for (const def of defs) {
+    const stashed = _cardStash.get(def.id);
+    if (!stashed) continue;
+    if (!activeIds.has(stashed.dataset.cardId || '')) continue;
+    if (grid.querySelector(`[data-card-id="${stashed.dataset.cardId}"]`)) continue;
+    _cardStash.delete(def.id);
+    if (addBtn) grid.insertBefore(stashed, addBtn); else grid.appendChild(stashed);
+  }
+}
+
 function openCatalog(insertBefore) {
   const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
   const defs = GP_CARD_DEFS[view] || [];
@@ -1669,26 +1699,34 @@ const _DASHBOARD_IDS = {
   mind: 'match_performance', mgrp: 'load_monitoring', mc: 'microcycle_compare',
 };
 
-async function saveLayout(viewKey) {
-  const did = _DASHBOARD_IDS[viewKey];
-  if (!did || !window.sb) return;
+async function saveLayout(viewKey, overrideDid) {
+  const did = overrideDid || _DASHBOARD_IDS[viewKey];
+  if (!did) { console.warn(`saveLayout(${viewKey}): unknown viewKey`); return; }
+  if (!window.sb) { console.warn(`saveLayout(${viewKey}): Supabase not ready`); return; }
   try {
     const uid = (await window.sb.auth.getUser())?.data?.user?.id;
     const cid = await window.getClubId?.();
-    if (!uid || !cid) return;
+    if (!uid || !cid) { console.warn(`saveLayout(${viewKey}): uid=${uid} cid=${cid} — skipping`); return; }
     const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
-    if (!grid) return;
+    if (!grid) { console.warn(`saveLayout(${viewKey}): grid not found`); return; }
     const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => ({
       card_id: el.dataset.cardId || el.querySelector('.ttl')?.textContent?.trim() || String(idx),
       size: el.dataset.size || 'md',
       position: idx,
       config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
     }));
-    await window.sb.from('gps_dashboard_layouts').upsert(
+    const { error } = await window.sb.from('gps_dashboard_layouts').upsert(
       { user_id: uid, club_id: cid, dashboard_id: did, layout, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,club_id,dashboard_id' }
     );
-  } catch (err) { console.warn('saveLayout:', err); }
+    if (error) {
+      console.error('saveLayout: Supabase error:', error);
+      showToast('Error al guardar layout — revisá la consola', true);
+    }
+  } catch (err) {
+    console.error('saveLayout:', err);
+    showToast('Error al guardar layout — revisá la consola', true);
+  }
 }
 
 async function loadLayout(viewKey) {
@@ -1731,6 +1769,8 @@ async function applyLayoutToView(viewKey) {
   if (!layout?.length) return;
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
   if (!grid) return;
+  const activeIds = new Set(layout.map(c => c.card_id));
+  _stashAbsentCards(viewKey, activeIds);
   for (const { card_id, size, config } of layout) {
     const card = grid.querySelector(`[data-card-id="${card_id}"]`);
     if (!card) continue;
@@ -1785,15 +1825,7 @@ async function applyGrpDefaultLayout() {
 
     // Restore: stash cards not present in saved layout
     const activeIds = new Set(layout.map(c => c.card_id));
-    for (const def of defs) {
-      const card = document.getElementById(def.id);
-      if (!card) continue;
-      const dcid = card.dataset.cardId || '';
-      if (!activeIds.has(dcid)) {
-        _cardStash.set(def.id, card);
-        card.remove();
-      }
-    }
+    _stashAbsentCards('grp', activeIds);
 
     // Restore metric_key / config per card (delegates to applyLayoutToView logic)
     for (const { card_id, size, config } of layout) {
@@ -1809,6 +1841,109 @@ async function applyGrpDefaultLayout() {
     }
     _reorderGrid(grid, layout);
   } catch (e) { console.warn('applyGrpDefaultLayout:', e); }
+}
+
+// ── Saved views (named snapshots over gps_dashboard_layouts) ─────
+// Each snapshot is stored as an extra row with dashboard_id = "{base}__snap__{name}"
+
+async function _svGetCtx(viewKey) {
+  const did = _DASHBOARD_IDS[viewKey];
+  if (!did || !window.sb) return null;
+  const uid = (await window.sb.auth.getUser())?.data?.user?.id;
+  const cid = await window.getClubId?.();
+  if (!uid || !cid) return null;
+  return { uid, cid, did };
+}
+
+async function _svList(viewKey) {
+  const ctx = await _svGetCtx(viewKey);
+  if (!ctx) return [];
+  const prefix = `${ctx.did}__snap__`;
+  const { data } = await window.sb.from('gps_dashboard_layouts')
+    .select('dashboard_id,updated_at')
+    .eq('user_id', ctx.uid).eq('club_id', ctx.cid)
+    .like('dashboard_id', `${prefix}%`)
+    .order('updated_at', { ascending: false });
+  return (data || []).map(r => ({
+    name: decodeURIComponent(r.dashboard_id.slice(prefix.length)),
+    snapDid: r.dashboard_id,
+  }));
+}
+
+async function _svSave(viewKey, name) {
+  const ctx = await _svGetCtx(viewKey);
+  if (!ctx) { showToast('Error al guardar — sesión no disponible', true); return; }
+  const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
+  if (!grid) return;
+  const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => ({
+    card_id: el.dataset.cardId || el.querySelector('.ttl')?.textContent?.trim() || String(idx),
+    size: el.dataset.size || 'md',
+    position: idx,
+    config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(),
+              ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
+  }));
+  const snapDid = `${ctx.did}__snap__${encodeURIComponent(name)}`;
+  const { error } = await window.sb.from('gps_dashboard_layouts').upsert(
+    { user_id: ctx.uid, club_id: ctx.cid, dashboard_id: snapDid, layout, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,club_id,dashboard_id' }
+  );
+  if (error) { console.error('_svSave:', error); showToast('Error al guardar vista', true); return; }
+  showToast(`Vista "${name}" guardada`);
+}
+
+async function _svDelete(viewKey, snapDid) {
+  const ctx = await _svGetCtx(viewKey);
+  if (!ctx) return;
+  await window.sb.from('gps_dashboard_layouts')
+    .delete().eq('user_id', ctx.uid).eq('club_id', ctx.cid).eq('dashboard_id', snapDid);
+}
+
+async function _svLoad(viewKey, snapDid, name) {
+  const ctx = await _svGetCtx(viewKey);
+  if (!ctx) { showToast('Error al cargar — sesión no disponible', true); return; }
+  const { data, error } = await window.sb.from('gps_dashboard_layouts')
+    .select('layout').eq('user_id', ctx.uid).eq('club_id', ctx.cid).eq('dashboard_id', snapDid).maybeSingle();
+  if (error || !data?.layout?.length) { showToast('Vista no encontrada', true); return; }
+  const snapLayout = data.layout;
+  const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
+  if (!grid) return;
+
+  const activeIds = new Set(snapLayout.map(c => c.card_id));
+
+  // Stash cards absent from snapshot, un-stash cards required by snapshot
+  _stashAbsentCards(viewKey, activeIds);
+  _unstashToGrid(viewKey, activeIds, grid);
+
+  // Apply size + config
+  for (const { card_id, size, config } of snapLayout) {
+    const card = grid.querySelector(`[data-card-id="${card_id}"]`);
+    if (!card) continue;
+    _applyCardSize(card, size);
+    if (!config) continue;
+    if (config.metric_key) card.dataset.metricKey = config.metric_key;
+    if (config.metrics?.length) {
+      const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+      card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
+    }
+    if (card_id === 'weekly-bars' && (config.wkok_yellow != null || config.wkok_red != null)) {
+      const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+      if (config.wkok_yellow != null) existing.wkok_yellow = config.wkok_yellow;
+      if (config.wkok_red    != null) existing.wkok_red    = config.wkok_red;
+      card.dataset.config = JSON.stringify(existing);
+    }
+    if (card_id === 'xmatch' && config.metrics?.length) {
+      const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+      card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
+    }
+  }
+  _reorderGrid(grid, snapLayout);
+
+  // Persist snapshot as the new live layout
+  await saveLayout(viewKey);
+
+  window.renderView?.();
+  window.refreshDashboard?.();
+  showToast(`Vista "${name}" cargada`);
 }
 
 // ── KPI card rendering helpers ──────────────────────────────────
@@ -2169,30 +2304,29 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
 
   // ── Saved views pill ───────────────────────────────────────
   if (ic.includes('ti-bookmark')) {
-    const saved = JSON.parse(localStorage.getItem('cm_gps_layouts') || '[]');
-    const svItems = [{ label: 'Save current layout…', icon: 'ti-device-floppy', action: 'save' }];
-    if (saved.length) svItems.push({ sep: true });
-    saved.forEach((v, i) => svItems.push({ label: v.name, icon: 'ti-bookmark', action: 'load', data: v }));
-    makePopover(pill, svItems, item => {
-      if (item.action === 'save') {
-        const name = prompt('Layout name:');
-        if (!name) return;
-        const cards = [...document.querySelectorAll('.gp-view.is-on .gp-c')].map(c => ({
-          title: c.querySelector('.ttl')?.textContent || '',
-          size: c.dataset.size,
-        }));
-        const all = JSON.parse(localStorage.getItem('cm_gps_layouts') || '[]');
-        all.push({ name, cards, ts: Date.now() });
-        localStorage.setItem('cm_gps_layouts', JSON.stringify(all));
-        showToast(`Layout "${name}" saved`);
-      } else if (item.action === 'load') {
-        item.data.cards?.forEach((sv, i) => {
-          const cards = document.querySelectorAll('.gp-view.is-on .gp-c');
-          if (cards[i]) cards[i].dataset.size = sv.size;
+    const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
+    _svList(view).then(saved => {
+      const svItems = [{ label: 'Guardar vista actual…', icon: 'ti-device-floppy', action: 'save' }];
+      if (saved.length) {
+        svItems.push({ sep: true });
+        saved.forEach(v => {
+          svItems.push({ label: v.name, icon: 'ti-bookmark', action: 'load', data: v });
+          svItems.push({ label: `Borrar "${v.name}"`, icon: 'ti-trash', action: 'delete', data: v });
         });
-        showToast(`Layout "${item.data.name}" loaded`);
       }
-    });
+      makePopover(pill, svItems, async item => {
+        if (item.action === 'save') {
+          const name = prompt('Nombre de la vista:');
+          if (!name?.trim()) return;
+          await _svSave(view, name.trim());
+        } else if (item.action === 'load') {
+          await _svLoad(view, item.data.snapDid, item.data.name);
+        } else if (item.action === 'delete') {
+          await _svDelete(view, item.data.snapDid);
+          showToast(`Vista "${item.data.name}" eliminada`);
+        }
+      });
+    }).catch(e => { console.error('_svList:', e); showToast('Error al cargar vistas', true); });
     return;
   }
 
@@ -2590,8 +2724,14 @@ async function _detectSmartDefault(clubId, userId) {
     if (banner) banner.classList.add('is-on');
   }
 
-  await applyLayoutToView('ind').catch(e => console.warn('applyLayoutToView:', e));
-  await applyGrpDefaultLayout().catch(e => console.warn('applyGrpDefaultLayout:', e));
+  try {
+    await applyLayoutToView('ind');
+    await applyGrpDefaultLayout();
+  } catch (e) {
+    console.warn('applyLayout:', e);
+  } finally {
+    document.querySelectorAll('.gp-grid').forEach(g => g.classList.add('layout-ready'));
+  }
   await window.refreshDashboard();
 })();
 </script>
