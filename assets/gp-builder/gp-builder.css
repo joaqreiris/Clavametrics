@@ -221,3 +221,73 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .gpb-toast .tx .s { font: 500 11px/1.4 var(--cm-font-sans); opacity: .78; margin-top: 2px; }
 .gpb-toast .act { margin-left: 6px; height: 28px; padding: 0 11px; border-radius: 7px; border: 0; background: rgba(255,255,255,.16); color: #fff; font: 600 12px/1 var(--cm-font-sans); cursor: pointer; flex-shrink: 0; }
 .gpb-toast .act:hover { background: rgba(255,255,255,.26); }
+
+/* ── Fase 3: tab management ────────────────────────────────── */
+
+/* kebab button inside each .gp-sec tab */
+.gp-sec .gpt-kb {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 5px; border: 0;
+  background: transparent; color: var(--cm-fg-faint); cursor: pointer;
+  opacity: 0; transition: opacity 120ms; flex-shrink: 0; margin-left: 2px;
+}
+.gp-sec:hover .gpt-kb,
+.gp-sec.is-on .gpt-kb { opacity: 1; }
+.gpt-kb:hover { background: var(--cm-bg-soft); color: var(--cm-fg); }
+.gpt-kb .ti { font-size: 13px; pointer-events: none; }
+
+/* inline rename input inside a tab */
+.gp-sec .gpt-rename {
+  border: 0; background: var(--cm-surface); color: var(--cm-fg-strong);
+  font: 600 13px/1 var(--cm-font-sans); outline: none; border-radius: 4px;
+  padding: 1px 5px; width: 130px; box-shadow: 0 0 0 2px var(--cm-accent);
+}
+
+/* + add-tab button */
+.gpt-addtab {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 34px; padding: 0 11px; border-radius: 7px;
+  border: 1.5px dashed var(--cm-border-strong);
+  background: transparent; color: var(--cm-fg-muted);
+  font: 500 12px/1 var(--cm-font-sans); cursor: pointer;
+  white-space: nowrap; flex-shrink: 0;
+}
+.gpt-addtab:hover { border-color: var(--cm-accent); color: var(--cm-accent); background: var(--cm-accent-soft); }
+.gpt-addtab .ti { font-size: 14px; }
+
+/* tab kebab dropdown */
+.gpt-menu {
+  position: fixed; z-index: 250; min-width: 180px;
+  background: var(--cm-surface); border: 1px solid var(--cm-border);
+  border-radius: var(--cm-r-4); box-shadow: var(--cm-shadow-pop);
+  overflow: hidden; opacity: 0; transform: translateY(-4px) scale(.98);
+  pointer-events: none; transition: opacity 130ms var(--cm-ease, ease), transform 130ms var(--cm-ease, ease);
+}
+.gpt-menu.is-open { opacity: 1; transform: none; pointer-events: auto; }
+.gpt-menu-bk { position: fixed; inset: 0; z-index: 249; display: none; }
+.gpt-menu-bk.is-on { display: block; }
+.gpt-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 13px; border: 0; background: transparent;
+  color: var(--cm-fg); font: 500 13px/1 var(--cm-font-sans);
+  cursor: pointer; text-align: left;
+}
+.gpt-menu-item:hover { background: var(--cm-bg-soft); }
+.gpt-menu-item .ti { font-size: 15px; color: var(--cm-fg-muted); }
+.gpt-menu-item.danger { color: var(--cm-danger); }
+.gpt-menu-item.danger .ti { color: var(--cm-danger); }
+.gpt-menu-div { height: 1px; background: var(--cm-border-soft); margin: 3px 0; }
+
+/* card drag-reorder indicator */
+.gp-c.gpt-drag-over { outline: 2px solid var(--cm-accent); outline-offset: 3px; }
+.gp-c.gpt-dragging { opacity: .45; }
+
+/* custom view placeholder (blank dashboard) */
+.gpt-empty-view {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: 60px 20px; text-align: center; color: var(--cm-fg-muted);
+}
+.gpt-empty-view .ic { width: 52px; height: 52px; border-radius: 14px; background: var(--cm-bg-soft); border: 1px solid var(--cm-border); display: flex; align-items: center; justify-content: center; color: var(--cm-fg-faint); }
+.gpt-empty-view .ic .ti { font-size: 24px; }
+.gpt-empty-view .t { font: 600 15px/1.3 var(--cm-font-sans); color: var(--cm-fg); }
+.gpt-empty-view .d { font: 500 12px/1.5 var(--cm-font-sans); color: var(--cm-fg-muted); max-width: 280px; }

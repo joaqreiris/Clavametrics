@@ -327,4 +327,151 @@
     if (error) throw new Error(`deleteDashboardCard: ${error.message}`);
   };
 
+  // ── Dashboard management (Fase 3) ────────────────────────────────────
+
+  /**
+   * Creates a new blank dashboard.
+   * @param {string} name
+   * @param {string} clubId
+   * @param {string} userId
+   * @param {object} sb
+   * @returns {Promise<{id:string, name:string, sort_order:number}>}
+   */
+  window.createDashboard = async function (name, clubId, userId, sb) {
+    // get max sort_order
+    const { data: last } = await sb
+      .from('dashboards')
+      .select('sort_order')
+      .eq('club_id', clubId)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const sort_order = (last?.sort_order ?? -1) + 1;
+
+    const { data, error } = await sb
+      .from('dashboards')
+      .insert({ club_id: clubId, name, sort_order, is_shared: false, created_by: userId || null })
+      .select('id, name, sort_order')
+      .single();
+
+    if (error) throw new Error(`createDashboard: ${error.message}`);
+    return data;
+  };
+
+  /**
+   * Renames a dashboard.
+   * @param {string} dashId
+   * @param {string} name
+   * @param {object} sb
+   */
+  window.renameDashboard = async function (dashId, name, sb) {
+    const { error } = await sb
+      .from('dashboards')
+      .update({ name, updated_at: new Date().toISOString() })
+      .eq('id', dashId);
+    if (error) throw new Error(`renameDashboard: ${error.message}`);
+  };
+
+  /**
+   * Duplicates a dashboard and all its cards.
+   * @param {string} dashId
+   * @param {string} clubId
+   * @param {string} userId
+   * @param {object} sb
+   * @returns {Promise<{id:string, name:string}>}
+   */
+  window.duplicateDashboard = async function (dashId, clubId, userId, sb) {
+    // load source
+    const { data: src, error: sErr } = await sb
+      .from('dashboards')
+      .select('name, scope, report_type, sort_order')
+      .eq('id', dashId)
+      .single();
+    if (sErr) throw new Error(`duplicateDashboard load: ${sErr.message}`);
+
+    const { data: srcCards } = await sb
+      .from('dashboard_cards')
+      .select('config, size, position, source')
+      .eq('dashboard_id', dashId)
+      .order('position', { ascending: true });
+
+    // create new dashboard right after the source
+    const { data: last } = await sb
+      .from('dashboards')
+      .select('sort_order')
+      .eq('club_id', clubId)
+      .order('sort_order', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: newDash, error: dErr } = await sb
+      .from('dashboards')
+      .insert({
+        club_id:    clubId,
+        name:       src.name + ' copy',
+        scope:      src.scope,
+        sort_order: (last?.sort_order ?? 0) + 1,
+        is_shared:  false,
+        created_by: userId || null,
+      })
+      .select('id, name')
+      .single();
+    if (dErr) throw new Error(`duplicateDashboard create: ${dErr.message}`);
+
+    if (srcCards?.length) {
+      const rows = srcCards.map(c => ({
+        dashboard_id: newDash.id,
+        config:   c.config,
+        size:     c.size,
+        position: c.position,
+        source:   c.source,
+        created_by: userId || null,
+      }));
+      await sb.from('dashboard_cards').insert(rows);
+    }
+    return newDash;
+  };
+
+  /**
+   * Deletes a dashboard and all its cards (CASCADE handles cards).
+   * @param {string} dashId
+   * @param {object} sb
+   */
+  window.deleteDashboard = async function (dashId, sb) {
+    const { error } = await sb.from('dashboards').delete().eq('id', dashId);
+    if (error) throw new Error(`deleteDashboard: ${error.message}`);
+  };
+
+  /**
+   * Persists the new card order for a dashboard.
+   * @param {{ id:string, position:number }[]} orderedCards
+   * @param {object} sb
+   */
+  window.reorderCards = async function (orderedCards, sb) {
+    // batch update — one upsert per card
+    const rows = orderedCards.map(c => ({ id: c.id, position: c.position }));
+    const { error } = await sb
+      .from('dashboard_cards')
+      .upsert(rows, { onConflict: 'id' });
+    if (error) throw new Error(`reorderCards: ${error.message}`);
+  };
+
+  /**
+   * Returns the dashboard row for a given club + reportType, or null.
+   * @param {string} clubId
+   * @param {string} reportType
+   * @param {object} sb
+   * @returns {Promise<{id:string,name:string}|null>}
+   */
+  window.getDashboardByReportType = async function (clubId, reportType, sb) {
+    const { data } = await sb
+      .from('dashboards')
+      .select('id, name, sort_order')
+      .eq('club_id', clubId)
+      .eq('report_type', reportType)
+      .maybeSingle();
+    return data || null;
+  };
+
 })();

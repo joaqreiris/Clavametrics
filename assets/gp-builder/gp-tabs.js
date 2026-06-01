@@ -1,0 +1,496 @@
+/* =============================================================
+   gp-tabs.js — Fase 3: dashboard tab management.
+
+   Responsibilities:
+     • Links the 5 predefined .gp-sec buttons to their DB rows
+       (adds data-dashboard-id + kebab menu).
+     • Renders extra custom dashboards as new .gp-sec buttons
+       + empty .gp-view[data-view="db-{id}"] containers.
+     • Adds the "+" new-dashboard button.
+     • Rename (inline), Duplicate, Delete for every dashboard.
+     • Card drag-to-reorder within a grid (updates position in DB).
+
+   Depends on: gp-persist.js (window.loadDashboards, etc.)
+   ============================================================= */
+(function () {
+  'use strict';
+
+  // Map report_type → data-view key used in the existing HTML
+  const REPORT_TYPE_TO_VIEW = {
+    ind: 'ind', grp: 'grp', mind: 'mind', mgrp: 'mgrp', mc: 'mc',
+  };
+  // Icon per report_type (matches existing HTML icons)
+  const VIEW_ICON = {
+    ind:  'ti-user', grp: 'ti-users-group', mind: 'ti-ball-football',
+    mgrp: 'ti-activity-heartbeat', mc: 'ti-arrows-diff',
+  };
+
+  let _clubId  = null;
+  let _userId  = null;
+  let _dashboards = [];   // loaded from DB
+  let _menuEl  = null;
+  let _menuBkEl = null;
+  let _menuOwner = null;
+
+  // ── Helpers ──────────────────────────────────────────────────
+
+  function esc(s) {
+    return String(s).replace(/[<>&"]/g, c =>
+      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])
+    );
+  }
+
+  function waitForClubId(maxMs = 12000) {
+    return new Promise((resolve, reject) => {
+      const t0 = Date.now();
+      (function check() {
+        if (window._gpClubId) return resolve(window._gpClubId);
+        if (Date.now() - t0 > maxMs) return reject(new Error('gpt: timeout'));
+        setTimeout(check, 300);
+      })();
+    });
+  }
+
+  // ── Tab switching (piggybacks on existing #sections listener) ─
+
+  function switchToView(viewKey) {
+    const btn = document.querySelector(`#sections .gp-sec[data-view="${viewKey}"]`);
+    if (btn) {
+      btn.click(); // fires the existing listener in GPS Analysis.html
+    } else {
+      // custom view: manually activate
+      document.querySelectorAll('#sections .gp-sec').forEach(b => b.classList.remove('is-on'));
+      const newBtn = document.querySelector(`#sections .gp-sec[data-view="${viewKey}"]`);
+      if (newBtn) newBtn.classList.add('is-on');
+      document.querySelectorAll('.gp-view').forEach(v =>
+        v.classList.toggle('is-on', v.dataset.view === viewKey)
+      );
+      const dashBar = document.querySelector('.gp-dash-bar');
+      if (dashBar) dashBar.dataset.view = viewKey;
+    }
+  }
+
+  // ── Enhance predefined tabs with data-dashboard-id + kebab ──
+
+  function enhancePredefinedTabs(dashboards) {
+    const sectionsEl = document.getElementById('sections');
+    if (!sectionsEl) return;
+
+    dashboards.forEach(d => {
+      const viewKey = REPORT_TYPE_TO_VIEW[d.report_type];
+      if (!viewKey) return; // custom dashboard handled separately
+
+      const btn = sectionsEl.querySelector(`.gp-sec[data-view="${viewKey}"]`);
+      if (!btn || btn.dataset.dashboardId) return; // already processed
+
+      btn.dataset.dashboardId = d.id;
+
+      // Add kebab button (appended to .row, not wrapping anything)
+      const row = btn.querySelector('.row');
+      if (row) {
+        const kb = document.createElement('button');
+        kb.className = 'gpt-kb';
+        kb.title = 'Dashboard options';
+        kb.innerHTML = '<i class="ti ti-dots"></i>';
+        kb.addEventListener('click', e => { e.stopPropagation(); openMenu(kb, d); });
+        row.appendChild(kb);
+      }
+    });
+  }
+
+  // ── Render custom dashboards (no predefined report_type match) ─
+
+  function renderCustomTabs(dashboards) {
+    const sectionsEl = document.getElementById('sections');
+    const pageEl     = document.querySelector('.gp-page');
+    if (!sectionsEl || !pageEl) return;
+
+    // remove old custom tabs/views first (re-render on reload)
+    sectionsEl.querySelectorAll('.gp-sec[data-custom]').forEach(b => b.remove());
+    document.querySelectorAll('.gp-view[data-custom]').forEach(v => v.remove());
+
+    const customDashes = dashboards.filter(d => !REPORT_TYPE_TO_VIEW[d.report_type]);
+    customDashes.forEach(d => {
+      const viewKey = `db-${d.id}`;
+
+      // Tab button
+      const btn = document.createElement('button');
+      btn.className = 'gp-sec';
+      btn.dataset.view = viewKey;
+      btn.dataset.dashboardId = d.id;
+      btn.dataset.custom = '1';
+      btn.innerHTML = `
+        <div class="row">
+          <i class="ti ti-layout-dashboard"></i>
+          <span class="gpt-tab-label">${esc(d.name)}</span>
+          <button class="gpt-kb" title="Dashboard options"><i class="ti ti-dots"></i></button>
+        </div>
+        <div class="sub">${d.cards?.length ?? 0} card${(d.cards?.length ?? 0) !== 1 ? 's' : ''}</div>`;
+
+      btn.addEventListener('click', e => {
+        if (e.target.closest('.gpt-kb')) return;
+        switchToView(viewKey);
+      });
+      btn.querySelector('.gpt-kb')?.addEventListener('click', e => {
+        e.stopPropagation();
+        openMenu(btn.querySelector('.gpt-kb'), d);
+      });
+      sectionsEl.insertBefore(btn, sectionsEl.querySelector('.gpt-addtab'));
+
+      // Empty view placeholder
+      const view = document.createElement('div');
+      view.className = 'gp-view';
+      view.dataset.view = viewKey;
+      view.dataset.custom = '1';
+      view.innerHTML = `
+        <div class="gp-grid">
+          <div class="gpt-empty-view" data-size="full" style="grid-column:span 12">
+            <div class="ic"><i class="ti ti-layout-dashboard"></i></div>
+            <div class="t">${esc(d.name)}</div>
+            <div class="d">This dashboard is empty. Use <b>Chart builder</b> to add cards.</div>
+          </div>
+        </div>`;
+      // inject before the last existing .gp-view or at end of .gp-page
+      const lastView = pageEl.querySelector('.gp-view:last-of-type');
+      if (lastView) lastView.after(view);
+      else pageEl.appendChild(view);
+
+      // mount any saved builder cards into this view's grid
+      if (typeof window.loadCardsForView === 'function' && window.sb) {
+        // custom dashboards use dashboard_id directly (not report_type)
+        _mountCardsForDashboard(d, view.querySelector('.gp-grid'));
+      }
+    });
+  }
+
+  async function _mountCardsForDashboard(dash, grid) {
+    if (!grid) return;
+    try {
+      const { data: cards } = await window.sb
+        .from('dashboard_cards')
+        .select('id, config, size, position, source')
+        .eq('dashboard_id', dash.id)
+        .order('position', { ascending: true });
+      if (!cards?.length) return;
+
+      // remove empty placeholder if we have real cards
+      grid.querySelector('.gpt-empty-view')?.closest('[data-size]')?.remove();
+
+      for (const card of cards) {
+        const el = _buildCardElement(card);
+        grid.appendChild(el);
+      }
+      wireCardDrag(grid, dash.id);
+    } catch (e) { console.warn('gpt _mountCardsForDashboard:', e); }
+  }
+
+  // ── "+" add-dashboard button ──────────────────────────────────
+
+  function renderAddTabButton() {
+    const sectionsEl = document.getElementById('sections');
+    if (!sectionsEl || sectionsEl.querySelector('.gpt-addtab')) return;
+
+    const btn = document.createElement('button');
+    btn.className = 'gpt-addtab';
+    btn.innerHTML = '<i class="ti ti-plus"></i>New';
+    btn.title = 'Create a new dashboard';
+    btn.addEventListener('click', createDashboardFlow);
+    sectionsEl.appendChild(btn);
+  }
+
+  async function createDashboardFlow() {
+    if (!_clubId || !window.createDashboard || !window.sb) return;
+    try {
+      const d = await window.createDashboard('New dashboard', _clubId, _userId, window.sb);
+      _dashboards.push({ ...d, cards: [] });
+      reRender();
+      // switch to the new tab and start rename immediately
+      const viewKey = `db-${d.id}`;
+      switchToView(viewKey);
+      const btn = document.querySelector(`#sections .gp-sec[data-view="${viewKey}"]`);
+      if (btn) startRename(btn, d);
+    } catch (e) { console.warn('gpt createDashboardFlow:', e); }
+  }
+
+  // ── Kebab dropdown ────────────────────────────────────────────
+
+  function ensureMenuEl() {
+    if (_menuEl) return;
+    _menuEl = document.createElement('div');
+    _menuEl.className = 'gpt-menu';
+    document.body.appendChild(_menuEl);
+
+    _menuBkEl = document.createElement('div');
+    _menuBkEl.className = 'gpt-menu-bk';
+    _menuBkEl.addEventListener('click', closeMenu);
+    document.body.appendChild(_menuBkEl);
+  }
+
+  function openMenu(trigger, dash) {
+    ensureMenuEl();
+    if (_menuOwner === trigger) { closeMenu(); return; }
+    closeMenu();
+
+    const isPredefined = !!REPORT_TYPE_TO_VIEW[dash.report_type];
+    const canDelete = !isPredefined && _dashboards.length > 1;
+
+    _menuEl.innerHTML = `
+      <button class="gpt-menu-item" data-act="rename"><i class="ti ti-pencil"></i>Rename</button>
+      <button class="gpt-menu-item" data-act="duplicate"><i class="ti ti-copy"></i>Duplicate</button>
+      ${canDelete ? '<div class="gpt-menu-div"></div><button class="gpt-menu-item danger" data-act="delete"><i class="ti ti-trash"></i>Delete dashboard</button>' : ''}
+    `;
+    _menuEl.querySelectorAll('[data-act]').forEach(b => {
+      b.addEventListener('click', () => {
+        const act = b.dataset.act;
+        closeMenu();
+        if (act === 'rename')    startRenameFromDash(dash);
+        else if (act === 'duplicate') duplicateFlow(dash);
+        else if (act === 'delete')    deleteFlow(dash);
+      });
+    });
+
+    _menuBkEl.classList.add('is-on');
+    _menuEl.style.visibility = 'hidden';
+    _menuEl.classList.add('is-open');
+    const r = trigger.getBoundingClientRect();
+    let left = r.left, top = r.bottom + 4;
+    if (left + 180 > innerWidth - 12) left = innerWidth - 184;
+    if (top + 120 > innerHeight - 12) top = r.top - 120;
+    _menuEl.style.left = left + 'px';
+    _menuEl.style.top  = top  + 'px';
+    _menuEl.style.visibility = '';
+    _menuOwner = trigger;
+  }
+
+  function closeMenu() {
+    if (_menuEl) _menuEl.classList.remove('is-open');
+    if (_menuBkEl) _menuBkEl.classList.remove('is-on');
+    _menuOwner = null;
+  }
+
+  // ── Rename ────────────────────────────────────────────────────
+
+  function startRenameFromDash(dash) {
+    const viewKey = REPORT_TYPE_TO_VIEW[dash.report_type] || `db-${dash.id}`;
+    const btn = document.querySelector(`#sections .gp-sec[data-view="${viewKey}"]`);
+    if (btn) startRename(btn, dash);
+  }
+
+  function startRename(btn, dash) {
+    const labelEl = btn.querySelector('.gpt-tab-label') || btn.querySelector('.row');
+    if (!labelEl) return;
+
+    const originalHTML = labelEl.innerHTML;
+    const currentName = dash.name;
+
+    labelEl.innerHTML = `<input class="gpt-rename" type="text" value="${esc(currentName)}" maxlength="60">`;
+    const input = labelEl.querySelector('input');
+    input.focus();
+    input.select();
+
+    let committed = false;
+    const commit = async () => {
+      if (committed) return;
+      committed = true;
+      const newName = input.value.trim();
+      if (newName && newName !== currentName) {
+        dash.name = newName;
+        try { await window.renameDashboard(dash.id, newName, window.sb); }
+        catch (e) { console.warn('gpt renameDashboard:', e); }
+      }
+      reRender();
+    };
+
+    input.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { committed = true; reRender(); }
+    });
+    input.addEventListener('blur', commit);
+    input.addEventListener('click', e => e.stopPropagation());
+  }
+
+  // ── Duplicate ─────────────────────────────────────────────────
+
+  async function duplicateFlow(dash) {
+    if (!window.duplicateDashboard || !window.sb) return;
+    try {
+      const newDash = await window.duplicateDashboard(dash.id, _clubId, _userId, window.sb);
+      _dashboards.push({ ...newDash, report_type: null, cards: [] });
+      reRender();
+      switchToView(`db-${newDash.id}`);
+    } catch (e) { console.warn('gpt duplicateFlow:', e); }
+  }
+
+  // ── Delete ────────────────────────────────────────────────────
+
+  async function deleteFlow(dash) {
+    if (!window.deleteDashboard || !window.sb) return;
+    if (_dashboards.length <= 1) return; // never delete last
+
+    const idx = _dashboards.indexOf(dash);
+    _dashboards.splice(idx, 1);
+
+    // switch to another view before removing DOM
+    const fallback = _dashboards[Math.max(0, idx - 1)];
+    const fallbackView = REPORT_TYPE_TO_VIEW[fallback?.report_type] || `db-${fallback?.id}`;
+    switchToView(fallbackView);
+
+    reRender();
+
+    try { await window.deleteDashboard(dash.id, window.sb); }
+    catch (e) { console.warn('gpt deleteDashboard:', e); }
+  }
+
+  // ── Card drag-to-reorder ──────────────────────────────────────
+
+  function wireCardDrag(grid, dashboardId) {
+    if (!grid) return;
+    let dragSrc = null;
+
+    grid.addEventListener('dragstart', e => {
+      const card = e.target.closest('.gp-c[data-card-id]');
+      if (!card) return;
+      dragSrc = card;
+      card.classList.add('gpt-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    grid.addEventListener('dragend', () => {
+      dragSrc?.classList.remove('gpt-dragging');
+      grid.querySelectorAll('.gpt-drag-over').forEach(n => n.classList.remove('gpt-drag-over'));
+      dragSrc = null;
+    });
+
+    grid.addEventListener('dragover', e => {
+      if (!dragSrc) return;
+      e.preventDefault();
+      const over = e.target.closest('.gp-c');
+      if (!over || over === dragSrc) return;
+      grid.querySelectorAll('.gpt-drag-over').forEach(n => n.classList.remove('gpt-drag-over'));
+      over.classList.add('gpt-drag-over');
+      const r = over.getBoundingClientRect();
+      const after = e.clientX > r.left + r.width / 2;
+      grid.insertBefore(dragSrc, after ? over.nextElementSibling : over);
+    });
+
+    grid.addEventListener('drop', async e => {
+      e.preventDefault();
+      grid.querySelectorAll('.gpt-drag-over').forEach(n => n.classList.remove('gpt-drag-over'));
+      if (!dragSrc || !window.reorderCards || !window.sb) return;
+
+      // collect all builder cards with their new positions
+      const ordered = [...grid.querySelectorAll('.gp-c[data-card-id]')]
+        .map((el, i) => ({ id: el.dataset.cardId, position: i }));
+
+      try { await window.reorderCards(ordered, window.sb); }
+      catch (e) { console.warn('gpt reorderCards:', e); }
+    });
+  }
+
+  function wireAllGridDrags() {
+    // wire predefined view grids for their builder cards
+    document.querySelectorAll('.gp-view').forEach(view => {
+      const grid = view.querySelector('.gp-grid');
+      if (!grid || grid.dataset.gptDragWired) return;
+      grid.dataset.gptDragWired = '1';
+
+      // make builder cards draggable
+      grid.querySelectorAll('.gp-c[data-card-id]').forEach(c => c.setAttribute('draggable', 'true'));
+
+      // also observe for future cards added to this grid
+      const obs = new MutationObserver(muts => {
+        muts.forEach(m => m.addedNodes.forEach(n => {
+          if (n.nodeType === 1 && n.classList.contains('gp-c') && n.dataset.cardId) {
+            n.setAttribute('draggable', 'true');
+          }
+        }));
+      });
+      obs.observe(grid, { childList: true });
+
+      const dashboardId = view.closest('[data-dashboard-id]')?.dataset.dashboardId
+        || document.querySelector(`#sections .gp-sec[data-view="${view.dataset.view}"]`)?.dataset.dashboardId;
+      wireCardDrag(grid, dashboardId);
+    });
+  }
+
+  // ── Card element builder (for custom dashboards) ──────────────
+
+  function _buildCardElement(card) {
+    const config = card.config || {};
+    const el = document.createElement('div');
+    el.className = 'gp-c';
+    el.dataset.size     = card.size || config.style?.size || 'md';
+    el.dataset.card     = 'chart';
+    el.dataset.cardId   = card.id;
+    el.setAttribute('draggable', 'true');
+    el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
+    const title = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    el.innerHTML = `
+      <div class="gp-c-h">
+        <span class="ttl">${title}</span>
+        <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
+        <div class="right">
+          <div class="size-toggle">
+            <button>S</button><button>M</button><button>L</button>
+            <button style="width:30px">FULL</button>
+          </div>
+          <button data-del title="Remove"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+      <div class="gp-c-b" style="min-height:120px;align-items:center;justify-content:center">
+        <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
+      </div>`;
+
+    // sync size-toggle
+    const sMap = { sm:'S', md:'M', lg:'L', full:'FULL' };
+    el.querySelectorAll('.size-toggle button').forEach(b =>
+      b.classList.toggle('is-on', b.textContent.trim() === (sMap[el.dataset.size] || 'M'))
+    );
+
+    el.querySelector('[data-del]')?.addEventListener('click', () => {
+      el.remove();
+      if (window.deleteDashboardCard && card.id) {
+        window.deleteDashboardCard(card.id, window.sb).catch(e => console.warn('gpt deleteDashboardCard:', e));
+      }
+    });
+
+    return el;
+  }
+
+  // ── Re-render all tab decorations ─────────────────────────────
+
+  function reRender() {
+    enhancePredefinedTabs(_dashboards);
+    renderCustomTabs(_dashboards);
+    renderAddTabButton();
+    wireAllGridDrags();
+  }
+
+  // ── Init ──────────────────────────────────────────────────────
+
+  async function init() {
+    if (!window.sb) { setTimeout(init, 400); return; }
+    try {
+      _clubId = await waitForClubId();
+      _userId = window._gpUserId || null;
+
+      if (!window.loadDashboards) return; // gp-persist.js not loaded
+
+      _dashboards = await window.loadDashboards(_clubId, window.sb);
+
+      reRender();
+
+      // also wire drags on predefined views (builder cards added later)
+      // Re-wire after GPS Analysis finishes mounting builder cards
+      setTimeout(wireAllGridDrags, 2000);
+
+    } catch (e) {
+      console.warn('[gp-tabs] init failed:', e);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => init());
+  if (document.readyState !== 'loading') init();
+
+})();
