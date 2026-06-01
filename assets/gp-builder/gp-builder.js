@@ -164,8 +164,10 @@
         .select('gps_builder_enabled')
         .eq('club_id', clubId)
         .maybeSingle();
-      return data?.gps_builder_enabled === true;
-    } catch { return false; }
+      // Opt-out model: enabled unless explicitly set to false.
+      // No settings row → enabled (new clubs get builder by default).
+      return data?.gps_builder_enabled !== false;
+    } catch { return true; }
   }
 
   async function loadCatalog(clubId) {
