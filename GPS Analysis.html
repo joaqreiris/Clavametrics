@@ -1237,6 +1237,18 @@
             </div>
           </div>
 
+          <!-- MD Trend -->
+          <div class="gp-c" data-size="full" id="card-mc-trend" data-card-id="mc-trend">
+            <div class="gp-c-h">
+              <span class="ttl">MD trend</span>
+              <span class="sub" id="mc-trend-sub">squad avg · last 8 microcycles</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:260px;padding:10px">
+              <canvas id="canvasMCTrend"></canvas>
+            </div>
+          </div>
+
           <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>MC diff · scatter · trend</small></button>
         </div>
       </div>
@@ -1580,8 +1592,8 @@ const GP_CARD_DEFS = {
     { name: 'MC diff table',   id: 'card-mc-table',       stub: false },
     // ── Add-card only (stashed by default) ──
     { name: 'Diff scatter',    id: 'card-mc-scatter',     stub: false },
-    // ── Not yet implemented ──
-    { name: 'MD trend',        id: null,                  stub: true  },
+    // ── Add-card only (extra, not default) ──
+    { name: 'MD trend',        id: 'card-mc-trend',       stub: false },
   ],
 };
 
@@ -8362,8 +8374,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         return;
       }
 
-      // GPS reports for current + reference sessions
-      const allSessIds = [currentSessId, ...refSessIds];
+      // Last ~8 MCs for trend (includes current + up to 7 before it)
+      const trendMcs     = mcsWithMD.slice(-8);
+      const trendSessIds = trendMcs.map(mc => mc.mdMap[selectedMD]).filter(Boolean);
+
+      // GPS reports for current + reference + trend sessions (deduplicated)
+      const allSessIds = [...new Set([currentSessId, ...refSessIds, ...trendSessIds])];
       const { data: reports } = await window.sb
         .from('gps_reports')
         .select(`player_id,session_id,${MC_METRICS.map(m => m.key).join(',')}`)
@@ -8389,6 +8405,17 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         return row;
       }).filter(r => r[metricKey] != null || r[metricKey + '_ref'] != null);
 
+      // Trend points: squad avg of selected metric per MC (last ~8)
+      const trendPoints = trendMcs.map(mc => {
+        const sessId = mc.mdMap[selectedMD];
+        if (!sessId) return null;
+        const rpts = allReports.filter(r => r.session_id === sessId);
+        const vals = rpts.map(r => r[metricKey]).filter(v => v != null);
+        if (!vals.length) return null;
+        const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+        return { mc, avg, label: _mcLabel(mc), isCurrent: mc === currentMc };
+      }).filter(Boolean);
+
       // Labels with real microcycle names and rivals
       function _mcLabel(mc) {
         const m = _mcMicros[mc.id];
@@ -8405,6 +8432,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _mcRenderMetricDiff(playerRows);
       _mcRenderTable(playerRows, metricKey);
       _mcRenderScatter(playerRows, metricKey);
+      _mcRenderTrend(trendPoints, metricKey, selectedMD);
     } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = 'Error loading data.'; }
   }
 
@@ -8562,6 +8590,101 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         },
       }],
     });
+  }
+
+  // ── MD trend ──────────────────────────────────────────────────
+  const _mcTrendCard   = document.getElementById('card-mc-trend');
+  const _mcTrendCanvas = document.getElementById('canvasMCTrend');
+  const _mcTrendSub    = document.getElementById('mc-trend-sub');
+  let   _mcTrendChart  = null;
+
+  function _mcRenderTrend(points, metricKey, mdCode) {
+    if (!_mcTrendCard || !_mcTrendCanvas || typeof Chart === 'undefined') return;
+    try {
+      if (_mcTrendChart) { _mcTrendChart.destroy(); _mcTrendChart = null; }
+
+      if (!points || points.length < 2) {
+        _mcTrendCanvas.getContext('2d').clearRect(0, 0, _mcTrendCanvas.width, _mcTrendCanvas.height);
+        if (_mcTrendSub) _mcTrendSub.textContent = 'Not enough data — need ≥ 2 microcycles';
+        return;
+      }
+
+      const metaDef   = MC_METRICS.find(m => m.key === metricKey);
+      const metaLabel = metaDef?.label || metricKey;
+      const metaUnit  = metaDef?.unit  || '';
+
+      if (_mcTrendSub) _mcTrendSub.textContent =
+        `${mdCode} · ${metaLabel} · squad avg · ${points.length} microcycles`;
+
+      const accent    = _accentHex();
+      const pointColors = points.map(p => p.isCurrent ? accent : 'rgba(99,102,241,0.75)');
+      const pointRadii  = points.map(p => p.isCurrent ? 7 : 4);
+
+      _mcTrendChart = new Chart(_mcTrendCanvas, {
+        type: 'line',
+        data: {
+          labels:   points.map(p => p.label),
+          datasets: [{
+            label:           metaLabel,
+            data:            points.map(p => p.avg),
+            borderColor:     'rgba(99,102,241,0.8)',
+            backgroundColor: 'rgba(99,102,241,0.08)',
+            fill:            true,
+            tension:         0.3,
+            borderWidth:     2,
+            pointRadius:     pointRadii,
+            pointBackgroundColor: pointColors,
+            pointHoverRadius: 8,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: ctx => points[ctx[0].dataIndex].label,
+                label: ctx => ` ${metaLabel}: ${fmtN(ctx.parsed.y, 0)}${metaUnit ? ' ' + metaUnit : ''}`,
+                afterLabel: ctx => points[ctx.dataIndex].isCurrent ? '← current' : '',
+              },
+            },
+          },
+          scales: {
+            x: {
+              ..._chartDefaults.scales?.x,
+              ticks: { maxRotation: 30, font: { size: 10 } },
+            },
+            y: {
+              ..._chartDefaults.scales?.y,
+              title: { display: true, text: `${metaLabel}${metaUnit ? ' (' + metaUnit + ')' : ''}`, font: { size: 10 } },
+            },
+          },
+        },
+        plugins: [{
+          id: 'currentAnnotation',
+          afterDraw(chart) {
+            const currentIdx = points.findIndex(p => p.isCurrent);
+            if (currentIdx < 0) return;
+            const { ctx, scales: { x, y } } = chart;
+            const xPx = x.getPixelForValue(currentIdx);
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(xPx, y.top);
+            ctx.lineTo(xPx, y.bottom);
+            ctx.strokeStyle = `${accent}55`;
+            ctx.setLineDash([4, 3]);
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = accent;
+            ctx.font = '9px Geist Mono, monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('NOW', xPx, y.top - 4);
+            ctx.restore();
+          },
+        }],
+      });
+    } catch (e) { console.error('_mcRenderTrend:', e); }
   }
 
   // ── events ───────────────────────────────────────────────────
