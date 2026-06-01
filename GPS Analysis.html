@@ -1021,11 +1021,13 @@
           </div>
 
           <!-- NEW: TD per match chart -->
-          <div class="gp-c" data-size="full" id="card-mp-td">
+          <div class="gp-c" data-size="full" id="card-mp-td" data-card-id="mp-td">
             <div class="gp-c-h">
-              <span class="ttl">TD per match</span>
-              <span class="sub">total distance · minutes played line</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+              <span class="ttl">Match metric</span>
+              <span class="sub" id="mp-td-sub">total distance · minutes played line</span>
+              <div class="right">
+                <button class="pill" id="mp-td-metric-btn" style="font-size:11px"><i class="ti ti-arrows-exchange"></i><span id="mp-td-metric-label">Total Distance</span></button>
+                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b" style="position:relative;min-height:240px;padding:10px">
               <canvas id="canvasMPTD"></canvas>
@@ -1041,84 +1043,6 @@
             </div>
             <div class="gp-c-b" id="mp-hi-body" style="position:relative;min-height:200px;padding:10px">
               <canvas id="canvasMPHI"></canvas>
-            </div>
-          </div>
-
-          <div class="gp-c" data-size="lg">
-            <div class="gp-c-h"><span class="ttl">Match heatmap + sprint tracks</span><span class="sub">F. Domínguez · 90′ · vs Vélez</span><span class="gp-demo-tag">Demo</span><div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div></div>
-            <div class="gp-c-b">
-              <div class="gp-pitch" style="aspect-ratio:105/55">
-                <div class="blob" style="left:35%; top:50%; width:120px; height:120px; background:rgba(74,222,128,0.55)"></div>
-                <div class="blob" style="left:55%; top:60%; width:170px; height:170px; background:rgba(252,211,77,0.6)"></div>
-                <div class="blob" style="left:68%; top:48%; width:180px; height:180px; background:rgba(248,113,113,0.55)"></div>
-                <svg class="traj" viewBox="0 0 100 100" preserveAspectRatio="none">
-                  <path d="M 30 50 Q 40 35 55 38 Q 70 42 78 50 Q 85 60 75 65" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="0.45" vector-effect="non-scaling-stroke"/>
-                  <path d="M 50 65 Q 60 55 72 52" fill="none" stroke="#FBBF24" stroke-width="0.6" vector-effect="non-scaling-stroke"/>
-                  <circle cx="72" cy="52" r="0.9" fill="#FB923C" stroke="#fff" stroke-width="0.3"/>
-                  <circle cx="85" cy="42" r="0.9" fill="#FB923C" stroke="#fff" stroke-width="0.3"/>
-                  <circle cx="78" cy="62" r="1.0" fill="#EF4444" stroke="#fff" stroke-width="0.3"/>
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div class="gp-c" data-size="md">
-            <div class="gp-c-h"><span class="ttl">Distance per minute</span><span class="gp-demo-tag">Demo</span><div class="gp-c-picks" style="margin-left:6px"><span class="gp-c-pick is-accent">Distance/min <i class="ti ti-chevron-down"></i></span></div><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
-            <div class="gp-c-b gp-ts">
-              <svg viewBox="0 0 800 200" preserveAspectRatio="none" font-family="Geist, ui-sans-serif">
-                <g stroke="var(--cm-border-soft)" stroke-width="1">
-                  <line x1="40" y1="20" x2="780" y2="20"/>
-                  <line x1="40" y1="80" x2="780" y2="80"/>
-                  <line x1="40" y1="140" x2="780" y2="140"/>
-                </g>
-                <line x1="410" y1="20" x2="410" y2="180" stroke="var(--cm-border-strong)" stroke-width="1" stroke-dasharray="3 3"/>
-                <text x="410" y="14" text-anchor="middle" font-size="10" font-family="Geist Mono, ui-monospace, monospace" fill="var(--cm-fg-muted)">HT</text>
-                <g fill="var(--cm-accent)">
-                  <rect x="50" y="80" width="22" height="100" rx="2"/><rect x="78" y="70" width="22" height="110" rx="2"/>
-                  <rect x="106" y="60" width="22" height="120" rx="2"/><rect x="134" y="55" width="22" height="125" rx="2"/>
-                  <rect x="162" y="40" width="22" height="140" rx="2" fill="var(--cm-warning)"/><rect x="190" y="65" width="22" height="115" rx="2"/>
-                  <rect x="218" y="72" width="22" height="108" rx="2"/><rect x="246" y="50" width="22" height="130" rx="2" fill="var(--cm-warning)"/>
-                  <rect x="274" y="68" width="22" height="112" rx="2"/><rect x="302" y="82" width="22" height="98" rx="2"/>
-                  <rect x="330" y="74" width="22" height="106" rx="2"/><rect x="358" y="90" width="22" height="90" rx="2"/>
-                  <rect x="386" y="100" width="22" height="80" rx="2"/>
-                  <rect x="420" y="72" width="22" height="108" rx="2"/><rect x="448" y="60" width="22" height="120" rx="2"/>
-                  <rect x="476" y="50" width="22" height="130" rx="2" fill="var(--cm-warning)"/><rect x="504" y="46" width="22" height="134" rx="2" fill="var(--cm-warning)"/>
-                  <rect x="532" y="36" width="22" height="144" rx="2" fill="var(--cm-danger)"/><rect x="560" y="58" width="22" height="122" rx="2"/>
-                  <rect x="588" y="48" width="22" height="132" rx="2" fill="var(--cm-warning)"/><rect x="616" y="70" width="22" height="110" rx="2"/>
-                  <rect x="644" y="82" width="22" height="98" rx="2"/><rect x="672" y="88" width="22" height="92" rx="2"/>
-                  <rect x="700" y="40" width="22" height="140" rx="2" fill="var(--cm-danger)"/><rect x="728" y="64" width="22" height="116" rx="2"/>
-                  <rect x="756" y="85" width="22" height="95" rx="2"/>
-                </g>
-                <g font-size="10" font-family="Geist Mono, ui-monospace, monospace" fill="var(--cm-fg-muted)">
-                  <text x="50" y="196">0′</text><text x="270" y="196">30′</text>
-                  <text x="410" y="196" text-anchor="middle">45′</text><text x="640" y="196">75′</text>
-                  <text x="772" y="196" text-anchor="end">90′</text>
-                </g>
-              </svg>
-            </div>
-          </div>
-
-          <!-- Half drop-off -->
-          <div class="gp-c" data-size="md" id="card-half-drop">
-            <div class="gp-c-h">
-              <span class="ttl">Half drop-off</span>
-              <span class="sub">1st vs 2nd half · key metrics</span>
-              <span class="gp-demo-tag">Demo</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
-            </div>
-            <div class="gp-c-b" id="halfDropBody" style="gap:10px;justify-content:center"></div>
-          </div>
-
-          <!-- Velocity profile (per-minute) -->
-          <div class="gp-c" data-size="lg" id="card-vel-profile">
-            <div class="gp-c-h">
-              <span class="ttl">Velocity profile</span>
-              <span class="sub">speed vs time · sprint markers</span>
-              <span class="gp-demo-tag">Demo</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div>
-            </div>
-            <div class="gp-c-b" style="position:relative;min-height:190px">
-              <canvas id="canvasVelProfile"></canvas>
             </div>
           </div>
 
@@ -8567,6 +8491,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // ── state & DOM ──────────────────────────────────────────────
   const _mp = { playerId: null, tdChart: null, hiChart: null };
   let _mpInited = false;
+  let _mpCurrentRows = [];
 
   const playerSel = document.getElementById('mp-player-sel');
   const rangeSel  = document.getElementById('mp-range-sel');
@@ -8576,6 +8501,186 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   const hiCanvas  = document.getElementById('canvasMPHI');
   if (!playerSel) return;
 
+  // ── KPI chip config (mirrors SC pattern) ─────────────────────
+  const _mpKpiOverride = {};
+  const _MP_PEAK_KEYS  = new Set(['max_speed','avg_speed','max_acceleration','max_deceleration','peak_speed']);
+  const _MP_DEFAULT_CHIPS = [
+    { key: 'total_distance',           unit: 'm',    dec: 0, agg: 'avg'   },
+    { key: 'high_speed_distance',      unit: 'm',    dec: 0, agg: 'avg'   },
+    { key: 'very_high_speed_distance', unit: 'm',    dec: 0, agg: 'avg'   },
+    { key: 'sprint_count',             unit: '',     dec: 1, agg: 'avg'   },
+    { key: 'acc_dec',                  unit: '',     dec: 1, agg: 'avg'   },
+    { key: 'player_load',              unit: 'AU',   dec: 1, agg: 'avg'   },
+    { key: 'max_speed',                unit: 'km/h', dec: 1, agg: 'max'   },
+  ];
+  const _MP_METRIC_NAMES = {
+    total_distance:'Distance', high_speed_distance:'HSR',
+    very_high_speed_distance:'VHSR', sprint_count:'Sprints',
+    sprint_distance:'Sprint dist', acc_dec:'Acc+Dec',
+    player_load:'Load', max_speed:'Speed',
+    accelerations:'Accels', decelerations:'Decels', time_played:'Time',
+  };
+  const _MP_AGG_LABELS = { avg:'Avg', total:'Total', median:'Median', max:'Max', min:'Min' };
+
+  function _mpChipLabel(key, agg) {
+    const cat  = (window._gpCatalog || []).find(d => d.key === key);
+    const base = _MP_METRIC_NAMES[key] || cat?.label || key.replace(/_/g,' ');
+    return `${_MP_AGG_LABELS[agg] || 'Avg'} ${base}`;
+  }
+  function _mpAllowedAggs(key) {
+    return _MP_PEAK_KEYS.has(key) ? ['avg','max','min'] : ['avg','total','median','max','min'];
+  }
+  function _mpDefaultAgg(key) { return _MP_PEAK_KEYS.has(key) ? 'max' : 'avg'; }
+  function _mpResolveChipDef(idx) {
+    const ov   = _mpKpiOverride[idx];
+    const base = _MP_DEFAULT_CHIPS[idx] || _MP_DEFAULT_CHIPS[0];
+    if (!ov) return { ...base, label: _mpChipLabel(base.key, base.agg) };
+    const key = typeof ov === 'string' ? ov : ov.key;
+    const agg = typeof ov === 'string' ? _mpDefaultAgg(key) : (ov.agg || _mpDefaultAgg(key));
+    const cat = (window._gpCatalog || []).find(d => d.key === key);
+    return { key, agg, label: _mpChipLabel(key, agg), unit: key === 'acc_dec' ? '' : (cat?.unit || ''), dec: cat?.decimals ?? 0 };
+  }
+  function _mpAggVal(rows, def) {
+    const vals = rows.map(r => def.key === 'acc_dec' ? (r.accelerations||0)+(r.decelerations||0) : r[def.key])
+      .filter(v => v != null && !isNaN(v));
+    if (!vals.length) return null;
+    switch (def.agg) {
+      case 'total':  return vals.reduce((s,v)=>s+v,0);
+      case 'max':    return Math.max(...vals);
+      case 'min':    return Math.min(...vals);
+      case 'median': { const s=[...vals].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2===0?(s[m-1]+s[m])/2:s[m]; }
+      default:       return vals.reduce((s,v)=>s+v,0)/vals.length;
+    }
+  }
+
+  // KPI change-metric popup
+  let _mpKmPopup = null;
+  let _mpKmTargetIdx = -1;
+  function _mpShowKmPopup(idx, anchorEl) {
+    _mpCloseKmPopup();
+    _mpKmTargetIdx = idx;
+    const catalog = window._gpCatalog || [];
+    if (!catalog.length) return;
+    const def        = _mpResolveChipDef(idx);
+    const currentKey = def.key;
+    const currentAgg = def.agg;
+    const allowed    = _mpAllowedAggs(currentKey);
+    const popup = document.createElement('div');
+    popup.className  = 'pw-km-popup';
+    popup.style.minWidth = '220px';
+    const aggHTML = `<div class="pw-km-popup-hd">Aggregation</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;padding:4px 6px 8px">
+        ${allowed.map(a =>
+          `<button class="sc-agg-btn${a===currentAgg?' is-on':''}" data-agg="${a}"
+            style="flex:1;min-width:52px;height:24px;border-radius:4px;border:1px solid var(--cm-border);
+            background:${a===currentAgg?'var(--cm-accent-soft)':'transparent'};
+            color:${a===currentAgg?'var(--cm-fg-strong)':'var(--cm-fg-muted)'};
+            font:600 11px/1 var(--cm-font-mono);cursor:pointer;padding:0 4px">
+            ${_MP_AGG_LABELS[a]}</button>`).join('')}
+      </div>`;
+    const metricHTML = `<div class="pw-km-popup-hd" style="border-top:1px solid var(--cm-border-soft);padding-top:8px;margin-top:2px">Metric</div>` +
+      catalog.map(d =>
+        `<div class="pw-km-item${d.key===currentKey?' is-on':''}" data-key="${d.key}">
+          ${d.label}<span class="km-tag">${d.unit||''}</span>
+        </div>`).join('');
+    popup.innerHTML = aggHTML + metricHTML;
+    document.body.appendChild(popup);
+    _mpKmPopup = popup;
+    const rect = anchorEl.getBoundingClientRect();
+    popup.style.top  = `${rect.bottom+4}px`;
+    popup.style.left = `${Math.min(rect.left, window.innerWidth-230)}px`;
+    popup.addEventListener('click', e => {
+      const aggBtn = e.target.closest('[data-agg]');
+      if (aggBtn) { _mpSelectAgg(_mpKmTargetIdx, aggBtn.dataset.agg); _mpCloseKmPopup(); return; }
+      const item = e.target.closest('.pw-km-item[data-key]');
+      if (item) { _mpSelectMetric(_mpKmTargetIdx, item.dataset.key); _mpCloseKmPopup(); }
+    });
+    setTimeout(() => document.addEventListener('click', _mpKmOutside, { once: true }), 0);
+  }
+  function _mpKmOutside(e) { if (_mpKmPopup && !_mpKmPopup.contains(e.target)) _mpCloseKmPopup(); }
+  function _mpCloseKmPopup() { _mpKmPopup?.remove(); _mpKmPopup = null; document.removeEventListener('click', _mpKmOutside); }
+  function _mpSelectAgg(idx, agg) {
+    const prev = _mpKpiOverride[idx];
+    const key  = typeof prev === 'object' ? prev.key : (typeof prev === 'string' ? prev : _MP_DEFAULT_CHIPS[idx]?.key);
+    _mpKpiOverride[idx] = { key, agg };
+    _mpRefreshChip(idx);
+    _mpSaveKpiSlots();
+  }
+  function _mpSelectMetric(idx, metricKey) {
+    const prev   = _mpKpiOverride[idx];
+    const oldAgg = typeof prev === 'object' ? prev.agg : _mpDefaultAgg(metricKey);
+    const agg    = _mpAllowedAggs(metricKey).includes(oldAgg) ? oldAgg : _mpDefaultAgg(metricKey);
+    _mpKpiOverride[idx] = { key: metricKey, agg };
+    _mpRefreshChip(idx);
+    _mpSaveKpiSlots();
+  }
+  function _mpRefreshChip(idx) {
+    const chip = kpiBody.querySelector(`[data-kpi-idx="${idx}"]`);
+    if (!chip) return;
+    const def = _mpResolveChipDef(idx);
+    const val = _mpAggVal(_mpCurrentRows, def);
+    chip.dataset.metricKey = def.key;
+    chip.querySelector('.k-label').textContent = def.label;
+    chip.querySelector('.k-val').innerHTML = `${val!=null?fmtN(val,def.dec):'—'}${def.unit?`<sub>${def.unit}</sub>`:''}`;
+  }
+
+  // KPI layout persistence
+  async function _mpInitKpiSlots() {
+    try {
+      const layout = await loadLayout('mind');
+      const card = layout?.find(c => c.card_id === 'mp-kpi');
+      if (card?.config?.kpi_overrides) Object.assign(_mpKpiOverride, card.config.kpi_overrides);
+    } catch {}
+  }
+  function _mpSaveKpiSlots() {
+    const cardEl = document.getElementById('card-mp-kpi');
+    if (cardEl) cardEl.dataset.config = JSON.stringify({ kpi_overrides: _mpKpiOverride });
+    saveLayout('mind');
+  }
+
+  // TD chart metric state
+  let _mpTdMetric = 'total_distance';
+  let _mpTdPopup  = null;
+  function _mpShowTdMetricPopup(anchorEl) {
+    _mpTdPopup?.remove(); _mpTdPopup = null;
+    const catalog = window._gpCatalog || [];
+    if (!catalog.length) return;
+    const popup = document.createElement('div');
+    popup.className = 'pw-km-popup';
+    popup.innerHTML = `<div class="pw-km-popup-hd">Chart metric</div>` +
+      catalog.map(d =>
+        `<div class="pw-km-item${d.key===_mpTdMetric?' is-on':''}" data-key="${d.key}">
+          ${d.label}<span class="km-tag">${d.unit||''}</span>
+        </div>`).join('');
+    document.body.appendChild(popup);
+    _mpTdPopup = popup;
+    const rect = anchorEl.getBoundingClientRect();
+    popup.style.top  = `${rect.bottom+4}px`;
+    popup.style.left = `${Math.min(rect.left, window.innerWidth-230)}px`;
+    popup.addEventListener('click', e => {
+      const item = e.target.closest('.pw-km-item[data-key]');
+      if (!item) return;
+      _mpTdMetric = item.dataset.key;
+      const cat = catalog.find(d => d.key === _mpTdMetric);
+      const lbl = cat?.label || _mpTdMetric.replace(/_/g,' ');
+      document.getElementById('mp-td-metric-label').textContent = lbl;
+      const sub = document.getElementById('mp-td-sub');
+      if (sub) sub.textContent = `${lbl} · minutes played line`;
+      _mpTdPopup?.remove(); _mpTdPopup = null;
+      document.removeEventListener('click', _mpTdOutside);
+      _mpRenderTDChart(_mpCurrentRows);
+    });
+    setTimeout(() => document.addEventListener('click', _mpTdOutside, { once: true }), 0);
+  }
+  function _mpTdOutside(e) { if (_mpTdPopup && !_mpTdPopup.contains(e.target)) { _mpTdPopup?.remove(); _mpTdPopup=null; } }
+
+  // Rival label helper
+  function _mpRivalLabel(r, maxLen) {
+    const rival = r.session?.rival;
+    if (rival) return `vs ${rival}`.slice(0, maxLen || 14);
+    return r.session?.title ? r.session.title.slice(0, maxLen || 10) : (r.session?.session_date?.slice(5) || '');
+  }
+
   // ── init ─────────────────────────────────────────────────────
   async function mpInit() {
     if (_mpInited) return;
@@ -8583,6 +8688,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     try {
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) return;
+      await _mpInitKpiSlots();
       const { data: players } = await window.sb
         .from('players').select('id,first_name,last_name,number,position')
         .eq('club_id', clubId).neq('status','inactive').order('last_name');
@@ -8607,10 +8713,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     try {
       const clubId = await window.getClubId?.();
 
-      // Get match sessions
+      // Match sessions (include microcycle_id for rival lookup)
       const { data: sessions } = await window.sb
         .from('training_sessions')
-        .select('id,session_date,title,session_type')
+        .select('id,session_date,title,session_type,microcycle_id')
         .eq('club_id', clubId)
         .eq('session_type', 'match')
         .order('session_date', { ascending: true });
@@ -8635,19 +8741,30 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         return;
       }
 
+      // Fetch rival names via microcycles
+      const mcIds = [...new Set(matchSessions.map(s => s.microcycle_id).filter(Boolean))];
+      let mcRivalMap = {};
+      if (mcIds.length) {
+        const { data: mcs } = await window.sb
+          .from('microcycles').select('id,rival').in('id', mcIds);
+        mcRivalMap = Object.fromEntries((mcs || []).map(mc => [mc.id, mc.rival || '']));
+      }
+
+      const sessMap = Object.fromEntries(matchSessions.map(s => [s.id, { ...s, rival: mcRivalMap[s.microcycle_id] || '' }]));
       const sessIds = matchSessions.map(s => s.id);
+
       const { data: reports } = await window.sb
         .from('gps_reports')
         .select('session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
         .eq('player_id', playerId).eq('club_id', clubId)
         .in('session_id', sessIds);
 
-      const sessMap = Object.fromEntries(matchSessions.map(s => [s.id, s]));
       const rows = (reports || [])
         .map(r => ({ ...r, session: sessMap[r.session_id] }))
         .filter(r => r.session)
         .sort((a, b) => a.session.session_date.localeCompare(b.session.session_date));
 
+      _mpCurrentRows = rows;
       mpInfo.textContent = `${rows.length} matches · ${matchSessions[0]?.session_date || ''} → ${matchSessions[matchSessions.length-1]?.session_date || ''}`;
       _mpRenderKPIs(rows);
       _mpRenderTDChart(rows);
@@ -8655,56 +8772,50 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch (e) { console.error('_mpLoad:', e); mpInfo.textContent = 'Error loading data.'; }
   }
 
-  // ── KPIs ─────────────────────────────────────────────────────
+  // ── KPIs (configurable chips) ─────────────────────────────────
   function _mpRenderKPIs(rows) {
     if (!rows.length) {
       kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No GPS data found for this player in matches.</div>'; return;
     }
-    const maxF = key => rows.reduce((best, r) => r[key] > (best?.val ?? -Infinity) ? { val: r[key], sess: r.session } : best, null);
-    const avgF = key => { const vals = rows.map(r => r[key]).filter(v => v != null); return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; };
-
-    const maxTD    = maxF('total_distance');
-    const maxHSR   = maxF('high_speed_distance');
-    const maxSPR   = maxF('sprint_count');
-    const maxAcDec = rows.reduce((best, r) => {
-      const v = (r.accelerations||0)+(r.decelerations||0);
-      return v > (best?.val ?? -Infinity) ? { val: v, sess: r.session } : best;
-    }, null);
-
-    const kpis = [
-      { label: 'Games',       val: rows.length,                          unit: '',      ctx: '' },
-      { label: 'Avg TD',      val: avgF('total_distance'),               unit: 'm',     ctx: '' },
-      { label: 'Max TD',      val: maxTD?.val,                           unit: 'm',     ctx: maxTD?.sess?.session_date || '' },
-      { label: 'Max HSR',     val: maxHSR?.val,                          unit: 'm',     ctx: maxHSR?.sess?.session_date || '' },
-      { label: 'Max Sprints', val: maxSPR?.val,                          unit: '',      ctx: maxSPR?.sess?.session_date || '' },
-      { label: 'Max Acc+Dec', val: maxAcDec?.val,                        unit: '',      ctx: maxAcDec?.sess?.session_date || '' },
-      { label: 'Avg Load',    val: avgF('player_load'),                  unit: 'AU',    ctx: '' },
-      { label: 'Max Speed',   val: Math.max(...rows.map(r=>r.max_speed||0)), unit: 'km/h', ctx: '' },
-    ];
-
-    kpiBody.innerHTML = `<div class="mp-kpis">${kpis.map(k =>
-      `<div class="mp-kpi"><span class="k-label">${k.label}</span><span class="k-val">${fmtN(k.val, k.unit==='km/h'?1:0)}${k.unit?`<sub>${k.unit}</sub>`:''}</span>${k.ctx?`<span class="k-ctx">${k.ctx}</span>`:''}</div>`
-    ).join('')}</div>`;
+    // Prepend fixed "Games" chip then configurable chips
+    const gamesChip = `<div class="pw-kpi">
+      <span class="k-label">Games</span>
+      <span class="k-val">${rows.length}</span>
+    </div>`;
+    const chips = _MP_DEFAULT_CHIPS.map((_, idx) => {
+      const def = _mpResolveChipDef(idx);
+      const val = _mpAggVal(rows, def);
+      return `<div class="pw-kpi" data-kpi-idx="${idx}" data-metric-key="${def.key}">
+        <span class="k-label">${def.label}</span>
+        <span class="k-val">${val!=null?fmtN(val,def.dec):'—'}${def.unit?`<sub>${def.unit}</sub>`:''}</span>
+        <button class="pw-kpi-menu-btn" title="Change metric"><i class="ti ti-dots-vertical"></i></button>
+      </div>`;
+    });
+    kpiBody.innerHTML = `<div class="pw-kpis">${gamesChip}${chips.join('')}</div>`;
   }
 
-  // ── TD per match chart ────────────────────────────────────────
+  // ── TD per match chart (dynamic metric) ───────────────────────
   function _mpRenderTDChart(rows) {
     if (!tdCanvas || typeof Chart === 'undefined') return;
     if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
     if (!rows.length) return;
 
-    const labels  = rows.map(r => r.session?.title ? r.session.title.slice(0,10) : r.session?.session_date?.slice(5) || '');
-    const td      = rows.map(r => r.total_distance || 0);
+    const cat     = (window._gpCatalog || []).find(d => d.key === _mpTdMetric);
+    const metLbl  = cat?.label || _mpTdMetric.replace(/_/g,' ');
+    const metUnit = cat?.unit  || '';
+
+    const labels  = rows.map(r => _mpRivalLabel(r, 12));
+    const vals    = rows.map(r => _mpTdMetric === 'acc_dec' ? (r.accelerations||0)+(r.decelerations||0) : (r[_mpTdMetric] || 0));
     const minutes = rows.map(r => r.time_played || null);
-    const avgTD   = td.reduce((s,v)=>s+v,0)/td.length;
+    const avg     = vals.reduce((s,v)=>s+v,0)/vals.length;
 
     _mp.tdChart = new Chart(tdCanvas, {
       data: {
         labels,
         datasets: [
           {
-            type: 'bar', label: 'Total Distance (m)', data: td,
-            backgroundColor: rows.map(r => (r.total_distance||0) >= avgTD * 1.1 ? 'rgba(74,222,128,.7)' : 'rgba(99,179,237,.65)'),
+            type: 'bar', label: `${metLbl}${metUnit?' ('+metUnit+')':''}`, data: vals,
+            backgroundColor: vals.map(v => v >= avg * 1.1 ? 'rgba(74,222,128,.7)' : 'rgba(99,179,237,.65)'),
             order: 2,
           },
           {
@@ -8719,7 +8830,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         responsive: true, maintainAspectRatio: false,
         scales: {
           x: { grid: { display: false } },
-          y:  { beginAtZero: true, title: { display: true, text: 'TD (m)' } },
+          y:  { beginAtZero: true, title: { display: true, text: metUnit ? `${metLbl} (${metUnit})` : metLbl } },
           y1: { position: 'right', beginAtZero: true, max: 120, title: { display: true, text: 'Min played' }, grid: { drawOnChartArea: false } },
         },
         plugins: {
@@ -8731,7 +8842,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
                 if (!r) return [];
                 return [
                   `Date: ${r.session?.session_date || ''}`,
-                  r.total_distance >= avgTD * 1.1 ? 'Above avg (+10%)' : '',
+                  vals[ctx[0]?.dataIndex] >= avg * 1.1 ? 'Above avg (+10%)' : '',
                 ].filter(Boolean);
               },
             },
@@ -8741,16 +8852,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           if (!elements.length) return;
           const r = rows[elements[0].index];
           if (!r?.session?.id) return;
-          // Drill-down: switch to Session Control and select this session
           const grpBtn = document.querySelector('.gp-sec[data-view="grp"]');
           if (grpBtn) {
             grpBtn.click();
             setTimeout(() => {
               const sel = document.getElementById('sc-sess-sel');
-              if (sel && r.session?.id) {
-                sel.value = r.session.id;
-                sel.dispatchEvent(new Event('change'));
-              }
+              if (sel) { sel.value = r.session.id; sel.dispatchEvent(new Event('change')); }
             }, 200);
           }
         },
@@ -8764,14 +8871,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
     if (!rows.length) return;
 
-    // Limit to 15 matches max for readability; show most recent
     const display = rows.slice(-15);
-    const labels  = display.map(r => r.session?.title ? r.session.title.slice(0,12) : r.session?.session_date?.slice(5) || '');
+    const labels  = display.map(r => _mpRivalLabel(r, 14));
     const hsr     = display.map(r => r.high_speed_distance || 0);
     const vhsr    = display.map(r => r.very_high_speed_distance || 0);
     const spr     = display.map(r => r.sprint_distance || 0);
 
-    // Dynamic height based on number of matches
     hiCanvas.parentElement.style.minHeight = `${Math.max(180, display.length * 28)}px`;
 
     _mp.hiChart = new Chart(hiCanvas, {
@@ -8791,9 +8896,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           x: { stacked: true, beginAtZero: true, title: { display: true, text: 'Distance (m)' } },
           y: { stacked: true, grid: { display: false } },
         },
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-        },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
       },
     });
   }
@@ -8806,6 +8909,21 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // ── events ───────────────────────────────────────────────────
   playerSel.addEventListener('change', () => { _mp.playerId = playerSel.value || null; if (_mp.playerId) _mpLoad(); });
   rangeSel.addEventListener('change',  () => { if (_mp.playerId) _mpLoad(); });
+
+  // KPI chip menu
+  kpiBody.addEventListener('click', e => {
+    const btn = e.target.closest('.pw-kpi-menu-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const chip = btn.closest('[data-kpi-idx]');
+    if (chip) _mpShowKmPopup(+chip.dataset.kpiIdx, btn);
+  });
+
+  // TD chart metric button
+  document.getElementById('mp-td-metric-btn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    _mpShowTdMetricPopup(e.currentTarget);
+  });
 
   window._mpInit = mpInit;
 
