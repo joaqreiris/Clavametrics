@@ -8488,7 +8488,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         const total    = vals.reduce((a,b) => a+b, 0);
         return { monotony, total, strain: total * monotony };
       }
-      const monoData = { curr: _foster(shapeCurr), ref: _foster(shapeRef), currLabel, refLabel };
 
       // Labels with real microcycle names and rivals
       function _mcLabel(mc) {
@@ -8500,6 +8499,9 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const refLabel  = refMcs.length === 1
         ? _mcLabel(refMcs[0])
         : `avg ${refMcs.map(mc => _mcMicros[mc.id]?.name || mc.id).join(', ')}`;
+
+      // monoData must come after currLabel/refLabel are defined
+      const monoData = { curr: _foster(shapeCurr), ref: _foster(shapeRef), currLabel, refLabel };
 
       mcInfo.textContent = `${selectedMD} · ${currLabel} ← ref: ${refLabel} · ${playerRows.length} players`;
 
