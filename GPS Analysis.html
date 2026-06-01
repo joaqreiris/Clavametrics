@@ -1237,6 +1237,18 @@
             </div>
           </div>
 
+          <!-- Microcycle shape -->
+          <div class="gp-c" data-size="full" id="card-mc-shape" data-card-id="mc-shape">
+            <div class="gp-c-h">
+              <span class="ttl">Microcycle shape</span>
+              <span class="sub" id="mc-shape-sub">load per day · current vs reference</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:260px;padding:10px">
+              <canvas id="canvasMCShape"></canvas>
+            </div>
+          </div>
+
           <!-- MD Trend -->
           <div class="gp-c" data-size="full" id="card-mc-trend" data-card-id="mc-trend">
             <div class="gp-c-h">
@@ -1593,7 +1605,8 @@ const GP_CARD_DEFS = {
     // ── Add-card only (stashed by default) ──
     { name: 'Diff scatter',    id: 'card-mc-scatter',     stub: false },
     // ── Add-card only (extra, not default) ──
-    { name: 'MD trend',        id: 'card-mc-trend',       stub: false },
+    { name: 'Microcycle shape', id: 'card-mc-shape',      stub: false },
+    { name: 'MD trend',         id: 'card-mc-trend',      stub: false },
   ],
 };
 
@@ -8378,8 +8391,15 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const trendMcs     = mcsWithMD.slice(-8);
       const trendSessIds = trendMcs.map(mc => mc.mdMap[selectedMD]).filter(Boolean);
 
-      // GPS reports for current + reference + trend sessions (deduplicated)
-      const allSessIds = [...new Set([currentSessId, ...refSessIds, ...trendSessIds])];
+      // Shape: ALL sessions of current MC + all sessions of ref MCs (for day-by-day profile)
+      const shapeCurrSessIds   = currentMc.sessions.map(s => s.id);
+      const shapeRefAllSessIds = refMcs.flatMap(mc => mc.sessions.map(s => s.id));
+
+      // GPS reports — single deduplicated query covering all consumers
+      const allSessIds = [...new Set([
+        currentSessId, ...refSessIds, ...trendSessIds,
+        ...shapeCurrSessIds, ...shapeRefAllSessIds,
+      ])];
       const { data: reports } = await window.sb
         .from('gps_reports')
         .select(`player_id,session_id,${MC_METRICS.map(m => m.key).join(',')}`)
@@ -8416,6 +8436,35 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         return { mc, avg, label: _mcLabel(mc), isCurrent: mc === currentMc };
       }).filter(Boolean);
 
+      // Shape: load per MD-code day, current vs reference
+      const _MD_ORDER = ['MD-5','MD-4','MD-3','MD-2','MD-1','MD','MD+1','MD+2'];
+      const shapeCurr = {};
+      for (const s of currentMc.sessions) {
+        const code = _getMcMdCode(s);
+        if (!code) continue;
+        const vals = allReports.filter(r => r.session_id === s.id)
+          .map(r => r[metricKey]).filter(v => v != null);
+        if (vals.length) shapeCurr[code] = vals.reduce((a,b)=>a+b,0)/vals.length;
+      }
+      const shapeRefAccum = {};
+      for (const mc of refMcs) {
+        for (const s of mc.sessions) {
+          const code = _getMcMdCode(s);
+          if (!code) continue;
+          const vals = allReports.filter(r => r.session_id === s.id)
+            .map(r => r[metricKey]).filter(v => v != null);
+          if (!vals.length) continue;
+          const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+          if (!shapeRefAccum[code]) shapeRefAccum[code] = [];
+          shapeRefAccum[code].push(avg);
+        }
+      }
+      const shapeRef = {};
+      for (const [code, vals] of Object.entries(shapeRefAccum)) {
+        shapeRef[code] = vals.reduce((a,b)=>a+b,0)/vals.length;
+      }
+      const shapeLabels = _MD_ORDER.filter(c => shapeCurr[c] != null || shapeRef[c] != null);
+
       // Labels with real microcycle names and rivals
       function _mcLabel(mc) {
         const m = _mcMicros[mc.id];
@@ -8433,6 +8482,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _mcRenderTable(playerRows, metricKey);
       _mcRenderScatter(playerRows, metricKey);
       _mcRenderTrend(trendPoints, metricKey, selectedMD);
+      _mcRenderShape({ curr: shapeCurr, ref: shapeRef, labels: shapeLabels, currLabel, refLabel }, metricKey);
     } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = 'Error loading data.'; }
   }
 
@@ -8590,6 +8640,92 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         },
       }],
     });
+  }
+
+  // ── Microcycle shape ──────────────────────────────────────────
+  const _mcShapeCard   = document.getElementById('card-mc-shape');
+  const _mcShapeCanvas = document.getElementById('canvasMCShape');
+  const _mcShapeSub    = document.getElementById('mc-shape-sub');
+  let   _mcShapeChart  = null;
+
+  function _mcRenderShape({ curr, ref, labels, currLabel, refLabel }, metricKey) {
+    if (!_mcShapeCard || !_mcShapeCanvas || typeof Chart === 'undefined') return;
+    try {
+      if (_mcShapeChart) { _mcShapeChart.destroy(); _mcShapeChart = null; }
+
+      if (!labels.length) {
+        _mcShapeCanvas.getContext('2d').clearRect(0, 0, _mcShapeCanvas.width, _mcShapeCanvas.height);
+        if (_mcShapeSub) _mcShapeSub.textContent = 'No day-level data available';
+        return;
+      }
+
+      const metaDef   = MC_METRICS.find(m => m.key === metricKey);
+      const metaLabel = metaDef?.label || metricKey;
+      const metaUnit  = metaDef?.unit  || '';
+      if (_mcShapeSub) _mcShapeSub.textContent =
+        `${metaLabel} per day · ${currLabel} vs ${refLabel}`;
+
+      const accent = _accentHex();
+
+      _mcShapeChart = new Chart(_mcShapeCanvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: currLabel,
+              data: labels.map(c => curr[c] ?? null),
+              borderColor: accent,
+              backgroundColor: `${accent}18`,
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2.5,
+              pointRadius: 5,
+              pointBackgroundColor: accent,
+              spanGaps: false,
+            },
+            {
+              label: refLabel,
+              data: labels.map(c => ref[c] ?? null),
+              borderColor: 'rgba(99,102,241,0.7)',
+              backgroundColor: 'rgba(99,102,241,0.06)',
+              fill: true,
+              tension: 0.25,
+              borderWidth: 2,
+              borderDash: [5, 4],
+              pointRadius: 4,
+              pointBackgroundColor: 'rgba(99,102,241,0.7)',
+              spanGaps: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true, position: 'bottom',
+              labels: { font: { size: 10 }, boxWidth: 14, padding: 10,
+                color: 'rgba(160,160,160,0.9)' },
+            },
+            tooltip: {
+              mode: 'index', intersect: false,
+              callbacks: {
+                label: ctx => ` ${ctx.dataset.label}: ${fmtN(ctx.parsed.y, 0)}${metaUnit ? ' ' + metaUnit : ''}`,
+              },
+            },
+          },
+          scales: {
+            x: { ..._chartDefaults.scales?.x },
+            y: {
+              ..._chartDefaults.scales?.y,
+              title: { display: true, text: `${metaLabel}${metaUnit ? ' (' + metaUnit + ')' : ''}`,
+                font: { size: 10 } },
+            },
+          },
+        },
+      });
+    } catch (e) { console.error('_mcRenderShape:', e); }
   }
 
   // ── MD trend ──────────────────────────────────────────────────
