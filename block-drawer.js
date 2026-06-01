@@ -569,7 +569,7 @@
       ),
       h('tbody', null,
         ...sets.map((s, i) => h('tr', null,
-          h('td', { class: 'set-n' }, h('input', { value: i + 1, readonly: '' })),
+          h('td', { class: 'set-n' }, h('div', { class: 'set-n-badge' }, String(i + 1))),
           h('td', null, h('input', { value: s.reps,  oninput: (e) => s.reps  = e.target.value })),
           h('td', null, h('input', { value: s.load,  oninput: (e) => s.load  = e.target.value })),
           h('td', null, h('input', { value: s.tempo, oninput: (e) => s.tempo = e.target.value })),
