@@ -27,6 +27,7 @@
 
   let _clubId  = null;
   let _userId  = null;
+  let _userRole = null;   // 'admin' | 'coach' | 'physio' | ...
   let _dashboards = [];   // loaded from DB
   let _menuEl  = null;
   let _menuBkEl = null;
@@ -38,6 +39,23 @@
     return String(s).replace(/[<>&"]/g, c =>
       ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])
     );
+  }
+
+  function canManage(dash) {
+    // Creator always can; admin/coach can manage any dashboard
+    if (!dash) return false;
+    if (_userRole === 'admin' || _userRole === 'coach') return true;
+    return dash.created_by === _userId;
+  }
+
+  function showPermissionError() {
+    const toast = document.getElementById('gpbToast');
+    if (!toast) return;
+    document.getElementById('gpbToastTitle').textContent = 'Permission denied';
+    document.getElementById('gpbToastSub').textContent   = 'Only admins and coaches can modify shared dashboards.';
+    document.getElementById('gpbToastAct').textContent   = 'OK';
+    toast.classList.add('is-on');
+    setTimeout(() => toast.classList.remove('is-on'), 4000);
   }
 
   function waitForClubId(maxMs = 12000) {
@@ -232,10 +250,11 @@
     closeMenu();
 
     const isPredefined = !!REPORT_TYPE_TO_VIEW[dash.report_type];
-    const canDelete = !isPredefined && _dashboards.length > 1;
+    const canDelete    = !isPredefined && _dashboards.length > 1 && canManage(dash);
+    const canRename    = canManage(dash);
 
     _menuEl.innerHTML = `
-      <button class="gpt-menu-item" data-act="rename"><i class="ti ti-pencil"></i>Rename</button>
+      ${canRename ? '<button class="gpt-menu-item" data-act="rename"><i class="ti ti-pencil"></i>Rename</button>' : ''}
       <button class="gpt-menu-item" data-act="duplicate"><i class="ti ti-copy"></i>Duplicate</button>
       ${canDelete ? '<div class="gpt-menu-div"></div><button class="gpt-menu-item danger" data-act="delete"><i class="ti ti-trash"></i>Delete dashboard</button>' : ''}
     `;
@@ -316,31 +335,55 @@
     if (!window.duplicateDashboard || !window.sb) return;
     try {
       const newDash = await window.duplicateDashboard(dash.id, _clubId, _userId, window.sb);
-      _dashboards.push({ ...newDash, report_type: null, cards: [] });
+      _dashboards.push({ ...newDash, report_type: null, cards: [], created_by: _userId });
       reRender();
       switchToView(`db-${newDash.id}`);
-    } catch (e) { console.warn('gpt duplicateFlow:', e); }
+    } catch (e) {
+      console.warn('gpt duplicateFlow:', e);
+      showPermissionError();
+    }
   }
 
   // ── Delete ────────────────────────────────────────────────────
 
   async function deleteFlow(dash) {
     if (!window.deleteDashboard || !window.sb) return;
-    if (_dashboards.length <= 1) return; // never delete last
+    if (_dashboards.length <= 1) return;
+    if (!canManage(dash)) { showPermissionError(); return; }
 
     const idx = _dashboards.indexOf(dash);
     _dashboards.splice(idx, 1);
 
-    // switch to another view before removing DOM
     const fallback = _dashboards[Math.max(0, idx - 1)];
     const fallbackView = REPORT_TYPE_TO_VIEW[fallback?.report_type] || `db-${fallback?.id}`;
     switchToView(fallbackView);
-
     reRender();
 
     try { await window.deleteDashboard(dash.id, window.sb); }
-    catch (e) { console.warn('gpt deleteDashboard:', e); }
+    catch (e) {
+      console.warn('gpt deleteDashboard:', e);
+      // rollback local state on server error
+      _dashboards.splice(idx, 0, dash);
+      reRender();
+      showPermissionError();
+    }
   }
+
+  // ── Pending-save tracker (beforeunload guard) ────────────────
+
+  const _pendingSaves = new Set();
+
+  function trackSave(promise) {
+    _pendingSaves.add(promise);
+    promise.finally(() => _pendingSaves.delete(promise));
+  }
+
+  window.addEventListener('beforeunload', e => {
+    if (_pendingSaves.size > 0) {
+      e.preventDefault();
+      e.returnValue = 'Card order is still saving. Are you sure you want to leave?';
+    }
+  });
 
   // ── Card drag-to-reorder ──────────────────────────────────────
 
@@ -383,8 +426,10 @@
       const ordered = [...grid.querySelectorAll('.gp-c[data-card-id]')]
         .map((el, i) => ({ id: el.dataset.cardId, position: i }));
 
-      try { await window.reorderCards(ordered, window.sb); }
-      catch (e) { console.warn('gpt reorderCards:', e); }
+      const save = window.reorderCards(ordered, window.sb)
+        .catch(e => console.warn('gpt reorderCards:', e));
+      trackSave(save);
+      await save;
     });
   }
 
@@ -476,6 +521,13 @@
       _userId = window._gpUserId || null;
 
       if (!window.loadDashboards) return; // gp-persist.js not loaded
+
+      // fetch user role for RBAC checks
+      if (_userId) {
+        const { data: profile } = await window.sb
+          .from('profiles').select('role').eq('id', _userId).maybeSingle();
+        _userRole = profile?.role || null;
+      }
 
       _dashboards = await window.loadDashboards(_clubId, window.sb);
 
