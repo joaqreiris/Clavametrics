@@ -1808,21 +1808,6 @@ async function applyGrpDefaultLayout() {
       }
     }
     _reorderGrid(grid, layout);
-
-    // One-time migration v1: stash zscore-matrix (now opt-in via Add card)
-    if (!localStorage.getItem('gp_zm_hidden_v1')) {
-      localStorage.setItem('gp_zm_hidden_v1', '1');
-      const zm = document.getElementById('card-zscore-matrix');
-      if (zm && zm.parentNode) { _cardStash.set('card-zscore-matrix', zm); zm.remove(); }
-    }
-
-    // One-time migration v2: stash vs-session; add outliers to default set
-    if (!localStorage.getItem('gp_defaults_v2')) {
-      localStorage.setItem('gp_defaults_v2', '1');
-      const vs = document.getElementById('card-sc-vs-session');
-      if (vs && vs.parentNode) { _cardStash.set('card-sc-vs-session', vs); vs.remove(); }
-      setTimeout(() => saveLayout('grp').catch(() => {}), 1500);
-    }
   } catch (e) { console.warn('applyGrpDefaultLayout:', e); }
 }
 
