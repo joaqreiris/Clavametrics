@@ -1440,7 +1440,11 @@ function initSizeToggles(root) {
       g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
       b.classList.add('is-on');
       const card = b.closest('.gp-c');
-      if (card) card.dataset.size = { S:'sm', M:'md', L:'lg', FULL:'full' }[b.textContent.trim()] || 'md';
+      if (card) {
+        card.dataset.size = { S:'sm', M:'md', L:'lg', FULL:'full' }[b.textContent.trim()] || 'md';
+        const view = card.closest('.gp-view')?.dataset.view;
+        if (view) saveLayout(view).catch(() => {});
+      }
     }))
   );
 }
@@ -1701,16 +1705,37 @@ async function loadLayout(viewKey) {
   } catch (err) { console.warn('loadLayout: unexpected error (using defaults):', err); return null; }
 }
 
+// ── Restore helpers (size + order) ─────────────────────────────
+function _applyCardSize(card, size) {
+  if (!card || !size) return;
+  card.dataset.size = size;
+  const label = { sm:'S', md:'M', lg:'L', full:'FULL' }[size] || 'M';
+  card.querySelectorAll('.size-toggle button').forEach(btn =>
+    btn.classList.toggle('is-on', btn.textContent.trim() === label)
+  );
+}
+
+function _reorderGrid(grid, layout) {
+  if (!grid || !layout?.length) return;
+  const posMap = new Map(layout.map(c => [c.card_id, c.position]));
+  const cards  = [...grid.querySelectorAll('.gp-c')];
+  cards.sort((a, b) => (posMap.get(a.dataset.cardId) ?? 9999) - (posMap.get(b.dataset.cardId) ?? 9999));
+  const addBtn = grid.querySelector('.gp-add');
+  cards.forEach(c => grid.appendChild(c));
+  if (addBtn) grid.appendChild(addBtn);
+}
+
 // ── Apply saved layout to a view (metric_key per card) ─────────
 async function applyLayoutToView(viewKey) {
   const layout = await loadLayout(viewKey);
   if (!layout?.length) return;
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
   if (!grid) return;
-  for (const { card_id, config } of layout) {
-    if (!config) continue;
+  for (const { card_id, size, config } of layout) {
     const card = grid.querySelector(`[data-card-id="${card_id}"]`);
     if (!card) continue;
+    _applyCardSize(card, size);
+    if (!config) continue;
     if (config.metric_key) card.dataset.metricKey = config.metric_key;
     if (card_id === 'weekly-bars' && (config.wkok_yellow != null || config.wkok_red != null)) {
       const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
@@ -1727,6 +1752,7 @@ async function applyLayoutToView(viewKey) {
       card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
     }
   }
+  _reorderGrid(grid, layout);
 }
 
 // ── Grp view: apply default visibility + restore stash state ─────
@@ -1770,16 +1796,18 @@ async function applyGrpDefaultLayout() {
     }
 
     // Restore metric_key / config per card (delegates to applyLayoutToView logic)
-    for (const { card_id, config } of layout) {
-      if (!config) continue;
+    for (const { card_id, size, config } of layout) {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
+      _applyCardSize(card, size);
+      if (!config) continue;
       if (config.metric_key) card.dataset.metricKey = config.metric_key;
       if ((card_id === 'sc-zscore-temporal' || card_id === 'sc-vs-session' || card_id === 'outliers') && config.metrics?.length) {
         const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
         card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
       }
     }
+    _reorderGrid(grid, layout);
 
     // One-time migration v1: stash zscore-matrix (now opt-in via Add card)
     if (!localStorage.getItem('gp_zm_hidden_v1')) {
@@ -7019,7 +7047,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     b.classList.add('is-on');
     const card = b.closest('.gp-c');
     const map = { 'S':'sm', 'M':'md', 'L':'lg', 'FULL':'full' };
-    card.dataset.size = map[b.textContent.trim()];
+    if (card) {
+      card.dataset.size = map[b.textContent.trim()] || 'md';
+      const view = card.closest('.gp-view')?.dataset.view;
+      if (view) saveLayout(view).catch(() => {});
+    }
   })));
   const srcDrawer = document.getElementById('srcDrawer');
   const srcOverlay = document.getElementById('srcOverlay');
