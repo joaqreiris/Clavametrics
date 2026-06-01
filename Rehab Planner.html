@@ -227,7 +227,7 @@
           <button><i class="ti ti-chevron-right"></i></button>
         </div>
         <div class="spacer"></div>
-        <span class="meta"><span class="cm-kbd">⌘</span><span class="cm-kbd">K</span> &nbsp;to add block</span>
+        <span class="meta"><span class="cm-kbd" id="rp-kbd-mod">⌘</span><span class="cm-kbd">K</span> &nbsp;to add block</span>
       </div>
 
       <!-- WORKSPACE: views + side panel -->
@@ -435,6 +435,7 @@
   // ── Show planner (skip picker) ──
   api.showPlanner();
   api.setMode(plan.kind); // sets panel visibility & re-renders with mock data (overwritten below)
+  document.getElementById('view-planner').classList.add('is-loading');
 
   // ── Helpers ──
   const TODAY = new Date(); TODAY.setHours(0,0,0,0);
@@ -596,7 +597,11 @@
   if (btnPrev) btnPrev.addEventListener('click', () => { currentWeekStart = new Date(currentWeekStart.getTime() - 7*DAY); loadWeek(currentWeekStart); });
   if (btnNext) btnNext.addEventListener('click', () => { currentWeekStart = new Date(currentWeekStart.getTime() + 7*DAY); loadWeek(currentWeekStart); });
 
-  await loadWeek(currentWeekStart);
+  try {
+    await loadWeek(currentWeekStart);
+  } finally {
+    document.getElementById('view-planner').classList.remove('is-loading');
+  }
 
   // ── Add block / Edit block → rehab_sessions ──
   const TYPE_COLOR_MAP = {
@@ -687,8 +692,7 @@
             const setCount = Array.isArray(ex.sets) ? ex.sets.length : 0;
             const first    = ex.sets?.[0];
             const meta     = [setCount ? setCount+'×'+(first?.reps||'') : '', first?.load||'', ex.side||''].filter(Boolean).join(' · ');
-            const flag     = ex.flag ? `<span class="rp-bd-ex-flag">${ex.flag}</span>` : '';
-            return `<div class="rp-bd-ex"><span class="n">${i+1}</span><span class="nm">${ex.name||'—'}</span><span class="meta">${meta}</span>${flag}</div>`;
+            return `<div class="rp-bd-ex"><span class="n">${i+1}</span><div class="rp-bd-ex-body"><div class="nm">${ex.name||'—'}</div><div class="rp-bd-ex-sub">${meta}${ex.flag?` <span class="rp-bd-ex-flag">${ex.flag}</span>`:''}</div></div></div>`;
           }).join('')}
         </div>
       </div>` : '';
