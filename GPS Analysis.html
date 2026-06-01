@@ -1576,8 +1576,9 @@ const GP_CARD_DEFS = {
     { name: 'Session KPI row',          id: 'card-session-kpi',          stub: false },
     { name: 'Session table',            id: 'card-session-table',        stub: false },
     { name: 'Variación vs equivalentes',id: 'card-sc-zscore-temporal',   stub: false },
-    { name: 'vs sesión',               id: 'card-sc-vs-session',        stub: false },
+    { name: 'Outliers',                 id: 'card-outliers',             stub: false },
     // ── Add-card only (stashed by default) ──
+    { name: 'vs sesión',               id: 'card-sc-vs-session',        stub: false },
     { name: 'Distance KPI',             id: 'card-sc-kpi-distance',      stub: false },
     { name: 'HSR KPI',                  id: 'card-sc-kpi-hsr',           stub: false },
     { name: 'Sprints KPI',              id: 'card-sc-kpi-sprints',       stub: false },
@@ -1587,7 +1588,6 @@ const GP_CARD_DEFS = {
     { name: 'Team heatmap',             id: 'card-team-heatmap',         stub: false },
     { name: 'Microcycle heatmap',       id: 'card-mc-heat',              stub: false },
     { name: 'Position profile',         id: 'card-pos-radar',            stub: false },
-    { name: 'Outliers',                 id: 'card-outliers',             stub: false },
     // ── Not yet implemented ──
     { name: 'Position box plot',        id: null,                        stub: true },
     { name: 'Squad readiness',          id: null,                        stub: true },
@@ -1730,11 +1730,11 @@ async function applyLayoutToView(viewKey) {
 }
 
 // ── Grp view: apply default visibility + restore stash state ─────
-// Default visible: session-kpi, session-table, sc-zscore-temporal.
+// Default visible: session-kpi, session-table, sc-zscore-temporal, card-outliers.
 // On first load (no saved layout): stash the rest + save defaults.
 // On subsequent loads: stash any card absent from saved layout.
 const _GRP_DEFAULTS = new Set([
-  'card-session-kpi', 'card-session-table', 'card-sc-zscore-temporal', 'card-sc-vs-session',
+  'card-session-kpi', 'card-session-table', 'card-sc-zscore-temporal', 'card-outliers',
 ]);
 
 async function applyGrpDefaultLayout() {
@@ -1781,15 +1781,19 @@ async function applyGrpDefaultLayout() {
       }
     }
 
-    // One-time migration: stash zscore-matrix (now opt-in via Add card)
+    // One-time migration v1: stash zscore-matrix (now opt-in via Add card)
     if (!localStorage.getItem('gp_zm_hidden_v1')) {
       localStorage.setItem('gp_zm_hidden_v1', '1');
       const zm = document.getElementById('card-zscore-matrix');
-      if (zm && zm.parentNode) {
-        _cardStash.set('card-zscore-matrix', zm);
-        zm.remove();
-        setTimeout(() => saveLayout('grp').catch(() => {}), 1500);
-      }
+      if (zm && zm.parentNode) { _cardStash.set('card-zscore-matrix', zm); zm.remove(); }
+    }
+
+    // One-time migration v2: stash vs-session; add outliers to default set
+    if (!localStorage.getItem('gp_defaults_v2')) {
+      localStorage.setItem('gp_defaults_v2', '1');
+      const vs = document.getElementById('card-sc-vs-session');
+      if (vs && vs.parentNode) { _cardStash.set('card-sc-vs-session', vs); vs.remove(); }
+      setTimeout(() => saveLayout('grp').catch(() => {}), 1500);
     }
   } catch (e) { console.warn('applyGrpDefaultLayout:', e); }
 }
