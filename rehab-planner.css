@@ -138,6 +138,7 @@ body.cm { background: var(--cm-bg); }
 .rp-phasebar {
   position:relative; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4);
   padding:16px 18px 14px; margin-bottom:14px; box-shadow:var(--cm-shadow-1);
+  overflow:visible;
 }
 .rp-phasebar-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
 .rp-phasebar-head .l { font:500 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
@@ -145,9 +146,9 @@ body.cm { background: var(--cm-bg); }
 .rp-phasebar-head .summary strong { color:var(--cm-fg-strong); font-weight:600; }
 .rp-phasebar-head .right { margin-left:auto; display:flex; gap:6px; align-items:center; }
 
-.rp-phase-track { position:relative; display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; gap:4px; height:64px; }
+.rp-phase-track { position:relative; display:flex; gap:4px; min-height:64px; overflow-x:auto; overflow-y:visible; }
 .rp-phase {
-  position:relative; padding:8px 12px; border-radius:6px;
+  position:relative; padding:8px 12px; border-radius:6px; flex:1 1 0; min-width:150px;
   background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft);
   display:flex; flex-direction:column; gap:4px; cursor:pointer;
   transition:background var(--cm-dur-1);
@@ -328,6 +329,11 @@ body.cm { background: var(--cm-bg); }
 .rp-bd-ex .params .p .l { color:#94A3B8; }
 .rp-bd-ex .restr { display:inline-flex; align-items:center; gap:3px; padding:1px 5px; border-radius:3px; background:#FEF2F2; color:#B91C1C; font:600 9.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; }
 .rp-bd-ex .restr .ti { font-size:11px; }
+/* dynamic exercise list from DB exercises jsonb */
+.rp-bd-ex-list { display:flex; flex-direction:column; gap:6px; }
+.rp-bd-ex .nm  { font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rp-bd-ex .meta { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; }
+.rp-bd-ex-flag  { padding:1px 5px; border-radius:3px; background:#FEF3C7; color:#92400E; font:600 9.5px/1 var(--cm-font-mono); white-space:nowrap; }
 
 /* — criteria checklist — */
 .rp-criteria { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:6px; }

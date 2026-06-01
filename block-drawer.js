@@ -66,7 +66,10 @@
     rpe: 7,
     notes: '',
     ctxField: '',       // contraindication (rehab) / target (prev) / goal (ip)
-    sets: {}            // exId -> [{reps,load,tempo,rest}]
+    sets: {},           // exId -> [{reps,load,tempo,rest}]
+    freeNames: {},      // __free__N -> name string
+    exExtras: {},       // exId -> {side, flag}
+    freeCount: 0
   };
 
   // ─── Helpers ───
@@ -372,7 +375,21 @@
         onclick: () => { state.step = 2; renderAll(); }
       },
         h('i', { class: 'ti ti-plus' }),
-        ' Add another exercise'
+        ' Add from library'
+      ),
+      h('button', {
+        class: 'bd-add-ex',
+        onclick: () => {
+          const fid = '__free__' + state.freeCount++;
+          state.selected.push(fid);
+          state.freeNames[fid] = '';
+          state.exExtras[fid]  = { side: '', flag: '' };
+          state.sets[fid]      = [{ reps: '', load: '', tempo: '', rest: '' }];
+          renderBody(); renderFooter();
+        }
+      },
+        h('i', { class: 'ti ti-pencil' }),
+        ' Add free-text exercise'
       )
     );
   }
@@ -388,14 +405,45 @@
   }
 
   function renderExCard(exId, exIdx) {
-    const ex = LIB.find(e => e.id === exId);
-    const sets = state.sets[exId] || [];
+    const isFree = exId.startsWith('__free__');
+    const ex     = isFree ? null : LIB.find(e => e.id === exId);
+    const sets   = state.sets[exId] || [];
+    const extras = state.exExtras[exId] || (state.exExtras[exId] = { side: '', flag: '' });
+
+    const nameEl = isFree
+      ? h('input', {
+          type: 'text', class: 'bd-free-name', placeholder: 'Exercise name…',
+          value: state.freeNames[exId] || '',
+          oninput: (e) => { state.freeNames[exId] = e.target.value; }
+        })
+      : document.createTextNode(ex ? ex.name : exId);
+
     const head = h('div', { class: 'bd-ex-card-h' },
       h('div', { class: 'n' }, String(exIdx + 1)),
-      h('div', { class: 'name' }, ex.name),
-      h('button', { class: 'ic', title: 'Duplicate', onclick: () => duplicateEx(exId) }, h('i', { class: 'ti ti-copy' })),
+      h('div', { class: 'name' }, nameEl),
+      isFree ? null : h('button', { class: 'ic', title: 'Duplicate', onclick: () => duplicateEx(exId) }, h('i', { class: 'ti ti-copy' })),
       h('button', { class: 'ic', title: 'Remove', onclick: () => removeEx(exId) }, h('i', { class: 'ti ti-trash' }))
     );
+
+    const extrasRow = h('div', { class: 'bd-ex-extras' },
+      h('div', { class: 'bd-field-mini' },
+        h('label', null, 'Side'),
+        h('input', { type: 'text', placeholder: 'L / R / Both', value: extras.side,
+          oninput: (e) => { extras.side = e.target.value; }
+        })
+      ),
+      h('div', { class: 'bd-field-mini' },
+        h('label', null, 'Flag'),
+        h('input', { type: 'text', placeholder: 'e.g. Avoid lockout', value: extras.flag,
+          oninput: (e) => { extras.flag = e.target.value; }
+        })
+      )
+    );
+
+    const seedRow = isFree
+      ? { reps: '', load: '', tempo: '', rest: '' }
+      : { reps: ex.reps, load: ex.load, tempo: ex.tempo, rest: ex.rest };
+
     const tbl = h('table', { class: 'bd-sets-tbl' },
       h('thead', null,
         h('tr', null,
@@ -410,10 +458,10 @@
       h('tbody', null,
         ...sets.map((s, i) => h('tr', null,
           h('td', { class: 'set-n' }, h('input', { value: i + 1, readonly: '' })),
-          h('td', null, h('input', { value: s.reps, oninput: (e) => s.reps = e.target.value })),
-          h('td', null, h('input', { value: s.load, oninput: (e) => s.load = e.target.value })),
+          h('td', null, h('input', { value: s.reps,  oninput: (e) => s.reps  = e.target.value })),
+          h('td', null, h('input', { value: s.load,  oninput: (e) => s.load  = e.target.value })),
           h('td', null, h('input', { value: s.tempo, oninput: (e) => s.tempo = e.target.value })),
-          h('td', null, h('input', { value: s.rest, oninput: (e) => s.rest = e.target.value })),
+          h('td', null, h('input', { value: s.rest,  oninput: (e) => s.rest  = e.target.value })),
           h('td', null, h('button', { class: 'rm-row', onclick: () => { sets.splice(i, 1); renderBody(); renderFooter(); } }, h('i', { class: 'ti ti-x' })))
         ))
       )
@@ -421,11 +469,11 @@
     const addSet = h('button', {
       class: 'bd-add-set',
       onclick: () => {
-        sets.push({ reps: ex.reps, load: ex.load, tempo: ex.tempo, rest: ex.rest });
+        sets.push({ ...seedRow });
         renderBody(); renderFooter();
       }
     }, h('i', { class: 'ti ti-plus' }), ' Add set');
-    return h('div', { class: 'bd-ex-card' }, head, tbl, addSet);
+    return h('div', { class: 'bd-ex-card' }, head, extrasRow, tbl, addSet);
   }
 
   function duplicateEx(exId) {
@@ -510,7 +558,7 @@
     state = {
       open: true,
       mode: existing ? 'edit' : 'create',
-      step: existing ? 3 : 1,   // jump straight to parameters when editing
+      step: existing ? 3 : 1,
       context: opts.context || 'rehab',
       dayLabel: opts.day || (existing && existing.day) || '',
       dayDate:  opts.dayDate || '',
@@ -523,13 +571,25 @@
       rpe: existing ? (existing.rpe || 7) : 7,
       notes: existing ? (existing.notes || '') : '',
       ctxField: existing ? (existing.ctxField || '') : '',
-      sets: {}
+      sets: {},
+      freeNames: {}, exExtras: {}, freeCount: 0
     };
-    // Seed sets for each existing exercise
+    // Seed from library IDs (legacy / create flow)
     if (existing && existing.exerciseIds) {
       existing.exerciseIds.forEach(exId => {
         const ex = LIB.find(e => e.id === exId);
         if (ex) state.sets[exId] = (existing.sets && existing.sets[exId]) || seedSets(ex);
+      });
+    }
+    // Seed from DB exercises jsonb (edit flow — free-text)
+    if (existing?.exercises?.length) {
+      existing.exercises.forEach((ex, i) => {
+        const fid = '__free__' + i;
+        state.freeCount = Math.max(state.freeCount, i + 1);
+        state.selected.push(fid);
+        state.freeNames[fid] = ex.name || '';
+        state.exExtras[fid]  = { side: ex.side || '', flag: ex.flag || '' };
+        state.sets[fid]      = Array.isArray(ex.sets) ? ex.sets : [];
       });
     }
     headTitle.textContent = state.mode === 'edit' ? 'Edit block' : 'New block';
@@ -550,27 +610,35 @@
   }
 
   function doSave() {
-    // No-op write — fire custom event so the host can react.
+    let totalSets = 0;
+    state.selected.forEach(exId => { totalSets += (state.sets[exId] || []).length; });
+
     const payload = {
-      mode: state.mode,
-      type: state.type,
-      name: state.blockName || TYPE_MAP[state.type].label,
-      duration: state.duration,
-      rpe: state.rpe,
-      owner: state.owner,
-      notes: state.notes,
-      ctxField: state.ctxField,
-      exercises: state.selected.map((exId, i) => {
-        const ex = LIB.find(e => e.id === exId);
+      mode:         state.mode,
+      type:         state.type,
+      name:         state.blockName || (TYPE_MAP[state.type]?.label || 'Block'),
+      duration:     state.duration,
+      rpe:          state.rpe,
+      owner:        state.owner,
+      notes:        state.notes,
+      ctxField:     state.ctxField,
+      context_note: state.ctxField,
+      volume_sets:  totalSets,
+      au:           computeAU(),
+      dayDate:      state.dayDate,
+      exercises: state.selected.map(exId => {
+        const isFree = exId.startsWith('__free__');
+        const ex     = isFree ? null : LIB.find(e => e.id === exId);
+        const extras = state.exExtras[exId] || {};
         return {
-          name: ex.name,
-          region: ex.region,
-          sets: state.sets[exId] || []
+          name: isFree ? (state.freeNames[exId] || '') : (ex?.name || exId),
+          sets: state.sets[exId] || [],
+          side: extras.side  || null,
+          flag: extras.flag  || null
+          // TODO: exercise_id cuando se linkee la Exercise library
         };
-      }),
-      au: computeAU()
+      })
     };
-    payload.dayDate = state.dayDate;
     window.dispatchEvent(new CustomEvent('blockdrawer:save', { detail: payload }));
     close();
   }
