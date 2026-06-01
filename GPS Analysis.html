@@ -1259,6 +1259,16 @@
             <div class="gp-c-b" id="mc-mono-body" style="padding:14px 16px"></div>
           </div>
 
+          <!-- Biggest movers -->
+          <div class="gp-c" data-size="md" id="card-mc-movers" data-card-id="mc-movers">
+            <div class="gp-c-h">
+              <span class="ttl">Biggest movers</span>
+              <span class="sub" id="mc-movers-sub">top gains &amp; drops vs reference</span>
+              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button><button style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+            </div>
+            <div class="gp-c-b" id="mc-movers-body" style="padding:10px 14px"></div>
+          </div>
+
           <!-- MD Trend -->
           <div class="gp-c" data-size="full" id="card-mc-trend" data-card-id="mc-trend">
             <div class="gp-c-h">
@@ -1615,6 +1625,7 @@ const GP_CARD_DEFS = {
     // ── Add-card only (stashed by default) ──
     { name: 'Diff scatter',    id: 'card-mc-scatter',     stub: false },
     // ── Add-card only (extra, not default) ──
+    { name: 'Biggest movers',     id: 'card-mc-movers',   stub: false },
     { name: 'Monotonía & strain', id: 'card-mc-monotony', stub: false },
     { name: 'Microcycle shape',   id: 'card-mc-shape',    stub: false },
     { name: 'MD trend',         id: 'card-mc-trend',      stub: false },
@@ -8511,6 +8522,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _mcRenderTrend(trendPoints, metricKey, selectedMD);
       _mcRenderShape({ curr: shapeCurr, ref: shapeRef, labels: shapeLabels, currLabel, refLabel }, metricKey);
       _mcRenderMonotony(monoData, metricKey);
+      _mcRenderMovers(playerRows, metricKey);
     } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = 'Error loading data.'; }
   }
 
@@ -8668,6 +8680,61 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         },
       }],
     });
+  }
+
+  // ── Biggest movers ────────────────────────────────────────────
+  const _mcMoversBody = document.getElementById('mc-movers-body');
+  const _mcMoversSub  = document.getElementById('mc-movers-sub');
+
+  function _mcRenderMovers(rows, metricKey) {
+    if (!_mcMoversBody) return;
+    try {
+      const metaDef   = MC_METRICS.find(m => m.key === metricKey);
+      const metaLabel = metaDef?.label || metricKey;
+      const metaUnit  = metaDef?.unit  || '';
+      if (_mcMoversSub) _mcMoversSub.textContent =
+        `${metaLabel} · top gains & drops vs reference`;
+
+      const valid = rows.filter(r => r.diff_pct != null);
+      if (!valid.length) {
+        _mcMoversBody.innerHTML =
+          '<p style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">No data.</p>';
+        return;
+      }
+
+      const N = 4; // players per section
+      const byDiff  = [...valid].sort((a, b) => b.diff_pct - a.diff_pct);
+      const gainers = byDiff.slice(0, N);
+      const losers  = byDiff.slice(-N).reverse();
+
+      function _playerName(r) {
+        const p = r.player;
+        return `${p.last_name || ''}${p.first_name ? ' ' + p.first_name[0] + '.' : ''}`.trim() || r.pid.slice(0, 8);
+      }
+
+      function _moversRow(r) {
+        const name = _playerName(r);
+        const diff = r.diff_pct;
+        const val  = r[metricKey];
+        const cls  = diffCls(diff);
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--cm-border-soft)">
+          <span style="font:500 12.5px/1.3 var(--cm-font-sans);color:var(--cm-fg)">${name}</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${fmtN(val, 0)}${metaUnit ? ' ' + metaUnit : ''}</span>
+            <span class="mc-diff ${cls}" style="min-width:52px;justify-content:flex-end">${fmtPct(diff)}</span>
+          </div>
+        </div>`;
+      }
+
+      const sectionHdr = (label, color) =>
+        `<div style="font:600 10px/1 var(--cm-font-mono);color:${color};text-transform:uppercase;padding:8px 0 4px">${label}</div>`;
+
+      _mcMoversBody.innerHTML =
+        sectionHdr('↑ Biggest gains', 'var(--cm-success)') +
+        gainers.map(_moversRow).join('') +
+        sectionHdr('↓ Biggest drops', 'var(--cm-danger)') +
+        losers.map(_moversRow).join('');
+    } catch (e) { console.error('_mcRenderMovers:', e); }
   }
 
   // ── Monotonía & strain ────────────────────────────────────────
