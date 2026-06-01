@@ -517,6 +517,10 @@
   .sc-ind-right { color:var(--cm-fg-muted); display:flex; align-items:center; gap:8px; }
   .sc-ind-right a { color:var(--cm-accent); text-decoration:none; cursor:pointer; }
   .sc-ind-right a:hover { text-decoration:underline; }
+  .sc-filter-ver { display:flex; align-items:center; gap:6px; }
+  .sc-filter-sep { width:1px; height:22px; background:var(--cm-border); margin:0 8px; flex-shrink:0; }
+  .sc-filter-comparar { display:flex; align-items:center; gap:6px; }
+  .sc-filter-comparar-label { font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); text-transform:uppercase; letter-spacing:.06em; white-space:nowrap; }
   .gp-sc-kpis { display:flex; gap:10px; flex-wrap:wrap; width:100%; padding:4px 0; }
   .gp-sc-kpi { flex:1; min-width:120px; display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); }
   .gp-sc-kpi .k-label { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); text-transform:uppercase; letter-spacing:.04em; }
@@ -600,8 +604,17 @@
           <span class="pw-next-match" id="pw-next-match"></span>
         </span>
         <span id="sc-filter-group">
-          <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
-          <select class="sc-sel" id="sc-player-sel" title="Optional: zoom into a specific player"><option value="">All players</option></select>
+          <span class="sc-filter-ver">
+            <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
+            <select class="sc-sel" id="sc-mc-sel"><option value="">Microcycle...</option></select>
+            <select class="sc-sel" id="sc-player-sel" title="Optional: zoom into a specific player"><option value="">All players</option></select>
+          </span>
+          <span class="sc-filter-sep"></span>
+          <span class="sc-filter-comparar">
+            <span class="sc-filter-comparar-label">vs</span>
+            <select class="sc-sel" id="sc-compare-md-sel"><option value="">MD...</option></select>
+            <select class="sc-sel" id="sc-compare-date-sel"><option value="">Fecha...</option></select>
+          </span>
           <span class="sc-info" id="sc-info"></span>
         </span>
         <div class="right">
@@ -9058,7 +9071,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── state ────────────────────────────────────────────────────
-  const _st = { mc: '', date: '', sessionId: null, compareSessionId: null, sortKey: 'player_name', sortDir: 1, highlightedRow: null };
+  const _st = { mc: '', date: '', sessionId: null, compareSessionId: null, compareMdCode: null, sortKey: 'player_name', sortDir: 1, highlightedRow: null };
   let _allSessions = [];
   let _lastReports = [];
   let _initialized  = false;
@@ -9188,6 +9201,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         .order('session_date', { ascending: false });
 
       _allSessions = sessions || [];
+      window._scAllSessions = _allSessions;
       if (!_allSessions.length) { scInfo.textContent = 'No sessions found.'; return; }
 
       // Diagnóstico de datos MD
@@ -9195,12 +9209,26 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (withMd === 0) console.warn('[SC] Todas las sesiones tienen match_day_offset y md_code en null — el indicador y la comparación saldrán vacíos por DATOS, no por UI.');
       else console.info(`[SC] ${withMd}/${_allSessions.length} sesiones con MD code.`);
 
+      _scLoadCompareState();
       _buildAllSessionOptions();
-      // auto-pick first session (options[0] is the placeholder; options[1] is first real session even with optgroups)
+      _buildMcOptions();
+
       const firstOpt = Array.from(sessSel.options).find(o => o.value);
+      const firstSessId = firstOpt?.value || null;
+
+      _buildCompareMdOptions(firstSessId);
+
       if (firstOpt) {
         sessSel.value = firstOpt.value;
         _st.sessionId = firstOpt.value;
+        // Default compareMdCode to first session's MD if not persisted
+        if (!_st.compareMdCode) {
+          const sess = _allSessions.find(s => s.id === _st.sessionId);
+          _st.compareMdCode = _getMdCode(sess) || null;
+          const mdSel = document.getElementById('sc-compare-md-sel');
+          if (mdSel && _st.compareMdCode) mdSel.value = _st.compareMdCode;
+        }
+        _buildCompareDateOptions();
         await _loadSessionData(_st.sessionId);
       }
     } catch (e) { console.error('scInit:', e); scInfo.textContent = 'Error loading sessions.'; }
@@ -9267,6 +9295,107 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return { count, mdCode };
   }
 
+  // ── Compare state persistence ─────────────────────────────────
+  const _SC_COMPARE_LS = 'sc_compare_state_v1';
+  function _scSaveCompareState() {
+    try { localStorage.setItem(_SC_COMPARE_LS, JSON.stringify({ compareMdCode: _st.compareMdCode, compareSessionId: _st.compareSessionId })); } catch {}
+  }
+  function _scLoadCompareState() {
+    try {
+      const s = JSON.parse(localStorage.getItem(_SC_COMPARE_LS) || '{}');
+      if (s.compareMdCode)    _st.compareMdCode    = s.compareMdCode;
+      if (s.compareSessionId) _st.compareSessionId = s.compareSessionId;
+    } catch {}
+  }
+
+  // ── Microcycle filter ─────────────────────────────────────────
+  function _buildMcOptions() {
+    const mcSel = document.getElementById('sc-mc-sel');
+    if (!mcSel) return;
+    const mcs = [...new Set(_allSessions.map(s => s.title?.match?.(/MC\s*\d+/i)?.[0] || null).filter(Boolean))].sort();
+    mcSel.innerHTML = '<option value="">Microcycle...</option>';
+    mcs.forEach(mc => {
+      const o = document.createElement('option');
+      o.value = mc; o.textContent = mc;
+      mcSel.appendChild(o);
+    });
+  }
+
+  // Rebuild sessSel options filtered by MC ('' = all)
+  function _buildSessionOptionsByMc(mc) {
+    sessSel.innerHTML = '<option value="">Session...</option>';
+    const source = (mc && mc !== '') ? _allSessions.filter(s => (s.title?.match?.(/MC\s*\d+/i)?.[0] || '') === mc) : _allSessions;
+    const mcGroups = new Map(); const noMc = [];
+    for (const s of source) {
+      const label = s.title?.match?.(/MC\s*\d+/i)?.[0] || null;
+      if (label) { if (!mcGroups.has(label)) mcGroups.set(label, []); mcGroups.get(label).push(s); }
+      else noMc.push(s);
+    }
+    const addOpt = (s, parent) => {
+      const o = document.createElement('option');
+      o.value = s.id;
+      const ds = s.session_date ? s.session_date.slice(5) : '??';
+      const md = _getMdCode(s);
+      o.textContent = md ? `${ds} · ${md}` : `${ds} · ${s.title || s.session_type || s.id.slice(0,8)}`;
+      parent.appendChild(o);
+    };
+    for (const [mcLabel, sessions] of mcGroups) {
+      const grp = document.createElement('optgroup'); grp.label = mcLabel;
+      sessions.forEach(s => addOpt(s, grp)); sessSel.appendChild(grp);
+    }
+    if (noMc.length) {
+      const grp = document.createElement('optgroup'); grp.label = 'Other';
+      noMc.forEach(s => addOpt(s, grp)); sessSel.appendChild(grp);
+    }
+    if (_st.sessionId && sessSel.querySelector(`option[value="${_st.sessionId}"]`)) {
+      sessSel.value = _st.sessionId;
+    }
+  }
+
+  // ── Compare MD & date filters ─────────────────────────────────
+  function _buildCompareMdOptions(sessionId) {
+    const mdSel = document.getElementById('sc-compare-md-sel');
+    if (!mdSel) return;
+    const mds = [...new Set(_allSessions.map(s => _getMdCode(s)).filter(Boolean))].sort();
+    mdSel.innerHTML = '<option value="">MD...</option>';
+    mds.forEach(md => {
+      const o = document.createElement('option');
+      o.value = md; o.textContent = md;
+      mdSel.appendChild(o);
+    });
+    // Default to session's MD if compareMdCode not set
+    if (!_st.compareMdCode && sessionId) {
+      const sess = _allSessions.find(s => s.id === sessionId);
+      _st.compareMdCode = _getMdCode(sess) || null;
+    }
+    if (_st.compareMdCode) mdSel.value = _st.compareMdCode;
+  }
+
+  function _buildCompareDateOptions() {
+    const dateSel = document.getElementById('sc-compare-date-sel');
+    if (!dateSel) return;
+    dateSel.innerHTML = '<option value="">Fecha...</option>';
+    const mdCode = _st.compareMdCode;
+    if (!mdCode) { _st.compareSessionId = null; return; }
+    const currentSess = _st.sessionId ? _allSessions.find(s => s.id === _st.sessionId) : null;
+    const candidates = _allSessions.filter(s =>
+      s.id !== _st.sessionId &&
+      _getMdCode(s) === mdCode &&
+      (!currentSess || s.session_date < currentSess.session_date)
+    );
+    candidates.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = `${s.session_date || '—'} · ${s.title || mdCode}`;
+      dateSel.appendChild(o);
+    });
+    if (_st.compareSessionId && dateSel.querySelector(`option[value="${_st.compareSessionId}"]`)) {
+      dateSel.value = _st.compareSessionId;
+    } else {
+      _st.compareSessionId = null;
+    }
+  }
+
   // Render context indicator above the grid
   function _renderScIndicator(sessionId) {
     const indicator = document.getElementById('sc-indicator');
@@ -9276,27 +9405,21 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     if (!sessionId) { indicator.style.display = 'none'; return; }
     const sess = _allSessions.find(s => s.id === sessionId);
     if (!sess) { indicator.style.display = 'none'; return; }
-    const mc     = sess.title?.match?.(/MC\s*\d+/i)?.[0] || '—';
-    const mdCode = _getMdCode(sess) || 'sin MD code';
+    const mdCode = _getMdCode(sess) || '—';
     const fecha  = sess.session_date || '—';
-    const n      = _lastReports.length;
-    leftEl.innerHTML = `Revisando · <b>${mc}</b> · <b>${mdCode}</b> · ${fecha} · ${n} jugador${n !== 1 ? 'es' : ''}`;
-    const { count, mdCode: eqMd } = _countEquivalents(sessionId);
-    if (!eqMd) {
-      rightEl.innerHTML = `<span>sin MD code — sin comparación automática</span>`;
-    } else if (count === 0) {
-      rightEl.innerHTML = `<span>sin sesiones ${eqMd} anteriores</span>`;
+    const title  = sess.title || mdCode;
+    leftEl.innerHTML = `Viendo: <b>${title}</b> · <b>${mdCode}</b> · ${fecha}`;
+    if (_st.compareSessionId) {
+      const cmpSess = _allSessions.find(s => s.id === _st.compareSessionId);
+      const cmpDate = cmpSess?.session_date || _st.compareSessionId.slice(0,10);
+      const cmpMd   = _getMdCode(cmpSess) || '';
+      rightEl.innerHTML = `Comparando contra: <b>${cmpDate}${cmpMd ? ' · ' + cmpMd : ''}</b>`;
     } else {
-      rightEl.innerHTML = `Comparando vs últimas <b>${count}</b> sesiones <b>${eqMd}</b> &nbsp;<a id="sc-ind-ver-todas">ver todas</a>`;
-      document.getElementById('sc-ind-ver-todas')?.addEventListener('click', () => {
-        const ztCard = document.getElementById('card-sc-zscore-temporal') || document.querySelector('.gp-view[data-view="grp"] .gp-c');
-        ztCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      });
+      rightEl.innerHTML = '';
     }
     indicator.style.display = '';
   }
 
-  // _buildCompareOptions is kept as a no-op (comparison now shown via indicator)
   function _buildCompareOptions(sessionId) {}
 
   // ── load session data ─────────────────────────────────────────
@@ -9807,7 +9930,39 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // ── filter event listeners ────────────────────────────────────
   sessSel.addEventListener('change', () => {
     _st.sessionId = sessSel.value || null;
-    if (_st.sessionId) _loadSessionData(_st.sessionId);
+    if (_st.sessionId) {
+      // When session changes, reset compare MD to the new session's MD (spec default)
+      const sess = _allSessions.find(s => s.id === _st.sessionId);
+      const mdCode = sess ? _getMdCode(sess) : null;
+      _st.compareMdCode    = mdCode;
+      _st.compareSessionId = null;
+      const mdSel = document.getElementById('sc-compare-md-sel');
+      if (mdSel) mdSel.value = mdCode || '';
+      _buildCompareDateOptions();
+      _scSaveCompareState();
+      _loadSessionData(_st.sessionId);
+    }
+  });
+
+  document.getElementById('sc-mc-sel')?.addEventListener('change', () => {
+    const mc = document.getElementById('sc-mc-sel')?.value || '';
+    _buildSessionOptionsByMc(mc);
+  });
+
+  document.getElementById('sc-compare-md-sel')?.addEventListener('change', () => {
+    _st.compareMdCode    = document.getElementById('sc-compare-md-sel')?.value || null;
+    _st.compareSessionId = null;
+    _buildCompareDateOptions();
+    _scSaveCompareState();
+    _renderScIndicator(_st.sessionId);
+    window._scOutliersRender?.();
+  });
+
+  document.getElementById('sc-compare-date-sel')?.addEventListener('change', () => {
+    _st.compareSessionId = document.getElementById('sc-compare-date-sel')?.value || null;
+    _scSaveCompareState();
+    _renderScIndicator(_st.sessionId);
+    window._scOutliersRender?.();
   });
 
   colorSel?.addEventListener('change', () => { if (_lastReports.length) _renderTable(_lastReports); });
@@ -10280,10 +10435,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       </tr>`;
     }).join('');
 
-    const noSort = _olSortCol === null;
+    const noSort    = _olSortCol === null;
+    const refDetail = prevCount > 0 ? ` · N equiv.=${prevCount}` : '';
     body.innerHTML = `
       <div style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:6px 10px 3px;text-transform:uppercase;letter-spacing:.04em">
-        ${mdCode} · N equiv.=${prevCount} · umbral |z|≥${thresh}${noSort ? ' · orden: desvío total' : ''}
+        ${mdCode}${refDetail} · umbral |z|≥${thresh}${noSort ? ' · orden: desvío total' : ''}
       </div>
       <div class="ol-hm-wrap">
         <table class="ol-hm">
@@ -10316,6 +10472,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       return;
     }
 
+    const compareSessionId = st?.compareSessionId;
+    if (!compareSessionId) {
+      body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Elegí una fecha comparativa para ver el heatmap de outliers.</div>';
+      return;
+    }
+
     body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Calculando…</div>';
 
     try {
@@ -10323,40 +10485,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = window._gpClubId || await window.getClubId?.();
       if (!clubId) return;
 
-      const { data: allSess } = await window.sb
-        .from('training_sessions')
-        .select('id,session_date,session_type,title,match_day_offset,session_attributes')
-        .eq('club_id', clubId)
-        .order('session_date', { ascending: false });
-
-      const current = (allSess || []).find(s => s.id === sessionId);
-      if (!current) {
-        body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted)">Sesión no encontrada.</div>';
-        return;
-      }
-
-      const mdCode = _olMdCode(current);
-      if (!mdCode) {
-        body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin MD code — no se puede calcular el heatmap temporal.</div>';
-        return;
-      }
-
-      const prevSess = (allSess || []).filter(s =>
-        s.id !== sessionId &&
-        s.session_date < current.session_date &&
-        _olMdCode(s) === mdCode
-      );
-
-      if (prevSess.length < _OL_MIN) {
-        body.innerHTML = `<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin sesiones ${mdCode} equivalentes suficientes (${prevSess.length}/${_OL_MIN} mínimo).</div>`;
-        return;
-      }
-
-      const allIds = [sessionId, ...prevSess.map(s => s.id)];
       const [{ data: reports }, { data: players }] = await Promise.all([
         window.sb.from('gps_reports')
           .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
-          .in('session_id', allIds).eq('club_id', clubId),
+          .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId),
         window.sb.from('players')
           .select('id,first_name,last_name,number,position')
           .eq('club_id', clubId).neq('status', 'inactive'),
@@ -10364,30 +10496,46 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
       const curRpts   = (reports || []).filter(r => r.session_id === sessionId);
+      const refRpts   = (reports || []).filter(r => r.session_id === compareSessionId);
 
-      // Build per-player z-score matrix
+      if (!refRpts.length) {
+        body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin datos GPS en la sesión comparativa.</div>';
+        return;
+      }
+
+      // For each metric: compute reference squad mean/std from compare session
+      const refStats = {};
+      for (const key of _olMetrics) {
+        const vals = refRpts.map(r => r[key]).filter(v => v != null && !isNaN(v));
+        if (vals.length < 2) { refStats[key] = null; continue; }
+        const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+        const std  = Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
+        refStats[key] = { mean, std };
+      }
+
+      // Find compare session label (use _allSessions exposed by SC IIFE)
+      const cmpSessObj = (window._scAllSessions || []).find(s => s.id === compareSessionId);
+      const cmpLabel     = cmpSessObj?.session_date || compareSessionId.slice(0, 10);
+      const cmpMdCode    = cmpSessObj ? _olMdCode(cmpSessObj) : '';
+
       const matrix = [];
       for (const cur of curRpts) {
-        const pid  = cur.player_id;
-        const hist = (reports || []).filter(r => r.player_id === pid && r.session_id !== sessionId);
-        const player = playerMap[pid];
+        const player    = playerMap[cur.player_id];
         const zByMetric = {};
         let totalDev = 0;
         for (const key of _olMetrics) {
           const curVal = cur[key];
-          if (curVal == null || isNaN(curVal)) { zByMetric[key] = null; continue; }
-          const histVals = hist.map(r => r[key]).filter(v => v != null && !isNaN(v));
-          if (histVals.length < _OL_MIN) { zByMetric[key] = null; continue; }
-          const mean = histVals.reduce((s, v) => s + v, 0) / histVals.length;
-          const std  = Math.sqrt(histVals.reduce((s, v) => s + (v - mean) ** 2, 0) / histVals.length);
-          const z    = std > 0 ? (curVal - mean) / std : null;
+          const ref    = refStats[key];
+          if (curVal == null || isNaN(curVal) || !ref || ref.std === 0) { zByMetric[key] = null; continue; }
+          const z = (curVal - ref.mean) / ref.std;
           zByMetric[key] = z;
-          if (z != null) totalDev += Math.abs(z);
+          totalDev += Math.abs(z);
         }
         matrix.push({ player, zByMetric, totalDev });
       }
 
-      _olDraw(matrix, thresh, mdCode, prevSess.length);
+      const headerLabel = `vs ${cmpLabel}${cmpMdCode ? ' · ' + cmpMdCode : ''}`;
+      _olDraw(matrix, thresh, headerLabel, 0);
 
     } catch (e) {
       console.warn('renderScOutliers:', e);
@@ -10439,8 +10587,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch { /* defaults */ }
 
     document.getElementById('sc-outlier-edit-btn')?.addEventListener('click', openOlMetricsModal);
-    document.getElementById('sc-sess-sel')?.addEventListener('change',      () => setTimeout(renderScOutliers, 120));
     document.getElementById('sc-outlier-thresh')?.addEventListener('change', () => renderScOutliers());
+    document.getElementById('sc-compare-date-sel')?.addEventListener('change', () => setTimeout(renderScOutliers, 80));
     document.getElementById('sections')?.addEventListener('click', e => {
       if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(renderScOutliers, 400);
     });
