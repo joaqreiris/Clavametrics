@@ -253,7 +253,7 @@
 
   .gp-radar svg { width:100%; height:auto; max-height:320px; display:block; }
 
-  .gp-xm { display:flex; flex-direction:column; gap:6px; }
+  .gp-xm { display:flex; flex-direction:column; gap:6px; flex:1; justify-content:space-between; }
   .gp-xm-row { display:grid; grid-template-columns: 80px 1fr 60px; align-items:center; gap:8px; }
   .gp-xm-l { font:500 11.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); display:flex; align-items:center; gap:5px; }
   .gp-xm-l .ti { font-size:12px; color:var(--cm-fg-muted); }
@@ -687,7 +687,7 @@
               <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button class="is-on">L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b gp-radar" style="align-items:center;justify-content:center">
-              <canvas id="gpsRadar" style="max-height:320px"></canvas>
+              <canvas id="gpsRadar" style="flex:1;width:100%;min-height:0;display:block"></canvas>
               <div id="gpsRadarEmpty" style="display:none;color:var(--cm-fg-muted);font:var(--cm-body-sm);text-align:center;padding:40px">No GPS data for this session</div>
             </div>
           </div>
@@ -3472,7 +3472,7 @@ async function _updateRadar(reports, state) {
           backgroundColor: 'rgba(34,197,94,0.12)', borderWidth: 2,
           pointRadius: 4, pointBackgroundColor: accent, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
       ]},
-      options: { responsive: true, maintainAspectRatio: true,
+      options: { responsive: true, maintainAspectRatio: false,
         scales: { r: { min: 0, max: 2, ticks: { display: false, stepSize: 0.5 },
           grid: { color: 'rgba(128,128,128,0.18)' },
           angleLines: { color: 'rgba(128,128,128,0.18)' },
@@ -3511,7 +3511,7 @@ async function _updateRadar(reports, state) {
         data: zs, borderColor: accent, backgroundColor: 'rgba(34,197,94,0.12)', borderWidth: 2,
         pointRadius: 4, pointBackgroundColor: accent, pointBorderColor: '#fff', pointBorderWidth: 1.5 },
     ]},
-    options: { responsive: true, maintainAspectRatio: true,
+    options: { responsive: true, maintainAspectRatio: false,
       scales: { r: { min: -3, max: 3, ticks: { display: false, stepSize: 1 },
         grid: { color: 'rgba(128,128,128,0.18)' }, angleLines: { color: 'rgba(128,128,128,0.18)' },
         pointLabels: { color: 'rgba(128,128,128,0.8)', font: { size: 11 } } } },
