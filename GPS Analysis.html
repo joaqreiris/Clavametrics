@@ -192,6 +192,18 @@
 
   .gp-zwrap { overflow-x:auto; }
   .gp-zt { width:100%; border-collapse:separate; border-spacing:0; }
+  /* Outliers heatmap */
+  .ol-hm-wrap { overflow-x:auto; }
+  .ol-hm { width:max-content; min-width:100%; border-collapse:separate; border-spacing:0; }
+  .ol-hm th { padding:7px 8px; font:600 10px/1 var(--cm-font-mono); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; text-align:center; cursor:pointer; user-select:none; }
+  .ol-hm th:hover { color:var(--cm-fg); }
+  .ol-hm th.is-sort { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); }
+  .ol-hm th.ol-pc, .ol-hm td.ol-pc { text-align:left; position:sticky; left:0; background:var(--cm-surface); border-right:1px solid var(--cm-border-soft); min-width:108px; padding-left:10px; z-index:2; }
+  .ol-hm thead th.ol-pc { background:var(--cm-bg-soft); z-index:3; }
+  .ol-hm td { padding:0; border-bottom:1px solid var(--cm-border-soft); text-align:center; min-width:50px; }
+  .ol-hm-cell { display:flex; align-items:center; justify-content:center; height:30px; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg); }
+  .ol-hm td.ol-pc .ol-hm-cell { justify-content:flex-start; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ol-hm td.is-thresh .ol-hm-cell { font-weight:700; }
   .gp-zt th { padding:8px 6px; font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); border-bottom:1px solid var(--cm-border); white-space:nowrap; text-align:center; }
   .gp-zt th.pc, .gp-zt td.pc { text-align:left; position:sticky; left:0; background:var(--cm-surface); border-right:1px solid var(--cm-border-soft); min-width:140px; padding-left:14px; z-index:2; }
   .gp-zt thead th.pc { background:var(--cm-bg-soft); z-index:3; }
@@ -897,16 +909,17 @@
               <span class="ttl">Outliers</span>
               <span class="sub">z temporal · mismo MD · por jugador</span>
               <div class="right">
-                <select id="sc-outlier-thresh" class="sc-sel" style="font-size:11px;height:24px;padding:0 5px" title="Umbral z">
+                <select id="sc-outlier-thresh" class="sc-sel" style="font-size:11px;height:24px;padding:0 5px" title="Umbral resaltado">
                   <option value="2" selected>|z|&gt;2</option>
                   <option value="2.5">|z|&gt;2.5</option>
                   <option value="3">|z|&gt;3</option>
                 </select>
+                <button id="sc-outlier-edit-btn" class="cm-btn is-ghost is-sm" title="Edit metrics" style="padding:0 6px;height:24px;font-size:12px"><i class="ti ti-pencil" style="font-size:12px"></i></button>
                 <div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div>
                 <button><i class="ti ti-dots"></i></button>
               </div>
             </div>
-            <div class="gp-c-b" id="outliersBody" style="gap:6px"></div>
+            <div class="gp-c-b" id="outliersBody" style="padding:0;overflow-x:auto"></div>
           </div>
 
           <!-- Variación vs sesiones equivalentes (temporal z-score) -->
@@ -1762,9 +1775,20 @@ async function applyGrpDefaultLayout() {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
       if (config.metric_key) card.dataset.metricKey = config.metric_key;
-      if ((card_id === 'sc-zscore-temporal' || card_id === 'sc-vs-session') && config.metrics?.length) {
+      if ((card_id === 'sc-zscore-temporal' || card_id === 'sc-vs-session' || card_id === 'outliers') && config.metrics?.length) {
         const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
         card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
+      }
+    }
+
+    // One-time migration: stash zscore-matrix (now opt-in via Add card)
+    if (!localStorage.getItem('gp_zm_hidden_v1')) {
+      localStorage.setItem('gp_zm_hidden_v1', '1');
+      const zm = document.getElementById('card-zscore-matrix');
+      if (zm && zm.parentNode) {
+        _cardStash.set('card-zscore-matrix', zm);
+        zm.remove();
+        setTimeout(() => saveLayout('grp').catch(() => {}), 1500);
       }
     }
   } catch (e) { console.warn('applyGrpDefaultLayout:', e); }
@@ -9988,24 +10012,26 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════
-     OUTLIERS TEMPORALES — Session Control (grp)
+     OUTLIERS HEATMAP — Session Control (grp)
      Card id: card-outliers
-     Por jugador: z vs sus propias sesiones del mismo MD code.
-     Umbral editable (|z|>2, 2.5, 3). Mínimo 3 sesiones previas.
+     Heatmap jugador × métrica: z vs sesiones propias del mismo MD.
+     Colores: rojo z<0, azul z>0, intensidad ∝ |z|.
+     Sort: clic en columna, o default por desvío total.
+     Umbral y métricas editables.
 ═══════════════════════════════════════════════════════════ -->
 <script>
 (function () {
-  const _OL_MIN = 3;
-  const _OL_METRICS = [
+  const _OL_MIN  = 3;
+  const _OL_ALL  = [
     'total_distance','high_speed_distance','very_high_speed_distance',
     'sprint_distance','sprint_count','max_speed',
-    'accelerations','decelerations','player_load'
+    'accelerations','decelerations','player_load',
   ];
   const _OL_LABELS = {
-    total_distance: 'Distancia', high_speed_distance: 'HSR',
-    very_high_speed_distance: 'VHSR', sprint_distance: 'Sprint dist.',
-    sprint_count: 'Sprints', max_speed: 'Vel. máx.',
-    accelerations: 'Acel.', decelerations: 'Desacel.', player_load: 'Player load'
+    total_distance:'Dist.', high_speed_distance:'HSR',
+    very_high_speed_distance:'VHSR', sprint_distance:'Sprint',
+    sprint_count:'N spr.', max_speed:'Vel.máx.',
+    accelerations:'Acel.', decelerations:'Desac.', player_load:'P.Load',
   };
   const _OL_PEAK = new Set(['max_speed']);
 
@@ -10020,6 +10046,78 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return sess.session_attributes?.md_code || null;
   }
 
+  let _olMetrics = [..._OL_ALL];
+  let _olSortCol = null; // null = sort by totalDev, string key = sort by that metric
+
+  // Background color: red for z<0, blue for z>0, intensity ∝ |z|, capped at 3
+  function _olBg(z) {
+    if (z == null || Math.abs(z) < 0.25) return '';
+    const α = (Math.min(Math.abs(z), 3) / 3 * 0.72).toFixed(2);
+    return z < 0 ? `rgba(220,38,38,${α})` : `rgba(59,130,246,${α})`;
+  }
+
+  // Build and inject the heatmap; reattaches sort listeners
+  function _olDraw(matrix, thresh, mdCode, prevCount) {
+    const body = document.getElementById('outliersBody');
+    if (!body) return;
+
+    const cols = _olMetrics;
+
+    // Sort rows
+    const sorted = [...matrix].sort((a, b) => {
+      if (_olSortCol) {
+        return Math.abs(b.zByMetric[_olSortCol] ?? 0) - Math.abs(a.zByMetric[_olSortCol] ?? 0);
+      }
+      return b.totalDev - a.totalDev;
+    });
+
+    const thCells = cols.map(k => {
+      const isSrt = _olSortCol === k;
+      return `<th class="ol-hm-th${isSrt ? ' is-sort' : ''}" data-key="${k}">${_OL_LABELS[k] || k}</th>`;
+    }).join('');
+
+    const bodyRows = sorted.map(({ player, zByMetric }) => {
+      const name = player
+        ? `${(player.first_name || '')[0] || '?'}. ${player.last_name || ''}`
+        : '—';
+      const tdCells = cols.map(k => {
+        const z  = zByMetric[k];
+        const bg = _olBg(z);
+        const over = z != null && Math.abs(z) >= thresh;
+        const txt = z == null ? '—' : `${z >= 0 ? '+' : ''}${z.toFixed(1)}`;
+        return `<td class="${over ? 'is-thresh' : ''}" style="${bg ? 'background:' + bg : ''}"><div class="ol-hm-cell">${txt}</div></td>`;
+      }).join('');
+      return `<tr>
+        <td class="ol-pc"><div class="ol-hm-cell">${name}</div></td>
+        ${tdCells}
+      </tr>`;
+    }).join('');
+
+    const noSort = _olSortCol === null;
+    body.innerHTML = `
+      <div style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:6px 10px 3px;text-transform:uppercase;letter-spacing:.04em">
+        ${mdCode} · N equiv.=${prevCount} · umbral |z|≥${thresh}${noSort ? ' · orden: desvío total' : ''}
+      </div>
+      <div class="ol-hm-wrap">
+        <table class="ol-hm">
+          <thead><tr>
+            <th class="ol-pc ol-hm-th${noSort && !_olSortCol ? '' : ''}" data-key="">Jugador</th>
+            ${thCells}
+          </tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>`;
+
+    // Sort on column header click
+    body.querySelectorAll('.ol-hm-th[data-key]').forEach(th => {
+      th.addEventListener('click', () => {
+        const k = th.dataset.key;
+        _olSortCol = (_olSortCol === k || k === '') ? null : k;
+        _olDraw(matrix, thresh, mdCode, prevCount);
+      });
+    });
+  }
+
   async function renderScOutliers() {
     const body = document.getElementById('outliersBody');
     if (!body) return;
@@ -10027,11 +10125,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const st = window._scState;
     const sessionId = st?.sessionId;
     if (!sessionId || !window.sb) {
-      body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Seleccioná una sesión para ver outliers.</div>';
+      body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Seleccioná una sesión para ver el heatmap.</div>';
       return;
     }
 
-    body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Calculando…</div>';
+    body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Calculando…</div>';
 
     try {
       const thresh = parseFloat(document.getElementById('sc-outlier-thresh')?.value || '2');
@@ -10046,13 +10144,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       const current = (allSess || []).find(s => s.id === sessionId);
       if (!current) {
-        body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted)">Sesión no encontrada.</div>';
+        body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted)">Sesión no encontrada.</div>';
         return;
       }
 
       const mdCode = _olMdCode(current);
       if (!mdCode) {
-        body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin MD code — no se pueden calcular outliers temporales.</div>';
+        body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin MD code — no se puede calcular el heatmap temporal.</div>';
         return;
       }
 
@@ -10063,7 +10161,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       );
 
       if (prevSess.length < _OL_MIN) {
-        body.innerHTML = `<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin sesiones ${mdCode} equivalentes suficientes (${prevSess.length}/${_OL_MIN} mínimo).</div>`;
+        body.innerHTML = `<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin sesiones ${mdCode} equivalentes suficientes (${prevSess.length}/${_OL_MIN} mínimo).</div>`;
         return;
       }
 
@@ -10074,90 +10172,98 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           .in('session_id', allIds).eq('club_id', clubId),
         window.sb.from('players')
           .select('id,first_name,last_name,number,position')
-          .eq('club_id', clubId).neq('status', 'inactive')
+          .eq('club_id', clubId).neq('status', 'inactive'),
       ]);
 
       const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
-      const curRpts = (reports || []).filter(r => r.session_id === sessionId);
+      const curRpts   = (reports || []).filter(r => r.session_id === sessionId);
 
-      const outliers = [];
+      // Build per-player z-score matrix
+      const matrix = [];
       for (const cur of curRpts) {
-        const pid = cur.player_id;
+        const pid  = cur.player_id;
         const hist = (reports || []).filter(r => r.player_id === pid && r.session_id !== sessionId);
-        if (hist.length < _OL_MIN) continue;
         const player = playerMap[pid];
-        for (const key of _OL_METRICS) {
+        const zByMetric = {};
+        let totalDev = 0;
+        for (const key of _olMetrics) {
           const curVal = cur[key];
-          if (curVal == null || isNaN(curVal)) continue;
+          if (curVal == null || isNaN(curVal)) { zByMetric[key] = null; continue; }
           const histVals = hist.map(r => r[key]).filter(v => v != null && !isNaN(v));
-          if (histVals.length < _OL_MIN) continue;
+          if (histVals.length < _OL_MIN) { zByMetric[key] = null; continue; }
           const mean = histVals.reduce((s, v) => s + v, 0) / histVals.length;
           const std  = Math.sqrt(histVals.reduce((s, v) => s + (v - mean) ** 2, 0) / histVals.length);
-          if (std === 0) continue;
-          const z = (curVal - mean) / std;
-          if (Math.abs(z) >= thresh) outliers.push({ player, key, z, n: histVals.length });
+          const z    = std > 0 ? (curVal - mean) / std : null;
+          zByMetric[key] = z;
+          if (z != null) totalDev += Math.abs(z);
         }
+        matrix.push({ player, zByMetric, totalDev });
       }
 
-      outliers.sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
-
-      if (!outliers.length) {
-        body.innerHTML = `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);padding:10px 0">
-          <i class="ti ti-circle-check" style="color:var(--cm-success);font-size:16px"></i>
-          Sin outliers en esta sesión (|z| &lt; ${thresh} · ${mdCode} · N=${prevSess.length})
-        </div>`;
-        return;
-      }
-
-      const rows = outliers.map(o => {
-        const p = o.player;
-        const name = p ? `${(p.first_name || '')[0] || '?'}. ${p.last_name || ''}` : '—';
-        const initials = p
-          ? `${(p.first_name || '?')[0]}${(p.last_name || '?')[0]}`.toUpperCase()
-          : '??';
-        const pos  = p?.position || '—';
-        const zSign = o.z >= 0 ? '+' : '';
-        const zTxt  = `${zSign}${o.z.toFixed(1)}`;
-        const zCls  = Math.abs(o.z) >= 3 ? 'high' : 'warn';
-        const dir   = o.z > 0 ? 'muy por encima' : 'muy por debajo';
-        const label = _OL_LABELS[o.key] || o.key;
-        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--cm-border-soft)">
-          <div class="gp-mav" style="flex-shrink:0">${initials}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}</div>
-            <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${pos} · ${label}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <span class="gp-zc ${zCls}" style="width:46px">${zTxt}</span>
-            <div style="font:500 10px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">${dir}</div>
-          </div>
-        </div>`;
-      }).join('');
-
-      body.innerHTML = `
-        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
-          ${outliers.length} outlier${outliers.length !== 1 ? 's' : ''} · ${mdCode} · N=${prevSess.length}
-        </div>
-        ${rows}`;
+      _olDraw(matrix, thresh, mdCode, prevSess.length);
 
     } catch (e) {
       console.warn('renderScOutliers:', e);
-      body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted)">Error al calcular outliers.</div>';
+      const body2 = document.getElementById('outliersBody');
+      if (body2) body2.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted)">Error al calcular.</div>';
     }
+  }
+
+  // Metric editor modal
+  function openOlMetricsModal() {
+    const items = _OL_ALL.map(k => {
+      const on = _olMetrics.includes(k);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg)">
+        <input type="checkbox" value="${k}" ${on ? 'checked' : ''} style="width:14px;height:14px;accent-color:var(--cm-accent)">
+        ${_OL_LABELS[k] || k}
+      </label>`;
+    }).join('');
+
+    const ov = makeModal('Métricas — Outliers heatmap',
+      `<div style="max-height:300px;overflow-y:auto;padding:4px 0 12px">${items}</div>
+       <div style="display:flex;gap:8px;justify-content:flex-end">
+         <button id="_olCancel" class="cm-btn is-outline" style="font-size:13px">Cancel</button>
+         <button id="_olApply"  class="cm-btn is-filled"  style="font-size:13px">Apply</button>
+       </div>`);
+
+    ov.querySelector('#_olCancel')?.addEventListener('click', () => ov.remove());
+    ov.querySelector('#_olApply')?.addEventListener('click', () => {
+      const checked = [...ov.querySelectorAll('input[type=checkbox]:checked')].map(el => el.value);
+      if (!checked.length) { showToast('Select at least one metric'); return; }
+      _olMetrics = checked;
+      const card = document.getElementById('card-outliers');
+      if (card) {
+        const cfg = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
+        card.dataset.config = JSON.stringify({ ...cfg, metrics: _olMetrics });
+        saveLayout('grp').catch(e => console.warn('ol saveLayout:', e));
+      }
+      ov.remove();
+      renderScOutliers();
+    });
   }
 
   window._scOutliersRender = renderScOutliers;
 
-  document.getElementById('sc-sess-sel')?.addEventListener('change',     () => setTimeout(renderScOutliers, 120));
-  document.getElementById('sc-outlier-thresh')?.addEventListener('change', () => renderScOutliers());
-  document.getElementById('sections')?.addEventListener('click', e => {
-    if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(renderScOutliers, 400);
-  });
+  async function olInit() {
+    try {
+      const layout = await loadLayout('grp');
+      const saved  = layout?.find(c => c.card_id === 'outliers');
+      if (saved?.config?.metrics?.length) _olMetrics = saved.config.metrics;
+    } catch { /* defaults */ }
 
-  if (document.querySelector('.gp-view[data-view="grp"].is-on')) {
-    const poll = () => window._scState?.sessionId ? renderScOutliers() : setTimeout(poll, 500);
-    setTimeout(poll, 700);
+    document.getElementById('sc-outlier-edit-btn')?.addEventListener('click', openOlMetricsModal);
+    document.getElementById('sc-sess-sel')?.addEventListener('change',      () => setTimeout(renderScOutliers, 120));
+    document.getElementById('sc-outlier-thresh')?.addEventListener('change', () => renderScOutliers());
+    document.getElementById('sections')?.addEventListener('click', e => {
+      if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(renderScOutliers, 400);
+    });
+    if (document.querySelector('.gp-view[data-view="grp"].is-on')) {
+      const poll = () => window._scState?.sessionId ? renderScOutliers() : setTimeout(poll, 500);
+      setTimeout(poll, 700);
+    }
   }
+
+  olInit();
 })();
 </script>
 
