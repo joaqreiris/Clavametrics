@@ -9345,6 +9345,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         .from('training_sessions')
         .select('id, session_date, title, session_type, match_day_offset, session_attributes')
         .eq('club_id', clubId)
+        .neq('session_type', 'rehab')
         .order('session_date', { ascending: false });
 
       _allSessions = sessions || [];
