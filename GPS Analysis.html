@@ -8212,6 +8212,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   let _mcInited   = false;
   let _mcSessions = []; // all sessions for club
   let _playerMap  = {};
+  let _mcMicros   = {}; // id → microcycle row
   let _mcSortKey  = 'diff_pct'; let _mcSortDir = -1;
 
   const mdCodeSel  = document.getElementById('mc-md-code');
@@ -8231,39 +8232,50 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     try {
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) return;
-      const [{ data: sessions }, { data: players }] = await Promise.all([
-        window.sb.from('training_sessions').select('id,session_date,session_type,title')
-          .eq('club_id', clubId).order('session_date', { ascending: true }),
+      const [{ data: sessions }, { data: players }, { data: microcycles }] = await Promise.all([
+        window.sb.from('training_sessions')
+          .select('id,session_date,session_type,title,match_day_offset,session_attributes,microcycle_id')
+          .eq('club_id', clubId).neq('session_type', 'rehab')
+          .order('session_date', { ascending: true }),
         window.sb.from('players').select('id,first_name,last_name,number,position')
           .eq('club_id', clubId).neq('status','inactive'),
+        window.sb.from('microcycles').select('id,name,start_date,match_date,rival')
+          .eq('club_id', clubId).order('start_date', { ascending: true }),
       ]);
       _mcSessions = sessions || [];
       _playerMap  = Object.fromEntries((players || []).map(p => [p.id, p]));
-      mcInfo.textContent = `${_mcSessions.length} sessions indexed. Select filters and click Load.`;
+      _mcMicros   = Object.fromEntries((microcycles || []).map(m => [m.id, m]));
+      mcInfo.textContent = `${_mcSessions.length} sessions indexed.`;
     } catch (e) { console.error('mcInit:', e); }
   }
 
-  // ── build MD_Code index per week ──────────────────────────────
-  function _buildWeekIndex() {
-    const weeks = {};
+  // ── MD code from a session (match_day_offset first, then session_attributes) ──
+  function _getMcMdCode(s) {
+    const off = s?.match_day_offset;
+    if (off != null) {
+      if (typeof off === 'string') return off || null;
+      if (off === 0) return 'MD';
+      return off < 0 ? `MD${off}` : `MD+${off}`;
+    }
+    return s?.session_attributes?.md_code || null;
+  }
+
+  // ── Build index grouped by real microcycle ─────────────────────
+  function _buildMcIndex() {
+    const mcs = {};
     for (const s of _mcSessions) {
-      const d   = new Date(s.session_date + 'T00:00:00');
-      const wk  = getISOWeek(d);
-      const yr  = d.getFullYear();
-      const key = `${yr}-W${String(wk).padStart(2,'0')}`;
-      if (!weeks[key]) weeks[key] = { key, sessions: [], matchDate: null };
-      weeks[key].sessions.push(s);
-      if (s.session_type === 'match') weeks[key].matchDate = s.session_date;
+      const mcId = s.microcycle_id;
+      if (!mcId) continue;
+      if (!mcs[mcId]) mcs[mcId] = { id: mcId, sessions: [], mdMap: {} };
+      mcs[mcId].sessions.push(s);
+      const code = _getMcMdCode(s);
+      if (code && !mcs[mcId].mdMap[code]) mcs[mcId].mdMap[code] = s.id;
     }
-    // Assign MD_Codes
-    for (const w of Object.values(weeks)) {
-      w.mdMap = {}; // md_code → session_id
-      for (const s of w.sessions) {
-        const code = mdCodeFromDates(s.session_date, w.matchDate);
-        if (code) w.mdMap[code] = s.id;
-      }
-    }
-    return Object.values(weeks).sort((a, b) => a.key.localeCompare(b.key));
+    return Object.values(mcs).sort((a, b) => {
+      const sa = _mcMicros[a.id]?.start_date || '';
+      const sb = _mcMicros[b.id]?.start_date || '';
+      return sa.localeCompare(sb);
+    });
   }
 
   // ── load & compare ───────────────────────────────────────────
@@ -8271,70 +8283,84 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const selectedMD = mdCodeSel.value;
     const scope      = scopeSel.value;
     const metricKey  = metricSel.value;
+    if (!selectedMD) return;
+    if (!_mcInited) await mcInit();
+
     mcInfo.textContent = 'Loading...';
     metricBody.innerHTML = tableBody.innerHTML =
       '<div style="padding:16px;color:var(--cm-fg-muted)">Loading...</div>';
 
     try {
       const clubId = await window.getClubId?.();
-      const weeks  = _buildWeekIndex();
+      const allMcs = _buildMcIndex();
 
-      // Find all weeks that have the selected MD_Code
-      const weeksWith = weeks.filter(w => w.mdMap[selectedMD]);
-      if (weeksWith.length < 2) {
-        mcInfo.textContent = weeksWith.length === 0
-          ? `No weeks found with ${selectedMD}. Need at least 2 microcycles to compare.`
-          : `Only 1 week has ${selectedMD}. Need at least 2 to compare.`;
+      // Microcycles that have a session with the selected MD code
+      const mcsWithMD = allMcs.filter(mc => mc.mdMap[selectedMD]);
+      if (mcsWithMD.length < 2) {
+        const msg = mcsWithMD.length === 0
+          ? `No microcycles with ${selectedMD}. Need at least 2 to compare.`
+          : `Only 1 microcycle has ${selectedMD}. Need at least 2 to compare.`;
+        mcInfo.textContent = msg;
         metricBody.innerHTML = tableBody.innerHTML =
-          `<div style="padding:16px;color:var(--cm-fg-muted)">${mcInfo.textContent}</div>`;
+          `<div style="padding:16px;color:var(--cm-fg-muted)">${msg}</div>`;
         return;
       }
 
-      // Current = last week, reference = previous N weeks
-      const currentWeek = weeksWith[weeksWith.length - 1];
-      const refCount    = scope === 'vs_last' ? 1 : scope === 'vs_avg_3' ? 3 : 5;
-      const refWeeks    = weeksWith.slice(-(refCount + 1), -1);
+      // Current = last MC with that MD code; reference = N previous
+      const currentMc  = mcsWithMD[mcsWithMD.length - 1];
+      const refCount   = scope === 'vs_last' ? 1 : scope === 'vs_avg_3' ? 3 : 5;
+      const refMcs     = mcsWithMD.slice(-(refCount + 1), -1);
 
-      const currentSessId = currentWeek.mdMap[selectedMD];
-      const refSessIds    = refWeeks.map(w => w.mdMap[selectedMD]).filter(Boolean);
+      const currentSessId = currentMc.mdMap[selectedMD];
+      const refSessIds    = refMcs.map(mc => mc.mdMap[selectedMD]).filter(Boolean);
 
       if (!refSessIds.length) {
-        mcInfo.textContent = 'Not enough historical microcycles for comparison.';
-        metricBody.innerHTML = tableBody.innerHTML = `<div style="padding:16px;color:var(--cm-fg-muted)">${mcInfo.textContent}</div>`;
+        const msg = 'Not enough historical microcycles for comparison.';
+        mcInfo.textContent = msg;
+        metricBody.innerHTML = tableBody.innerHTML =
+          `<div style="padding:16px;color:var(--cm-fg-muted)">${msg}</div>`;
         return;
       }
 
-      // Load GPS reports for current + reference sessions
+      // GPS reports for current + reference sessions
       const allSessIds = [currentSessId, ...refSessIds];
       const { data: reports } = await window.sb
         .from('gps_reports')
-        .select(`player_id,session_id,${MC_METRICS.map(m=>m.key).join(',')}`)
+        .select(`player_id,session_id,${MC_METRICS.map(m => m.key).join(',')}`)
         .eq('club_id', clubId).in('session_id', allSessIds);
 
       const allReports = reports || [];
 
-      // Build per-player data
-      const playerIds = [...new Set(allReports.map(r => r.player_id))];
+      // Per-player data
+      const playerIds  = [...new Set(allReports.map(r => r.player_id))];
       const playerRows = playerIds.map(pid => {
         const currReport = allReports.find(r => r.player_id === pid && r.session_id === currentSessId);
         const refReports = allReports.filter(r => r.player_id === pid && refSessIds.includes(r.session_id));
-
         const row = { pid, player: _playerMap[pid] || {} };
         for (const m of MC_METRICS) {
           const currVal = currReport?.[m.key] ?? null;
           const refVals = refReports.map(r => r[m.key]).filter(v => v != null);
-          const refAvg  = refVals.length ? refVals.reduce((s,v)=>s+v,0)/refVals.length : null;
-          row[m.key]         = currVal;
-          row[m.key + '_ref'] = refAvg;
-          row[m.key + '_diff'] = calcDiff(currVal, refAvg);
+          const refAvg  = refVals.length ? refVals.reduce((s, v) => s + v, 0) / refVals.length : null;
+          row[m.key]            = currVal;
+          row[m.key + '_ref']   = refAvg;
+          row[m.key + '_diff']  = calcDiff(currVal, refAvg);
         }
         row.diff_pct = row[metricKey + '_diff'];
         return row;
-      }).filter(r => r[metricKey] != null || r[metricKey+'_ref'] != null);
+      }).filter(r => r[metricKey] != null || r[metricKey + '_ref'] != null);
 
-      const currentDate = currentWeek.sessions.find(s=>s.id===currentSessId)?.session_date || '';
-      const refLabel    = refWeeks.length === 1 ? refWeeks[0].key : `avg of ${refWeeks.length} MCs`;
-      mcInfo.textContent = `${selectedMD} · ${currentDate} vs ${refLabel} · ${playerRows.length} players`;
+      // Labels with real microcycle names and rivals
+      function _mcLabel(mc) {
+        const m = _mcMicros[mc.id];
+        if (!m) return mc.id;
+        return m.rival ? `${m.name} vs ${m.rival}` : m.name;
+      }
+      const currLabel = _mcLabel(currentMc);
+      const refLabel  = refMcs.length === 1
+        ? _mcLabel(refMcs[0])
+        : `avg ${refMcs.map(mc => _mcMicros[mc.id]?.name || mc.id).join(', ')}`;
+
+      mcInfo.textContent = `${selectedMD} · ${currLabel} ← ref: ${refLabel} · ${playerRows.length} players`;
 
       _mcRenderMetricDiff(playerRows);
       _mcRenderTable(playerRows, metricKey);
@@ -8499,13 +8525,24 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── events ───────────────────────────────────────────────────
-  loadBtn.addEventListener('click', _mcLoad);
-  metricSel.addEventListener('change', () => { /* reload on metric change only if data loaded */ });
+  function _mcTriggerLoad() {
+    if (!_mcInited) {
+      mcInit().then(() => _mcLoad()).catch(e => console.error('mc auto-load:', e));
+    } else {
+      _mcLoad().catch(e => console.error('mc auto-load:', e));
+    }
+  }
+
+  mdCodeSel.addEventListener('change', _mcTriggerLoad);
+  scopeSel.addEventListener('change', _mcTriggerLoad);
+  metricSel.addEventListener('change', _mcTriggerLoad);
+  loadBtn.addEventListener('click', _mcTriggerLoad);
 
   window._mcInit = mcInit;
 
   document.getElementById('sections')?.addEventListener('click', e => {
-    if (e.target.closest('.gp-sec[data-view="mc"]')) setTimeout(mcInit, 0);
+    if (!e.target.closest('.gp-sec[data-view="mc"]')) return;
+    _mcTriggerLoad();
   });
 })();
 </script>
