@@ -314,8 +314,9 @@
         <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--cm-border);background:var(--cm-bg-soft);flex-shrink:0">
           <button class="cm-btn is-ghost is-sm" id="gpbConfigBtn"><i class="ti ti-braces" style="font-size:13px"></i>Config</button>
           <div style="flex:1"></div>
+          <span id="gpbSaveHint" style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:none">← add a metric first</span>
           <button class="cm-btn is-outline is-sm" id="gpbCancel">Cancel</button>
-          <button class="cm-btn is-primary is-sm" id="gpbSave" disabled>Add card</button>
+          <button class="cm-btn is-primary is-sm" id="gpbSave" disabled title="Add at least one metric to enable">Add card</button>
         </div>
       </div>
 
@@ -812,7 +813,13 @@
     syncHeader();
 
     const valid = S.metrics.length >= t.min;
-    document.getElementById('gpbSave').disabled = !valid;
+    const saveBtn  = document.getElementById('gpbSave');
+    const saveHint = document.getElementById('gpbSaveHint');
+    const addBtn   = document.getElementById('gpbAddMetric');
+    if (saveBtn)  saveBtn.disabled = !valid;
+    if (saveHint) saveHint.style.display = valid ? 'none' : 'inline';
+    // pulse "Add metric" button when no metrics and panel is on Setup tab
+    if (addBtn) addBtn.classList.toggle('gpb-pulse', !valid && S.metrics.length === 0);
 
     const body = document.getElementById('gpbDraftBody') || draftCard.querySelector('.gp-c-b');
     if (!body) return;
