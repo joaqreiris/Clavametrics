@@ -995,7 +995,7 @@ function rpBuildGate(phases, injuryId, refresh) {
   // Criteria list
   const listHtml = items.length ? items.map(it => {
     const met = !!completed[it.id];
-    return `<li class="rp-criterion${met?' is-met':''}">
+    return `<li class="rp-criterion${met?' is-met':''}" data-id="${it.id}">
       <div class="check">${met ? '<i class="ti ti-check"></i>' : ''}</div>
       <div class="body">
         <div class="name">${it.label}</div>
@@ -1008,13 +1008,26 @@ function rpBuildGate(phases, injuryId, refresh) {
   const footHtml = `<div class="rp-criteria-foot">
     <i class="ti ti-shield-check"></i>
     <span><strong>${remaining > 0 ? remaining + ' criteria' : 'All criteria'}</strong> required to unlock <strong>${nextPh.phase_name || 'next phase'}</strong>.</span>
-    ${curPh ? `<button class="cm-btn is-secondary" id="btn-advance-phase" style="margin-left:auto;height:26px;padding:0 10px;font-size:11px">
+    ${curPh ? `<button class="cm-btn is-secondary" id="btn-advance-phase" style="margin-left:auto;height:26px;padding:0 10px;font-size:11px"${remaining > 0 ? ' disabled' : ''}>
       Advance → ${nextPh.phase_name || 'next'} <i class="ti ti-arrow-right"></i>
     </button>` : ''}
   </div>`;
 
   card.querySelector('.rp-panel-b').innerHTML =
     `<ul class="rp-criteria">${listHtml}</ul>${footHtml}`;
+
+  // Criterion toggle
+  card.querySelectorAll('.rp-criterion[data-id]').forEach(el => {
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', async () => {
+      const id = el.dataset.id;
+      completed[id] = !completed[id];
+      await window.sb.from('injury_phases')
+        .update({ criteria_completed: completed })
+        .eq('id', nextPh.id);
+      if (typeof refresh === 'function') refresh();
+    });
+  });
 
   // Advance action
   const advBtn = document.getElementById('btn-advance-phase');
