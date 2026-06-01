@@ -1202,7 +1202,7 @@
         <div class="gp-grid is-edit">
 
           <!-- NEW: Diff by metric summary -->
-          <div class="gp-c" data-size="full" id="card-mc-diff-metric">
+          <div class="gp-c" data-size="full" id="card-mc-diff-metric" data-card-id="mc-diff-metric">
             <div class="gp-c-h">
               <span class="ttl">Diff by metric</span>
               <span class="sub" id="mc-metric-sub">squad avg diff% per metric</span>
@@ -1214,7 +1214,7 @@
           </div>
 
           <!-- NEW: MC diff table -->
-          <div class="gp-c is-table" data-size="full" id="card-mc-table">
+          <div class="gp-c is-table" data-size="full" id="card-mc-table" data-card-id="mc-table">
             <div class="gp-c-h">
               <span class="ttl">MC diff table</span>
               <span class="sub" id="mc-table-sub">current vs reference · one row per player</span>
@@ -1226,7 +1226,7 @@
           </div>
 
           <!-- NEW: MC diff scatter -->
-          <div class="gp-c" data-size="full" id="card-mc-scatter">
+          <div class="gp-c" data-size="full" id="card-mc-scatter" data-card-id="mc-scatter">
             <div class="gp-c-h">
               <span class="ttl">Diff scatter</span>
               <span class="sub">X: diff% vs reference · Y: current value · each point = a player</span>
@@ -1575,10 +1575,13 @@ const GP_CARD_DEFS = {
     { name: 'Risk alerts',                    id: null, stub: true },
   ],
   mc: [
-    { name: 'MC diff table',   id: null, stub: true },
-    { name: 'MC diff scatter', id: null, stub: true },
-    { name: 'Diff by metric',  id: null, stub: true },
-    { name: 'MD trend',        id: null, stub: true },
+    // ── Default-visible cards ──
+    { name: 'Diff by metric',  id: 'card-mc-diff-metric', stub: false },
+    { name: 'MC diff table',   id: 'card-mc-table',       stub: false },
+    // ── Add-card only (stashed by default) ──
+    { name: 'Diff scatter',    id: 'card-mc-scatter',     stub: false },
+    // ── Not yet implemented ──
+    { name: 'MD trend',        id: null,                  stub: true  },
   ],
 };
 
@@ -1803,6 +1806,43 @@ async function applyGrpDefaultLayout() {
     }
     _reorderGrid(grid, layout);
   } catch (e) { console.warn('applyGrpDefaultLayout:', e); }
+}
+
+// ── Mc view: apply default visibility + restore stash state ──────
+// Default visible: mc-diff-metric, mc-table.  Scatter → Add card.
+// On first load (no saved layout): stash scatter + save defaults.
+const _MC_DEFAULTS = new Set(['card-mc-diff-metric', 'card-mc-table']);
+
+async function applyMcDefaultLayout() {
+  const grid = document.querySelector('.gp-view[data-view="mc"] .gp-grid');
+  if (!grid) return;
+  const defs = (GP_CARD_DEFS.mc || []).filter(d => d.id && !d.stub);
+
+  try {
+    const layout = await loadLayout('mc');
+
+    if (!layout?.length) {
+      // First load — stash everything except defaults
+      for (const def of defs) {
+        if (_MC_DEFAULTS.has(def.id)) continue;
+        const card = document.getElementById(def.id);
+        if (card) { _cardStash.set(def.id, card); card.remove(); }
+      }
+      await saveLayout('mc').catch(e => console.warn('applyMcDefaultLayout save:', e));
+      return;
+    }
+
+    // Restore: stash cards not present in saved layout
+    const activeIds = new Set(layout.map(c => c.card_id));
+    _stashAbsentCards('mc', activeIds);
+
+    for (const { card_id, size } of layout) {
+      const card = grid.querySelector(`[data-card-id="${card_id}"]`);
+      if (!card) continue;
+      _applyCardSize(card, size);
+    }
+    _reorderGrid(grid, layout);
+  } catch (e) { console.warn('applyMcDefaultLayout:', e); }
 }
 
 // ── Saved views (named snapshots over gps_dashboard_layouts) ─────
@@ -2691,7 +2731,7 @@ async function _detectSmartDefault(clubId, userId) {
     await applyGrpDefaultLayout();
     await applyLayoutToView('mind');
     await applyLayoutToView('mgrp');
-    await applyLayoutToView('mc');
+    await applyMcDefaultLayout();
   } catch (e) {
     console.warn('applyLayout:', e);
   } finally {
@@ -3312,7 +3352,7 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   } catch(e) { _showCardError('card-match-vs-train', e); }
 
   // init size toggles for all new cards
-  document.querySelectorAll('#card-acwr, #card-tsb, #card-vzones, #card-mc-heat, #card-pos-radar, #card-outliers, #card-half-drop, #card-vel-profile, #card-match-vs-train').forEach(c => initSizeToggles(c));
+  document.querySelectorAll('#card-acwr, #card-tsb, #card-vzones, #card-mc-heat, #card-pos-radar, #card-outliers, #card-half-drop, #card-vel-profile, #card-match-vs-train, #card-mc-diff-metric, #card-mc-table, #card-mc-scatter').forEach(c => initSizeToggles(c));
 };
 
 // Self-trigger: if the async IIFE already completed before this script ran
