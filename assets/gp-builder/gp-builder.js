@@ -1396,4 +1396,68 @@
   // Also try immediately in case DOM is already loaded
   if (document.readyState !== 'loading') init();
 
+  // ── Public API (used by gp-ai.js) ─────────────────────────────────────
+
+  /**
+   * Opens the builder panel pre-seeded with a gp.card/v1 config.
+   * Called by the AI generator after it produces a valid config.
+   * The user reviews and tweaks before clicking "Add card".
+   *
+   * @param {object} config  gp.card/v1 object
+   */
+  window.openBuilderWithConfig = function (config) {
+    if (!config || config.schema !== 'gp.card/v1') return;
+
+    // Ensure builder has been initialised
+    if (!panelEl) {
+      // builder not yet inited — store config and retry after init
+      const orig = init;
+      init = async function () {
+        await orig();
+        window.openBuilderWithConfig(config);
+        init = orig;
+      };
+      return;
+    }
+
+    if (S) cancelBuild();
+    startBuild();
+    if (!S) return;
+
+    // Map gp.card/v1 → internal state S
+    S.type    = config.viz                        || 'bars';
+    S.scope   = config.scope?.level               || 'player';
+    S.range   = config.range?.type                || 'mc';
+    S.compare = config.comparison?.baseline       || 'none';
+    S.size    = config.style?.size                || 'md';
+    S.color   = config.style?.color               || '#15803D';
+    S.palette = config.style?.palette             || 'pitch';
+    S.axes    = config.style?.axes    !== false;
+    S.legend  = config.style?.legend  !== false;
+    S.labels  = !!config.style?.dataLabels;
+    S.title   = config.title || '';
+    S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg }));
+
+    // keep only metrics that exist in catalog; fix invalid peak aggs
+    S.metrics = S.metrics.filter(m => catalogMap.has(m.id)).map(m => {
+      const cat = catalogMap.get(m.id);
+      if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg';
+      return m;
+    });
+
+    document.getElementById('gpbTitle').value = S.title;
+    pulseNext = true;
+    syncAll();
+  };
+
+  /**
+   * Namespace exposed for gp-ai.js (fallback heuristic needs VIZ_TYPES + catalog).
+   */
+  window.GpBuilder = {
+    get catalogMap() { return catalogMap; },
+    get VIZ_TYPES()  { return VIZ_TYPES;  },
+    get AGG()        { return AGG;        },
+    defaultAgg,
+  };
+
 })();

@@ -222,6 +222,59 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .gpb-toast .act { margin-left: 6px; height: 28px; padding: 0 11px; border-radius: 7px; border: 0; background: rgba(255,255,255,.16); color: #fff; font: 600 12px/1 var(--cm-font-sans); cursor: pointer; flex-shrink: 0; }
 .gpb-toast .act:hover { background: rgba(255,255,255,.26); }
 
+/* ── Fase 4: AI modal ──────────────────────────────────────── */
+
+.gpai-bk { position: fixed; inset: 0; z-index: 350; background: rgba(10,12,14,.5); backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity 200ms; }
+.gpai-bk.is-on { opacity: 1; pointer-events: auto; }
+
+.gpai-modal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(.98);
+  z-index: 351; width: 520px; max-width: 94vw;
+  background: var(--cm-surface); border: 1px solid var(--cm-border);
+  border-radius: var(--cm-r-5); box-shadow: var(--cm-shadow-3);
+  display: flex; flex-direction: column; overflow: hidden;
+  opacity: 0; pointer-events: none; transition: opacity 180ms var(--cm-ease, ease), transform 180ms var(--cm-ease, ease);
+}
+.gpai-modal:not([hidden]) { opacity: 1; transform: translate(-50%,-50%) scale(1); pointer-events: auto; }
+.gpai-modal[hidden] { display: none !important; }
+
+.gpai-h { display: flex; align-items: center; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid var(--cm-border-soft); }
+.gpai-h .t { font: 600 16px/1 var(--cm-font-sans); color: var(--cm-fg-strong); }
+.gpai-h .badge { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--cm-accent-soft); color: var(--cm-accent); border: 1px solid var(--cm-accent); font: 600 10.5px/1 var(--cm-font-mono); }
+.gpai-h .badge .ti { font-size: 12px; }
+.gpai-h .x { margin-left: auto; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--cm-border); background: transparent; color: var(--cm-fg-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.gpai-h .x:hover { background: var(--cm-bg-soft); color: var(--cm-fg); }
+
+.gpai-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.gpai-prompt-wrap { position: relative; }
+.gpai-prompt { width: 100%; resize: none; border: 1.5px solid var(--cm-border); border-radius: var(--cm-r-3); padding: 11px 13px; font: 500 13.5px/1.6 var(--cm-font-sans); color: var(--cm-fg); background: var(--cm-bg-soft); outline: none; }
+.gpai-prompt:focus { border-color: var(--cm-accent); box-shadow: 0 0 0 3px var(--cm-focus-ring); background: var(--cm-surface); }
+.gpai-prompt::placeholder { color: var(--cm-fg-faint); }
+
+.gpai-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.gpai-chip { height: 26px; padding: 0 11px; border-radius: 999px; border: 1px solid var(--cm-border); background: var(--cm-bg-soft); color: var(--cm-fg-muted); font: 500 12px/1 var(--cm-font-sans); cursor: pointer; white-space: nowrap; }
+.gpai-chip:hover { border-color: var(--cm-accent); color: var(--cm-accent); background: var(--cm-accent-soft); }
+
+/* thinking animation */
+.gpai-think { display: none; flex-direction: column; gap: 8px; padding: 12px 0 4px; }
+.gpai-body.is-thinking .gpai-think { display: flex; }
+.gpai-body.is-thinking .gpai-prompt-wrap,
+.gpai-body.is-thinking .gpai-chips { opacity: .35; pointer-events: none; }
+.gpai-step { display: flex; align-items: center; gap: 9px; height: 28px; padding: 0 10px; border-radius: var(--cm-r-3); font: 500 12px/1 var(--cm-font-sans); color: var(--cm-fg-muted); }
+.gpai-step .ti { font-size: 15px; }
+.gpai-step.is-on { background: var(--cm-accent-soft); color: var(--cm-accent); }
+.gpai-step.is-on .ti { animation: gpaiSpin .8s linear infinite; }
+@keyframes gpaiSpin { to { transform: rotate(360deg); } }
+
+.gpai-foot { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--cm-border-soft); background: var(--cm-bg-soft); }
+.gpai-foot .hint { display: flex; align-items: center; gap: 5px; font: 500 11px/1.3 var(--cm-font-sans); color: var(--cm-fg-faint); }
+.gpai-foot .hint .ti { font-size: 13px; }
+.gpai-foot.is-thinking .cm-btn { opacity: .45; pointer-events: none; }
+
+/* "Ask AI" button accent */
+.gpai-open-btn { color: var(--cm-accent) !important; }
+.gpai-open-btn .ti { color: var(--cm-accent) !important; }
+
 /* ── Fase 3: tab management ────────────────────────────────── */
 
 /* kebab button inside each .gp-sec tab */
