@@ -2604,6 +2604,105 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
 </script>
 
 <script>
+// ── GPS Builder Fase 2: mount saved builder cards onto each view's grid ──
+// Dual-read: existing predefined cards (HTML) stay unchanged.
+// Builder cards stored in dashboard_cards are appended to the same grid.
+async function _mountSavedBuilderCards(clubId) {
+  if (!window.sb || !window.loadCardsForView) return;
+  const VIEWS = ['ind', 'grp', 'mind', 'mgrp', 'mc'];
+  const REPORT_TYPES = { ind:'ind', grp:'grp', mind:'mind', mgrp:'mgrp', mc:'mc' };
+
+  for (const view of VIEWS) {
+    const grid = document.querySelector(`.gp-view[data-view="${view}"] .gp-grid`);
+    if (!grid) continue;
+
+    let cards;
+    try {
+      cards = await window.loadCardsForView(clubId, REPORT_TYPES[view], window.sb);
+    } catch (e) { console.warn('_mountSavedBuilderCards:', view, e); continue; }
+
+    if (!cards?.length) continue;
+
+    // filter to only 'builder' source cards (catalog defaults shown via old HTML)
+    const builderCards = cards.filter(c => c.source === 'builder');
+    if (!builderCards.length) continue;
+
+    for (const card of builderCards) {
+      const config = card.config;
+      if (!config || config.schema !== 'gp.card/v1') continue;
+
+      const el = document.createElement('div');
+      el.className = 'gp-c';
+      el.dataset.size     = card.size || config.style?.size || 'md';
+      el.dataset.card     = 'chart';
+      el.dataset.cardId   = card.id;
+      el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
+      el.innerHTML = `
+        <div class="gp-c-h">
+          <span class="ttl">${(config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</span>
+          <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
+          <div class="right">
+            <div class="size-toggle">
+              <button>S</button><button>M</button><button>L</button><button style="width:30px">FULL</button>
+            </div>
+            <button data-del title="Remove card"><i class="ti ti-x"></i></button>
+          </div>
+        </div>
+        <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
+          <div class="cb2-state load" style="min-height:120px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
+        </div>`;
+
+      // sync size-toggle selection
+      const sizeMap = { sm:'S', md:'M', lg:'L', full:'FULL' };
+      el.querySelectorAll('.size-toggle button').forEach(b =>
+        b.classList.toggle('is-on', b.textContent.trim() === (sizeMap[el.dataset.size] || 'M'))
+      );
+
+      // delete button
+      el.querySelector('[data-del]')?.addEventListener('click', async () => {
+        el.remove();
+        if (window.deleteDashboardCard && card.id) {
+          window.deleteDashboardCard(card.id, window.sb).catch(e => console.warn('deleteDashboardCard:', e));
+        }
+      });
+
+      grid.appendChild(el);
+
+      // resolve real data (async, non-blocking)
+      _resolveAndRenderSavedCard(el, config, clubId).catch(e => console.warn('resolve saved card:', e));
+    }
+  }
+}
+
+/** Resolves a saved card's data and renders it using the same pipeline as the builder. */
+async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
+  const body = cardEl.querySelector('.gp-c-b');
+  if (!body) return;
+  try {
+    const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, CORE_COLS } =
+      await import('./assets/gp-card/resolver.js').catch(() => ({}));
+    if (!aggregateSeries) return; // resolver not available as module in this context
+
+    const ctx = { clubId, playerId: window.gpState?.playerId || null, mcId: window.gpState?.mcId || null, asOf: new Date().toISOString().slice(0,10) };
+    const sessionIds = await getSessionIds(config.range, ctx, window.sb);
+    if (!sessionIds.length) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No sessions in range</div></div>'; return; }
+    const rows = await fetchReports(sessionIds, config, ctx, new Map(), window.sb);
+    if (!rows.length) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No GPS data</div></div>'; return; }
+    const customKeys = (config.metrics||[]).filter(m => !CORE_COLS.has(m.id)).map(m => m.id);
+    const eavMap = customKeys.length ? await fetchEavMetrics(rows.map(r=>r.id), customKeys, clubId, window.sb) : new Map();
+    const catalog = new Map((window._gpCatalog||[]).map(c => [c.key, { id:c.key, name:c.label, unit:c.unit||'', kind:c.kind||'accum', is_custom:!c.is_core, squad_rollup:c.squad_rollup??true }]));
+    const series = aggregateSeries(rows, eavMap, config, catalog);
+    if (!series.some(s=>s.points.length)) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data</div></div>'; return; }
+    // basic render (builder will do full render when builder is loaded)
+    body.innerHTML = `<div style="padding:14px;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${series[0]?.points?.length} point${series[0]?.points?.length!==1?'s':''} · ${config.viz}</div>`;
+    body.className = 'gp-c-b';
+    cardEl.classList.remove('is-draft');
+  } catch (e) {
+    console.warn('_resolveAndRenderSavedCard:', e);
+    body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-alert-triangle"></i></div><div class="t">Could not load</div></div>';
+  }
+}
+
 // ── refreshDashboard — reusable after import ──────────────────
 // opts.sessionId: if provided, update date range to cover that session
 window.refreshDashboard = async function (opts = {}) {
@@ -2773,6 +2872,14 @@ async function _detectSmartDefault(clubId, userId) {
   // Load metric catalog (used by charts for dynamic labels/units)
   if (typeof window.getCatalog === 'function') {
     window._gpCatalog = await window.getCatalog(clubId);
+  }
+
+  // GPS Builder — Fase 2: seed default dashboards + mount saved builder cards
+  if (typeof window.ensureDefaultDashboards === 'function' && window.sb) {
+    window.ensureDefaultDashboards(clubId, profile?.id, window.sb).catch(e => console.warn('ensureDefaultDashboards:', e));
+  }
+  if (typeof window.loadCardsForView === 'function' && window.sb) {
+    _mountSavedBuilderCards(clubId).catch(e => console.warn('_mountSavedBuilderCards:', e));
   }
 
   // Apply smart default / saved prefs
@@ -7197,6 +7304,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 <script type="text/babel" src="settings-drawer.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
 <script type="text/babel" src="theme-tweaks.jsx"></script>
+<script src="assets/gp-builder/gp-persist.js" defer></script>
 <script src="assets/gp-builder/gp-builder.js" defer></script>
 
 <script>

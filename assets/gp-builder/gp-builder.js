@@ -1,8 +1,14 @@
 /* =============================================================
-   GPS Builder — Fase 1
+   GPS Builder — Fase 1/2
    Initialises only when club_gps_settings.gps_builder_enabled = true.
    All DOM is injected at runtime; GPS Analysis.html is unchanged
    beyond the <link>/<script> tags.
+
+   Fase 2 additions:
+     • saveCard() writes to dashboard_cards (via window.saveDashboardCard)
+     • renderCard() calls resolveAndRender() for real data after save
+     • resolveAndRender() uses the browser-side resolver (aggregateSeries)
+       with data fetched from Supabase
 
    Rollback: set gps_builder_enabled = false → the whole module
    is a no-op, existing cards are untouched.
@@ -79,6 +85,8 @@
   let popOwner = null;
   let toastTimer = null;
   let staticBuilt = false;
+  let _clubId = null;   // set during init, used by saveCard & resolveAndRender
+  let _userId = null;
 
   // ── DOM refs populated after injectDOM() ──────────────────
 
@@ -458,33 +466,54 @@
     document.querySelector('.gp-view.is-on .gp-grid')?.classList.remove('is-building');
   }
 
-  function saveCard() {
+  async function saveCard() {
     if (!S || !draftCard) return;
     const t = VIZ_TYPES[S.type];
     if (S.metrics.length < t.min) return;
 
-    draftCard.__cfg = JSON.parse(JSON.stringify(S));
-    draftCard.dataset.card = 'chart';
-    draftCard.classList.remove('is-draft', 'is-editing');
-    draftCard.dataset.size = S.size;
-    draftCard.style.setProperty('--cm-accent', S.color);
+    const config = buildConfig(S);
+    const savedCard = draftCard; // keep ref before clearing state
 
-    // final render (no pulse animation)
-    const body = draftCard.querySelector('#gpbDraftBody') || draftCard.querySelector('.gp-c-b');
-    if (body) {
-      body.id = '';
-      body.className = bodyClass(S.type);
-      body.innerHTML = renderType(S);
+    savedCard.__cfg = JSON.parse(JSON.stringify(S));
+    savedCard.dataset.card = 'chart';
+    savedCard.classList.remove('is-draft', 'is-editing');
+    savedCard.dataset.size = S.size;
+    savedCard.style.setProperty('--cm-accent', S.color);
+
+    // update header immediately
+    const titleEl = savedCard.querySelector('.ttl');
+    const subEl   = savedCard.querySelector('.sub');
+    if (titleEl) titleEl.textContent = autoTitle(S);
+    if (subEl) {
+      const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
+      subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}`;
     }
-    updateDraftHeader();
-    syncSizeToggle();
-    const grid = draftCard.closest('.gp-grid');
+
+    // sync size-toggle on the card
+    const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
+    savedCard.querySelectorAll('.size-toggle button').forEach(b =>
+      b.classList.toggle('is-on', map[b.textContent.trim()] === S.size)
+    );
+
+    const grid = savedCard.closest('.gp-grid');
     if (grid) grid.classList.remove('is-building');
 
+    // close panel first so the user sees the card
     draftCard = null;
     S = null;
     closePanel();
-    showToast('Chart added', 'Drag to reorder · click edit to tweak.', 'Done');
+
+    // Persist to DB (fire-and-forget; failure is non-blocking)
+    const reportType = _currentView();
+    if (_clubId && typeof window.saveDashboardCard === 'function') {
+      window.saveDashboardCard(config, _clubId, reportType, _userId, window.sb)
+        .then(cardId => { savedCard.dataset.cardId = cardId; })
+        .catch(e => console.warn('gpb: saveDashboardCard failed:', e));
+    }
+
+    // Resolve real data and update card body
+    resolveAndRenderCard(savedCard, config);
+    showToast('Chart added', 'Real data loading…', 'Done');
   }
 
   // ── Panel open / close ─────────────────────────────────────
@@ -828,6 +857,262 @@
     }
   }
 
+  // ── Current view helper ──────────────────────────────────────
+
+  function _currentView() {
+    return document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
+  }
+
+  // ── Resolve real data and re-render a saved card ──────────────────────
+
+  /**
+   * Fetches real GPS data for a saved card and re-renders its body.
+   * Fires asynchronously — the card body shows a loading spinner first.
+   *
+   * @param {HTMLElement} cardEl  the .gp-c element
+   * @param {object}      config  gp.card/v1 object
+   */
+  async function resolveAndRenderCard(cardEl, config) {
+    const body = cardEl.querySelector('.gp-c-b');
+    if (!body) return;
+
+    // Show loading spinner
+    body.className = 'gp-c-b';
+    body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">Loading GPS data…</div></div>`;
+
+    try {
+      const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, CORE_COLS } = await _importResolver();
+      if (!applyAgg) return; // resolver not available
+
+      const ctx = {
+        clubId:   _clubId,
+        playerId: window._gpPlayerId || window.gpState?.playerId || null,
+        mcId:     window._gpMcId     || window.gpState?.mcId     || null,
+        asOf:     new Date().toISOString().slice(0, 10),
+      };
+
+      const sb = window.sb;
+
+      // Step 1: session IDs
+      const sessionIds = await getSessionIds(config.range, ctx, sb);
+      if (!sessionIds.length) {
+        _showCardState(cardEl, body, 'nodata', 'No sessions found for this range.', config);
+        return;
+      }
+
+      // Step 2: reports
+      const rows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
+      if (!rows.length) {
+        _showCardState(cardEl, body, 'nodata', 'No GPS data for this selection.', config);
+        return;
+      }
+
+      // Step 3: EAV
+      const customKeys = config.metrics.filter(m => !CORE_COLS.has(m.id)).map(m => m.id);
+      const eavMap = customKeys.length
+        ? await fetchEavMetrics(rows.map(r => r.id), customKeys, _clubId, sb)
+        : new Map();
+
+      // Step 4: aggregate
+      const series = aggregateSeries(rows, eavMap, config, catalogMap);
+
+      // Step 5: render
+      const hasData = series.some(s => s.points.length > 0);
+      if (!hasData) {
+        _showCardState(cardEl, body, 'nodata', 'No rows match the current scope, range and filters.', config);
+        return;
+      }
+
+      body.className = _bodyClassFromViz(config.viz);
+      body.innerHTML = renderTypeFromDataset(config, series);
+      cardEl.classList.remove('is-draft');
+
+    } catch (e) {
+      console.warn('gpb resolveAndRenderCard:', e);
+      _showCardState(cardEl, body, 'err', 'GPS query failed. Your config is saved — try refreshing.', config);
+    }
+  }
+
+  /** Lazy-imports the resolver from lib/gp-card/resolver.js if available. */
+  async function _importResolver() {
+    try {
+      return await import('../../lib/gp-card/resolver.js');
+    } catch {
+      return {};
+    }
+  }
+
+  function _bodyClassFromViz(viz) {
+    if (viz === 'kpi')     return 'gp-c-b gp-kpi';
+    if (viz === 'radar')   return 'gp-c-b gp-radar';
+    if (viz === 'scatter') return 'gp-c-b gp-scatter';
+    if (viz === 'line')    return 'gp-c-b gp-ts';
+    return 'gp-c-b';
+  }
+
+  function _showCardState(cardEl, body, kind, msg, config) {
+    cardEl.classList.add('is-draft');
+    body.className = 'gp-c-b';
+    const vizIcon = VIZ_TYPES[config.viz]?.icon || 'ti-chart-bar';
+    if (kind === 'nodata') {
+      body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data for this selection</div><div class="d">${esc(msg)}</div></div>`;
+    } else if (kind === 'err') {
+      body.innerHTML = `<div class="cb2-state err"><div class="ic"><i class="ti ti-alert-triangle"></i></div><div class="t">Couldn't load this card</div><div class="d">${esc(msg)}</div></div>`;
+    }
+  }
+
+  /**
+   * Renders a chart body from a real Dataset (series with actual data points).
+   * Mirrors renderType() but uses series data instead of hardcoded samples.
+   *
+   * @param {object}   config  gp.card/v1
+   * @param {object[]} series  aggregateSeries() output
+   * @returns {string} innerHTML
+   */
+  function renderTypeFromDataset(config, series) {
+    const viz   = config.viz;
+    const color = config.style?.color || '#15803D';
+    const axes  = config.style?.axes !== false;
+    const legend= config.style?.legend !== false;
+    const labels= !!config.style?.dataLabels;
+    const s0    = series[0];
+    const s1    = series[1];
+
+    function fmtY(y) { return fmt(Math.round(y * 10) / 10); }
+
+    switch (viz) {
+      case 'kpi': {
+        const val  = s0?.points[0]?.y ?? 0;
+        const unit = s0?.unit || '';
+        const aggName = AGG[config.metrics[0]?.agg]?.name || '';
+        const rangeName = RANGES.find(r => r.id === config.range?.type)?.name || '';
+        return `<div class="l"><i class="ti ${VIZ_TYPES.kpi.icon}"></i>${aggName} · ${rangeName}</div>
+          <div class="v">${fmtY(val)} <sub>${esc(unit)}</sub></div>
+          <div class="t">${esc(s0?.name || '')}</div>`;
+      }
+
+      case 'ranking': {
+        const pts = [...(s0?.points || [])];
+        const max = Math.max(...pts.map(p => p.y), 1);
+        return `<div class="gp-rank">${pts.map((p, i) => `
+          <div class="gp-rank-row">
+            <span class="ax">${i + 1}</span>
+            <span class="gp-rank-bar">
+              <span class="gp-rank-fill ${i < 1?'':i<3?'med':'low'}" style="width:${Math.round(p.y/max*100)}%">${esc(p.x)}</span>
+            </span>
+            <span style="text-align:right;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${labels ? fmtY(p.y) : ''}</span>
+          </div>`).join('')}</div>`;
+      }
+
+      case 'bars': {
+        const pts0 = s0?.points || [];
+        const pts1 = s1?.points || [];
+        const maxY = Math.max(...pts0.map(p => p.y), ...pts1.map(p => p.y), 1);
+        return `<div class="gp-bars">${pts0.map((p, i) => {
+          const h0 = Math.max(3, Math.round(p.y / maxY * 98));
+          const h1 = pts1[i] ? Math.max(2, Math.round(pts1[i].y / maxY * 98)) : 0;
+          return `<div class="gr"><div class="stack">
+            ${h1 ? `<div class="b prev" style="height:${h1}%"></div>` : ''}
+            <div class="b curr" style="height:${h0}%"></div></div>
+            ${axes ? `<span class="lbl">${esc((p.x||'').split(',')[0].slice(0,6))}</span>` : ''}
+          </div>`;
+        }).join('')}</div>
+        ${legend && s0 ? `<div style="display:flex;gap:14px;margin-top:10px;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">
+          <span style="display:flex;align-items:center;gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--cm-accent)"></i>${esc(s0.name)}</span>
+          ${s1 ? `<span style="display:flex;align-items:center;gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--cm-bg-sunk);border:1px solid var(--cm-border)"></i>${esc(s1.name)}</span>` : ''}
+        </div>` : ''}`;
+      }
+
+      case 'line': {
+        const pts = s0?.points || [];
+        if (!pts.length) return '<div style="padding:20px;color:var(--cm-fg-muted)">No data</div>';
+        const maxY = Math.max(...pts.map(p => p.y), 1);
+        const W = 380, H = 180, pad = 28;
+        const xStep = pts.length > 1 ? (W - pad * 2) / (pts.length - 1) : 0;
+        const yScale = (H - pad) / maxY;
+        const svgPts = pts.map((p, i) => `${pad + i * xStep},${H - p.y * yScale}`).join(' ');
+        const pts2 = s1?.points || [];
+        const svgPts2 = pts2.length > 1
+          ? pts2.map((p, i) => `${pad + i * xStep},${H - p.y * yScale}`).join(' ')
+          : null;
+        return `<svg viewBox="0 0 ${W} ${legend?210:H+10}" font-family="Geist,Inter,sans-serif">
+          ${axes ? `<g stroke="var(--cm-border-soft)" stroke-width="1"><line x1="${pad}" y1="${H}" x2="${W-pad}" y2="${H}"/></g>` : ''}
+          <polyline fill="none" stroke="${color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" points="${svgPts}"/>
+          ${svgPts2 ? `<polyline fill="none" stroke="var(--cm-info,#3B82F6)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".7" points="${svgPts2}"/>` : ''}
+          ${legend ? `<g font-size="10" font-weight="600" fill="var(--cm-fg-muted)">
+            ${[s0,s1].filter(Boolean).map((s,i)=>`<text x="${pad+i*150}" y="200">${esc(s.name.split(' ')[0])}</text>`).join('')}
+          </g>` : ''}</svg>`;
+      }
+
+      case 'scatter': {
+        if (!s0 || !s1) return renderType({ ...config, type:'scatter' }); // fallback to mock
+        const xs = s0.points.map(p => p.y);
+        const ys = s1.points.map(p => p.y);
+        const xMax = Math.max(...xs, 1), yMax = Math.max(...ys, 1);
+        const W = 380, H = 230, pL = 44, pB = 34;
+        const svgDots = xs.map((x, i) => {
+          const cx = pL + (x / xMax) * (W - pL - 16);
+          const cy = H - pB - (ys[i] / yMax) * (H - pB - 16);
+          return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="7" fill="${color}" opacity=".7"/>`;
+        }).join('');
+        return `<svg viewBox="0 0 ${W} ${H}" font-family="Geist,Inter,sans-serif">
+          ${axes ? `<g stroke="var(--cm-border-soft)" stroke-width="1"><line x1="${pL}" y1="16" x2="${pL}" y2="${H-pB}"/><line x1="${pL}" y1="${H-pB}" x2="${W-16}" y2="${H-pB}"/></g>
+          <text x="${W/2}" y="${H}" text-anchor="middle" font-size="10" font-weight="600" fill="var(--cm-fg-muted)">${esc(s0.name)} →</text>
+          <text x="14" y="${(H-pB)/2}" transform="rotate(-90 14 ${(H-pB)/2})" text-anchor="middle" font-size="10" font-weight="600" fill="var(--cm-fg-muted)">${esc(s1.name)} ↑</text>` : ''}
+          ${svgDots}</svg>`;
+      }
+
+      case 'radar': {
+        const n = series.length;
+        if (n < 3) return renderType({ ...config, type:'radar' });
+        const cx = 190, cy = 140, R = 98;
+        const vals = series.map(s => s.points[0]?.y ?? 0);
+        const maxV = Math.max(...vals, 1);
+        const pt = (i, r) => [cx + r * Math.sin(i / n * 2 * Math.PI), cy - r * Math.cos(i / n * 2 * Math.PI)];
+        const ring = rr => `<polygon fill="none" stroke="var(--cm-border-soft)" stroke-width="1" points="${Array.from({length:n},(_,i)=>pt(i,rr).map(v=>v.toFixed(0)).join(',')).join(' ')}"/>`;
+        const shape = series.map((s, i) => pt(i, R * (vals[i] / maxV)).map(v => v.toFixed(0)).join(',')).join(' ');
+        const lbls = axes ? series.map((s, i) => { const [x, y] = pt(i, R + 22); return `<text x="${x.toFixed(0)}" y="${y.toFixed(0)}" text-anchor="middle" font-size="10" font-weight="600" fill="var(--cm-fg-muted)">${esc(s.name.split(' ')[0])}</text>`; }).join('') : '';
+        return `<svg viewBox="0 0 380 290" font-family="Geist,Inter,sans-serif">${ring(R)}${ring(R * .6)}<polygon points="${shape}" fill="${color}22" stroke="${color}" stroke-width="2.2"/>${lbls}</svg>`;
+      }
+
+      case 'table': {
+        const allX = [...new Set(series.flatMap(s => s.points.map(p => p.x)))];
+        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr>
+          <th class="pc">Player</th>
+          ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
+        </tr></thead><tbody>${allX.map(x => `<tr>
+          <td class="pc" style="padding:8px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(x)}</td>
+          ${series.map(s => { const pt = s.points.find(p => p.x === x); return `<td>${pt ? fmtY(pt.y) : '—'}</td>`; }).join('')}
+        </tr>`).join('')}</tbody></table></div>`;
+      }
+
+      case 'heatmap': {
+        const allX = [...new Set(series.flatMap(s => s.points.map(p => p.x)))];
+        const cls = ['vlow','mlow','low','neu','warn','mhigh','high'];
+        // compute z-scores per series
+        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr>
+          <th class="pc">Player</th>
+          ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
+        </tr></thead><tbody>${allX.map(x => `<tr>
+          <td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(x)}</td>
+          ${series.map(s => {
+            const pt  = s.points.find(p => p.x === x);
+            const val = pt?.y ?? 0;
+            const allV= s.points.map(p => p.y);
+            const mean= allV.reduce((a,b)=>a+b,0)/allV.length;
+            const std = Math.sqrt(allV.reduce((a,b)=>a+(b-mean)**2,0)/allV.length) || 1;
+            const z   = (val - mean) / std;
+            const ci  = Math.max(0, Math.min(6, Math.round(z + 3)));
+            return `<td><span class="gp-zc ${cls[ci]}">${labels ? (z >= 0 ? '+' : '') + z.toFixed(1) : ''}</span></td>`;
+          }).join('')}
+        </tr>`).join('')}</tbody></table></div>`;
+      }
+
+      default:
+        return renderType({ ...config, type: viz }); // fallback to mock
+    }
+  }
+
   // ── Mock chart rendering (Phase 1 — sample data) ──────────
 
   function renderType(S) {
@@ -1084,6 +1369,9 @@
 
       const enabled = await checkFlag(clubId);
       if (!enabled) return;
+
+      _clubId = clubId;
+      _userId = window._gpUserId || null;
 
       await loadCatalog(clubId);
 
