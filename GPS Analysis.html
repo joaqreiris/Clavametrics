@@ -205,6 +205,14 @@
   .sc-zt-label { font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg); flex:0 0 130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sc-zt-text  { font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); flex:1; }
   .sc-zt-legend { padding:6px 14px 10px; border-top:1px solid var(--cm-border-soft); font:500 10.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-faint); }
+  .sc-vs-row { display:flex; align-items:center; gap:10px; padding:5px 0; border-bottom:1px solid var(--cm-border-soft); }
+  .sc-vs-row:last-child { border-bottom:none; }
+  .sc-vs-label { font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg); flex:0 0 130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sc-vs-pct { font:600 12px/1 var(--cm-font-mono); width:56px; text-align:right; flex-shrink:0; }
+  .sc-vs-pct.pos { color:var(--cm-success); }
+  .sc-vs-pct.neg { color:var(--cm-danger); }
+  .sc-vs-pct.neu { color:var(--cm-fg-muted); }
+  .sc-vs-vals { font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .gp-mini-pl { display:flex; align-items:center; gap:8px; padding:6px 0; }
   .gp-mav { width:24px; height:24px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg); display:flex; align-items:center; justify-content:center; font:600 10px/1 var(--cm-font-sans); flex-shrink:0; }
   .gp-mav.tn { background:var(--cm-accent-soft); color:var(--cm-accent); border-color:transparent; }
@@ -571,7 +579,6 @@
           <select class="sc-sel" id="sc-mc-sel"><option value="">All MCs</option></select>
           <select class="sc-sel" id="sc-date-sel"><option value="">Date...</option></select>
           <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
-          <select class="sc-sel" id="sc-compare-sel" title="Select an equivalent session from a previous MC to compare"><option value="">Compare with...</option></select>
           <select class="sc-sel" id="sc-player-sel" title="Optional: zoom into a specific player"><option value="">All players</option></select>
           <span class="sc-info" id="sc-info"></span>
         </span>
@@ -883,8 +890,16 @@
           <div class="gp-c" data-size="md" id="card-outliers" data-card-id="outliers">
             <div class="gp-c-h">
               <span class="ttl">Outliers</span>
-              <span class="sub">z &gt; |2| · last session</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
+              <span class="sub">z temporal · mismo MD · por jugador</span>
+              <div class="right">
+                <select id="sc-outlier-thresh" class="sc-sel" style="font-size:11px;height:24px;padding:0 5px" title="Umbral z">
+                  <option value="2" selected>|z|&gt;2</option>
+                  <option value="2.5">|z|&gt;2.5</option>
+                  <option value="3">|z|&gt;3</option>
+                </select>
+                <div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div>
+                <button><i class="ti ti-dots"></i></button>
+              </div>
             </div>
             <div class="gp-c-b" id="outliersBody" style="gap:6px"></div>
           </div>
@@ -895,6 +910,11 @@
               <span class="ttl">Variación vs equivalentes</span>
               <span class="sub">z-score temporal · vs mismo MD</span>
               <div class="right">
+                <select id="sc-zt-n-sel" class="sc-sel" style="font-size:11px;height:24px;padding:0 5px" title="Sesiones históricas a comparar">
+                  <option value="5">N=5</option>
+                  <option value="10" selected>N=10</option>
+                  <option value="0">N=∞</option>
+                </select>
                 <button id="sc-zt-edit-btn" class="cm-btn is-ghost is-sm" title="Edit metrics" style="padding:0 6px;height:24px;font-size:12px"><i class="ti ti-pencil" style="font-size:12px"></i></button>
                 <div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div>
                 <button><i class="ti ti-dots"></i></button>
@@ -905,7 +925,24 @@
             </div>
             <div class="sc-zt-legend">
               <i class="ti ti-info-circle" style="font-size:11px"></i>
-              Compara la sesión actual contra las últimas <strong id="sc-zt-n">—</strong> sesiones del mismo tipo (N≤10). z = (actual − media) / σ — verde |z|&lt;1, amarillo 1–2, rojo |z|≥2.
+              Compara la sesión actual contra las últimas <strong id="sc-zt-n">—</strong> sesiones del mismo MD code. z = (actual − μ) / σ — verde |z|&lt;1, amarillo 1–2, rojo |z|≥2.
+            </div>
+          </div>
+
+          <!-- vs sesión — comparación % 1-a-1 vs sesión de referencia -->
+          <div class="gp-c" data-size="md" id="card-sc-vs-session" data-card-id="sc-vs-session">
+            <div class="gp-c-h">
+              <span class="ttl">vs sesión</span>
+              <span class="sub">% cambio grupo · 1-a-1</span>
+              <div class="right">
+                <select class="sc-sel" id="sc-vs-compare-sel" title="Elegir sesión de referencia (mismo MD code)" style="max-width:180px"><option value="">Compare with…</option></select>
+                <button id="sc-vs-edit-btn" class="cm-btn is-ghost is-sm" title="Edit metrics" style="padding:0 6px;height:24px;font-size:12px"><i class="ti ti-pencil" style="font-size:12px"></i></button>
+                <div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div>
+                <button><i class="ti ti-dots"></i></button>
+              </div>
+            </div>
+            <div class="gp-c-b" id="sc-vs-body" style="padding:4px 14px 12px">
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:16px 0">Elegí una sesión de referencia para comparar.</div>
             </div>
           </div>
 
@@ -1521,6 +1558,7 @@ const GP_CARD_DEFS = {
     { name: 'Session KPI row',          id: 'card-session-kpi',          stub: false },
     { name: 'Session table',            id: 'card-session-table',        stub: false },
     { name: 'Variación vs equivalentes',id: 'card-sc-zscore-temporal',   stub: false },
+    { name: 'vs sesión',               id: 'card-sc-vs-session',        stub: false },
     // ── Add-card only (stashed by default) ──
     { name: 'Distance KPI',             id: 'card-sc-kpi-distance',      stub: false },
     { name: 'HSR KPI',                  id: 'card-sc-kpi-hsr',           stub: false },
@@ -1678,7 +1716,7 @@ async function applyLayoutToView(viewKey) {
 // On first load (no saved layout): stash the rest + save defaults.
 // On subsequent loads: stash any card absent from saved layout.
 const _GRP_DEFAULTS = new Set([
-  'card-session-kpi', 'card-session-table', 'card-sc-zscore-temporal',
+  'card-session-kpi', 'card-session-table', 'card-sc-zscore-temporal', 'card-sc-vs-session',
 ]);
 
 async function applyGrpDefaultLayout() {
@@ -1719,7 +1757,7 @@ async function applyGrpDefaultLayout() {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
       if (config.metric_key) card.dataset.metricKey = config.metric_key;
-      if (card_id === 'sc-zscore-temporal' && config.metrics?.length) {
+      if ((card_id === 'sc-zscore-temporal' || card_id === 'sc-vs-session') && config.metrics?.length) {
         const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
         card.dataset.config = JSON.stringify({ ...existing, metrics: config.metrics });
       }
@@ -9665,12 +9703,14 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
      Session Control (grp). Card id: sc-zscore-temporal
      Resumen squad-level: avg plantel sesión actual vs avg plantel
      de las últimas N sesiones del mismo MD code.
-     N = 10, mínimo 3 para calcular z.
-     El compareSel ("Compare with") dispara re-render via window._ztRender.
+     N configurable (5/10/∞), mínimo 3 para calcular z.
 ═══════════════════════════════════════════════════════════ -->
 <script>
 (function () {
-  const _ZT_N   = 10;
+  function _ztN() {
+    const v = parseInt(document.getElementById('sc-zt-n-sel')?.value || '10', 10);
+    return isNaN(v) || v <= 0 ? Infinity : v;
+  }
   const _ZT_MIN = 3;
 
   // Metrics available directly in gps_reports columns
@@ -9788,7 +9828,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         s.session_date < current.session_date &&
         matchKey != null &&
         _ztMdCode(s) === matchKey
-      ).slice(0, _ZT_N);
+      ).slice(0, Number.isFinite(_ztN()) ? _ztN() : undefined);
 
       if (nEl) nEl.textContent = equivalents.length;
 
@@ -9923,8 +9963,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     // Session change → re-render (slight delay so _scState.sessionId is updated)
     document.getElementById('sc-sess-sel')?.addEventListener('change', () => setTimeout(renderZt, 80));
 
-    // compareSel change → re-render (compareSel now drives the z-score card, NOT the table)
-    document.getElementById('sc-compare-sel')?.addEventListener('change', () => setTimeout(renderZt, 60));
+    // N selector change → re-render
+    document.getElementById('sc-zt-n-sel')?.addEventListener('change', () => renderZt());
 
     // grp tab activation
     document.getElementById('sections')?.addEventListener('click', e => {
@@ -9939,6 +9979,180 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   ztInit();
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     OUTLIERS TEMPORALES — Session Control (grp)
+     Card id: card-outliers
+     Por jugador: z vs sus propias sesiones del mismo MD code.
+     Umbral editable (|z|>2, 2.5, 3). Mínimo 3 sesiones previas.
+═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  const _OL_MIN = 3;
+  const _OL_METRICS = [
+    'total_distance','high_speed_distance','very_high_speed_distance',
+    'sprint_distance','sprint_count','max_speed',
+    'accelerations','decelerations','player_load'
+  ];
+  const _OL_LABELS = {
+    total_distance: 'Distancia', high_speed_distance: 'HSR',
+    very_high_speed_distance: 'VHSR', sprint_distance: 'Sprint dist.',
+    sprint_count: 'Sprints', max_speed: 'Vel. máx.',
+    accelerations: 'Acel.', decelerations: 'Desacel.', player_load: 'Player load'
+  };
+  const _OL_PEAK = new Set(['max_speed']);
+
+  function _olMdCode(sess) {
+    if (!sess) return null;
+    const off = sess.match_day_offset;
+    if (off != null) {
+      if (typeof off === 'string') return off || null;
+      if (off === 0) return 'MD';
+      return off < 0 ? `MD${off}` : `MD+${off}`;
+    }
+    return sess.session_attributes?.md_code || null;
+  }
+
+  async function renderScOutliers() {
+    const body = document.getElementById('outliersBody');
+    if (!body) return;
+
+    const st = window._scState;
+    const sessionId = st?.sessionId;
+    if (!sessionId || !window.sb) {
+      body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Seleccioná una sesión para ver outliers.</div>';
+      return;
+    }
+
+    body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Calculando…</div>';
+
+    try {
+      const thresh = parseFloat(document.getElementById('sc-outlier-thresh')?.value || '2');
+      const clubId = window._gpClubId || await window.getClubId?.();
+      if (!clubId) return;
+
+      const { data: allSess } = await window.sb
+        .from('training_sessions')
+        .select('id,session_date,session_type,title,match_day_offset,session_attributes')
+        .eq('club_id', clubId)
+        .order('session_date', { ascending: false });
+
+      const current = (allSess || []).find(s => s.id === sessionId);
+      if (!current) {
+        body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted)">Sesión no encontrada.</div>';
+        return;
+      }
+
+      const mdCode = _olMdCode(current);
+      if (!mdCode) {
+        body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin MD code — no se pueden calcular outliers temporales.</div>';
+        return;
+      }
+
+      const prevSess = (allSess || []).filter(s =>
+        s.id !== sessionId &&
+        s.session_date < current.session_date &&
+        _olMdCode(s) === mdCode
+      );
+
+      if (prevSess.length < _OL_MIN) {
+        body.innerHTML = `<div style="padding:12px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Sin sesiones ${mdCode} equivalentes suficientes (${prevSess.length}/${_OL_MIN} mínimo).</div>`;
+        return;
+      }
+
+      const allIds = [sessionId, ...prevSess.map(s => s.id)];
+      const [{ data: reports }, { data: players }] = await Promise.all([
+        window.sb.from('gps_reports')
+          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
+          .in('session_id', allIds).eq('club_id', clubId),
+        window.sb.from('players')
+          .select('id,first_name,last_name,number,position')
+          .eq('club_id', clubId).neq('status', 'inactive')
+      ]);
+
+      const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
+      const curRpts = (reports || []).filter(r => r.session_id === sessionId);
+
+      const outliers = [];
+      for (const cur of curRpts) {
+        const pid = cur.player_id;
+        const hist = (reports || []).filter(r => r.player_id === pid && r.session_id !== sessionId);
+        if (hist.length < _OL_MIN) continue;
+        const player = playerMap[pid];
+        for (const key of _OL_METRICS) {
+          const curVal = cur[key];
+          if (curVal == null || isNaN(curVal)) continue;
+          const histVals = hist.map(r => r[key]).filter(v => v != null && !isNaN(v));
+          if (histVals.length < _OL_MIN) continue;
+          const mean = histVals.reduce((s, v) => s + v, 0) / histVals.length;
+          const std  = Math.sqrt(histVals.reduce((s, v) => s + (v - mean) ** 2, 0) / histVals.length);
+          if (std === 0) continue;
+          const z = (curVal - mean) / std;
+          if (Math.abs(z) >= thresh) outliers.push({ player, key, z, n: histVals.length });
+        }
+      }
+
+      outliers.sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+
+      if (!outliers.length) {
+        body.innerHTML = `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);padding:10px 0">
+          <i class="ti ti-circle-check" style="color:var(--cm-success);font-size:16px"></i>
+          Sin outliers en esta sesión (|z| &lt; ${thresh} · ${mdCode} · N=${prevSess.length})
+        </div>`;
+        return;
+      }
+
+      const rows = outliers.map(o => {
+        const p = o.player;
+        const name = p ? `${(p.first_name || '')[0] || '?'}. ${p.last_name || ''}` : '—';
+        const initials = p
+          ? `${(p.first_name || '?')[0]}${(p.last_name || '?')[0]}`.toUpperCase()
+          : '??';
+        const pos  = p?.position || '—';
+        const zSign = o.z >= 0 ? '+' : '';
+        const zTxt  = `${zSign}${o.z.toFixed(1)}`;
+        const zCls  = Math.abs(o.z) >= 3 ? 'high' : 'warn';
+        const dir   = o.z > 0 ? 'muy por encima' : 'muy por debajo';
+        const label = _OL_LABELS[o.key] || o.key;
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--cm-border-soft)">
+          <div class="gp-mav" style="flex-shrink:0">${initials}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}</div>
+            <div style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${pos} · ${label}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <span class="gp-zc ${zCls}" style="width:46px">${zTxt}</span>
+            <div style="font:500 10px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:3px">${dir}</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      body.innerHTML = `
+        <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
+          ${outliers.length} outlier${outliers.length !== 1 ? 's' : ''} · ${mdCode} · N=${prevSess.length}
+        </div>
+        ${rows}`;
+
+    } catch (e) {
+      console.warn('renderScOutliers:', e);
+      body.innerHTML = '<div style="padding:12px 0;color:var(--cm-fg-muted)">Error al calcular outliers.</div>';
+    }
+  }
+
+  window._scOutliersRender = renderScOutliers;
+
+  document.getElementById('sc-sess-sel')?.addEventListener('change',     () => setTimeout(renderScOutliers, 120));
+  document.getElementById('sc-outlier-thresh')?.addEventListener('change', () => renderScOutliers());
+  document.getElementById('sections')?.addEventListener('click', e => {
+    if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(renderScOutliers, 400);
+  });
+
+  if (document.querySelector('.gp-view[data-view="grp"].is-on')) {
+    const poll = () => window._scState?.sessionId ? renderScOutliers() : setTimeout(poll, 500);
+    setTimeout(poll, 700);
+  }
 })();
 </script>
 </body>
