@@ -9154,6 +9154,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _renderKPIs(_lastReports);
       _renderTable(_lastReports);
       await annotateScKpiCards();
+      // Notify dependent cards that a session has loaded (works for both manual and auto-selection)
+      window._ztRender?.();
+      window._scOutliersRender?.();
+      window._vsReload?.();
     } catch (e) { console.error('_loadSessionData:', e); scInfo.textContent = 'Error loading data.'; }
   }
 
@@ -10499,14 +10503,17 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     document.getElementById('sc-vs-edit-btn')?.addEventListener('click', openVsMetricsModal);
 
-    // Session change → rebuild options, clear selection, re-render
-    document.getElementById('sc-sess-sel')?.addEventListener('change', async () => {
+    // Expose reload hook so _loadSessionData can notify this card on auto-selection
+    window._vsReload = async () => {
       _vsCacheClub = null;
       const sel = document.getElementById('sc-vs-compare-sel');
       if (sel) sel.value = '';
       await _buildVsOptions();
       renderVsSession();
-    });
+    };
+
+    // Session change → rebuild options, clear selection, re-render
+    document.getElementById('sc-sess-sel')?.addEventListener('change', () => window._vsReload?.());
 
     document.getElementById('sc-vs-compare-sel')?.addEventListener('change', () => renderVsSession());
 
