@@ -75,6 +75,7 @@
 
   // ── Runtime state ──────────────────────────────────────────
 
+  let _initStarted = false; // prevents double-init (defer fires + DOMContentLoaded listener)
   let S = null;           // active builder config (null when closed)
   let draftCard = null;   // the .gp-c draft DOM node
   let catalogMap = new Map();   // id → enriched metric def
@@ -1370,7 +1371,9 @@
   // ── Entry point ────────────────────────────────────────────
 
   async function init() {
-    if (!window.sb) { setTimeout(init, 500); return; }
+    if (_initStarted) return;
+    _initStarted = true;
+    if (!window.sb) { _initStarted = false; setTimeout(init, 500); return; }
     try {
       const clubId = await waitForClubId();
       if (!clubId) return;

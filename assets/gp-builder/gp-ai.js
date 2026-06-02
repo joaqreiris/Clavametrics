@@ -24,6 +24,7 @@
   const USE_CLOUD = false;
 
   let _clubId = null;
+  let _initStarted = false;
 
   // ── Heuristic fallback parser (ported from GPS Builder prototype) ──────
   // Uses window.GpBuilder.catalogMap for metric lookup.
@@ -337,7 +338,9 @@
   // ── Init ──────────────────────────────────────────────────────────────
 
   async function init() {
-    if (!window.sb) { setTimeout(init, 400); return; }
+    if (_initStarted) return;
+    _initStarted = true;
+    if (!window.sb) { _initStarted = false; setTimeout(init, 400); return; }
     try {
       _clubId = await waitForClubId();
       injectModal();

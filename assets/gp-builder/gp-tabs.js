@@ -27,7 +27,8 @@
 
   let _clubId  = null;
   let _userId  = null;
-  let _userRole = null;   // 'admin' | 'coach' | 'physio' | ...
+  let _userRole = null;
+  let _initStarted = false;   // 'admin' | 'coach' | 'physio' | ...
   let _dashboards = [];   // loaded from DB
   let _menuEl  = null;
   let _menuBkEl = null;
@@ -515,7 +516,9 @@
   // ── Init ──────────────────────────────────────────────────────
 
   async function init() {
-    if (!window.sb) { setTimeout(init, 400); return; }
+    if (_initStarted) return;
+    _initStarted = true;
+    if (!window.sb) { _initStarted = false; setTimeout(init, 400); return; }
     try {
       _clubId = await waitForClubId();
       _userId = window._gpUserId || null;
