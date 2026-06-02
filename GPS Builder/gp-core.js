@@ -267,7 +267,7 @@
           plugins:{
             legend:{display:false},
             tooltip:{callbacks:{label:ctx=>`${ctx.raw.player}: (${fmt(ctx.raw.x)} ${ms[0].unit}${ms[1]?', '+fmt(ctx.raw.y)+' '+ms[1].unit:''})`}},
-            datalabels:{display:showLbl, formatter:(_,ctx)=>ctx.raw.player, font:{size:9,weight:'600'}, color:GC_FG, anchor:'end', align:'end', offset:2},
+            datalabels:{display:showLbl, formatter:value=>value.player||'', font:{size:9,weight:'600'}, color:GC_FG, anchor:'end', align:'end', offset:2},
           },
           scales:{
             x:{display:showAxes, title:{display:showAxes,text:`${ms[0].name} (${ms[0].unit})`,font:{size:10},color:GC_FG}, grid:{color:GC_GRID}, ticks:{font:{size:10},color:GC_FG}, border:{dash:[3,3]}},
@@ -306,7 +306,7 @@
           plugins:{
             legend:{display:showLeg&&hasComp, position:'bottom', labels:{boxWidth:10,padding:14,font:{size:10.5},usePointStyle:true}},
             tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw}%`}},
-            datalabels:{display:showLbl, formatter:v=>v+'%', font:{size:9,weight:'600'}, color:(_,ctx)=>ctx.datasetIndex===0?color:GC_FAINT, anchor:'end', align:'end', offset:3},
+            datalabels:{display:showLbl, formatter:v=>v+'%', font:{size:9,weight:'600'}, color:ctx=>ctx.datasetIndex===0?color:GC_FAINT, anchor:'end', align:'end', offset:3},
           },
           scales:{
             r:{

@@ -587,7 +587,9 @@ document.addEventListener('DOMContentLoaded', () => {
     n.dataset.size = d.cfg.size; n.style.setProperty('--cm-accent', d.cfg.color);
     setTitleSubFor(n, d.cfg);
     n.querySelector('.gp-c-b').className = GP.bodyClass(d.cfg.type);
-    GP.renderChart(n.querySelector('.gp-c-b'), d.cfg);
+    /* Render chart once the node is connected to the DOM (Chart.js needs layout dimensions). */
+    const _body = n.querySelector('.gp-c-b'), _cfg = d.cfg;
+    (function raf() { _body.isConnected ? GP.renderChart(_body, _cfg) : requestAnimationFrame(raf); })();
     syncCardSizeToggleFor(n, d.cfg);
     n.setAttribute('draggable', layoutMode ? 'true':'false');
     return n;
