@@ -217,6 +217,7 @@
   // ── DOM injection ──────────────────────────────────────────
 
   function injectDOM() {
+    if (document.getElementById('gpbPanel')) return; // guard against double-init
     document.body.insertAdjacentHTML('beforeend', `
       <!-- GPS Builder panel -->
       <div id="gpbPanel" class="es-panel" hidden>
