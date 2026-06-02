@@ -248,7 +248,7 @@
     if (!_clubId || !window.createDashboard || !window.sb) return;
     try {
       const d = await window.createDashboard('New dashboard', _clubId, _userId, window.sb);
-      _dashboards.push({ ...d, cards: [] });
+      _dashboards.push({ ...d, created_by: _userId, cards: [] });
       reRender();
       // switch to the new tab and start rename immediately
       const viewKey = `db-${d.id}`;

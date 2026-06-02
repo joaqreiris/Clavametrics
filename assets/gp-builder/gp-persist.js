@@ -182,7 +182,7 @@
   window.loadDashboards = async function (clubId, sb) {
     const { data: dashes, error: dErr } = await sb
       .from('dashboards')
-      .select('id, report_type, name, scope, sort_order, is_shared')
+      .select('id, report_type, name, scope, sort_order, is_shared, created_by')
       .eq('club_id', clubId)
       .order('sort_order', { ascending: true });
 
@@ -439,6 +439,9 @@
    * @param {object} sb
    */
   window.deleteDashboard = async function (dashId, sb) {
+    // Explicitly delete cards first (belt-and-suspenders for CASCADE)
+    const { error: cardErr } = await sb.from('dashboard_cards').delete().eq('dashboard_id', dashId);
+    if (cardErr) throw new Error(`deleteDashboard cards: ${cardErr.message}`);
     const { error } = await sb.from('dashboards').delete().eq('id', dashId);
     if (error) throw new Error(`deleteDashboard: ${error.message}`);
   };

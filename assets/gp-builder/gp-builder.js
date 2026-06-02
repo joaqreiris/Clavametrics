@@ -88,8 +88,12 @@
   let staticBuilt = false;
   let _clubId = null;   // set during init, used by saveCard & resolveAndRender
   let _userId = null;
-  let _editCardId  = null;  // cardId being edited (null = new card mode)
-  let _editCardDom = null;  // DOM element being edited
+  let _editCardId      = null;  // cardId being edited (null = new card mode)
+  let _editCardDom     = null;  // DOM element being edited
+  let _editCardOrigTtl    = '';
+  let _editCardOrigSub    = '';
+  let _editCardOrigSize   = 'md';
+  let _editCardOrigAccent = '#15803D';
 
   // ── DOM refs populated after injectDOM() ──────────────────
 
@@ -464,13 +468,52 @@
   function _onViewSwitch() { if (S) cancelBuild(); }
 
   function cancelBuild() {
-    _editCardId  = null;
-    _editCardDom = null;
-    draftCard?.remove();
+    if (_editCardDom) {
+      // Edit mode: restore the card to its saved state, don't remove it
+      const card = _editCardDom;
+      card.classList.remove('is-draft', 'is-editing');
+      card.dataset.size = _editCardOrigSize;
+      card.style.setProperty('--cm-accent', _editCardOrigAccent);
+      const ttlEl = card.querySelector('.ttl');
+      const subEl = card.querySelector('.sub');
+      if (ttlEl) ttlEl.textContent = _editCardOrigTtl;
+      if (subEl) subEl.textContent = _editCardOrigSub;
+
+      // Restore X → delete, show pencil
+      const delBtn = card.querySelector('[data-del]');
+      if (delBtn) {
+        const fresh = delBtn.cloneNode(true);
+        const cardRef = card;
+        fresh.addEventListener('click', () => {
+          cardRef.remove();
+          if (window.deleteDashboardCard && cardRef.dataset.cardId) {
+            window.deleteDashboardCard(cardRef.dataset.cardId, window.sb)
+              .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
+          }
+        });
+        delBtn.replaceWith(fresh);
+      }
+      card.querySelector('[data-edit]')?.style.removeProperty('display');
+
+      // Restore body from saved config
+      if (card.__config) resolveAndRenderCard(card, card.__config);
+
+      card.closest('.gp-grid')?.classList.remove('is-building');
+
+      _editCardId = null;
+      _editCardDom = null;
+      _editCardOrigTtl = '';
+      _editCardOrigSub = '';
+      _editCardOrigSize   = 'md';
+      _editCardOrigAccent = '#15803D';
+    } else {
+      // New card mode: remove draft node
+      draftCard?.remove();
+      document.querySelector('.gp-view.is-on .gp-grid')?.classList.remove('is-building');
+    }
     draftCard = null;
     S = null;
     closePanel();
-    document.querySelector('.gp-view.is-on .gp-grid')?.classList.remove('is-building');
     const saveBtn = document.getElementById('gpbSave');
     if (saveBtn) saveBtn.textContent = 'Add card';
   }
@@ -483,7 +526,7 @@
     const config = buildConfig(S);
 
     if (_editCardId) {
-      // ── Edit mode: update existing card in place ──────────────
+      // ── Edit mode: update existing card in place (draftCard === _editCardDom) ──
       const targetCard = _editCardDom;
       const cardId     = _editCardId;
 
@@ -505,12 +548,33 @@
         b.classList.toggle('is-on', mapSz[b.textContent.trim()] === S.size)
       );
 
-      const grid = draftCard.closest('.gp-grid');
-      if (grid) grid.classList.remove('is-building');
-      draftCard.remove();
+      // Remove editing state (don't remove the card from DOM!)
+      targetCard.classList.remove('is-draft', 'is-editing');
+      targetCard.closest('.gp-grid')?.classList.remove('is-building');
+
+      // Restore X → delete, show pencil
+      const delBtnE = targetCard.querySelector('[data-del]');
+      if (delBtnE) {
+        const freshE = delBtnE.cloneNode(true);
+        const cardRefE = targetCard;
+        freshE.addEventListener('click', () => {
+          cardRefE.remove();
+          if (window.deleteDashboardCard && cardRefE.dataset.cardId) {
+            window.deleteDashboardCard(cardRefE.dataset.cardId, window.sb)
+              .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
+          }
+        });
+        delBtnE.replaceWith(freshE);
+      }
+      targetCard.querySelector('[data-edit]')?.style.removeProperty('display');
+
       draftCard = null;
       _editCardId  = null;
       _editCardDom = null;
+      _editCardOrigTtl = '';
+      _editCardOrigSub = '';
+      _editCardOrigSize   = 'md';
+      _editCardOrigAccent = '#15803D';
 
       const saveBtnE = document.getElementById('gpbSave');
       if (saveBtnE) saveBtnE.textContent = 'Add card';
@@ -590,6 +654,7 @@
   }
 
   // ── Edit existing card ────────────────────────────────────
+  // Reuses _editCardDom as draftCard — no second card is created.
   function openBuilderForEdit(cardEl) {
     if (!panelEl) return;
     const cardId = cardEl?.dataset.cardId;
@@ -597,12 +662,49 @@
 
     if (S) cancelBuild();
 
+    // Save original visual state so cancelBuild can restore it
+    _editCardOrigTtl    = cardEl.querySelector('.ttl')?.textContent || '';
+    _editCardOrigSub    = cardEl.querySelector('.sub')?.textContent || '';
+    _editCardOrigSize   = cardEl.dataset.size || 'md';
+    _editCardOrigAccent = cardEl.style.getPropertyValue('--cm-accent') || '#15803D';
+
     _editCardId  = cardId;
     _editCardDom = cardEl;
 
-    startBuild();
-    if (!S) { _editCardId = null; _editCardDom = null; return; }
+    // Use the existing card as the live draft — no new DOM node
+    S = freshState();
+    pulseNext = false;
+    draftCard = cardEl;
 
+    cardEl.classList.add('is-draft', 'is-editing');
+    const grid = cardEl.closest('.gp-grid');
+    if (grid) grid.classList.add('is-building');
+
+    // Clone X button to strip old listeners, then wire to cancelBuild
+    const delBtn = cardEl.querySelector('[data-del]');
+    if (delBtn) {
+      const fresh = delBtn.cloneNode(true);
+      fresh.onclick = cancelBuild;
+      delBtn.replaceWith(fresh);
+    }
+    // Hide pencil while editing
+    cardEl.querySelector('[data-edit]')?.style.setProperty('display', 'none');
+
+    // Wire size-toggle on the card
+    cardEl.querySelector('.size-toggle')?.querySelectorAll('button').forEach(b => {
+      b.onclick = () => {
+        const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
+        const sz = map[b.textContent.trim()];
+        if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); }
+      };
+    });
+
+    document.getElementById('sections')?.addEventListener('click', _onViewSwitch, { once:true });
+
+    openPanel();
+    buildStaticPanel();
+
+    // Seed S from stored config
     const cfg       = cardEl.__cfg;
     const rawConfig = cardEl.__config;
 
