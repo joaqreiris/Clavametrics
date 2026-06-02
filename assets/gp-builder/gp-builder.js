@@ -88,6 +88,8 @@
   let staticBuilt = false;
   let _clubId = null;   // set during init, used by saveCard & resolveAndRender
   let _userId = null;
+  let _editCardId  = null;  // cardId being edited (null = new card mode)
+  let _editCardDom = null;  // DOM element being edited
 
   // ── DOM refs populated after injectDOM() ──────────────────
 
@@ -462,11 +464,15 @@
   function _onViewSwitch() { if (S) cancelBuild(); }
 
   function cancelBuild() {
+    _editCardId  = null;
+    _editCardDom = null;
     draftCard?.remove();
     draftCard = null;
     S = null;
     closePanel();
     document.querySelector('.gp-view.is-on .gp-grid')?.classList.remove('is-building');
+    const saveBtn = document.getElementById('gpbSave');
+    if (saveBtn) saveBtn.textContent = 'Add card';
   }
 
   async function saveCard() {
@@ -475,15 +481,62 @@
     if (S.metrics.length < t.min) return;
 
     const config = buildConfig(S);
-    const savedCard = draftCard; // keep ref before clearing state
 
-    savedCard.__cfg = JSON.parse(JSON.stringify(S));
+    if (_editCardId) {
+      // ── Edit mode: update existing card in place ──────────────
+      const targetCard = _editCardDom;
+      const cardId     = _editCardId;
+
+      targetCard.__cfg    = JSON.parse(JSON.stringify(S));
+      targetCard.__config = JSON.parse(JSON.stringify(config));
+      targetCard.dataset.card = 'chart';
+      targetCard.dataset.size = S.size;
+      targetCard.style.setProperty('--cm-accent', S.color);
+
+      const titleElE = targetCard.querySelector('.ttl');
+      const subElE   = targetCard.querySelector('.sub');
+      if (titleElE) titleElE.textContent = autoTitle(S);
+      if (subElE) {
+        const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
+        subElE.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}`;
+      }
+      const mapSz = { S:'sm', M:'md', L:'lg', FULL:'full' };
+      targetCard.querySelectorAll('.size-toggle button').forEach(b =>
+        b.classList.toggle('is-on', mapSz[b.textContent.trim()] === S.size)
+      );
+
+      const grid = draftCard.closest('.gp-grid');
+      if (grid) grid.classList.remove('is-building');
+      draftCard.remove();
+      draftCard = null;
+      _editCardId  = null;
+      _editCardDom = null;
+
+      const saveBtnE = document.getElementById('gpbSave');
+      if (saveBtnE) saveBtnE.textContent = 'Add card';
+      S = null;
+      closePanel();
+
+      if (typeof window.updateDashboardCard === 'function') {
+        window.updateDashboardCard(cardId, config, window.sb)
+          .catch(e => console.warn('gpb: updateDashboardCard failed:', e));
+      }
+      resolveAndRenderCard(targetCard, config);
+      showToast('Card updated', 'Real data loading…', 'Done');
+      return;
+    }
+
+    // ── New card mode ─────────────────────────────────────────
+    const savedCard = draftCard;
+
+    savedCard.__cfg    = JSON.parse(JSON.stringify(S));
+    savedCard.__config = JSON.parse(JSON.stringify(config));
     savedCard.dataset.card = 'chart';
     savedCard.classList.remove('is-draft', 'is-editing');
     savedCard.dataset.size = S.size;
     savedCard.style.setProperty('--cm-accent', S.color);
+    savedCard.setAttribute('draggable', 'true');
 
-    // update header immediately
     const titleEl = savedCard.querySelector('.ttl');
     const subEl   = savedCard.querySelector('.sub');
     if (titleEl) titleEl.textContent = autoTitle(S);
@@ -492,21 +545,39 @@
       subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}`;
     }
 
-    // sync size-toggle on the card
     const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
     savedCard.querySelectorAll('.size-toggle button').forEach(b =>
       b.classList.toggle('is-on', map[b.textContent.trim()] === S.size)
     );
 
+    // Re-wire X → delete from DB; add Edit button before it
+    const delBtn = savedCard.querySelector('[data-del]');
+    if (delBtn) {
+      const fresh = delBtn.cloneNode(true);
+      delBtn.replaceWith(fresh);
+      fresh.addEventListener('click', () => {
+        savedCard.remove();
+        if (window.deleteDashboardCard && savedCard.dataset.cardId) {
+          window.deleteDashboardCard(savedCard.dataset.cardId, window.sb)
+            .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
+        }
+      });
+      const editBtn = document.createElement('button');
+      editBtn.title = 'Edit card';
+      editBtn.dataset.edit = '';
+      editBtn.innerHTML = '<i class="ti ti-pencil"></i>';
+      editBtn.style.cssText = 'background:none;border:none;cursor:pointer;padding:4px 6px;color:var(--cm-fg-muted)';
+      fresh.parentNode.insertBefore(editBtn, fresh);
+      editBtn.addEventListener('click', () => openBuilderForEdit(savedCard));
+    }
+
     const grid = savedCard.closest('.gp-grid');
     if (grid) grid.classList.remove('is-building');
 
-    // close panel first so the user sees the card
     draftCard = null;
     S = null;
     closePanel();
 
-    // Persist to DB (fire-and-forget; failure is non-blocking)
     const reportType = _currentView();
     if (_clubId && typeof window.saveDashboardCard === 'function') {
       window.saveDashboardCard(config, _clubId, reportType, _userId, window.sb)
@@ -514,9 +585,71 @@
         .catch(e => console.warn('gpb: saveDashboardCard failed:', e));
     }
 
-    // Resolve real data and update card body
     resolveAndRenderCard(savedCard, config);
     showToast('Chart added', 'Real data loading…', 'Done');
+  }
+
+  // ── Edit existing card ────────────────────────────────────
+  function openBuilderForEdit(cardEl) {
+    if (!panelEl) return;
+    const cardId = cardEl?.dataset.cardId;
+    if (!cardId) return;
+
+    if (S) cancelBuild();
+
+    _editCardId  = cardId;
+    _editCardDom = cardEl;
+
+    startBuild();
+    if (!S) { _editCardId = null; _editCardDom = null; return; }
+
+    const cfg       = cardEl.__cfg;
+    const rawConfig = cardEl.__config;
+
+    if (cfg) {
+      S.type    = cfg.type;
+      S.scope   = cfg.scope;
+      S.range   = cfg.range;
+      S.compare = cfg.compare;
+      S.size    = cfg.size;
+      S.color   = cfg.color;
+      S.palette = cfg.palette;
+      S.axes    = cfg.axes !== false;
+      S.legend  = cfg.legend !== false;
+      S.labels  = !!cfg.labels;
+      S.title   = cfg.title || '';
+      S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
+    } else if (rawConfig?.schema === 'gp.card/v1') {
+      S.type    = rawConfig.viz                  || 'bars';
+      S.scope   = rawConfig.scope?.level         || 'player';
+      S.range   = rawConfig.range?.type          || 'mc';
+      S.compare = rawConfig.comparison?.baseline || 'none';
+      S.size    = rawConfig.style?.size          || 'md';
+      S.color   = rawConfig.style?.color         || '#15803D';
+      S.palette = rawConfig.style?.palette       || 'pitch';
+      S.axes    = rawConfig.style?.axes   !== false;
+      S.legend  = rawConfig.style?.legend !== false;
+      S.labels  = !!rawConfig.style?.dataLabels;
+      S.title   = rawConfig.title || '';
+      S.metrics = (rawConfig.metrics || [])
+        .map(m => ({ id: m.id, agg: m.agg }))
+        .filter(m => catalogMap.has(m.id))
+        .map(m => {
+          const cat = catalogMap.get(m.id);
+          if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg';
+          return m;
+        });
+    } else {
+      cancelBuild();
+      return;
+    }
+
+    const saveBtn = document.getElementById('gpbSave');
+    if (saveBtn) saveBtn.textContent = 'Update card';
+
+    document.getElementById('gpbTitle').value = S.title;
+    pulseNext = true;
+    syncAll();
   }
 
   // ── Panel open / close ─────────────────────────────────────
@@ -1469,6 +1602,8 @@
     get VIZ_TYPES()  { return VIZ_TYPES;  },
     get AGG()        { return AGG;        },
     defaultAgg,
+    resolveAndRenderCard,
+    openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
 
 })();

@@ -114,6 +114,25 @@
         kb.addEventListener('click', e => { e.stopPropagation(); openMenu(kb, d); });
         row.appendChild(kb);
       }
+
+      // Mount builder cards for this predefined view (source='builder' only; catalog cards are in HTML)
+      const viewEl = document.querySelector(`.gp-view[data-view="${viewKey}"]`);
+      const grid   = viewEl?.querySelector('.gp-grid');
+      if (grid && !grid.dataset.gptBuilderMounted) {
+        const builderCards = (d.cards || []).filter(c => c.source === 'builder');
+        builderCards.forEach(card => grid.appendChild(_buildCardElement(card)));
+        if (builderCards.length) {
+          grid.dataset.gptBuilderMounted = '1';
+          wireCardDrag(grid, d.id);
+          setTimeout(() => {
+            grid.querySelectorAll('.gp-c[data-card-id]').forEach(el => {
+              if (window.GpBuilder?.resolveAndRenderCard && el.__config) {
+                window.GpBuilder.resolveAndRenderCard(el, el.__config);
+              }
+            });
+          }, 800);
+        }
+      }
     });
   }
 
@@ -200,6 +219,14 @@
         grid.appendChild(el);
       }
       wireCardDrag(grid, dash.id);
+
+      setTimeout(() => {
+        grid.querySelectorAll('.gp-c[data-card-id]').forEach(el => {
+          if (window.GpBuilder?.resolveAndRenderCard && el.__config) {
+            window.GpBuilder.resolveAndRenderCard(el, el.__config);
+          }
+        });
+      }, 800);
     } catch (e) { console.warn('gpt _mountCardsForDashboard:', e); }
   }
 
@@ -469,6 +496,7 @@
     el.dataset.size     = card.size || config.style?.size || 'md';
     el.dataset.card     = 'chart';
     el.dataset.cardId   = card.id;
+    el.__config         = config;
     el.setAttribute('draggable', 'true');
     el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
     const title = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
@@ -481,6 +509,7 @@
             <button>S</button><button>M</button><button>L</button>
             <button style="width:30px">FULL</button>
           </div>
+          <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
           <button data-del title="Remove"><i class="ti ti-x"></i></button>
         </div>
       </div>
@@ -493,6 +522,10 @@
     el.querySelectorAll('.size-toggle button').forEach(b =>
       b.classList.toggle('is-on', b.textContent.trim() === (sMap[el.dataset.size] || 'M'))
     );
+
+    el.querySelector('[data-edit]')?.addEventListener('click', () => {
+      if (window.GpBuilder?.openForEdit) window.GpBuilder.openForEdit(el);
+    });
 
     el.querySelector('[data-del]')?.addEventListener('click', () => {
       el.remove();
