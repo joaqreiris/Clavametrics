@@ -479,6 +479,27 @@
       }
     });
 
+    // ⌘K / Ctrl+K — open add-block drawer for today when planner is visible
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const kbdMod = document.getElementById('rp-kbd-mod');
+    if (kbdMod) kbdMod.textContent = isMac ? '⌘' : 'Ctrl';
+
+    document.addEventListener('keydown', (e) => {
+      if (!((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) return;
+      if ($('#view-picker').classList.contains('rp-hidden') === false) return; // picker open
+      e.preventDefault();
+      const todayCard = document.querySelector('.rp-day.is-today');
+      let day = '', dayDate = '';
+      if (todayCard) {
+        const dow = todayCard.querySelector('.dow');
+        const dom = todayCard.querySelector('.dom');
+        if (dow && dom) day = dow.textContent.replace(/·.*$/, '').trim() + ', ' + dom.textContent;
+        dayDate = todayCard.dataset.date || '';
+      }
+      const ctx = document.body.dataset.rpMode === 'prev' ? 'prev' : 'rehab';
+      window.openBlockDrawer({ context: ctx, day, dayDate });
+    });
+
     // back to picker
     $('#back-to-picker').addEventListener('click', showPicker);
 
