@@ -413,7 +413,12 @@
   // ── Build / cancel / save ─────────────────────────────────
 
   function freshState() {
-    return { type:'bars', metrics:[], scope:'player', compare:'role', range:'mc',
+    // Inherit time range from page filter; avoid 'mc' default (needs mcId)
+    let range = 'w30';
+    const p = window.gpState?.datePreset;
+    if (p === 'last7') range = 'w7';
+    else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
+    return { type:'bars', metrics:[], scope:'player', compare:'role', range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false };
   }
 
@@ -642,11 +647,21 @@
     S = null;
     closePanel();
 
-    const reportType = _currentView();
-    if (_clubId && typeof window.saveDashboardCard === 'function') {
-      window.saveDashboardCard(config, _clubId, reportType, _userId, window.sb)
-        .then(cardId => { savedCard.dataset.cardId = cardId; })
-        .catch(e => console.warn('gpb: saveDashboardCard failed:', e));
+    const viewKey = _currentView();
+    const _PREDEFINED = new Set(['ind', 'grp', 'mind', 'mgrp', 'mc']);
+    if (_PREDEFINED.has(viewKey)) {
+      if (_clubId && typeof window.saveDashboardCard === 'function') {
+        window.saveDashboardCard(config, _clubId, viewKey, _userId, window.sb)
+          .then(cardId => { savedCard.dataset.cardId = cardId; })
+          .catch(e => console.warn('gpb: saveDashboardCard failed:', e));
+      }
+    } else if (viewKey.startsWith('db-')) {
+      const dashId = viewKey.slice(3);
+      if (typeof window.insertCardIntoDashboard === 'function') {
+        window.insertCardIntoDashboard(config, dashId, _userId, window.sb)
+          .then(cardId => { savedCard.dataset.cardId = cardId; })
+          .catch(e => console.warn('gpb: insertCardIntoDashboard failed:', e));
+      }
     }
 
     resolveAndRenderCard(savedCard, config);

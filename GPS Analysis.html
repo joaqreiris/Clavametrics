@@ -1344,6 +1344,7 @@ window.gpState = {
   dateTo: null,
   includeHistorical: false,
   microcycle: 'All',
+  mcId: null,
   playerId: null,
   baseline: 'vs Role',
   view: 'ind',
@@ -2256,7 +2257,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
     const clubId = await window.getClubId();
     const { from, to } = getDateRange();
     const qry = window.sb.from('training_sessions')
-      .select('session_date').eq('club_id', clubId)
+      .select('session_date,microcycle_id').eq('club_id', clubId)
       .gte('session_date', from).lte('session_date', to)
       .order('session_date', { ascending: false }).limit(120);
     const { data: sessions } = await qry;
@@ -2264,11 +2265,12 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
     (sessions || []).forEach(s => {
       const d = new Date(s.session_date);
       const k = `MC ${getISOWeek(d)}`;
-      if (!weeks[k]) weeks[k] = { label: k, date: s.session_date };
+      if (!weeks[k]) weeks[k] = { label: k, date: s.session_date, mcId: s.microcycle_id || null };
     });
-    const mcItems = [{ label: 'All MCs', mc: 'All' }, ...Object.values(weeks).slice(0, 12).map(w => ({ label: `${w.label}  ·  ${w.date}`, mc: w.label }))];
+    const mcItems = [{ label: 'All MCs', mc: 'All', mcId: null }, ...Object.values(weeks).slice(0, 12).map(w => ({ label: `${w.label}  ·  ${w.date}`, mc: w.label, mcId: w.mcId }))];
     makePopover(pill, mcItems, item => {
       window.gpState.microcycle = item.mc;
+      window.gpState.mcId = item.mcId || null;
       document.getElementById('mcLabel').textContent = item.mc === 'All' ? 'All MCs' : item.mc;
       showToast(`Microcycle → ${item.mc}`);
       saveGpsPrefs();

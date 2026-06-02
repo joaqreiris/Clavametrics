@@ -447,6 +447,44 @@
   };
 
   /**
+   * Inserts a card directly into a dashboard by its id (no get-or-create).
+   * Use this for custom dashboards whose id is already known.
+   *
+   * @param {object} config      gp.card/v1 object
+   * @param {string} dashboardId existing dashboard UUID
+   * @param {string} userId
+   * @param {object} sb
+   * @returns {Promise<string>} new card id
+   */
+  window.insertCardIntoDashboard = async function (config, dashboardId, userId, sb) {
+    const { data: maxRow } = await sb
+      .from('dashboard_cards')
+      .select('position')
+      .eq('dashboard_id', dashboardId)
+      .order('position', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const position = (maxRow?.position ?? -1) + 1;
+
+    const { data: card, error: cErr } = await sb
+      .from('dashboard_cards')
+      .insert({
+        dashboard_id: dashboardId,
+        config,
+        size:       config.style?.size || 'md',
+        position,
+        source:     'builder',
+        created_by: userId || null,
+      })
+      .select('id')
+      .single();
+
+    if (cErr) throw new Error(`insertCardIntoDashboard: ${cErr.message}`);
+    return card.id;
+  };
+
+  /**
    * Persists the new card order for a dashboard.
    * @param {{ id:string, position:number }[]} orderedCards
    * @param {object} sb
