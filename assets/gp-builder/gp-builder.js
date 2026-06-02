@@ -1075,6 +1075,7 @@
 
     const body = document.getElementById('gpbDraftBody') || draftCard.querySelector('.gp-c-b');
     if (!body) return;
+    destroyBodyChart(body);
 
     const nd = noDataReason(S);
     if (!valid) { showState(body, 'await'); return; }
@@ -1083,7 +1084,8 @@
 
     draftCard.classList.remove('is-draft');
     body.className = bodyClass(S.type);
-    body.innerHTML = renderType(S);
+    if (S.type === 'radar') mountRadarPreview(body, S);
+    else body.innerHTML = renderType(S);
   }
 
   function showState(body, kind, msg) {
@@ -1136,11 +1138,12 @@
     if (!body) return;
 
     // Show loading spinner
+    destroyBodyChart(body);
     body.className = 'gp-c-b';
     body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">Loading GPS data…</div></div>`;
 
     try {
-      const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, CORE_COLS } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, CORE_COLS } = await _importResolver();
       if (!applyAgg) return; // resolver not available
 
       const ctx = {
@@ -1183,7 +1186,20 @@
       }
 
       body.className = _bodyClassFromViz(config.viz);
-      body.innerHTML = renderTypeFromDataset(config, series);
+      if (config.viz === 'radar') {
+        // Per-axis role baseline drives the radial scale (so axes don't collapse).
+        // Fetched for any player-scope radar; the baseline RING is only drawn when
+        // comparison ≠ none (radarChartData keys that off config.comparison).
+        let baselineMap = null;
+        if (config.scope.level === 'player' && fetchRoleBaseline) {
+          try { baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
+          catch (e) { console.warn('gpb role baseline:', e); }
+        }
+        mountRadarChart(body, config, series, baselineMap);
+      } else {
+        destroyBodyChart(body);
+        body.innerHTML = renderTypeFromDataset(config, series);
+      }
       cardEl.classList.remove('is-draft');
 
     } catch (e) {
@@ -1218,6 +1234,150 @@
     } else if (kind === 'err') {
       body.innerHTML = `<div class="cb2-state err"><div class="ic"><i class="ti ti-alert-triangle"></i></div><div class="t">Couldn't load this card</div><div class="d">${esc(msg)}</div></div>`;
     }
+  }
+
+  // ── Radar (Chart.js) ──────────────────────────────────────────
+  // Per-axis normalization fixes the "spike" collapse: each metric is shown as
+  // a % of its OWN role baseline, so metrics of wildly different magnitudes
+  // (Total Distance ~thousands of m vs Distance/Min ~70) share one radial scale
+  // without the large one pinning everything else to the centre. The value that
+  // is SHOWN (tooltip / data label) stays the REAL value, not the percentage.
+
+  function destroyBodyChart(body) {
+    if (body && body.__chart) { try { body.__chart.destroy(); } catch (e) {} body.__chart = null; }
+  }
+  function showEmptyBody(body, msg) {
+    body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data for this selection</div><div class="d">${esc(msg)}</div></div>`;
+  }
+
+  /** Draws the REAL value (e.g. "5.2 km") over each player point. No plugin dep. */
+  const _radarLabelPlugin = {
+    id: 'gpbRadarLabels',
+    afterDatasetsDraw(chart, _args, opts) {
+      if (!opts || !opts.show || !opts.labels) return;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 9px Geist, Inter, sans-serif';
+      ctx.fillStyle = opts.color || '#374151';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      meta.data.forEach((pt, i) => { if (opts.labels[i] != null) ctx.fillText(opts.labels[i], pt.x, pt.y - 5); });
+      ctx.restore();
+    },
+  };
+
+  /**
+   * Pure: (config, series, baselineMap) → Chart.js radar payload.
+   * Each axis normalized as % of its baseline (fallback: own value → 100%).
+   * @param {Map<string,number>|null} baselineMap  metricId → baseline value
+   */
+  function radarChartData(config, series, baselineMap) {
+    const color    = config.style?.color || '#15803D';
+    const showAxes = config.style?.axes   !== false;
+    const showLeg  = config.style?.legend !== false;
+    const showLbl  = !!config.style?.dataLabels;
+    const hasBaseline  = !!config.comparison?.baseline;
+    const baselineName = hasBaseline
+      ? (COMPARES.find(c => c.id === config.comparison.baseline)?.name || 'Baseline')
+      : null;
+
+    const ms        = (series || []).filter(s => s.points && s.points.length);
+    const labels    = ms.map(s => (s.name || s.label || '').split(' ').slice(0, 2).join(' '));
+    const units     = ms.map(s => s.unit || '');
+    const realVals  = ms.map(s => s.points[0]?.y ?? 0);
+    const refs      = ms.map((s, i) => {
+      const b = baselineMap ? baselineMap.get(s.label) : null;
+      return (b != null && b > 0) ? b : (realVals[i] || 1);   // fallback: own value → 100%
+    });
+    const pct        = realVals.map((v, i) => Math.round((v / refs[i]) * 100));
+    const realLabels = realVals.map((v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : ''));
+    const rMax       = Math.ceil(Math.max(120, ...(pct.length ? pct : [120])) / 30) * 30;
+
+    return { labels, pct, realLabels, units, realVals, refs, hasBaseline, baselineName, rMax, color, showAxes, showLeg, showLbl };
+  }
+
+  /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
+  function mountRadarChart(body, config, series, baselineMap) {
+    destroyBodyChart(body);
+    body.innerHTML = '';
+    const d = radarChartData(config, series, baselineMap);
+    if (!d.labels.length) { showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    // Chart.js needs the container laid out; defer until it has width.
+    const mount = () => {
+      if (!body.isConnected) return;
+      if (!body.clientWidth) { requestAnimationFrame(mount); return; }
+      const canvas = document.createElement('canvas');
+      canvas.style.maxHeight = '270px';
+      body.appendChild(canvas);
+
+      const datasets = [{
+        label: 'Player',
+        data: d.pct,
+        borderColor: d.color,
+        backgroundColor: d.color + '26',
+        borderWidth: 2.4,
+        pointRadius: 4, pointHoverRadius: 6,
+        pointBackgroundColor: d.color, pointBorderColor: '#fff', pointBorderWidth: 1.5,
+      }];
+      if (d.hasBaseline) datasets.push({
+        label: d.baselineName,
+        data: d.pct.map(() => 100),
+        borderColor: 'rgba(148,163,184,0.75)',
+        backgroundColor: 'transparent',
+        borderWidth: 1.5, borderDash: [5, 3],
+        pointRadius: 2, pointBackgroundColor: 'rgba(148,163,184,0.75)', pointBorderColor: '#fff',
+      });
+
+      body.__chart = new Chart(canvas, {
+        type: 'radar',
+        data: { labels: d.labels, datasets },
+        plugins: [_radarLabelPlugin],
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 320 },
+          plugins: {
+            legend: { display: d.showLeg && d.hasBaseline, position: 'bottom',
+                      labels: { boxWidth: 10, padding: 12, font: { size: 10 }, usePointStyle: true } },
+            tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0
+              ? `${ctx.chart.data.labels[ctx.dataIndex]}: ${d.realLabels[ctx.dataIndex]} (${ctx.raw}%)`
+              : `${ctx.dataset.label}: ${ctx.raw}%` } },
+            gpbRadarLabels: { show: d.showLbl, labels: d.realLabels, color: d.color },
+          },
+          scales: {
+            r: {
+              min: 0, max: d.rMax,
+              ticks: { display: d.showAxes, stepSize: 30, font: { size: 9 }, color: '#9CA3AF',
+                       backdropColor: 'transparent', callback: v => v + '%' },
+              grid: { color: 'rgba(148,163,184,0.18)' },
+              angleLines: { color: 'rgba(148,163,184,0.22)' },
+              pointLabels: { display: d.showAxes, font: { size: 10, weight: '600' }, color: '#4B5563' },
+            },
+          },
+        },
+      });
+    };
+    mount();
+  }
+
+  /** Builder preview radar — same Chart.js renderer, mock per-metric values. */
+  function mountRadarPreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    if (ms.length < 3) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    const series = ms.map((m, i) => ({
+      label: m.id, name: m.name, unit: m.unit,
+      points: [{ x: 'all', y: +(metSample(m) * (0.55 + 0.4 * Math.abs(Math.sin(i * 1.3 + 1)))).toFixed(1) }],
+    }));
+    const baselineMap = new Map(ms.map(m => [m.id, metSample(m)]));
+    const cfg = {
+      viz: 'radar',
+      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      style: { color: S.color, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+    };
+    mountRadarChart(body, cfg, series, baselineMap);
   }
 
   /**
@@ -1321,18 +1481,11 @@
           ${svgDots}</svg>`;
       }
 
-      case 'radar': {
-        const n = series.length;
-        if (n < 3) return renderType({ ...config, type:'radar' });
-        const cx = 190, cy = 140, R = 98;
-        const vals = series.map(s => s.points[0]?.y ?? 0);
-        const maxV = Math.max(...vals, 1);
-        const pt = (i, r) => [cx + r * Math.sin(i / n * 2 * Math.PI), cy - r * Math.cos(i / n * 2 * Math.PI)];
-        const ring = rr => `<polygon fill="none" stroke="var(--cm-border-soft)" stroke-width="1" points="${Array.from({length:n},(_,i)=>pt(i,rr).map(v=>v.toFixed(0)).join(',')).join(' ')}"/>`;
-        const shape = series.map((s, i) => pt(i, R * (vals[i] / maxV)).map(v => v.toFixed(0)).join(',')).join(' ');
-        const lbls = axes ? series.map((s, i) => { const [x, y] = pt(i, R + 22); return `<text x="${x.toFixed(0)}" y="${y.toFixed(0)}" text-anchor="middle" font-size="10" font-weight="600" fill="var(--cm-fg-muted)">${esc(s.name.split(' ')[0])}</text>`; }).join('') : '';
-        return `<svg viewBox="0 0 380 290" font-family="Geist,Inter,sans-serif">${ring(R)}${ring(R * .6)}<polygon points="${shape}" fill="${color}22" stroke="${color}" stroke-width="2.2"/>${lbls}</svg>`;
-      }
+      case 'radar':
+        // Radar is rendered via Chart.js (mountRadarChart) straight into the body,
+        // with per-axis baseline normalization — never the old global-max SVG and
+        // never a mock fallback. If reached here, show an empty state.
+        return `<div class="cb2-state empty"><div class="ic"><i class="ti ti-chart-radar"></i></div><div class="t">Radar needs ≥3 metrics</div></div>`;
 
       case 'table': {
         const allX = [...new Set(series.flatMap(s => s.points.map(p => p.x)))];
@@ -1720,6 +1873,8 @@
     get AGG()        { return AGG;        },
     defaultAgg,
     resolveAndRenderCard,
+    radarChartData,   // exposed for tests
+    mountRadarChart,  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
 
