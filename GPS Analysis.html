@@ -3677,6 +3677,10 @@ async function _updateRadar(reports, state) {
     canvas.style.display = '';
     if (radarEmpty) radarEmpty.style.display = 'none';
 
+    // Re-check AFTER the async baseline fetch: a concurrent _updateRadar() call
+    // may have created a chart on this canvas while we awaited (avoids the
+    // "canvas is already in use" error when session/player/mode change fast).
+    Chart.getChart(canvas)?.destroy();
     new Chart(canvas, {
       type: 'radar',
       data: { labels: LABELS, datasets: [
@@ -3718,6 +3722,7 @@ async function _updateRadar(reports, state) {
   const zs     = METRICS.map((m, i) => +((+(sel[m]||0) - stats[i].mu) / stats[i].sigma).toFixed(2));
   canvas.style.display = '';
   if (radarEmpty) radarEmpty.style.display = 'none';
+  Chart.getChart(canvas)?.destroy();   // guard before reuse (concurrent renders)
   new Chart(canvas, {
     type: 'radar',
     data: { labels: LABELS, datasets: [

@@ -1369,19 +1369,25 @@
 
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
   function mountRadarChart(body, config, series, baselineMap) {
-    destroyBodyChart(body);
-    body.innerHTML = '';
     const d = radarChartData(config, series, baselineMap);
-    if (!d.labels.length) { showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
-    if (typeof Chart === 'undefined') { body.innerHTML = renderTypeFromDataset(config, series); return; }
+    if (!d.labels.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    // Token cancels any earlier pending mount. The builder preview re-renders on
+    // every change, so rapid calls must not each create a chart on the canvas.
+    const token = (body.__radarToken = (body.__radarToken || 0) + 1);
 
     // Chart.js needs the container laid out; defer until it has width.
     const mount = () => {
-      if (!body.isConnected) return;
+      if (!body.isConnected || body.__radarToken !== token) return;   // superseded by a newer render
       if (!body.clientWidth) { requestAnimationFrame(mount); return; }
-      const canvas = document.createElement('canvas');
+      // Atomic: destroy prior instance, clear DOM, then create a fresh canvas + chart.
+      destroyBodyChart(body);
+      body.innerHTML = '';
+      const canvas = document.createElement('canvas');   // no global id — unique per card body
       canvas.style.maxHeight = '270px';
       body.appendChild(canvas);
+      Chart.getChart(canvas)?.destroy();                 // belt-and-suspenders before reuse
 
       const datasets = [{
         label: 'Player',
