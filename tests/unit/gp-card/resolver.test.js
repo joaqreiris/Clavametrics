@@ -191,3 +191,34 @@ describe('aggregateSeries — line uses md_code label', () => {
     expect(s.points.map(p=>p.x)).toContain('MD-1');
   });
 });
+
+describe('aggregateSeries — group by chosen dimension', () => {
+  const withPos = (row, pos) => { row.players = { ...row.players, position: pos }; return row; };
+  const rows = [
+    withPos(makeRow({ playerId:'p1', reportId:'r1', total_distance:10000 }), 'CB'),
+    withPos(makeRow({ playerId:'p2', reportId:'r2', sessionId:'s2', total_distance:12000 }), 'CB'),
+    withPos(makeRow({ playerId:'p3', reportId:'r3', sessionId:'s3', total_distance: 8000 }), 'ST'),
+  ];
+
+  it('table grouped by position aggregates within each position', () => {
+    const config = { viz:'table', scope:{ level:'squad' }, dimensions:[{ id:'position' }],
+                     metrics:[{ id:'total_distance', agg:'total' }] };
+    const [s] = aggregateSeries(rows, new Map(), config, catalog);
+    expect(s.points).toHaveLength(2);
+    expect(s.points.find(p => p.x === 'CB').y).toBe(22000);
+    expect(s.points.find(p => p.x === 'ST').y).toBe(8000);
+  });
+
+  it('table grouped by player_name → one row per player (distinct ids, shared name)', () => {
+    const config = { viz:'table', scope:{ level:'squad' }, dimensions:[{ id:'player_name' }],
+                     metrics:[{ id:'total_distance', agg:'total' }] };
+    const [s] = aggregateSeries(rows, new Map(), config, catalog);
+    expect(s.points).toHaveLength(3);
+  });
+
+  it('no dimensions[] → legacy default (one row per player)', () => {
+    const config = { viz:'table', scope:{ level:'squad' }, metrics:[{ id:'total_distance', agg:'total' }] };
+    const [s] = aggregateSeries(rows, new Map(), config, catalog);
+    expect(s.points).toHaveLength(3);
+  });
+});

@@ -152,3 +152,18 @@ describe('validateCard', () => {
     expect(errs.some(e => e.path.includes('agg'))).toBe(true);
   });
 });
+
+describe('validateCardSchema — dimensions', () => {
+  it('accepts a config with no dimensions (backward compatible)', () => {
+    expect(validateCardSchema(makeConfig())).toHaveLength(0);
+  });
+  it('accepts a known dimension', () => {
+    expect(validateCardSchema(makeConfig({ dimensions: [{ id: 'position' }] }))).toHaveLength(0);
+  });
+  it('rejects an unknown dimension id', () => {
+    expect(validateCardSchema(makeConfig({ dimensions: [{ id: 'shoe_size' }] })).length).toBeGreaterThan(0);
+  });
+  it('rejects more than one dimension', () => {
+    expect(validateCardSchema(makeConfig({ dimensions: [{ id: 'position' }, { id: 'md_code' }] })).length).toBeGreaterThan(0);
+  });
+});

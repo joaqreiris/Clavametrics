@@ -18,16 +18,42 @@
 
   // ── Domain constants (mirrors lib/gp-card/) ────────────────
 
+  // dimMax = how many DIMENSIONS (grouping/axis fields) this viz accepts.
+  // The row/X dimension defaults to player_name in the resolver when none picked.
   const VIZ_TYPES = {
-    kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 1  },
-    bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 2  },
-    line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6  },
-    scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2  },
-    radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8  },
-    ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1  },
-    table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12 },
-    heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12 },
+    kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 1,  dimMax: 0 },
+    bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 2,  dimMax: 1 },
+    line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
+    scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1 },
+    radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 0 },
+    ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1 },
+    table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 1 },
+    heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12, dimMax: 1 },
   };
+
+  // DIMENSIONS — fields you group / label / filter by (no aggregation).
+  // Mirror of the keys the resolver understands (lib/gp-card/resolver.js dimGroup).
+  const DIMENSIONS = [
+    { id:'player_name',  name:'Player name', icon:'ti-user',           group:'Identity' },
+    { id:'position',     name:'Position',    icon:'ti-shirt-sport',    group:'Identity' },
+    { id:'session_date', name:'Date',        icon:'ti-calendar',       group:'Time' },
+    { id:'md_code',      name:'MD code',     icon:'ti-calendar-event', group:'Time' },
+    { id:'microcycle',   name:'Microcycle',  icon:'ti-calendar-week',  group:'Time' },
+    { id:'rival',        name:'Rival',       icon:'ti-ball-football',  group:'Context' },
+  ];
+  const DIM_MAP = new Map(DIMENSIONS.map(d => [d.id, d]));
+  // Mock row labels per dimension — only for the builder's pre-save preview.
+  const DIM_MOCK = {
+    player_name:  ['R. Vega','T. López','I. Barreiro','S. Rivas','M. Paredes'],
+    position:     ['GK','CB','FB','CM','ST'],
+    session_date: ['Mon','Tue','Wed','Thu','Fri'],
+    md_code:      ['MD-3','MD-2','MD-1','MD'],
+    microcycle:   ['MC 44','MC 45','MC 46'],
+    rival:        ['Polvorín','Arenteiro','Ourense','Compostela'],
+  };
+  function dimRowId(S)     { return (S.dimensions && S.dimensions[0]?.id) || 'player_name'; }
+  function dimRowName(S)   { return DIM_MAP.get(dimRowId(S))?.name || 'Player'; }
+  function dimMockLabels(S){ return DIM_MOCK[dimRowId(S)] || DIM_MOCK.player_name; }
   const VIZ_FULLNAME  = { kpi:'KPI', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap' };
   const VIZ_REQ_LBL   = { kpi:'pick 1', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+' };
 
@@ -129,6 +155,7 @@
         const cat = catalogMap.get(m.id) || {};
         return { id:m.id, agg:m.agg, kind:cat.kind||'accum', unit:cat.unit||'', custom:!!cat.is_custom };
       }),
+      dimensions: (S.dimensions || []).map(d => ({ id:d.id })),
       range:      { type: S.range },
       comparison: S.compare === 'none' ? null : { baseline: S.compare },
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels },
@@ -418,7 +445,7 @@
     const p = window.gpState?.datePreset;
     if (p === 'last7') range = 'w7';
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
-    return { type:'bars', metrics:[], scope:'player', compare:'role', range,
+    return { type:'bars', metrics:[], dimensions:[], scope:'player', compare:'role', range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false };
   }
 
@@ -736,6 +763,7 @@
       S.labels  = !!cfg.labels;
       S.title   = cfg.title || '';
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
+      S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id)).map(d => ({ id:d.id }));
     } else if (rawConfig?.schema === 'gp.card/v1') {
       S.type    = rawConfig.viz                  || 'bars';
       S.scope   = rawConfig.scope?.level         || 'player';
@@ -756,10 +784,16 @@
           if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg';
           return m;
         });
+      S.dimensions = (rawConfig.dimensions || []).filter(d => DIM_MAP.has(d.id)).map(d => ({ id:d.id }));
     } else {
       cancelBuild();
       return;
     }
+
+    // clamp dimensions to what this viz accepts (backward-compat: none → default)
+    const _vt = VIZ_TYPES[S.type] || VIZ_TYPES.bars;
+    if (!S.dimensions) S.dimensions = [];
+    if (S.dimensions.length > (_vt.dimMax || 0)) S.dimensions = S.dimensions.slice(0, _vt.dimMax || 0);
 
     const saveBtn = document.getElementById('gpbSave');
     if (saveBtn) saveBtn.textContent = 'Update card';
@@ -920,6 +954,8 @@
     const t = VIZ_TYPES[id];
     if (S.metrics.length > t.max) S.metrics = S.metrics.slice(0, t.max);
     S.metrics.forEach(m => { const cat = catalogMap.get(m.id); if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg'; });
+    if (!S.dimensions) S.dimensions = [];
+    if (S.dimensions.length > (t.dimMax || 0)) S.dimensions = S.dimensions.slice(0, t.dimMax || 0);
     syncAll();
   }
 
@@ -937,6 +973,19 @@
       const cat = catalogMap.get(id);
       S.metrics.push({ id, agg: defaultAgg(cat?.kind || 'accum') });
     }
+    syncAll();
+  }
+
+  function addDimension(id) {
+    if (!S || !DIM_MAP.has(id)) return;
+    pulseNext = true;
+    const dmax = VIZ_TYPES[S.type].dimMax || 0;
+    if (!S.dimensions) S.dimensions = [];
+    const idx = S.dimensions.findIndex(d => d.id === id);
+    if (idx >= 0)            S.dimensions.splice(idx, 1);   // toggle off
+    else if (dmax === 0)     return;                        // viz takes no dimensions
+    else if (dmax === 1)     S.dimensions = [{ id }];       // single → replace
+    else if (S.dimensions.length < dmax) S.dimensions.push({ id });
     syncAll();
   }
 
@@ -996,10 +1045,29 @@
     draftCard.dataset.size = S.size;
   }
 
+  function dimBadge() {
+    if (S.type === 'scatter') return 'color';
+    if (S.type === 'table')   return 'row';
+    return 'X';   // bars / line / ranking / heatmap → category axis
+  }
+
   function renderMetrics() {
     if (!S) return;
     const wrap = document.getElementById('gpbMetrics');
-    wrap.innerHTML = S.metrics.map((m, i) => {
+    if (!S.dimensions) S.dimensions = [];
+    const dimsHtml = S.dimensions.map(d => {
+      const def = DIM_MAP.get(d.id);
+      if (!def) return '';
+      return `<div class="es-field is-dim" data-dim="${esc(d.id)}">
+        <span class="ftype dim">${dimBadge()}</span>
+        <div class="fnm">
+          <div class="t">${esc(def.name)}</div>
+          <div class="s"><i class="ti ti-dimensions" style="font-size:11px;opacity:.6"></i> dimension</div>
+        </div>
+        <button class="frm" data-rmdim="${esc(d.id)}"><i class="ti ti-x"></i></button>
+      </div>`;
+    }).join('');
+    wrap.innerHTML = dimsHtml + S.metrics.map((m, i) => {
       const cat = catalogMap.get(m.id);
       if (!cat) return '';
       const role = S.type === 'scatter' ? (i===0?'X':'Y') : (i+1);
@@ -1020,6 +1088,7 @@
     }).join('');
 
     wrap.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => addMetric(b.dataset.rm));
+    wrap.querySelectorAll('[data-rmdim]').forEach(b => b.onclick = () => addDimension(b.dataset.rmdim));
     wrap.querySelectorAll('[data-agg-for]').forEach(b => {
       b.onclick = () => {
         popEl.dataset.field = b.dataset.aggFor;
@@ -1029,9 +1098,9 @@
       };
     });
 
-    // reorder by drag
-    wrap.querySelectorAll('.es-field').forEach((el, i) => {
-      el.addEventListener('dragstart', e => { e.stopPropagation(); reorderFrom = i; el.classList.add('is-dragging'); e.dataTransfer.effectAllowed = 'move'; });
+    // reorder by drag (metric fields only — dimension chips aren't reorderable)
+    wrap.querySelectorAll('.es-field:not(.is-dim)').forEach(el => {
+      el.addEventListener('dragstart', e => { e.stopPropagation(); reorderFrom = +el.dataset.idx; el.classList.add('is-dragging'); e.dataTransfer.effectAllowed = 'move'; });
       el.addEventListener('dragend',   () => { el.classList.remove('is-dragging'); reorderFrom = null; wrap.querySelectorAll('.drop-before').forEach(n=>n.classList.remove('drop-before')); });
       el.addEventListener('dragover',  e => { if (reorderFrom===null) return; e.preventDefault(); wrap.querySelectorAll('.drop-before').forEach(n=>n.classList.remove('drop-before')); el.classList.add('drop-before'); });
       el.addEventListener('drop',      e => {
@@ -1394,6 +1463,7 @@
     const axes  = config.style?.axes !== false;
     const legend= config.style?.legend !== false;
     const labels= !!config.style?.dataLabels;
+    const rowDimName = config.dimensions?.[0] ? (DIM_MAP.get(config.dimensions[0].id)?.name || 'Group') : 'Player';
     const s0    = series[0];
     const s1    = series[1];
 
@@ -1490,7 +1560,7 @@
       case 'table': {
         const allX = [...new Set(series.flatMap(s => s.points.map(p => p.x)))];
         return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr>
-          <th class="pc">Player</th>
+          <th class="pc">${esc(rowDimName)}</th>
           ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
         </tr></thead><tbody>${allX.map(x => `<tr>
           <td class="pc" style="padding:8px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(x)}</td>
@@ -1503,7 +1573,7 @@
         const cls = ['vlow','mlow','low','neu','warn','mhigh','high'];
         // compute z-scores per series
         return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr>
-          <th class="pc">Player</th>
+          <th class="pc">${esc(rowDimName)}</th>
           ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
         </tr></thead><tbody>${allX.map(x => `<tr>
           <td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(x)}</td>
@@ -1545,13 +1615,16 @@
           ${cmp ? `<div class="t"><span class="d up"><i class="ti ti-arrow-up-right"></i>+8%</span> · z = +0.6</div>` : `<div class="t">${agg?.name||''} · ${rangeName}</div>`}`;
       }
       case 'ranking': {
-        const rows = [['R. Vega · #7',96],['T. López · #4',82],['I. Barreiro · #18',74],['S. Rivas · #6',61],['M. Paredes · #8',47]];
+        const rl = dimMockLabels(S);
+        const ws = [96,82,74,61,47,33,28];
+        const rows = rl.map((nm,i) => [nm, ws[i] ?? 30]);
         return `<div class="gp-rank">${rows.map((r,i)=>`<div class="gp-rank-row"><span class="ax">${i+1}</span><span class="gp-rank-bar"><span class="gp-rank-fill ${i<1?'':i<3?'med':'low'}" style="width:${r[1]}%">${esc(r[0])}</span></span><span style="text-align:right;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg)">${labels?fmt(Math.round(s0*r[1]/100)):''}</span></div>`).join('')}</div>`;
       }
       case 'bars': {
         const hs = [58,72,90,46,80,64,98];
         const m1 = ms[1];
-        return `<div class="gp-bars">${hs.map((h,i)=>`<div class="gr"><div class="stack">${m1?`<div class="b prev" style="height:${h-12}%"></div>`:''}<div class="b curr" style="height:${h}%"></div></div>${axes?`<span class="lbl">${['Vega','López','Barr','Rivas','Pdes','Sosa','Mtz'][i]}</span>`:''}</div>`).join('')}</div>
+        const bl = dimMockLabels(S);
+        return `<div class="gp-bars">${hs.map((h,i)=>`<div class="gr"><div class="stack">${m1?`<div class="b prev" style="height:${h-12}%"></div>`:''}<div class="b curr" style="height:${h}%"></div></div>${axes?`<span class="lbl">${esc((bl[i]||'').split(' ')[0])}</span>`:''}</div>`).join('')}</div>
           ${legend?`<div style="display:flex;gap:14px;margin-top:10px;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">
             <span style="display:flex;align-items:center;gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--cm-accent)"></i>${esc(m0.name)}</span>
             ${m1?`<span style="display:flex;align-items:center;gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--cm-bg-sunk);border:1px solid var(--cm-border)"></i>${esc(m1.name)}</span>`:''}</div>`:''}`;
@@ -1584,16 +1657,16 @@
       }
       case 'table': {
         const cols = ms.slice(0,5);
-        const players = ['R. Vega','T. López','I. Barreiro','S. Rivas','M. Paredes'];
-        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr><th class="pc">Player</th>${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
-          <tbody>${players.map((p,r)=>`<tr><td class="pc" style="padding:8px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>`<td>${fmt(Math.round(metSample(m)*(0.8+.08*((r+c)%4))))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        const rowsL = dimMockLabels(S);
+        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr><th class="pc">${esc(dimRowName(S))}</th>${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
+          <tbody>${rowsL.map((p,r)=>`<tr><td class="pc" style="padding:8px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>`<td>${fmt(Math.round(metSample(m)*(0.8+.08*((r+c)%4))))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
       }
       case 'heatmap': {
         const cols = ms.slice(0,6);
-        const players = ['R. Vega','T. López','I. Barreiro','S. Rivas','M. Paredes'];
+        const rowsL = dimMockLabels(S);
         const cls = ['vlow','mlow','low','neu','warn','mhigh','high'];
-        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr><th class="pc">Player</th>${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
-          <tbody>${players.map((p,r)=>`<tr><td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>{const z=(Math.sin(r*1.6+c*.9)*2);const ci=Math.max(0,Math.min(6,Math.round(z+3)));return `<td><span class="gp-zc ${cls[ci]}">${labels?(z>=0?'+':'')+z.toFixed(1):''}</span></td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
+        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr><th class="pc">${esc(dimRowName(S))}</th>${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
+          <tbody>${rowsL.map((p,r)=>`<tr><td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>{const z=(Math.sin(r*1.6+c*.9)*2);const ci=Math.max(0,Math.min(6,Math.round(z+3)));return `<td><span class="gp-zc ${cls[ci]}">${labels?(z>=0?'+':'')+z.toFixed(1):''}</span></td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
       }
       default: return '';
     }
@@ -1701,16 +1774,43 @@
     if (!S) return;
     const t    = VIZ_TYPES[S.type];
     const full = S.metrics.length >= t.max && t.max > 1;
+    const dmax = t.dimMax || 0;
+    // like measures: a single-slot dimension is replaceable (don't disable the others)
+    const dimFull = S.dimensions && S.dimensions.length >= dmax && dmax > 1;
     let html = '', shown = 0;
+
+    // ── DIMENSIONS section (only for vizzes that group by a dimension) ──
+    if (dmax > 0) {
+      const dims = DIMENSIONS.filter(d => !q || d.name.toLowerCase().includes(q) || d.id.includes(q));
+      if (dims.length) {
+        shown += dims.length;
+        html += `<div class="es-fly-grp dim">Dimensiones</div>`;
+        dims.forEach(d => {
+          const on  = (S.dimensions || []).some(x => x.id === d.id);
+          const dis = !on && dimFull;
+          html += `<div class="es-fly-row dim-row ${on?'is-on':''} ${dis?'is-disabled':''}" data-did="${esc(d.id)}">
+            <span class="ic"><i class="ti ${d.icon}"></i></span>
+            <span class="nm">
+              <span class="t">${esc(d.name)}</span>
+              <span class="s">${esc(d.group)}</span>
+            </span>
+            <span class="kind dim">DIM</span>
+          </div>`;
+        });
+      }
+    }
+
+    // ── MEASURES section (the gps_metric_definitions catalog) ──
+    let measuresHtml = '';
     catalogGroups.forEach(grp => {
       const items = grp.items.filter(m => !q || m.name.toLowerCase().includes(q) || m.id.includes(q));
       if (!items.length) return;
       shown += items.length;
-      html += `<div class="es-fly-grp ${grp.custom?'cust':''}">${esc(grp.g)}</div>`;
+      measuresHtml += `<div class="es-fly-grp ${grp.custom?'cust':''}">${esc(grp.g)}</div>`;
       items.forEach(m => {
         const on  = S.metrics.some(f => f.id === m.id);
         const dis = !on && full;
-        html += `<div class="es-fly-row ${on?'is-on':''} ${dis?'is-disabled':''}" data-mid="${esc(m.id)}" draggable="true">
+        measuresHtml += `<div class="es-fly-row ${on?'is-on':''} ${dis?'is-disabled':''}" data-mid="${esc(m.id)}" draggable="true">
           <span class="ic"><i class="ti ${metIcon(m)}"></i></span>
           <span class="nm">
             <span class="t">${esc(m.name)}${m.is_custom?' <span style="font-size:9px;color:var(--cm-violet,#7C3AED)">EAV</span>':''}</span>
@@ -1720,8 +1820,21 @@
         </div>`;
       });
     });
+    if (measuresHtml) html += `<div class="es-fly-grp meas">Medidas</div>` + measuresHtml;
+
     const body = document.getElementById('gpbFlyBody');
     body.innerHTML = shown ? html : `<div style="padding:22px;text-align:center;color:var(--cm-fg-muted);font:500 12px/1.5 var(--cm-font-sans)">No fields match "${esc(q)}"</div>`;
+
+    // dimension rows → toggle dimension (click only, no drag)
+    body.querySelectorAll('[data-did]').forEach(row => {
+      row.onclick = () => {
+        if (row.classList.contains('is-disabled')) return;
+        addDimension(row.dataset.did);
+        renderFlyBody(document.getElementById('gpbFlySearch').value.trim().toLowerCase());
+        if (dmax === 1) closeFly();
+      };
+    });
+
     body.querySelectorAll('[data-mid]').forEach(row => {
       row.onclick = () => {
         if (row.classList.contains('is-disabled')) return;
@@ -1875,6 +1988,7 @@
     resolveAndRenderCard,
     radarChartData,   // exposed for tests
     mountRadarChart,  // exposed for tests
+    currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
 
