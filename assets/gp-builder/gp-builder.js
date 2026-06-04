@@ -165,7 +165,7 @@
       dimensions: (S.dimensions || []).map(d => ({ id:d.id })),
       range:      { type: S.range },
       comparison: S.compare === 'none' ? null : { baseline: S.compare },
-      style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels },
+      style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points },
     };
   }
 
@@ -350,6 +350,14 @@
                 <span class="tx"><span class="t">Data labels</span><span class="s">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>
+              <div class="es-toggle" data-only="line">
+                <span class="tx"><span class="t">Points</span><span class="s">Mark each vertex (line)</span></span>
+                <button class="es-sw-t is-on" data-toggle="points"></button>
+              </div>
+              <div class="es-toggle" data-only="line">
+                <span class="tx"><span class="t">Area fill</span><span class="s">Soft fill under the line</span></span>
+                <button class="es-sw-t" data-toggle="area"></button>
+              </div>
             </div>
           </div>
         </div>
@@ -453,7 +461,8 @@
     if (p === 'last7') range = 'w7';
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
     return { type:'bars', metrics:[], dimensions:[], scope:'player', compare:'role', range,
-             size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false };
+             size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
+             points:true, area:false };
   }
 
   function startBuild() {
@@ -775,6 +784,8 @@
       S.axes    = cfg.axes !== false;
       S.legend  = cfg.legend !== false;
       S.labels  = !!cfg.labels;
+      S.points  = cfg.points !== false;
+      S.area    = !!cfg.area;
       S.title   = cfg.title || '';
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
       S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id)).map(d => ({ id:d.id }));
@@ -789,6 +800,8 @@
       S.axes    = rawConfig.style?.axes   !== false;
       S.legend  = rawConfig.style?.legend !== false;
       S.labels  = !!rawConfig.style?.dataLabels;
+      S.points  = rawConfig.style?.points !== false;
+      S.area    = !!rawConfig.style?.area;
       S.title   = rawConfig.title || '';
       S.metrics = (rawConfig.metrics || [])
         .map(m => ({ id: m.id, agg: m.agg }))
@@ -1040,6 +1053,10 @@
     panelEl.querySelectorAll('[data-toggle]').forEach(b =>
       b.classList.toggle('is-on', !!S[b.dataset.toggle])
     );
+    // line-only style options (points / area fill) are hidden for other viz types
+    panelEl.querySelectorAll('[data-only="line"]').forEach(el =>
+      el.style.display = (S.type === 'line') ? '' : 'none'
+    );
     if (draftCard) draftCard.style.setProperty('--cm-accent', S.color);
   }
 
@@ -1170,6 +1187,7 @@
     body.className = bodyClass(S.type);
     if (S.type === 'radar') mountRadarPreview(body, S);
     else if (S.type === 'bars') mountBarsPreview(body, S);
+    else if (S.type === 'line') mountLinePreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -1283,6 +1301,23 @@
         mountRadarChart(body, config, series, baselineMap);
       } else if (config.viz === 'bars') {
         mountBarsChart(body, config, series);
+      } else if (config.viz === 'line') {
+        // Single-metric, player-scope line vs role → append a flat dashed reference
+        // line at the role baseline (same fetch the radar uses). Multi-metric is left
+        // un-referenced (mixed units would be noise); match/md aren't time-series friendly.
+        let lineSeries = series;
+        if (config.comparison?.baseline === 'role' && config.scope.level === 'player'
+            && fetchRoleBaseline && series.length === 1 && series[0].points.length) {
+          try {
+            const bmap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
+            const bval = bmap?.get(series[0].label);
+            if (bval != null && bval > 0) lineSeries = [series[0], {
+              label: '__baseline', name: 'Role baseline', unit: series[0].unit, dashed: true,
+              points: series[0].points.map(p => ({ x: p.x, y: bval })),
+            }];
+          } catch (e) { console.warn('gpb line baseline:', e); }
+        }
+        mountLineChart(body, config, lineSeries);
       } else {
         destroyBodyChart(body);
         body.innerHTML = renderTypeFromDataset(config, series);
@@ -1664,6 +1699,203 @@
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
     };
     mountBarsChart(body, cfg, series);
+  }
+
+  // ── Line / temporal (Chart.js) — "GPS Chart Reference §2" professional look ──
+  const _LINE_SIZE_H = { sm: 160, md: 220, lg: 280, full: 330 };
+
+  /** Per-series colors: 1→accent, 2+→categorical palette (accent, info, violet, warning). */
+  function lineColors(config, n) {
+    const accent = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    if (n <= 1) return [accent];
+    const pal = PALETTES.find(p => p.id === config.style?.palette);
+    const base = (pal && pal.id !== 'pitch')
+      ? [accent, ...pal.cols]                               // honor a non-default style.palette
+      : [accent, _cssVar('--cm-info', '#2563EB'), _cssVar('--cm-violet', '#7C3AED'), _cssVar('--cm-warning', '#D97706')];
+    return Array.from({ length: n }, (_, i) => base[i % base.length]);
+  }
+
+  /** Chronological order for time dimensions; keeps insertion order if labels aren't time-like. */
+  function lineSortCats(cats) {
+    const key = c => {
+      const s = String(c); let m;
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s;                          // ISO date → lexical
+      if ((m = s.match(/^MD(?:[\s-]?(\d+))?$/i))) return m[1] ? -(+m[1]) : 0;  // MD-3 < MD-2 < … < MD
+      if ((m = s.match(/(-?\d+(?:\.\d+)?)/))) return +m[1];                // "MC 45" → 45
+      return null;
+    };
+    const keyed = cats.map(c => [c, key(c)]);
+    if (keyed.some(([, k]) => k === null)) return cats;                    // unknown → don't reorder
+    return keyed.slice().sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0)).map(x => x[0]);
+  }
+
+  /** Draws fmt(value) above each point (measure series only). No plugin dependency. */
+  const _lineLabelPlugin = {
+    id: 'gpbLineLabels',
+    afterDatasetsDraw(chart, _args, opts) {
+      if (!opts || !opts.show) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 9px Geist, Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      chart.data.datasets.forEach((ds, di) => {
+        if (ds._dashed) return;                            // never label the reference line
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        ctx.fillStyle = ds.borderColor || '#6B7280';
+        meta.data.forEach((pt, i) => {
+          const v = ds.data[i];
+          if (v == null) return;
+          ctx.fillText(fmt(Math.round(v * 10) / 10), pt.x, pt.y - 6);
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  /**
+   * Pure: (config, series) → Chart.js line payload (X = temporal dimension, series = measures).
+   * A series flagged `dashed:true` renders as a grey dotted reference line, no points, no fill,
+   * and is skipped in palette indexing.
+   */
+  function lineChartData(config, series) {
+    const size     = config.style?.size || 'md';
+    const showAxes = config.style?.axes   !== false;
+    const showLeg  = config.style?.legend !== false;
+    const showLbl  = !!config.style?.dataLabels;        // values over points — OFF by default
+    const showArea = !!config.style?.area;
+    const showPts  = config.style?.points !== false;    // points ON by default
+    const ss       = (series || []).filter(s => s.points && s.points.length);
+
+    // X categories = the temporal dimension values, chronologically ordered
+    const catsRaw = [];
+    ss.forEach(s => s.points.forEach(p => { if (!catsRaw.includes(p.x)) catsRaw.push(p.x); }));
+    const cats = lineSortCats(catsRaw);
+
+    const measureCount = ss.filter(s => !s.dashed).length;
+    const colors = lineColors(config, measureCount);
+    let ci = 0;
+    const datasets = ss.map(s => {
+      const isRef = !!s.dashed;
+      const col   = isRef ? 'rgba(148,163,184,0.9)' : colors[ci++];
+      return {
+        label: s.name || s.label,
+        unit:  s.unit || '',
+        data:  cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; }),
+        borderColor: col,
+        backgroundColor: (!isRef && showArea) ? col + '1F' : 'transparent',   // fill-opacity ~0.12
+        borderWidth: isRef ? 1.6 : 2.4,
+        borderDash: isRef ? [5, 4] : [],
+        fill: (!isRef && showArea) ? 'origin' : false,
+        tension: 0.25,
+        pointRadius: isRef ? 0 : (showPts ? 3.5 : 0),
+        pointHoverRadius: isRef ? 0 : 5.5,
+        pointBackgroundColor: col, pointBorderColor: '#fff', pointBorderWidth: 1.4,
+        spanGaps: true,
+        _dashed: isRef,
+      };
+    });
+
+    const maxVal = Math.max(0, ...datasets.flatMap(d => d.data.filter(v => v != null)));
+    const ticks  = size === 'sm' ? 4 : 5;
+    const { max, step } = niceScale(maxVal, ticks);
+
+    return { cats, datasets, max, step, showAxes, showLeg, showLbl, height: _LINE_SIZE_H[size] || 220 };
+  }
+
+  /** Mounts (or re-mounts) a Chart.js line chart into `body`. Same renderer for preview + saved card. */
+  function mountLineChart(body, config, series) {
+    const d = lineChartData(config, series);
+    if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    const token = (body.__lineToken = (body.__lineToken || 0) + 1);
+    const mount = () => {
+      if (!body.isConnected || body.__lineToken !== token) return;   // superseded by a newer render
+      if (!body.clientWidth) { requestAnimationFrame(mount); return; }
+      destroyBodyChart(body);
+      body.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      const canvas = document.createElement('canvas');   // no global id — unique per card body
+      wrap.appendChild(canvas);
+      body.appendChild(wrap);
+      Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
+
+      body.__chart = new Chart(canvas, {
+        type: 'line',
+        data: { labels: d.cats, datasets: d.datasets },
+        plugins: [_lineLabelPlugin],
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 320 },
+          layout: { padding: { top: d.showLbl ? 16 : 6, right: 8 } },
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: {
+              display: d.showLeg, position: 'bottom',
+              labels: { boxWidth: 20, boxHeight: 0, padding: 14, usePointStyle: true, pointStyle: 'line',
+                        font: { size: 11 },
+                        generateLabels: ch => ch.data.datasets.map((ds, i) => ({
+                          text: ds.unit ? `${ds.label} (${ds.unit})` : ds.label,
+                          strokeStyle: ds.borderColor, fillStyle: ds.borderColor,
+                          lineWidth: 2, lineDash: ds._dashed ? [4, 3] : [],
+                          hidden: !ch.isDatasetVisible(i), datasetIndex: i,
+                        })) },
+              onClick: (e, item, legend) => {
+                const ci = legend.chart; ci.setDatasetVisibility(item.datasetIndex, !ci.isDatasetVisible(item.datasetIndex)); ci.update();
+              },
+            },
+            tooltip: {
+              callbacks: {
+                title: items => items.length ? String(items[0].label) : '',
+                label: ctx => `${ctx.dataset.label}: ${fmt(Math.round(ctx.parsed.y * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`,
+              },
+            },
+            gpbLineLabels: { show: d.showLbl },
+          },
+          scales: {
+            x: {
+              display: d.showAxes,
+              grid: { display: false, drawTicks: false },
+              ticks: { font: { size: 10.5 }, color: '#6B7280', maxRotation: 0, autoSkip: true },
+              border: { display: d.showAxes },
+            },
+            y: {
+              display: d.showAxes, beginAtZero: true, max: d.max,
+              grid: { display: d.showAxes, color: 'rgba(148,163,184,0.18)', drawTicks: false },
+              border: { display: false },
+              ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
+            },
+          },
+        },
+      });
+    };
+    mount();
+  }
+
+  /** Builder preview line — same Chart.js renderer, mock per-period values. */
+  function mountLinePreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    if (!ms.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    // X = the chosen temporal dimension; default to microcycles when none picked yet
+    const cats = (S.dimensions && S.dimensions.length) ? dimMockLabels(S) : DIM_MOCK.microcycle;
+    const series = ms.map((m, idx) => ({ label: m.id, name: m.name, unit: m.unit,
+      points: cats.map((c, r) => ({ x: c, y: Math.round(metSample(m) * (0.5 + 0.42 * Math.abs(Math.sin(r * 1.1 + idx + 1)))) })) }));
+    // single-metric + role comparison → flat dashed reference line, mirrors the saved card
+    if (S.compare === 'role' && ms.length === 1) {
+      const base = Math.round(metSample(ms[0]) * 0.7);
+      series.push({ label: '__baseline', name: 'Role baseline', unit: ms[0].unit, dashed: true,
+        points: cats.map(c => ({ x: c, y: base })) });
+    }
+    const cfg = {
+      viz: 'line',
+      dimensions: S.dimensions,
+      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points },
+    };
+    mountLineChart(body, cfg, series);
   }
 
   /**
@@ -2183,6 +2415,8 @@
     S.axes    = config.style?.axes    !== false;
     S.legend  = config.style?.legend  !== false;
     S.labels  = !!config.style?.dataLabels;
+    S.points  = config.style?.points  !== false;
+    S.area    = !!config.style?.area;
     S.title   = config.title || '';
     S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg }));
 
@@ -2211,6 +2445,8 @@
     mountRadarChart,  // exposed for tests
     barsChartData,    // exposed for tests
     mountBarsChart,   // exposed for tests
+    lineChartData,    // exposed for tests
+    mountLineChart,   // exposed for tests
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
