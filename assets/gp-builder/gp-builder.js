@@ -1359,9 +1359,19 @@
     const showLeg  = config.style?.legend !== false;
     const showLbl  = !!config.style?.dataLabels;
     const hasBaseline  = !!config.comparison?.baseline;
-    const baselineName = hasBaseline
-      ? (COMPARES.find(c => c.id === config.comparison.baseline)?.name || 'Baseline')
-      : null;
+    // Readable names so the 100% reference is obvious at a glance:
+    //   ring → gray legend label ("Pico de partido (100%)")
+    //   of   → tooltip suffix ("78% del pico")
+    const BASELINE_LABELS = {
+      role:  { ring: 'Media del puesto (100%)', of: 'de la media' },
+      match: { ring: 'Pico de partido (100%)',  of: 'del pico' },
+      md:    { ring: 'Mismo MD (100%)',          of: 'del MD' },
+    };
+    const baselineInfo = hasBaseline ? BASELINE_LABELS[config.comparison.baseline] : null;
+    const baselineName = baselineInfo
+      ? baselineInfo.ring
+      : (hasBaseline ? (COMPARES.find(c => c.id === config.comparison.baseline)?.name || 'Baseline') : null);
+    const baselineOf   = baselineInfo ? baselineInfo.of : 'del baseline';
 
     const ms        = (series || []).filter(s => s.points && s.points.length);
     const labels    = ms.map(s => (s.name || s.label || '').split(' ').slice(0, 2).join(' '));
@@ -1375,7 +1385,7 @@
     const realLabels = realVals.map((v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : ''));
     const rMax       = Math.ceil(Math.max(120, ...(pct.length ? pct : [120])) / 30) * 30;
 
-    return { labels, pct, realLabels, units, realVals, refs, hasBaseline, baselineName, rMax, color, showAxes, showLeg, showLbl };
+    return { labels, pct, realLabels, units, realVals, refs, hasBaseline, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
   }
 
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
@@ -1401,7 +1411,7 @@
       Chart.getChart(canvas)?.destroy();                 // belt-and-suspenders before reuse
 
       const datasets = [{
-        label: 'Player',
+        label: 'Jugador',
         data: d.pct,
         borderColor: d.color,
         backgroundColor: d.color + '26',
@@ -1428,9 +1438,12 @@
           plugins: {
             legend: { display: d.showLeg && d.hasBaseline, position: 'bottom',
                       labels: { boxWidth: 10, padding: 12, font: { size: 10 }, usePointStyle: true } },
-            tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0
-              ? `${ctx.chart.data.labels[ctx.dataIndex]}: ${d.realLabels[ctx.dataIndex]} (${ctx.raw}%)`
-              : `${ctx.dataset.label}: ${ctx.raw}%` } },
+            tooltip: { callbacks: { label: ctx => {
+              if (ctx.datasetIndex !== 0) return `${ctx.dataset.label}: ${ctx.raw}%`;
+              // Real value + % of baseline, e.g. "HSR: 640 m · 78% del pico"
+              const lbl = ctx.chart.data.labels[ctx.dataIndex], real = d.realLabels[ctx.dataIndex];
+              return d.hasBaseline ? `${lbl}: ${real} · ${ctx.raw}% ${d.baselineOf}` : `${lbl}: ${real}`;
+            } } },
             gpbRadarLabels: { show: d.showLbl, labels: d.realLabels, color: d.color },
           },
           scales: {
