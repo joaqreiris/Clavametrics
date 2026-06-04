@@ -1200,6 +1200,8 @@
     else if (S.type === 'bars') mountBarsPreview(body, S);
     else if (S.type === 'line') mountLinePreview(body, S);
     else if (S.type === 'scatter') mountScatterPreview(body, S);
+    else if (S.type === 'kpi') mountKpiPreview(body, S);
+    else if (S.type === 'ranking') mountRankingPreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -1380,6 +1382,35 @@
         mountLineChart(body, config, lineSeries);
       } else if (config.viz === 'scatter') {
         mountScatterChart(body, config, series);
+      } else if (config.viz === 'kpi') {
+        // Delta vs the chosen comparison: role (squad/player) or match peak (player).
+        let baselineVal = null;
+        const cmp = config.comparison?.baseline;
+        if (cmp && config.metrics?.[0]) {
+          try {
+            if (cmp === 'role' && fetchRoleBaseline) {
+              const bmap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
+              baselineVal = bmap?.get(config.metrics[0].id) ?? null;
+            } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
+              const r = await window.getMatchBaseline(ctx.playerId, config.metrics[0].id, _clubId, {});
+              baselineVal = (r && r.baseline != null) ? r.baseline : null;
+            }
+          } catch (e) { console.warn('gpb kpi baseline:', e); }
+        }
+        if (stale()) return;
+        // Sparkline = the same metric re-aggregated over time (real resolver, line grouping).
+        let sparkSeries = null;
+        try {
+          const trend = aggregateSeries(rows, eavMap, { ...config, viz: 'line', dimensions: [] }, catalogMap);
+          const tp = trend?.[0]?.points || [];
+          if (tp.length >= 2) {
+            const byX = new Map(tp.map(p => [p.x, p]));
+            sparkSeries = lineSortCats(tp.map(p => p.x)).map(c => byX.get(c)).filter(Boolean);
+          }
+        } catch (e) { /* sparkline is optional — never break the KPI */ }
+        mountKpiCard(body, config, series, { baselineVal, sparkSeries });
+      } else if (config.viz === 'ranking') {
+        mountRankingCard(body, config, series);
       } else {
         destroyBodyChart(body);
         body.innerHTML = renderTypeFromDataset(config, series);
@@ -2235,6 +2266,185 @@
     mountScatterChart(body, cfg, series);
   }
 
+  // ── KPI + Ranking (HTML/CSS, no Chart.js except the KPI sparkline) ──
+  // "GPS Chart Reference §4" look. Both share one renderer for preview + saved card.
+  // Delta/rank-change assume higher = better (no per-metric direction in the catalog).
+
+  /** Small absolutely-positioned "datos de ejemplo" badge for the no-backend previews. */
+  function _appendExampleBadge(el) {
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    const badge = document.createElement('div');
+    badge.textContent = 'datos de ejemplo';
+    badge.style.cssText = 'position:absolute;top:4px;right:6px;z-index:2;font:600 9px/1 var(--cm-font-sans,sans-serif);'
+      + 'color:#9CA3AF;background:rgba(148,163,184,0.14);padding:3px 7px;border-radius:999px;pointer-events:none';
+    el.appendChild(badge);
+  }
+
+  /** Pure: (config, series, baselineVal) → KPI view model (value, label, delta). */
+  function kpiCardData(config, series, baselineVal) {
+    const s0      = series && series[0];
+    const value   = s0?.points?.[0]?.y ?? 0;
+    const unit    = s0?.unit || '';
+    const name    = s0?.name || '';
+    const aggName = AGG[config.metrics?.[0]?.agg]?.name || '';
+    const scope   = config.scope?.level || '';
+    const cat     = catalogMap.get(config.metrics?.[0]?.id);
+    const icon    = cat ? metIcon(cat) : VIZ_TYPES.kpi.icon;
+    const cmpId   = config.comparison?.baseline || null;
+    const cmpName = cmpId ? (COMPARES.find(c => c.id === cmpId)?.name || '') : '';
+
+    let delta = null;
+    if (baselineVal != null && baselineVal > 0 && isFinite(value)) {
+      const diff = value - baselineVal;
+      delta = { dir: diff >= 0 ? 'up' : 'down', pct: (diff / baselineVal) * 100, abs: diff };
+    }
+    return { value, unit, name, aggName, scope, icon, cmpName, delta };
+  }
+
+  /** KPI markup. `spark` adds an empty sparkline canvas (mounted by mountKpiCard). */
+  function kpiHtml(d, spark) {
+    const lLabel = [d.aggName, d.scope].filter(Boolean).join(' · ');
+    let tLine = '';
+    if (d.delta) {
+      const sign = d.delta.dir === 'up' ? '+' : '−';
+      tLine = `<div class="t"><span class="d ${d.delta.dir}"><i class="ti ti-arrow-${d.delta.dir}-right"></i>${sign}${Math.abs(d.delta.pct).toFixed(0)}%</span>${d.cmpName ? ' ' + esc(d.cmpName) : ''}</div>`;
+    } else if (d.cmpName) {
+      tLine = `<div class="t">${esc(d.cmpName)}</div>`;
+    } else if (d.name) {
+      tLine = `<div class="t">${esc(d.name)}</div>`;
+    }
+    const sparkHtml = spark ? `<div class="gp-kpi-spark" style="margin-top:12px;height:36px;position:relative"><canvas></canvas></div>` : '';
+    return `<div class="l"><i class="ti ${d.icon}"></i>${esc(lLabel)}</div>
+      <div class="v">${fmt(Math.round(d.value * 10) / 10)}${d.unit ? ` <sub>${esc(d.unit)}</sub>` : ''}</div>
+      ${tLine}${sparkHtml}`;
+  }
+
+  /** Mounts a KPI card (+ optional sparkline). opts: { baselineVal, sparkSeries, example }. */
+  function mountKpiCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const d = kpiCardData(config, series, opts.baselineVal);
+    const spark = Array.isArray(opts.sparkSeries) && opts.sparkSeries.length >= 2;
+    body.innerHTML = kpiHtml(d, spark);
+    if (opts.example) _appendExampleBadge(body);
+    if (!spark || typeof Chart === 'undefined') return;
+
+    const color  = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    const ys     = opts.sparkSeries.map(p => (typeof p === 'number' ? p : p.y));
+    const token  = (body.__kpiToken = (body.__kpiToken || 0) + 1);
+    const mount = () => {
+      const canvas = body.querySelector('.gp-kpi-spark canvas');
+      if (!canvas || !body.isConnected || body.__kpiToken !== token) return;   // superseded
+      if (!canvas.clientWidth) { requestAnimationFrame(mount); return; }
+      Chart.getChart(canvas)?.destroy();
+      body.__chart = new Chart(canvas, {
+        type: 'line',
+        data: { labels: ys.map(() => ''), datasets: [{
+          data: ys, borderColor: color, borderWidth: 2,
+          backgroundColor: color + '1A', fill: true,
+          pointRadius: 0, pointHoverRadius: 0, tension: 0.35,
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: { x: { display: false }, y: { display: false, grace: '12%' } },
+        },
+      });
+    };
+    mount();
+  }
+
+  /** Pure: (config, series) → ranking view model (sorted rows + bar widths). */
+  function rankingCardData(config, series) {
+    const size    = config.style?.size || 'md';
+    const color   = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    const showVal = !!config.style?.dataLabels || size !== 'sm';   // OFF only in S w/o toggle (mirrors bars)
+    const unit    = series?.[0]?.unit || '';
+    const pts     = [...(series?.[0]?.points || [])].sort((a, b) => b.y - a.y);
+    const max     = Math.max(...pts.map(p => p.y), 1);
+    const rows = pts.map((p, i) => ({
+      rank: i + 1, name: String(p.x), value: p.y,
+      pct: Math.max(3, Math.round(p.y / max * 100)),
+      change: (p.change == null ? null : p.change),    // +n = climbed, −n = dropped (preview only)
+    }));
+    return { rows, color, showVal, unit };
+  }
+
+  /** Optional rank-change badge (▲/▼ + positions). */
+  function _rankChangeHtml(change) {
+    if (change == null || change === 0) return '';
+    const up = change > 0;
+    return `<span style="margin-left:6px;font:600 10px/1 var(--cm-font-mono);color:${up ? 'var(--cm-success)' : 'var(--cm-danger)'}">`
+      + `<i class="ti ti-arrow-${up ? 'up' : 'down'}" style="font-size:10px"></i>${Math.abs(change)}</span>`;
+  }
+
+  /** Ranking markup — sorted desc, proportional bars in style.color, value on the right. */
+  function rankingHtml(d) {
+    return `<div class="gp-rank">${d.rows.map(r => `
+      <div class="gp-rank-row">
+        <span class="ax">${r.rank}</span>
+        <span class="gp-rank-bar"><span class="gp-rank-fill" style="width:${r.pct}%;background:${d.color}">${esc(r.name)}</span></span>
+        <span class="gp-rank-v">${d.showVal ? esc(fmt(Math.round(r.value * 10) / 10)) + (d.unit ? ' ' + esc(d.unit) : '') : ''}${_rankChangeHtml(r.change)}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  /** Mounts a ranking card. opts: { example }. */
+  function mountRankingCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const d = rankingCardData(config, series);
+    if (!d.rows.length) { body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    body.innerHTML = rankingHtml(d);
+    if (opts.example) _appendExampleBadge(body);
+  }
+
+  /** Builder preview KPI — real data when a backend is present, else a badged mock. */
+  function mountKpiPreview(body, S) {
+    const m0 = catalogMap.get(S.metrics[0]?.id);
+    if (!m0) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    mountKpiMockPreview(body, S);
+  }
+
+  function mountKpiMockPreview(body, S) {
+    const m0   = catalogMap.get(S.metrics[0].id);
+    const base = metSample(m0);
+    const series = [{ label: m0.id, name: m0.name, unit: m0.unit, points: [{ x: 'all', y: Math.round(base * 1.04) }] }];
+    const config = {
+      viz: 'kpi', metrics: S.metrics, scope: { level: S.scope },
+      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+      __example: true,
+    };
+    const baselineVal = S.compare === 'none' ? null : Math.round(base);   // mock → +4% delta
+    const spark = DIM_MOCK.microcycle.concat(['', '']).slice(0, 6)
+      .map((_, r) => ({ x: r, y: Math.round(base * (0.82 + 0.16 * Math.abs(Math.sin(r * 1.3 + 1)))) }));
+    mountKpiCard(body, config, series, { baselineVal, sparkSeries: spark, example: true });
+  }
+
+  /** Builder preview ranking — real data when a backend is present, else a badged mock. */
+  function mountRankingPreview(body, S) {
+    const m0 = catalogMap.get(S.metrics[0]?.id);
+    if (!m0) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    mountRankingMockPreview(body, S);
+  }
+
+  function mountRankingMockPreview(body, S) {
+    const m0    = catalogMap.get(S.metrics[0].id);
+    const names = dimMockLabels(S);                       // entity = dimension[0] (default player_name)
+    const base  = metSample(m0);
+    const ws    = [0.96, 0.8, 0.72, 0.61, 0.47, 0.33, 0.28];
+    const chg   = [0, 1, -1, 2, -2, 0, 1];
+    const pts   = names.map((nm, i) => ({ x: nm, y: Math.round(base * (ws[i] ?? 0.3)),
+      change: S.compare === 'none' ? null : (chg[i % chg.length]) }));
+    const series = [{ label: m0.id, name: m0.name, unit: m0.unit, points: pts }];
+    const config = {
+      viz: 'ranking', dimensions: S.dimensions,
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+      __example: true,
+    };
+    mountRankingCard(body, config, series, { example: true });
+  }
+
   /**
    * Renders a chart body from a real Dataset (series with actual data points).
    * Mirrors renderType() but uses series data instead of hardcoded samples.
@@ -2786,6 +2996,8 @@
     mountLineChart,   // exposed for tests
     scatterChartData, // exposed for tests
     mountScatterChart,// exposed for tests
+    kpiCardData,      // exposed for tests
+    rankingCardData,  // exposed for tests
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
