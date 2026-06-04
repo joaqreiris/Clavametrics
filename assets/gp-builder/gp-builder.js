@@ -597,9 +597,12 @@
         const freshE = delBtnE.cloneNode(true);
         const cardRefE = targetCard;
         freshE.addEventListener('click', () => {
+          const host = cardRefE.closest('.gp-view');
+          const cardId = cardRefE.dataset.cardId;
           cardRefE.remove();
-          if (window.deleteDashboardCard && cardRefE.dataset.cardId) {
-            window.deleteDashboardCard(cardRefE.dataset.cardId, window.sb)
+          window.gptSyncEmptyState?.(host);   // re-show empty-state + drop tab count
+          if (window.deleteDashboardCard && cardId) {
+            window.deleteDashboardCard(cardId, window.sb)
               .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
           }
         });
@@ -659,9 +662,12 @@
       const fresh = delBtn.cloneNode(true);
       delBtn.replaceWith(fresh);
       fresh.addEventListener('click', () => {
+        const host = savedCard.closest('.gp-view');
+        const cardId = savedCard.dataset.cardId;
         savedCard.remove();
-        if (window.deleteDashboardCard && savedCard.dataset.cardId) {
-          window.deleteDashboardCard(savedCard.dataset.cardId, window.sb)
+        window.gptSyncEmptyState?.(host);   // re-show empty-state + drop tab count
+        if (window.deleteDashboardCard && cardId) {
+          window.deleteDashboardCard(cardId, window.sb)
             .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
         }
       });
@@ -676,6 +682,7 @@
 
     const grid = savedCard.closest('.gp-grid');
     if (grid) grid.classList.remove('is-building');
+    window.gptSyncEmptyState?.(savedCard);   // hide empty-state + bump tab count
 
     draftCard = null;
     S = null;

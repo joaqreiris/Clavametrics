@@ -163,7 +163,7 @@
           <span class="gpt-tab-label">${esc(d.name)}</span>
           <button class="gpt-kb" title="Dashboard options"><i class="ti ti-dots"></i></button>
         </div>
-        <div class="sub">${d.cards?.length ?? 0} card${(d.cards?.length ?? 0) !== 1 ? 's' : ''}</div>`;
+        <div class="sub">${(d._cardCount ?? d.cards?.length ?? 0)} card${(d._cardCount ?? d.cards?.length ?? 0) !== 1 ? 's' : ''}</div>`;
 
       btn.addEventListener('click', e => {
         if (e.target.closest('.gpt-kb')) return;
@@ -209,26 +209,63 @@
         .select('id, config, size, position, source')
         .eq('dashboard_id', dash.id)
         .order('position', { ascending: true });
-      if (!cards?.length) return;
 
-      // remove empty placeholder if we have real cards
-      grid.querySelector('.gpt-empty-view')?.closest('[data-size]')?.remove();
+      if (cards?.length) {
+        for (const card of cards) {
+          const el = _buildCardElement(card);
+          grid.appendChild(el);
+        }
+        wireCardDrag(grid, dash.id);
 
-      for (const card of cards) {
-        const el = _buildCardElement(card);
-        grid.appendChild(el);
+        setTimeout(() => {
+          grid.querySelectorAll('.gp-c[data-card-id]').forEach(el => {
+            if (window.GpBuilder?.resolveAndRenderCard && el.__config) {
+              window.GpBuilder.resolveAndRenderCard(el, el.__config);
+            }
+          });
+        }, 800);
       }
-      wireCardDrag(grid, dash.id);
-
-      setTimeout(() => {
-        grid.querySelectorAll('.gp-c[data-card-id]').forEach(el => {
-          if (window.GpBuilder?.resolveAndRenderCard && el.__config) {
-            window.GpBuilder.resolveAndRenderCard(el, el.__config);
-          }
-        });
-      }, 800);
+      syncEmptyState(grid);   // single source of truth: placeholder + tab count
     } catch (e) { console.warn('gpt _mountCardsForDashboard:', e); }
   }
+
+  // ── Empty-state + tab count: single source of truth ───────────
+  // Counts the real (non-draft) builder cards in a custom dashboard's grid, then
+  // shows/hides the "empty" placeholder and updates the tab's "N cards" label.
+  // Call after mounting, saving, or deleting a card. Accepts any element inside
+  // the view (a card, the grid, or the .gp-view itself).
+  function syncEmptyState(ref) {
+    const view = ref && ref.closest
+      ? (ref.classList?.contains('gp-view') ? ref : ref.closest('.gp-view'))
+      : null;
+    if (!view) return;
+    const viewKey = view.dataset.view || '';
+    if (!viewKey.startsWith('db-')) return;   // only custom dashboards carry the placeholder
+    const grid = view.querySelector('.gp-grid');
+    if (!grid) return;
+
+    const count = grid.querySelectorAll('.gp-c:not(.is-draft)').length;
+    const ph    = grid.querySelector('.gpt-empty-view');
+    if (count > 0) {
+      ph?.closest('[data-size]')?.remove();
+    } else if (!ph) {
+      const dash = _dashboards.find(d => `db-${d.id}` === viewKey);
+      const name = esc(dash?.name || 'Dashboard');
+      grid.insertAdjacentHTML('beforeend',
+        `<div class="gpt-empty-view" data-size="full" style="grid-column:span 12">
+           <div class="ic"><i class="ti ti-layout-dashboard"></i></div>
+           <div class="t">${name}</div>
+           <div class="d">This dashboard is empty. Use <b>Chart builder</b> to add cards.</div>
+         </div>`);
+    }
+
+    const sub = document.querySelector(`.gp-sec[data-view="${viewKey}"] .sub`);
+    if (sub) sub.textContent = `${count} card${count !== 1 ? 's' : ''}`;
+
+    const dash = _dashboards.find(d => `db-${d.id}` === viewKey);
+    if (dash) dash._cardCount = count;   // keep tab re-renders consistent
+  }
+  window.gptSyncEmptyState = syncEmptyState;
 
   // ── "+" add-dashboard button ──────────────────────────────────
 
@@ -528,7 +565,9 @@
     });
 
     el.querySelector('[data-del]')?.addEventListener('click', () => {
+      const host = el.closest('.gp-view');
       el.remove();
+      syncEmptyState(host);
       if (window.deleteDashboardCard && card.id) {
         window.deleteDashboardCard(card.id, window.sb).catch(e => console.warn('gpt deleteDashboardCard:', e));
       }
