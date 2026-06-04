@@ -1300,6 +1300,7 @@
       //                reports AND role baselines stay consistent)
       //   · player   → narrows gps_reports rows to the chosen players
       //   · position → narrows rows to players in the chosen positions
+      //   · microcycle → narrows rows to the chosen microcycle_id set
       const FB = window.gpFilterBar?.getState?.() || null;
 
       // Step 1: session IDs — a date filter, if active, wins over the card range.
@@ -1488,12 +1489,13 @@
     if (d.to)   r.to   = d.to;
     return r;
   }
-  /** Narrow report rows by the player / position filters (AND). */
+  /** Narrow report rows by the player / position / microcycle filters (AND). */
   function _fbFilterRows(rows, FB) {
     if (!FB) return rows;
     let out = rows;
     if (FB.playerIds?.length) { const s = new Set(FB.playerIds); out = out.filter(r => s.has(r.player_id)); }
     if (FB.positions?.length) { const s = new Set(FB.positions); out = out.filter(r => s.has(r.players?.position)); }
+    if (FB.microcycleIds?.length) { const s = new Set(FB.microcycleIds.map(String)); out = out.filter(r => s.has(String(r.training_sessions?.microcycle_id ?? ''))); }
     return out;
   }
   /** Re-render every builder card in the active dashboard (called on filter change). */

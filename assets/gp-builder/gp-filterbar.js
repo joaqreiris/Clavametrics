@@ -15,12 +15,13 @@
   'use strict';
   if (window.gpFilterBar) return;
 
-  // ── Config de los 4 desplegables (orden de la referencia) ───────────────
+  // ── Config de los desplegables (orden de la referencia) ─────────────────
   const DROPS = [
-    { key: 'md_code',  icon: 'ti-calendar-event', placeholder: 'Todos los MD',          multi: true },
-    { key: 'date',     icon: 'ti-calendar-range', placeholder: 'Cualquier fecha',       date: true  },
-    { key: 'player',   icon: 'ti-user',           placeholder: 'Todos los jugadores',   multi: true },
-    { key: 'position', icon: 'ti-shirt-sport',    placeholder: 'Todas las posiciones',  multi: true },
+    { key: 'md_code',    icon: 'ti-calendar-event', placeholder: 'Todos los MD',          multi: true },
+    { key: 'date',       icon: 'ti-calendar-range', placeholder: 'Cualquier fecha',       date: true  },
+    { key: 'player',     icon: 'ti-user',           placeholder: 'Todos los jugadores',   multi: true },
+    { key: 'position',   icon: 'ti-shirt-sport',    placeholder: 'Todas las posiciones',  multi: true },
+    { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'Todos los microciclos', multi: true },
   ];
 
   const DATE_PRESETS = [
@@ -32,13 +33,14 @@
 
   // ── Estado (en memoria) ─────────────────────────────────────────────────
   const state = {
-    md_code:  [],                              // valores seleccionados
-    player:   [],                              // ids de jugador
-    position: [],                              // posiciones
-    date:     { preset: null, from: null, to: null },
+    md_code:    [],                            // valores seleccionados
+    player:     [],                            // ids de jugador
+    position:   [],                            // posiciones
+    microcycle: [],                            // ids de microciclo
+    date:       { preset: null, from: null, to: null },
   };
   // opciones reales por desplegable: [{ value, label }]
-  const options = { md_code: [], player: [], position: [] };
+  const options = { md_code: [], player: [], position: [], microcycle: [] };
 
   const listeners = new Set();
   let root = null;
@@ -55,14 +57,23 @@
   }
   function getState() {
     return {
-      mdCodes:   state.md_code.slice(),
-      playerIds: state.player.slice(),
-      positions: state.position.slice(),
-      date:      { ...state.date },
+      mdCodes:       state.md_code.slice(),
+      playerIds:     state.player.slice(),
+      positions:     state.position.slice(),
+      microcycleIds: state.microcycle.slice(),
+      date:          { ...state.date },
       activeCount: activeCount(),
     };
   }
+  // Aplicar automático: cada clic en una opción coalesce con los siguientes en una
+  // sola pasada (~170 ms) para no recalcular las cards 5 veces seguidas.
+  let _fireT = null;
   function fire() {
+    clearTimeout(_fireT);
+    _fireT = setTimeout(() => { _fireT = null; fireNow(); }, 170);
+  }
+  function fireNow() {
+    clearTimeout(_fireT); _fireT = null;
     const snap = getState();
     persist();                                   // recuerda los filtros por dashboard
     listeners.forEach(fn => { try { fn(snap); } catch (e) { console.warn('gpFilterBar listener:', e); } });
@@ -82,12 +93,13 @@
   function persist() {
     try {
       localStorage.setItem(storeKey(), JSON.stringify({
-        md_code: state.md_code, player: state.player, position: state.position, date: state.date,
+        md_code: state.md_code, player: state.player, position: state.position,
+        microcycle: state.microcycle, date: state.date,
       }));
     } catch (e) { /* storage no disponible */ }
   }
   function resetStateSilent() {
-    state.md_code = []; state.player = []; state.position = [];
+    state.md_code = []; state.player = []; state.position = []; state.microcycle = [];
     state.date = { preset: null, from: null, to: null };
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
@@ -97,9 +109,10 @@
       const raw = localStorage.getItem(storeKey());
       if (raw) {
         const s = JSON.parse(raw) || {};
-        state.md_code  = Array.isArray(s.md_code)  ? s.md_code  : [];
-        state.player   = Array.isArray(s.player)   ? s.player   : [];
-        state.position = Array.isArray(s.position) ? s.position : [];
+        state.md_code    = Array.isArray(s.md_code)    ? s.md_code    : [];
+        state.player     = Array.isArray(s.player)     ? s.player     : [];
+        state.position   = Array.isArray(s.position)   ? s.position   : [];
+        state.microcycle = Array.isArray(s.microcycle) ? s.microcycle : [];
         state.date     = (s.date && typeof s.date === 'object')
           ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null }
           : { preset: null, from: null, to: null };
@@ -166,6 +179,8 @@
   }
 
   function buildMultiPanel(cfg) {
+    // Sin botón "Aplicar": cada check/uncheck (y Seleccionar todo / Limpiar) aplica
+    // al instante. El panel queda abierto para seguir tildando varias opciones.
     const panel = el('div', 'fb-panel');
     panel.innerHTML =
       `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="Buscar…"></div>` +
@@ -173,14 +188,12 @@
         `<button class="fb-link" type="button" data-act="all">Seleccionar todo</button>` +
         `<button class="fb-link" type="button" data-act="none">Limpiar</button>` +
       `</div>` +
-      `<div class="fb-list"><div class="fb-empty">Cargando…</div></div>` +
-      `<div class="fb-foot"><button class="fb-apply" type="button">Aplicar</button></div>`;
+      `<div class="fb-list"><div class="fb-empty">Cargando…</div></div>`;
 
     panel.addEventListener('click', e => e.stopPropagation());
     panel.querySelector('.fb-search input').addEventListener('input', e => filterList(cfg.key, e.target.value));
     panel.querySelector('[data-act="all"]').addEventListener('click', () => selectAll(cfg.key, true));
     panel.querySelector('[data-act="none"]').addEventListener('click', () => selectAll(cfg.key, false));
-    panel.querySelector('.fb-apply').addEventListener('click', () => { commit(cfg.key); closePanel(); });
     return panel;
   }
 
@@ -196,7 +209,6 @@
       `</div>` +
       `<div class="fb-foot">` +
         `<button class="fb-link" type="button" data-act="none">Limpiar</button>` +
-        `<button class="fb-apply" type="button">Aplicar</button>` +
       `</div>`;
 
     panel.addEventListener('click', e => e.stopPropagation());
@@ -207,12 +219,15 @@
       // preset y rango manual son excluyentes
       panel.querySelector('.fb-date-from').value = '';
       panel.querySelector('.fb-date-to').value = '';
+      commitDate(panel);                          // aplica al instante
     }));
-    const clearRangePreset = () => panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
-    panel.querySelector('.fb-date-from').addEventListener('input', clearRangePreset);
-    panel.querySelector('.fb-date-to').addEventListener('input', clearRangePreset);
+    const onRangeInput = () => {
+      panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
+      commitDate(panel);
+    };
+    panel.querySelector('.fb-date-from').addEventListener('input', onRangeInput);
+    panel.querySelector('.fb-date-to').addEventListener('input', onRangeInput);
     panel.querySelector('[data-act="none"]').addEventListener('click', () => { clearOne('date'); syncDatePanel(); });
-    panel.querySelector('.fb-apply').addEventListener('click', () => { commitDate(panel); closePanel(); });
     return panel;
   }
 
@@ -229,6 +244,7 @@
     ).join('');
     list.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
       if (inp.checked) draft.add(inp.value); else draft.delete(inp.value);
+      commit(key);                               // aplica al instante (debounced), panel sigue abierto
     }));
   }
 
@@ -248,6 +264,7 @@
       inp.checked = on;
       if (on) draft.add(inp.value); else draft.delete(inp.value);
     });
+    commit(key);                                                // aplica al instante (debounced)
   }
 
   // ── Commit (Aplicar) ────────────────────────────────────────────────────
@@ -380,11 +397,13 @@
     const clubId = await window.getClubId?.();
     if (!clubId || !window.sb) return;
 
-    const [{ data: players }, { data: sessions }] = await Promise.all([
+    const [{ data: players }, { data: sessions }, { data: mcs }] = await Promise.all([
       window.sb.from('players').select('id,first_name,last_name,number,position')
         .eq('club_id', clubId).neq('status', 'inactive').order('last_name'),
       window.sb.from('training_sessions').select('session_attributes')
         .eq('club_id', clubId).limit(3000),
+      window.sb.from('microcycles').select('id,name,start_date')
+        .eq('club_id', clubId).order('start_date', { ascending: false }),
     ]);
 
     // Jugadores reales
@@ -406,6 +425,13 @@
       if (v) mdSet.add(String(v));
     });
     options.md_code = Array.from(mdSet).sort(mdCompare).map(v => ({ value: v, label: v }));
+
+    // Microciclos reales del club — etiqueta REAL del MC (mc.name), no getISOWeek.
+    // value = id (los reports filtran por training_sessions.microcycle_id).
+    options.microcycle = (mcs || []).map(m => ({
+      value: m.id,
+      label: m.name || (m.start_date ? `MC ${String(m.start_date).slice(0, 10)}` : m.id),
+    }));
 
     // re-render del panel abierto si corresponde
     if (openKey && openKey !== 'date') renderList(openKey);
