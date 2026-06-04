@@ -561,7 +561,9 @@
       }
       card.querySelector('[data-edit]')?.style.removeProperty('display');
 
-      // Restore body from saved config
+      // Restore body from saved config. Clear draftCard FIRST so the restored card
+      // renders read-only (no format chip / sort affordance — editing is over).
+      draftCard = null;
       if (card.__config) resolveAndRenderCard(card, card.__config);
 
       card.closest('.gp-grid')?.classList.remove('is-building');
