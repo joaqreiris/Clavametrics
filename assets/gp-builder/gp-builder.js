@@ -169,6 +169,17 @@
     };
   }
 
+  /** Signature of the data-affecting parts of a config (style excluded). Lets the
+   *  live preview re-render style changes from cached series without re-querying. */
+  function _dataSig(config) {
+    return JSON.stringify({
+      viz: config.viz, scope: config.scope, range: config.range,
+      metrics: (config.metrics || []).map(m => [m.id, m.agg]),
+      dims: (config.dimensions || []).map(d => d.id),
+      cmp: config.comparison?.baseline || null,
+    });
+  }
+
   function hlJSON(obj) {
     let j = JSON.stringify(obj, null, 2).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
     return j.replace(/("(\\.|[^"\\])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?)/g, m => {
@@ -1188,6 +1199,7 @@
     if (S.type === 'radar') mountRadarPreview(body, S);
     else if (S.type === 'bars') mountBarsPreview(body, S);
     else if (S.type === 'line') mountLinePreview(body, S);
+    else if (S.type === 'scatter') mountScatterPreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -1240,6 +1252,12 @@
     const body = cardEl.querySelector('.gp-c-b');
     if (!body) return;
 
+    // Per-element request token: the live builder preview re-resolves on every change,
+    // so an older (slower) query must not overwrite a newer one. Saved cards each have
+    // their own element, so this never cancels across cards.
+    const seq   = (cardEl.__resolveSeq = (cardEl.__resolveSeq || 0) + 1);
+    const stale = () => cardEl.__resolveSeq !== seq;
+
     // Show loading spinner
     destroyBodyChart(body);
     body.className = 'gp-c-b';
@@ -1247,6 +1265,7 @@
 
     try {
       const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, CORE_COLS } = await _importResolver();
+      if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
       const ctx = {
@@ -1260,6 +1279,7 @@
 
       // Step 1: session IDs
       const sessionIds = await getSessionIds(config.range, ctx, sb);
+      if (stale()) return;
       if (!sessionIds.length) {
         _showCardState(cardEl, body, 'nodata', 'No sessions found for this range.', config);
         return;
@@ -1267,6 +1287,7 @@
 
       // Step 2: reports
       const rows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
+      if (stale()) return;
       if (!rows.length) {
         _showCardState(cardEl, body, 'nodata', 'No GPS data for this selection.', config);
         return;
@@ -1277,6 +1298,7 @@
       const eavMap = customKeys.length
         ? await fetchEavMetrics(rows.map(r => r.id), customKeys, _clubId, sb)
         : new Map();
+      if (stale()) return;
 
       // Step 4: aggregate
       const series = aggregateSeries(rows, eavMap, config, catalogMap);
@@ -1315,6 +1337,7 @@
       }
 
       // Step 5: render
+      if (stale()) return;
       const hasData = series.some(s => s.points.length > 0);
       if (!hasData) {
         _showCardState(cardEl, body, 'nodata', 'No rows match the current scope, range and filters.', config);
@@ -1350,7 +1373,13 @@
             }];
           } catch (e) { console.warn('gpb line baseline:', e); }
         }
+        if (stale()) return;
+        // Cache real series so the builder preview can re-render style-only changes
+        // (color, area, points) instantly, without hitting Supabase again.
+        cardEl.__previewCache = { sig: _dataSig(config), series: lineSeries };
         mountLineChart(body, config, lineSeries);
+      } else if (config.viz === 'scatter') {
+        mountScatterChart(body, config, series);
       } else {
         destroyBodyChart(body);
         body.innerHTML = renderTypeFromDataset(config, series);
@@ -1853,6 +1882,15 @@
       wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
       const canvas = document.createElement('canvas');   // no global id — unique per card body
       wrap.appendChild(canvas);
+      // Example-data badge: shown only when the builder preview can't reach real data
+      // (no Supabase context), so example values are never mistaken for the real card.
+      if (config.__example) {
+        const badge = document.createElement('div');
+        badge.textContent = 'datos de ejemplo';
+        badge.style.cssText = 'position:absolute;top:4px;right:6px;z-index:2;font:600 9px/1 var(--cm-font-sans,sans-serif);'
+          + 'color:#9CA3AF;background:rgba(148,163,184,0.14);padding:3px 7px;border-radius:999px;pointer-events:none';
+        wrap.appendChild(badge);
+      }
       body.appendChild(wrap);
       Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
 
@@ -1908,10 +1946,31 @@
     mount();
   }
 
-  /** Builder preview line — same Chart.js renderer, mock per-period values. */
+  /**
+   * Builder preview line. Resolves REAL GPS data through the same pipeline as the
+   * saved card (so the draft shows actual metres and a temporal X), and only falls
+   * back to clearly-labelled example data when there's no Supabase context.
+   */
   function mountLinePreview(body, S) {
     const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
     if (!ms.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    // Real data when we have a backend + club context — identical to the saved card.
+    if (window.sb && _clubId) {
+      const cfg = buildConfig(S);
+      const cache = draftCard.__previewCache;
+      if (cache && cache.sig === _dataSig(cfg) && cache.series) {
+        mountLineChart(body, cfg, cache.series);   // style-only change → instant, no re-query
+      } else {
+        resolveAndRenderCard(draftCard, cfg);
+      }
+      return;
+    }
+    mountLineMockPreview(body, S);
+  }
+
+  /** Fallback line preview with example values (no backend) — badged "datos de ejemplo". */
+  function mountLineMockPreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
     // X = the chosen temporal dimension; default to microcycles when none picked yet
     const cats = (S.dimensions && S.dimensions.length) ? dimMockLabels(S) : DIM_MOCK.microcycle;
     const series = ms.map((m, idx) => ({ label: m.id, name: m.name, unit: m.unit,
@@ -1927,8 +1986,252 @@
       dimensions: S.dimensions,
       comparison: S.compare === 'none' ? null : { baseline: S.compare },
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points },
+      __example: true,
     };
     mountLineChart(body, cfg, series);
+  }
+
+  // ── Scatter (Chart.js) — "GPS Chart Reference §3" professional look ──
+  // One point per entity (player): X = metrics[0], Y = metrics[1]. An optional
+  // colour dimension (dimensions[0]) splits the points into categorical groups
+  // with a legend. Average reference lines (vertical = avg X, horizontal = avg Y)
+  // cut the plot into quadrants. Same renderer for builder preview + saved card.
+  const _SCATTER_SIZE_H = { sm: 180, md: 240, lg: 300, full: 340 };
+
+  /** Per-category colors: 1→accent, 2+→categorical palette (honors style.palette). */
+  function scatterColors(config, n) {
+    const accent = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    if (n <= 1) return [accent];
+    const pal = PALETTES.find(p => p.id === config.style?.palette);
+    const base = (pal && pal.id !== 'pitch')
+      ? [accent, ...pal.cols]                               // honor a non-default style.palette
+      : [accent, _cssVar('--cm-info', '#2563EB'), _cssVar('--cm-violet', '#7C3AED'),
+         _cssVar('--cm-warning', '#D97706'), _cssVar('--cm-rose', '#E11D48'), _cssVar('--cm-fg-muted', '#64748B')];
+    return Array.from({ length: n }, (_, i) => base[i % base.length]);
+  }
+
+  /** Draws the point's name beside each dot (off by default). No plugin dependency. */
+  const _scatterLabelPlugin = {
+    id: 'gpbScatterLabels',
+    afterDatasetsDraw(chart, _args, opts) {
+      if (!opts || !opts.show) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 9px Geist, Inter, sans-serif';
+      ctx.fillStyle = '#6B7280';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((pt, i) => {
+          const nm = ds.data[i]?.name;
+          if (nm) ctx.fillText(String(nm), pt.x + 8, pt.y);
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  /** Draws the average reference lines (vertical avg-X, horizontal avg-Y) as a thin dashed grey cross. */
+  const _scatterAvgPlugin = {
+    id: 'gpbScatterAvg',
+    afterDatasetsDraw(chart, _args, opts) {
+      if (!opts || opts.avgX == null || opts.avgY == null) return;
+      const { ctx, chartArea, scales } = chart;
+      const px = scales.x.getPixelForValue(opts.avgX);
+      const py = scales.y.getPixelForValue(opts.avgY);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(148,163,184,0.75)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      if (px >= chartArea.left && px <= chartArea.right) {
+        ctx.beginPath(); ctx.moveTo(px, chartArea.top); ctx.lineTo(px, chartArea.bottom); ctx.stroke();
+      }
+      if (py >= chartArea.top && py <= chartArea.bottom) {
+        ctx.beginPath(); ctx.moveTo(chartArea.left, py); ctx.lineTo(chartArea.right, py); ctx.stroke();
+      }
+      ctx.restore();
+    },
+  };
+
+  /** Pure: (config, series) → Chart.js scatter payload (datasets per category, averages, axis titles). */
+  function scatterChartData(config, series) {
+    const size     = config.style?.size || 'md';
+    const showAxes = config.style?.axes   !== false;
+    const showLbl  = !!config.style?.dataLabels;     // point name labels — OFF by default
+    const sX = series && series[0];
+    const sY = series && series[1];
+    const empty = { datasets: [], avgX: null, avgY: null, showAxes, showLbl, showLeg: false,
+                    xName: '', yName: '', xUnit: '', yUnit: '', xTitle: '', yTitle: '',
+                    height: _SCATTER_SIZE_H[size] || 240 };
+    if (!sX || !sY || !sX.points?.length || !sY.points?.length) return empty;
+
+    // Pair X and Y by entity (point.x = entity label). Category = the colour-dimension
+    // value carried on the X-series point (resolver attaches `cat` for scatter).
+    const yByEntity = new Map(sY.points.map(p => [p.x, p]));
+    const paired = [];
+    sX.points.forEach(px => {
+      const py = yByEntity.get(px.x);
+      if (!py) return;
+      paired.push({ name: px.x, x: px.y, y: py.y, cat: px.cat ?? null });   // px.y = X-axis value, py.y = Y-axis value
+    });
+    if (!paired.length) return empty;
+
+    const hasCat = paired.some(p => p.cat != null);
+    const cats   = hasCat ? [...new Set(paired.map(p => p.cat ?? '—'))] : [null];
+    const colors = scatterColors(config, cats.length);
+    const datasets = cats.map((c, i) => {
+      const col = colors[i];
+      const pts = paired
+        .filter(p => (hasCat ? (p.cat ?? '—') : null) === c)
+        .map(p => ({ x: p.x, y: p.y, name: p.name }));
+      return {
+        label: c ?? (sX.name + ' vs ' + sY.name),
+        data: pts,
+        backgroundColor: col + 'CC',                 // ~80% fill so overlaps read
+        borderColor: '#fff',
+        borderWidth: 1.2,
+        pointRadius: 5.5,
+        pointHoverRadius: 7.5,
+        pointHoverBackgroundColor: col,
+        pointHoverBorderColor: col,
+      };
+    });
+
+    const avgX = paired.reduce((a, p) => a + p.x, 0) / paired.length;
+    const avgY = paired.reduce((a, p) => a + p.y, 0) / paired.length;
+    const xUnit = sX.unit || '', yUnit = sY.unit || '';
+
+    return {
+      datasets, avgX, avgY, showAxes, showLbl,
+      showLeg: hasCat && config.style?.legend !== false,
+      xName: sX.name, yName: sY.name, xUnit, yUnit,
+      xTitle: sX.name + (xUnit ? ` (${xUnit})` : ''),
+      yTitle: sY.name + (yUnit ? ` (${yUnit})` : ''),
+      height: _SCATTER_SIZE_H[size] || 240,
+    };
+  }
+
+  /** Mounts (or re-mounts) a Chart.js scatter into `body`. Same renderer for preview + saved card. */
+  function mountScatterChart(body, config, series) {
+    const d = scatterChartData(config, series);
+    if (!d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'Scatter needs two measures with overlapping entities.'); return; }
+    if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    const token = (body.__scatterToken = (body.__scatterToken || 0) + 1);
+    const mount = () => {
+      if (!body.isConnected || body.__scatterToken !== token) return;   // superseded by a newer render
+      if (!body.clientWidth) { requestAnimationFrame(mount); return; }
+      destroyBodyChart(body);
+      body.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      const canvas = document.createElement('canvas');   // no global id — unique per card body
+      wrap.appendChild(canvas);
+      // Example-data badge — only when the preview couldn't reach real GPS data.
+      if (config.__example) {
+        const badge = document.createElement('div');
+        badge.textContent = 'datos de ejemplo';
+        badge.style.cssText = 'position:absolute;top:4px;right:6px;z-index:2;font:600 9px/1 var(--cm-font-sans,sans-serif);'
+          + 'color:#9CA3AF;background:rgba(148,163,184,0.14);padding:3px 7px;border-radius:999px;pointer-events:none';
+        wrap.appendChild(badge);
+      }
+      body.appendChild(wrap);
+      Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
+
+      const gridCol = 'rgba(148,163,184,0.18)';
+      body.__chart = new Chart(canvas, {
+        type: 'scatter',
+        data: { datasets: d.datasets },
+        plugins: [_scatterAvgPlugin, _scatterLabelPlugin],
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 320 },
+          layout: { padding: { top: 6, right: 12 } },
+          plugins: {
+            legend: {
+              display: d.showLeg, position: 'bottom',
+              labels: { boxWidth: 10, boxHeight: 10, padding: 14, usePointStyle: true, pointStyle: 'circle',
+                        font: { size: 11 },
+                        generateLabels: ch => ch.data.datasets.map((ds, i) => ({
+                          text: ds.label,
+                          fillStyle: ds.pointHoverBackgroundColor || ds.backgroundColor,
+                          strokeStyle: ds.pointHoverBackgroundColor || ds.backgroundColor, lineWidth: 0,
+                          hidden: !ch.isDatasetVisible(i), datasetIndex: i,
+                        })) },
+              onClick: (e, item, legend) => {
+                const ci = legend.chart; ci.setDatasetVisibility(item.datasetIndex, !ci.isDatasetVisible(item.datasetIndex)); ci.update();
+              },
+            },
+            tooltip: {
+              callbacks: {
+                title: items => (items.length && items[0].raw?.name) ? String(items[0].raw.name) : '',
+                label: ctx => {
+                  const x = Math.round(ctx.parsed.x * 10) / 10, y = Math.round(ctx.parsed.y * 10) / 10;
+                  return [`${d.xName}: ${fmt(x)}${d.xUnit ? ' ' + d.xUnit : ''}`,
+                          `${d.yName}: ${fmt(y)}${d.yUnit ? ' ' + d.yUnit : ''}`];
+                },
+              },
+            },
+            gpbScatterAvg:    { avgX: d.avgX, avgY: d.avgY },
+            gpbScatterLabels: { show: d.showLbl },
+          },
+          scales: {
+            x: {
+              display: d.showAxes, grace: '6%',
+              title: { display: d.showAxes && !!d.xTitle, text: d.xTitle, font: { size: 11, weight: '600' }, color: '#6B7280', padding: { top: 4 } },
+              grid: { display: d.showAxes, color: gridCol, drawTicks: false },
+              ticks: { font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
+              border: { display: d.showAxes },
+            },
+            y: {
+              display: d.showAxes, grace: '6%',
+              title: { display: d.showAxes && !!d.yTitle, text: d.yTitle, font: { size: 11, weight: '600' }, color: '#6B7280' },
+              grid: { display: d.showAxes, color: gridCol, drawTicks: false },
+              ticks: { font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
+              border: { display: false },
+            },
+          },
+        },
+      });
+    };
+    mount();
+  }
+
+  /**
+   * Builder preview scatter. Resolves REAL GPS data through the same pipeline as the
+   * saved card, and only falls back to clearly-labelled example data when there's no
+   * Supabase context.
+   */
+  function mountScatterPreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    if (ms.length < 2) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    mountScatterMockPreview(body, S);
+  }
+
+  /** Fallback scatter preview with example values (no backend) — badged "datos de ejemplo". */
+  function mountScatterMockPreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    const [mX, mY] = ms;
+    const names    = DIM_MOCK.player_name;
+    const colorDim = S.dimensions?.[0]?.id;
+    const catPool  = colorDim ? (DIM_MOCK[colorDim] || null) : null;
+    // Same series shape the resolver feeds the saved card → preview renders identically.
+    const ptOf = (m, r, ph) => ({ x: names[r], cat: catPool ? catPool[r % catPool.length] : null,
+      y: Math.round(metSample(m) * (0.55 + 0.42 * Math.abs(Math.sin(r * ph + 1)))) });
+    const series = [
+      { label: mX.id, name: mX.name, unit: mX.unit, points: names.map((_, r) => ptOf(mX, r, 1.7)) },
+      { label: mY.id, name: mY.name, unit: mY.unit, points: names.map((_, r) => ptOf(mY, r, 2.3)) },
+    ];
+    const cfg = {
+      viz: 'scatter',
+      dimensions: S.dimensions,
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+      __example: true,
+    };
+    mountScatterChart(body, cfg, series);
   }
 
   /**
@@ -2480,6 +2783,8 @@
     mountBarsChart,   // exposed for tests
     lineChartData,    // exposed for tests
     mountLineChart,   // exposed for tests
+    scatterChartData, // exposed for tests
+    mountScatterChart,// exposed for tests
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
