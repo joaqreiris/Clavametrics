@@ -1003,17 +1003,8 @@
       <!-- MATCH · INDIVIDUAL / MATCH PERFORMANCE -->
       <div class="gp-view" data-view="mind">
 
-        <!-- Match Performance — filters bar -->
-        <div class="gp-mp-bar" id="mpBar">
-          <select class="sc-sel" id="mp-player-sel"><option value="">Player...</option></select>
-          <select class="sc-sel" id="mp-range-sel">
-            <option value="season">Current season</option>
-            <option value="last_10">Last 10 matches</option>
-            <option value="last_5">Last 5 matches</option>
-            <option value="all">All matches</option>
-          </select>
-          <span class="sc-info" id="mp-info">Select a player to load match data</span>
-        </div>
+        <!-- Filtros viejos eliminados: el único filtrado es la barra de desplegables
+             (gpFilterBar), que se monta sobre la grilla para todos los dashboards. -->
 
         <div class="gp-grid is-edit">
 
@@ -9266,13 +9257,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   let _mpInited = false;
   let _mpCurrentRows = [];
 
-  const playerSel = document.getElementById('mp-player-sel');
-  const rangeSel  = document.getElementById('mp-range-sel');
-  const mpInfo    = document.getElementById('mp-info');
-  const kpiBody   = document.getElementById('mp-kpi-body');
-  const tdCanvas  = document.getElementById('canvasMPTD');
-  const hiCanvas  = document.getElementById('canvasMPHI');
-  if (!playerSel) return;
+  // Filtros viejos (mp-player-sel / mp-range-sel / mp-info) eliminados: la ÚNICA
+  // fuente de filtrado es la barra de desplegables (gpFilterBar).
+  const kpiBody = document.getElementById('mp-kpi-body');
+  if (!kpiBody) return;
 
   // ── KPI chip config (mirrors SC pattern) ─────────────────────
   const _mpKpiOverride = {};
@@ -9462,87 +9450,63 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb) return;
       await _mpInitKpiSlots();
-      const { data: players } = await window.sb
-        .from('players').select('id,first_name,last_name,number,position')
-        .eq('club_id', clubId).neq('status','inactive').order('last_name');
-      (players || []).forEach(p => {
-        const o = document.createElement('option');
-        o.value = p.id;
-        o.textContent = `${p.last_name || ''} ${(p.first_name||'')[0]||''}.${p.number ? ' #'+p.number : ''}`.trim();
-        playerSel.appendChild(o);
-      });
-      if (playerSel.options.length > 1) { playerSel.selectedIndex = 1; _mp.playerId = playerSel.value; }
-      if (_mp.playerId) await _mpLoad();
+      await _mpLoad();
     } catch (e) { console.error('mpInit:', e); }
   }
 
-  // ── load match data ──────────────────────────────────────────
-  async function _mpLoad() {
-    const { playerId } = _mp;
-    if (!playerId) return;
-    mpInfo.textContent = 'Loading...';
-    kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Loading...</div>';
+  // Rango de fechas pedido por la barra (gpFilterBar). Sin filtro de fecha → temporada
+  // (~6 meses), igual que el range 'season' de las cards TD/HI.
+  function _mpBarDateRange(FB) {
+    const back = n => { const x = new Date(); x.setDate(x.getDate() - n); return x.toISOString().slice(0, 10); };
+    const d = FB?.date;
+    if (!d || (!d.preset && !d.from && !d.to)) return { from: back(183), to: null };
+    switch (d.preset) {
+      case '7':      return { from: back(7),   to: null };
+      case '30':     return { from: back(30),  to: null };
+      case '90':     return { from: back(90),  to: null };
+      case 'season': return { from: back(183), to: null };
+    }
+    return { from: d.from || null, to: d.to || null };
+  }
 
+  // ── KPIs de partido: alcance intrínseco = sesiones de PARTIDO; el ÚNICO filtrado
+  //    del usuario es la barra de desplegables (player/posición/MD/microciclo/fecha).
+  async function _mpLoad() {
+    if (!kpiBody) return;
+    kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Loading…</div>';
     try {
       const clubId = await window.getClubId?.();
+      if (!clubId) return;
+      const FB = window.gpFilterBar?.getState?.() || null;
 
-      // Match sessions (include microcycle_id for rival lookup)
       const { data: sessions } = await window.sb
         .from('training_sessions')
-        .select('id,session_date,title,session_type,microcycle_id')
-        .eq('club_id', clubId)
-        .eq('session_type', 'match')
+        .select('id,session_date,session_attributes,microcycle_id')
+        .eq('club_id', clubId).eq('session_type', 'match')
         .order('session_date', { ascending: true });
 
       let matchSessions = sessions || [];
+      const { from, to } = _mpBarDateRange(FB);
+      if (from) matchSessions = matchSessions.filter(s => s.session_date >= from);
+      if (to)   matchSessions = matchSessions.filter(s => s.session_date <= to);
+      if (FB?.microcycleIds?.length) { const mc = new Set(FB.microcycleIds.map(String)); matchSessions = matchSessions.filter(s => mc.has(String(s.microcycle_id))); }
+      if (FB?.mdCodes?.length)       { const md = new Set(FB.mdCodes.map(String));       matchSessions = matchSessions.filter(s => md.has(String(s.session_attributes?.md_code ?? ''))); }
 
-      // Apply time range filter
-      const range = rangeSel.value;
-      if (range === 'season') {
-        const year = new Date().getFullYear();
-        matchSessions = matchSessions.filter(s => s.session_date >= `${year}-01-01`);
-      } else if (range === 'last_10') {
-        matchSessions = matchSessions.slice(-10);
-      } else if (range === 'last_5') {
-        matchSessions = matchSessions.slice(-5);
-      }
+      if (!matchSessions.length) { _mpCurrentRows = []; kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No hay partidos para los filtros activos.</div>'; return; }
 
-      if (!matchSessions.length) {
-        mpInfo.textContent = 'No match sessions found.';
-        kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No match data for the selected range.</div>';
-        _destroyCharts();
-        return;
-      }
-
-      // Fetch rival names via microcycles
-      const mcIds = [...new Set(matchSessions.map(s => s.microcycle_id).filter(Boolean))];
-      let mcRivalMap = {};
-      if (mcIds.length) {
-        const { data: mcs } = await window.sb
-          .from('microcycles').select('id,rival').in('id', mcIds);
-        mcRivalMap = Object.fromEntries((mcs || []).map(mc => [mc.id, mc.rival || '']));
-      }
-
-      const sessMap = Object.fromEntries(matchSessions.map(s => [s.id, { ...s, rival: mcRivalMap[s.microcycle_id] || '' }]));
       const sessIds = matchSessions.map(s => s.id);
-
       const { data: reports } = await window.sb
         .from('gps_reports')
-        .select('session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
-        .eq('player_id', playerId).eq('club_id', clubId)
-        .in('session_id', sessIds);
+        .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played,players!inner(position)')
+        .eq('club_id', clubId).in('session_id', sessIds);
 
-      const rows = (reports || [])
-        .map(r => ({ ...r, session: sessMap[r.session_id] }))
-        .filter(r => r.session)
-        .sort((a, b) => a.session.session_date.localeCompare(b.session.session_date));
+      let rows = reports || [];
+      if (FB?.playerIds?.length) { const p = new Set(FB.playerIds);  rows = rows.filter(r => p.has(r.player_id)); }
+      if (FB?.positions?.length) { const ps = new Set(FB.positions); rows = rows.filter(r => ps.has(r.players?.position)); }
 
       _mpCurrentRows = rows;
-      mpInfo.textContent = `${rows.length} matches · ${matchSessions[0]?.session_date || ''} → ${matchSessions[matchSessions.length-1]?.session_date || ''}`;
       _mpRenderKPIs(rows);
-      _mpRenderTDChart(rows);
-      _mpRenderHIChart(rows);
-    } catch (e) { console.error('_mpLoad:', e); mpInfo.textContent = 'Error loading data.'; }
+    } catch (e) { console.error('_mpLoad:', e); kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Error cargando datos.</div>'; }
   }
 
   // ── KPIs (configurable chips) ─────────────────────────────────
@@ -9621,8 +9585,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── events ───────────────────────────────────────────────────
-  playerSel.addEventListener('change', () => { _mp.playerId = playerSel.value || null; if (_mp.playerId) _mpLoad(); });
-  rangeSel.addEventListener('change',  () => { if (_mp.playerId) _mpLoad(); });
+  // (Sin listeners de filtros propios: los selectores viejos se eliminaron.)
 
   // KPI chip menu
   kpiBody.addEventListener('click', e => {
@@ -9639,10 +9602,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     _mpShowTdMetricPopup(e.currentTarget);
   });
 
-  // Cards migradas (TD/HI): render inicial + re-render al cambiar los filtros del
-  // gpFilterBar. (Una vez guardadas en dashboard_cards, el propio filter bar también
-  // las re-renderiza por data-card-id; el doble render es inocuo.)
-  document.addEventListener('gpfilter:change', () => { _mpRenderTDChart(); _mpRenderHIChart(); });
+  // Todas las cards responden SOLO a la barra de desplegables: al cambiar un filtro
+  // se refrescan los KPIs (bespoke) y se re-renderizan TD/HI (resolver). (Una vez
+  // guardadas en dashboard_cards, el filter bar también re-renderiza TD/HI por
+  // data-card-id; el doble render es inocuo.)
+  document.addEventListener('gpfilter:change', () => { _mpLoad(); _mpRenderTDChart(); _mpRenderHIChart(); });
   setTimeout(() => { _mpRenderTDChart(); _mpRenderHIChart(); }, 1000);
 
   window._mpInit = mpInit;
