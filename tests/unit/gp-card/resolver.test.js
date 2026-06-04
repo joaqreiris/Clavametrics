@@ -257,3 +257,36 @@ describe('aggregateSeries — multi-dimension table (composite key + columns)', 
     expect(cbPlayer.y).toBe(10000);              // its measure
   });
 });
+
+describe('aggregateSeries — scatter (one point per player; dimension = colour category)', () => {
+  const withPos = (row, pos) => { row.players = { ...row.players, position: pos }; return row; };
+  // Two CB players, one ST. A scatter's dimension must NOT collapse them by position —
+  // every player stays its own point, and carries `cat` = the dimension value for colour.
+  const rows = [
+    withPos(makeRow({ playerId:'p1', reportId:'r1', total_distance:10000 }), 'CB'),
+    withPos(makeRow({ playerId:'p2', reportId:'r2', sessionId:'s2', total_distance:12000 }), 'CB'),
+    withPos(makeRow({ playerId:'p3', reportId:'r3', sessionId:'s3', total_distance: 8000 }), 'ST'),
+  ];
+  const config = {
+    viz: 'scatter', scope: { level: 'squad' },
+    dimensions: [{ id: 'position' }],
+    metrics: [{ id: 'total_distance', agg: 'total' }, { id: 'max_speed', agg: 'max' }],
+  };
+
+  it('keeps one point per player even though a position dimension is set', () => {
+    const [sx] = aggregateSeries(rows, new Map(), config, catalog);
+    expect(sx.points).toHaveLength(3);           // not 2 — position does NOT group
+  });
+
+  it('carries cat = the colour-dimension value on each point', () => {
+    const [sx] = aggregateSeries(rows, new Map(), config, catalog);
+    const cats = sx.points.map(p => p.cat).sort();
+    expect(cats).toEqual(['CB', 'CB', 'ST']);
+  });
+
+  it('cat is null when no dimension is chosen', () => {
+    const [sx] = aggregateSeries(rows, new Map(), { ...config, dimensions: [] }, catalog);
+    expect(sx.points).toHaveLength(3);
+    sx.points.forEach(p => expect(p.cat).toBeNull());
+  });
+});

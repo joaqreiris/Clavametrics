@@ -2067,15 +2067,16 @@
                     height: _SCATTER_SIZE_H[size] || 240 };
     if (!sX || !sY || !sX.points?.length || !sY.points?.length) return empty;
 
-    // Pair X and Y by entity (point.x = entity label). Category = the colour-dimension
-    // value carried on the X-series point (resolver attaches `cat` for scatter).
-    const yByEntity = new Map(sY.points.map(p => [p.x, p]));
+    // Pair X and Y per entity. The resolver builds every metric's points in the same
+    // group order (same keys, same row iteration), so we pair by index — robust even
+    // when two players share a display name. Category = the colour-dimension value
+    // carried on the point (resolver attaches `cat` for scatter).
+    const n = Math.min(sX.points.length, sY.points.length);
     const paired = [];
-    sX.points.forEach(px => {
-      const py = yByEntity.get(px.x);
-      if (!py) return;
+    for (let i = 0; i < n; i++) {
+      const px = sX.points[i], py = sY.points[i];
       paired.push({ name: px.x, x: px.y, y: py.y, cat: px.cat ?? null });   // px.y = X-axis value, py.y = Y-axis value
-    });
+    }
     if (!paired.length) return empty;
 
     const hasCat = paired.some(p => p.cat != null);
