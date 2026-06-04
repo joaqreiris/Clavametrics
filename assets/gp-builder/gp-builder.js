@@ -1427,7 +1427,7 @@
       } else if (config.viz === 'table') {
         // Interactive (per-column rules panel) only in the builder draft; saved
         // dashboard cards render the stored formats read-only.
-        mountTableCard(body, config, series, { interactive: cardEl === draftCard });
+        mountTableCard(body, config, series, { editable: cardEl === draftCard });
       } else {
         destroyBodyChart(body);
         body.innerHTML = renderTypeFromDataset(config, series);
@@ -2617,10 +2617,15 @@
     _rerenderDraftTable();
   }
 
-  /** Renders the conditional-format table. opts: { interactive, example }. */
+  /**
+   * Renders the conditional-format table. opts: { editable, example }.
+   * Sorting (header click) is ALWAYS available — on the live dashboard card and in
+   * the editor preview. `editable` (the builder draft) additionally shows the format
+   * chip per measure column; live cards never expose format editing.
+   */
   function mountTableCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
-    const interactive = !!opts.interactive;
+    const editable = !!opts.editable;
     const rowPts = series?.[0]?.points || [];
     if (!series?.length || !rowPts.length) { body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
 
@@ -2637,17 +2642,15 @@
     const arrow = id => (sort && sort.col === id)
       ? ` <i class="ti ti-${sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} tf-sort-arr"></i>` : '';
 
-    const sortable = interactive ? ' tf-sortable' : '';
     const dimHead = dimCols.map((n, j) => {
       const sid = _dimSortId(config, j);
-      return `<th class="${j === 0 ? 'pc' : 'dc'}${sortable}"${interactive ? ` data-sort="${sid}" title="Ordenar por esta columna"` : ''}>${esc(n)}${arrow(sid)}</th>`;
+      return `<th class="${j === 0 ? 'pc' : 'dc'} tf-sortable" data-sort="${sid}" title="Ordenar por esta columna">${esc(n)}${arrow(sid)}</th>`;
     }).join('');
     const metHead = cols.map((c, i) => {
       const sid  = 'met:' + (config.metrics?.[i]?.id || i);
       const name = esc(c.s.name.split(' ')[0]);
-      return interactive
-        ? `<th class="tf-h${sortable}" data-sort="${sid}" title="Ordenar por esta columna">${name}${arrow(sid)}<span class="tf-fbtn" data-mi="${i}" title="Formato condicional"><i class="ti ti-adjustments"></i></span></th>`
-        : `<th>${name}${arrow(sid)}</th>`;
+      const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="Formato condicional"><i class="ti ti-adjustments"></i></span>` : '';
+      return `<th class="tf-sortable${editable ? ' tf-h' : ''}" data-sort="${sid}" title="Ordenar por esta columna">${name}${arrow(sid)}${chip}</th>`;
     }).join('');
     const head = `<tr>${dimHead}${metHead}</tr>`;
 
@@ -2664,15 +2667,49 @@
     if (opts.example) _appendExampleBadge(body);
     body.__tf = { series };   // cache real series so format/sort edits re-render without re-querying
 
-    if (interactive) {
-      // Clic en el nombre/encabezado → ordena; clic en el chip de formato → abre el panel.
-      body.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', e => {
-        if (e.target.closest('.tf-fbtn')) return;   // format chip handles its own click
-        _toggleSort(th.dataset.sort);
-      }));
+    // Sorting: always on. Clic en el nombre/encabezado → ordena (draft o card en vivo);
+    // el chip de formato (solo editor) hace su propio clic.
+    body.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', e => {
+      if (e.target.closest('.tf-fbtn')) return;   // format chip handles its own click
+      _onTableSortClick(body, th.dataset.sort);
+    }));
+    if (editable) {
       body.querySelectorAll('.tf-fbtn[data-mi]').forEach(chip => chip.addEventListener('click', e => {
         e.stopPropagation(); openTfPane(+chip.dataset.mi, chip.closest('th'));
       }));
+    }
+  }
+
+  /**
+   * Header-click sort dispatch. In the builder draft it mutates S.sort and re-renders
+   * from cache (persisted when the card is saved). On a live dashboard card it mutates
+   * that card's stored config, re-renders, and persists immediately via updateDashboardCard.
+   */
+  function _onTableSortClick(body, colId) {
+    const cardEl = body.closest('.gp-c');
+    if (cardEl && cardEl === draftCard) _toggleSort(colId);          // editor preview
+    else if (cardEl) _toggleSavedCardSort(cardEl, colId);           // live saved card
+  }
+
+  /** Cycles + persists the sort of an already-saved dashboard card (no builder context). */
+  function _toggleSavedCardSort(cardEl, colId) {
+    const config = cardEl.__config;
+    if (!config) return;
+    const cur = config.sort && config.sort.col ? config.sort : null, first = _defaultSortDir(colId);
+    let next;
+    if (!cur || cur.col !== colId) next = { col: colId, dir: first };
+    else if (cur.dir === first)    next = { col: colId, dir: first === 'asc' ? 'desc' : 'asc' };
+    else                           next = null;   // third click → original order
+    if (next) config.sort = next; else delete config.sort;
+    if (cardEl.__cfg) cardEl.__cfg.sort = next || null;             // keep internal mirror in sync
+
+    const body = cardEl.querySelector('.gp-c-b');
+    if (body && body.__tf) mountTableCard(body, config, body.__tf.series, { editable: false });   // instant, no re-query
+    else resolveAndRenderCard(cardEl, config);
+
+    const cardId = cardEl.dataset.cardId;
+    if (cardId && typeof window.updateDashboardCard === 'function') {
+      window.updateDashboardCard(cardId, config, window.sb).catch(e => console.warn('gpb: sort persist failed:', e));
     }
   }
 
@@ -2680,7 +2717,7 @@
   function _rerenderDraftTable() {
     const body = draftCard?.querySelector('.gp-c-b');
     if (!body || !body.__tf) return;
-    mountTableCard(body, buildConfig(S), body.__tf.series, { interactive: true });
+    mountTableCard(body, buildConfig(S), body.__tf.series, { editable: true });
   }
 
   // ── Per-column rules panel (.tf-pane) ──
@@ -2795,7 +2832,7 @@
       return { label: m.id, name: cat.name, unit: cat.unit, points };
     });
     const config = buildConfig(S);
-    mountTableCard(body, config, series, { interactive: true, example: true });
+    mountTableCard(body, config, series, { editable: true, example: true });
   }
 
   /**
