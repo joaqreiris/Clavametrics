@@ -102,10 +102,16 @@
   // newest first. Loaded once in init() from the `microcycles` table.
   let _mcList = [];
 
+  /** True only for a real UUID string (guards uuid query inputs — see resolver.isUuid). */
+  function _isUuid(v) {
+    return typeof v === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+  }
+
   /** gp.card/v1 `comparison` block for the active state (centralizes mc + refMcId). */
   function cmpConfig(S) {
     if (!S || S.compare === 'none') return null;
-    if (S.compare === 'mc') return { baseline: 'mc', refMcId: S.refMcId || null };
+    if (S.compare === 'mc') return { baseline: 'mc', refMcId: _isUuid(S.refMcId) ? S.refMcId : null };
     return { baseline: S.compare };
   }
 
@@ -1488,7 +1494,7 @@
       // the resolver behaves exactly as before. If anything here fails, we DEGRADE to
       // no comparison (keep the already-computed `series`) and never tumble the card.
       const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter']);
-      if (config.comparison?.baseline === 'mc' && config.comparison?.refMcId
+      if (config.comparison?.baseline === 'mc' && _isUuid(config.comparison?.refMcId)
           && typeof getMcSessionIds === 'function' && MC_VIZ.has(config.viz)) {
         try {
           let refSessions = await getMcSessionIds(config.comparison.refMcId, ctx, sb);
