@@ -64,8 +64,56 @@
   }
   function fire() {
     const snap = getState();
+    persist();                                   // recuerda los filtros por dashboard
     listeners.forEach(fn => { try { fn(snap); } catch (e) { console.warn('gpFilterBar listener:', e); } });
     document.dispatchEvent(new CustomEvent('gpfilter:change', { detail: snap }));
+    // Parte B: re-renderiza TODAS las cards del dashboard activo con el nuevo set.
+    if (window.GpBuilder && window.GpBuilder.rerenderActiveCards) window.GpBuilder.rerenderActiveCards();
+  }
+
+  // ── Persistencia por usuario + dashboard_id (localStorage) ──────────────
+  function dashId() {
+    return document.querySelector('#sections .gp-sec.is-on')?.dataset.dashboardId
+        || document.querySelector('.gp-view.is-on')?.dataset.view
+        || 'default';
+  }
+  function storeKey() { return `cm_gpfilters_${window._gpUserId || '?'}_${dashId()}`; }
+
+  function persist() {
+    try {
+      localStorage.setItem(storeKey(), JSON.stringify({
+        md_code: state.md_code, player: state.player, position: state.position, date: state.date,
+      }));
+    } catch (e) { /* storage no disponible */ }
+  }
+  function resetStateSilent() {
+    state.md_code = []; state.player = []; state.position = [];
+    state.date = { preset: null, from: null, to: null };
+  }
+  /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
+  function restore() {
+    resetStateSilent();
+    try {
+      const raw = localStorage.getItem(storeKey());
+      if (raw) {
+        const s = JSON.parse(raw) || {};
+        state.md_code  = Array.isArray(s.md_code)  ? s.md_code  : [];
+        state.player   = Array.isArray(s.player)   ? s.player   : [];
+        state.position = Array.isArray(s.position) ? s.position : [];
+        state.date     = (s.date && typeof s.date === 'object')
+          ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null }
+          : { preset: null, from: null, to: null };
+      }
+    } catch (e) { /* ignore */ }
+    if (root) { DROPS.forEach(d => updateTrigger(d.key)); updateGlobal(); }
+  }
+  /** Al cambiar de dashboard: cierra panel, carga sus filtros y re-renderiza. */
+  function onDashChange() {
+    closePanel();
+    restore();
+    if (window.GpBuilder && window.GpBuilder.rerenderActiveCards) {
+      setTimeout(() => window.GpBuilder.rerenderActiveCards(), 60);
+    }
   }
 
   // ── Construcción del DOM ────────────────────────────────────────────────
@@ -395,6 +443,11 @@
     // cerrar al click fuera / Escape
     document.addEventListener('click', e => { if (root && !root.contains(e.target)) closePanel(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+    // cambiar de dashboard (tab) → cargar los filtros guardados de ese dashboard
+    document.getElementById('sections')?.addEventListener('click', e => {
+      if (e.target.closest('.gp-sec')) setTimeout(onDashChange, 0);
+    });
   }
 
   // espera a tener sesión/club y carga datos (la barra ya está visible mientras)
@@ -404,11 +457,17 @@
     for (let i = 0; i < 50; i++) {
       if (window.sb && window.getClubId) {
         try { await loadData(); } catch (e) { console.warn('gpFilterBar loadData:', e); }
+        // restaurar filtros persistidos del dashboard activo + re-render
+        restore();
+        if (isAnyActive() && window.GpBuilder && window.GpBuilder.rerenderActiveCards) {
+          setTimeout(() => window.GpBuilder.rerenderActiveCards(), 120);
+        }
         return;
       }
       await new Promise(r => setTimeout(r, 200));
     }
   }
+  function isAnyActive() { return DROPS.some(d => isActive(d.key)); }
 
   // ── API pública ─────────────────────────────────────────────────────────
   window.gpFilterBar = {

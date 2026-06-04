@@ -1292,16 +1292,35 @@
 
       const sb = window.sb;
 
-      // Step 1: session IDs
-      const sessionIds = await getSessionIds(config.range, ctx, sb);
+      // Dashboard filter bar (GPS Chart Reference §6, Parte B): the active filters are
+      // the single source of "what data am I seeing". Every active filter is AND-ed
+      // (Power-BI style):
+      //   · date     → overrides the card's own range (only when active)
+      //   · MD       → narrows sessions to the chosen md_code set (session level, so
+      //                reports AND role baselines stay consistent)
+      //   · player   → narrows gps_reports rows to the chosen players
+      //   · position → narrows rows to players in the chosen positions
+      const FB = window.gpFilterBar?.getState?.() || null;
+
+      // Step 1: session IDs — a date filter, if active, wins over the card range.
+      let sessionIds = await getSessionIds(_fbEffectiveRange(FB, config.range), ctx, sb);
       if (stale()) return;
+      if (FB?.mdCodes?.length && sessionIds.length) {
+        const want = new Set(FB.mdCodes.map(String));
+        const { data: ts } = await sb.from('training_sessions')
+          .select('id,session_attributes').in('id', sessionIds);
+        if (stale()) return;
+        sessionIds = (ts || [])
+          .filter(s => want.has(String(s.session_attributes?.md_code ?? '')))
+          .map(s => s.id);
+      }
       if (!sessionIds.length) {
-        _showCardState(cardEl, body, 'nodata', 'No sessions found for this range.', config);
+        _showCardState(cardEl, body, 'nodata', 'No sessions match the active filters.', config);
         return;
       }
 
-      // Step 2: reports
-      const rows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
+      // Step 2: reports — then narrow rows by player / position (AND).
+      const rows = _fbFilterRows(await fetchReports(sessionIds, config, ctx, catalogMap, sb), FB);
       if (stale()) return;
       if (!rows.length) {
         _showCardState(cardEl, body, 'nodata', 'No GPS data for this selection.', config);
@@ -1447,6 +1466,43 @@
     } catch {
       return {};
     }
+  }
+
+  // ── Dashboard filter bar wiring (GPS Chart Reference §6, Parte B) ─────────
+  function _fbDaysBack(days) {
+    const d = new Date(); d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10);
+  }
+  /** Date filter (if active) overrides the card's own range; else keep card range. */
+  function _fbEffectiveRange(FB, cardRange) {
+    const d = FB?.date;
+    if (!d || (!d.preset && !d.from && !d.to)) return cardRange;
+    switch (d.preset) {
+      case '7':      return { type: 'w7' };
+      case '30':     return { type: 'w30' };
+      case '90':     return { type: 'custom', from: _fbDaysBack(90) };
+      case 'season': return { type: 'season' };
+    }
+    const r = { type: 'custom' };
+    if (d.from) r.from = d.from;
+    if (d.to)   r.to   = d.to;
+    return r;
+  }
+  /** Narrow report rows by the player / position filters (AND). */
+  function _fbFilterRows(rows, FB) {
+    if (!FB) return rows;
+    let out = rows;
+    if (FB.playerIds?.length) { const s = new Set(FB.playerIds); out = out.filter(r => s.has(r.player_id)); }
+    if (FB.positions?.length) { const s = new Set(FB.positions); out = out.filter(r => s.has(r.players?.position)); }
+    return out;
+  }
+  /** Re-render every builder card in the active dashboard (called on filter change). */
+  function rerenderActiveCards() {
+    const grid = document.querySelector('.gp-view.is-on .gp-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.gp-c[data-card-id]').forEach(el => {
+      if (el.__config) resolveAndRenderCard(el, el.__config);
+    });
   }
 
   function _bodyClassFromViz(viz) {
@@ -3379,6 +3435,7 @@
     get AGG()        { return AGG;        },
     defaultAgg,
     resolveAndRenderCard,
+    rerenderActiveCards,   // filter bar (Parte B) re-renders the active dashboard
     radarChartData,   // exposed for tests
     mountRadarChart,  // exposed for tests
     barsChartData,    // exposed for tests

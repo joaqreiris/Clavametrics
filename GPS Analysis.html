@@ -7502,15 +7502,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   if (!playerSel) return;
 
   function _pwSyncLabel() {
+    // (Descriptor "jugador · posición" removido de la fila "Dashboard": el contexto
+    //  de datos lo da la barra de filtros. Mantengo el subtítulo genérico de la vista.)
     const indSub = document.getElementById('secSub');
-    if (!indSub) return;
-    const player = _pw.playersList.find(p => p.id === _pw.playerId);
-    if (player) {
-      const name = `${player.first_name || ''} ${player.last_name || ''}`.trim();
-      indSub.textContent = `${name} · ${player.position || '—'}`;
-    } else {
-      indSub.textContent = '— week vs match reference';
-    }
+    if (indSub) indSub.textContent = '— week vs match reference';
   }
 
   // ── init ─────────────────────────────────────────────────────
