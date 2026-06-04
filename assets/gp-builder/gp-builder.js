@@ -1482,9 +1482,14 @@
       // `series` into per-metric/per-player diff% (vs ref). Bars/ranking/table/scatter
       // then render the diff straight from the reshaped series. Other comparisons
       // (role/match/none) and other vizzes are untouched.
+      // GUARD: this path runs ONLY for a card that explicitly asks for an MC diff
+      // (baseline 'mc' + a refMcId) on a viz that uses it. Every other card —
+      // role/match/md/none, or no comparison at all — skips this block entirely and
+      // the resolver behaves exactly as before. If anything here fails, we DEGRADE to
+      // no comparison (keep the already-computed `series`) and never tumble the card.
       const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter']);
       if (config.comparison?.baseline === 'mc' && config.comparison?.refMcId
-          && getMcSessionIds && MC_VIZ.has(config.viz)) {
+          && typeof getMcSessionIds === 'function' && MC_VIZ.has(config.viz)) {
         try {
           let refSessions = await getMcSessionIds(config.comparison.refMcId, ctx, sb);
           if (stale()) return;
@@ -1512,8 +1517,17 @@
               refSeries = aggregateSeries(refRows, refEav, config, catalogMap);
             }
           }
-          series = _mcReshape(config, _enrichMcDiff(series, refSeries));
-        } catch (e) { console.warn('gpb mc comparison:', e); }
+          // Only reshape when the reference actually has data — otherwise degrade to
+          // no comparison (render the current values) instead of all-zero diff bars.
+          if (refSeries.some(s => s.points && s.points.length)) {
+            const reshaped = _mcReshape(config, _enrichMcDiff(series, refSeries));
+            if (Array.isArray(reshaped) && reshaped.length) series = reshaped;
+          } else {
+            console.warn('gpb mc comparison: reference microcycle has no data — degrading to no comparison');
+          }
+        } catch (e) {
+          console.warn('gpb mc comparison failed — degrading to no comparison:', e);
+        }
         if (stale()) return;
       }
 
@@ -1957,8 +1971,8 @@
     ss.forEach(s => s.points.forEach(p => { if (!cats.includes(p.x)) cats.push(p.x); }));
 
     const isMc     = ss.some(s => s._mcDiff);   // value = diff% vs ref MC (set by _mcReshape)
-    const upCol    = _cssVar('--cm-success', '#16A34A');
-    const dnCol    = _cssVar('--cm-danger',  '#DC2626');
+    const upCol    = isMc ? _cssVar('--cm-success', '#16A34A') : null;   // lazy: non-mc cards untouched
+    const dnCol    = isMc ? _cssVar('--cm-danger',  '#DC2626') : null;
     const isLine   = ss.map((s, i) => !!(s.line || config.metrics?.[i]?.line));
     const barCols  = barColors(config, isLine.filter(f => !f).length || 1);
     const lineCol  = _cssVar('--cm-warning', '#D97706');
@@ -3655,7 +3669,7 @@
       _userId = window._gpUserId || null;
 
       await loadCatalog(clubId);
-      await loadMicrocycles(clubId);
+      loadMicrocycles(clubId);   // non-blocking: only needed when the compare popover opens
 
       injectDOM();
       wireDOMRefs();
