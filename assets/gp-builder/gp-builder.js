@@ -1281,6 +1281,39 @@
       // Step 4: aggregate
       const series = aggregateSeries(rows, eavMap, config, catalogMap);
 
+      // Diagnostics: prove the series is 100% real (gps_reports/Supabase) and let you
+      // cross-check the total against Session Control. Silence with window.GPB_DEBUG=false.
+      if (window.GPB_DEBUG !== false) {
+        try {
+          const rawTotal = mid => {
+            let sum = 0, n = 0;
+            for (const r of rows) {
+              const v = CORE_COLS.has(mid) ? Number(r[mid]) : Number(eavMap.get(r.id)?.[mid]);
+              if (v != null && !isNaN(v)) { sum += v; n++; }
+            }
+            return { metric: catalogMap.get(mid)?.name || mid, rows_with_value: n, raw_total: Math.round(sum * 10) / 10 };
+          };
+          const scopeLbl = `${config.scope?.level || '?'}${ctx.playerId ? ' · ' + ctx.playerId : ''}`;
+          console.groupCollapsed(`[gpb] ${config.viz} · ${(config.metrics || []).map(m => m.id).join(', ')} · ${scopeLbl}`);
+          console.log('range:', config.range?.type, '→ sessionIds (getSessionIds):', sessionIds.length, sessionIds);
+          console.log('rows from gps_reports (fetchReports):', rows.length);
+          console.table((config.metrics || []).map(m => rawTotal(m.id)));
+          console.log('aggregated series (what the chart plots):',
+            series.map(s => ({ metric: s.name, agg: config.metrics.find(m => m.id === s.label)?.agg, points: s.points.length,
+                               x: s.points.map(p => p.x), y: s.points.map(p => p.y) })));
+          // Line wants a temporal X. Empty dimensions → resolver groups by time (correct).
+          // A non-Time dimension means the X axis isn't temporal — warn loudly.
+          if (config.viz === 'line') {
+            const d0 = config.dimensions?.[0]?.id;
+            const TIME_DIMS = new Set(['session_date', 'md_code', 'microcycle']);
+            if (!d0) console.log('line X dimension: (none) → grouped by session/MD/microcycle (temporal default) ✓');
+            else if (TIME_DIMS.has(d0)) console.log('line X dimension:', d0, '(temporal) ✓');
+            else console.warn(`line X dimension is "${d0}" — NOT temporal. A line/temporal chart expects microcycle/date; pick a Time dimension (or none).`);
+          }
+          console.groupEnd();
+        } catch (e) { /* diagnostics must never break a render */ }
+      }
+
       // Step 5: render
       const hasData = series.some(s => s.points.length > 0);
       if (!hasData) {
