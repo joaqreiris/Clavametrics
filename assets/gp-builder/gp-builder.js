@@ -2572,7 +2572,7 @@
 
     const head = `<tr>${dimCols.map((n, i) => `<th class="${i === 0 ? 'pc' : 'dc'}">${esc(n)}</th>`).join('')}`
       + cols.map((c, i) => interactive
-          ? `<th class="tf-h" data-mi="${i}" title="Formato de columna">${esc(c.s.name.split(' ')[0])} <i class="ti ti-adjustments-horizontal"></i></th>`
+          ? `<th class="tf-h" data-mi="${i}" title="Formato condicional">${esc(c.s.name.split(' ')[0])}<span class="tf-fbtn" aria-hidden="true"><i class="ti ti-adjustments"></i></span></th>`
           : `<th>${esc(c.s.name.split(' ')[0])}</th>`).join('') + `</tr>`;
 
     const rows = rowPts.map(p => {
