@@ -171,6 +171,8 @@
       range:      { type: S.range },
       comparison: S.compare === 'none' ? null : { baseline: S.compare },
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points },
+      // Presentation-only column sort (table viz). Persisted so the order survives reload.
+      ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
     };
   }
 
@@ -478,7 +480,7 @@
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
     return { type:'bars', metrics:[], dimensions:[], scope:'player', compare:'role', range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
-             points:true, area:false };
+             points:true, area:false, sort:null };
   }
 
   function startBuild() {
@@ -802,6 +804,7 @@
       S.labels  = !!cfg.labels;
       S.points  = cfg.points !== false;
       S.area    = !!cfg.area;
+      S.sort    = cfg.sort || null;
       S.title   = cfg.title || '';
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
       S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id)).map(d => ({ id:d.id }));
@@ -818,6 +821,7 @@
       S.labels  = !!rawConfig.style?.dataLabels;
       S.points  = rawConfig.style?.points !== false;
       S.area    = !!rawConfig.style?.area;
+      S.sort    = rawConfig.sort || null;
       S.title   = rawConfig.title || '';
       S.metrics = (rawConfig.metrics || [])
         .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}) }))
@@ -2558,6 +2562,59 @@
     });
   }
 
+  /** Natural-order key for matchday/microcycle labels (MD-3 < … < MD, "MC 45" → 45). */
+  function _temporalKey(s) {
+    s = String(s); let m;
+    if ((m = s.match(/^MD(?:[\s-]?(\d+))?$/i))) return m[1] ? -(+m[1]) : 0;
+    if ((m = s.match(/(-?\d+(?:\.\d+)?)/))) return +m[1];
+    return 0;
+  }
+
+  /** Sort identifier for a column: measures → "met:<metricId>", dims → "dim:<dimId>". */
+  function _dimSortId(config, j) { return 'dim:' + (config.dimensions?.[j]?.id || '__row'); }
+
+  /** Default first-click direction: numbers & dates descending, text ascending (A→Z). */
+  function _defaultSortDir(colId) {
+    if (colId.startsWith('met:')) return 'desc';
+    const id = colId.slice(4);
+    return (id === 'session_date' || id === 'md_code' || id === 'microcycle') ? 'desc' : 'asc';
+  }
+
+  /** (sort, config, series) → row comparator, or null if the column no longer exists. */
+  function _rowComparator(sort, config, series) {
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    let get, type;
+    if (sort.col.startsWith('met:')) {
+      const si = (config.metrics || []).findIndex(m => m.id === sort.col.slice(4));
+      if (si < 0 || !series[si]) return null;
+      const map = new Map(series[si].points.map(p => [p.x, p.y]));
+      get = p => map.get(p.x); type = 'number';
+    } else {
+      const id = sort.col.slice(4);
+      const j  = id === '__row' ? 0 : (config.dimensions || []).findIndex(d => d.id === id);
+      if (j < 0) return null;
+      get = p => (p.dims ? p.dims[j] : p.x) ?? p.x;
+      type = id === 'session_date' ? 'date' : (id === 'md_code' || id === 'microcycle') ? 'temporal' : 'text';
+    }
+    return (a, b) => {
+      const va = get(a), vb = get(b); let c;
+      if (type === 'number')        { const na = +va, nb = +vb; c = (isFinite(na) ? na : -Infinity) - (isFinite(nb) ? nb : -Infinity); }
+      else if (type === 'date')     { c = String(va).localeCompare(String(vb)); }
+      else if (type === 'temporal') { c = _temporalKey(va) - _temporalKey(vb); }
+      else                          { c = String(va).localeCompare(String(vb), undefined, { numeric: true }); }
+      return dir * c;
+    };
+  }
+
+  /** Cycles the table sort for a column (desc/asc → opposite → original) and re-renders live. */
+  function _toggleSort(colId) {
+    const cur = S.sort, first = _defaultSortDir(colId);
+    if (!cur || cur.col !== colId) S.sort = { col: colId, dir: first };
+    else if (cur.dir === first)    S.sort = { col: colId, dir: first === 'asc' ? 'desc' : 'asc' };
+    else                           S.sort = null;   // third click → back to original order
+    _rerenderDraftTable();
+  }
+
   /** Renders the conditional-format table. opts: { interactive, example }. */
   function mountTableCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
@@ -2570,12 +2627,29 @@
     if (!dimCols.length) dimCols.push(config.dimensions?.[0] ? 'Group' : 'Player');   // legacy single identity
     const cols = _tableColumns(config, series, accent);
 
-    const head = `<tr>${dimCols.map((n, i) => `<th class="${i === 0 ? 'pc' : 'dc'}">${esc(n)}</th>`).join('')}`
-      + cols.map((c, i) => interactive
-          ? `<th class="tf-h" data-mi="${i}" title="Formato condicional">${esc(c.s.name.split(' ')[0])}<span class="tf-fbtn" aria-hidden="true"><i class="ti ti-adjustments"></i></span></th>`
-          : `<th>${esc(c.s.name.split(' ')[0])}</th>`).join('') + `</tr>`;
+    // Presentation-only ordering (header click). Falls back to original order if the
+    // sorted column was removed.
+    const sort = config.sort && config.sort.col ? config.sort : null;
+    let orderedRows = rowPts;
+    if (sort) { const cmp = _rowComparator(sort, config, series); if (cmp) orderedRows = [...rowPts].sort(cmp); }
+    const arrow = id => (sort && sort.col === id)
+      ? ` <i class="ti ti-${sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} tf-sort-arr"></i>` : '';
 
-    const rows = rowPts.map(p => {
+    const sortable = interactive ? ' tf-sortable' : '';
+    const dimHead = dimCols.map((n, j) => {
+      const sid = _dimSortId(config, j);
+      return `<th class="${j === 0 ? 'pc' : 'dc'}${sortable}"${interactive ? ` data-sort="${sid}" title="Ordenar por esta columna"` : ''}>${esc(n)}${arrow(sid)}</th>`;
+    }).join('');
+    const metHead = cols.map((c, i) => {
+      const sid  = 'met:' + (config.metrics?.[i]?.id || i);
+      const name = esc(c.s.name.split(' ')[0]);
+      return interactive
+        ? `<th class="tf-h${sortable}" data-sort="${sid}" title="Ordenar por esta columna">${name}${arrow(sid)}<span class="tf-fbtn" data-mi="${i}" title="Formato condicional"><i class="ti ti-adjustments"></i></span></th>`
+        : `<th>${name}${arrow(sid)}</th>`;
+    }).join('');
+    const head = `<tr>${dimHead}${metHead}</tr>`;
+
+    const rows = orderedRows.map(p => {
       const dimCells = (p.dims || [p.x]).map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join('');
       const valCells = cols.map(c => {
         const pt = c.s.points.find(q => q.x === p.x);
@@ -2586,10 +2660,17 @@
 
     body.innerHTML = `<div class="gp-zwrap"><table class="gp-zt"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
     if (opts.example) _appendExampleBadge(body);
-    body.__tf = { series };   // cache real series so format edits re-render without re-querying
+    body.__tf = { series };   // cache real series so format/sort edits re-render without re-querying
 
     if (interactive) {
-      body.querySelectorAll('th.tf-h').forEach(th => th.addEventListener('click', e => { e.stopPropagation(); openTfPane(+th.dataset.mi, th); }));
+      // Clic en el nombre/encabezado → ordena; clic en el chip de formato → abre el panel.
+      body.querySelectorAll('th[data-sort]').forEach(th => th.addEventListener('click', e => {
+        if (e.target.closest('.tf-fbtn')) return;   // format chip handles its own click
+        _toggleSort(th.dataset.sort);
+      }));
+      body.querySelectorAll('.tf-fbtn[data-mi]').forEach(chip => chip.addEventListener('click', e => {
+        e.stopPropagation(); openTfPane(+chip.dataset.mi, chip.closest('th'));
+      }));
     }
   }
 
@@ -3234,6 +3315,7 @@
     S.labels  = !!config.style?.dataLabels;
     S.points  = config.style?.points  !== false;
     S.area    = !!config.style?.area;
+    S.sort    = config.sort || null;
     S.title   = config.title || '';
     S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}) }));
 

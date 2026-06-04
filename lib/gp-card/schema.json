@@ -9,6 +9,16 @@
   "properties": {
     "schema": { "const": "gp.card/v1" },
     "title": { "type": "string", "maxLength": 120 },
+    "sort": {
+      "$comment": "Optional presentation-only column sort (table viz). Does not change the data.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["col", "dir"],
+      "properties": {
+        "col": { "type": "string" },
+        "dir": { "type": "string", "enum": ["asc", "desc"] }
+      }
+    },
     "viz": {
       "type": "string",
       "enum": ["kpi", "bars", "line", "scatter", "radar", "ranking", "table", "heatmap"]

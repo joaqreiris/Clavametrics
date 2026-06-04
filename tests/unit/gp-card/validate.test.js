@@ -103,6 +103,16 @@ describe('validateCardSchema', () => {
     });
     expect(validateCardSchema(cfg).length).toBeGreaterThan(0);
   });
+
+  it('accepts a presentation-only table sort', () => {
+    const cfg = makeConfig({ viz: 'table', sort: { col: 'met:total_distance', dir: 'desc' } });
+    expect(validateCardSchema(cfg)).toHaveLength(0);
+  });
+
+  it('rejects a sort with an invalid direction', () => {
+    const cfg = makeConfig({ viz: 'table', sort: { col: 'met:total_distance', dir: 'sideways' } });
+    expect(validateCardSchema(cfg).length).toBeGreaterThan(0);
+  });
 });
 
 // ── validateCardRules ─────────────────────────────────────────────────────────
