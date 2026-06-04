@@ -93,9 +93,41 @@
   const COMPARES = [
     { id:'role',  name:'vs role baseline', icon:'ti-users',          d:'Same position group' },
     { id:'match', name:'vs match peak',    icon:'ti-ball-football',  d:'Last match reference' },
+    { id:'mc',    name:'vs microciclo',    icon:'ti-calendar-stats', d:'Diferencia vs otro MC' },
     { id:'md',    name:'vs same MD code',  icon:'ti-calendar-event', d:'Matchday-minus code' },
     { id:'none',  name:'No comparison',   icon:'ti-circle-off',     d:'Raw values only' },
   ];
+
+  // Real microcycles for the "vs microciclo" reference picker — { id, name, start_date },
+  // newest first. Loaded once in init() from the `microcycles` table.
+  let _mcList = [];
+
+  /** gp.card/v1 `comparison` block for the active state (centralizes mc + refMcId). */
+  function cmpConfig(S) {
+    if (!S || S.compare === 'none') return null;
+    if (S.compare === 'mc') return { baseline: 'mc', refMcId: S.refMcId || null };
+    return { baseline: S.compare };
+  }
+
+  /** Current microcycle id (from the page context), if any. */
+  function currentMcId() { return window._gpMcId || window.gpState?.mcId || null; }
+
+  /** Default reference MC = the one immediately BEFORE the current MC (else newest). */
+  function prevMcId() {
+    if (!_mcList.length) return null;
+    const cur = currentMcId();
+    if (cur) {
+      const i = _mcList.findIndex(m => String(m.id) === String(cur));
+      if (i >= 0 && i + 1 < _mcList.length) return _mcList[i + 1].id;   // list is newest→oldest
+    }
+    // no current MC in context → first MC that isn't the current one
+    return (_mcList.find(m => String(m.id) !== String(cur)) || _mcList[0]).id;
+  }
+
+  function mcLabel(id) {
+    const m = _mcList.find(x => String(x.id) === String(id));
+    return m ? (m.name || (m.start_date ? `MC ${String(m.start_date).slice(0,10)}` : id)) : (id || '—');
+  }
 
   // Icon/sample value by category (for mock rendering)
   const CAT_ICON = {
@@ -170,7 +202,7 @@
       }),
       dimensions: (S.dimensions || []).map(d => ({ id:d.id })),
       range:      { type: S.range },
-      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
       // Presentation-only column sort (table viz). Persisted so the order survives reload.
@@ -186,6 +218,7 @@
       metrics: (config.metrics || []).map(m => [m.id, m.agg]),
       dims: (config.dimensions || []).map(d => d.id),
       cmp: config.comparison?.baseline || null,
+      ref: config.comparison?.refMcId || null,
     });
   }
 
@@ -488,7 +521,7 @@
     const p = window.gpState?.datePreset;
     if (p === 'last7') range = 'w7';
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
-    return { type:'bars', metrics:[], dimensions:[], scope:'player', compare:'role', range,
+    return { type:'bars', metrics:[], dimensions:[], scope:'player', compare:'role', refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
              points:true, area:false, horizontal:false, stacked:false, sort:null };
   }
@@ -818,6 +851,7 @@
       S.scope   = cfg.scope;
       S.range   = cfg.range;
       S.compare = cfg.compare;
+      S.refMcId = cfg.refMcId || null;
       S.size    = cfg.size;
       S.color   = cfg.color;
       S.palette = cfg.palette;
@@ -837,6 +871,7 @@
       S.scope   = rawConfig.scope?.level         || 'player';
       S.range   = rawConfig.range?.type          || 'mc';
       S.compare = rawConfig.comparison?.baseline || 'none';
+      S.refMcId = rawConfig.comparison?.refMcId  || null;
       S.size    = rawConfig.style?.size          || 'md';
       S.color   = rawConfig.style?.color         || '#15803D';
       S.palette = rawConfig.style?.palette       || 'pitch';
@@ -1082,7 +1117,10 @@
   function syncSelects() {
     if (!S) return;
     document.getElementById('gpbRangeName').textContent   = RANGES.find(r=>r.id===S.range)?.name  || S.range;
-    document.getElementById('gpbCompareName').textContent = COMPARES.find(c=>c.id===S.compare)?.name || S.compare;
+    document.getElementById('gpbCompareName').textContent =
+      (S.compare === 'mc')
+        ? `vs ${mcLabel(S.refMcId)}`
+        : (COMPARES.find(c=>c.id===S.compare)?.name || S.compare);
   }
 
   function syncStyle() {
@@ -1339,7 +1377,7 @@
     body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">Loading GPS data…</div></div>`;
 
     try {
-      const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, CORE_COLS } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, CORE_COLS } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
@@ -1396,7 +1434,7 @@
       if (stale()) return;
 
       // Step 4: aggregate
-      const series = aggregateSeries(rows, eavMap, config, catalogMap);
+      let series = aggregateSeries(rows, eavMap, config, catalogMap);
 
       // Diagnostics: prove the series is 100% real (gps_reports/Supabase) and let you
       // cross-check the total against Session Control. Silence with window.GPB_DEBUG=false.
@@ -1437,6 +1475,46 @@
       if (!hasData) {
         _showCardState(cardEl, body, 'nodata', 'No rows match the current scope, range and filters.', config);
         return;
+      }
+
+      // Step 5a: "vs microciclo" — the current series above is the card's own range;
+      // here we resolve the REFERENCE microcycle through the same pipeline and reshape
+      // `series` into per-metric/per-player diff% (vs ref). Bars/ranking/table/scatter
+      // then render the diff straight from the reshaped series. Other comparisons
+      // (role/match/none) and other vizzes are untouched.
+      const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter']);
+      if (config.comparison?.baseline === 'mc' && config.comparison?.refMcId
+          && getMcSessionIds && MC_VIZ.has(config.viz)) {
+        try {
+          let refSessions = await getMcSessionIds(config.comparison.refMcId, ctx, sb);
+          if (stale()) return;
+          // Same MD-code narrowing as the current side (session level), but NOT the
+          // microcycle filter — the reference set IS a specific microcycle.
+          if (FB?.mdCodes?.length && refSessions.length) {
+            const want = new Set(FB.mdCodes.map(String));
+            const { data: ts } = await sb.from('training_sessions')
+              .select('id,session_attributes').in('id', refSessions);
+            if (stale()) return;
+            refSessions = (ts || [])
+              .filter(s => want.has(String(s.session_attributes?.md_code ?? '')))
+              .map(s => s.id);
+          }
+          let refSeries = [];
+          if (refSessions.length) {
+            const refFB = FB ? { ...FB, microcycleIds: [] } : null;   // keep player/position parity
+            const refRows = _fbFilterRows(await fetchReports(refSessions, config, ctx, catalogMap, sb), refFB);
+            if (stale()) return;
+            if (refRows.length) {
+              const refEav = customKeys.length
+                ? await fetchEavMetrics(refRows.map(r => r.id), customKeys, _clubId, sb)
+                : new Map();
+              if (stale()) return;
+              refSeries = aggregateSeries(refRows, refEav, config, catalogMap);
+            }
+          }
+          series = _mcReshape(config, _enrichMcDiff(series, refSeries));
+        } catch (e) { console.warn('gpb mc comparison:', e); }
+        if (stale()) return;
       }
 
       // Step 5b: compute the DB-derived extras this card needs, then hand the actual
@@ -1507,6 +1585,54 @@
       console.warn('gpb resolveAndRenderCard:', e);
       _showCardState(cardEl, body, 'err', 'GPS query failed. Your config is saved — try refreshing.', config);
     }
+  }
+
+  // ── "vs microciclo" diff helpers ──────────────────────────────────────────
+  // Both series sets come from the SAME pipeline (same metrics, same grouping), so
+  // a point matches its reference by (series.label = metric id, point.x = group key).
+
+  /** Attach { cur, ref, diff% } to every current-series point using the reference series. */
+  function _enrichMcDiff(series, refSeries) {
+    const refIdx = new Map();                      // metricId → Map(x → refValue)
+    for (const rs of (refSeries || [])) {
+      const m = new Map();
+      for (const p of rs.points) m.set(p.x, p.y);
+      refIdx.set(rs.label, m);
+    }
+    return (series || []).map(s => {
+      const rm = refIdx.get(s.label);
+      const points = s.points.map(p => {
+        const rv = rm ? rm.get(p.x) : null;
+        const diff = (rv != null && rv !== 0 && !isNaN(rv)) ? (p.y - rv) / rv * 100 : null;
+        return { ...p, cur: p.y, ref: (rv == null ? null : rv), diff };
+      });
+      return { ...s, points };
+    });
+  }
+
+  /**
+   * Reshape enriched series for the chosen viz so the existing renderers plot the
+   * comparison without per-renderer rewrites:
+   *   · bars / ranking / table → value becomes diff% (cur/ref kept for tooltips)
+   *   · scatter                → two synthetic series for metric 0: X = diff%, Y = current
+   */
+  function _mcReshape(config, enriched) {
+    if (config.viz === 'scatter') {
+      const s0 = enriched[0];
+      if (!s0) return enriched;
+      const name = s0.name || s0.label;
+      const diffPts = s0.points.map(p => ({ x: p.x, y: p.diff == null ? 0 : p.diff, cat: p.cat ?? null }));
+      const curPts  = s0.points.map(p => ({ x: p.x, y: p.cur == null ? 0 : p.cur,  cat: p.cat ?? null }));
+      return [
+        { label: s0.label + '__mcdiff', name: `Δ% vs ${mcLabel(config.comparison.refMcId)}`, unit: '%', points: diffPts },
+        { label: s0.label + '__mccur',  name: `${name} (actual)`, unit: s0.unit || '', points: curPts },
+      ];
+    }
+    // bars / ranking / table: plot the diff%, but carry cur/ref for tooltips/labels.
+    return enriched.map(s => ({
+      ...s, unit: '%', _mcDiff: true,
+      points: s.points.map(p => ({ ...p, y: p.diff == null ? 0 : p.diff })),
+    }));
   }
 
   /** Lazy-imports the resolver from lib/gp-card/resolver.js if available. */
@@ -1732,7 +1858,7 @@
     const baselineMap = new Map(ms.map(m => [m.id, metSample(m)]));
     const cfg = {
       viz: 'radar',
-      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      comparison: cmpConfig(S),
       style: { color: S.color, axes: S.axes, legend: S.legend, dataLabels: S.labels },
     };
     mountRadarChart(body, cfg, series, baselineMap);
@@ -1774,7 +1900,7 @@
         meta.data.forEach((bar, i) => {
           const v = ds.data[i];
           if (v == null) return;
-          const txt = fmt(Math.round(v * 10) / 10);
+          const txt = opts.mc ? `${v > 0 ? '+' : ''}${fmt(Math.round(v * 10) / 10)}%` : fmt(Math.round(v * 10) / 10);
           if (stacked) {
             // centre each segment, white for contrast; skip segments too small to fit
             const seg = horizontal ? Math.abs(bar.x - bar.base) : Math.abs(bar.base - bar.y);
@@ -1830,6 +1956,9 @@
     const cats = [];
     ss.forEach(s => s.points.forEach(p => { if (!cats.includes(p.x)) cats.push(p.x); }));
 
+    const isMc     = ss.some(s => s._mcDiff);   // value = diff% vs ref MC (set by _mcReshape)
+    const upCol    = _cssVar('--cm-success', '#16A34A');
+    const dnCol    = _cssVar('--cm-danger',  '#DC2626');
     const isLine   = ss.map((s, i) => !!(s.line || config.metrics?.[i]?.line));
     const barCols  = barColors(config, isLine.filter(f => !f).length || 1);
     const lineCol  = _cssVar('--cm-warning', '#D97706');
@@ -1844,20 +1973,31 @@
           pointBackgroundColor: lineCol, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
       }
       const col = barCols[bi++];
-      return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
+      const ds = { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
         backgroundColor: col, borderColor: col, borderWidth: 0,
         borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
         maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
         stack: stacked ? 'stk' : undefined };
+      if (isMc) {   // diff%: colour each bar by sign + carry cur/ref for the tooltip
+        ds.backgroundColor = data.map(v => (v == null || v >= 0) ? upCol : dnCol);
+        ds.borderColor     = ds.backgroundColor;
+        ds._cur = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.cur : null; });
+        ds._ref = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.ref : null; });
+      }
+      return ds;
     });
     datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // bars first → line drawn on top
 
     const barDs  = datasets.filter(d => !d._isLine);
     const ticks  = size === 'sm' ? 4 : 5;
+    const allBarVals = barDs.flatMap(d => d.data.filter(v => v != null));
     const maxVal = stacked
       ? Math.max(0, ...cats.map((_, ci) => barDs.reduce((sum, d) => sum + (d.data[ci] || 0), 0)))
-      : Math.max(0, ...barDs.flatMap(d => d.data.filter(v => v != null)));
+      : Math.max(0, ...allBarVals);
     const { max, step } = niceScale(maxVal, ticks);
+    // diff% bars can be negative → let the value axis dip below zero symmetrically.
+    const minVal = isMc ? Math.min(0, ...allBarVals) : 0;
+    const min = isMc && minVal < 0 ? -niceScale(-minVal, ticks).max : 0;
 
     const hasLine = datasets.some(d => d._isLine);
     let max1 = null, step1 = null;
@@ -1869,7 +2009,7 @@
     const baseH  = _BAR_SIZE_H[size] || 210;
     const height = horizontal ? Math.max(baseH, cats.length * 26 + 48) : baseH;   // grow for many horizontal bars
 
-    return { cats, datasets, max, step, ticks, showAxes, showLeg, showLbl,
+    return { cats, datasets, max, min, step, ticks, showAxes, showLeg, showLbl, isMc,
              horizontal, stacked, hasLine, max1, step1,
              height, color: config.style?.color || _cssVar('--cm-accent', '#15803D') };
   }
@@ -1895,10 +2035,11 @@
 
       const gridCol = 'rgba(148,163,184,0.18)';
       const valueScale = {
-        display: d.showAxes, beginAtZero: true, max: d.max, stacked: d.stacked,
+        display: d.showAxes, beginAtZero: !d.isMc || !d.min, max: d.max, min: d.min || undefined, stacked: d.stacked,
         grid: { display: d.showAxes, color: gridCol, drawTicks: false },
         border: { display: false },
-        ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
+        ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6,
+                 callback: v => d.isMc ? `${v > 0 ? '+' : ''}${kfmt(v)}%` : kfmt(v) },
       };
       const catScale = {
         display: d.showAxes, stacked: d.stacked,
@@ -1945,11 +2086,19 @@
               callbacks: {
                 label: ctx => {
                   const v = d.horizontal ? ctx.parsed.x : ctx.parsed.y;
+                  if (d.isMc) {
+                    const i = ctx.dataIndex, cur = ctx.dataset._cur?.[i], ref = ctx.dataset._ref?.[i];
+                    const sign = v > 0 ? '+' : '';
+                    const diff = `${ctx.dataset.label}: ${sign}${fmt(Math.round(v * 10) / 10)}%`;
+                    return (cur != null && ref != null)
+                      ? [diff, `actual ${fmt(Math.round(cur * 10) / 10)} · ref ${fmt(Math.round(ref * 10) / 10)}`]
+                      : diff;
+                  }
                   return `${ctx.dataset.label}: ${fmt(Math.round(v * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`;
                 },
               },
             },
-            gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked },
+            gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked, mc: d.isMc },
           },
           scales,
         },
@@ -1962,6 +2111,14 @@
   function mountBarsPreview(body, S) {
     const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
     if (!ms.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    // Real data when we have a backend + club context — identical to the saved card
+    // (and required for "vs microciclo", whose diff% comes from the resolver).
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    mountBarsMockPreview(body, S, ms);
+  }
+
+  /** Fallback bars preview with example values (no backend) — mock series, mock cats. */
+  function mountBarsMockPreview(body, S, ms) {
     const cats = dimMockLabels(S);   // X categories = the chosen dimension
     // One series per measure — same shape the resolver feeds the saved card, so
     // preview and saved card render identically. 2 series → 2nd in grey.
@@ -1970,7 +2127,7 @@
     const cfg = {
       viz: 'bars',
       dimensions: S.dimensions,
-      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      comparison: cmpConfig(S),
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels,
                orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
     };
@@ -2198,7 +2355,7 @@
     const cfg = {
       viz: 'line',
       dimensions: S.dimensions,
-      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      comparison: cmpConfig(S),
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels, area: S.area, points: S.points },
       __example: true,
     };
@@ -2421,7 +2578,9 @@
    */
   function mountScatterPreview(body, S) {
     const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
-    if (ms.length < 2) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    // "vs microciclo" scatter derives both axes (Δ% vs ref, current value) from ONE metric.
+    const minMetrics = S.compare === 'mc' ? 1 : 2;
+    if (ms.length < minMetrics) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
     if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
     mountScatterMockPreview(body, S);
   }
@@ -2542,14 +2701,17 @@
     const color   = config.style?.color || _cssVar('--cm-accent', '#15803D');
     const showVal = !!config.style?.dataLabels || size !== 'sm';   // OFF only in S w/o toggle (mirrors bars)
     const unit    = series?.[0]?.unit || '';
-    const pts     = [...(series?.[0]?.points || [])].sort((a, b) => b.y - a.y);
-    const max     = Math.max(...pts.map(p => p.y), 1);
+    // "vs microciclo" ranking = biggest movers: order by |diff%|, bar width by |value|.
+    const isMc    = !!series?.[0]?._mcDiff;
+    const pts     = [...(series?.[0]?.points || [])].sort((a, b) => isMc ? (Math.abs(b.y) - Math.abs(a.y)) : (b.y - a.y));
+    const max     = Math.max(...pts.map(p => isMc ? Math.abs(p.y) : p.y), 1);
     const rows = pts.map((p, i) => ({
-      rank: i + 1, name: String(p.x), value: p.y,
-      pct: Math.max(3, Math.round(p.y / max * 100)),
+      rank: i + 1, name: String(p.x), value: p.y, isMc,
+      pct: Math.max(3, Math.round((isMc ? Math.abs(p.y) : p.y) / max * 100)),
+      barCol: isMc ? (p.y >= 0 ? _cssVar('--cm-success', '#16A34A') : _cssVar('--cm-danger', '#DC2626')) : color,
       change: (p.change == null ? null : p.change),    // +n = climbed, −n = dropped (preview only)
     }));
-    return { rows, color, showVal, unit };
+    return { rows, color, showVal, unit, isMc };
   }
 
   /** Optional rank-change badge (▲/▼ + positions). */
@@ -2562,11 +2724,15 @@
 
   /** Ranking markup — sorted desc, proportional bars in style.color, value on the right. */
   function rankingHtml(d) {
+    const valTxt = r => {
+      const v = Math.round(r.value * 10) / 10;
+      return r.isMc ? `${v > 0 ? '+' : ''}${esc(fmt(v))}%` : esc(fmt(v)) + (d.unit ? ' ' + esc(d.unit) : '');
+    };
     return `<div class="gp-rank">${d.rows.map(r => `
       <div class="gp-rank-row">
         <span class="ax">${r.rank}</span>
-        <span class="gp-rank-bar"><span class="gp-rank-fill" style="width:${r.pct}%;background:${d.color}">${esc(r.name)}</span></span>
-        <span class="gp-rank-v">${d.showVal ? esc(fmt(Math.round(r.value * 10) / 10)) + (d.unit ? ' ' + esc(d.unit) : '') : ''}${_rankChangeHtml(r.change)}</span>
+        <span class="gp-rank-bar"><span class="gp-rank-fill" style="width:${r.pct}%;background:${r.barCol || d.color}">${esc(r.name)}</span></span>
+        <span class="gp-rank-v">${d.showVal ? valTxt(r) : ''}${_rankChangeHtml(r.change)}</span>
       </div>`).join('')}</div>`;
   }
 
@@ -2593,7 +2759,7 @@
     const series = [{ label: m0.id, name: m0.name, unit: m0.unit, points: [{ x: 'all', y: Math.round(base * 1.04) }] }];
     const config = {
       viz: 'kpi', metrics: S.metrics, scope: { level: S.scope },
-      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      comparison: cmpConfig(S),
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
       __example: true,
     };
@@ -3158,7 +3324,8 @@
     const color = S.color || '#15803D';
     const axes = S.axes !== false, legend = S.legend !== false, labels = !!S.labels;
     const rangeName = RANGES.find(r=>r.id===S.range)?.name || S.range;
-    const cmp = S.compare === 'none' ? '' : (COMPARES.find(c=>c.id===S.compare)?.name || '');
+    const cmp = S.compare === 'none' ? ''
+      : (S.compare === 'mc' ? `vs ${mcLabel(S.refMcId)}` : (COMPARES.find(c=>c.id===S.compare)?.name || ''));
     const m0 = ms[0];
     const s0 = m0 ? metSample(m0) : 100;
 
@@ -3268,7 +3435,23 @@
         <span class="ic"><i class="ti ${c.icon}"></i></span>
         <span class="tx"><span class="t">${esc(c.name)}</span><span class="d">${esc(c.d)}</span></span>
         <i class="ti ti-check ck"></i></button>`).join('');
-      return `<div class="rb-pop-h"><div class="t">${kind==='range'?'Time range':'Comparison / baseline'}</div></div><div class="rb-pop-b">${rows}</div>`;
+      // "vs microciclo" reveals a reference-MC sub-list (the MC we diff against).
+      let mcPicker = '';
+      if (kind === 'compare' && S.compare === 'mc') {
+        const curId = currentMcId();
+        const mcRows = _mcList.length
+          ? _mcList.map(m => {
+              const isCur = String(m.id) === String(curId);
+              const lbl = m.name || (m.start_date ? `MC ${String(m.start_date).slice(0,10)}` : m.id);
+              return `<button class="rb-opt ${String(S.refMcId)===String(m.id)?'is-on':''} ${isCur?'is-disabled':''}" data-mc="${esc(m.id)}">
+                <span class="ic"><i class="ti ti-calendar-week"></i></span>
+                <span class="tx"><span class="t">${esc(lbl)}</span>${isCur?'<span class="d">microciclo actual</span>':''}</span>
+                ${isCur?'<span class="tag no">actual</span>':'<i class="ti ti-check ck"></i>'}</button>`;
+            }).join('')
+          : `<div class="rb-note"><i class="ti ti-info-circle"></i>No hay microciclos cargados.</div>`;
+        mcPicker = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Microciclo de referencia</div></div><div class="rb-pop-b">${mcRows}</div>`;
+      }
+      return `<div class="rb-pop-h"><div class="t">${kind==='range'?'Time range':'Comparison / baseline'}</div></div><div class="rb-pop-b">${rows}</div>${mcPicker}`;
     }
     if (kind === 'agg') {
       const field = S.metrics.find(m => m.id === popEl.dataset.field);
@@ -3291,9 +3474,24 @@
 
   function bindPop(kind) {
     popEl.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
-      if (kind === 'range') S.range = b.dataset.pick;
-      else S.compare = b.dataset.pick;
+      if (kind === 'range') { S.range = b.dataset.pick; syncSelects(); pulseNext = true; renderCard(); closePop(); return; }
+      S.compare = b.dataset.pick;
+      if (S.compare === 'mc') {
+        // Keep the popover open and reveal the reference-MC list (default = previous MC).
+        if (!S.refMcId) S.refMcId = prevMcId();
+        const owner = popOwner;
+        syncSelects(); pulseNext = true; renderCard();
+        openPop(popHTML('compare'), owner, 'compare');
+        return;
+      }
       syncSelects(); pulseNext = true; renderCard(); closePop();
+    });
+    popEl.querySelectorAll('[data-mc]').forEach(b => b.onclick = () => {
+      if (b.classList.contains('is-disabled')) return;   // can't compare a MC against itself
+      S.refMcId = b.dataset.mc;
+      const owner = popOwner;
+      syncSelects(); pulseNext = true; renderCard();
+      openPop(popHTML('compare'), owner, 'compare');
     });
     popEl.querySelectorAll('[data-agg]').forEach(b => b.onclick = () => {
       if (b.classList.contains('is-disabled')) return;
@@ -3457,6 +3655,7 @@
       _userId = window._gpUserId || null;
 
       await loadCatalog(clubId);
+      await loadMicrocycles(clubId);
 
       injectDOM();
       wireDOMRefs();
@@ -3466,6 +3665,17 @@
     } catch (e) {
       console.warn('[gp-builder] init failed:', e);
     }
+  }
+
+  /** Loads the club's microcycles (newest first) for the "vs microciclo" reference picker. */
+  async function loadMicrocycles(clubId) {
+    try {
+      const { data } = await window.sb.from('microcycles')
+        .select('id,name,start_date')
+        .eq('club_id', clubId)
+        .order('start_date', { ascending: false });
+      _mcList = data || [];
+    } catch (e) { console.warn('[gp-builder] loadMicrocycles:', e); _mcList = []; }
   }
 
   function wireEvents() {
@@ -3512,6 +3722,7 @@
     S.scope   = config.scope?.level               || 'player';
     S.range   = config.range?.type                || 'mc';
     S.compare = config.comparison?.baseline       || 'none';
+    S.refMcId = config.comparison?.refMcId        || null;
     S.size    = config.style?.size                || 'md';
     S.color   = config.style?.color               || '#15803D';
     S.palette = config.style?.palette             || 'pitch';
