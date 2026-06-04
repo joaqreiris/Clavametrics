@@ -1036,7 +1036,7 @@
               <span class="sub" id="mp-td-sub">total distance · minutes played line</span>
               <div class="right">
                 <button class="pill" id="mp-td-metric-btn" style="font-size:11px"><i class="ti ti-arrows-exchange"></i><span id="mp-td-metric-label">Total Distance</span></button>
-                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button data-edit title="Editar card"><i class="ti ti-pencil"></i></button></div>
             </div>
             <div class="gp-c-b" style="position:relative;min-height:240px;padding:10px">
               <canvas id="canvasMPTD"></canvas>
@@ -1048,7 +1048,7 @@
             <div class="gp-c-h">
               <span class="ttl">High intensity per match</span>
               <span class="sub">HSR · VHSR · Sprint distance · horizontal bars</span>
-              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-dots"></i></button></div>
+              <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button data-edit title="Editar card"><i class="ti ti-pencil"></i></button></div>
             </div>
             <div class="gp-c-b" id="mp-hi-body" style="position:relative;min-height:200px;padding:10px">
               <canvas id="canvasMPHI"></canvas>
@@ -9571,100 +9571,53 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // Migrada al motor compartido: la métrica elegida va como BARRAS y los minutos
   // jugados como LÍNEA sobre un eje Y secundario (window.GpRender.renderCard).
   // El dato sale de los mismos `rows` de _mpLoad; sólo cambia cómo se dibuja.
-  function _mpRenderTDChart(rows) {
-    const body = document.querySelector('#card-mp-td .gp-c-b');
-    if (!body) return;
-    if (!window.GpRender || typeof Chart === 'undefined') { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } return; }
-    if (!rows.length) { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } body.innerHTML = ''; return; }
+  // ── Capa 2: TD y HI son cards EDITABLES del builder ───────────
+  // Cada una es un config gp.card/v1 real alimentado por el RESOLVER (no por la carga
+  // bespoke). Se filtran con los menús desplegables (gpFilterBar); el lápiz abre el
+  // Chart builder. El primer guardado crea su fila en dashboard_cards (in-place) y
+  // luego se comportan como cualquier card del usuario.
+  function _mpRenderTDChart() { _mpRenderBuilderCard('#card-mp-td', _mpTdConfig); }
+  function _mpRenderHIChart() { _mpRenderBuilderCard('#card-mp-hi', _mpHiConfig); }
 
-    const cat     = (window._gpCatalog || []).find(d => d.key === _mpTdMetric);
-    const metLbl  = cat?.label || _mpTdMetric.replace(/_/g, ' ');
-    const metUnit = cat?.unit  || '';
-
-    const labelOf = r => {
-      const base = _mpRivalLabel(r, 12);
-      const d = r.session?.session_date ? r.session.session_date.slice(5) : '';
-      return d ? `${base} · ${d}` : base;
-    };
-    const labels = rows.map(labelOf);
-    const valOf  = r => _mpTdMetric === 'acc_dec' ? (r.accelerations || 0) + (r.decelerations || 0) : (r[_mpTdMetric] || 0);
-    const series = [
-      { label: _mpTdMetric,  name: metLbl,         unit: metUnit, points: rows.map((r, i) => ({ x: labels[i], y: valOf(r) })) },
-      { label: 'time_played', name: 'Min jugados', unit: 'min', line: true, points: rows.map((r, i) => ({ x: labels[i], y: r.time_played || 0 })) },
-    ];
-    const config = {
-      schema: 'gp.card/v1', viz: 'bars',
-      metrics: [{ id: _mpTdMetric }, { id: 'time_played', line: true }],
-      style: { size: 'lg', palette: 'pitch', legend: true, axes: true, dataLabels: false },
-    };
-    window.GpRender.renderCard(body, config, series);
-
-    // Preserva el clic-para-navegar a Session Control de la card original.
-    // Listener en el body (sobrevive a los re-render que recrean el canvas).
-    if (!body.__mpNavBound) {
-      body.__mpNavBound = true;
-      body.addEventListener('click', ev => {
-        const chart = body.__chart;
-        if (!chart) return;
-        const els = chart.getElementsAtEventForMode(ev, 'index', { intersect: false }, true);
-        if (!els.length) return;
-        const r = _mpCurrentRows[els[0].index];
-        if (!r?.session?.id) return;
-        const grpBtn = document.querySelector('.gp-sec[data-view="grp"]');
-        if (grpBtn) {
-          grpBtn.click();
-          setTimeout(() => {
-            const sel = document.getElementById('sc-sess-sel');
-            if (sel) { sel.value = r.session.id; sel.dispatchEvent(new Event('change')); }
-          }, 200);
-        }
-      });
-    }
+  // Configs por defecto (semilla). 'Match metric' = COMBO (barras + minutos línea, eje
+  // 2º); 'High intensity' = barras HORIZONTALES APILADAS. dimension session_date → una
+  // barra por sesión; el usuario filtra jugador / matchday con los desplegables.
+  function _mpTdConfig() {
+    return { schema: 'gp.card/v1', title: 'Match metric', viz: 'bars', scope: { level: 'squad' },
+      metrics: [{ id: 'total_distance', agg: 'avg' }, { id: 'time_played', agg: 'avg', line: true }],
+      dimensions: [{ id: 'session_date' }], range: { type: 'season' }, comparison: null,
+      style: { size: 'full', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false, orientation: 'vertical', stacked: false } };
+  }
+  function _mpHiConfig() {
+    return { schema: 'gp.card/v1', title: 'High intensity per match', viz: 'bars', scope: { level: 'squad' },
+      metrics: [{ id: 'high_speed_distance', agg: 'avg' }, { id: 'very_high_speed_distance', agg: 'avg' }, { id: 'sprint_distance', agg: 'avg' }],
+      dimensions: [{ id: 'session_date' }], range: { type: 'season' }, comparison: null,
+      style: { size: 'full', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false, orientation: 'horizontal', stacked: true } };
   }
 
-  // ── High Intensity per match — PILOTO motor unificado ─────────
-  // Renderizada por el motor compartido del builder (window.GpRender.renderCard)
-  // como una card gp.card/v1 'bars' multi-métrica (HSR / VHSR / Sprint por partido).
-  // El DATO sale de los mismos `rows` que ya carga _mpLoad (no cambia el origen);
-  // solo cambia CÓMO se dibuja (look pro del builder).
-  function _mpRenderHIChart(rows) {
-    const body = document.getElementById('mp-hi-body');
-    if (!body) return;
-    // Sin motor / sin Chart.js → no rompemos: dejamos el cuerpo vacío.
-    if (!window.GpRender || typeof Chart === 'undefined') { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } return; }
-    if (!rows.length) { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } body.innerHTML = ''; return; }
-
-    const display = rows.slice(-15);
-    // Etiqueta única por partido (rival + fecha) para que las barras no se fusionen.
-    const labelOf = r => {
-      const base = _mpRivalLabel(r, 12);
-      const d = r.session?.session_date ? r.session.session_date.slice(5) : '';
-      return d ? `${base} · ${d}` : base;
-    };
-    const labels = display.map(labelOf);
-    const pts = key => display.map((r, i) => ({ x: labels[i], y: r[key] || 0 }));
-    const series = [
-      { label: 'high_speed_distance',      name: 'HSR',    unit: 'm', points: pts('high_speed_distance') },
-      { label: 'very_high_speed_distance', name: 'VHSR',   unit: 'm', points: pts('very_high_speed_distance') },
-      { label: 'sprint_distance',          name: 'Sprint', unit: 'm', points: pts('sprint_distance') },
-    ];
-    const config = {
-      schema: 'gp.card/v1', viz: 'bars',
-      metrics: [{ id: 'high_speed_distance' }, { id: 'very_high_speed_distance' }, { id: 'sprint_distance' }],
-      // Barras HORIZONTALES APILADAS (HSR + VHSR + Sprint sumados por partido).
-      style: { size: 'lg', palette: 'pitch', legend: true, axes: true, dataLabels: false, orientation: 'horizontal', stacked: true },
-    };
-    window.GpRender.renderCard(body, config, series);
+  function _mpRenderBuilderCard(cardSel, defaultCfg) {
+    const el = document.querySelector(cardSel);
+    if (!el || !window.GpBuilder?.resolveAndRenderCard) return;
+    const cfg = defaultCfg();
+    // Dedup tras recarga: si esta sigue siendo la placeholder estática (sin
+    // data-card-id) pero ya existe una card GUARDADA con el mismo título en la grilla
+    // (montada por gp-tabs desde dashboard_cards), la estática sobra → la quitamos.
+    if (!el.dataset.cardId) {
+      const grid = el.closest('.gp-grid');
+      const saved = grid && [...grid.querySelectorAll('.gp-c[data-card-id] .ttl')]
+        .some(t => t.textContent.trim() === cfg.title);
+      if (saved) { el.remove(); return; }
+    }
+    if (!el.__config) el.__config = cfg;                   // semilla; tras editar+guardar el builder la reemplaza
+    const pen = el.querySelector('[data-edit]');
+    if (pen && !pen.__mpBound) { pen.__mpBound = true; pen.addEventListener('click', () => window.GpBuilder.openForEdit?.(el)); }
+    window.GpBuilder.resolveAndRenderCard(el, el.__config);
   }
 
   function _destroyCharts() {
+    // TD/HI ahora son cards del builder (resolveAndRenderCard gestiona body.__chart).
     if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
     if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
-    // TD y HI ahora las dibuja GpRender (chart en body.__chart).
-    ['#card-mp-td .gp-c-b', '#mp-hi-body'].forEach(sel => {
-      const el = document.querySelector(sel);
-      if (el && el.__chart) { try { el.__chart.destroy(); } catch (e) {} el.__chart = null; }
-    });
   }
 
   // ── events ───────────────────────────────────────────────────
@@ -9685,6 +9638,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     e.stopPropagation();
     _mpShowTdMetricPopup(e.currentTarget);
   });
+
+  // Cards migradas (TD/HI): render inicial + re-render al cambiar los filtros del
+  // gpFilterBar. (Una vez guardadas en dashboard_cards, el propio filter bar también
+  // las re-renderiza por data-card-id; el doble render es inocuo.)
+  document.addEventListener('gpfilter:change', () => { _mpRenderTDChart(); _mpRenderHIChart(); });
+  setTimeout(() => { _mpRenderTDChart(); _mpRenderHIChart(); }, 1000);
 
   window._mpInit = mpInit;
 

@@ -603,8 +603,9 @@
 
     const config = buildConfig(S);
 
-    if (_editCardId) {
-      // ── Edit mode: update existing card in place (draftCard === _editCardDom) ──
+    if (_editCardDom) {
+      // ── Edit mode: update the card in place (draftCard === _editCardDom). The card
+      // may not have a DB row yet (migrated MP card) → the first save creates it. ──
       const targetCard = _editCardDom;
       const cardId     = _editCardId;
 
@@ -662,12 +663,19 @@
       S = null;
       closePanel();
 
-      if (typeof window.updateDashboardCard === 'function') {
+      if (cardId && typeof window.updateDashboardCard === 'function') {
         window.updateDashboardCard(cardId, config, window.sb)
           .catch(e => console.warn('gpb: updateDashboardCard failed:', e));
+      } else if (!cardId && _clubId && typeof window.saveDashboardCard === 'function') {
+        // First save of an in-place card without a DB row → create it; the card then
+        // behaves like any user card (filter bar re-renders it, future saves update).
+        targetCard.dataset.card = 'chart';
+        window.saveDashboardCard(config, _clubId, _currentView(), _userId, window.sb)
+          .then(newId => { if (newId) targetCard.dataset.cardId = newId; })
+          .catch(e => console.warn('gpb: saveDashboardCard (in-place) failed:', e));
       }
       resolveAndRenderCard(targetCard, config);
-      showToast('Card updated', 'Real data loading…', 'Done');
+      showToast(cardId ? 'Card updated' : 'Card saved', 'Real data loading…', 'Done');
       return;
     }
 
@@ -752,8 +760,10 @@
   // Reuses _editCardDom as draftCard — no second card is created.
   function openBuilderForEdit(cardEl) {
     if (!panelEl) return;
-    const cardId = cardEl?.dataset.cardId;
-    if (!cardId) return;
+    // A card may not have a DB row yet (e.g. a migrated Match Performance card seeded
+    // with __config). Editing is allowed; the first save creates the row in place.
+    if (!cardEl || (!cardEl.dataset.cardId && !cardEl.__config)) return;
+    const cardId = cardEl.dataset.cardId || null;
 
     if (S) cancelBuild();
 
