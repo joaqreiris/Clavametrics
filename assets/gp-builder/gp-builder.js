@@ -492,7 +492,7 @@
       b.onclick = () => {
         const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
         const sz = map[b.textContent.trim()];
-        if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); }
+        if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); renderCard(); }
       };
     });
 
@@ -744,7 +744,7 @@
       b.onclick = () => {
         const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
         const sz = map[b.textContent.trim()];
-        if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); }
+        if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); renderCard(); }
       };
     });
 
@@ -887,6 +887,7 @@
         S.size = b.dataset.size;
         if (draftCard) draftCard.dataset.size = S.size;
         syncSizeToggle();
+        renderCard();
       };
     });
 
@@ -1161,6 +1162,7 @@
     draftCard.classList.remove('is-draft');
     body.className = bodyClass(S.type);
     if (S.type === 'radar') mountRadarPreview(body, S);
+    else if (S.type === 'bars') mountBarsPreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -1272,6 +1274,8 @@
           catch (e) { console.warn('gpb role baseline:', e); }
         }
         mountRadarChart(body, config, series, baselineMap);
+      } else if (config.viz === 'bars') {
+        mountBarsChart(body, config, series);
       } else {
         destroyBodyChart(body);
         body.innerHTML = renderTypeFromDataset(config, series);
@@ -1460,6 +1464,186 @@
       style: { color: S.color, axes: S.axes, legend: S.legend, dataLabels: S.labels },
     };
     mountRadarChart(body, cfg, series, baselineMap);
+  }
+
+  // ── Bars (Chart.js) — "GPS Chart Reference §1" professional look ──────────
+  function _cssVar(name, fallback) {
+    try { const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fallback; }
+    catch (e) { return fallback; }
+  }
+  /** thousands → "1k" / "2.5k", else plain (Y-axis ticks). */
+  function kfmt(v) {
+    if (Math.abs(v) >= 1000) { const k = v / 1000; return (Number.isInteger(k) ? k : +k.toFixed(1)) + 'k'; }
+    return String(+(+v).toFixed(2));
+  }
+  /** A "nice" axis: max with ~10% headroom, snapped to a 1/2/2.5/5 step × ticks. */
+  function niceScale(maxVal, ticks) {
+    if (!(maxVal > 0)) return { max: ticks, step: 1 };
+    const raw = (maxVal * 1.1) / ticks;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / mag;
+    const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+    const step = nice * mag;
+    return { max: step * ticks, step };
+  }
+  /** Draws fmt(value) above each bar. No plugin dependency. */
+  const _barLabelPlugin = {
+    id: 'gpbBarLabels',
+    afterDatasetsDraw(chart, _args, opts) {
+      if (!opts || !opts.show) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '600 9px Geist, Inter, sans-serif';
+      ctx.fillStyle = opts.color || '#6B7280';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      chart.data.datasets.forEach((ds, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((bar, i) => {
+          const v = ds.data[i];
+          if (v == null) return;
+          ctx.fillText(fmt(Math.round(v * 10) / 10), bar.x, bar.y - 3);
+        });
+      });
+      ctx.restore();
+    },
+  };
+
+  const _BAR_SIZE_H = { sm: 150, md: 210, lg: 270, full: 320 };
+
+  /** Per-series colors: 1→accent, 2→accent+grey(prev), 3+→categorical palette. */
+  function barColors(config, n) {
+    const accent = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    const grey   = 'rgba(148,163,184,0.6)';
+    if (n <= 1) return [accent];
+    if (n === 2) return [accent, grey];                    // main + comparison/prev (grey)
+    const pal = PALETTES.find(p => p.id === config.style?.palette);
+    const base = (pal && pal.id !== 'pitch')
+      ? [accent, ...pal.cols]                              // honor a non-default style.palette
+      : [accent, _cssVar('--cm-info', '#2563EB'), _cssVar('--cm-violet', '#7C3AED'), _cssVar('--cm-warning', '#D97706')];
+    return Array.from({ length: n }, (_, i) => base[i % base.length]);
+  }
+
+  /** Pure: (config, series) → Chart.js bar payload (categories, datasets, scale). */
+  function barsChartData(config, series) {
+    const size     = config.style?.size || 'md';
+    const showAxes = config.style?.axes   !== false;
+    const showLeg  = config.style?.legend !== false;
+    const showLbl  = !!config.style?.dataLabels || size !== 'sm';   // OFF in S, ON in M/L, toggle forces ON
+    const ss       = (series || []).filter(s => s.points && s.points.length);
+
+    // categories = the dimension values (x), in first-series order
+    const cats = [];
+    ss.forEach(s => s.points.forEach(p => { if (!cats.includes(p.x)) cats.push(p.x); }));
+
+    const colors = barColors(config, ss.length);
+    const datasets = ss.map((s, i) => ({
+      label: s.name || s.label,
+      unit:  s.unit || '',
+      data:  cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; }),
+      backgroundColor: colors[i],
+      borderColor: colors[i],
+      borderWidth: 0,
+      borderRadius: 4,
+      borderSkipped: 'bottom',
+      maxBarThickness: 46,
+      categoryPercentage: 0.7,
+      barPercentage: 0.9,
+    }));
+
+    const maxVal = Math.max(0, ...datasets.flatMap(d => d.data.filter(v => v != null)));
+    const ticks  = size === 'sm' ? 4 : 5;
+    const { max, step } = niceScale(maxVal, ticks);
+
+    return { cats, datasets, max, step, ticks, showAxes, showLeg, showLbl,
+             height: _BAR_SIZE_H[size] || 210, color: config.style?.color || _cssVar('--cm-accent', '#15803D') };
+  }
+
+  /** Mounts (or re-mounts) a Chart.js bar chart into `body`. Same renderer for preview + saved card. */
+  function mountBarsChart(body, config, series) {
+    const d = barsChartData(config, series);
+    if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
+
+    const token = (body.__barsToken = (body.__barsToken || 0) + 1);
+    const mount = () => {
+      if (!body.isConnected || body.__barsToken !== token) return;   // superseded by a newer render
+      if (!body.clientWidth) { requestAnimationFrame(mount); return; }
+      destroyBodyChart(body);
+      body.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      const canvas = document.createElement('canvas');   // no global id — unique per card body
+      wrap.appendChild(canvas);
+      body.appendChild(wrap);
+      Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
+
+      body.__chart = new Chart(canvas, {
+        type: 'bar',
+        data: { labels: d.cats, datasets: d.datasets },
+        plugins: [_barLabelPlugin],
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 320 },
+          layout: { padding: { top: d.showLbl ? 14 : 4 } },
+          plugins: {
+            legend: {
+              display: d.showLeg, position: 'bottom',
+              labels: { boxWidth: 12, boxHeight: 12, padding: 14, usePointStyle: true, pointStyle: 'rectRounded',
+                        font: { size: 11 },
+                        generateLabels: ch => ch.data.datasets.map((ds, i) => ({
+                          text: ds.unit ? `${ds.label} (${ds.unit})` : ds.label,
+                          fillStyle: ds.backgroundColor, strokeStyle: ds.backgroundColor, lineWidth: 0,
+                          hidden: !ch.isDatasetVisible(i), datasetIndex: i,
+                        })) },
+              onClick: (e, item, legend) => {
+                const ci = legend.chart; ci.setDatasetVisibility(item.datasetIndex, !ci.isDatasetVisible(item.datasetIndex)); ci.update();
+              },
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${fmt(Math.round(ctx.parsed.y * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`,
+              },
+            },
+            gpbBarLabels: { show: d.showLbl, color: '#6B7280' },
+          },
+          scales: {
+            x: {
+              display: d.showAxes, stacked: false,
+              grid: { display: false, drawTicks: false },
+              ticks: { font: { size: 10.5 }, color: '#6B7280', maxRotation: 0, autoSkip: true },
+              border: { display: d.showAxes },
+            },
+            y: {
+              display: d.showAxes, beginAtZero: true, max: d.max,
+              grid: { display: d.showAxes, color: 'rgba(148,163,184,0.18)', drawTicks: false },
+              border: { display: false, dash: [3, 3] },
+              ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
+            },
+          },
+        },
+      });
+    };
+    mount();
+  }
+
+  /** Builder preview bars — same Chart.js renderer, mock per-category values. */
+  function mountBarsPreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    if (!ms.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    const cats = dimMockLabels(S);   // X categories = the chosen dimension
+    // One series per measure — same shape the resolver feeds the saved card, so
+    // preview and saved card render identically. 2 series → 2nd in grey.
+    const series = ms.map((m, idx) => ({ label: m.id, name: m.name, unit: m.unit,
+      points: cats.map((c, r) => ({ x: c, y: Math.round(metSample(m) * (0.5 + 0.42 * Math.abs(Math.sin(r * 1.3 + idx + 1)))) })) }));
+    const cfg = {
+      viz: 'bars',
+      dimensions: S.dimensions,
+      comparison: S.compare === 'none' ? null : { baseline: S.compare },
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+    };
+    mountBarsChart(body, cfg, series);
   }
 
   /**
@@ -2005,6 +2189,8 @@
     resolveAndRenderCard,
     radarChartData,   // exposed for tests
     mountRadarChart,  // exposed for tests
+    barsChartData,    // exposed for tests
+    mountBarsChart,   // exposed for tests
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
