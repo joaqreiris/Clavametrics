@@ -142,7 +142,7 @@
   .gp-grid.is-edit .gp-c { outline:1.5px dashed var(--cm-border-strong); outline-offset:-2px; }
   .gp-grid.is-edit .gp-c:hover { outline-color:var(--cm-accent); }
 
-  .gp-c { grid-column: span 6; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; position:relative; overflow:hidden; }
+  .gp-c { grid-column: span 6; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; position:relative; overflow:hidden; box-sizing:border-box; min-width:0; max-width:100%; }
   .gp-c[data-size="sm"]   { grid-column: span 4;  max-height: 280px; }
   .gp-c[data-size="md"]   { grid-column: span 6;  max-height: 420px; }
   .gp-c[data-size="lg"]   { grid-column: span 8;  max-height: 580px; }
@@ -166,7 +166,11 @@
   .size-toggle button { width:22px; height:22px; border:0; background:transparent; color:var(--cm-fg-muted); font:600 9.5px/1 var(--cm-font-mono); cursor:pointer; border-radius:3px; }
   .size-toggle button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
 
-  .gp-c-b { padding:14px; flex:1; display:flex; flex-direction:column; overflow-y:auto; min-height:0; }
+  .gp-c-b { padding:14px; flex:1; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; min-height:0; min-width:0; }
+  /* Card body children must shrink to the card width (never push the grid wider);
+     wide content scrolls inside its own wrapper (e.g. .gp-zwrap) instead. */
+  .gp-c-b > * { min-width:0; max-width:100%; }
+  .gp-c-b canvas { max-width:100%; }
   .gp-c-picks { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
   .gp-c-pick { display:inline-flex; align-items:center; gap:4px; height:22px; padding:0 8px; border-radius:5px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg); font:500 11px/1 var(--cm-font-sans); cursor:pointer; }
   .gp-c-pick:hover { border-color:var(--cm-border-strong); }
@@ -193,7 +197,7 @@
   .gp-kpi .d.warn { color:var(--cm-warning); }
   .gp-kpi .d.down { color:var(--cm-danger); }
 
-  .gp-zwrap { overflow-x:auto; }
+  .gp-zwrap { overflow-x:auto; min-width:0; max-width:100%; }
   .gp-zt { width:100%; border-collapse:separate; border-spacing:0; }
   /* Outliers heatmap */
   .ol-hm-wrap { overflow-x:auto; }
@@ -2800,12 +2804,8 @@ window.refreshDashboard = async function (opts = {}) {
   // Individual KPIs (first / selected player)
   const sel = (window.gpState.playerId ? reports.find(r => r.player_id === window.gpState.playerId) : null) || reports[0];
   if (sel) {
-    const p = sel.players;
-    const fname = p ? ((p.first_name||'') + ' ' + (p.last_name||'')).trim() : '—';
-    const indSub = document.getElementById('secSub');
-    if (indSub && document.querySelector('.gp-view.is-on')?.dataset.view !== 'ind') {
-      indSub.textContent = `${fname} · ${p?.position || '—'} · ${getDatePresetLabel()}`;
-    }
+    // (Descriptor "jugador · posición · rango" removido de la fila "Dashboard":
+    //  el contexto de datos ahora lo da exclusivamente la barra de filtros.)
     const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
     const distCard = document.querySelector('.gp-view[data-view="ind"] .gp-c[data-card-id="kpi-distance"]');
     if (distCard) renderKpiCard(distCard, distCard.dataset.metricKey || 'total_distance', sel);
