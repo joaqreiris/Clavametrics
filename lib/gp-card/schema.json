@@ -35,7 +35,25 @@
           "agg": { "type": "string", "enum": ["avg", "total", "median", "max", "min"] },
           "kind": { "type": "string", "enum": ["accum", "peak"] },
           "unit": { "type": "string" },
-          "custom": { "type": "boolean" }
+          "custom": { "type": "boolean" },
+          "format": {
+            "$comment": "Optional per-column conditional formatting (table viz). min/max & thresholds are derived from real data at render; only the rule is stored.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mode": { "type": "string", "enum": ["plain", "bar", "heat", "icon", "pct"] },
+              "dir": { "type": "string", "enum": ["high", "band"] },
+              "dec": { "type": "integer", "minimum": 0, "maximum": 3 },
+              "barColor": { "type": ["string", "null"] },
+              "heatScale": { "type": "string", "enum": ["gyr", "ryg", "seq"] },
+              "iconStyle": { "type": "string", "enum": ["dot", "arrow"] },
+              "thr": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "properties": { "hi": { "type": "number" }, "lo": { "type": "number" } }
+              }
+            }
+          }
         },
         "allOf": [
           {

@@ -160,7 +160,12 @@
       scope:  { level: S.scope },
       metrics: S.metrics.map(m => {
         const cat = catalogMap.get(m.id) || {};
-        return { id:m.id, agg:m.agg, kind:cat.kind||'accum', unit:cat.unit||'', custom:!!cat.is_custom };
+        const out = { id:m.id, agg:m.agg, kind:cat.kind||'accum', unit:cat.unit||'', custom:!!cat.is_custom };
+        // Per-column conditional format (table viz). Persist the user's rule, or a
+        // sensible default for table cards so the formatting survives save/reload.
+        if (m.format) out.format = m.format;
+        else if (S.type === 'table') out.format = _defaultFormat(cat);
+        return out;
       }),
       dimensions: (S.dimensions || []).map(d => ({ id:d.id })),
       range:      { type: S.range },
@@ -815,7 +820,7 @@
       S.area    = !!rawConfig.style?.area;
       S.title   = rawConfig.title || '';
       S.metrics = (rawConfig.metrics || [])
-        .map(m => ({ id: m.id, agg: m.agg }))
+        .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}) }))
         .filter(m => catalogMap.has(m.id))
         .map(m => {
           const cat = catalogMap.get(m.id);
@@ -1170,6 +1175,7 @@
 
   function renderCard() {
     if (!S || !draftCard) return;
+    closeTfPane();   // structural change (viz/metrics/dims/style) → drop any open column-rules panel
     const t = VIZ_TYPES[S.type];
     draftCard.dataset.size = S.size;
     draftCard.style.setProperty('--cm-accent', S.color);
@@ -1202,6 +1208,7 @@
     else if (S.type === 'scatter') mountScatterPreview(body, S);
     else if (S.type === 'kpi') mountKpiPreview(body, S);
     else if (S.type === 'ranking') mountRankingPreview(body, S);
+    else if (S.type === 'table') mountTablePreview(body, S);
     else body.innerHTML = renderType(S);
   }
 
@@ -1411,6 +1418,10 @@
         mountKpiCard(body, config, series, { baselineVal, sparkSeries });
       } else if (config.viz === 'ranking') {
         mountRankingCard(body, config, series);
+      } else if (config.viz === 'table') {
+        // Interactive (per-column rules panel) only in the builder draft; saved
+        // dashboard cards render the stored formats read-only.
+        mountTableCard(body, config, series, { interactive: cardEl === draftCard });
       } else {
         destroyBodyChart(body);
         body.innerHTML = renderTypeFromDataset(config, series);
@@ -2445,6 +2456,265 @@
     mountRankingCard(body, config, series, { example: true });
   }
 
+  // ── Conditional table formatting (GPS Chart Reference §5) ──
+  // Per-column cell modes (bar / heat / icon / pct / plain). Min/max and icon
+  // thresholds are derived from the REAL data of each column (never hardcoded).
+  // The rule per column lives in metric.format and is persisted in gp.card/v1.
+
+  let _tfPane = null;   // the open per-column rules panel (builder draft only)
+
+  /** Sensible default format for a metric, by unit / group / name. User edits it after. */
+  function _defaultFormat(cat) {
+    const unit = (cat?.unit || '').toLowerCase();
+    const name = (cat?.name || '').toLowerCase();
+    const id   = (cat?.id || cat?.key || '').toLowerCase();
+    const grp  = (cat?.group_name || '').toLowerCase();
+    let mode = 'plain', dir = 'high', dec = 0;
+    if (/acwr|ratio/.test(name) || /acwr|ratio/.test(id)) { mode = 'icon'; dir = 'band'; dec = 2; }      // load ratio band
+    else if (unit === '%' || /readiness|wellness|availab/.test(name)) { mode = 'pct'; dec = 0; }          // % / readiness
+    else if (grp === 'distance' || unit === 'm' || unit === 'km') { mode = 'bar'; }                       // distance / volume
+    else if (grp === 'count' || unit === 'n' || /count|sprint/.test(name)) { mode = 'bar'; }              // counts
+    return { mode, dir, dec, barColor: null, heatScale: 'gyr', iconStyle: 'dot', thr: null };
+  }
+
+  function _round3(n) { return Math.round(n * 1000) / 1000; }
+
+  /** Quantile-based default thresholds from a column's real values. */
+  function _colThr(vals, dir) {
+    const s = vals.filter(v => isFinite(v)).sort((a, b) => a - b);
+    if (!s.length) return { hi: 1, lo: 0 };
+    const q = p => { const i = (s.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return s[lo] + (s[hi] - s[lo]) * (i - lo); };
+    return dir === 'band'
+      ? { lo: _round3(q(0.25)), hi: _round3(q(0.75)) }    // middle half = ok zone
+      : { lo: _round3(q(0.34)), hi: _round3(q(0.67)) };   // high-good: ≥hi green, ≥lo amber
+  }
+
+  function _hex2rgb(h) { const m = h.replace('#', ''); const n = parseInt(m.length === 3 ? m.replace(/./g, c => c + c) : m, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function _rgb2hex(r) { return '#' + r.map(v => Math.round(v).toString(16).padStart(2, '0')).join(''); }
+  function _lerpHex(a, b, t) { const x = _hex2rgb(a), y = _hex2rgb(b); return _rgb2hex([0, 1, 2].map(i => x[i] + (y[i] - x[i]) * t)); }
+  /** Interpolated heat colour for t∈[0,1] across the chosen scale. */
+  function _heatColor(t, scale) {
+    t = Math.max(0, Math.min(1, t));
+    const stops = scale === 'ryg' ? ['#DC2626', '#F59E0B', '#15803D']
+                : scale === 'seq' ? ['#DCFCE7', '#16A34A', '#14532D']
+                : ['#15803D', '#F59E0B', '#DC2626'];                 // gyr (default)
+    const seg = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(seg));
+    return _lerpHex(stops[i], stops[i + 1], seg - i);
+  }
+  /** Readable text colour over a given background. */
+  function _textOn(hex) { const [r, g, b] = _hex2rgb(hex); return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1F2937' : '#fff'; }
+
+  function _fmtNum(v, dec) { return dec > 0 ? (+v).toFixed(dec) : fmt(Math.round(v)); }
+
+  const _TF_ARROW      = { good: 'ti-trending-up', warn: 'ti-minus', bad: 'ti-trending-down' };
+  const _TF_ARROW_BAND = { good: 'ti-circle-check', bad: 'ti-alert-triangle' };
+
+  function _iconStatus(v, thr, dir) {
+    if (dir === 'band') return (v >= thr.lo && v <= thr.hi) ? 'good' : 'bad';
+    return v >= thr.hi ? 'good' : v >= thr.lo ? 'warn' : 'bad';
+  }
+
+  /** Builds the inner HTML for one measure cell, per its column format + real stats. */
+  function tableCellHtml(value, f, stats) {
+    if (value == null || !isFinite(value)) return `<span class="tf-c plain">—</span>`;
+    const valTxt = esc(_fmtNum(value, f.dec ?? 0));
+    const { min, max, accent } = stats;
+    switch (f.mode) {
+      case 'bar': {
+        const w = max > min ? Math.max(2, Math.round((value - min) / (max - min) * 100)) : 100;
+        return `<span class="tf-c bar"><span class="tf-fill" style="width:${w}%;background:${f.barColor || accent}"></span><span class="tf-val">${valTxt}</span></span>`;
+      }
+      case 'heat': {
+        const t  = max > min ? (value - min) / (max - min) : 0.5;
+        const bg = _heatColor(t, f.heatScale || 'gyr');
+        return `<span class="tf-c heat heat-cell" style="background:${bg};color:${_textOn(bg)}">${valTxt}</span>`;
+      }
+      case 'icon': {
+        const thr = f.thr || stats.thr;
+        const st  = _iconStatus(value, thr, f.dir || 'high');
+        const inner = (f.iconStyle === 'arrow')
+          ? `<i class="ti ${(f.dir === 'band' ? _TF_ARROW_BAND : _TF_ARROW)[st] || 'ti-minus'}"></i>`
+          : `<span class="tf-dot"></span>`;
+        return `<span class="tf-c icon ${st}">${inner}<span class="tf-val">${valTxt}</span></span>`;
+      }
+      case 'pct': {
+        const w = Math.max(0, Math.min(100, value));
+        return `<span class="tf-c pct"><span class="tf-track"><span style="width:${w}%;background:${f.barColor || accent}"></span></span><span class="tf-val">${valTxt}%</span></span>`;
+      }
+      default:
+        return `<span class="tf-c plain">${valTxt}</span>`;
+    }
+  }
+
+  /** Per-column effective format + real-data stats (min/max/thr) for the table. */
+  function _tableColumns(config, series, accent) {
+    return series.map((s, i) => {
+      const cat  = catalogMap.get(config.metrics?.[i]?.id) || {};
+      const f    = config.metrics?.[i]?.format || _defaultFormat(cat);
+      const vals = s.points.map(p => p.y).filter(v => isFinite(v));
+      const min  = vals.length ? Math.min(...vals) : 0;
+      const max  = vals.length ? Math.max(...vals) : 1;
+      return { s, cat, f, stats: { min, max, accent, thr: f.thr || _colThr(vals, f.dir || 'high') } };
+    });
+  }
+
+  /** Renders the conditional-format table. opts: { interactive, example }. */
+  function mountTableCard(body, config, series, opts = {}) {
+    destroyBodyChart(body);
+    const interactive = !!opts.interactive;
+    const rowPts = series?.[0]?.points || [];
+    if (!series?.length || !rowPts.length) { body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+
+    const accent  = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    const dimCols = (config.dimensions || []).map(d => DIM_MAP.get(d.id)?.name || d.id);
+    if (!dimCols.length) dimCols.push(config.dimensions?.[0] ? 'Group' : 'Player');   // legacy single identity
+    const cols = _tableColumns(config, series, accent);
+
+    const head = `<tr>${dimCols.map((n, i) => `<th class="${i === 0 ? 'pc' : 'dc'}">${esc(n)}</th>`).join('')}`
+      + cols.map((c, i) => interactive
+          ? `<th class="tf-h" data-mi="${i}" title="Formato de columna">${esc(c.s.name.split(' ')[0])} <i class="ti ti-adjustments-horizontal"></i></th>`
+          : `<th>${esc(c.s.name.split(' ')[0])}</th>`).join('') + `</tr>`;
+
+    const rows = rowPts.map(p => {
+      const dimCells = (p.dims || [p.x]).map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join('');
+      const valCells = cols.map(c => {
+        const pt = c.s.points.find(q => q.x === p.x);
+        return `<td class="tf">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;
+      }).join('');
+      return `<tr>${dimCells}${valCells}</tr>`;
+    }).join('');
+
+    body.innerHTML = `<div class="gp-zwrap"><table class="gp-zt"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
+    if (opts.example) _appendExampleBadge(body);
+    body.__tf = { series };   // cache real series so format edits re-render without re-querying
+
+    if (interactive) {
+      body.querySelectorAll('th.tf-h').forEach(th => th.addEventListener('click', e => { e.stopPropagation(); openTfPane(+th.dataset.mi, th); }));
+    }
+  }
+
+  /** Re-renders the draft table from cached series with the current S formats (live, no re-query). */
+  function _rerenderDraftTable() {
+    const body = draftCard?.querySelector('.gp-c-b');
+    if (!body || !body.__tf) return;
+    mountTableCard(body, buildConfig(S), body.__tf.series, { interactive: true });
+  }
+
+  // ── Per-column rules panel (.tf-pane) ──
+
+  function closeTfPane() {
+    if (_tfPane) { _tfPane.remove(); _tfPane = null; }
+    document.removeEventListener('mousedown', _tfOutside, true);
+    document.removeEventListener('keydown', _tfEsc, true);
+  }
+  function _tfOutside(e) { if (_tfPane && !_tfPane.contains(e.target)) closeTfPane(); }
+  function _tfEsc(e) { if (e.key === 'Escape') closeTfPane(); }
+
+  function openTfPane(mi, anchor) {
+    closeTfPane();
+    const m = S.metrics[mi]; if (!m) return;
+    const cat = catalogMap.get(m.id) || {};
+    if (!m.format) m.format = _defaultFormat(cat);   // materialize default so the edit persists
+    _tfPane = document.createElement('div');
+    _tfPane.className = 'tf-pane';
+    document.body.appendChild(_tfPane);
+    _renderTfPane(mi);
+    _positionPane(_tfPane, anchor);
+    setTimeout(() => {
+      document.addEventListener('mousedown', _tfOutside, true);
+      document.addEventListener('keydown', _tfEsc, true);
+    }, 0);
+  }
+
+  function _positionPane(pane, anchor) {
+    const r = anchor.getBoundingClientRect();
+    let left = Math.min(r.left, innerWidth - pane.offsetWidth - 12);
+    let top  = r.bottom + 6;
+    if (top + pane.offsetHeight > innerHeight - 12) top = Math.max(12, r.top - pane.offsetHeight - 6);
+    pane.style.left = Math.max(12, left) + 'px';
+    pane.style.top  = top + 'px';
+  }
+
+  function _renderTfPane(mi) {
+    const m = S.metrics[mi], cat = catalogMap.get(m.id) || {}, f = m.format;
+    const ser  = (draftCard?.querySelector('.gp-c-b')?.__tf?.series || [])[mi];
+    const vals = ser ? ser.points.map(p => p.y).filter(isFinite) : [];
+    const thr  = f.thr || _colThr(vals, f.dir || 'high');
+    _tfPane.innerHTML = _tfPaneHtml(cat, f, thr);
+    _bindTfPane(mi);
+  }
+
+  function _tfPaneHtml(cat, f, thr) {
+    const seg = (attr, opts, cur) => `<div class="tf-seg">${opts.map(o => `<button data-${attr}="${o.v}" class="${cur === o.v ? 'is-on' : ''}">${o.l}</button>`).join('')}</div>`;
+    const modeSeg = seg('mode', [{ v: 'plain', l: 'plain' }, { v: 'bar', l: 'bar' }, { v: 'heat', l: 'heat' }, { v: 'icon', l: 'icon' }, { v: 'pct', l: 'pct' }], f.mode);
+    let cond = '';
+    if (f.mode === 'bar' || f.mode === 'pct') {
+      cond = `<div class="tf-row"><span class="lab">Color</span><div class="tf-sw">${COLORS.map(c => `<button data-col="${c.hex}" class="${(f.barColor || '') === c.hex ? 'is-on' : ''}" style="background:${c.hex}"></button>`).join('')}</div></div>`;
+    } else if (f.mode === 'heat') {
+      cond = `<div class="tf-row"><span class="lab">Escala</span><select data-scale>
+        <option value="gyr" ${f.heatScale === 'gyr' ? 'selected' : ''}>Verde → Rojo (alto malo)</option>
+        <option value="ryg" ${f.heatScale === 'ryg' ? 'selected' : ''}>Rojo → Verde (alto bueno)</option>
+        <option value="seq" ${f.heatScale === 'seq' ? 'selected' : ''}>Secuencial (acento)</option></select></div>`;
+    } else if (f.mode === 'icon') {
+      const band = (f.dir || 'high') === 'band';
+      cond = `<div class="tf-row"><span class="lab">Estilo</span>${seg('istyle', [{ v: 'dot', l: 'semáforo' }, { v: 'arrow', l: 'flecha' }], f.iconStyle || 'dot')}</div>
+        <div class="tf-row"><span class="lab">Lógica</span>${seg('dir', [{ v: 'high', l: 'alto = bueno' }, { v: 'band', l: 'banda' }], f.dir || 'high')}</div>
+        <div class="tf-row"><span class="lab">Umbrales ${band ? '(zona ok)' : ''}</span><div class="tf-thr">
+          <label>${band ? 'mín' : 'ámbar ≥'}<input type="number" step="any" data-thr="lo" value="${_round3(thr.lo)}"></label>
+          <label>${band ? 'máx' : 'verde ≥'}<input type="number" step="any" data-thr="hi" value="${_round3(thr.hi)}"></label>
+        </div></div>`;
+    }
+    const decRow = `<div class="tf-row"><span class="lab">Decimales</span><input type="number" min="0" max="3" data-dec value="${f.dec ?? 0}"></div>`;
+    return `<div class="tf-hd"><span class="t">${esc(cat.name || 'Columna')}</span><button class="x"><i class="ti ti-x"></i></button></div>
+      <div class="tf-row"><span class="lab">Formato</span>${modeSeg}</div>${cond}${decRow}`;
+  }
+
+  function _bindTfPane(mi) {
+    const pane = _tfPane, f = S.metrics[mi].format;
+    pane.querySelector('.x').onclick = closeTfPane;
+    pane.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { f.mode = b.dataset.mode; _renderTfPane(mi); _rerenderDraftTable(); });
+    pane.querySelectorAll('[data-dir]').forEach(b => b.onclick = () => { f.dir = b.dataset.dir; f.thr = null; _renderTfPane(mi); _rerenderDraftTable(); });
+    pane.querySelectorAll('[data-istyle]').forEach(b => b.onclick = () => { f.iconStyle = b.dataset.istyle; _renderTfPane(mi); _rerenderDraftTable(); });
+    pane.querySelectorAll('[data-col]').forEach(b => b.onclick = () => {
+      f.barColor = b.dataset.col;
+      pane.querySelectorAll('[data-col]').forEach(x => x.classList.toggle('is-on', x === b));
+      _rerenderDraftTable();
+    });
+    const scale = pane.querySelector('[data-scale]');
+    if (scale) scale.onchange = () => { f.heatScale = scale.value; _rerenderDraftTable(); };
+    const hi = pane.querySelector('[data-thr="hi"]'), lo = pane.querySelector('[data-thr="lo"]');
+    const applyThr = () => { const h = parseFloat(hi.value), l = parseFloat(lo.value); if (isFinite(h) && isFinite(l)) { f.thr = { hi: h, lo: l }; _rerenderDraftTable(); } };
+    if (hi) hi.oninput = applyThr;
+    if (lo) lo.oninput = applyThr;
+    const dec = pane.querySelector('[data-dec]');
+    if (dec) dec.oninput = () => { const d = parseInt(dec.value, 10); if (isFinite(d)) { f.dec = Math.max(0, Math.min(3, d)); _rerenderDraftTable(); } };
+  }
+
+  /** Builder preview table — real data when a backend is present, else a badged mock. */
+  function mountTablePreview(body, S) {
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    if (!ms.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    if (window.sb && _clubId) { resolveAndRenderCard(draftCard, buildConfig(S)); return; }
+    mountTableMockPreview(body, S);
+  }
+
+  function mountTableMockPreview(body, S) {
+    const rows = dimMockRows(S, 6);                       // [[dimVals…], …]
+    const series = S.metrics.map((m, mi) => {
+      const cat  = catalogMap.get(m.id);
+      const base = metSample(cat);
+      const band = /acwr|ratio/.test((cat?.name || '').toLowerCase()) || /acwr|ratio/.test((cat?.id || '').toLowerCase());
+      const points = rows.map((dv, r) => ({
+        x: dv.join(' · '), dims: dv,
+        y: band ? Math.round((0.7 + 0.7 * Math.abs(Math.sin(r * 1.4 + mi + 1))) * 100) / 100
+                : Math.round(base * (0.45 + 0.5 * Math.abs(Math.sin(r * 1.4 + mi + 1)))),
+      }));
+      return { label: m.id, name: cat.name, unit: cat.unit, points };
+    });
+    const config = buildConfig(S);
+    mountTableCard(body, config, series, { interactive: true, example: true });
+  }
+
   /**
    * Renders a chart body from a real Dataset (series with actual data points).
    * Mirrors renderType() but uses series data instead of hardcoded samples.
@@ -2965,7 +3235,7 @@
     S.points  = config.style?.points  !== false;
     S.area    = !!config.style?.area;
     S.title   = config.title || '';
-    S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg }));
+    S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}) }));
 
     // keep only metrics that exist in catalog; fix invalid peak aggs
     S.metrics = S.metrics.filter(m => catalogMap.has(m.id)).map(m => {

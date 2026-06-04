@@ -86,6 +86,23 @@ describe('validateCardSchema', () => {
     });
     expect(validateCardSchema(cfg)).toHaveLength(0);
   });
+
+  it('accepts a table metric with per-column conditional format', () => {
+    const cfg = makeConfig({
+      viz: 'table', dimensions: [{ id: 'player_name' }],
+      metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum',
+        format: { mode: 'icon', dir: 'band', dec: 2, heatScale: 'gyr', iconStyle: 'arrow', barColor: null, thr: { lo: 0.8, hi: 1.3 } } }],
+    });
+    expect(validateCardSchema(cfg)).toHaveLength(0);
+  });
+
+  it('rejects an unknown format mode', () => {
+    const cfg = makeConfig({
+      viz: 'table',
+      metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', format: { mode: 'sparkles' } }],
+    });
+    expect(validateCardSchema(cfg).length).toBeGreaterThan(0);
+  });
 });
 
 // ── validateCardRules ─────────────────────────────────────────────────────────
