@@ -221,4 +221,39 @@ describe('aggregateSeries — group by chosen dimension', () => {
     const [s] = aggregateSeries(rows, new Map(), config, catalog);
     expect(s.points).toHaveLength(3);
   });
+
+  it('single dimension still carries dims:[value] on each point', () => {
+    const config = { viz:'table', scope:{ level:'squad' }, dimensions:[{ id:'position' }],
+                     metrics:[{ id:'total_distance', agg:'total' }] };
+    const [s] = aggregateSeries(rows, new Map(), config, catalog);
+    expect(s.points.find(p => p.x === 'CB').dims).toEqual(['CB']);
+  });
+});
+
+describe('aggregateSeries — multi-dimension table (composite key + columns)', () => {
+  const withPos = (row, pos) => { row.players = { ...row.players, position: pos }; return row; };
+  // p1 & p2 both CB (distinct ids), p3 ST — each player appears once
+  const rows = [
+    withPos(makeRow({ playerId:'p1', reportId:'r1', total_distance:10000 }), 'CB'),
+    withPos(makeRow({ playerId:'p2', reportId:'r2', sessionId:'s2', total_distance:12000 }), 'CB'),
+    withPos(makeRow({ playerId:'p3', reportId:'r3', sessionId:'s3', total_distance: 8000 }), 'ST'),
+  ];
+  const config = {
+    viz: 'table', scope: { level: 'squad' },
+    dimensions: [{ id: 'player_name' }, { id: 'position' }],
+    metrics: [{ id: 'total_distance', agg: 'total' }],
+  };
+
+  it('keeps Name+Position as separate rows (composite key does not collapse)', () => {
+    const [s] = aggregateSeries(rows, new Map(), config, catalog);
+    expect(s.points).toHaveLength(3);            // one row per player, not merged by name
+  });
+
+  it('each row exposes a value per dimension in order [name, position]', () => {
+    const [s] = aggregateSeries(rows, new Map(), config, catalog);
+    s.points.forEach(p => expect(p.dims).toHaveLength(2));
+    const cbPlayer = s.points.find(p => p.dims[1] === 'CB');
+    expect(cbPlayer.dims[0]).toMatch(/Vega/);    // name column
+    expect(cbPlayer.y).toBe(10000);              // its measure
+  });
 });

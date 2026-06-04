@@ -27,7 +27,7 @@
     scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1 },
     radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 0 },
     ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1 },
-    table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 1 },
+    table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 4 },
     heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12, dimMax: 1 },
   };
 
@@ -54,6 +54,13 @@
   function dimRowId(S)     { return (S.dimensions && S.dimensions[0]?.id) || 'player_name'; }
   function dimRowName(S)   { return DIM_MAP.get(dimRowId(S))?.name || 'Player'; }
   function dimMockLabels(S){ return DIM_MOCK[dimRowId(S)] || DIM_MOCK.player_name; }
+  // multi-dimension helpers (tables): the chosen dimensions in order (default player_name)
+  function dimList(S)      { return (S.dimensions && S.dimensions.length) ? S.dimensions.map(d => d.id) : ['player_name']; }
+  function dimNames(S)     { return dimList(S).map(id => DIM_MAP.get(id)?.name || id); }
+  function dimMockRows(S, n = 5) {
+    const ids = dimList(S);
+    return Array.from({ length: n }, (_, r) => ids.map(id => { const a = DIM_MOCK[id] || DIM_MOCK.player_name; return a[r % a.length]; }));
+  }
   const VIZ_FULLNAME  = { kpi:'KPI', bars:'Bar chart', line:'Line / temporal', scatter:'Scatter', radar:'Radar', ranking:'Ranking', table:'Table', heatmap:'Heatmap' };
   const VIZ_REQ_LBL   = { kpi:'pick 1', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+' };
 
@@ -1564,13 +1571,16 @@
         return `<div class="cb2-state empty"><div class="ic"><i class="ti ti-chart-radar"></i></div><div class="t">Radar needs ≥3 metrics</div></div>`;
 
       case 'table': {
-        const allX = [...new Set(series.flatMap(s => s.points.map(p => p.x)))];
+        // one column per chosen dimension (in order) + one per measure
+        const dimCols = (config.dimensions || []).map(d => DIM_MAP.get(d.id)?.name || d.id);
+        if (!dimCols.length) dimCols.push(rowDimName);   // legacy: single identity column
+        const rowPts = series[0]?.points || [];          // rows (with composite key + per-dim values)
         return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr>
-          <th class="pc">${esc(rowDimName)}</th>
+          ${dimCols.map((n, i) => `<th class="${i === 0 ? 'pc' : 'dc'}">${esc(n)}</th>`).join('')}
           ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
-        </tr></thead><tbody>${allX.map(x => `<tr>
-          <td class="pc" style="padding:8px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(x)}</td>
-          ${series.map(s => { const pt = s.points.find(p => p.x === x); return `<td>${pt ? fmtY(pt.y) : '—'}</td>`; }).join('')}
+        </tr></thead><tbody>${rowPts.map(p => `<tr>
+          ${(p.dims || [p.x]).map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join('')}
+          ${series.map(s => { const pt = s.points.find(q => q.x === p.x); return `<td>${pt ? fmtY(pt.y) : '—'}</td>`; }).join('')}
         </tr>`).join('')}</tbody></table></div>`;
       }
 
@@ -1663,9 +1673,10 @@
       }
       case 'table': {
         const cols = ms.slice(0,5);
-        const rowsL = dimMockLabels(S);
-        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr><th class="pc">${esc(dimRowName(S))}</th>${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
-          <tbody>${rowsL.map((p,r)=>`<tr><td class="pc" style="padding:8px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>`<td>${fmt(Math.round(metSample(m)*(0.8+.08*((r+c)%4))))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        const names = dimNames(S);
+        const rows  = dimMockRows(S);
+        return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr>${names.map((n,i)=>`<th class="${i===0?'pc':'dc'}">${esc(n)}</th>`).join('')}${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
+          <tbody>${rows.map((dimVals,r)=>`<tr>${dimVals.map((v,i)=>`<td class="${i===0?'pc':'dc'}">${esc(v)}</td>`).join('')}${cols.map((m,c)=>`<td>${fmt(Math.round(metSample(m)*(0.8+.08*((r+c)%4))))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
       }
       case 'heatmap': {
         const cols = ms.slice(0,6);

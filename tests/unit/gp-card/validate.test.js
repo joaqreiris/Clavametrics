@@ -163,7 +163,11 @@ describe('validateCardSchema — dimensions', () => {
   it('rejects an unknown dimension id', () => {
     expect(validateCardSchema(makeConfig({ dimensions: [{ id: 'shoe_size' }] })).length).toBeGreaterThan(0);
   });
-  it('rejects more than one dimension', () => {
-    expect(validateCardSchema(makeConfig({ dimensions: [{ id: 'position' }, { id: 'md_code' }] })).length).toBeGreaterThan(0);
+  it('accepts several dimensions (table can combine them)', () => {
+    expect(validateCardSchema(makeConfig({ dimensions: [{ id: 'player_name' }, { id: 'position' }] }))).toHaveLength(0);
+  });
+  it('rejects more than four dimensions', () => {
+    const five = ['player_name', 'position', 'session_date', 'md_code', 'microcycle'].map(id => ({ id }));
+    expect(validateCardSchema(makeConfig({ dimensions: five })).length).toBeGreaterThan(0);
   });
 });
