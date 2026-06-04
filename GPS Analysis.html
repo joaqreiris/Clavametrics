@@ -9567,75 +9567,59 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     kpiBody.innerHTML = `<div class="pw-kpis">${gamesChip}${chips.join('')}</div>`;
   }
 
-  // ── TD per match chart (dynamic metric) ───────────────────────
+  // ── TD per match (métrica dinámica) — COMBO barras + línea ─────
+  // Migrada al motor compartido: la métrica elegida va como BARRAS y los minutos
+  // jugados como LÍNEA sobre un eje Y secundario (window.GpRender.renderCard).
+  // El dato sale de los mismos `rows` de _mpLoad; sólo cambia cómo se dibuja.
   function _mpRenderTDChart(rows) {
-    if (!tdCanvas || typeof Chart === 'undefined') return;
-    if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
-    if (!rows.length) return;
+    const body = document.querySelector('#card-mp-td .gp-c-b');
+    if (!body) return;
+    if (!window.GpRender || typeof Chart === 'undefined') { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } return; }
+    if (!rows.length) { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } body.innerHTML = ''; return; }
 
     const cat     = (window._gpCatalog || []).find(d => d.key === _mpTdMetric);
-    const metLbl  = cat?.label || _mpTdMetric.replace(/_/g,' ');
+    const metLbl  = cat?.label || _mpTdMetric.replace(/_/g, ' ');
     const metUnit = cat?.unit  || '';
 
-    const labels  = rows.map(r => _mpRivalLabel(r, 12));
-    const vals    = rows.map(r => _mpTdMetric === 'acc_dec' ? (r.accelerations||0)+(r.decelerations||0) : (r[_mpTdMetric] || 0));
-    const minutes = rows.map(r => r.time_played || null);
-    const avg     = vals.reduce((s,v)=>s+v,0)/vals.length;
+    const labelOf = r => {
+      const base = _mpRivalLabel(r, 12);
+      const d = r.session?.session_date ? r.session.session_date.slice(5) : '';
+      return d ? `${base} · ${d}` : base;
+    };
+    const labels = rows.map(labelOf);
+    const valOf  = r => _mpTdMetric === 'acc_dec' ? (r.accelerations || 0) + (r.decelerations || 0) : (r[_mpTdMetric] || 0);
+    const series = [
+      { label: _mpTdMetric,  name: metLbl,         unit: metUnit, points: rows.map((r, i) => ({ x: labels[i], y: valOf(r) })) },
+      { label: 'time_played', name: 'Min jugados', unit: 'min', line: true, points: rows.map((r, i) => ({ x: labels[i], y: r.time_played || 0 })) },
+    ];
+    const config = {
+      schema: 'gp.card/v1', viz: 'bars',
+      metrics: [{ id: _mpTdMetric }, { id: 'time_played', line: true }],
+      style: { size: 'lg', palette: 'pitch', legend: true, axes: true, dataLabels: false },
+    };
+    window.GpRender.renderCard(body, config, series);
 
-    _mp.tdChart = new Chart(tdCanvas, {
-      data: {
-        labels,
-        datasets: [
-          {
-            type: 'bar', label: `${metLbl}${metUnit?' ('+metUnit+')':''}`, data: vals,
-            backgroundColor: vals.map(v => v >= avg * 1.1 ? 'rgba(74,222,128,.7)' : 'rgba(99,179,237,.65)'),
-            order: 2,
-          },
-          {
-            type: 'line', label: 'Min played', data: minutes,
-            borderColor: 'var(--cm-warning)', backgroundColor: 'transparent',
-            pointRadius: 5, pointBackgroundColor: 'var(--cm-warning)',
-            yAxisID: 'y1', tension: 0, order: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        scales: {
-          x: { grid: { display: false } },
-          y:  { beginAtZero: true, title: { display: true, text: metUnit ? `${metLbl} (${metUnit})` : metLbl } },
-          y1: { position: 'right', beginAtZero: true, max: 120, title: { display: true, text: 'Min played' }, grid: { drawOnChartArea: false } },
-        },
-        plugins: {
-          legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-          tooltip: {
-            callbacks: {
-              afterBody: ctx => {
-                const r = rows[ctx[0]?.dataIndex];
-                if (!r) return [];
-                return [
-                  `Date: ${r.session?.session_date || ''}`,
-                  vals[ctx[0]?.dataIndex] >= avg * 1.1 ? 'Above avg (+10%)' : '',
-                ].filter(Boolean);
-              },
-            },
-          },
-        },
-        onClick: (e, elements) => {
-          if (!elements.length) return;
-          const r = rows[elements[0].index];
-          if (!r?.session?.id) return;
-          const grpBtn = document.querySelector('.gp-sec[data-view="grp"]');
-          if (grpBtn) {
-            grpBtn.click();
-            setTimeout(() => {
-              const sel = document.getElementById('sc-sess-sel');
-              if (sel) { sel.value = r.session.id; sel.dispatchEvent(new Event('change')); }
-            }, 200);
-          }
-        },
-      },
-    });
+    // Preserva el clic-para-navegar a Session Control de la card original.
+    // Listener en el body (sobrevive a los re-render que recrean el canvas).
+    if (!body.__mpNavBound) {
+      body.__mpNavBound = true;
+      body.addEventListener('click', ev => {
+        const chart = body.__chart;
+        if (!chart) return;
+        const els = chart.getElementsAtEventForMode(ev, 'index', { intersect: false }, true);
+        if (!els.length) return;
+        const r = _mpCurrentRows[els[0].index];
+        if (!r?.session?.id) return;
+        const grpBtn = document.querySelector('.gp-sec[data-view="grp"]');
+        if (grpBtn) {
+          grpBtn.click();
+          setTimeout(() => {
+            const sel = document.getElementById('sc-sess-sel');
+            if (sel) { sel.value = r.session.id; sel.dispatchEvent(new Event('change')); }
+          }, 200);
+        }
+      });
+    }
   }
 
   // ── High Intensity per match — PILOTO motor unificado ─────────
@@ -9667,7 +9651,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const config = {
       schema: 'gp.card/v1', viz: 'bars',
       metrics: [{ id: 'high_speed_distance' }, { id: 'very_high_speed_distance' }, { id: 'sprint_distance' }],
-      style: { size: 'lg', palette: 'pitch', legend: true, axes: true, dataLabels: false },
+      // Barras HORIZONTALES APILADAS (HSR + VHSR + Sprint sumados por partido).
+      style: { size: 'lg', palette: 'pitch', legend: true, axes: true, dataLabels: false, orientation: 'horizontal', stacked: true },
     };
     window.GpRender.renderCard(body, config, series);
   }
@@ -9675,9 +9660,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   function _destroyCharts() {
     if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
     if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
-    // HI ahora la dibuja GpRender (chart en body.__chart).
-    const hb = document.getElementById('mp-hi-body');
-    if (hb && hb.__chart) { try { hb.__chart.destroy(); } catch (e) {} hb.__chart = null; }
+    // TD y HI ahora las dibuja GpRender (chart en body.__chart).
+    ['#card-mp-td .gp-c-b', '#mp-hi-body'].forEach(sel => {
+      const el = document.querySelector(sel);
+      if (el && el.__chart) { try { el.__chart.destroy(); } catch (e) {} el.__chart = null; }
+    });
   }
 
   // ── events ───────────────────────────────────────────────────

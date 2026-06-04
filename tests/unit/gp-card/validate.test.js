@@ -113,6 +113,20 @@ describe('validateCardSchema', () => {
     const cfg = makeConfig({ viz: 'table', sort: { col: 'met:total_distance', dir: 'sideways' } });
     expect(validateCardSchema(cfg).length).toBeGreaterThan(0);
   });
+
+  it('accepts bar variant style (orientation/stacked) + a combo line metric', () => {
+    const cfg = makeConfig({
+      viz: 'bars',
+      style: { size: 'md', orientation: 'horizontal', stacked: true },
+      metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum' }, { id: 'max_speed', agg: 'avg', kind: 'peak', line: true }],
+    });
+    expect(validateCardSchema(cfg)).toHaveLength(0);
+  });
+
+  it('rejects an invalid orientation', () => {
+    const cfg = makeConfig({ viz: 'bars', style: { size: 'md', orientation: 'diagonal' } });
+    expect(validateCardSchema(cfg).length).toBeGreaterThan(0);
+  });
 });
 
 // ── validateCardRules ─────────────────────────────────────────────────────────

@@ -165,12 +165,14 @@
         // sensible default for table cards so the formatting survives save/reload.
         if (m.format) out.format = m.format;
         else if (S.type === 'table') out.format = _defaultFormat(cat);
+        if (m.line) out.line = true;               // combo: render this metric as a line (2nd axis)
         return out;
       }),
       dimensions: (S.dimensions || []).map(d => ({ id:d.id })),
       range:      { type: S.range },
       comparison: S.compare === 'none' ? null : { baseline: S.compare },
-      style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points },
+      style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
       // Presentation-only column sort (table viz). Persisted so the order survives reload.
       ...(S.type === 'table' && S.sort ? { sort: S.sort } : {}),
     };
@@ -368,6 +370,14 @@
                 <span class="tx"><span class="t">Data labels</span><span class="s">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>
+              <div class="es-toggle" data-only="bars">
+                <span class="tx"><span class="t">Horizontal</span><span class="s">Barras horizontales</span></span>
+                <button class="es-sw-t" data-toggle="horizontal"></button>
+              </div>
+              <div class="es-toggle" data-only="bars">
+                <span class="tx"><span class="t">Apilado</span><span class="s">Sumar las series en una barra</span></span>
+                <button class="es-sw-t" data-toggle="stacked"></button>
+              </div>
               <div class="es-toggle" data-only="line">
                 <span class="tx"><span class="t">Points</span><span class="s">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
@@ -480,7 +490,7 @@
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
     return { type:'bars', metrics:[], dimensions:[], scope:'player', compare:'role', range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
-             points:true, area:false, sort:null };
+             points:true, area:false, horizontal:false, stacked:false, sort:null };
   }
 
   function startBuild() {
@@ -806,6 +816,8 @@
       S.labels  = !!cfg.labels;
       S.points  = cfg.points !== false;
       S.area    = !!cfg.area;
+      S.horizontal = !!cfg.horizontal;
+      S.stacked    = !!cfg.stacked;
       S.sort    = cfg.sort || null;
       S.title   = cfg.title || '';
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
@@ -823,10 +835,12 @@
       S.labels  = !!rawConfig.style?.dataLabels;
       S.points  = rawConfig.style?.points !== false;
       S.area    = !!rawConfig.style?.area;
+      S.horizontal = rawConfig.style?.orientation === 'horizontal';
+      S.stacked    = !!rawConfig.style?.stacked;
       S.sort    = rawConfig.sort || null;
       S.title   = rawConfig.title || '';
       S.metrics = (rawConfig.metrics || [])
-        .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}) }))
+        .map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }))
         .filter(m => catalogMap.has(m.id))
         .map(m => {
           const cat = catalogMap.get(m.id);
@@ -1075,9 +1089,9 @@
     panelEl.querySelectorAll('[data-toggle]').forEach(b =>
       b.classList.toggle('is-on', !!S[b.dataset.toggle])
     );
-    // line-only style options (points / area fill) are hidden for other viz types
-    panelEl.querySelectorAll('[data-only="line"]').forEach(el =>
-      el.style.display = (S.type === 'line') ? '' : 'none'
+    // viz-specific style options (data-only="line" / "bars") hidden for other types
+    panelEl.querySelectorAll('[data-only]').forEach(el =>
+      el.style.display = el.dataset.only.split(',').includes(S.type) ? '' : 'none'
     );
     if (draftCard) draftCard.style.setProperty('--cm-accent', S.color);
   }
@@ -1133,6 +1147,7 @@
           <div class="s"><span class="pk ${cat.kind}"></span>${esc(cat.unit)} · ${cat.kind}</div>
         </div>
         <div style="display:flex;align-items:center;gap:4px">
+          ${S.type === 'bars' ? `<button data-line-for="${esc(m.id)}" title="Mostrar como línea (eje secundario)" style="border:1px solid var(--cm-border);background:${m.line?'var(--cm-accent)':'var(--cm-bg-soft)'};color:${m.line?'var(--cm-fg-on-accent)':'var(--cm-fg-muted)'};border-radius:5px;width:24px;height:24px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center"><i class="ti ti-chart-line" style="font-size:13px"></i></button>` : ''}
           <button class="es-aggchip" data-agg-for="${esc(m.id)}">
             <i class="ti ${agg.icon}"></i>${agg.short}<i class="ti ti-chevron-down" style="font-size:11px"></i>
           </button>
@@ -1141,6 +1156,10 @@
       </div>`;
     }).join('');
 
+    wrap.querySelectorAll('[data-line-for]').forEach(b => b.onclick = () => {
+      const m = S.metrics.find(x => x.id === b.dataset.lineFor);
+      if (m) { m.line = !m.line; renderMetrics(); renderCard(); }
+    });
     wrap.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => addMetric(b.dataset.rm));
     wrap.querySelectorAll('[data-rmdim]').forEach(b => b.onclick = () => addDimension(b.dataset.rmdim));
     wrap.querySelectorAll('[data-agg-for]').forEach(b => {
@@ -1734,19 +1753,32 @@
     id: 'gpbBarLabels',
     afterDatasetsDraw(chart, _args, opts) {
       if (!opts || !opts.show) return;
-      const ctx = chart.ctx;
+      const { ctx } = chart;
+      const horizontal = !!opts.horizontal, stacked = !!opts.stacked;
       ctx.save();
       ctx.font = '600 9px Geist, Inter, sans-serif';
-      ctx.fillStyle = opts.color || '#6B7280';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
       chart.data.datasets.forEach((ds, di) => {
+        if (ds._isLine) return;                     // combo line: leave unlabelled (keeps it clean)
         const meta = chart.getDatasetMeta(di);
         if (meta.hidden) return;
         meta.data.forEach((bar, i) => {
           const v = ds.data[i];
           if (v == null) return;
-          ctx.fillText(fmt(Math.round(v * 10) / 10), bar.x, bar.y - 3);
+          const txt = fmt(Math.round(v * 10) / 10);
+          if (stacked) {
+            // centre each segment, white for contrast; skip segments too small to fit
+            const seg = horizontal ? Math.abs(bar.x - bar.base) : Math.abs(bar.base - bar.y);
+            if (seg < 18) return;
+            const c = bar.getCenterPoint();
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(txt, c.x, c.y);
+          } else if (horizontal) {
+            ctx.fillStyle = opts.color || '#6B7280'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText(txt, bar.x + 4, bar.y);
+          } else {
+            ctx.fillStyle = opts.color || '#6B7280'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.fillText(txt, bar.x, bar.y - 3);
+          }
         });
       });
       ctx.restore();
@@ -1768,39 +1800,68 @@
     return Array.from({ length: n }, (_, i) => base[i % base.length]);
   }
 
-  /** Pure: (config, series) → Chart.js bar payload (categories, datasets, scale). */
+  /**
+   * Pure: (config, series) → Chart.js bar payload. Variants (not new viz types):
+   *   style.orientation: 'vertical' (default) | 'horizontal'
+   *   style.stacked:     false (grouped) | true (segments summed into one bar)
+   *   combo: a series flagged `line` (or config.metrics[i].line) is drawn as a LINE
+   *          on a secondary value axis (y1) over the bars.
+   */
   function barsChartData(config, series) {
-    const size     = config.style?.size || 'md';
-    const showAxes = config.style?.axes   !== false;
-    const showLeg  = config.style?.legend !== false;
-    const showLbl  = !!config.style?.dataLabels || size !== 'sm';   // OFF in S, ON in M/L, toggle forces ON
-    const ss       = (series || []).filter(s => s.points && s.points.length);
+    const size       = config.style?.size || 'md';
+    const showAxes   = config.style?.axes   !== false;
+    const showLeg    = config.style?.legend !== false;
+    const showLbl    = !!config.style?.dataLabels || size !== 'sm';   // OFF in S, ON in M/L, toggle forces ON
+    const horizontal = config.style?.orientation === 'horizontal';
+    const stacked    = !!config.style?.stacked;
+    const ss         = (series || []).filter(s => s.points && s.points.length);
 
     // categories = the dimension values (x), in first-series order
     const cats = [];
     ss.forEach(s => s.points.forEach(p => { if (!cats.includes(p.x)) cats.push(p.x); }));
 
-    const colors = barColors(config, ss.length);
-    const datasets = ss.map((s, i) => ({
-      label: s.name || s.label,
-      unit:  s.unit || '',
-      data:  cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; }),
-      backgroundColor: colors[i],
-      borderColor: colors[i],
-      borderWidth: 0,
-      borderRadius: 4,
-      borderSkipped: 'bottom',
-      maxBarThickness: 46,
-      categoryPercentage: 0.7,
-      barPercentage: 0.9,
-    }));
+    const isLine   = ss.map((s, i) => !!(s.line || config.metrics?.[i]?.line));
+    const barCols  = barColors(config, isLine.filter(f => !f).length || 1);
+    const lineCol  = _cssVar('--cm-warning', '#D97706');
 
-    const maxVal = Math.max(0, ...datasets.flatMap(d => d.data.filter(v => v != null)));
+    let bi = 0;
+    const datasets = ss.map((s, i) => {
+      const data = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; });
+      if (isLine[i]) {                              // combo: line on the secondary axis
+        return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
+          yAxisID: 'y1', borderColor: lineCol, backgroundColor: 'transparent',
+          borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
+          pointBackgroundColor: lineCol, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
+      }
+      const col = barCols[bi++];
+      return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
+        backgroundColor: col, borderColor: col, borderWidth: 0,
+        borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
+        maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
+        stack: stacked ? 'stk' : undefined };
+    });
+    datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // bars first → line drawn on top
+
+    const barDs  = datasets.filter(d => !d._isLine);
     const ticks  = size === 'sm' ? 4 : 5;
+    const maxVal = stacked
+      ? Math.max(0, ...cats.map((_, ci) => barDs.reduce((sum, d) => sum + (d.data[ci] || 0), 0)))
+      : Math.max(0, ...barDs.flatMap(d => d.data.filter(v => v != null)));
     const { max, step } = niceScale(maxVal, ticks);
 
+    const hasLine = datasets.some(d => d._isLine);
+    let max1 = null, step1 = null;
+    if (hasLine) {
+      const lineVals = datasets.filter(d => d._isLine).flatMap(d => d.data.filter(v => v != null));
+      ({ max: max1, step: step1 } = niceScale(Math.max(0, ...lineVals), ticks));
+    }
+
+    const baseH  = _BAR_SIZE_H[size] || 210;
+    const height = horizontal ? Math.max(baseH, cats.length * 26 + 48) : baseH;   // grow for many horizontal bars
+
     return { cats, datasets, max, step, ticks, showAxes, showLeg, showLbl,
-             height: _BAR_SIZE_H[size] || 210, color: config.style?.color || _cssVar('--cm-accent', '#15803D') };
+             horizontal, stacked, hasLine, max1, step1,
+             height, color: config.style?.color || _cssVar('--cm-accent', '#15803D') };
   }
 
   /** Mounts (or re-mounts) a Chart.js bar chart into `body`. Same renderer for preview + saved card. */
@@ -1822,22 +1883,48 @@
       body.appendChild(wrap);
       Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
 
+      const gridCol = 'rgba(148,163,184,0.18)';
+      const valueScale = {
+        display: d.showAxes, beginAtZero: true, max: d.max, stacked: d.stacked,
+        grid: { display: d.showAxes, color: gridCol, drawTicks: false },
+        border: { display: false },
+        ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
+      };
+      const catScale = {
+        display: d.showAxes, stacked: d.stacked,
+        grid: { display: false, drawTicks: false },
+        ticks: { font: { size: 10.5 }, color: '#6B7280', maxRotation: 0, autoSkip: true },
+        border: { display: d.showAxes },
+      };
+      const scales = {};
+      scales[d.horizontal ? 'x' : 'y'] = valueScale;     // value axis follows orientation
+      scales[d.horizontal ? 'y' : 'x'] = catScale;       // category axis
+      if (d.hasLine) {                                    // combo: secondary value axis for the line
+        scales.y1 = { display: d.showAxes, position: 'right', beginAtZero: true, max: d.max1, stacked: false,
+          grid: { drawOnChartArea: false }, border: { display: false },
+          ticks: { stepSize: d.step1, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) } };
+      }
+
       body.__chart = new Chart(canvas, {
         type: 'bar',
         data: { labels: d.cats, datasets: d.datasets },
         plugins: [_barLabelPlugin],
         options: {
+          indexAxis: d.horizontal ? 'y' : 'x',
           responsive: true, maintainAspectRatio: false,
           animation: { duration: 320 },
-          layout: { padding: { top: d.showLbl ? 14 : 4 } },
+          layout: { padding: { top: (!d.horizontal && d.showLbl) ? 14 : 6, right: (d.horizontal && d.showLbl) ? 30 : 8 } },
           plugins: {
             legend: {
               display: d.showLeg, position: 'bottom',
-              labels: { boxWidth: 12, boxHeight: 12, padding: 14, usePointStyle: true, pointStyle: 'rectRounded',
+              labels: { boxWidth: 12, boxHeight: 12, padding: 14, usePointStyle: true,
                         font: { size: 11 },
                         generateLabels: ch => ch.data.datasets.map((ds, i) => ({
                           text: ds.unit ? `${ds.label} (${ds.unit})` : ds.label,
-                          fillStyle: ds.backgroundColor, strokeStyle: ds.backgroundColor, lineWidth: 0,
+                          fillStyle:   ds._isLine ? ds.borderColor : ds.backgroundColor,
+                          strokeStyle: ds._isLine ? ds.borderColor : ds.backgroundColor,
+                          lineWidth:   ds._isLine ? 2 : 0,
+                          pointStyle:  ds._isLine ? 'line' : 'rectRounded',
                           hidden: !ch.isDatasetVisible(i), datasetIndex: i,
                         })) },
               onClick: (e, item, legend) => {
@@ -1846,25 +1933,15 @@
             },
             tooltip: {
               callbacks: {
-                label: ctx => `${ctx.dataset.label}: ${fmt(Math.round(ctx.parsed.y * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`,
+                label: ctx => {
+                  const v = d.horizontal ? ctx.parsed.x : ctx.parsed.y;
+                  return `${ctx.dataset.label}: ${fmt(Math.round(v * 10) / 10)}${ctx.dataset.unit ? ' ' + ctx.dataset.unit : ''}`;
+                },
               },
             },
-            gpbBarLabels: { show: d.showLbl, color: '#6B7280' },
+            gpbBarLabels: { show: d.showLbl, color: '#6B7280', horizontal: d.horizontal, stacked: d.stacked },
           },
-          scales: {
-            x: {
-              display: d.showAxes, stacked: false,
-              grid: { display: false, drawTicks: false },
-              ticks: { font: { size: 10.5 }, color: '#6B7280', maxRotation: 0, autoSkip: true },
-              border: { display: d.showAxes },
-            },
-            y: {
-              display: d.showAxes, beginAtZero: true, max: d.max,
-              grid: { display: d.showAxes, color: 'rgba(148,163,184,0.18)', drawTicks: false },
-              border: { display: false, dash: [3, 3] },
-              ticks: { stepSize: d.step, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) },
-            },
-          },
+          scales,
         },
       });
     };
@@ -1878,13 +1955,14 @@
     const cats = dimMockLabels(S);   // X categories = the chosen dimension
     // One series per measure — same shape the resolver feeds the saved card, so
     // preview and saved card render identically. 2 series → 2nd in grey.
-    const series = ms.map((m, idx) => ({ label: m.id, name: m.name, unit: m.unit,
+    const series = ms.map((m, idx) => ({ label: m.id, name: m.name, unit: m.unit, line: !!S.metrics[idx]?.line,
       points: cats.map((c, r) => ({ x: c, y: Math.round(metSample(m) * (0.5 + 0.42 * Math.abs(Math.sin(r * 1.3 + idx + 1)))) })) }));
     const cfg = {
       viz: 'bars',
       dimensions: S.dimensions,
       comparison: S.compare === 'none' ? null : { baseline: S.compare },
-      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+      style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels,
+               orientation: S.horizontal ? 'horizontal' : 'vertical', stacked: !!S.stacked },
     };
     mountBarsChart(body, cfg, series);
   }
@@ -3432,9 +3510,11 @@
     S.labels  = !!config.style?.dataLabels;
     S.points  = config.style?.points  !== false;
     S.area    = !!config.style?.area;
+    S.horizontal = config.style?.orientation === 'horizontal';
+    S.stacked    = !!config.style?.stacked;
     S.sort    = config.sort || null;
     S.title   = config.title || '';
-    S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}) }));
+    S.metrics = (config.metrics || []).map(m => ({ id: m.id, agg: m.agg, ...(m.format ? { format: m.format } : {}), ...(m.line ? { line: true } : {}) }));
 
     // keep only metrics that exist in catalog; fix invalid peak aggs
     S.metrics = S.metrics.filter(m => catalogMap.has(m.id)).map(m => {
