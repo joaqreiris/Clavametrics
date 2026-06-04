@@ -9638,45 +9638,46 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     });
   }
 
-  // ── High Intensity per match (horizontal stacked) ─────────────
+  // ── High Intensity per match — PILOTO motor unificado ─────────
+  // Renderizada por el motor compartido del builder (window.GpRender.renderCard)
+  // como una card gp.card/v1 'bars' multi-métrica (HSR / VHSR / Sprint por partido).
+  // El DATO sale de los mismos `rows` que ya carga _mpLoad (no cambia el origen);
+  // solo cambia CÓMO se dibuja (look pro del builder).
   function _mpRenderHIChart(rows) {
-    if (!hiCanvas || typeof Chart === 'undefined') return;
-    if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
-    if (!rows.length) return;
+    const body = document.getElementById('mp-hi-body');
+    if (!body) return;
+    // Sin motor / sin Chart.js → no rompemos: dejamos el cuerpo vacío.
+    if (!window.GpRender || typeof Chart === 'undefined') { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } return; }
+    if (!rows.length) { if (body.__chart) { body.__chart.destroy(); body.__chart = null; } body.innerHTML = ''; return; }
 
     const display = rows.slice(-15);
-    const labels  = display.map(r => _mpRivalLabel(r, 14));
-    const hsr     = display.map(r => r.high_speed_distance || 0);
-    const vhsr    = display.map(r => r.very_high_speed_distance || 0);
-    const spr     = display.map(r => r.sprint_distance || 0);
-
-    hiCanvas.parentElement.style.minHeight = `${Math.max(180, display.length * 28)}px`;
-
-    _mp.hiChart = new Chart(hiCanvas, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'HSR (m)',    data: hsr,  backgroundColor: 'rgba(251,191,36,.75)', stack: 'hi' },
-          { label: 'VHSR (m)',   data: vhsr, backgroundColor: 'rgba(232,121,249,.7)', stack: 'hi' },
-          { label: 'Sprint (m)', data: spr,  backgroundColor: 'rgba(74,222,128,.7)',  stack: 'hi' },
-        ],
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true, maintainAspectRatio: false,
-        scales: {
-          x: { stacked: true, beginAtZero: true, title: { display: true, text: 'Distance (m)' } },
-          y: { stacked: true, grid: { display: false } },
-        },
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-      },
-    });
+    // Etiqueta única por partido (rival + fecha) para que las barras no se fusionen.
+    const labelOf = r => {
+      const base = _mpRivalLabel(r, 12);
+      const d = r.session?.session_date ? r.session.session_date.slice(5) : '';
+      return d ? `${base} · ${d}` : base;
+    };
+    const labels = display.map(labelOf);
+    const pts = key => display.map((r, i) => ({ x: labels[i], y: r[key] || 0 }));
+    const series = [
+      { label: 'high_speed_distance',      name: 'HSR',    unit: 'm', points: pts('high_speed_distance') },
+      { label: 'very_high_speed_distance', name: 'VHSR',   unit: 'm', points: pts('very_high_speed_distance') },
+      { label: 'sprint_distance',          name: 'Sprint', unit: 'm', points: pts('sprint_distance') },
+    ];
+    const config = {
+      schema: 'gp.card/v1', viz: 'bars',
+      metrics: [{ id: 'high_speed_distance' }, { id: 'very_high_speed_distance' }, { id: 'sprint_distance' }],
+      style: { size: 'lg', palette: 'pitch', legend: true, axes: true, dataLabels: false },
+    };
+    window.GpRender.renderCard(body, config, series);
   }
 
   function _destroyCharts() {
     if (_mp.tdChart) { _mp.tdChart.destroy(); _mp.tdChart = null; }
     if (_mp.hiChart) { _mp.hiChart.destroy(); _mp.hiChart = null; }
+    // HI ahora la dibuja GpRender (chart en body.__chart).
+    const hb = document.getElementById('mp-hi-body');
+    if (hb && hb.__chart) { try { hb.__chart.destroy(); } catch (e) {} hb.__chart = null; }
   }
 
   // ── events ───────────────────────────────────────────────────

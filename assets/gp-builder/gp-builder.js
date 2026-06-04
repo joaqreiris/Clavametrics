@@ -1254,6 +1254,37 @@
     return document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
   }
 
+  // ── Shared drawing engine (window.GpRender.renderCard) ────────────────
+  // Pure DRAW: takes a gp.card/v1 `config` + already-prepared `series` and renders
+  // into `container`. NEVER queries the DB. Any DB-derived extras (role baseline,
+  // KPI delta/sparkline, line reference series) are computed by the caller and
+  // handed in via `opts` so this engine stays reusable across dashboards.
+  //
+  //   opts = { baselineMap, lineSeries, baselineVal, sparkSeries, editable, example }
+  //
+  // Supports every builder viz: kpi, bars, line, scatter, radar, ranking, table
+  // (table includes conditional formatting + column sort). Each mountX handles its
+  // own unique-canvas + previous-chart destroy.
+  function _renderCardInto(container, config, series, opts = {}) {
+    // Apply the body viz-class without clobbering host classes (add base + swap modifier).
+    container.classList.add('gp-c-b');
+    container.classList.remove('gp-kpi', 'gp-radar', 'gp-scatter', 'gp-ts');
+    const mod = config.viz === 'kpi' ? 'gp-kpi' : config.viz === 'radar' ? 'gp-radar'
+              : config.viz === 'scatter' ? 'gp-scatter' : config.viz === 'line' ? 'gp-ts' : null;
+    if (mod) container.classList.add(mod);
+
+    switch (config.viz) {
+      case 'radar':   mountRadarChart(container, config, series, opts.baselineMap || null); break;
+      case 'bars':    mountBarsChart(container, config, series); break;
+      case 'line':    mountLineChart(container, config, opts.lineSeries || series); break;
+      case 'scatter': mountScatterChart(container, config, series); break;
+      case 'kpi':     mountKpiCard(container, config, series, { baselineVal: opts.baselineVal ?? null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
+      case 'ranking': mountRankingCard(container, config, series); break;
+      case 'table':   mountTableCard(container, config, series, { editable: !!opts.editable, example: opts.example }); break;
+      default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series);
+    }
+  }
+
   // ── Resolve real data and re-render a saved card ──────────────────────
 
   /**
@@ -1379,23 +1410,21 @@
         return;
       }
 
-      body.className = _bodyClassFromViz(config.viz);
+      // Step 5b: compute the DB-derived extras this card needs, then hand the actual
+      // drawing to the shared engine (_renderCardInto / GpRender.renderCard).
+      const drawOpts = { editable: cardEl === draftCard };
+
       if (config.viz === 'radar') {
         // Per-axis role baseline drives the radial scale (so axes don't collapse).
         // Fetched for any player-scope radar; the baseline RING is only drawn when
         // comparison ≠ none (radarChartData keys that off config.comparison).
-        let baselineMap = null;
         if (config.scope.level === 'player' && fetchRoleBaseline) {
-          try { baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
+          try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
           catch (e) { console.warn('gpb role baseline:', e); }
         }
-        mountRadarChart(body, config, series, baselineMap);
-      } else if (config.viz === 'bars') {
-        mountBarsChart(body, config, series);
       } else if (config.viz === 'line') {
         // Single-metric, player-scope line vs role → append a flat dashed reference
-        // line at the role baseline (same fetch the radar uses). Multi-metric is left
-        // un-referenced (mixed units would be noise); match/md aren't time-series friendly.
+        // line at the role baseline. Multi-metric is left un-referenced (mixed units).
         let lineSeries = series;
         if (config.comparison?.baseline === 'role' && config.scope.level === 'player'
             && fetchRoleBaseline && series.length === 1 && series[0].points.length) {
@@ -1412,9 +1441,7 @@
         // Cache real series so the builder preview can re-render style-only changes
         // (color, area, points) instantly, without hitting Supabase again.
         cardEl.__previewCache = { sig: _dataSig(config), series: lineSeries };
-        mountLineChart(body, config, lineSeries);
-      } else if (config.viz === 'scatter') {
-        mountScatterChart(body, config, series);
+        drawOpts.lineSeries = lineSeries;
       } else if (config.viz === 'kpi') {
         // Delta vs the chosen comparison: role (squad/player) or match peak (player).
         let baselineVal = null;
@@ -1432,26 +1459,19 @@
         }
         if (stale()) return;
         // Sparkline = the same metric re-aggregated over time (real resolver, line grouping).
-        let sparkSeries = null;
         try {
           const trend = aggregateSeries(rows, eavMap, { ...config, viz: 'line', dimensions: [] }, catalogMap);
           const tp = trend?.[0]?.points || [];
           if (tp.length >= 2) {
             const byX = new Map(tp.map(p => [p.x, p]));
-            sparkSeries = lineSortCats(tp.map(p => p.x)).map(c => byX.get(c)).filter(Boolean);
+            drawOpts.sparkSeries = lineSortCats(tp.map(p => p.x)).map(c => byX.get(c)).filter(Boolean);
           }
         } catch (e) { /* sparkline is optional — never break the KPI */ }
-        mountKpiCard(body, config, series, { baselineVal, sparkSeries });
-      } else if (config.viz === 'ranking') {
-        mountRankingCard(body, config, series);
-      } else if (config.viz === 'table') {
-        // Interactive (per-column rules panel) only in the builder draft; saved
-        // dashboard cards render the stored formats read-only.
-        mountTableCard(body, config, series, { editable: cardEl === draftCard });
-      } else {
-        destroyBodyChart(body);
-        body.innerHTML = renderTypeFromDataset(config, series);
+        drawOpts.baselineVal = baselineVal;
       }
+
+      if (stale()) return;
+      _renderCardInto(body, config, series, drawOpts);
       cardEl.classList.remove('is-draft');
 
     } catch (e) {
@@ -3451,5 +3471,10 @@
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
   };
+
+  // Shared render engine for OTHER dashboards (e.g. Match Performance pilot). Draw-only:
+  //   GpRender.renderCard(container, config /* gp.card/v1 */, series, opts?)
+  // `series` must already be prepared (this never queries Supabase).
+  window.GpRender = window.GpRender || { renderCard: _renderCardInto };
 
 })();
