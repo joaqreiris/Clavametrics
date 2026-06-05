@@ -485,9 +485,11 @@
         try { await loadData(); } catch (e) { console.warn('gpFilterBar loadData:', e); }
         // restaurar filtros persistidos del dashboard activo + re-render
         restore();
-        if (isAnyActive() && window.GpBuilder && window.GpBuilder.rerenderActiveCards) {
-          setTimeout(() => window.GpBuilder.rerenderActiveCards(), 120);
-        }
+        // El bar ya está listo (sb + club + opciones + filtros restaurados): notificar
+        // SIEMPRE (no solo si hay filtros activos) para que TODAS las cards se rendericen
+        // con el contexto correcto. Despierta cualquier card que montó antes de tiempo
+        // (incluidas las que escuchan 'gpfilter:change', no solo las data-card-id).
+        setTimeout(() => { try { fireNow(); } catch (e) { console.warn('gpFilterBar boot fire:', e); } }, 120);
         return;
       }
       await new Promise(r => setTimeout(r, 200));

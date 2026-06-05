@@ -1412,12 +1412,24 @@
     body.innerHTML = `<div class="cb2-state load"><div class="cb2-spin"></div><div class="t">Loading GPS data…</div></div>`;
 
     try {
+      // Context readiness (TIMING): a card can be rendered during dashboard boot —
+      // before the club context is resolved. Wait, showing the spinner, for clubId +
+      // Supabase so the FIRST render uses the SAME context as a later filter re-render.
+      // A card that mounts early is never left stuck on an empty result: it resolves
+      // as soon as the context is ready (just like a filter change would).
+      for (let i = 0; i < 80; i++) {
+        if (stale()) return;
+        if ((_clubId || window._gpClubId) && window.sb) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+      if (stale()) return;
+
       const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, CORE_COLS } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
       const ctx = {
-        clubId:   _clubId,
+        clubId:   _clubId || window._gpClubId || null,
         playerId: window._gpPlayerId || window.gpState?.playerId || null,
         mcId:     window._gpMcId     || window.gpState?.mcId     || null,
         asOf:     new Date().toISOString().slice(0, 10),
