@@ -984,7 +984,6 @@
         if (!S) return;
         document.getElementById('gpbScope').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o===b));
         S.scope = b.dataset.scope;
-        document.getElementById('gpbDimName').textContent = S.scope === 'squad' ? 'Squad' : 'Player';
         pulseNext = true; renderCard();
       };
     });
@@ -1117,7 +1116,6 @@
       b.classList.toggle('is-on', b.dataset.type === S.type)
     );
     document.getElementById('gpbMetHint').textContent = VIZ_REQ_LBL[S.type];
-    document.getElementById('gpbDimName').textContent = S.scope === 'squad' ? 'Squad' : 'Player';
     document.getElementById('gpbScope').querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.scope === S.scope)
     );
@@ -1351,7 +1349,7 @@
 
     switch (config.viz) {
       case 'radar':   mountRadarChart(container, config, series, opts.baselineMap || null); break;
-      case 'bars':    mountBarsChart(container, config, series); break;
+      case 'bars':    mountBarsChart(container, config, series, opts.mcNames || null); break;
       case 'line':    mountLineChart(container, config, opts.lineSeries || series); break;
       case 'scatter': mountScatterChart(container, config, series); break;
       case 'kpi':     mountKpiCard(container, config, series, { baselineVal: opts.baselineVal ?? null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
@@ -1540,6 +1538,7 @@
       // the resolver behaves exactly as before. If anything here fails, we DEGRADE to
       // no comparison (keep the already-computed `series`) and never tumble the card.
       const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter']);
+      let mcNamesForDraw = null;   // MC legend labels for the bar engine (cur/ref)
       if (config.comparison?.baseline === 'mc' && _isUuid(config.comparison?.refMcId)
           && typeof getMcSessionIds === 'function' && MC_VIZ.has(config.viz)) {
         try {
@@ -1569,8 +1568,8 @@
               refSeries = aggregateSeries(refRows, refEav, config, catalogMap);
             }
           }
-          // Only reshape when the reference actually has data — otherwise degrade to
-          // no comparison (render the current values) instead of all-zero diff bars.
+          // Only apply when the reference actually has data — otherwise degrade to no
+          // comparison (render the current values) instead of all-zero bars.
           if (refSeries.some(s => s.points && s.points.length)) {
             // Names for the two sides. The CURRENT side is whatever the card shows
             // (filter bar's single-MC filter if active, else the card's current MC);
@@ -1579,8 +1578,18 @@
             // brings the second MC to contrast against.
             const curMcId = (FB?.microcycleIds?.length === 1 ? FB.microcycleIds[0] : null) || ctx.mcId;
             const mcNames = { cur: curMcId ? mcLabel(curMcId) : 'Actual', ref: mcLabel(config.comparison.refMcId) };
-            const reshaped = _mcReshape(config, _enrichMcDiff(series, refSeries), mcNames);
-            if (Array.isArray(reshaped) && reshaped.length) series = reshaped;
+            const enriched = _enrichMcDiff(series, refSeries);   // each point gets { cur, ref, diff }
+            if (config.viz === 'bars') {
+              // Keep ONE series per metric, enriched. The shared bar engine
+              // (barsChartData) reads config.comparison + the cur/ref on each point and
+              // splits into current/reference bars with the diff% — logic lives there,
+              // not duplicated here.
+              series = enriched;
+              mcNamesForDraw = mcNames;
+            } else {
+              const reshaped = _mcReshape(config, enriched, mcNames);   // ranking/table/scatter
+              if (Array.isArray(reshaped) && reshaped.length) series = reshaped;
+            }
           } else {
             console.warn('gpb mc comparison: reference microcycle has no data — degrading to no comparison');
           }
@@ -1592,7 +1601,7 @@
 
       // Step 5b: compute the DB-derived extras this card needs, then hand the actual
       // drawing to the shared engine (_renderCardInto / GpRender.renderCard).
-      const drawOpts = { editable: cardEl === draftCard };
+      const drawOpts = { editable: cardEl === draftCard, mcNames: mcNamesForDraw };
 
       if (config.viz === 'radar') {
         // Per-axis role baseline drives the radial scale (so axes don't collapse).
@@ -1684,12 +1693,9 @@
   }
 
   /**
-   * Reshape enriched series for the chosen viz:
-   *   · bars    → TWO grouped series per metric (current MC + reference MC) so each
-   *               X category shows two bars side by side; the diff% is carried on the
-   *               "current" series points and drawn as a label over each pair.
+   * Reshape enriched series for non-bar vizzes (bars are handled inside barsChartData):
    *   · ranking / table → value becomes diff% (cur/ref kept for tooltips)
-   *   · scatter → two synthetic series for metric 0: X = diff%, Y = current
+   *   · scatter         → two synthetic series for metric 0: X = diff%, Y = current
    * @param {{cur:string, ref:string}} mcNames  legend labels for the two MC sides
    */
   function _mcReshape(config, enriched, mcNames) {
@@ -1704,26 +1710,6 @@
         { label: s0.label + '__mcdiff', name: `Δ% vs ${mcNames.ref}`, unit: '%', points: diffPts },
         { label: s0.label + '__mccur',  name: `${name} (actual)`, unit: s0.unit || '', points: curPts },
       ];
-    }
-    if (config.viz === 'bars') {
-      // Grouped current-vs-reference bars. One pair per metric per X category; the
-      // diff% rides on the "current" series point for the over-pair label.
-      const single = enriched.length === 1;
-      const out = [];
-      for (const s of enriched) {
-        const base = s.name || s.label;
-        out.push({
-          label: s.label + '__mccur', name: single ? mcNames.cur : `${base} · ${mcNames.cur}`,
-          unit: s.unit || '', _mcRole: 'cur', _metric: s.label,
-          points: s.points.map(p => ({ x: p.x, dims: p.dims, y: p.cur == null ? 0 : p.cur, cur: p.cur, ref: p.ref, diff: p.diff })),
-        });
-        out.push({
-          label: s.label + '__mcref', name: single ? mcNames.ref : `${base} · ${mcNames.ref}`,
-          unit: s.unit || '', _mcRole: 'ref', _metric: s.label,
-          points: s.points.map(p => ({ x: p.x, dims: p.dims, y: p.ref == null ? 0 : p.ref })),
-        });
-      }
-      return out;
     }
     // ranking / table: plot the diff%, but carry cur/ref for tooltips/labels.
     return enriched.map(s => ({
@@ -2076,82 +2062,98 @@
    *   combo: a series flagged `line` (or config.metrics[i].line) is drawn as a LINE
    *          on a secondary value axis (y1) over the bars.
    */
-  function barsChartData(config, series) {
+  function barsChartData(config, series, mcNames) {
     const size       = config.style?.size || 'md';
     const showAxes   = config.style?.axes   !== false;
     const showLeg    = config.style?.legend !== false;
     const showLbl    = !!config.style?.dataLabels || size !== 'sm';   // OFF in S, ON in M/L, toggle forces ON
     const horizontal = config.style?.orientation === 'horizontal';
-    const stacked    = !!config.style?.stacked;
+    const accent     = config.style?.color || _cssVar('--cm-accent', '#15803D');
     const ss         = (series || []).filter(s => s.points && s.points.length);
 
     // categories = the dimension values (x), in first-series order
     const cats = [];
     ss.forEach(s => s.points.forEach(p => { if (!cats.includes(p.x)) cats.push(p.x); }));
 
-    // "vs microciclo": grouped current-vs-reference bars (set by _mcReshape: each
-    // metric → a `cur` series + a `ref` series). We draw them as normal grouped bars
-    // (current = accent, reference = grey) and overlay the diff% per category pair.
-    const isMcGrouped = ss.some(s => s._mcRole);
-    const upCol    = isMcGrouped ? _cssVar('--cm-success', '#16A34A') : null;   // lazy: non-mc untouched
-    const dnCol    = isMcGrouped ? _cssVar('--cm-danger',  '#DC2626') : null;
-    const isLine   = ss.map((s, i) => !!(s.line || config.metrics?.[i]?.line));
-    const barCols  = barColors(config, isLine.filter(f => !f).length || 1);
-    const lineCol  = _cssVar('--cm-warning', '#D97706');
+    // "vs microciclo": the resolver enriches each point with { cur, ref, diff }. When the
+    // card asks for an MC comparison (and the points carry both values) we draw TWO bars
+    // per category — current MC (accent) + reference MC (grey) — grouped side by side,
+    // plus a diff% label over each pair. Any other comparison/scope → the normal path
+    // below is left completely untouched (point 4).
+    const mcOn = config.comparison?.baseline === 'mc' && ss.some(s => s.points.some(p => p.cur !== undefined));
 
-    let bi = 0;
-    const datasets = ss.map((s, i) => {
-      const data = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; });
-      if (isLine[i]) {                              // combo: line on the secondary axis
-        return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
-          yAxisID: 'y1', borderColor: lineCol, backgroundColor: 'transparent',
-          borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
-          pointBackgroundColor: lineCol, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
+    const ticks = size === 'sm' ? 4 : 5;
+    let datasets, mcDiffs = null, hasLine = false, max1 = null, step1 = null, stacked = !!config.style?.stacked;
+
+    if (mcOn) {
+      stacked = false;                              // current-vs-ref is always grouped
+      const grey   = 'rgba(148,163,184,0.65)';
+      const names  = mcNames || { cur: 'Actual', ref: mcLabel(config.comparison?.refMcId) };
+      const single = ss.length === 1;
+      const mk = (s, label, key, col) => ({
+        type: 'bar', label, unit: s.unit || '',
+        data: cats.map(c => { const p = s.points.find(q => q.x === c); return (p && p[key] != null) ? p[key] : null; }),
+        backgroundColor: col, borderColor: col, borderWidth: 0, borderRadius: 4,
+        borderSkipped: horizontal ? 'left' : 'bottom', maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
+      });
+      datasets = [];
+      for (const s of ss) {
+        const base = s.name || s.label;
+        datasets.push(mk(s, single ? names.cur : `${base} · ${names.cur}`, 'cur', accent));
+        datasets.push(mk(s, single ? names.ref : `${base} · ${names.ref}`, 'ref', grey));
       }
-      // MC grouped → fixed colours (current=accent, reference=grey) regardless of count.
-      const col = isMcGrouped
-        ? (s._mcRole === 'ref' ? 'rgba(148,163,184,0.65)' : (config.style?.color || _cssVar('--cm-accent', '#15803D')))
-        : barCols[bi++];
-      return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
-        backgroundColor: col, borderColor: col, borderWidth: 0,
-        borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
-        maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
-        stack: stacked ? 'stk' : undefined };
-    });
-    datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // bars first → line drawn on top
-
-    // Per-category diff% (from the first `cur` series) for the over-pair label.
-    const mcDiffs = isMcGrouped
-      ? cats.map(c => { const cur = ss.find(s => s._mcRole === 'cur'); const p = cur?.points.find(q => q.x === c); return p ? p.diff : null; })
-      : null;
+      // diff% per category from the first metric (label over each pair)
+      const s0 = ss[0];
+      mcDiffs = cats.map(c => { const p = s0.points.find(q => q.x === c); return p ? (p.diff ?? null) : null; });
+    } else {
+      const isLine  = ss.map((s, i) => !!(s.line || config.metrics?.[i]?.line));
+      const barCols = barColors(config, isLine.filter(f => !f).length || 1);
+      const lineCol = _cssVar('--cm-warning', '#D97706');
+      let bi = 0;
+      datasets = ss.map((s, i) => {
+        const data = cats.map(c => { const p = s.points.find(q => q.x === c); return p ? p.y : null; });
+        if (isLine[i]) {                            // combo: line on the secondary axis
+          return { type: 'line', label: s.name || s.label, unit: s.unit || '', data,
+            yAxisID: 'y1', borderColor: lineCol, backgroundColor: 'transparent',
+            borderWidth: 2.4, tension: 0.25, pointRadius: 3.5, pointHoverRadius: 5.5,
+            pointBackgroundColor: lineCol, pointBorderColor: '#fff', pointBorderWidth: 1.2, _isLine: true };
+        }
+        const col = barCols[bi++];
+        return { type: 'bar', label: s.name || s.label, unit: s.unit || '', data,
+          backgroundColor: col, borderColor: col, borderWidth: 0,
+          borderRadius: stacked ? 2 : 4, borderSkipped: horizontal ? 'left' : 'bottom',
+          maxBarThickness: 46, categoryPercentage: 0.7, barPercentage: 0.9,
+          stack: stacked ? 'stk' : undefined };
+      });
+      datasets.sort((a, b) => (a._isLine ? 1 : 0) - (b._isLine ? 1 : 0));   // bars first → line drawn on top
+      hasLine = datasets.some(d => d._isLine);
+      if (hasLine) {
+        const lineVals = datasets.filter(d => d._isLine).flatMap(d => d.data.filter(v => v != null));
+        ({ max: max1, step: step1 } = niceScale(Math.max(0, ...lineVals), ticks));
+      }
+    }
 
     const barDs  = datasets.filter(d => !d._isLine);
-    const ticks  = size === 'sm' ? 4 : 5;
     const allBarVals = barDs.flatMap(d => d.data.filter(v => v != null));
     const maxVal = stacked
       ? Math.max(0, ...cats.map((_, ci) => barDs.reduce((sum, d) => sum + (d.data[ci] || 0), 0)))
       : Math.max(0, ...allBarVals);
     const { max, step } = niceScale(maxVal, ticks);
 
-    const hasLine = datasets.some(d => d._isLine);
-    let max1 = null, step1 = null;
-    if (hasLine) {
-      const lineVals = datasets.filter(d => d._isLine).flatMap(d => d.data.filter(v => v != null));
-      ({ max: max1, step: step1 } = niceScale(Math.max(0, ...lineVals), ticks));
-    }
-
     const baseH  = _BAR_SIZE_H[size] || 210;
     const height = horizontal ? Math.max(baseH, cats.length * 26 + 48) : baseH;   // grow for many horizontal bars
 
     return { cats, datasets, max, step, ticks, showAxes, showLeg, showLbl,
-             isMcGrouped, mcDiffs, mcUpCol: upCol, mcDnCol: dnCol,
+             isMcGrouped: mcOn, mcDiffs,
+             mcUpCol: mcOn ? _cssVar('--cm-success', '#16A34A') : null,
+             mcDnCol: mcOn ? _cssVar('--cm-danger',  '#DC2626') : null,
              horizontal, stacked, hasLine, max1, step1,
-             height, color: config.style?.color || _cssVar('--cm-accent', '#15803D') };
+             height, color: accent };
   }
 
   /** Mounts (or re-mounts) a Chart.js bar chart into `body`. Same renderer for preview + saved card. */
-  function mountBarsChart(body, config, series) {
-    const d = barsChartData(config, series);
+  function mountBarsChart(body, config, series, mcNames) {
+    const d = barsChartData(config, series, mcNames);
     if (!d.cats.length || !d.datasets.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
 
