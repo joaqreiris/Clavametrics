@@ -1422,7 +1422,7 @@
       }
       if (stale()) return;
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, CORE_COLS } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, enrichMcDiff, CORE_COLS } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
@@ -1578,7 +1578,7 @@
             // brings the second MC to contrast against.
             const curMcId = (FB?.microcycleIds?.length === 1 ? FB.microcycleIds[0] : null) || ctx.mcId;
             const mcNames = { cur: curMcId ? mcLabel(curMcId) : 'Actual', ref: mcLabel(config.comparison.refMcId) };
-            const enriched = _enrichMcDiff(series, refSeries);   // each point gets { cur, ref, diff }
+            const enriched = (enrichMcDiff || _enrichMcDiff)(series, refSeries);   // resolver helper (shared), local fallback
             if (config.viz === 'bars') {
               // Keep ONE series per metric, enriched. The shared bar engine
               // (barsChartData) reads config.comparison + the cur/ref on each point and
