@@ -1171,32 +1171,8 @@
       <!-- MICROCYCLE COMPARE -->
       <div class="gp-view" data-view="mc">
 
-        <!-- Microcycle Compare — filters bar -->
-        <div class="gp-mc-bar" id="mcBar">
-          <select class="sc-sel" id="mc-md-code">
-            <option value="MD-5">MD-5</option>
-            <option value="MD-4">MD-4</option>
-            <option value="MD-3" selected>MD-3</option>
-            <option value="MD-2">MD-2</option>
-            <option value="MD-1">MD-1</option>
-            <option value="MD">MD (match day)</option>
-            <option value="MD+1">MD+1</option>
-          </select>
-          <select class="sc-sel" id="mc-scope">
-            <option value="vs_last">vs Last microcycle</option>
-            <option value="vs_avg_3">vs Average of last 3 MCs</option>
-            <option value="vs_avg_5">vs Average of last 5 MCs</option>
-          </select>
-          <select class="sc-sel" id="mc-metric">
-            <option value="total_distance">Total Distance</option>
-            <option value="high_speed_distance">HSR</option>
-            <option value="sprint_distance">Sprint Distance</option>
-            <option value="player_load">Player Load</option>
-            <option value="sprint_count">Sprint Count</option>
-          </select>
-          <button class="pill" id="mc-load-btn" style="height:30px"><i class="ti ti-refresh"></i>Load</button>
-          <span class="sc-info" id="mc-info">Select filters and click Load</span>
-        </div>
+        <!-- Filtros viejos de MC Compare eliminados: la ÚNICA fuente es la barra de
+             desplegables (gpFilterBar), igual que el resto de los dashboards. -->
 
         <div class="gp-grid is-edit">
 
@@ -8429,15 +8405,15 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   let _mcMicros   = {}; // id → microcycle row
   let _mcSortKey  = 'diff_pct'; let _mcSortDir = -1;
 
-  const mdCodeSel  = document.getElementById('mc-md-code');
-  const scopeSel   = document.getElementById('mc-scope');
-  const metricSel  = document.getElementById('mc-metric');
-  const loadBtn    = document.getElementById('mc-load-btn');
-  const mcInfo     = document.getElementById('mc-info');
-  const metricBody = document.getElementById('mc-metric-body');
-  const tableBody  = document.getElementById('mc-table-body');
+  // Filtros viejos (#mcBar: mc-md-code / mc-scope / mc-metric / Load) eliminados: la
+  // ÚNICA fuente de filtrado es la barra de desplegables (gpFilterBar). mcInfo y los
+  // bodies de las cards migradas al builder son sinks detached (el builder es dueño
+  // de #mc-metric-body / #mc-table-body vía resolveAndRenderCard).
+  const mcInfo     = document.createElement('span');
+  const metricBody = document.createElement('div');
+  const tableBody  = document.createElement('div');
   const scatCanvas = document.getElementById('canvasMCScatter');
-  if (!loadBtn) return;
+  if (!document.querySelector('.gp-view[data-view="mc"]')) return;   // MC view not present
 
   // ── init — build session index once ──────────────────────────
   async function mcInit() {
@@ -8494,9 +8470,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
   // ── load & compare ───────────────────────────────────────────
   async function _mcLoad() {
-    const selectedMD = mdCodeSel.value;
-    const scope      = scopeSel.value;
-    const metricKey  = metricSel.value;
+    // Filtros desde la barra nueva (gpFilterBar). MD: el seleccionado si hay uno solo,
+    // si no MD-3 (default histórico). scope: vs Last (dos MCs). metric: total_distance
+    // para las cards bespoke (Monotonía/Exposure/Shape). Las cards de diff son builder.
+    const FB = window.gpFilterBar?.getState?.() || {};
+    const selectedMD = (FB.mdCodes && FB.mdCodes.length === 1) ? FB.mdCodes[0] : 'MD-3';
+    const scope      = 'vs_last';
+    const metricKey  = 'total_distance';
     if (!selectedMD) return;
     if (!_mcInited) await mcInit();
 
@@ -8671,13 +8651,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       mcInfo.textContent = `${selectedMD} · ${currLabel} ← ref: ${refLabel} · ${playerRows.length} players`;
 
-      _mcRenderMetricDiff(playerRows);
-      _mcRenderTable(playerRows, metricKey);
-      _mcRenderScatter(playerRows, metricKey);
-      _mcRenderTrend(trendPoints, metricKey, selectedMD);
+      // Cards de DIFF + trend → migradas al motor unificado (builder), se renderizan
+      // en _mcRenderBuilderCards(). Acá quedan SOLO las bespoke (math propia):
       _mcRenderShape({ curr: shapeCurr, ref: shapeRef, labels: shapeLabels, currLabel, refLabel }, metricKey);
       _mcRenderMonotony(monoData, metricKey);
-      _mcRenderMovers(playerRows, metricKey);
       _mcRenderExposure(exposureData);
     } catch (e) { console.error('_mcLoad:', e); mcInfo.textContent = 'Error loading data.'; }
   }
@@ -9222,8 +9199,83 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch (e) { console.error('_mcRenderTrend:', e); }
   }
 
+  // ── Cards migradas al motor unificado (gp.card/v1 vía el builder) ──────────
+  // Diff by metric, MC diff table, Diff scatter, Biggest movers y MD trend dejan de
+  // ser bespoke: son configs gp.card/v1 reales alimentadas por el RESOLVER, con la
+  // comparación "vs microciclo" (MC actual vs MC de referencia = el anterior por
+  // defecto). 'current' = window._gpMcId (rango mc); 'ref' = comparison.refMcId.
+  const _mcMet = MC_METRICS.map(m => ({ id: m.key, agg: 'avg' }));
+  function _mcDiffMetricConfig(refId) {
+    return { schema:'gp.card/v1', title:'Diff by metric', viz:'bars', scope:{level:'squad'},
+      metrics:_mcMet, dimensions:[], range:{type:'mc'},
+      comparison: refId ? {baseline:'mc',refMcId:refId} : null,
+      style:{size:'full',color:'#15803D',palette:'pitch',axes:true,legend:true,dataLabels:false,orientation:'horizontal',stacked:false} };
+  }
+  function _mcTableConfig(refId) {
+    return { schema:'gp.card/v1', title:'MC diff table', viz:'table', scope:{level:'squad'},
+      metrics:_mcMet, dimensions:[{id:'player_name'}], range:{type:'mc'},
+      comparison: refId ? {baseline:'mc',refMcId:refId} : null,
+      style:{size:'full',color:'#15803D'} };
+  }
+  function _mcScatterConfig(refId) {
+    return { schema:'gp.card/v1', title:'Diff scatter', viz:'scatter', scope:{level:'squad'},
+      metrics:[{id:'total_distance',agg:'avg'}], dimensions:[{id:'player_name'}], range:{type:'mc'},
+      comparison: refId ? {baseline:'mc',refMcId:refId} : null,
+      style:{size:'full',color:'#15803D'} };
+  }
+  function _mcMoversConfig(refId) {
+    return { schema:'gp.card/v1', title:'Biggest movers', viz:'ranking', scope:{level:'squad'},
+      metrics:[{id:'total_distance',agg:'avg'}], dimensions:[{id:'player_name'}], range:{type:'mc'},
+      comparison: refId ? {baseline:'mc',refMcId:refId} : null,
+      style:{size:'md',color:'#15803D'} };
+  }
+  function _mcTrendConfig() {
+    return { schema:'gp.card/v1', title:'MD trend', viz:'line', scope:{level:'squad'},
+      metrics:[{id:'total_distance',agg:'avg'}], dimensions:[{id:'microcycle'}], range:{type:'season'},
+      comparison:null,
+      style:{size:'full',color:'#15803D',axes:true,legend:true,points:true,area:false} };
+  }
+
+  /** MC de referencia por defecto = el INMEDIATAMENTE anterior al actual (vs Last). */
+  async function _mcRefId() {
+    if (!_mcInited) { try { await mcInit(); } catch (e) {} }
+    const allMcs = _buildMcIndex();   // oldest → newest
+    const FB = window.gpFilterBar?.getState?.() || {};
+    const curId = (FB.microcycleIds && FB.microcycleIds.length === 1)
+      ? FB.microcycleIds[0]
+      : (window._gpMcId || (allMcs.length ? allMcs[allMcs.length - 1].id : null));
+    const i = allMcs.findIndex(m => String(m.id) === String(curId));
+    return i > 0 ? allMcs[i - 1].id : (allMcs.length >= 2 ? allMcs[allMcs.length - 2].id : null);
+  }
+
+  async function _mcRenderBuilderCards() {
+    if (!window.GpBuilder?.resolveAndRenderCard) return;
+    const refId = await _mcRefId();
+    const specs = [
+      ['#card-mc-diff-metric', () => _mcDiffMetricConfig(refId)],
+      ['#card-mc-table',       () => _mcTableConfig(refId)],
+      ['#card-mc-scatter',     () => _mcScatterConfig(refId)],
+      ['#card-mc-movers',      () => _mcMoversConfig(refId)],
+      ['#card-mc-trend',       () => _mcTrendConfig()],
+    ];
+    for (const [sel, cfgFn] of specs) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      if (!el.__config) el.__config = cfgFn();          // semilla; editar+guardar la reemplaza
+      // El botón de la cabecera abre el Chart builder (lápiz) para editar la card.
+      const act = el.querySelector('.gp-c-h .right > button:last-child');
+      if (act && !act.__mcBound) {
+        act.__mcBound = true; act.title = 'Editar card'; act.innerHTML = '<i class="ti ti-pencil"></i>';
+        act.addEventListener('click', () => window.GpBuilder.openForEdit?.(el));
+      }
+      window.GpBuilder.resolveAndRenderCard(el, el.__config);
+    }
+  }
+
   // ── events ───────────────────────────────────────────────────
   function _mcTriggerLoad() {
+    // builder cards (diff + trend) + bespoke (shape/monotony/exposure) en paralelo
+    _mcRenderBuilderCards().catch(e => console.error('mc builder cards:', e));
     if (!_mcInited) {
       mcInit().then(() => _mcLoad()).catch(e => console.error('mc auto-load:', e));
     } else {
@@ -9231,16 +9283,17 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     }
   }
 
-  mdCodeSel.addEventListener('change', _mcTriggerLoad);
-  scopeSel.addEventListener('change', _mcTriggerLoad);
-  metricSel.addEventListener('change', _mcTriggerLoad);
-  loadBtn.addEventListener('click', _mcTriggerLoad);
-
   window._mcInit = mcInit;
 
+  // Primer render al entrar a la vista (el contexto/clubId lo espera resolveAndRenderCard).
   document.getElementById('sections')?.addEventListener('click', e => {
     if (!e.target.closest('.gp-sec[data-view="mc"]')) return;
     _mcTriggerLoad();
+  });
+  // Re-render con la barra de filtros nueva — solo si la vista MC está activa.
+  document.addEventListener('gpfilter:change', () => {
+    const v = document.querySelector('.gp-view[data-view="mc"]');
+    if (v && v.classList.contains('is-on')) _mcTriggerLoad();
   });
 })();
 </script>
