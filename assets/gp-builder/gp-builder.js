@@ -1361,6 +1361,32 @@
   // ── Resolve real data and re-render a saved card ──────────────────────
 
   /**
+   * One-line diagnostics for an empty/odd render, labelled by card TITLE so two
+   * cards on the same dashboard can be compared (e.g. "Match metric" finds matches,
+   * "High intensity per match" doesn't → compare their range/filters/sessionIds).
+   * Silenced with window.GPB_DEBUG = false.
+   */
+  function _gpbDiag(config, FB, ctx, extra) {
+    if (window.GPB_DEBUG === false) return;
+    try {
+      const filters = FB ? {
+        date:        FB.date?.preset || FB.date?.from || FB.date?.to || null,
+        mdCodes:     FB.mdCodes?.length     ? FB.mdCodes     : null,
+        players:     FB.playerIds?.length   || 0,
+        positions:   FB.positions?.length   ? FB.positions   : null,
+        microcycles: FB.microcycleIds?.length || 0,
+      } : '(filter bar not mounted)';
+      console.log(`[gpb:diag] «${config.title || config.viz}»`, {
+        viz: config.viz, scope: config.scope?.level, range: config.range?.type,
+        metrics: (config.metrics || []).map(m => m.id),
+        dims: (config.dimensions || []).map(d => d.id),
+        comparison: config.comparison || null,
+        mcId: ctx?.mcId || null, filters, ...extra,
+      });
+    } catch { /* diagnostics must never break a render */ }
+  }
+
+  /**
    * Fetches real GPS data for a saved card and re-renders its body.
    * Fires asynchronously — the card body shows a loading spinner first.
    *
@@ -1420,14 +1446,17 @@
           .map(s => s.id);
       }
       if (!sessionIds.length) {
+        _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', effectiveRange: _fbEffectiveRange(FB, config.range), sessionIds: 0 });
         _showCardState(cardEl, body, 'nodata', 'No sessions match the active filters.', config);
         return;
       }
 
       // Step 2: reports — then narrow rows by player / position (AND).
-      const rows = _fbFilterRows(await fetchReports(sessionIds, config, ctx, catalogMap, sb), FB);
+      const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
+      const rows = _fbFilterRows(rawRows, FB);
       if (stale()) return;
       if (!rows.length) {
+        _gpbDiag(config, FB, ctx, { stage: 'NO ROWS', sessionIds: sessionIds.length, rowsBeforeFbFilter: rawRows.length, rowsAfter: 0 });
         _showCardState(cardEl, body, 'nodata', 'No GPS data for this selection.', config);
         return;
       }
@@ -1455,7 +1484,7 @@
             return { metric: catalogMap.get(mid)?.name || mid, rows_with_value: n, raw_total: Math.round(sum * 10) / 10 };
           };
           const scopeLbl = `${config.scope?.level || '?'}${ctx.playerId ? ' · ' + ctx.playerId : ''}`;
-          console.groupCollapsed(`[gpb] ${config.viz} · ${(config.metrics || []).map(m => m.id).join(', ')} · ${scopeLbl}`);
+          console.groupCollapsed(`[gpb] «${config.title || config.viz}» · ${config.viz} · ${(config.metrics || []).map(m => m.id).join(', ')} · ${scopeLbl}`);
           console.log('range:', config.range?.type, '→ sessionIds (getSessionIds):', sessionIds.length, sessionIds);
           console.log('rows from gps_reports (fetchReports):', rows.length);
           console.table((config.metrics || []).map(m => rawTotal(m.id)));
@@ -1479,6 +1508,8 @@
       if (stale()) return;
       const hasData = series.some(s => s.points.length > 0);
       if (!hasData) {
+        _gpbDiag(config, FB, ctx, { stage: 'NO HASDATA', sessionIds: sessionIds.length, rows: rows.length,
+          seriesPoints: series.map(s => ({ metric: s.label, points: s.points.length })) });
         _showCardState(cardEl, body, 'nodata', 'No rows match the current scope, range and filters.', config);
         return;
       }
