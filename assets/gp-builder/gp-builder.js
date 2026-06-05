@@ -834,9 +834,12 @@
     // Hide pencil while editing
     cardEl.querySelector('[data-edit]')?.style.setProperty('display', 'none');
 
-    // Wire size-toggle on the card
+    // Wire size-toggle on the card. The handler stays bound after the builder closes,
+    // so guard against firing when this card is no longer the active draft (S is null
+    // once the builder closes → "Cannot set properties of null (setting 'size')").
     cardEl.querySelector('.size-toggle')?.querySelectorAll('button').forEach(b => {
       b.onclick = () => {
+        if (!S || draftCard !== cardEl) return;   // not editing this card → ignore
         const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
         const sz = map[b.textContent.trim()];
         if (sz) { S.size = sz; draftCard.dataset.size = sz; syncStyle(); renderCard(); }
