@@ -108,10 +108,16 @@
       && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
   }
 
+  /** True for a usable microcycle id. microcycles.id is TEXT (not uuid) → accept any
+   *  non-empty id, reject only null / "null" / "". Mirrors resolver.isNonNullId. */
+  function _validMcId(v) {
+    return typeof v === 'string' && v !== '' && v !== 'null' && v !== 'undefined';
+  }
+
   /** gp.card/v1 `comparison` block for the active state (centralizes mc + refMcId). */
   function cmpConfig(S) {
     if (!S || S.compare === 'none') return null;
-    if (S.compare === 'mc') return { baseline: 'mc', refMcId: _isUuid(S.refMcId) ? S.refMcId : null };
+    if (S.compare === 'mc') return { baseline: 'mc', refMcId: _validMcId(S.refMcId) ? S.refMcId : null };
     return { baseline: S.compare };
   }
 
@@ -1542,15 +1548,15 @@
       // no comparison (keep the already-computed `series`) and never tumble the card.
       const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter']);
       let mcNamesForDraw = null;   // MC legend labels for the bar engine (cur/ref)
-      console.log('[gpb:mc-gate]', config.title, {
+      if (window.GPB_DEBUG !== false) console.log('[gpb:mc-gate]', config.title, {
         baselineIsMc: config.comparison?.baseline === 'mc',
         refMcId: config.comparison?.refMcId,
-        refIsUuid: _isUuid(config.comparison?.refMcId),
+        refValid: _validMcId(config.comparison?.refMcId),   // microcycle id is TEXT, not uuid
         hasFn: typeof getMcSessionIds === 'function',
         vizOk: MC_VIZ.has(config.viz),
         viz: config.viz,
       });
-      if (config.comparison?.baseline === 'mc' && _isUuid(config.comparison?.refMcId)
+      if (config.comparison?.baseline === 'mc' && _validMcId(config.comparison?.refMcId)
           && typeof getMcSessionIds === 'function' && MC_VIZ.has(config.viz)) {
         try {
           let refSessions = await getMcSessionIds(config.comparison.refMcId, ctx, sb);
