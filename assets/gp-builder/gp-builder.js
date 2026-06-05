@@ -1040,6 +1040,9 @@
 
     // popover close
     popBk.onclick = closePop;
+    // Clicks INSIDE the popover must never bubble out — otherwise an option click can
+    // reach an outside-click / view-switch handler and close the whole builder panel.
+    popEl.addEventListener('click', e => e.stopPropagation());
 
     // cfg drawer
     document.getElementById('gpbCfgClose').onclick = closeCfg;
@@ -3611,7 +3614,8 @@
   }
 
   function bindPop(kind) {
-    popEl.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
+    popEl.querySelectorAll('[data-pick]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
       if (kind === 'range') { S.range = b.dataset.pick; syncSelects(); pulseNext = true; renderCard(); closePop(); return; }
       S.compare = b.dataset.pick;
       if (S.compare === 'mc') {
@@ -3624,14 +3628,15 @@
       }
       syncSelects(); pulseNext = true; renderCard(); closePop();
     });
-    popEl.querySelectorAll('[data-mc]').forEach(b => b.onclick = () => {
+    popEl.querySelectorAll('[data-mc]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
       if (b.classList.contains('is-disabled')) return;   // can't compare a MC against itself
       S.refMcId = b.dataset.mc;
-      const owner = popOwner;
-      syncSelects(); pulseNext = true; renderCard();
-      openPop(popHTML('compare'), owner, 'compare');
+      // Select → close ONLY the dropdown; the builder stays open and the label updates.
+      syncSelects(); pulseNext = true; renderCard(); closePop();
     });
-    popEl.querySelectorAll('[data-agg]').forEach(b => b.onclick = () => {
+    popEl.querySelectorAll('[data-agg]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
       if (b.classList.contains('is-disabled')) return;
       const f = S.metrics.find(m => m.id === popEl.dataset.field);
       if (f) f.agg = b.dataset.agg;
