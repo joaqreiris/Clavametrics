@@ -1542,6 +1542,14 @@
       // no comparison (keep the already-computed `series`) and never tumble the card.
       const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter']);
       let mcNamesForDraw = null;   // MC legend labels for the bar engine (cur/ref)
+      console.log('[gpb:mc-gate]', config.title, {
+        baselineIsMc: config.comparison?.baseline === 'mc',
+        refMcId: config.comparison?.refMcId,
+        refIsUuid: _isUuid(config.comparison?.refMcId),
+        hasFn: typeof getMcSessionIds === 'function',
+        vizOk: MC_VIZ.has(config.viz),
+        viz: config.viz,
+      });
       if (config.comparison?.baseline === 'mc' && _isUuid(config.comparison?.refMcId)
           && typeof getMcSessionIds === 'function' && MC_VIZ.has(config.viz)) {
         try {
