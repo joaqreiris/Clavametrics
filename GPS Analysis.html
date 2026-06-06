@@ -2257,6 +2257,31 @@ async function renderKpiCard(cardEl, metricKey, sel) {
   if (tEl) tEl.innerHTML = '';
 }
 
+// ACWR · selector de MÉTRICA BASE (único parámetro elegible). Cambia solo la métrica
+// sobre la que se calcula la carga aguda:crónica; bandas, umbrales y cálculo quedan
+// bespoke. Re-render vía refreshDashboard → gpRenderScienceCards (lee data-metric-key).
+function _openAcwrMetricPicker(anchor, card) {
+  const cat = window._gpCatalog || [];
+  const SKIP = new Set(['time_played', 'distance_per_minute', 'max_speed', 'avg_speed']);
+  const opts = cat.length
+    ? cat.filter(d => !SKIP.has(d.key)).map(d => ({ label: d.label, metric: d.key }))
+    : [
+        { label: 'Player Load',    metric: 'player_load' },
+        { label: 'Total Distance', metric: 'total_distance' },
+        { label: 'HSR',            metric: 'high_speed_distance' },
+        { label: 'Sprint Distance',metric: 'sprint_distance' },
+        { label: 'Accelerations',  metric: 'accelerations' },
+      ];
+  const cur = card.dataset.metricKey || 'player_load';
+  makePopover(anchor, opts.map(o => ({ label: (o.metric === cur ? '✓ ' : '') + o.label, metric: o.metric })), async item => {
+    card.dataset.metricKey = item.metric;
+    try { await window.refreshDashboard?.(); } catch (e) { console.warn('acwr metric refresh:', e); }
+    const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
+    saveLayout(view).catch(e => console.warn('saveLayout (acwr metric):', e));
+    showToast('ACWR · métrica base → ' + item.label.replace('✓ ', ''));
+  });
+}
+
 async function openChangeMetricModal(card) {
   const clubId  = window._gpClubId || await window.getClubId?.();
   const catalog = typeof window.getCatalog === 'function' ? await window.getCatalog(clubId) : [];
@@ -2609,9 +2634,11 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   const isPwTable  = card?.id === 'card-pw-table';
   const isWkOnWk   = card?.id === 'card-weekly-bars';
   const isXmatch   = card?.id === 'card-xmatch';
+  const isAcwr     = card?.id === 'card-acwr';
   makePopover(btn, [
     { label: 'Duplicate',     icon: 'ti-copy' },
-    ...(!isPwTable && !isXmatch ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
+    ...(isAcwr ? [{ label: 'Métrica base', icon: 'ti-chart-bar' }] : []),
+    ...(!isPwTable && !isXmatch && !isAcwr ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
     ...(isWkOnWk   ? [{ label: 'Edit thresholds', icon: 'ti-adjustments-horizontal' }] : []),
     ...(isXmatch   ? [{ label: 'Edit metrics',    icon: 'ti-layout-list' }] : []),
     { label: 'Change viz',    icon: 'ti-chart-area' },
@@ -2635,6 +2662,8 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       } else {
         card.remove();
       }
+    } else if (item.label === 'Métrica base') {
+      _openAcwrMetricPicker(btn, card);
     } else if (item.label === 'Change metric') {
       if (!card.dataset.cardId) { showToast('Change metric not available for this card'); return; }
       openChangeMetricModal(card);
