@@ -21,7 +21,7 @@
   // dimMax = how many DIMENSIONS (grouping/axis fields) this viz accepts.
   // The row/X dimension defaults to player_name in the resolver when none picked.
   const VIZ_TYPES = {
-    kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 1,  dimMax: 0 },
+    kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 8,  dimMax: 0 },
     bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 2,  dimMax: 1 },
     line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
     scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1 },
@@ -1343,7 +1343,7 @@
   // KPI delta/sparkline, line reference series) are computed by the caller and
   // handed in via `opts` so this engine stays reusable across dashboards.
   //
-  //   opts = { baselineMap, lineSeries, baselineVal, sparkSeries, editable, example }
+  //   opts = { baselineMap, mcNames, lineSeries, baselineMap (kpi), mcRefName, sparkSeries, editable, example }
   //
   // Supports every builder viz: kpi, bars, line, scatter, radar, ranking, table
   // (table includes conditional formatting + column sort). Each mountX handles its
@@ -1361,7 +1361,7 @@
       case 'bars':    mountBarsChart(container, config, series, opts.mcNames || null); break;
       case 'line':    mountLineChart(container, config, opts.lineSeries || series); break;
       case 'scatter': mountScatterChart(container, config, series); break;
-      case 'kpi':     mountKpiCard(container, config, series, { baselineVal: opts.baselineVal ?? null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
+      case 'kpi':     mountKpiCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
       case 'ranking': mountRankingCard(container, config, series); break;
       case 'table':   mountTableCard(container, config, series, { editable: !!opts.editable, example: opts.example }); break;
       default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series);
@@ -1546,8 +1546,8 @@
       // role/match/md/none, or no comparison at all — skips this block entirely and
       // the resolver behaves exactly as before. If anything here fails, we DEGRADE to
       // no comparison (keep the already-computed `series`) and never tumble the card.
-      const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter']);
-      let mcNamesForDraw = null;   // MC legend labels for the bar engine (cur/ref)
+      const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter', 'kpi']);
+      let mcNamesForDraw = null;   // MC legend labels (bars) / ref name (kpi)
       if (window.GPB_DEBUG !== false) console.log('[gpb:mc-gate]', config.title, {
         baselineIsMc: config.comparison?.baseline === 'mc',
         refMcId: config.comparison?.refMcId,
@@ -1596,11 +1596,10 @@
             const curMcId = (FB?.microcycleIds?.length === 1 ? FB.microcycleIds[0] : null) || ctx.mcId;
             const mcNames = { cur: curMcId ? mcLabel(curMcId) : 'Actual', ref: mcLabel(config.comparison.refMcId) };
             const enriched = (enrichMcDiff || _enrichMcDiff)(series, refSeries);   // resolver helper (shared), local fallback
-            if (config.viz === 'bars') {
-              // Keep ONE series per metric, enriched. The shared bar engine
-              // (barsChartData) reads config.comparison + the cur/ref on each point and
-              // splits into current/reference bars with the diff% — logic lives there,
-              // not duplicated here.
+            if (config.viz === 'bars' || config.viz === 'kpi') {
+              // Keep ONE series per metric, enriched (cur/ref/diff on each point). The
+              // bar engine splits cur/ref bars; the KPI reads point.diff per metric.
+              // Logic lives in those renderers, not duplicated here.
               series = enriched;
               mcNamesForDraw = mcNames;
             } else {
@@ -1649,31 +1648,40 @@
         cardEl.__previewCache = { sig: _dataSig(config), series: lineSeries };
         drawOpts.lineSeries = lineSeries;
       } else if (config.viz === 'kpi') {
-        // Delta vs the chosen comparison: role (squad/player) or match peak (player).
-        let baselineVal = null;
+        // Per-metric delta from the EXISTING comparison block:
+        //  · mc    → already on the series points (.diff), enriched by Step 5a above.
+        //  · role  → fetchRoleBaseline returns a per-metric map (use it directly).
+        //  · match → getMatchBaseline per metric (player scope) → map.
+        // mc's ref name (for the "vs MC ref" caption) comes from Step 5a.
         const cmp = config.comparison?.baseline;
-        if (cmp && config.metrics?.[0]) {
+        drawOpts.mcRefName = mcNamesForDraw?.ref || null;
+        if ((cmp === 'role' || cmp === 'match') && config.metrics?.length) {
+          const bmap = new Map();
           try {
             if (cmp === 'role' && fetchRoleBaseline) {
-              const bmap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
-              baselineVal = bmap?.get(config.metrics[0].id) ?? null;
+              const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
+              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
             } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
-              const r = await window.getMatchBaseline(ctx.playerId, config.metrics[0].id, _clubId, {});
-              baselineVal = (r && r.baseline != null) ? r.baseline : null;
+              for (const m of config.metrics) {
+                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
+                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
+              }
             }
           } catch (e) { console.warn('gpb kpi baseline:', e); }
+          if (bmap.size) drawOpts.baselineMap = bmap;
         }
         if (stale()) return;
-        // Sparkline = the same metric re-aggregated over time (real resolver, line grouping).
-        try {
-          const trend = aggregateSeries(rows, eavMap, { ...config, viz: 'line', dimensions: [] }, catalogMap);
-          const tp = trend?.[0]?.points || [];
-          if (tp.length >= 2) {
-            const byX = new Map(tp.map(p => [p.x, p]));
-            drawOpts.sparkSeries = lineSortCats(tp.map(p => p.x)).map(c => byX.get(c)).filter(Boolean);
-          }
-        } catch (e) { /* sparkline is optional — never break the KPI */ }
-        drawOpts.baselineVal = baselineVal;
+        // Sparkline (single-metric KPI only) = metrics[0] re-aggregated over time.
+        if (config.metrics?.length === 1) {
+          try {
+            const trend = aggregateSeries(rows, eavMap, { ...config, viz: 'line', dimensions: [] }, catalogMap);
+            const tp = trend?.[0]?.points || [];
+            if (tp.length >= 2) {
+              const byX = new Map(tp.map(p => [p.x, p]));
+              drawOpts.sparkSeries = lineSortCats(tp.map(p => p.x)).map(c => byX.get(c)).filter(Boolean);
+            }
+          } catch (e) { /* sparkline is optional — never break the KPI */ }
+        }
       }
 
       if (stale()) return;
@@ -2777,28 +2785,47 @@
     el.appendChild(badge);
   }
 
-  /** Pure: (config, series, baselineVal) → KPI view model (value, label, delta). */
-  function kpiCardData(config, series, baselineVal) {
-    const s0      = series && series[0];
-    const value   = s0?.points?.[0]?.y ?? 0;
-    const unit    = s0?.unit || '';
-    const name    = s0?.name || '';
-    const aggName = AGG[config.metrics?.[0]?.agg]?.name || '';
-    const scope   = config.scope?.level || '';
-    const cat     = catalogMap.get(config.metrics?.[0]?.id);
-    const icon    = cat ? metIcon(cat) : VIZ_TYPES.kpi.icon;
+  /**
+   * Pure: (config, series, opts) → KPI view model. ONE item per metric (multi-metric
+   * KPI = compact row). Per-metric delta comes from the EXISTING comparison block:
+   *   · vs microciclo → point carries { diff } (enriched by the mc pipeline)
+   *   · role / match  → opts.baselineMap (metricId → baseline value)
+   *   · none          → no delta.
+   * opts: { baselineMap, mcRefName }.
+   */
+  function kpiCardData(config, series, opts = {}) {
+    const baselineMap = opts.baselineMap || null;
     const cmpId   = config.comparison?.baseline || null;
-    const cmpName = cmpId ? (COMPARES.find(c => c.id === cmpId)?.name || '') : '';
+    const cmpName = cmpId === 'mc'
+      ? (opts.mcRefName ? `vs ${opts.mcRefName}` : '')          // empty if ref MC had no data (degraded)
+      : (cmpId ? (COMPARES.find(c => c.id === cmpId)?.name || '') : '');
+    const scope   = config.scope?.level || '';
 
-    let delta = null;
-    if (baselineVal != null && baselineVal > 0 && isFinite(value)) {
-      const diff = value - baselineVal;
-      delta = { dir: diff >= 0 ? 'up' : 'down', pct: (diff / baselineVal) * 100, abs: diff };
-    }
-    return { value, unit, name, aggName, scope, icon, cmpName, delta };
+    const items = (series || []).map((s, i) => {
+      const m       = config.metrics?.[i] || {};
+      const p       = s?.points?.[0] || {};
+      const value   = (p.cur != null ? p.cur : p.y) ?? 0;
+      const unit    = s?.unit || '';
+      const name    = s?.name || m.id || '';
+      const aggName = AGG[m.agg]?.name || '';
+      const cat     = catalogMap.get(m.id);
+      const icon    = cat ? metIcon(cat) : VIZ_TYPES.kpi.icon;
+      let delta = null;
+      if (p.diff != null && isFinite(p.diff)) {                    // vs microciclo
+        delta = { dir: p.diff >= 0 ? 'up' : 'down', pct: p.diff };
+      } else if (baselineMap) {                                    // role / match
+        const bv = baselineMap.get(m.id);
+        if (bv != null && bv > 0 && isFinite(value)) {
+          const diff = value - bv;
+          delta = { dir: diff >= 0 ? 'up' : 'down', pct: (diff / bv) * 100 };
+        }
+      }
+      return { value, unit, name, aggName, scope, icon, cmpName, delta };
+    });
+    return { items, single: items.length <= 1 };
   }
 
-  /** KPI markup. `spark` adds an empty sparkline canvas (mounted by mountKpiCard). */
+  /** Single-KPI markup (1 metric). `spark` adds an empty sparkline canvas. */
   function kpiHtml(d, spark) {
     const lLabel = [d.aggName, d.scope].filter(Boolean).join(' · ');
     let tLine = '';
@@ -2816,12 +2843,37 @@
       ${tLine}${sparkHtml}`;
   }
 
-  /** Mounts a KPI card (+ optional sparkline). opts: { baselineVal, sparkSeries, example }. */
+  /** Multi-KPI markup (N metrics) — compact grid, one tile per metric (like Player KPIs). */
+  function kpiMultiHtml(items) {
+    return `<div class="gp-kpi-multi">${items.map(it => {
+      const lab = [it.name, it.aggName].filter(Boolean).join(' · ');
+      let t = '';
+      if (it.delta) {
+        const sign = it.delta.dir === 'up' ? '+' : '−';
+        t = `<div class="kt"><span class="kd ${it.delta.dir}"><i class="ti ti-arrow-${it.delta.dir}-right"></i>${sign}${Math.abs(it.delta.pct).toFixed(0)}%</span>${it.cmpName ? ' ' + esc(it.cmpName) : ''}</div>`;
+      } else if (it.cmpName) {
+        t = `<div class="kt">${esc(it.cmpName)}</div>`;
+      }
+      return `<div class="gp-kpi-tile">
+        <div class="kl"><i class="ti ${it.icon}"></i>${esc(lab)}</div>
+        <div class="kv">${fmt(Math.round(it.value * 10) / 10)}${it.unit ? ` <sub>${esc(it.unit)}</sub>` : ''}</div>
+        ${t}</div>`;
+    }).join('')}</div>`;
+  }
+
+  /** Mounts a KPI card. 1 metric → single KPI (+ optional sparkline); N → compact row.
+   *  opts: { baselineMap, mcRefName, sparkSeries, example }. */
   function mountKpiCard(body, config, series, opts = {}) {
     destroyBodyChart(body);
-    const d = kpiCardData(config, series, opts.baselineVal);
+    const d = kpiCardData(config, series, opts);
+    if (!d.single) {                                  // multi-metric → row of KPIs, no sparkline
+      body.innerHTML = kpiMultiHtml(d.items);
+      if (opts.example) _appendExampleBadge(body);
+      return;
+    }
+    const item = d.items[0] || { value: 0, unit: '', name: '', aggName: '', scope: config.scope?.level || '', icon: VIZ_TYPES.kpi.icon, cmpName: '', delta: null };
     const spark = Array.isArray(opts.sparkSeries) && opts.sparkSeries.length >= 2;
-    body.innerHTML = kpiHtml(d, spark);
+    body.innerHTML = kpiHtml(item, spark);
     if (opts.example) _appendExampleBadge(body);
     if (!spark || typeof Chart === 'undefined') return;
 
@@ -2909,19 +2961,29 @@
   }
 
   function mountKpiMockPreview(body, S) {
-    const m0   = catalogMap.get(S.metrics[0].id);
-    const base = metSample(m0);
-    const series = [{ label: m0.id, name: m0.name, unit: m0.unit, points: [{ x: 'all', y: Math.round(base * 1.04) }] }];
+    const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
+    if (!ms.length) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    // One mock series per metric (so the multi-metric KPI shows without a backend).
+    const series = S.metrics.map(m => {
+      const cat = catalogMap.get(m.id), base = metSample(cat);
+      return { label: m.id, name: cat.name, unit: cat.unit, points: [{ x: 'all', y: Math.round(base * 1.04) }] };
+    });
     const config = {
       viz: 'kpi', metrics: S.metrics, scope: { level: S.scope },
       comparison: cmpConfig(S),
       style: { size: S.size, color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
       __example: true,
     };
-    const baselineVal = S.compare === 'none' ? null : Math.round(base);   // mock → +4% delta
-    const spark = DIM_MOCK.microcycle.concat(['', '']).slice(0, 6)
-      .map((_, r) => ({ x: r, y: Math.round(base * (0.82 + 0.16 * Math.abs(Math.sin(r * 1.3 + 1)))) }));
-    mountKpiCard(body, config, series, { baselineVal, sparkSeries: spark, example: true });
+    let baselineMap = null, mcRefName = null;
+    if (S.compare !== 'none') {                                   // mock → ~+4% delta per metric
+      baselineMap = new Map(S.metrics.map(m => [m.id, Math.round(metSample(catalogMap.get(m.id)))]));
+      if (S.compare === 'mc') mcRefName = mcLabel(S.refMcId);
+    }
+    const spark = S.metrics.length === 1
+      ? DIM_MOCK.microcycle.concat(['', '']).slice(0, 6)
+          .map((_, r) => ({ x: r, y: Math.round(metSample(ms[0]) * (0.82 + 0.16 * Math.abs(Math.sin(r * 1.3 + 1)))) }))
+      : null;
+    mountKpiCard(body, config, series, { baselineMap, mcRefName, sparkSeries: spark, example: true });
   }
 
   /** Builder preview ranking — real data when a backend is present, else a badged mock. */
