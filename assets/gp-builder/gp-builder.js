@@ -3928,6 +3928,7 @@
     rankingCardData,  // exposed for tests
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
+    startNew: function () { startBuild(); },   // blank canvas — "Crear a medida" del panel Agregar gráfico
   };
 
   // Shared render engine for OTHER dashboards (e.g. Match Performance pilot). Draw-only:
