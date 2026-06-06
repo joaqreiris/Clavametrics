@@ -8435,7 +8435,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   const loadBtn    = document.getElementById('mc-load-btn');
   const mcInfo     = document.getElementById('mc-info');
   const metricBody = document.getElementById('mc-metric-body');
-  const tableBody  = document.getElementById('mc-table-body');
+  // "MC diff table" la dibuja el motor unificado (builder) en #mc-table-body; este ref
+  // queda como sink detached para que los mensajes de loading/error de _mcLoad NO
+  // pisen el render de la card del builder.
+  const tableBody  = document.createElement('div');
   const scatCanvas = document.getElementById('canvasMCScatter');
   if (!loadBtn) return;
 
@@ -8672,7 +8675,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       mcInfo.textContent = `${selectedMD} · ${currLabel} ← ref: ${refLabel} · ${playerRows.length} players`;
 
       _mcRenderMetricDiff(playerRows);
-      _mcRenderTable(playerRows, metricKey);
+      // "MC diff table" migrada al motor unificado (builder + vs-microciclo): se
+      // renderiza vía _mcRenderTableCard() (no acá). El resto sigue bespoke.
       _mcRenderScatter(playerRows, metricKey);
       _mcRenderTrend(trendPoints, metricKey, selectedMD);
       _mcRenderShape({ curr: shapeCurr, ref: shapeRef, labels: shapeLabels, currLabel, refLabel }, metricKey);
@@ -9222,13 +9226,46 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch (e) { console.error('_mcRenderTrend:', e); }
   }
 
+  // ── "MC diff table" → card editable gp.card/v1 (motor unificado) ───────────
+  // ÚNICA card migrada en esta pasada. Tabla, scope squad, una fila por jugador,
+  // comparación "vs microciclo" (MC actual = window._gpMcId; ref = el MC anterior por
+  // defecto, editable desde el lápiz). Cada celda = diff% vs el MC de referencia, con
+  // formato condicional HEATMAP (rojo→ámbar→verde por magnitud del cambio). Mismos
+  // números que la tabla vieja para los mismos dos MCs; solo cambia la presentación.
+  const _MC_TBL_FMT = { mode: 'heat', dir: 'high', dec: 1, barColor: null, heatScale: 'ryg', iconStyle: 'dot', thr: null };
+  function _mcTableConfig(refId) {
+    return { schema: 'gp.card/v1', title: 'MC diff table', viz: 'table', scope: { level: 'squad' },
+      metrics: MC_METRICS.map(m => ({ id: m.key, agg: 'avg', format: { ..._MC_TBL_FMT } })),
+      dimensions: [{ id: 'player_name' }], range: { type: 'mc' },
+      comparison: refId ? { baseline: 'mc', refMcId: refId } : null,
+      style: { size: 'full', color: '#15803D' } };
+  }
+  /** MC de referencia por defecto = el inmediatamente anterior al actual (vs Last). */
+  function _mcDefaultRefId() {
+    const allMcs = _buildMcIndex();                       // oldest → newest
+    const curId  = window._gpMcId || (allMcs.length ? allMcs[allMcs.length - 1].id : null);
+    const i = allMcs.findIndex(m => String(m.id) === String(curId));
+    return i > 0 ? allMcs[i - 1].id : (allMcs.length >= 2 ? allMcs[allMcs.length - 2].id : null);
+  }
+  function _mcRenderTableCard() {
+    if (!window.GpBuilder?.resolveAndRenderCard) return;
+    const el = document.getElementById('card-mc-table');
+    if (!el) return;
+    if (!el.__config) el.__config = _mcTableConfig(_mcDefaultRefId());   // semilla; el builder la reemplaza al editar
+    // Botón de la cabecera → abre el Chart builder con la config de la card (lápiz).
+    const act = el.querySelector('.gp-c-h .right > button:last-child');
+    if (act && !act.__mcBound) {
+      act.__mcBound = true; act.title = 'Editar card'; act.innerHTML = '<i class="ti ti-pencil"></i>';
+      act.addEventListener('click', () => window.GpBuilder.openForEdit?.(el));
+    }
+    window.GpBuilder.resolveAndRenderCard(el, el.__config);
+  }
+
   // ── events ───────────────────────────────────────────────────
   function _mcTriggerLoad() {
-    if (!_mcInited) {
-      mcInit().then(() => _mcLoad()).catch(e => console.error('mc auto-load:', e));
-    } else {
-      _mcLoad().catch(e => console.error('mc auto-load:', e));
-    }
+    const _bothLoads = () => { _mcRenderTableCard(); _mcLoad().catch(e => console.error('mc auto-load:', e)); };
+    if (!_mcInited) mcInit().then(_bothLoads).catch(e => console.error('mc auto-load:', e));
+    else _bothLoads();
   }
 
   mdCodeSel.addEventListener('change', _mcTriggerLoad);
