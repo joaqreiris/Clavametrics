@@ -3587,6 +3587,9 @@
             const pt  = s.points.find(p => p.x === x);
             const val = pt?.y;
             const m   = colMeta[ci];
+            // The NUMBER always shows on top of the colour (like the table "heat"
+            // format) — colour alone isn't legible. Value mode → the metric value;
+            // diff mode → the signed diff%. Tooltip always carries the real value.
             let bg, fg, lbl, tip;
             if (val == null || !isFinite(val)) {
               bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = '—';
@@ -3594,19 +3597,19 @@
             } else if (useDiff) {
               const d = diffOf(s, pt);
               if (d == null) {
-                bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = labels ? fmtY(val) : '·';
+                bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = fmtY(val);
                 tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)} (sin referencia)`;
               } else {
                 bg = _heatDiff(d / m.maxAbs); fg = _textOn(bg);
-                lbl = labels ? (d >= 0 ? '+' : '') + d.toFixed(0) + '%' : '';
+                lbl = (d >= 0 ? '+' : '') + d.toFixed(d >= 10 || d <= -10 ? 0 : 1) + '%';
                 tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)} · Δ ${(d >= 0 ? '+' : '') + d.toFixed(1)}%`;
               }
             } else {
               bg = _heatVal((val - m.min) / m.span); fg = _textOn(bg);
-              lbl = labels ? fmtY(val) : '';
+              lbl = fmtY(val);
               tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)}`;
             }
-            return `<td><span class="gp-zc" style="background:${bg};color:${fg}" title="${esc(tip)}">${esc(lbl)}</span></td>`;
+            return `<td><span class="gp-zc" style="background:${bg};color:${fg};width:auto;min-width:46px;padding:0 8px" title="${esc(tip)}">${esc(lbl)}</span></td>`;
           }).join('')}
         </tr>`).join('')}</tbody></table></div>`;
       }
@@ -3694,10 +3697,10 @@
         return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr><th class="pc">${esc(dimRowName(S))}</th>${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
           <tbody>${rowsL.map((p,r)=>`<tr><td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>{
             const w = Math.sin(r*1.6+c*.9);                 // [-1,1] deterministic
-            let bg, fg, lbl;
-            if (useDiff) { const d = w*30; bg=_heatDiff(d/30); fg=_textOn(bg); lbl=labels?(d>=0?'+':'')+d.toFixed(0)+'%':''; }
-            else { const t=(w+1)/2; bg=_heatVal(t); fg=_textOn(bg); lbl=labels?fmt(Math.round(metSample(m)*(0.7+0.5*t))):''; }
-            return `<td><span class="gp-zc" style="background:${bg};color:${fg}">${lbl}</span></td>`;
+            let bg, fg, lbl;                                 // number always on top of colour
+            if (useDiff) { const d = w*30; bg=_heatDiff(d/30); fg=_textOn(bg); lbl=(d>=0?'+':'')+d.toFixed(0)+'%'; }
+            else { const t=(w+1)/2; bg=_heatVal(t); fg=_textOn(bg); lbl=fmt(Math.round(metSample(m)*(0.7+0.5*t))); }
+            return `<td><span class="gp-zc" style="background:${bg};color:${fg};width:auto;min-width:46px;padding:0 8px">${lbl}</span></td>`;
           }).join('')}</tr>`).join('')}</tbody></table></div>`;
       }
       default: return '';
