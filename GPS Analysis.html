@@ -727,7 +727,7 @@
           </div>
 
           <!-- ACWR chart -->
-          <div class="gp-c" data-size="md" id="card-acwr" data-card-id="acwr">
+          <div class="gp-c" data-size="md" id="card-acwr" data-card-id="acwr" data-metric-key="player_load">
             <div class="gp-c-h">
               <span class="ttl">ACWR</span>
               <span class="sub">8-week · player load</span>
@@ -1717,9 +1717,9 @@ function openCatalog(insertBefore) {
 // bespoke (la que ya existe) que inserta el botón "Agregar".
 const AC_TPLS = [
   { id:'acwr', cardId:'card-acwr', nm:'ACWR — Carga aguda:crónica',
-    ds:'Ratio de carga aguda (7d) sobre crónica (28d) con zona de seguridad.',
+    ds:'Ratio aguda (7d) : crónica (28d) con zona de seguridad. Métrica base elegible (Player Load por defecto).',
     cite:'Gabbett 2016', type:'Línea + banda', icon:'ti-activity-heartbeat', color:'var(--cm-accent)',
-    info:'suele usarse en cargas',
+    info:'métrica base elegible',
     ref:{ title:'Acute:Chronic Workload Ratio', author:'Gabbett, T. (2016) · Br J Sports Med',
       body:'Relaciona la carga reciente (aguda, ~7 días) con la habitual (crónica, ~28 días). Valores entre 0.8 y 1.3 se asocian a menor riesgo de lesión; picos por encima de 1.5 elevan el riesgo.',
       doi:'10.1136/bjsports-2015-095788' } },
@@ -1757,6 +1757,27 @@ const AC_TPLS = [
     info:'suele usarse en comparativas',
     ref:{ title:'Comparación con equivalentes', author:'Benchmark posicional',
       body:'Sitúa la métrica del jugador frente a la mediana de jugadores de su misma posición o rol, mostrando el delta. Útil para detectar quién carga por encima o debajo de su grupo.',
+      doi:'—' } },
+  { id:'xmatch', cardId:'card-xmatch', nm:'× match avg',
+    ds:'Volumen de entrenamiento como múltiplos de la demanda de partido.',
+    cite:'Stevens 2017', type:'Barras + ×', icon:'ti-ball-football', color:'var(--cm-info)',
+    info:'suele usarse en dosificación',
+    ref:{ title:'Entrenamiento relativo a la demanda de partido (× match)', author:'Stevens, T. et al. (2017) · Science and Medicine in Football',
+      body:'Expresa el volumen de cada sesión como un múltiplo de la demanda media del partido (ej. 0.6× distancia, 1.2× sprint). Permite dosificar la exposición semanal en relación a lo que exige competir.',
+      doi:'10.1080/24733938.2017.1282163' } },
+  { id:'radar', cardId:'card-radar', nm:'Radar profile',
+    ds:'Perfil multivariable z-normalizado del jugador vs su baseline.',
+    cite:'z-perfil', type:'Radar', icon:'ti-chart-radar', color:'var(--cm-violet)',
+    info:'suele usarse en perfil',
+    ref:{ title:'Perfil multivariable (radar z-normalizado)', author:'Perfil normalizado vs baseline',
+      body:'Muestra varias métricas a la vez, cada eje normalizado (z-score) respecto al baseline del jugador, para leer de un vistazo en qué dimensiones está por encima o por debajo de lo habitual.',
+      doi:'—' } },
+  { id:'weekly', cardId:'card-weekly-bars', nm:'Weekly volume · wk-on-wk',
+    ds:'Volumen semana a semana para seguir progresión y picos.',
+    cite:'wk-on-wk', type:'Barras semanales', icon:'ti-chart-bar', color:'var(--cm-accent)',
+    info:'suele usarse en cargas',
+    ref:{ title:'Volumen semana a semana', author:'Monitoreo de carga semanal',
+      body:'Compara el volumen agregado de cada semana con la anterior. Saltos bruscos de una semana a otra (carga aguda elevada) son una señal temprana de sobrecarga; sirve para suavizar la progresión.',
       doi:'—' } },
 ];
 
@@ -2262,6 +2283,15 @@ async function openChangeMetricModal(card) {
     if (!newMetric) return;
     ov.remove();
     card.dataset.metricKey = newMetric;
+    // ACWR: solo la MÉTRICA BASE es configurable; el resto (bandas, cálculo
+    // aguda:crónica, umbrales) queda bespoke. Re-render vía el refresh del dashboard.
+    if (card.id === 'card-acwr') {
+      try { await window.refreshDashboard?.(); } catch (e) { console.warn('acwr metric refresh:', e); }
+      const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'mgrp';
+      await saveLayout(view);
+      showToast('ACWR · métrica base actualizada');
+      return;
+    }
     const selPlayer = (window._gpReports || []).find(r => r.player_id === window.gpState?.playerId)
                    || (window._gpReports || [])[0];
     if (selPlayer) await renderKpiCard(card, newMetric, selPlayer);
@@ -3452,8 +3482,13 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   if (!histSessions?.length) return;
 
   const hids = histSessions.map(s => s.id);
+  // ACWR base metric is configurable (card-acwr[data-metric-key]); default player_load.
+  // The shared `daily` below stays player_load (TSB et al. depend on it); a separate
+  // `acwrDaily` drives the ACWR chart when a different base metric is chosen.
+  const acwrMetric = document.getElementById('card-acwr')?.dataset.metricKey || 'player_load';
+  const _acwrCols  = acwrMetric !== 'player_load' ? `,${acwrMetric}` : '';
   const { data: histLoads } = await window.sb.from('gps_reports')
-    .select('session_id,player_load')
+    .select(`session_id,player_load${_acwrCols}`)
     .in('session_id', hids.slice(0, 400))
     .eq('club_id', clubId);
 
@@ -3464,12 +3499,20 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     loadBySession[r.session_id].push(r.player_load || 0);
   });
 
+  const _dailyFrom = (key) => histSessions
+    .filter(s => (loadBySession[s.id]?.length))
+    .map(s => {
+      const arr = (histLoads || []).filter(r => r.session_id === s.id).map(r => Number(r[key]) || 0);
+      return { date: s.session_date, load: arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0, type: s.session_type, notes: s.notes || '' };
+    });
+
   const daily = histSessions
     .filter(s => loadBySession[s.id]?.length)
     .map(s => {
       const arr = loadBySession[s.id];
       return { date: s.session_date, load: arr.reduce((a, b) => a + b, 0) / arr.length, type: s.session_type, notes: s.notes || '' };
     });
+  const acwrDaily = acwrMetric === 'player_load' ? daily : _dailyFrom(acwrMetric);
 
   if (!daily.length) return;
 
@@ -3478,7 +3521,14 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   const canvasACWR = document.getElementById('canvasACWR');
   if (canvasACWR && window.gpScience) {
     Chart.getChart(canvasACWR)?.destroy();
-    const acwrData = window.gpScience.acwr(daily);
+    const acwrData = window.gpScience.acwr(acwrDaily);
+    // Reflect the chosen base metric in the card subtitle.
+    const _acwrSub = document.querySelector('#card-acwr .sub');
+    if (_acwrSub) {
+      const _lbl = (window._gpCatalog || []).find(c => c.key === acwrMetric)?.label
+        || acwrMetric.replace(/_/g, ' ');
+      _acwrSub.textContent = `8-week · ${_lbl.toLowerCase()}`;
+    }
     const accent   = _accentHex();
     new Chart(canvasACWR, {
       type: 'line',
