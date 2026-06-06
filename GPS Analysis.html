@@ -730,7 +730,10 @@
           <div class="gp-c" data-size="md" id="card-acwr" data-card-id="acwr" data-metric-key="player_load">
             <div class="gp-c-h">
               <span class="ttl">ACWR</span>
-              <span class="sub">8-week · player load</span>
+              <span class="sub">8-week</span>
+              <div class="gp-c-picks" style="margin-left:6px">
+                <span class="gp-c-pick is-accent" data-acwr-metric-pick title="Métrica base">Player load <i class="ti ti-chevron-down"></i></span>
+              </div>
               <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b" style="position:relative;min-height:190px">
@@ -2274,11 +2277,14 @@ function _openAcwrMetricPicker(anchor, card) {
       ];
   const cur = card.dataset.metricKey || 'player_load';
   makePopover(anchor, opts.map(o => ({ label: (o.metric === cur ? '✓ ' : '') + o.label, metric: o.metric })), async item => {
+    const lbl = item.label.replace('✓ ', '');
     card.dataset.metricKey = item.metric;
+    const chip = card.querySelector('[data-acwr-metric-pick]');
+    if (chip) chip.innerHTML = `${lbl} <i class="ti ti-chevron-down"></i>`;   // refleja la elección en el chip
     try { await window.refreshDashboard?.(); } catch (e) { console.warn('acwr metric refresh:', e); }
     const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
     saveLayout(view).catch(e => console.warn('saveLayout (acwr metric):', e));
-    showToast('ACWR · métrica base → ' + item.label.replace('✓ ', ''));
+    showToast('ACWR · métrica base → ' + lbl);
   });
 }
 
@@ -2637,7 +2643,6 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   const isAcwr     = card?.id === 'card-acwr';
   makePopover(btn, [
     { label: 'Duplicate',     icon: 'ti-copy' },
-    ...(isAcwr ? [{ label: 'Métrica base', icon: 'ti-chart-bar' }] : []),
     ...(!isPwTable && !isXmatch && !isAcwr ? [{ label: 'Change metric', icon: 'ti-chart-bar' }] : []),
     ...(isWkOnWk   ? [{ label: 'Edit thresholds', icon: 'ti-adjustments-horizontal' }] : []),
     ...(isXmatch   ? [{ label: 'Edit metrics',    icon: 'ti-layout-list' }] : []),
@@ -2662,8 +2667,6 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
       } else {
         card.remove();
       }
-    } else if (item.label === 'Métrica base') {
-      _openAcwrMetricPicker(btn, card);
     } else if (item.label === 'Change metric') {
       if (!card.dataset.cardId) { showToast('Change metric not available for this card'); return; }
       openChangeMetricModal(card);
@@ -2711,6 +2714,12 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
   if (!pick?.querySelector('.ti-chevron-down')) return;
   e.stopPropagation();
   const txt = pick.textContent.trim();
+
+  // ACWR base-metric pick — dropdown dentro del chart (no en el menú ⋯)
+  if (pick.hasAttribute('data-acwr-metric-pick')) {
+    _openAcwrMetricPicker(pick, pick.closest('.gp-c'));
+    return;
+  }
 
   // Weekly bars metric pick — resolved by attribute, not text
   if (pick.hasAttribute('data-wb-metric-pick')) {
@@ -3551,12 +3560,12 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   if (canvasACWR && window.gpScience) {
     Chart.getChart(canvasACWR)?.destroy();
     const acwrData = window.gpScience.acwr(acwrDaily);
-    // Reflect the chosen base metric in the card subtitle.
-    const _acwrSub = document.querySelector('#card-acwr .sub');
-    if (_acwrSub) {
+    // Reflect the chosen base metric in the in-chart dropdown chip.
+    const _acwrChip = document.querySelector('#card-acwr [data-acwr-metric-pick]');
+    if (_acwrChip) {
       const _lbl = (window._gpCatalog || []).find(c => c.key === acwrMetric)?.label
         || acwrMetric.replace(/_/g, ' ');
-      _acwrSub.textContent = `8-week · ${_lbl.toLowerCase()}`;
+      _acwrChip.innerHTML = `${_lbl} <i class="ti ti-chevron-down"></i>`;
     }
     const accent   = _accentHex();
     new Chart(canvasACWR, {
