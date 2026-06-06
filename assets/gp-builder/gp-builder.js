@@ -1364,7 +1364,7 @@
       case 'kpi':     mountKpiCard(container, config, series, { baselineMap: opts.baselineMap || null, mcRefName: opts.mcRefName || null, sparkSeries: opts.sparkSeries || null, example: opts.example }); break;
       case 'ranking': mountRankingCard(container, config, series); break;
       case 'table':   mountTableCard(container, config, series, { editable: !!opts.editable, example: opts.example }); break;
-      default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series);
+      default:        destroyBodyChart(container); container.innerHTML = renderTypeFromDataset(config, series, opts);
     }
   }
 
@@ -1546,7 +1546,7 @@
       // role/match/md/none, or no comparison at all — skips this block entirely and
       // the resolver behaves exactly as before. If anything here fails, we DEGRADE to
       // no comparison (keep the already-computed `series`) and never tumble the card.
-      const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter', 'kpi']);
+      const MC_VIZ = new Set(['bars', 'ranking', 'table', 'scatter', 'kpi', 'heatmap']);
       let mcNamesForDraw = null;   // MC legend labels (bars) / ref name (kpi)
       if (window.GPB_DEBUG !== false) console.log('[gpb:mc-gate]', config.title, {
         baselineIsMc: config.comparison?.baseline === 'mc',
@@ -1596,10 +1596,10 @@
             const curMcId = (FB?.microcycleIds?.length === 1 ? FB.microcycleIds[0] : null) || ctx.mcId;
             const mcNames = { cur: curMcId ? mcLabel(curMcId) : 'Actual', ref: mcLabel(config.comparison.refMcId) };
             const enriched = (enrichMcDiff || _enrichMcDiff)(series, refSeries);   // resolver helper (shared), local fallback
-            if (config.viz === 'bars' || config.viz === 'kpi') {
+            if (config.viz === 'bars' || config.viz === 'kpi' || config.viz === 'heatmap') {
               // Keep ONE series per metric, enriched (cur/ref/diff on each point). The
-              // bar engine splits cur/ref bars; the KPI reads point.diff per metric.
-              // Logic lives in those renderers, not duplicated here.
+              // bar engine splits cur/ref bars; the KPI reads point.diff per metric; the
+              // heatmap colours each cell by point.diff. Logic lives in those renderers.
               series = enriched;
               mcNamesForDraw = mcNames;
             } else {
@@ -1682,6 +1682,27 @@
             }
           } catch (e) { /* sparkline is optional — never break the KPI */ }
         }
+      } else if (config.viz === 'heatmap') {
+        // Heatmap colours each cell by diff% when a comparison is set. mc already
+        // enriched the points (.diff) in Step 5a; role/match need a per-metric
+        // baseline map — same source as the KPI — handed to the renderer via opts.
+        const cmp = config.comparison?.baseline;
+        if ((cmp === 'role' || cmp === 'match') && config.metrics?.length) {
+          const bmap = new Map();
+          try {
+            if (cmp === 'role' && fetchRoleBaseline) {
+              const rb = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
+              if (rb) for (const m of config.metrics) { const v = rb.get(m.id); if (v != null) bmap.set(m.id, v); }
+            } else if (cmp === 'match' && config.scope.level === 'player' && ctx.playerId && window.getMatchBaseline) {
+              for (const m of config.metrics) {
+                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
+                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
+              }
+            }
+          } catch (e) { console.warn('gpb heatmap baseline:', e); }
+          if (bmap.size) drawOpts.baselineMap = bmap;
+        }
+        if (stale()) return;
       }
 
       if (stale()) return;
@@ -3059,6 +3080,24 @@
   /** Readable text colour over a given background. */
   function _textOn(hex) { const [r, g, b] = _hex2rgb(hex); return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#1F2937' : '#fff'; }
 
+  // ── Heatmap colour scales ──────────────────────────────────────────────
+  // Two criteria, mirroring bars/KPI: by VALUE (no comparison) or by DIFF% (vs a
+  // baseline). Both return saturated stops (not the washed-out .gp-zc classes) so
+  // the gradient actually reads. Each column normalizes on its own range.
+
+  /** Sequential low→high colour for t∈[0,1]. Default heatmap (no comparison): blue→red. */
+  function _heatVal(t) {
+    t = Math.max(0, Math.min(1, t));
+    const stops = ['#1D4ED8', '#60A5FA', '#FDE68A', '#F87171', '#DC2626']; // blue → warm → red
+    const seg = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(seg));
+    return _lerpHex(stops[i], stops[i + 1], seg - i);
+  }
+  /** Divergent diff% colour for t∈[-1,1], centred on 0. Down→blue, up→red. */
+  function _heatDiff(t) {
+    t = Math.max(-1, Math.min(1, t));
+    return t >= 0 ? _lerpHex('#F1F5F9', '#DC2626', t) : _lerpHex('#F1F5F9', '#1D4ED8', -t);
+  }
+
   function _fmtNum(v, dec) { return dec > 0 ? (+v).toFixed(dec) : fmt(Math.round(v)); }
 
   const _TF_ARROW      = { good: 'ti-trending-up', warn: 'ti-minus', bad: 'ti-trending-down' };
@@ -3390,9 +3429,10 @@
    *
    * @param {object}   config  gp.card/v1
    * @param {object[]} series  aggregateSeries() output
+   * @param {object}   opts    draw extras (e.g. baselineMap for the heatmap)
    * @returns {string} innerHTML
    */
-  function renderTypeFromDataset(config, series) {
+  function renderTypeFromDataset(config, series, opts = {}) {
     const viz   = config.viz;
     const color = config.style?.color || '#15803D';
     const axes  = config.style?.axes !== false;
@@ -3508,22 +3548,65 @@
 
       case 'heatmap': {
         const allX = [...new Set(series.flatMap(s => s.points.map(p => p.x)))];
-        const cls = ['vlow','mlow','low','neu','warn','mhigh','high'];
-        // compute z-scores per series
+        // Same criterion as bars/KPI: colour by VALUE when there's no comparison, by
+        // DIFF% when one is set. mc carries .diff per point (enriched upstream);
+        // role/match come as a per-metric baseline map handed in via opts.baselineMap.
+        const cmp = config.comparison?.baseline || null;          // null | mc | role | match | md
+        const baselineMap = opts.baselineMap || null;
+        const unitOf = s => s.unit ? ` ${s.unit}` : '';
+        // diff% for one cell, by comparison mode (null = no reference available).
+        const diffOf = (s, pt) => {
+          if (!pt) return null;
+          if (cmp === 'mc') return (pt.diff != null && isFinite(pt.diff)) ? pt.diff : null;
+          const bv = baselineMap ? baselineMap.get(s.label) : null;
+          if (bv != null && bv > 0 && pt.y != null && isFinite(pt.y)) return (pt.y - bv) / bv * 100;
+          return null;
+        };
+        // A comparison only colours by diff% if the reference actually resolved (mc
+        // enriched points, or a role/match baseline arrived). Otherwise — e.g. 'md',
+        // or a degraded mc — fall back to value colouring instead of an all-grey grid.
+        const useDiff = !!cmp && series.some(s => s.points.some(p => diffOf(s, p) != null));
+        // Per-COLUMN scale so every metric reads on its own range (point 2):
+        //  · value → real min→max of the column
+        //  · diff  → symmetric ±maxAbs centred on 0 (min 1% so faint diffs still show)
+        const colMeta = series.map(s => {
+          if (useDiff) {
+            const ds = s.points.map(p => diffOf(s, p)).filter(d => d != null && isFinite(d));
+            return { maxAbs: Math.max(1, ...ds.map(Math.abs)) };
+          }
+          const vs = s.points.map(p => p.y).filter(v => v != null && isFinite(v));
+          const min = vs.length ? Math.min(...vs) : 0, max = vs.length ? Math.max(...vs) : 0;
+          return { min, span: (max - min) || 1 };
+        });
         return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr>
           <th class="pc">${esc(rowDimName)}</th>
           ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
         </tr></thead><tbody>${allX.map(x => `<tr>
           <td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(x)}</td>
-          ${series.map(s => {
+          ${series.map((s, ci) => {
             const pt  = s.points.find(p => p.x === x);
-            const val = pt?.y ?? 0;
-            const allV= s.points.map(p => p.y);
-            const mean= allV.reduce((a,b)=>a+b,0)/allV.length;
-            const std = Math.sqrt(allV.reduce((a,b)=>a+(b-mean)**2,0)/allV.length) || 1;
-            const z   = (val - mean) / std;
-            const ci  = Math.max(0, Math.min(6, Math.round(z + 3)));
-            return `<td><span class="gp-zc ${cls[ci]}">${labels ? (z >= 0 ? '+' : '') + z.toFixed(1) : ''}</span></td>`;
+            const val = pt?.y;
+            const m   = colMeta[ci];
+            let bg, fg, lbl, tip;
+            if (val == null || !isFinite(val)) {
+              bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = '—';
+              tip = `${x} · ${s.name}: sin datos`;
+            } else if (useDiff) {
+              const d = diffOf(s, pt);
+              if (d == null) {
+                bg = 'var(--cm-bg-soft)'; fg = 'var(--cm-fg-muted)'; lbl = labels ? fmtY(val) : '·';
+                tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)} (sin referencia)`;
+              } else {
+                bg = _heatDiff(d / m.maxAbs); fg = _textOn(bg);
+                lbl = labels ? (d >= 0 ? '+' : '') + d.toFixed(0) + '%' : '';
+                tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)} · Δ ${(d >= 0 ? '+' : '') + d.toFixed(1)}%`;
+              }
+            } else {
+              bg = _heatVal((val - m.min) / m.span); fg = _textOn(bg);
+              lbl = labels ? fmtY(val) : '';
+              tip = `${x} · ${s.name}: ${fmtY(val)}${unitOf(s)}`;
+            }
+            return `<td><span class="gp-zc" style="background:${bg};color:${fg}" title="${esc(tip)}">${esc(lbl)}</span></td>`;
           }).join('')}
         </tr>`).join('')}</tbody></table></div>`;
       }
@@ -3604,9 +3687,18 @@
       case 'heatmap': {
         const cols = ms.slice(0,6);
         const rowsL = dimMockLabels(S);
-        const cls = ['vlow','mlow','low','neu','warn','mhigh','high'];
+        // Mirror the real renderer's two criteria so the preview matches what ships:
+        // no comparison → vivid value scale; any comparison → divergent diff% (down
+        // blue / up red, centred on 0). Mock values come from a deterministic wave.
+        const useDiff = S.compare && S.compare !== 'none';
         return `<div class="gp-zwrap"><table class="gp-zt"><thead><tr><th class="pc">${esc(dimRowName(S))}</th>${cols.map(m=>`<th>${esc(m.name.split(' ')[0])}</th>`).join('')}</tr></thead>
-          <tbody>${rowsL.map((p,r)=>`<tr><td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>{const z=(Math.sin(r*1.6+c*.9)*2);const ci=Math.max(0,Math.min(6,Math.round(z+3)));return `<td><span class="gp-zc ${cls[ci]}">${labels?(z>=0?'+':'')+z.toFixed(1):''}</span></td>`;}).join('')}</tr>`).join('')}</tbody></table></div>`;
+          <tbody>${rowsL.map((p,r)=>`<tr><td class="pc" style="padding:6px 14px;font:500 12px/1 var(--cm-font-sans)">${esc(p)}</td>${cols.map((m,c)=>{
+            const w = Math.sin(r*1.6+c*.9);                 // [-1,1] deterministic
+            let bg, fg, lbl;
+            if (useDiff) { const d = w*30; bg=_heatDiff(d/30); fg=_textOn(bg); lbl=labels?(d>=0?'+':'')+d.toFixed(0)+'%':''; }
+            else { const t=(w+1)/2; bg=_heatVal(t); fg=_textOn(bg); lbl=labels?fmt(Math.round(metSample(m)*(0.7+0.5*t))):''; }
+            return `<td><span class="gp-zc" style="background:${bg};color:${fg}">${lbl}</span></td>`;
+          }).join('')}</tr>`).join('')}</tbody></table></div>`;
       }
       default: return '';
     }
