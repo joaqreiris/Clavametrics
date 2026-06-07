@@ -612,20 +612,8 @@
           <select class="sc-sel" id="pw-mc-sel"><option value="">Microcycle...</option></select>
           <span class="pw-next-match" id="pw-next-match"></span>
         </span>
-        <span id="sc-filter-group">
-          <span class="sc-filter-ver">
-            <select class="sc-sel" id="sc-sess-sel"><option value="">Session...</option></select>
-            <select class="sc-sel" id="sc-mc-sel"><option value="">Microcycle...</option></select>
-            <select class="sc-sel" id="sc-player-sel" title="Optional: zoom into a specific player"><option value="">All players</option></select>
-          </span>
-          <span class="sc-filter-sep"></span>
-          <span class="sc-filter-comparar">
-            <span class="sc-filter-comparar-label">vs</span>
-            <select class="sc-sel" id="sc-compare-md-sel"><option value="">MD...</option></select>
-            <select class="sc-sel" id="sc-compare-date-sel"><option value="">Fecha...</option></select>
-          </span>
-          <span class="sc-info" id="sc-info"></span>
-        </span>
+        <!-- Filtros viejos de Session Control eliminados: la barra de desplegables
+             (gpFilterBar) es la ÚNICA fuente de filtrado. La comparación vive por card. -->
         <div class="right">
           <button class="pill" id="dateRangePill"><i class="ti ti-calendar-range"></i><span id="dateRangeLabel">Last 30 days</span></button>
           <button class="pill" id="mcPill"><i class="ti ti-clock"></i><span id="mcLabel">All MCs</span></button>
@@ -745,10 +733,7 @@
       <!-- GROUP -->
       <div class="gp-view" data-view="grp">
 
-        <div class="sc-indicator" id="sc-indicator" style="display:none">
-          <span class="sc-ind-left" id="sc-ind-left"></span>
-          <span class="sc-ind-right" id="sc-ind-right"></span>
-        </div>
+        <!-- "VS MD-X" (comparación global vieja) eliminado: la comparación es por card. -->
 
         <div class="gp-grid is-edit">
 
@@ -2930,7 +2915,7 @@ const _GEN_EXAMPLE_CONFIGS = {
       { id: 'player_load',         agg: 'total', kind: 'accum', unit: 'AU' },
     ],
     dimensions: [{ id: 'player_name' }],
-    range: { type: 'w7' }, comparison: null,
+    range: { type: 'season' }, comparison: null,
     style: { size: 'full', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false },
   }),
   'card-gen-match-kpi': () => ({
@@ -11880,6 +11865,85 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   vsInit().catch(e => console.warn('vsInit:', e));
+})();
+</script>
+
+<script>
+// ── Session Control: puente barra de filtros → sesión actual ───────────────
+// La barra nueva (gpFilterBar) es la ÚNICA fuente de filtrado. El módulo SC viejo
+// (selectores propios) quedó desactivado: al borrar #sc-sess-sel su IIFE corta en
+// `if (!sessSel) return`. Pero las cards session-scoped (Outliers / z-temporal /
+// vs sesión) necesitan UNA sesión. Acá la derivamos de la barra: tomamos la sesión
+// MÁS RECIENTE que matchee fecha/MD/microciclo. La comparación es POR CARD:
+//   · vs sesión → su propio selector (sc-vs-compare-sel)
+//   · Outliers  → sesión previa del MISMO MD (contraste, no acotado por la barra)
+(function () {
+  const _mdOf = s => {
+    const md = s?.session_attributes?.md_code;
+    if (md != null && md !== '') return String(md);
+    return s?.match_day_offset != null ? 'MD' + s.match_day_offset : '';
+  };
+  function _barFrom(d) {
+    if (!d) return null;
+    const back = n => { const x = new Date(); x.setDate(x.getDate() - n); return x.toISOString().slice(0, 10); };
+    switch (d.preset) {
+      case '7':  return back(7);
+      case '30': return back(30);
+      case '90': return back(90);
+      case 'season': return null;            // temporada → sin tope inferior simple
+    }
+    return d.from || null;
+  }
+
+  let _busy = false;
+  async function _scApplyBar() {
+    if (_busy) return; _busy = true;
+    try {
+      if (!window.sb) return;
+      const clubId = window._gpClubId || await window.getClubId?.();
+      if (!clubId) return;
+      const { data } = await window.sb.from('training_sessions')
+        .select('id,session_date,session_attributes,microcycle_id,match_day_offset')
+        .eq('club_id', clubId)
+        .order('session_date', { ascending: false });
+      const all = data || [];
+      window._scAllSessions = all;             // labels para Outliers
+
+      const FB   = window.gpFilterBar?.getState?.() || null;
+      const from = _barFrom(FB?.date), to = FB?.date?.to || null;
+      const md   = FB?.mdCodes?.length      ? new Set(FB.mdCodes.map(String))      : null;
+      const mc   = FB?.microcycleIds?.length ? new Set(FB.microcycleIds.map(String)) : null;
+      const matches = s =>
+        (!from || s.session_date >= from) && (!to || s.session_date <= to) &&
+        (!md || md.has(_mdOf(s))) && (!mc || mc.has(String(s.microcycle_id ?? '')));
+
+      const current = all.find(matches) || null;     // más reciente (all viene desc)
+      const st = (window._scState = window._scState || {});
+      st.sessionId = current?.id || null;
+      // Comparación de Outliers: sesión previa del mismo MD code (de todo el historial).
+      if (current) {
+        const cmd = _mdOf(current);
+        const prev = all.find(s => s.id !== current.id && s.session_date < current.session_date && _mdOf(s) === cmd);
+        st.compareSessionId = prev?.id || null;
+      } else {
+        st.compareSessionId = null;
+      }
+
+      window._ztRender?.();
+      window._scOutliersRender?.();
+      window._vsReload?.();
+    } catch (e) { console.warn('_scApplyBar:', e); }
+    finally { _busy = false; }
+  }
+
+  // La barra es la única fuente: re-derivar la sesión en cada cambio de filtro.
+  document.addEventListener('gpfilter:change', _scApplyBar);
+  // Al entrar al dashboard grp.
+  document.getElementById('sections')?.addEventListener('click', e => {
+    if (e.target.closest?.('.gp-sec[data-view="grp"]')) setTimeout(_scApplyBar, 200);
+  });
+  // Carga inicial si grp ya está activo.
+  if (document.querySelector('.gp-view[data-view="grp"].is-on')) setTimeout(_scApplyBar, 800);
 })();
 </script>
 </body>
