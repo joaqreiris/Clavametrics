@@ -102,9 +102,10 @@
   .gp-dash-bar .pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
   .gp-dash-bar .pill.is-on { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border-strong); }
   .gp-dash-bar .pill .ti { font-size:13px; }
-  /* Player Week view: show pw-filter-group, hide global player/MC/baseline/hist pills */
+  /* Player Week view: filtros viejos eliminados → la barra de desplegables es la
+     única fuente. Se ocultan TODOS los pills de filtro globales (incl. fecha). */
   #pw-filter-group { display:none; }
-  .gp-dash-bar[data-view="ind"] #pw-filter-group { display:contents; }
+  .gp-dash-bar[data-view="ind"] #dateRangePill,
   .gp-dash-bar[data-view="ind"] #mcPill,
   .gp-dash-bar[data-view="ind"] #playerPill,
   .gp-dash-bar[data-view="ind"] #baselinePill,
@@ -607,11 +608,8 @@
       <div class="gp-dash-bar" data-view="ind">
         <span class="h">Dashboard <span id="secTitle">· Individual</span></span>
         <span class="h-sub" id="secSub">— · vs role baseline</span>
-        <span id="pw-filter-group">
-          <select class="sc-sel" id="pw-player-sel"><option value="">Player...</option></select>
-          <select class="sc-sel" id="pw-mc-sel"><option value="">Microcycle...</option></select>
-          <span class="pw-next-match" id="pw-next-match"></span>
-        </span>
+        <!-- Filtros viejos de Player Week eliminados: la barra de desplegables
+             (gpFilterBar) es la ÚNICA fuente de filtrado. La comparación vive por card. -->
         <!-- Filtros viejos de Session Control eliminados: la barra de desplegables
              (gpFilterBar) es la ÚNICA fuente de filtrado. La comparación vive por card. -->
         <div class="right">
@@ -6526,8 +6524,8 @@ async function renderMatchMax(report) {
   const cfg        = (() => { try { return JSON.parse(card?.dataset.config || '{}'); } catch { return {}; } })();
   const metricKeys = cfg.metrics?.length ? cfg.metrics : _XM_DEFAULT_METRICS.map(m => m.key);
 
-  // Get current MC id
-  const curMcId = document.getElementById('pw-mc-sel')?.value;
+  // Get current MC id (derivado de la barra vía el módulo PW; filtro viejo eliminado)
+  const curMcId = window._pwMcKey || (window.gpFilterBar?.getState?.().microcycleIds || [])[0] || null;
 
   // Aggregate metric values across all sessions in the MC
   const aggregated = {};
@@ -7615,13 +7613,37 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   let _pwCurrentBaseline  = null;
 
   // ── DOM ──────────────────────────────────────────────────────
-  const playerSel  = document.getElementById('pw-player-sel');
-  const mcSel      = document.getElementById('pw-mc-sel');
+  // Filtros viejos (pw-player-sel / pw-mc-sel / pw-next-match) eliminados: la barra
+  // de desplegables (gpFilterBar) es la ÚNICA fuente de filtrado. Jugador/microciclo
+  // se derivan de ella. nextMatch/kpiBody/tblBody/pwCanvas pueden ser null.
   const nextMatch  = document.getElementById('pw-next-match');
   const kpiBody    = document.getElementById('pw-kpi-body');
   const tblBody    = document.getElementById('pw-tbl-body');
   const pwCanvas   = document.getElementById('canvasPWChart');
-  if (!playerSel) return;
+  if (!document.querySelector('.gp-view[data-view="ind"] .gp-grid')) return;
+
+  // Jugador/microciclo derivados de la barra (con defaults sensatos).
+  function _pwBarPlayerId() {
+    const FB = window.gpFilterBar?.getState?.() || null;
+    const list = _pw.playersList || [];
+    const fromBar = (FB?.playerIds || []).find(id => list.some(p => p.id === id));
+    return fromBar || list[0]?.id || null;
+  }
+  function _pwBarMcKey() {
+    const FB = window.gpFilterBar?.getState?.() || null;
+    const fromBar = (FB?.microcycleIds || []).map(String).find(id => _mcMap[id]);
+    return fromBar || _mcList[0]?.id || null;   // _mcList ordenado desc → [0] = más reciente
+  }
+  // Mapea la fecha de la barra → window.gpState (para radar / science vía refreshDashboard).
+  function _pwApplyBarDate() {
+    if (!window.gpState) return;
+    const d = (window.gpFilterBar?.getState?.() || {}).date || {};
+    if (d.preset === '7')            window.gpState.datePreset = 'last7';
+    else if (d.preset === '30')      window.gpState.datePreset = 'last30';
+    else if (d.preset === '90')      window.gpState.datePreset = 'last90';
+    else if (d.preset === 'season')  window.gpState.datePreset = 'currentSeason';
+    else if (d.from || d.to) { window.gpState.datePreset = 'custom'; window.gpState.dateFrom = d.from || null; window.gpState.dateTo = d.to || null; }
+  }
 
   function _pwSyncLabel() {
     // (Descriptor "jugador · posición" removido de la fila "Dashboard": el contexto
@@ -7651,24 +7673,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       window._pwMcMap  = _mcMap;
 
       _pw.playersList = players || [];
-      _pw.playersList.forEach(p => {
-        const o = document.createElement('option');
-        o.value = p.id;
-        o.textContent = `${p.last_name || ''} ${(p.first_name || '')[0] || ''}.${p.number ? ' #' + p.number : ''}`.trim();
-        playerSel.appendChild(o);
-      });
 
-      _mcList.forEach(mc => {
-        const o = document.createElement('option');
-        o.value = mc.id;
-        o.textContent = mc.name || mc.start_date || mc.id;
-        mcSel.appendChild(o);
-      });
-
-      if (playerSel.options.length > 1) playerSel.selectedIndex = 1;
-      if (mcSel.options.length > 1)     mcSel.selectedIndex = 1;
-      _pw.playerId = playerSel.value || null;
-      _pw.mcKey    = mcSel.value || null;
+      // Jugador/microciclo iniciales derivados de la barra (o defaults: 1er jugador / MC más reciente).
+      _pwApplyBarDate();
+      _pw.playerId = _pwBarPlayerId();
+      _pw.mcKey    = _pwBarMcKey();
+      window._pwMcKey = _pw.mcKey;
+      if (window.gpState) window.gpState.playerId = _pw.playerId;
       _pwSyncLabel();
       await _pwInitTableCols();
       if (_pw.playerId && _pw.mcKey) await _pwLoad();
@@ -7690,7 +7701,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const matchDate = mc?.match_date || null;
       const rival     = mc?.rival     || '';
 
-      nextMatch.innerHTML = matchDate
+      if (nextMatch) nextMatch.innerHTML = matchDate
         ? `vs <strong>${rival || 'match'}</strong> · MD on ${matchDate}`
         : 'No match in this MC';
 
@@ -8485,30 +8496,36 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── events ───────────────────────────────────────────────────
-  playerSel.addEventListener('change', () => {
-    _pw.playerId = playerSel.value || null;
+  // La barra de desplegables es la única fuente: re-derivar jugador/MC y re-render.
+  async function _pwReapply() {
+    _pwApplyBarDate();
+    _pw.playerId = _pwBarPlayerId();
+    _pw.mcKey    = _pwBarMcKey();
+    window._pwMcKey = _pw.mcKey;
+    if (window.gpState) window.gpState.playerId = _pw.playerId;
     _pwSyncLabel();
-    if (_pw.playerId && _pw.mcKey) _pwLoad();
-    renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
-      .catch(e => console.warn('renderWeeklyBars (playerSel):', e));
+    if (_pw.playerId && _pw.mcKey) await _pwLoad().catch(e => console.warn('_pwLoad (bar):', e));
+    await renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
+      .catch(e => console.warn('renderWeeklyBars (bar):', e));
     if (_pw.playerId) _pwUpdateAcwr(_pw.playerId).catch(e => console.warn('_pwUpdateAcwr:', e));
     if (_pw.playerId) _pwUpdateTsb(_pw.playerId).catch(e => console.warn('_pwUpdateTsb:', e));
-  });
-  mcSel.addEventListener('change', () => {
-    _pw.mcKey = mcSel.value || null;
-    if (_pw.playerId && _pw.mcKey) _pwLoad();
-    renderWeeklyBars({ ...window.gpState, playerId: _pw.playerId })
-      .catch(e => console.warn('renderWeeklyBars (mcSel):', e));
-  });
+    window.refreshDashboard?.();   // radar / science cards siguen al jugador y fecha de la barra
+  }
+  window._pwReapply = _pwReapply;
 
   window._pwInit = pwInit;
   window._pwLoad = _pwLoad;
 
+  // Cambios en la barra → re-derivar (solo cuando ind está activo).
+  document.addEventListener('gpfilter:change', () => {
+    if (!document.querySelector('.gp-view[data-view="ind"].is-on')) return;
+    if (!_pwInited) pwInit(); else _pwReapply();
+  });
+
   document.getElementById('sections')?.addEventListener('click', e => {
     if (!e.target.closest('.gp-sec[data-view="ind"]')) return;
-    _pwSyncLabel();
     if (!_pwInited) { setTimeout(pwInit, 0); return; }
-    if (_pw.playerId && _pw.mcKey) _pwLoad();
+    _pwReapply();
   });
 
   if (document.querySelector('.gp-view[data-view="ind"].is-on')) pwInit();
