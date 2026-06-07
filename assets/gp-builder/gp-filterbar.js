@@ -42,6 +42,70 @@
   // opciones reales por desplegable: [{ value, label }]
   const options = { md_code: [], player: [], position: [], microcycle: [] };
 
+  // ── Filtros encadenados ───────────────────────────────────────────────────
+  // Relación REAL del club: un gps_report por fila (date/md/mc/jugador/posición).
+  // Permite, al seleccionar un filtro, acotar las opciones válidas del resto según
+  // las sesiones reales (no cálculos derivados tipo getISOWeek).
+  let _rows = [];            // [{ d, md, mc, p, pos }]
+  let _validCache = null;    // { md_code:Set, microcycle:Set, player:Set, position:Set } | null (sin filtros)
+  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'pos' };
+
+  function _anyFilterActive() {
+    return !!(state.md_code.length || state.player.length || state.position.length || state.microcycle.length
+      || state.date.preset || state.date.from || state.date.to);
+  }
+  function _dateBounds() {
+    const dt = state.date;
+    if (dt.preset) {
+      const p = DATE_PRESETS.find(x => x.id === dt.preset);
+      const back = n => { const x = new Date(); x.setDate(x.getDate() - n); return x.toISOString().slice(0, 10); };
+      return { from: p ? back(p.days) : null, to: null };
+    }
+    return { from: dt.from || null, to: dt.to || null };
+  }
+  // ¿la fila cumple TODOS los filtros activos, salvo el del propio desplegado (exceptKey)?
+  function _rowMatches(r, exceptKey) {
+    if (exceptKey !== 'date') {
+      const { from, to } = _dateBounds();
+      if (from && r.d < from) return false;
+      if (to   && r.d > to)   return false;
+    }
+    if (exceptKey !== 'md_code'    && state.md_code.length    && !state.md_code.includes(r.md))    return false;
+    if (exceptKey !== 'microcycle' && state.microcycle.length && !state.microcycle.includes(r.mc)) return false;
+    if (exceptKey !== 'player'     && state.player.length     && !state.player.includes(r.p))      return false;
+    if (exceptKey !== 'position'   && state.position.length   && !state.position.includes(r.pos))  return false;
+    return true;
+  }
+  function _computeValidSets() {
+    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set() };
+    for (const r of _rows) {
+      for (const key in _FIELD) if (_rowMatches(r, key)) out[key].add(r[_FIELD[key]]);
+    }
+    return out;
+  }
+  // Recalcula _validCache y poda selecciones que quedaron IMPOSIBLES (cascada estable).
+  function applyChaining() {
+    if (!_rows.length || !_anyFilterActive()) { _validCache = null; return; }
+    for (let pass = 0; pass < 6; pass++) {
+      const v = _computeValidSets();
+      let pruned = false;
+      for (const key in _FIELD) {
+        const before = state[key].length;
+        state[key] = state[key].filter(val => v[key].has(val));
+        if (state[key].length !== before) pruned = true;
+      }
+      if (!pruned) break;
+    }
+    _validCache = _anyFilterActive() ? _computeValidSets() : null;
+  }
+  // Tras cualquier cambio de filtro: recalcular encadenado, refrescar todos los triggers y emitir.
+  function _afterChange() {
+    applyChaining();
+    DROPS.forEach(d => updateTrigger(d.key));
+    updateGlobal();
+    fire();
+  }
+
   const listeners = new Set();
   let root = null;
   let openKey = null;        // key del panel abierto
@@ -252,10 +316,14 @@
     const opts = options[key] || [];
     if (!opts.length) { list.innerHTML = `<div class="fb-empty">Sin datos del club todavía.</div>`; return; }
     const draft = drafts[key] || new Set();
-    list.innerHTML = opts.map(o =>
-      `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
-      `<span>${escHtml(o.label)}</span></label>`
-    ).join('');
+    const valid = _validCache && _validCache[key];   // Set de valores posibles según los OTROS filtros
+    list.innerHTML = opts.map(o => {
+      // Imposible = no aparece en ninguna sesión que cumpla los otros filtros (y no está ya elegida).
+      const off = valid && !valid.has(o.value) && !draft.has(o.value);
+      return `<label class="fb-opt${off ? ' is-disabled' : ''}">` +
+        `<input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}${off ? ' disabled' : ''}>` +
+        `<span>${escHtml(o.label)}</span></label>`;
+    }).join('');
     list.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
       if (inp.checked) draft.add(inp.value); else draft.delete(inp.value);
       commit(key);                               // aplica al instante (debounced), panel sigue abierto
@@ -274,6 +342,7 @@
     const draft = drafts[key] || (drafts[key] = new Set());
     root.querySelectorAll(`.fb-drop[data-key="${key}"] .fb-opt`).forEach(opt => {
       if (opt.classList.contains('is-hidden')) return;          // respeta el filtro de búsqueda
+      if (on && opt.classList.contains('is-disabled')) return;  // no seleccionar opciones imposibles
       const inp = opt.querySelector('input');
       inp.checked = on;
       if (on) draft.add(inp.value); else draft.delete(inp.value);
@@ -284,9 +353,7 @@
   // ── Commit (Aplicar) ────────────────────────────────────────────────────
   function commit(key) {
     state[key] = Array.from(drafts[key] || []);
-    updateTrigger(key);
-    updateGlobal();
-    fire();
+    _afterChange();   // recalcula opciones válidas del resto + poda imposibles
   }
   function commitDate(panel) {
     const presetBtn = panel.querySelector('.fb-preset.is-on');
@@ -299,9 +366,7 @@
       : single
         ? { preset: null, from: single, to: single }
         : { preset: null, from, to };
-    updateTrigger('date');
-    updateGlobal();
-    fire();
+    _afterChange();   // la fecha también acota MD/jugador/posición/microciclo
   }
 
   // ── Triggers (estados cerrado/activo) ───────────────────────────────────
@@ -358,8 +423,9 @@
     if (key === 'date') state.date = { preset: null, from: null, to: null };
     else state[key] = [];
     drafts[key] = key === 'date' ? null : new Set();
+    applyChaining();                                  // recalcula opciones válidas (al limpiar, se amplían)
     if (openKey === key) { renderListOrDate(key); }
-    updateTrigger(key);
+    DROPS.forEach(d => updateTrigger(d.key));
     updateGlobal();
     fire();
   }
@@ -368,8 +434,9 @@
       if (d.key === 'date') state.date = { preset: null, from: null, to: null };
       else state[d.key] = [];
       drafts[d.key] = d.date ? null : new Set();
-      updateTrigger(d.key);
     });
+    applyChaining();                                  // sin filtros → _validCache null → todas habilitadas
+    DROPS.forEach(d => updateTrigger(d.key));
     updateGlobal();
     closePanel();
     fire();
@@ -383,6 +450,7 @@
     openKey = key;
     const drop = root.querySelector(`.fb-drop[data-key="${key}"]`);
     drop.classList.add('is-open');
+    applyChaining();                              // _validCache fresco → opciones imposibles deshabilitadas
     // arranca el draft desde el estado actual
     if (key !== 'date') drafts[key] = new Set(state[key]);
     renderListOrDate(key);
@@ -419,13 +487,18 @@
     const clubId = await window.getClubId?.();
     if (!clubId || !window.sb) return;
 
-    const [{ data: players }, { data: sessions }, { data: mcs }] = await Promise.all([
+    const [{ data: players }, { data: sessions }, { data: mcs }, { data: reports }] = await Promise.all([
       window.sb.from('players').select('id,first_name,last_name,number,position')
         .eq('club_id', clubId).neq('status', 'inactive').order('last_name'),
       window.sb.from('training_sessions').select('session_attributes')
         .eq('club_id', clubId).limit(3000),
       window.sb.from('microcycles').select('id,name,start_date')
         .eq('club_id', clubId).order('start_date', { ascending: false }),
+      // Relación REAL para filtros encadenados: un gps_report por fila con su sesión
+      // (fecha, md_code, microciclo) y la posición del jugador.
+      window.sb.from('gps_reports')
+        .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id), players!inner(position)')
+        .eq('club_id', clubId).limit(20000),
     ]);
 
     // Jugadores reales
@@ -454,6 +527,20 @@
       value: m.id,
       label: m.name || (m.start_date ? `MC ${String(m.start_date).slice(0, 10)}` : m.id),
     }));
+
+    // Relación real (un gps_report por fila) para el encadenado de filtros.
+    _rows = (reports || []).map(r => {
+      const ts = r.training_sessions || {};
+      return {
+        d:   ts.session_date || '',
+        md:  String(ts.session_attributes?.md_code ?? '') || '',
+        mc:  ts.microcycle_id != null ? String(ts.microcycle_id) : '',
+        p:   r.player_id,
+        pos: r.players?.position || '',
+      };
+    }).filter(x => x.d);
+
+    applyChaining();   // si había filtros restaurados, deja _validCache listo
 
     // re-render del panel abierto si corresponde
     if (openKey && openKey !== 'date') renderList(openKey);
