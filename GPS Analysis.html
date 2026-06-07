@@ -2874,10 +2874,12 @@ window.refreshDashboard = async function (opts = {}) {
 // builder reemplaza la semilla por la card guardada en dashboard_cards.
 const _GEN_EXAMPLE_CONFIGS = {
   'card-gen-week-kpi': () => ({
-    schema: 'gp.card/v1', title: 'Distancia total (semana)', viz: 'kpi',
-    scope: { level: 'player' },
+    schema: 'gp.card/v1', title: 'Distancia total', viz: 'kpi',
+    // squad → no depende de que haya un jugador seleccionado; season → ventana amplia
+    // (la card de ejemplo siempre muestra un dato). El usuario lo acota con el lápiz.
+    scope: { level: 'squad' },
     metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', unit: 'm' }],
-    range: { type: 'w7' }, comparison: null,
+    range: { type: 'season' }, comparison: null,
     style: { size: 'sm', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false },
   }),
   'card-gen-session-table': () => ({
@@ -2894,7 +2896,8 @@ const _GEN_EXAMPLE_CONFIGS = {
   }),
   'card-gen-match-kpi': () => ({
     schema: 'gp.card/v1', title: 'KPIs de partido', viz: 'kpi',
-    scope: { level: 'player' },
+    // squad → no depende de gpState.playerId (que solo lo setea el dashboard ind).
+    scope: { level: 'squad' },
     metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', unit: 'm' }],
     range: { type: 'season' }, comparison: null,
     style: { size: 'sm', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false },
@@ -2903,7 +2906,7 @@ const _GEN_EXAMPLE_CONFIGS = {
     schema: 'gp.card/v1', title: 'Carga semanal', viz: 'bars',
     scope: { level: 'squad' },
     metrics: [{ id: 'player_load', agg: 'total', kind: 'accum', unit: 'AU' }],
-    range: { type: 'w30' }, comparison: null,
+    range: { type: 'season' }, comparison: null,
     style: { size: 'full', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false },
   }),
 };
