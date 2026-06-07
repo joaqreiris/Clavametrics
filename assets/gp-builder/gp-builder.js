@@ -607,7 +607,7 @@
         const cardRef = card;
         fresh.addEventListener('click', () => {
           cardRef.remove();
-          if (window.deleteDashboardCard && cardRef.dataset.cardId) {
+          if (window.deleteDashboardCard && _isUuid(cardRef.dataset.cardId)) {
             window.deleteDashboardCard(cardRef.dataset.cardId, window.sb)
               .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
           }
@@ -686,7 +686,7 @@
           const cardId = cardRefE.dataset.cardId;
           cardRefE.remove();
           window.gptSyncEmptyState?.(host);   // re-show empty-state + drop tab count
-          if (window.deleteDashboardCard && cardId) {
+          if (window.deleteDashboardCard && _isUuid(cardId)) {
             window.deleteDashboardCard(cardId, window.sb)
               .catch(e => console.warn('gpb: deleteDashboardCard failed:', e));
           }
@@ -708,12 +708,14 @@
       S = null;
       closePanel();
 
-      if (cardId && typeof window.updateDashboardCard === 'function') {
+      if (_isUuid(cardId) && typeof window.updateDashboardCard === 'function') {
         window.updateDashboardCard(cardId, config, window.sb)
           .catch(e => console.warn('gpb: updateDashboardCard failed:', e));
-      } else if (!cardId && _clubId && typeof window.saveDashboardCard === 'function') {
-        // First save of an in-place card without a DB row → create it; the card then
-        // behaves like any user card (filter bar re-renders it, future saves update).
+      } else if (!_isUuid(cardId) && _clubId && typeof window.saveDashboardCard === 'function') {
+        // Sin row en DB todavía (sin id, o card de EJEMPLO con id no-uuid/slug tipo
+        // "gen-week-kpi") → crear. saveDashboardCard inserta y devuelve un uuid real;
+        // reemplazamos el slug por ese uuid y la card pasa a comportarse como cualquier
+        // card del usuario (el filter bar la re-renderiza, futuros saves la actualizan).
         targetCard.dataset.card = 'chart';
         window.saveDashboardCard(config, _clubId, _currentView(), _userId, window.sb)
           .then(newId => { if (newId) targetCard.dataset.cardId = newId; })
@@ -3296,7 +3298,7 @@
     else resolveAndRenderCard(cardEl, config);
 
     const cardId = cardEl.dataset.cardId;
-    if (cardId && typeof window.updateDashboardCard === 'function') {
+    if (_isUuid(cardId) && typeof window.updateDashboardCard === 'function') {
       window.updateDashboardCard(cardId, config, window.sb).catch(e => console.warn('gpb: sort persist failed:', e));
     }
   }

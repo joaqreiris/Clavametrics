@@ -7,6 +7,12 @@
 (function () {
   'use strict';
 
+  /** True solo para un UUID real (dashboard_cards.id es uuid; rechaza slugs de cards semilla). */
+  function _isCardUuid(v) {
+    return typeof v === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+  }
+
   // ── Default dashboard definitions (backfill) ──────────────────────────
 
   const DEFAULT_DASHBOARDS = [
@@ -309,6 +315,10 @@
    * @param {object} sb
    */
   window.updateDashboardCard = async function (cardId, config, sb) {
+    // dashboard_cards.id es UUID. Una card de ejemplo/semilla sin row aún puede traer
+    // un id no-uuid (slug); en ese caso no hay nada que actualizar → no-op (evita el
+    // 400 "invalid input syntax for type uuid"). El alta la hace saveDashboardCard.
+    if (!_isCardUuid(cardId)) return;
     const { error } = await sb
       .from('dashboard_cards')
       .update({ config, size: config.style?.size || 'md', updated_at: new Date().toISOString() })
@@ -323,6 +333,7 @@
    * @param {object} sb
    */
   window.deleteDashboardCard = async function (cardId, sb) {
+    if (!_isCardUuid(cardId)) return;   // id no-uuid (card semilla sin row) → no-op
     const { error } = await sb.from('dashboard_cards').delete().eq('id', cardId);
     if (error) throw new Error(`deleteDashboardCard: ${error.message}`);
   };
@@ -490,8 +501,10 @@
    * @param {object} sb
    */
   window.reorderCards = async function (orderedCards, sb) {
-    // batch update — one upsert per card
-    const rows = orderedCards.map(c => ({ id: c.id, position: c.position }));
+    // batch update — one upsert per card. Solo cards con uuid real (las bespoke/semilla
+    // con id slug no tienen row en dashboard_cards → se omiten para evitar el 400).
+    const rows = orderedCards.filter(c => _isCardUuid(c.id)).map(c => ({ id: c.id, position: c.position }));
+    if (!rows.length) return;
     const { error } = await sb
       .from('dashboard_cards')
       .upsert(rows, { onConflict: 'id' });
