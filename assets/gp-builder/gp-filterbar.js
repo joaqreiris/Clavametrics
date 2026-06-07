@@ -317,13 +317,14 @@
     if (!opts.length) { list.innerHTML = `<div class="fb-empty">Sin datos del club todavía.</div>`; return; }
     const draft = drafts[key] || new Set();
     const valid = _validCache && _validCache[key];   // Set de valores posibles según los OTROS filtros
-    list.innerHTML = opts.map(o => {
-      // Imposible = no aparece en ninguna sesión que cumpla los otros filtros (y no está ya elegida).
-      const off = valid && !valid.has(o.value) && !draft.has(o.value);
-      return `<label class="fb-opt${off ? ' is-disabled' : ''}">` +
-        `<input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}${off ? ' disabled' : ''}>` +
-        `<span>${escHtml(o.label)}</span></label>`;
-    }).join('');
+    // Mostrar SOLO lo elegible: las opciones imposibles no se renderizan (las ya elegidas
+    // se mantienen). Se recuperan al limpiar o quitar la selección que acota.
+    const shown = opts.filter(o => !valid || valid.has(o.value) || draft.has(o.value));
+    if (!shown.length) { list.innerHTML = `<div class="fb-empty">Sin opciones para los filtros actuales.</div>`; return; }
+    list.innerHTML = shown.map(o =>
+      `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
+      `<span>${escHtml(o.label)}</span></label>`
+    ).join('');
     list.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
       if (inp.checked) draft.add(inp.value); else draft.delete(inp.value);
       commit(key);                               // aplica al instante (debounced), panel sigue abierto
@@ -332,17 +333,25 @@
 
   function filterList(key, q) {
     const norm = (q || '').toLowerCase().trim();
-    root.querySelectorAll(`.fb-drop[data-key="${key}"] .fb-opt`).forEach(opt => {
-      const txt = opt.textContent.toLowerCase();
-      opt.classList.toggle('is-hidden', norm && !txt.includes(norm));
+    const list = root.querySelector(`.fb-drop[data-key="${key}"] .fb-list`);
+    if (!list) return;
+    let anyVisible = false;
+    list.querySelectorAll('.fb-opt').forEach(opt => {
+      const hit = !norm || opt.textContent.toLowerCase().includes(norm);
+      opt.classList.toggle('is-hidden', !hit);
+      if (hit) anyVisible = true;
     });
+    // Vacío claro si la búsqueda no matchea ninguna opción elegible.
+    let nomatch = list.querySelector('.fb-nomatch');
+    if (norm && !anyVisible) {
+      if (!nomatch) { nomatch = document.createElement('div'); nomatch.className = 'fb-empty fb-nomatch'; nomatch.textContent = 'Sin coincidencias'; list.appendChild(nomatch); }
+    } else if (nomatch) { nomatch.remove(); }
   }
 
   function selectAll(key, on) {
     const draft = drafts[key] || (drafts[key] = new Set());
     root.querySelectorAll(`.fb-drop[data-key="${key}"] .fb-opt`).forEach(opt => {
       if (opt.classList.contains('is-hidden')) return;          // respeta el filtro de búsqueda
-      if (on && opt.classList.contains('is-disabled')) return;  // no seleccionar opciones imposibles
       const inp = opt.querySelector('input');
       inp.checked = on;
       if (on) draft.add(inp.value); else draft.delete(inp.value);
