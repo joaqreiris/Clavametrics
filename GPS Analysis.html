@@ -1003,32 +1003,8 @@
       <!-- MICROCYCLE COMPARE -->
       <div class="gp-view" data-view="mc">
 
-        <!-- Microcycle Compare — filters bar -->
-        <div class="gp-mc-bar" id="mcBar">
-          <select class="sc-sel" id="mc-md-code">
-            <option value="MD-5">MD-5</option>
-            <option value="MD-4">MD-4</option>
-            <option value="MD-3" selected>MD-3</option>
-            <option value="MD-2">MD-2</option>
-            <option value="MD-1">MD-1</option>
-            <option value="MD">MD (match day)</option>
-            <option value="MD+1">MD+1</option>
-          </select>
-          <select class="sc-sel" id="mc-scope">
-            <option value="vs_last">vs Last microcycle</option>
-            <option value="vs_avg_3">vs Average of last 3 MCs</option>
-            <option value="vs_avg_5">vs Average of last 5 MCs</option>
-          </select>
-          <select class="sc-sel" id="mc-metric">
-            <option value="total_distance">Total Distance</option>
-            <option value="high_speed_distance">HSR</option>
-            <option value="sprint_distance">Sprint Distance</option>
-            <option value="player_load">Player Load</option>
-            <option value="sprint_count">Sprint Count</option>
-          </select>
-          <button class="pill" id="mc-load-btn" style="height:30px"><i class="ti ti-refresh"></i>Load</button>
-          <span class="sc-info" id="mc-info">Select filters and click Load</span>
-        </div>
+        <!-- Filtros viejos de Microcycle Compare eliminados: la barra de desplegables
+             (gpFilterBar) es la ÚNICA fuente de filtrado. La comparación vs MC vive por card. -->
 
         <div class="gp-grid is-edit">
 
@@ -8587,18 +8563,17 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   let _mcMicros   = {}; // id → microcycle row
   let _mcSortKey  = 'diff_pct'; let _mcSortDir = -1;
 
-  const mdCodeSel  = document.getElementById('mc-md-code');
-  const scopeSel   = document.getElementById('mc-scope');
-  const metricSel  = document.getElementById('mc-metric');
-  const loadBtn    = document.getElementById('mc-load-btn');
-  const mcInfo     = document.getElementById('mc-info');
+  // Filtros viejos del dashboard (mc-md-code / mc-scope / mc-metric / Load / mc-info)
+  // eliminados: la barra de desplegables (gpFilterBar) es la ÚNICA fuente de filtrado.
+  // mcInfo queda como sink detached para no romper los mensajes de estado de _mcLoad.
+  const mcInfo     = document.getElementById('mc-info') || document.createElement('span');
   const metricBody = document.getElementById('mc-metric-body');
   // "MC diff table" la dibuja el motor unificado (builder) en #mc-table-body; este ref
   // queda como sink detached para que los mensajes de loading/error de _mcLoad NO
   // pisen el render de la card del builder.
   const tableBody  = document.createElement('div');
   const scatCanvas = document.getElementById('canvasMCScatter');
-  if (!loadBtn) return;
+  if (!document.querySelector('.gp-view[data-view="mc"] .gp-grid')) return;
 
   // ── init — build session index once ──────────────────────────
   async function mcInit() {
@@ -8655,9 +8630,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
   // ── load & compare ───────────────────────────────────────────
   async function _mcLoad() {
-    const selectedMD = mdCodeSel.value;
-    const scope      = scopeSel.value;
-    const metricKey  = metricSel.value;
+    // Inputs derivados de la barra (única fuente de filtrado). La comparación vs MC
+    // es per-card: las cards bespoke comparan contra el MC previo (vs_last) por defecto;
+    // mc-table usa su propia config (refMcId en __config).
+    const FB = window.gpFilterBar?.getState?.() || null;
+    const selectedMD = (FB?.mdCodes && FB.mdCodes[0]) || 'MD-3';
+    const scope      = 'vs_last';
+    const metricKey  = 'total_distance';
     if (!selectedMD) return;
     if (!_mcInited) await mcInit();
 
@@ -9427,10 +9406,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     else _bothLoads();
   }
 
-  mdCodeSel.addEventListener('change', _mcTriggerLoad);
-  scopeSel.addEventListener('change', _mcTriggerLoad);
-  metricSel.addEventListener('change', _mcTriggerLoad);
-  loadBtn.addEventListener('click', _mcTriggerLoad);
+  // La barra de desplegables es la única fuente: re-cargar mc en cada cambio de filtro.
+  document.addEventListener('gpfilter:change', _mcTriggerLoad);
 
   window._mcInit = mcInit;
 
