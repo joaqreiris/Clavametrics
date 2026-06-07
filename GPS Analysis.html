@@ -904,22 +904,8 @@
       <!-- MATCH · GROUP / LOAD MONITORING -->
       <div class="gp-view" data-view="mgrp">
 
-        <!-- Load Monitoring — filters bar -->
-        <div class="gp-lm-bar" id="lmBar">
-          <select class="sc-sel" id="lm-refdate">
-            <option value="today">As of today</option>
-            <option value="custom">Custom date...</option>
-          </select>
-          <input type="date" class="sc-sel" id="lm-custom-date" style="display:none">
-          <select class="sc-sel" id="lm-metric">
-            <option value="player_load">Player Load (recommended)</option>
-            <option value="total_distance">Total Distance</option>
-            <option value="high_speed_distance">HSR</option>
-            <option value="sprint_count">Sprints</option>
-          </select>
-          <button class="pill" id="lm-refresh-btn" style="height:30px"><i class="ti ti-refresh"></i>Refresh</button>
-          <span class="sc-info" id="lm-info">Select a metric and click Refresh</span>
-        </div>
+        <!-- Filtros viejos de Load Monitoring eliminados: la barra de desplegables
+             (gpFilterBar) es la ÚNICA fuente de filtrado. La comparación vive por card. -->
 
         <div class="gp-grid is-edit">
 
@@ -9854,16 +9840,15 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── DOM ──────────────────────────────────────────────────────
-  const refdateSel  = document.getElementById('lm-refdate');
-  const customDate  = document.getElementById('lm-custom-date');
-  const metricSel   = document.getElementById('lm-metric');
-  const refreshBtn  = document.getElementById('lm-refresh-btn');
-  const lmInfo      = document.getElementById('lm-info');
+  // Filtros viejos del dashboard (lm-refdate / lm-custom-date / lm-metric / Refresh /
+  // lm-info) eliminados: la barra de desplegables (gpFilterBar) es la ÚNICA fuente de
+  // filtrado. lmInfo queda como sink detached para no romper los mensajes de estado.
+  const lmInfo      = document.getElementById('lm-info') || document.createElement('span');
   const alertsBody  = document.getElementById('lm-alerts-body');
   const gaugesBody  = document.getElementById('lm-gauges-body');
   const tableBody   = document.getElementById('lm-table-body');
   const zoneFilter  = document.getElementById('lm-zone-filter');
-  if (!refreshBtn) return;
+  if (!document.querySelector('.gp-view[data-view="mgrp"] .gp-grid')) return;
 
   let _playerAcwrData = null;
   let _playerMap      = {};
@@ -9880,7 +9865,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = await window.getClubId?.();
       if (!clubId || !window.sb || !window.gpsACWR) { lmInfo.textContent = 'Not ready.'; return; }
 
-      const refDate = refdateSel.value === 'custom' ? (customDate.value || null) : null;
+      // Fecha de referencia derivada de la barra (fin del rango elegido); null = hoy.
+      const refDate = window.gpFilterBar?.getState?.()?.date?.to || null;
 
       const [teamAcwr, playerAcwr, players] = await Promise.all([
         window.gpsACWR.calculateTeamACWR({ clubId, refDate }),
@@ -9891,7 +9877,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _playerMap = Object.fromEntries((players.data || []).map(p => [p.id, p]));
       _playerAcwrData = playerAcwr || {};
 
-      const metricKey = metricSel.value || 'player_load';
+      const metricKey = 'player_load';   // métrica base ACWR (default); el ACWR no depende de ella
       lmInfo.textContent = `Ref: ${refDate || 'today'} · ${Object.keys(_playerAcwrData).length} players`;
 
       _renderGauges(teamAcwr);
@@ -10023,12 +10009,13 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   }
 
   // ── events ───────────────────────────────────────────────────
-  refdateSel.addEventListener('change', () => {
-    customDate.style.display = refdateSel.value === 'custom' ? '' : 'none';
+  // La barra de desplegables es la única fuente: re-cargar ACWR al cambiar un filtro
+  // (solo si mgrp está activo — el cálculo ACWR es costoso).
+  document.addEventListener('gpfilter:change', () => {
+    if (document.querySelector('.gp-view[data-view="mgrp"].is-on')) lmLoad();
   });
-  refreshBtn.addEventListener('click', lmLoad);
+  // Filtro de zona dentro de la card (ACWR by player) — per-card, se mantiene.
   zoneFilter?.addEventListener('change', () => { if (_playerAcwrData) _renderTable(); });
-  metricSel.addEventListener('change', () => { if (_playerAcwrData) _renderAlerts(metricSel.value); });
 
   window._lmInit = lmLoad;
 
