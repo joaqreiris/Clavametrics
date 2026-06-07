@@ -203,9 +203,14 @@
       `<div class="fb-presets">` +
         DATE_PRESETS.map(p => `<button class="fb-preset" type="button" data-preset="${p.id}">${p.label}</button>`).join('') +
       `</div>` +
+      `<div class="fb-date-h">Rango</div>` +
       `<div class="fb-range">` +
         `<label>Desde<input type="date" class="fb-date-from"></label>` +
         `<label>Hasta<input type="date" class="fb-date-to"></label>` +
+      `</div>` +
+      `<div class="fb-date-h">Un día</div>` +
+      `<div class="fb-range">` +
+        `<label>Fecha<input type="date" class="fb-date-single"></label>` +
       `</div>` +
       `<div class="fb-foot">` +
         `<button class="fb-link" type="button" data-act="none">Limpiar</button>` +
@@ -216,17 +221,26 @@
       const on = !btn.classList.contains('is-on');
       panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
       if (on) btn.classList.add('is-on');
-      // preset y rango manual son excluyentes
+      // preset, rango manual y día puntual son mutuamente excluyentes
       panel.querySelector('.fb-date-from').value = '';
       panel.querySelector('.fb-date-to').value = '';
+      panel.querySelector('.fb-date-single').value = '';
       commitDate(panel);                          // aplica al instante
     }));
     const onRangeInput = () => {
       panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
+      panel.querySelector('.fb-date-single').value = '';   // rango y día son excluyentes
       commitDate(panel);
     };
     panel.querySelector('.fb-date-from').addEventListener('input', onRangeInput);
     panel.querySelector('.fb-date-to').addEventListener('input', onRangeInput);
+    // Día puntual → filtra solo las sesiones de ESE día (from === to).
+    panel.querySelector('.fb-date-single').addEventListener('input', () => {
+      panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
+      panel.querySelector('.fb-date-from').value = '';
+      panel.querySelector('.fb-date-to').value = '';
+      commitDate(panel);
+    });
     panel.querySelector('[data-act="none"]').addEventListener('click', () => { clearOne('date'); syncDatePanel(); });
     return panel;
   }
@@ -276,11 +290,15 @@
   }
   function commitDate(panel) {
     const presetBtn = panel.querySelector('.fb-preset.is-on');
+    const single = panel.querySelector('.fb-date-single').value || null;
     const from = panel.querySelector('.fb-date-from').value || null;
     const to   = panel.querySelector('.fb-date-to').value || null;
+    // Prioridad: preset > día puntual (from===to) > rango manual. Excluyentes.
     state.date = presetBtn
       ? { preset: presetBtn.dataset.preset, from: null, to: null }
-      : { preset: null, from, to };
+      : single
+        ? { preset: null, from: single, to: single }
+        : { preset: null, from, to };
     updateTrigger('date');
     updateGlobal();
     fire();
@@ -319,6 +337,7 @@
       return p ? p.label : state.date.preset;
     }
     const f = state.date.from, t = state.date.to;
+    if (f && t && f === t) return `Día: ${f}`;     // fecha individual
     if (f && t) return `${f} → ${t}`;
     if (f) return `Desde ${f}`;
     if (t) return `Hasta ${t}`;
@@ -388,8 +407,11 @@
     const panel = root.querySelector('.fb-drop[data-key="date"] .fb-panel');
     panel.querySelectorAll('.fb-preset').forEach(b =>
       b.classList.toggle('is-on', state.date.preset === b.dataset.preset));
-    panel.querySelector('.fb-date-from').value = state.date.from || '';
-    panel.querySelector('.fb-date-to').value   = state.date.to   || '';
+    const f = state.date.from, t = state.date.to;
+    const isSingle = f && t && f === t;            // fecha individual → va en su input
+    panel.querySelector('.fb-date-from').value   = isSingle ? '' : (f || '');
+    panel.querySelector('.fb-date-to').value     = isSingle ? '' : (t || '');
+    panel.querySelector('.fb-date-single').value = isSingle ? f  : '';
   }
 
   // ── Carga de opciones REALES desde Supabase ─────────────────────────────
