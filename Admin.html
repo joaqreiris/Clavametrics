@@ -608,7 +608,7 @@
           <div class="ad-card">
             <div class="ad-card-h">
               <h3>Recent activity</h3>
-              <span class="sub">audit log · last 24 h</span>
+              <span class="sub">audit log · últimas acciones</span>
               <div class="right"><button class="cm-btn is-ghost is-sm">View all <i class="ti ti-arrow-up-right" style="font-size:14px"></i></button></div>
             </div>
             <div class="ad-log" id="adLogContainer">
@@ -641,7 +641,7 @@
       .eq('club_id', clubId)
       .order('created_at', { ascending: true }),
     window.sb.from('audit_log')
-      .select('id,table_name,operation,changes,created_at,profiles(full_name)')
+      .select('id,table_name,operation,changes,created_at,actor:profiles!actor_id(full_name)')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false })
       .limit(8),
@@ -863,7 +863,7 @@
     logEl.innerHTML = `<div style="padding:20px 16px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">No audit entries yet</div>`;
   } else {
     logEl.innerHTML = auditRows.map(r => {
-      const who  = r.profiles?.full_name || 'System';
+      const who  = r.actor?.full_name || 'System';
       const { icon, color } = LOG_ICON[r.operation] || LOG_ICON.UPDATE;
       const what = `<strong>${who}</strong> ${r.operation.toLowerCase()}d <strong>${r.table_name}</strong>`;
       const when = relTime(r.created_at);
