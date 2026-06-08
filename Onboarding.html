@@ -488,22 +488,21 @@
       const lastName  = nameParts.slice(1).join(' ') || '';
       const clubName  = (firstName ? firstName + "'s Club" : user.email?.split('@')[0] + "'s Club");
 
-      const { data: club, error: clubErr } = await window.sb
+      const newClubId = crypto.randomUUID();
+      const { error: clubErr } = await window.sb
         .from('clubs')
-        .insert({ name: clubName, plan: 'free' })
-        .select('id')
-        .single();
+        .insert({ id: newClubId, name: clubName, plan: 'free' });
+      if (clubErr) { alert('Setup failed (club): ' + clubErr.message); return; }
 
-      if (clubErr) { alert('Setup failed: ' + clubErr.message); return; }
-
-      await window.sb.from('profiles').insert({
+      const { error: profErr } = await window.sb.from('profiles').insert({
         id:         user.id,
-        club_id:    club.id,
+        club_id:    newClubId,
         full_name:  fullName || user.email,
         first_name: firstName,
         last_name:  lastName,
         role:       'admin',
       });
+      if (profErr) { alert('Setup failed (profile): ' + profErr.message); return; }
 
       window.resetSupabaseCache();
     }
