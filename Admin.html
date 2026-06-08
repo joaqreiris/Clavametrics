@@ -780,7 +780,7 @@
             ${email ? `<div class="email">${email}</div>` : ''}
           </div>
         </div></td>
-        <td><span class="ad-role ${rc}"><span class="dot"></span>${rl}</span></td>
+        <td><span class="ad-role ${rc}"${isMe ? '' : ` data-role-edit="${m.id}" style="cursor:pointer" title="Change role"`}><span class="dot"></span>${rl}</span></td>
         <td>${sectionsCell(m)}</td>
         <td><span class="ad-last">${last}</span></td>
         <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
@@ -792,6 +792,8 @@
       c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
     document.querySelectorAll('#adTbody [data-edit]').forEach(b =>
       b.addEventListener('click', e => { e.stopPropagation(); openMemberSectionsModal(b.dataset.edit); }));
+    document.querySelectorAll('#adTbody [data-role-edit]').forEach(b =>
+      b.addEventListener('click', e => { e.stopPropagation(); openMemberRoleModal(b.dataset.roleEdit); }));
     const foot = document.getElementById('adMemberFoot');
     if (foot) foot.innerHTML = `Showing <strong style="color:var(--cm-fg)">${list.length}</strong> of ${count} members`;
   }
@@ -956,6 +958,46 @@
   document.getElementById('secModalSave')  ?.addEventListener('click', saveMemberSections);
   document.getElementById('secModalBackdrop')?.addEventListener('click', e => { if (e.target.id === 'secModalBackdrop') closeMemberSectionsModal(); });
 
+  // ── Member role modal ──
+  let _roleEditId = null;
+  function openMemberRoleModal(id) {
+    const m = members.find(x => x.id === id);
+    if (!m) return;
+    _roleEditId = id;
+    document.getElementById('roleModalName').textContent = m.full_name || m.email || 'Member';
+    const sel = document.getElementById('roleModalSelect');
+    sel.value = (m.role || '').toLowerCase();
+    const ownerOpt = sel.querySelector('option[value="owner"]');
+    if (ownerOpt) ownerOpt.disabled = !(profile?.role === 'owner' || profile?.club_role === 'owner');
+    const msg = document.getElementById('roleModalMsg'); if (msg) msg.style.display = 'none';
+    document.getElementById('roleModalBackdrop').style.display = 'flex';
+  }
+  function closeMemberRoleModal() { document.getElementById('roleModalBackdrop').style.display = 'none'; }
+  async function saveMemberRole() {
+    if (!_roleEditId) return;
+    const newRole = document.getElementById('roleModalSelect').value;
+    const { error } = await window.sb.rpc('set_member_role', { target_id: _roleEditId, new_role: newRole });
+    if (error) {
+      const msg = document.getElementById('roleModalMsg');
+      if (msg) { msg.textContent = error.message || 'Save failed'; msg.style.display = 'block'; }
+      return;
+    }
+    const m = members.find(x => x.id === _roleEditId);
+    if (m) m.role = newRole;
+    // Recalcular contadores de los pills desde members actualizado
+    const counts = { all: members.length };
+    members.forEach(x => { const b = roleClass(x.role || x.club_role); counts[b] = (counts[b] || 0) + 1; });
+    document.querySelectorAll('.ad-toolbar .ad-pill[data-bucket]').forEach(p => {
+      const ct = p.querySelector('.ct'); if (ct) ct.textContent = counts[p.dataset.bucket] || 0;
+    });
+    closeMemberRoleModal();
+    applyFilters();
+  }
+  document.getElementById('roleModalClose') ?.addEventListener('click', closeMemberRoleModal);
+  document.getElementById('roleModalCancel')?.addEventListener('click', closeMemberRoleModal);
+  document.getElementById('roleModalSave')  ?.addEventListener('click', saveMemberRole);
+  document.getElementById('roleModalBackdrop')?.addEventListener('click', e => { if (e.target.id === 'roleModalBackdrop') closeMemberRoleModal(); });
+
   // ── Club logo upload ────────────────────────────────────────────────
   const canUploadLogo = ['admin','owner'].includes(profile?.role) ||
                         ['admin','owner'].includes(profile?.club_role);
@@ -1077,6 +1119,51 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-outline is-sm" onclick="closeAddCategoryModal()">Cancel</button>
       <button class="cm-btn is-primary is-sm" onclick="saveClubSettings()"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Member Role Modal -->
+<div id="roleModalBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:380px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+      <i class="ti ti-shield-check" style="font-size:18px;color:var(--cm-accent)"></i>
+      <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Role · <span id="roleModalName">—</span></div>
+      <button id="roleModalClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px">
+      <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Role</label>
+      <select id="roleModalSelect" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
+        <optgroup label="Management">
+          <option value="owner">Owner</option>
+          <option value="admin">Admin</option>
+        </optgroup>
+        <optgroup label="Coaching">
+          <option value="head_coach">Head coach</option>
+          <option value="assistant_coach">Assistant coach</option>
+          <option value="coach">Coach</option>
+        </optgroup>
+        <optgroup label="Performance">
+          <option value="performance">Performance</option>
+          <option value="analyst">Analyst</option>
+          <option value="strength">Strength</option>
+        </optgroup>
+        <optgroup label="Medical">
+          <option value="medical">Medical lead</option>
+          <option value="physio">Physio</option>
+          <option value="doctor">Doctor</option>
+          <option value="nutritionist">Nutritionist</option>
+        </optgroup>
+        <optgroup label="Other">
+          <option value="player">Player</option>
+          <option value="viewer">Viewer</option>
+        </optgroup>
+      </select>
+      <div id="roleModalMsg" style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-danger,#DC2626);margin-top:10px;display:none"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
+      <button class="cm-btn is-outline is-sm" id="roleModalCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="roleModalSave"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
     </div>
   </div>
 </div>
