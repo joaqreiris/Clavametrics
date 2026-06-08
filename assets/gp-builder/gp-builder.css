@@ -447,40 +447,30 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .gp-kpi-tile .kd.down { color:var(--cm-danger); }
 
 /* =============================================================
-   Chart builder · Drag & drop mode (PROMPT 1 — solo UI)
-   Capa de interacción para armar la MISMA config gp.card/v1
-   arrastrando campos a zonas. Convive con el builder clásico.
-   Estilos portados de la maqueta de referencia (prefijo .bdd-* /
-   preview .bp-*) usando los tokens reales --cm-*.
+   Chart builder · Modo Drag & drop (DENTRO del builder — solo UI)
+   Forma alternativa de armar la MISMA config gp.card/v1 vía un toggle
+   Clásico/D&D dentro del drawer. El stage se apila vertical para entrar
+   en el panel de 328px; el preview es la draft card del grid (compartida).
+   Estilos portados de la maqueta (prefijo .bdd-*, preview .bp-*) con los
+   tokens reales --cm-*.
    ============================================================= */
 
-/* ── overlay / modal que aloja el stage (convive con el clásico) ── */
-.gpb-dd-bk { position:fixed; inset:0; z-index:var(--cm-z-modal); display:flex; align-items:flex-start; justify-content:center;
-  padding:32px 24px; background:color-mix(in srgb, var(--cm-fg-strong) 38%, transparent); backdrop-filter:saturate(140%) blur(4px);
-  opacity:0; transition:opacity var(--cm-dur-2) var(--cm-ease); overflow:auto; }
-.gpb-dd-bk.is-open { opacity:1; }
-.gpb-dd-bk[hidden] { display:none; }
-.gpb-dd-modal { width:min(1240px, 96vw); margin:auto; background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:var(--cm-r-5);
-  box-shadow:var(--cm-shadow-pop); display:flex; flex-direction:column; overflow:hidden;
-  transform:translateY(8px) scale(0.99); transition:transform var(--cm-dur-2) var(--cm-ease); }
-.gpb-dd-bk.is-open .gpb-dd-modal { transform:none; }
-.gpb-dd-head { display:flex; align-items:center; gap:14px; padding:13px 16px; border-bottom:1px solid var(--cm-border); background:var(--cm-surface); flex-shrink:0; }
-.gpb-dd-head .ttl { display:inline-flex; align-items:center; gap:9px; font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
-.gpb-dd-head .ttl .ti { font-size:17px; color:var(--cm-fg-muted); }
-.gpb-dd-head .sp { flex:1; }
-.gpb-dd-modeseg { display:inline-flex; gap:2px; padding:3px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
-.gpb-dd-modeseg button { display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 13px; border:0; border-radius:var(--cm-r-2);
-  background:transparent; color:var(--cm-fg-muted); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer;
+/* ── toggle de modo de construcción (en el header del drawer) ── */
+.es-mode { display:flex; gap:2px; margin:0 0 10px; padding:3px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); }
+.es-mode button { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px; height:30px; border:0; border-radius:var(--cm-r-2);
+  background:transparent; color:var(--cm-fg-muted); font:600 12px/1 var(--cm-font-sans); cursor:pointer;
   transition:background var(--cm-dur-1) var(--cm-ease), color var(--cm-dur-1) var(--cm-ease); }
-.gpb-dd-modeseg button .ti { font-size:15px; }
-.gpb-dd-modeseg button:hover { color:var(--cm-fg); }
-.gpb-dd-modeseg button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); font-weight:600; }
-.gpb-dd-x { width:32px; height:32px; border-radius:var(--cm-r-2); border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted);
-  display:inline-flex; align-items:center; justify-content:center; cursor:pointer; transition:background var(--cm-dur-1), color var(--cm-dur-1), border-color var(--cm-dur-1); }
-.gpb-dd-x:hover { color:var(--cm-fg); background:var(--cm-bg-soft); border-color:var(--cm-border-strong); }
-.gpb-dd-body { padding:18px; overflow:auto; }
+.es-mode button .ti { font-size:15px; }
+.es-mode button:hover { color:var(--cm-fg); }
+.es-mode button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+/* en modo D&D, los tabs Setup/Style (sólo del clásico) se ocultan */
+.es-panel.is-ddmode .es-tabs { display:none; }
 
-.bdd-wrap { display:flex; flex-direction:column; gap:16px; }
+/* el pane D&D dentro del drawer: padding lateral propio + stack vertical */
+.es-p-b > .pane[data-pane="dd"] { padding:12px 14px 24px; }
+.bdd-wrap { display:flex; flex-direction:column; gap:14px; }
+.bdd-dock { display:flex; flex-direction:column; gap:14px; }
+.bdd-dock .bdd-fields { max-height:260px; }
 
 /* ── toolbar: tipo de gráfico + badge de config ── */
 .bdd-bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap;
@@ -499,10 +489,6 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
   background:var(--cm-bg-sunk); border:1px solid var(--cm-border); color:var(--cm-fg-muted); font:var(--cm-mono); white-space:nowrap; }
 .bdd-cfg .ti { font-size:13px; color:var(--cm-accent); }
 .bdd-cfg b { color:var(--cm-fg); font-weight:600; }
-
-/* ── stage de 3 columnas: campos / zonas / preview ── */
-.bdd-stage { display:grid; grid-template-columns:248px 332px minmax(0,1fr); gap:16px; align-items:start; }
-@media (max-width:1180px){ .bdd-stage { grid-template-columns:240px 1fr; } .bdd-preview { grid-column:1 / -1; } }
 
 .bdd-col { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; overflow:hidden; }
 .bdd-col-h { display:flex; align-items:center; gap:8px; padding:11px 13px; border-bottom:1px solid var(--cm-border-soft); flex-shrink:0; }
