@@ -1313,7 +1313,7 @@
           <div class="s"><span class="pk ${cat.kind}"></span>${esc(cat.unit)} · ${cat.kind}</div>
         </div>
         <div style="display:flex;align-items:center;gap:4px">
-          ${S.type === 'bars' ? `<button data-line-for="${esc(m.id)}" title="Mostrar como línea (eje secundario)" style="border:1px solid var(--cm-border);background:${m.line?'var(--cm-accent)':'var(--cm-bg-soft)'};color:${m.line?'var(--cm-fg-on-accent)':'var(--cm-fg-muted)'};border-radius:5px;width:24px;height:24px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center"><i class="ti ti-chart-line" style="font-size:13px"></i></button>` : ''}
+          ${S.type === 'bars' ? `<button data-line-for="${esc(m.id)}" title="Mostrar como línea (eje secundario)" style="border:1px solid var(--cm-border);background:${m.line?'var(--cm-accent)':'var(--cm-bg-soft)'};color:${m.line?'var(--cm-fg-on-accent)':'var(--cm-fg-muted)'};border-radius:5px;width:20px;height:20px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center"><i class="ti ti-chart-line" style="font-size:12px"></i></button>` : ''}
           <button class="es-aggchip" data-agg-for="${esc(m.id)}">
             <i class="ti ${agg.icon}"></i>${agg.short}<i class="ti ti-chevron-down" style="font-size:11px"></i>
           </button>
