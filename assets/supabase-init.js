@@ -23,6 +23,9 @@
       const { data: { user }, error: authErr } = await window.sb.auth.getUser();
       if (authErr) console.warn('[supabase-init] getUser error:', authErr.message);
       if (!user) return null;
+      // Override de super-admin: club activo elegido en el switcher
+      const _ov = window.getActiveClubOverride && window.getActiveClubOverride();
+      if (_ov && await window.isSuperAdmin()) { _clubId = _ov; return _clubId; }
       const { data: profile, error: profileErr } = await window.sb.from('profiles')
         .select('club_id, role, full_name')
         .eq('id', user.id)
@@ -60,6 +63,24 @@
     if (_profilePromise) return _profilePromise;
     _profilePromise = window.getClubId().then(() => _profile);
     return _profilePromise;
+  };
+
+  let _superAdmin = null;
+  window.isSuperAdmin = function () {
+    if (_superAdmin !== null) return Promise.resolve(_superAdmin);
+    return (async () => {
+      try { const { data } = await window.sb.rpc('is_super_admin'); _superAdmin = !!data; }
+      catch { _superAdmin = false; }
+      return _superAdmin;
+    })();
+  };
+  // Club activo elegido por un super-admin (override). Devuelve null si no aplica.
+  window.getActiveClubOverride = function () {
+    try { return sessionStorage.getItem('cm_active_club') || null; } catch { return null; }
+  };
+  window.setActiveClubOverride = function (clubId) {
+    try { if (clubId) sessionStorage.setItem('cm_active_club', clubId); else sessionStorage.removeItem('cm_active_club'); } catch {}
+    window.resetSupabaseCache();
   };
 
   window.resetSupabaseCache = function () {
