@@ -227,7 +227,12 @@
   .gp-kpi .d.down { color:var(--cm-danger); }
 
   .gp-zwrap { overflow-x:auto; min-width:0; max-width:100%; }
-  .gp-zt { width:100%; border-collapse:separate; border-spacing:0; }
+  /* width:max-content + min-width:100% (mismo patrón que .ol-hm): si las columnas
+     ENTRAN, la tabla llena la card alineada a la izquierda sin stretch raro de la
+     columna sticky; si NO entran, crece a su ancho natural y scrollea desde la 1ª col.
+     Con width:100% el auto-layout volcaba el sobrante en la col .pc (la ensanchaba)
+     y apretaba/cortaba las métricas. */
+  .gp-zt { width:max-content; min-width:100%; border-collapse:separate; border-spacing:0; }
   /* Outliers heatmap */
   .ol-hm-wrap { overflow-x:auto; }
   .ol-hm { width:max-content; min-width:100%; border-collapse:separate; border-spacing:0; }
