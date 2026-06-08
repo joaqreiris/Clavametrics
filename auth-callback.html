@@ -83,6 +83,19 @@
       if (!profile) {
         // New OAuth user — no profile yet. Create a stub club + profile so the app
         // can boot, then let Onboarding collect the real club details.
+        // Invited user — club_id + role come in user_metadata (set by invite-staff fn)
+        const inviteMeta = data.user.user_metadata || {};
+        if (inviteMeta.club_id) {
+          msgEl.textContent = 'Joining your club…';
+          const { error: joinErr } = await window.sb.from('profiles').insert({
+            id: userId, club_id: inviteMeta.club_id, full_name: inviteMeta.full_name || '',
+            role: inviteMeta.role || 'viewer', email,
+          });
+          if (joinErr) { showError('Join failed: ' + joinErr.message); return; }
+          await window.sb.rpc('accept_invitation');
+          window.location.replace('Hub.html');
+          return;
+        }
         msgEl.textContent = 'Creating your workspace…';
         const meta     = data.user.user_metadata || {};
         const fullName = meta.full_name || meta.name || '';

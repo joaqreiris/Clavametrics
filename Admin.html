@@ -1054,15 +1054,15 @@
       if (msg) { msg.textContent = 'Enter a valid email.'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
       return;
     }
-    const { data, error } = await window.sb.from('invitations')
-      .upsert({ club_id: clubId, email, role, status: 'pending', invited_by: profile?.id },
-              { onConflict: 'club_id,email' })
-      .select('id, email, role, status, created_at')
-      .single();
-    if (error) {
-      if (msg) { msg.textContent = error.message || 'Invite failed'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
+    const redirectTo = new URL('auth-callback.html', window.location.href).href;
+    const { data: res, error } = await window.sb.functions.invoke('invite-staff', {
+      body: { email, role, redirectTo },
+    });
+    if (error || res?.error) {
+      if (msg) { msg.textContent = (res?.error) || error.message || 'Invite failed'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
       return;
     }
+    const data = res.invitation;
     invites = [data, ...invites.filter(x => x.id !== data.id)];
     renderInvites();
     closeInviteModal();
