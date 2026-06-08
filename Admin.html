@@ -790,7 +790,7 @@
         <td>${sectionsCell(m)}</td>
         <td><span class="ad-last">${last}</span></td>
         <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
-        <td><div class="ad-row-act">${isMe ? '' : `<button data-edit="${m.id}"><i class="ti ti-edit"></i></button>`}<button><i class="ti ti-dots"></i></button></div></td>
+        <td><div class="ad-row-act">${isMe ? '' : `<button data-edit="${m.id}"><i class="ti ti-edit"></i></button><button data-menu="${m.id}"><i class="ti ti-dots"></i></button>`}</div></td>
       </tr>`;
     }).join('');
     // Rebind checkbox por fila (las filas se recrean en cada render)
@@ -1006,6 +1006,46 @@
   document.getElementById('roleModalCancel')?.addEventListener('click', closeMemberRoleModal);
   document.getElementById('roleModalSave')  ?.addEventListener('click', saveMemberRole);
   document.getElementById('roleModalBackdrop')?.addEventListener('click', e => { if (e.target.id === 'roleModalBackdrop') closeMemberRoleModal(); });
+
+  // ── Row actions menu ("…") ──
+  const _rmStyle = document.createElement('style');
+  _rmStyle.textContent = '#adRowMenu button:hover{background:var(--cm-bg-soft)}';
+  document.head.appendChild(_rmStyle);
+
+  const _rowMenu = document.createElement('div');
+  _rowMenu.id = 'adRowMenu';
+  _rowMenu.style.cssText = 'position:absolute;z-index:950;min-width:184px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.16);padding:6px;display:none';
+  document.body.appendChild(_rowMenu);
+  let _rowMenuId = null;
+
+  const _rmItem = (icon, label) =>
+    `<button data-act="${label}" style="display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;background:transparent;border:0;border-radius:7px;cursor:pointer;color:var(--cm-fg);font:var(--cm-body-sm);text-align:left">
+       <i class="ti ${icon}" style="font-size:15px;color:var(--cm-fg-muted)"></i>${label}</button>`;
+
+  function openRowMenu(id, btn) {
+    _rowMenuId = id;
+    _rowMenu.innerHTML = _rmItem('ti-shield-check','Change role') + _rmItem('ti-layout-grid','Edit sections') + _rmItem('ti-mail','Copy email');
+    _rowMenu.style.display = 'block';
+    const r = btn.getBoundingClientRect();
+    _rowMenu.style.top  = (window.scrollY + r.bottom + 4) + 'px';
+    _rowMenu.style.left = (window.scrollX + r.right - _rowMenu.offsetWidth) + 'px';
+    _rowMenu.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+      const act = b.dataset.act, id2 = _rowMenuId;
+      closeRowMenu();
+      if (act === 'Change role') openMemberRoleModal(id2);
+      else if (act === 'Edit sections') openMemberSectionsModal(id2);
+      else if (act === 'Copy email') { const mm = members.find(x => x.id === id2); if (mm?.email) navigator.clipboard?.writeText(mm.email); }
+    }));
+  }
+  function closeRowMenu() { _rowMenu.style.display = 'none'; _rowMenuId = null; }
+
+  document.addEventListener('click', e => {
+    const trigger = e.target.closest('#adTbody [data-menu]');
+    if (trigger) { e.stopPropagation(); openRowMenu(trigger.dataset.menu, trigger); return; }
+    if (!_rowMenu.contains(e.target)) closeRowMenu();
+  });
+  window.addEventListener('resize', closeRowMenu);
+  document.addEventListener('scroll', closeRowMenu, true);
 
   // ── Pending invites ──
   function renderInvites() {
