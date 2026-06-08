@@ -119,6 +119,29 @@
     return m.all || m.keys.has(key);
   };
 
+  // Mapa archivo → key, derivado de CM_SECTIONS (decodifica %20, etc.)
+  window.moduleKeyForPage = function (file) {
+    const f = decodeURIComponent(file || (location.pathname.split('/').pop() || '')).toLowerCase();
+    const hit = (window.CM_SECTIONS || []).find(s => decodeURIComponent(s.href).toLowerCase() === f);
+    return hit ? hit.key : null;
+  };
+
+  // Guard: si el usuario no puede ver el módulo de ESTA página, lo manda a Hub.
+  // Llamar al inicio del boot de cada página gateable: await window.guardModule();
+  window.guardModule = async function (key) {
+    try {
+      const ok = await window.requireAuth('Login.html');
+      if (!ok) return false;
+      const k = key || window.moduleKeyForPage();
+      if (!k) return true;                 // página no gateable → pasa
+      if (await window.canAccess(k)) return true;
+      window.location.replace('Hub.html'); // sin acceso → fuera
+      return false;
+    } catch (e) {
+      return true;                         // fail-open: ante error no bloquear
+    }
+  };
+
   window.setClubLogo = function (url) {
     if (_club) _club.logo_url = url;
     document.dispatchEvent(new CustomEvent('clublogochanged', { detail: { logo_url: url } }));
