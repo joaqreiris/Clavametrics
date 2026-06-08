@@ -47,6 +47,12 @@
       const userId = data.user.id;
       const email  = data.user.email || '';
 
+      // 2b. Invitado con invitación pendiente → primero define su contraseña.
+      //     (su profile ya existe; lo creó handle_new_user al enviarse el invite)
+      const { data: pendingInv } = await window.sb.from('invitations')
+        .select('id').eq('email', email).eq('status', 'pending').limit(1).maybeSingle();
+      if (pendingInv) { window.location.replace('set-password.html'); return; }
+
       // 3. Email-confirmation path: pending registration data was saved in sessionStorage
       //    by Register.html when Supabase required email confirmation before session creation.
       const pendingRaw = sessionStorage.getItem('cm_pending_reg');
