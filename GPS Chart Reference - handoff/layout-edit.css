@@ -1,0 +1,217 @@
+/* =============================================================
+   GPS Analysis — Chart reference · "Editar layout" (target look)
+   Drag-to-reorder + draggable resize that snaps to the 12-col grid.
+   Builds on clavametrics.css + chart-reference.css (.gp-c chrome).
+   Mirrors the real dashboard class names (.gp-grid.is-layout,
+   .ga-grip, .ga-edit-acts) so the handoff maps 1:1 to the app.
+   The draggable resize REPLACES the old S/M/L/FULL .size-toggle.
+   ============================================================= */
+
+/* ---------- demo stage (a slice of the dashboard canvas) ---------- */
+.le-stage { border:1px solid var(--cm-border); border-radius:var(--cm-r-5); background:var(--cm-bg-soft); overflow:hidden; }
+.le-bar { display:flex; align-items:center; gap:10px; padding:10px 13px; border-bottom:1px solid var(--cm-border); background:var(--cm-surface); }
+.le-bar .ttl { font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+.le-bar .sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+.le-bar .sp { margin-left:auto; }
+
+/* the "Editar layout" toggle (off = normal, on = edit) */
+.le-toggle { display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); font:600 11.5px/1 var(--cm-font-sans); cursor:default; }
+.le-toggle .ti { font-size:14px; }
+.le-toggle.is-on { background:var(--cm-accent); border-color:var(--cm-accent); color:var(--cm-fg-on-accent); }
+.le-toggle .dot { width:7px; height:7px; border-radius:50%; background:var(--cm-fg-faint); }
+.le-toggle.is-on .dot { background:var(--cm-fg-on-accent); }
+
+.le-canvas { padding:16px; }
+
+/* ---------- the 12-column grid (mirror of .gp-grid) ---------- */
+.le-grid { display:grid; grid-template-columns:repeat(12, 1fr); gap:12px; position:relative; }
+.le-c4  { grid-column:span 4; }
+.le-c6  { grid-column:span 6; }
+.le-c8  { grid-column:span 8; }
+.le-c12 { grid-column:span 12; }
+
+/* compact card body for the demos */
+.le-grid .gp-c { min-height:138px; }
+.le-grid .gp-c .gp-c-b { gap:9px; }
+
+/* ---------- header controls that STAY (normal mode) ---------- */
+/* pencil = editar · X = borrar. No S/M/L/FULL toggle anymore. */
+.le-cta { display:inline-flex; align-items:center; gap:5px; }
+.le-cta > button { width:25px; height:25px; border-radius:6px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); cursor:default; display:inline-flex; align-items:center; justify-content:center; }
+.le-cta > button .ti { font-size:13px; }
+.le-cta > button.del:hover { background:var(--cm-danger-bg); color:var(--cm-danger); border-color:var(--cm-danger-bd); }
+.le-cta > button.edit:hover { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border-color:var(--cm-border); }
+.gp-c .ga-grip { display:none; align-items:center; color:var(--cm-fg-faint); cursor:grab; margin-right:1px; }
+.gp-c .ga-grip .ti { font-size:16px; }
+
+/* normal mode: actions appear on hover only (sober, Notion-like) */
+.le-grid:not(.is-layout) .gp-c .le-cta { opacity:0; transition:opacity var(--cm-dur-1) var(--cm-ease); }
+.le-grid:not(.is-layout) .gp-c:hover .le-cta { opacity:1; }
+
+/* ============================================================
+   EDIT MODE — .le-grid.is-layout (mirror of .gp-grid.is-layout)
+   dashed outline · grab cursor · grip handle · resize handle
+   ============================================================ */
+.le-grid.is-layout .gp-c { outline:1.5px dashed var(--cm-border-strong); outline-offset:-2px; cursor:grab; }
+.le-grid.is-layout .gp-c:hover { outline-color:var(--cm-accent); }
+.le-grid.is-layout .gp-c .gp-c-h { cursor:grab; }
+.le-grid.is-layout .gp-c .ga-grip { display:inline-flex; }
+.le-grid.is-layout .gp-c .le-cta { opacity:1; }
+
+/* resize handle — bottom-right corner; only in edit mode */
+.le-rh { position:absolute; right:3px; bottom:3px; width:16px; height:16px; cursor:nwse-resize; display:none; z-index:4; }
+.le-grid.is-layout .gp-c .le-rh { display:block; }
+.le-rh::before, .le-rh::after { content:''; position:absolute; right:2px; background:var(--cm-fg-faint); border-radius:1px; }
+.le-rh::before { bottom:2px; width:11px; height:2px; }
+.le-rh::after  { bottom:2px; width:2px;  height:11px; }
+.le-grid.is-layout .gp-c:hover .le-rh::before,
+.le-grid.is-layout .gp-c:hover .le-rh::after { background:var(--cm-accent); }
+
+/* ============================================================
+   FAUX CARD BODIES — lightweight, sober
+   ============================================================ */
+.le-mini { flex:1; min-height:0; display:flex; flex-direction:column; gap:8px; }
+.le-mini .mlab { display:flex; align-items:center; justify-content:space-between; font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+.le-bars { flex:1; display:flex; align-items:flex-end; gap:6px; min-height:42px; }
+.le-bars i { flex:1; background:color-mix(in srgb, var(--cm-fg-strong) 16%, var(--cm-surface)); border-radius:3px 3px 0 0; }
+.le-bars i.on { background:var(--cm-accent); }
+.le-kpi { display:flex; align-items:flex-end; gap:9px; }
+.le-kpi .v { font:600 30px/0.9 var(--cm-font-sans); letter-spacing:-0.03em; color:var(--cm-fg-strong); }
+.le-kpi .v .u { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:3px; }
+.le-kpi .d { display:inline-flex; align-items:center; gap:3px; height:20px; padding:0 7px; border-radius:999px; font:600 11px/1 var(--cm-font-mono); margin-bottom:4px; background:var(--cm-success-bg); color:var(--cm-success); }
+.le-kpi .d .ti { font-size:12px; }
+.le-spark { flex:1; min-height:28px; }
+.le-spark svg { width:100%; height:100%; display:block; overflow:visible; }
+.le-spark polyline { fill:none; stroke:var(--cm-accent); stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round; stroke-linecap:round; }
+.le-rkrow { display:grid; grid-template-columns:1fr 2fr auto; align-items:center; gap:8px; }
+.le-rkrow .n { font:600 11px/1 var(--cm-font-sans); color:var(--cm-fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.le-rkrow .tr { height:9px; border-radius:4px; background:var(--cm-bg-soft); position:relative; overflow:hidden; }
+.le-rkrow .tr i { position:absolute; inset:0 auto 0 0; background:color-mix(in srgb, var(--cm-accent) 60%, var(--cm-surface)); border-radius:4px; }
+.le-rkrow:first-child .tr i { background:var(--cm-accent); }
+.le-rkrow .vv { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+/* ============================================================
+   BLOCK · normal vs edición (side by side)
+   ============================================================ */
+.le-twin { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media (max-width:980px){ .le-twin { grid-template-columns:1fr; } }
+.le-tag { display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:999px; font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.02em; }
+.le-tag.normal { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); }
+.le-tag.edit { background:var(--cm-accent-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); }
+.le-tag .ti { font-size:12px; }
+
+/* ============================================================
+   BLOCK · anatomía (annotated card)
+   ============================================================ */
+.le-anat { display:grid; grid-template-columns:1fr 320px; gap:32px; align-items:start; }
+@media (max-width:980px){ .le-anat { grid-template-columns:1fr; } }
+.le-anat-stage { position:relative; padding:30px 40px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); }
+.le-anat-stage .gp-c { width:320px; margin:0 auto; min-height:150px; outline:1.5px dashed var(--cm-accent); outline-offset:-2px; }
+.le-anat-stage .gp-c .ga-grip, .le-anat-stage .gp-c .le-cta, .le-anat-stage .gp-c .le-rh { display:inline-flex; }
+.le-anat-stage .gp-c .le-rh { display:block; }
+
+/* numbered pins */
+.le-pin { position:absolute; width:20px; height:20px; border-radius:50%; background:var(--cm-accent); color:var(--cm-fg-on-accent); font:700 11px/1 var(--cm-font-mono); display:flex; align-items:center; justify-content:center; z-index:5; box-shadow:0 0 0 3px var(--cm-surface); }
+
+.le-legend { display:flex; flex-direction:column; gap:2px; }
+.le-li { display:grid; grid-template-columns:22px 1fr; gap:11px; align-items:start; padding:11px 2px; border-bottom:1px solid var(--cm-border-soft); }
+.le-li:last-child { border-bottom:0; }
+.le-li .nm { width:20px; height:20px; border-radius:50%; background:var(--cm-accent); color:var(--cm-fg-on-accent); font:700 11px/1 var(--cm-font-mono); display:flex; align-items:center; justify-content:center; margin-top:1px; }
+.le-li .tx .t { font:600 12.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); }
+.le-li .tx .d { font:500 11.5px/1.45 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:2px; }
+.le-li .tx code { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg); background:var(--cm-bg-sunk); padding:1px 4px; border-radius:4px; }
+
+/* header before/after (S/M/L removed) */
+.le-headcmp { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px; }
+@media (max-width:720px){ .le-headcmp { grid-template-columns:1fr; } }
+.le-hc { border:1px solid var(--cm-border); border-radius:var(--cm-r-4); background:var(--cm-surface); overflow:hidden; }
+.le-hc .cap { display:flex; align-items:center; gap:7px; padding:8px 12px; border-bottom:1px solid var(--cm-border-soft); font:600 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); background:var(--cm-bg-soft); }
+.le-hc .cap .ti { font-size:13px; }
+.le-hc .body { padding:13px; }
+/* a single header row sample */
+.le-hrow { display:flex; align-items:center; gap:8px; padding:9px 11px; border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); background:var(--cm-surface); }
+.le-hrow .ttl { font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+.le-hrow .sub { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+.le-hrow .right { margin-left:auto; display:flex; align-items:center; gap:5px; }
+.le-hrow .right button { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); display:inline-flex; align-items:center; justify-content:center; cursor:default; }
+.le-hrow .right button .ti { font-size:13px; }
+.le-hrow .ga-grip { display:inline-flex; color:var(--cm-fg-faint); }
+/* the removed size toggle — shown struck-through */
+.le-killed { display:inline-flex; gap:1px; padding:2px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); position:relative; opacity:0.6; }
+.le-killed span { width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; font:600 9px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+.le-killed::after { content:''; position:absolute; left:-3px; right:-3px; top:50%; height:1.5px; background:var(--cm-danger); transform:rotate(-9deg); }
+.le-removed-note { display:inline-flex; align-items:center; gap:6px; margin-top:9px; font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-danger); }
+.le-removed-note .ti { font-size:13px; }
+
+/* ============================================================
+   BLOCK · drag para reordenar
+   ============================================================ */
+.le-drag-stage { position:relative; }
+/* the lifted / ghost card following the pointer */
+.le-grid .gp-c.is-ghost { outline:1.5px solid var(--cm-accent); box-shadow:var(--cm-shadow-3); transform:rotate(-1.4deg) scale(1.02); opacity:0.97; cursor:grabbing; z-index:20; position:relative; }
+/* the empty slot it lifted from */
+.le-slot { grid-column:span 4; border:1.5px dashed var(--cm-border-strong); border-radius:var(--cm-r-4); background:repeating-linear-gradient(135deg, var(--cm-bg-sunk) 0 7px, transparent 7px 14px); min-height:138px; display:flex; align-items:center; justify-content:center; }
+.le-slot span { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+/* drop indicator — vertical accent bar between two cards */
+.le-dropline { grid-column:span 1; position:relative; min-height:138px; }
+.le-dropline::before { content:''; position:absolute; left:50%; top:-3px; bottom:-3px; width:3px; transform:translateX(-50%); background:var(--cm-accent); border-radius:3px; }
+.le-dropline::after { content:''; position:absolute; left:50%; top:-7px; width:9px; height:9px; transform:translateX(-50%) rotate(45deg); background:var(--cm-accent); border-radius:2px; }
+
+/* faux pointer cursor */
+.le-cursor { position:absolute; z-index:30; pointer-events:none; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3)); }
+.le-cursor svg { display:block; }
+.le-cursor .grab-chip { position:absolute; top:18px; left:14px; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:6px; background:var(--cm-fg-strong); color:var(--cm-bg); font:600 10.5px/1 var(--cm-font-mono); box-shadow:var(--cm-shadow-2); }
+
+/* ============================================================
+   BLOCK · resize con snap al grid de 12
+   ============================================================ */
+.le-resize-stage { position:relative; padding:40px 16px 18px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); }
+.le-rt { position:relative; }
+/* 12-column guide lines behind everything */
+.le-colguides { position:absolute; inset:0; display:grid; grid-template-columns:repeat(12,1fr); pointer-events:none; z-index:0; }
+.le-colguides i { border-right:1px dashed var(--cm-border); }
+.le-colguides i:first-child { border-left:1px dashed var(--cm-border); }
+/* fraction marks ABOVE the track (1/4 · 1/3 · 1/2 · 3/4 · full) */
+.le-fracs { position:absolute; top:-26px; left:0; right:0; height:22px; pointer-events:none; }
+.le-frac { position:absolute; top:0; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:3px; }
+.le-frac .lab { font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); white-space:nowrap; }
+.le-frac .tick { width:1px; height:9px; background:var(--cm-border-strong); }
+.le-frac.is-target .lab { color:var(--cm-accent); }
+.le-frac.is-target .tick { background:var(--cm-accent); height:13px; width:2px; }
+
+/* the card being resized (free width, mid-drag) */
+.le-rt .gp-c { position:relative; z-index:2; outline:1.5px dashed var(--cm-accent); outline-offset:-2px; min-height:150px; }
+.le-rt .gp-c .ga-grip, .le-rt .gp-c .le-cta { display:inline-flex; }
+.le-rt .gp-c .le-rh { display:block; }
+.le-rt .gp-c .le-rh::before, .le-rt .gp-c .le-rh::after { background:var(--cm-accent); }
+/* active resize handle — emphasised ring */
+.le-rt .gp-c .le-rh { width:18px; height:18px; }
+.le-rt .gp-c .le-rh::after, .le-rt .gp-c .le-rh::before { height:13px; }
+.le-rt .gp-c .le-rh::after { width:2px; } .le-rt .gp-c .le-rh::before { width:13px; height:2px; }
+
+/* phantom outline = where it imanta on release */
+.le-snapghost { position:absolute; top:0; bottom:0; z-index:1; border:1.5px solid var(--cm-accent); border-radius:var(--cm-r-4); background:color-mix(in srgb, var(--cm-accent-soft) 70%, transparent); }
+.le-snapghost .lab { position:absolute; top:8px; right:10px; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:999px; background:var(--cm-accent); color:var(--cm-fg-on-accent); font:600 10.5px/1 var(--cm-font-mono); white-space:nowrap; }
+.le-snapghost .lab .ti { font-size:12px; }
+/* magnet arrow from free edge to the snap line */
+.le-magnet { position:absolute; z-index:3; display:inline-flex; align-items:center; gap:4px; padding:0 7px; height:20px; border-radius:999px; background:var(--cm-fg-strong); color:var(--cm-bg); font:600 9.5px/1 var(--cm-font-mono); white-space:nowrap; box-shadow:var(--cm-shadow-2); }
+.le-magnet .ti { font-size:12px; }
+
+.le-resize-cursor { position:absolute; z-index:6; pointer-events:none; color:var(--cm-fg-strong); }
+.le-resize-cursor .ti { font-size:18px; transform:rotate(45deg); display:block; filter:drop-shadow(0 1px 1px var(--cm-surface)); }
+
+/* result legend — chica / media / full (replaces S/M/L) */
+.le-results { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:8px; }
+@media (max-width:720px){ .le-results { grid-template-columns:1fr; } }
+.le-res { border:1px solid var(--cm-border); border-radius:var(--cm-r-4); background:var(--cm-surface); padding:13px 14px; }
+.le-res .top { display:flex; align-items:center; gap:9px; }
+.le-res .sw { height:14px; border-radius:3px; background:var(--cm-accent); }
+.le-res .nm { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+.le-res .sp { margin-left:auto; font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); background:var(--cm-bg-sunk); padding:3px 7px; border-radius:5px; }
+.le-res .was { margin-top:8px; font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-faint); }
+.le-res .was s { color:var(--cm-fg-muted); }
+
+/* tiny inline caption under a stage */
+.le-cap { display:flex; align-items:center; gap:7px; margin-top:11px; font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+.le-cap .ti { font-size:15px; color:var(--cm-accent); flex-shrink:0; }
+.le-cap kbd { font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg); background:var(--cm-bg-sunk); border:1px solid var(--cm-border); border-radius:4px; padding:2px 5px; }

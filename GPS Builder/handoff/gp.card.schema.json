@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clavametrics.app/schemas/gp.card.v1.json",
+  "title": "gp.card/v1",
+  "description": "Shared contract for a GPS analysis card. Produced identically by the catalog, the manual builder, and the AI generator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "viz", "metrics", "scope", "range", "style"],
+  "properties": {
+    "schema": { "const": "gp.card/v1" },
+    "title": { "type": "string", "maxLength": 120 },
+    "viz": {
+      "type": "string",
+      "enum": ["kpi", "bars", "line", "scatter", "radar", "ranking", "table", "heatmap"]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level"],
+      "properties": {
+        "level": { "type": "string", "enum": ["player", "squad"] },
+        "playerId": { "type": ["string", "null"] }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "agg"],
+        "properties": {
+          "id": { "type": "string" },
+          "agg": { "type": "string", "enum": ["avg", "total", "median", "max", "min"] },
+          "kind": { "type": "string", "enum": ["accum", "peak"] },
+          "unit": { "type": "string" },
+          "custom": { "type": "boolean" }
+        },
+        "allOf": [
+          {
+            "$comment": "Peak rule: peak metrics only allow avg/max/min (sum & median are meaningless).",
+            "if": { "properties": { "kind": { "const": "peak" } }, "required": ["kind"] },
+            "then": { "properties": { "agg": { "enum": ["avg", "max", "min"] } } }
+          }
+        ]
+      }
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["mc", "w7", "w30", "season", "custom"] },
+        "from": { "type": "string", "format": "date" },
+        "to": { "type": "string", "format": "date" },
+        "mcCode": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "$comment": "A custom range requires explicit dates.",
+          "if": { "properties": { "type": { "const": "custom" } } },
+          "then": { "required": ["from", "to"] }
+        }
+      ]
+    },
+    "comparison": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["baseline"],
+          "properties": {
+            "baseline": { "type": "string", "enum": ["role", "match", "md"] }
+          }
+        }
+      ]
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size"],
+      "properties": {
+        "size": { "type": "string", "enum": ["sm", "md", "lg", "full"] },
+        "color": { "type": "string", "pattern": "^#([0-9a-fA-F]{6})$" },
+        "palette": { "type": "string", "enum": ["pitch", "heat", "cool", "mono"] },
+        "axes": { "type": "boolean" },
+        "legend": { "type": "boolean" },
+        "dataLabels": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "KPI and Ranking take exactly one metric.",
+      "if": { "properties": { "viz": { "enum": ["kpi", "ranking"] } } },
+      "then": { "properties": { "metrics": { "maxItems": 1 } } }
+    },
+    {
+      "$comment": "Bars take one or two metrics.",
+      "if": { "properties": { "viz": { "const": "bars" } } },
+      "then": { "properties": { "metrics": { "maxItems": 2 } } }
+    },
+    {
+      "$comment": "Scatter takes exactly two metrics (X, Y).",
+      "if": { "properties": { "viz": { "const": "scatter" } } },
+      "then": { "properties": { "metrics": { "minItems": 2, "maxItems": 2 } } }
+    },
+    {
+      "$comment": "Radar needs three or more metrics.",
+      "if": { "properties": { "viz": { "const": "radar" } } },
+      "then": { "properties": { "metrics": { "minItems": 3 } } }
+    }
+  ]
+}

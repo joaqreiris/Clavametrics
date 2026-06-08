@@ -1077,12 +1077,12 @@
         if (rmMet) { S.metrics = (S.metrics || []).filter(m => m.id !== rmMet.dataset.rm); ddSyncFromS(); return; }
       });
 
-      // cambiar agregación del chip de métrica (no re-render: el <select> ya refleja el valor)
+      // cambiar agregación del chip de métrica → actualiza S y re-renderiza la card en vivo
       ddPane.addEventListener('change', e => {
         const sel = e.target.closest('[data-agg-for]');
         if (!sel) return;
         const it = (S.metrics || []).find(m => m.id === sel.dataset.aggFor);
-        if (it) it.agg = sel.value;
+        if (it) { it.agg = sel.value; ddSyncFromS(); }
       });
     }
 
@@ -4228,22 +4228,14 @@
   // ── D&D · mutaciones sobre el MISMO S + sync (sin renderizar el gráfico) ──
   let _ddDrag = null;   // { id, kind, from:'panel'|'zone' } durante un arrastre
 
-  // Refleja S tras un cambio por D&D: header (indicador de cambio) + estado del
-  // botón Guardar + re-pintado del pane. NO renderiza el preview (eso es Prompt 3).
-  // El modo clásico se re-sincroniza solo al volver a él (setBuilderMode → syncAll).
+  // Refleja S tras un cambio por D&D. Usa EL MISMO camino que el builder clásico
+  // (syncAll → renderCard → S→buildConfig(S)→resolveAndRenderCard): la card del
+  // dashboard se re-renderiza EN VIVO con datos reales del resolver, idéntico a
+  // armar con dropdowns. renderDDPane() repinta además las zonas/panel del D&D.
   function ddSyncFromS() {
     if (!S) return;
-    syncHeader();
-    _ddSyncSave();
+    syncAll();
     renderDDPane();
-  }
-  function _ddSyncSave() {
-    const t = VIZ_TYPES[S.type];
-    const valid = S.metrics.length >= t.min;
-    const saveBtn  = document.getElementById('gpbSave');
-    const saveHint = document.getElementById('gpbSaveHint');
-    if (saveBtn)  saveBtn.disabled = !valid;
-    if (saveHint) saveHint.style.display = valid ? 'none' : 'inline';
   }
 
   // Cambio de tipo (segmented D&D): misma mutación que el setType clásico

@@ -1058,7 +1058,7 @@
 
     if (!window.requireAuth || !window.sb) return;
 
-    const ok = await window.requireAuth();
+    const ok = await window.guardModule();
     if (!ok) return;
     _clubId = await window.getClubId();
 
