@@ -385,6 +385,22 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .tf-c.pct .tf-track span { display: block; height: 100%; background: var(--cm-accent); border-radius: 3px; }
 .tf-c.pct .tf-val { flex: none; }
 
+/* ── Saved builder table: ocupa el ancho de la card y reparte las columnas ───────────
+   El motor compartido (.gp-zt) usa width:max-content (igual que el heatmap .ol-hm) para
+   que el PREVIEW de edición (.gp-c.is-draft) y el heatmap puedan crecer/scrollear. Pero
+   en la card YA GUARDADA queremos lo contrario: con 1..N métricas las columnas se reparten
+   el ancho de la card SIN desbordar. Forzamos table-layout:fixed + width:100% sólo en las
+   tablas que produce mountTableCard — se identifican porque sus celdas de valor son td.tf
+   (el z-score matrix y .ol-hm no las tienen, así que quedan intactos). Las barras de formato
+   condicional pasan a ser proporcionales a su columna (sin min-width fijo que empuje), con
+   el número siempre visible. Sólo si hubiera muchísimas columnas se verían muy angostas. */
+.gp-c:not(.is-draft) .gp-zt:has(td.tf) { width: 100%; table-layout: fixed; }
+.gp-c:not(.is-draft) .gp-zt:has(td.tf) th.pc,
+.gp-c:not(.is-draft) .gp-zt:has(td.tf) td.pc { width: 140px; }
+.gp-c:not(.is-draft) .gp-zt:has(td.tf) .tf-c.bar { width: 100%; min-width: 0; }
+.gp-c:not(.is-draft) .gp-zt:has(td.tf) .tf-c.pct { min-width: 0; }
+.gp-c:not(.is-draft) .gp-zt:has(td.tf) .tf-c.heat.heat-cell { min-width: 0; }
+
 /* clickable measure headers in the builder draft */
 .gp-zt th.tf-h { cursor: pointer; user-select: none; }
 .gp-zt th.tf-h:hover { color: var(--cm-accent); background: var(--cm-accent-soft); }
