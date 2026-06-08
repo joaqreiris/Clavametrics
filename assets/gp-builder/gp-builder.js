@@ -523,6 +523,14 @@
     btn.style.cssText = 'margin-left:4px';
     btn.onclick = startBuild;
     rightBar.appendChild(btn);
+
+    // Sibling entry for the drag & drop mode (coexists with the classic builder).
+    const ddBtn = document.createElement('button');
+    ddBtn.id = 'gpbDDOpenBtn';
+    ddBtn.className = 'cm-btn is-outline is-sm';
+    ddBtn.innerHTML = '<i class="ti ti-drag-drop" style="font-size:14px"></i>Drag &amp; drop';
+    ddBtn.onclick = openDD;
+    rightBar.appendChild(ddBtn);
   }
 
   // ── Build / cancel / save ─────────────────────────────────
@@ -4005,6 +4013,180 @@
   // Also try immediately in case DOM is already loaded
   if (document.readyState !== 'loading') init();
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  CHART BUILDER · DRAG & DROP MODE (Prompt 1 — sólo UI, sin lógica)
+  //  Modo alternativo que CONVIVE con el builder clásico y arma la MISMA
+  //  config gp.card/v1 (manipulando el mismo modelo). Por ahora monta sólo
+  //  la interfaz: panel de campos REALES + dos zonas vacías + preview vacío
+  //  + segmented de tipo. No arrastra, no actualiza el preview, no toca S.
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Tipos visibles en el toolbar D&D (subset del clásico, como la maqueta).
+  // Las etiquetas de eje de cada zona cambian con el tipo (cosmético en Prompt 1).
+  const DD_TYPES = {
+    bars:  { name:'Barras', icon:'ti-chart-bar',  dimAx:'eje X · categorías',    metAx:'eje Y · valores' },
+    line:  { name:'Línea',  icon:'ti-chart-line', dimAx:'eje X · tiempo / dim.', metAx:'series · valores' },
+    table: { name:'Tabla',  icon:'ti-table',      dimAx:'filas',                 metAx:'columnas' },
+  };
+  let _ddType  = 'bars';   // sólo visual — NO es S.type
+  let _ddQuery = '';       // texto del buscador del panel
+  let _ddWired = false;    // wire() una sola vez
+
+  function injectDD() {
+    if (document.getElementById('gpbDD')) return;
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="gpbDD" class="gpb-dd-bk" hidden>
+        <div class="gpb-dd-modal" role="dialog" aria-modal="true" aria-label="Chart builder · drag and drop">
+          <div class="gpb-dd-head">
+            <span class="ttl"><i class="ti ti-drag-drop"></i>Chart builder</span>
+            <span class="sp"></span>
+            <div class="gpb-dd-modeseg" id="gpbDDMode">
+              <button data-mode="classic"><i class="ti ti-adjustments-alt"></i>Clásico</button>
+              <button class="is-on" data-mode="dd"><i class="ti ti-drag-drop"></i>Drag &amp; drop</button>
+            </div>
+            <button class="gpb-dd-x" id="gpbDDClose" aria-label="Cerrar"><i class="ti ti-x"></i></button>
+          </div>
+          <div class="gpb-dd-body">
+            <div class="bdd-wrap" id="gpbDDStage"></div>
+          </div>
+        </div>
+      </div>`);
+    wireDD();
+  }
+
+  // draggable=false en Prompt 1 (nada arrastra todavía; el cursor:grab del CSS
+  // mantiene el look de la maqueta).
+  function ddFieldRow(id, kind, name, icon, unit) {
+    return `<div class="bdd-field" draggable="false" data-id="${esc(id)}" data-kind="${kind}">
+      <span class="grip"><i class="ti ti-grip-vertical"></i></span>
+      <span class="ic"><i class="ti ${esc(icon)}"></i></span>
+      <span class="nm">${esc(name)}</span>${unit ? `<span class="u">${esc(unit)}</span>` : ''}
+    </div>`;
+  }
+
+  // Panel poblado con el catálogo REAL del builder: DIMENSIONS + catalogMap.
+  function ddPanelHTML() {
+    const mets  = [...catalogMap.values()];
+    const total = DIMENSIONS.length + mets.length;
+    const q = _ddQuery.trim().toLowerCase();
+    const hit = (id, name) => !q || name.toLowerCase().includes(q) || id.toLowerCase().includes(q);
+    const dimRows = DIMENSIONS.filter(d => hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, ''));
+    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit));
+    const none = '<div class="bdd-grp-h"><span class="hint">sin coincidencias</span></div>';
+    return `
+      <div class="bdd-col-h"><i class="ti ti-list-details"></i><span class="t">Campos</span><span class="ct">${total}</span></div>
+      <div class="bdd-search"><i class="ti ti-search"></i><input id="gpbDDSearch" type="text" placeholder="Buscar campo…" value="${esc(_ddQuery)}"></div>
+      <div class="bdd-fields" id="gpbDDFields">
+        <div class="bdd-grp-h"><span class="k">Dimensiones</span><span class="ln"></span><span class="hint">cómo se agrupan</span></div>
+        ${dimRows.join('') || none}
+        <div class="bdd-grp-h"><span class="k">Métricas</span><span class="ln"></span><span class="hint">qué se mide</span></div>
+        ${metRows.join('') || none}
+      </div>`;
+  }
+
+  function ddZoneHTML(accept) {
+    const t = DD_TYPES[_ddType];
+    const isDim = accept === 'dim';
+    const title = isDim ? 'Dimensiones' : 'Métricas';
+    const ax    = isDim ? t.dimAx : t.metAx;
+    const badge = isDim ? 'ti-category-2' : 'ti-ruler-measure';
+    const what  = isDim ? 'dimensiones' : 'métricas';
+    return `<div class="bdd-zone" data-accept="${accept}">
+      <div class="bdd-zone-h"><span class="badge"><i class="ti ${badge}"></i></span><span class="t">${title}</span><span class="ax">${ax}</span><span class="ct">0</span></div>
+      <div class="bdd-drop" data-accept="${accept}">
+        <div class="bdd-empty"><i class="ti ti-arrow-down-to-arc"></i><span class="m">arrastrá ${what} aquí</span></div>
+      </div>
+    </div>`;
+  }
+  function ddZonesHTML() { return `<div class="bdd-zones">${ddZoneHTML('dim')}${ddZoneHTML('metric')}</div>`; }
+
+  function ddPreviewHTML() {
+    const t = DD_TYPES[_ddType];
+    return `<div class="bdd-preview bdd-col">
+      <div class="bdd-prev-h"><i class="ti ${t.icon}" style="color:var(--cm-fg-muted)"></i><span class="ttl">Preview</span><span class="sub">— × —</span><span class="live"><span class="dot"></span>en vivo</span></div>
+      <div class="bdd-prev-b">
+        <div class="bdd-prev-empty"><i class="ti ti-chart-histogram"></i><div class="m">Arrastrá una dimensión y una métrica para construir el gráfico.</div></div>
+      </div>
+    </div>`;
+  }
+
+  function ddToolbarHTML() {
+    return `<div class="bdd-bar">
+      <span class="lbl">Tipo</span>
+      <div class="bdd-seg" id="gpbDDSeg">${Object.keys(DD_TYPES).map(k =>
+        `<button data-type="${k}" class="${k === _ddType ? 'is-on' : ''}"><i class="ti ${DD_TYPES[k].icon}"></i>${DD_TYPES[k].name}</button>`).join('')}</div>
+      <span class="spacer"></span>
+      <span class="bdd-cfg"><i class="ti ti-code"></i>config&nbsp;<b>gp.card/v1</b>&nbsp;· misma salida</span>
+    </div>`;
+  }
+
+  function renderDD() {
+    const stage = document.getElementById('gpbDDStage');
+    if (!stage) return;
+    stage.innerHTML = ddToolbarHTML() +
+      `<div class="bdd-stage">
+        <div class="bdd-panel bdd-col" id="gpbDDPanel">${ddPanelHTML()}</div>
+        ${ddZonesHTML()}
+        ${ddPreviewHTML()}
+      </div>`;
+  }
+  function renderDDPanel() {
+    const p = document.getElementById('gpbDDPanel');
+    if (p) p.innerHTML = ddPanelHTML();
+  }
+
+  function openDD() {
+    injectDD();
+    const ov = document.getElementById('gpbDD');
+    if (!ov) return;
+    _ddType  = 'bars';
+    _ddQuery = '';
+    renderDD();
+    ov.removeAttribute('hidden');
+    requestAnimationFrame(() => ov.classList.add('is-open'));
+    document.body.classList.add('gpb-dd-open');
+  }
+  function closeDD() {
+    const ov = document.getElementById('gpbDD');
+    if (!ov || ov.hasAttribute('hidden')) return;
+    ov.classList.remove('is-open');
+    document.body.classList.remove('gpb-dd-open');
+    setTimeout(() => ov.setAttribute('hidden', ''), 200);
+  }
+
+  function wireDD() {
+    if (_ddWired) return;
+    _ddWired = true;
+    const ov = document.getElementById('gpbDD');
+    if (!ov) return;
+
+    ov.addEventListener('click', e => {
+      if (e.target === ov) { closeDD(); return; }                       // backdrop
+      if (e.target.closest('#gpbDDClose')) { closeDD(); return; }        // X
+      const mode = e.target.closest('#gpbDDMode button[data-mode]');     // toggle clásico / D&D
+      if (mode) {
+        if (mode.dataset.mode === 'classic') { closeDD(); if (!S) startBuild(); }
+        return;
+      }
+      const typeBtn = e.target.closest('#gpbDDSeg button[data-type]');   // segmented de tipo (cosmético)
+      if (typeBtn) { _ddType = typeBtn.dataset.type; renderDD(); return; }
+    });
+
+    // buscador del panel (filtra la lista; no toca S)
+    ov.addEventListener('input', e => {
+      const s = e.target.closest('#gpbDDSearch');
+      if (!s) return;
+      _ddQuery = s.value;
+      renderDDPanel();
+      const ns = document.getElementById('gpbDDSearch');
+      if (ns) { ns.focus(); const v = ns.value; ns.setSelectionRange(v.length, v.length); }
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !ov.hasAttribute('hidden')) closeDD();
+    });
+  }
+
   // ── Public API (used by gp-ai.js) ─────────────────────────────────────
 
   /**
@@ -4088,6 +4270,7 @@
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
     startNew: function () { startBuild(); },   // blank canvas — "Crear a medida" del panel Agregar gráfico
+    openDragDrop: function () { openDD(); },    // modo drag & drop (convive con el clásico)
   };
 
   // Shared render engine for OTHER dashboards (e.g. Match Performance pilot). Draw-only:
