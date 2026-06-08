@@ -372,7 +372,7 @@
         </div>
         <div class="ad-kpi">
           <div class="ad-kpi-l"><i class="ti ti-mail"></i>Pending invites</div>
-          <div class="ad-kpi-v">2</div>
+          <div class="ad-kpi-v" id="adKpiInvites">0</div>
           <div class="ad-kpi-t"><span class="ad-kpi-d warn"><i class="ti ti-clock"></i>4d</span> avg time to accept</div>
         </div>
         <div class="ad-kpi">
@@ -635,7 +635,7 @@
 
   if (club) window.applyClubTheme();
 
-  const [membersRes, auditRes, playersRes, memberModsRes] = await Promise.all([
+  const [membersRes, auditRes, playersRes, memberModsRes, invitesRes] = await Promise.all([
     window.sb.from('profiles')
       .select('id,full_name,email,role,club_role,created_at,last_seen_at,updated_at')
       .eq('club_id', clubId)
@@ -651,6 +651,11 @@
     window.sb.from('member_modules')
       .select('profile_id, module_key')
       .eq('club_id', clubId),
+    window.sb.from('invitations')
+      .select('id, email, role, status, created_at')
+      .eq('club_id', clubId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false }),
   ]);
 
   const members     = membersRes.data  || [];
@@ -660,6 +665,7 @@
   const count = members.length;
   const sectionMap = {};
   (memberModsRes.data || []).forEach(r => { (sectionMap[r.profile_id] ||= []).push(r.module_key); });
+  let invites = invitesRes.data || [];
 
   // ── Org / workspace bar ──────────────────────────────────────────
   const clubName  = club?.name || '—';
@@ -998,6 +1004,79 @@
   document.getElementById('roleModalSave')  ?.addEventListener('click', saveMemberRole);
   document.getElementById('roleModalBackdrop')?.addEventListener('click', e => { if (e.target.id === 'roleModalBackdrop') closeMemberRoleModal(); });
 
+  // ── Pending invites ──
+  function renderInvites() {
+    const host = document.getElementById('adPendingInvites');
+    if (!host) return;
+    if (!invites.length) {
+      host.innerHTML = `<div style="padding:20px 16px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">No pending invites</div>`;
+    } else {
+      host.innerHTML = invites.map(iv => `
+        <div class="ad-pending-row">
+          <div class="info">
+            <div class="em">${iv.email}</div>
+            <div class="meta">${(iv.role || 'viewer')} · invited ${relTime(iv.created_at)}</div>
+          </div>
+          <button class="cm-btn is-outline is-sm" data-revoke="${iv.id}"><i class="ti ti-trash" style="font-size:13px"></i>Revoke</button>
+        </div>`).join('');
+      host.querySelectorAll('[data-revoke]').forEach(b =>
+        b.addEventListener('click', () => revokeInvite(b.dataset.revoke)));
+    }
+    // KPIs / subtítulos que dependen de invites
+    const sub = document.getElementById('adMembersSub');
+    if (sub) sub.textContent = `${count} active · ${invites.length} pending`;
+    const card = document.querySelector('#adPendingInvites')?.closest('.ad-card')?.querySelector('.ad-card-h .sub');
+    if (card) card.textContent = `${invites.length} sent · awaiting accept`;
+    const kpi = document.getElementById('adKpiInvites');
+    if (kpi) kpi.textContent = invites.length;
+  }
+  async function revokeInvite(id) {
+    const { error } = await window.sb.from('invitations').update({ status: 'revoked' }).eq('id', id);
+    if (error) { alert('Revoke failed: ' + error.message); return; }
+    invites = invites.filter(x => x.id !== id);
+    renderInvites();
+  }
+  renderInvites();
+
+  // ── Invite staff modal ──
+  function openInviteModal() {
+    document.getElementById('inviteEmail').value = '';
+    document.getElementById('inviteRole').value = 'viewer';
+    const msg = document.getElementById('inviteMsg'); if (msg) msg.style.display = 'none';
+    document.getElementById('inviteBackdrop').style.display = 'flex';
+  }
+  function closeInviteModal() { document.getElementById('inviteBackdrop').style.display = 'none'; }
+  async function sendInvite() {
+    const email = document.getElementById('inviteEmail').value.trim().toLowerCase();
+    const role  = document.getElementById('inviteRole').value;
+    const msg   = document.getElementById('inviteMsg');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      if (msg) { msg.textContent = 'Enter a valid email.'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
+      return;
+    }
+    const { data, error } = await window.sb.from('invitations')
+      .upsert({ club_id: clubId, email, role, status: 'pending', invited_by: profile?.id },
+              { onConflict: 'club_id,email' })
+      .select('id, email, role, status, created_at')
+      .single();
+    if (error) {
+      if (msg) { msg.textContent = error.message || 'Invite failed'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
+      return;
+    }
+    invites = [data, ...invites.filter(x => x.id !== data.id)];
+    renderInvites();
+    closeInviteModal();
+  }
+  document.getElementById('inviteClose') ?.addEventListener('click', closeInviteModal);
+  document.getElementById('inviteCancel')?.addEventListener('click', closeInviteModal);
+  document.getElementById('inviteSend')  ?.addEventListener('click', sendInvite);
+  document.getElementById('inviteBackdrop')?.addEventListener('click', e => { if (e.target.id === 'inviteBackdrop') closeInviteModal(); });
+
+  // Cablear los 3 botones "Invite staff" (org bar, header) — no tienen onclick
+  document.querySelectorAll('button.cm-btn').forEach(b => {
+    if (b.textContent.trim().includes('Invite staff')) b.addEventListener('click', openInviteModal);
+  });
+
   // ── Club logo upload ────────────────────────────────────────────────
   const canUploadLogo = ['admin','owner'].includes(profile?.role) ||
                         ['admin','owner'].includes(profile?.club_role);
@@ -1119,6 +1198,46 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-outline is-sm" onclick="closeAddCategoryModal()">Cancel</button>
       <button class="cm-btn is-primary is-sm" onclick="saveClubSettings()"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invite Staff Modal -->
+<div id="inviteBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:400px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+      <i class="ti ti-mail-plus" style="font-size:18px;color:var(--cm-accent)"></i>
+      <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Invite staff</div>
+      <button id="inviteClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Email</label>
+        <input id="inviteEmail" type="email" placeholder="name@club.com" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Role</label>
+        <select id="inviteRole" style="width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box">
+          <option value="admin">Admin</option>
+          <option value="head_coach">Head coach</option>
+          <option value="assistant_coach">Assistant coach</option>
+          <option value="coach">Coach</option>
+          <option value="performance">Performance</option>
+          <option value="analyst">Analyst</option>
+          <option value="strength">Strength</option>
+          <option value="medical">Medical lead</option>
+          <option value="physio">Physio</option>
+          <option value="doctor">Doctor</option>
+          <option value="nutritionist">Nutritionist</option>
+          <option value="player">Player</option>
+          <option value="viewer" selected>Viewer</option>
+        </select>
+      </div>
+      <div id="inviteMsg" style="font:500 12px/1.3 var(--cm-font-sans);margin-top:2px;display:none"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
+      <button class="cm-btn is-outline is-sm" id="inviteCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="inviteSend"><i class="ti ti-send" style="font-size:13px"></i>Send invite</button>
     </div>
   </div>
 </div>
