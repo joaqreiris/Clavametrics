@@ -135,6 +135,14 @@
     // 5. No code — existing session check (direct visit or stale redirect)
     const ok = await window.requireAuth('Login.html');
     if (!ok) return;
+
+    // Invitado que aún no definió contraseña → set-password (flujo implícito cae acá)
+    const { data: { user: invUser } } = await window.sb.auth.getUser();
+    if (invUser?.email) {
+      const { data: pend } = await window.sb.from('invitations')
+        .select('id').eq('email', invUser.email).eq('status', 'pending').limit(1).maybeSingle();
+      if (pend) { window.location.replace('set-password.html'); return; }
+    }
     const clubId = await window.getClubId();
     window.location.replace(clubId ? 'Hub.html' : 'Onboarding.html');
   })();
