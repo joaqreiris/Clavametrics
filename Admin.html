@@ -25,6 +25,8 @@
   .ad-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
   .ad-tab .ti { font-size:16px; }
   .ad-tab .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:2px 5px; background:var(--cm-bg-soft); border-radius:3px; margin-left:2px; }
+  .ad-panel { display: none; }
+  .ad-panel.is-active { display: contents; }
 
   /* Page */
   .ad-page { padding:24px 28px 64px; max-width:1500px; width:100%; }
@@ -315,13 +317,13 @@
     </div>
 
     <div class="ad-tabs">
-      <button class="ad-tab is-on"><i class="ti ti-users"></i>Members<span class="ct" id="adTabMembers">14</span></button>
-      <button class="ad-tab"><i class="ti ti-shield-check"></i>Roles<span class="ct">7</span></button>
-      <button class="ad-tab"><i class="ti ti-layout-grid"></i>Sections<span class="ct">14</span></button>
-      <button class="ad-tab"><i class="ti ti-credit-card"></i>Subscription</button>
-      <button class="ad-tab"><i class="ti ti-plug"></i>Integrations<span class="ct">4</span></button>
-      <button class="ad-tab"><i class="ti ti-key"></i>Security &amp; SSO</button>
-      <button class="ad-tab"><i class="ti ti-history"></i>Audit log</button>
+      <button class="ad-tab is-on" data-panel="members"><i class="ti ti-users"></i>Members<span class="ct" id="adTabMembers">14</span></button>
+      <button class="ad-tab" data-panel="roles"><i class="ti ti-shield-check"></i>Roles<span class="ct">7</span></button>
+      <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i>Sections<span class="ct">14</span></button>
+      <button class="ad-tab" data-panel="subscription"><i class="ti ti-credit-card"></i>Subscription</button>
+      <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i>Integrations<span class="ct">4</span></button>
+      <button class="ad-tab" data-panel="security"><i class="ti ti-key"></i>Security &amp; SSO</button>
+      <button class="ad-tab" data-panel="audit"><i class="ti ti-history"></i>Audit log</button>
     </div>
 
     <section class="ad-page">
@@ -342,6 +344,7 @@
         </div>
       </div>
 
+      <div class="ad-panel is-active" data-panel="members">
       <!-- Workspace club card -->
       <div class="ad-card clubs-card">
         <div class="ad-card-h">
@@ -619,6 +622,72 @@
       </div>
 
     </section>
+      </div><!-- /panel members -->
+
+      <div class="ad-panel" data-panel="roles">
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h"><h3>Roles</h3><span class="sub">próximamente</span></div>
+          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
+            <i class="ti ti-shield-check" style="font-size:28px;opacity:.5"></i>
+            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Panel de roles en construcción</div>
+            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">Acá irán los 7 roles, sus permisos y cuántos miembros tiene cada uno.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ad-panel" data-panel="sections">
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h"><h3>Sections</h3><span class="sub">próximamente</span></div>
+          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
+            <i class="ti ti-layout-grid" style="font-size:28px;opacity:.5"></i>
+            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Matriz de secciones en construcción</div>
+            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">Acá irá qué módulo ve cada miembro (member_modules) y los toggles del club.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ad-panel" data-panel="subscription">
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h"><h3>Subscription</h3><span class="sub">requiere Stripe</span></div>
+          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
+            <i class="ti ti-credit-card" style="font-size:28px;opacity:.5"></i>
+            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Facturación pendiente de integración</div>
+            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">Plan, monto, próximo cobro e invoices se conectan con Stripe.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ad-panel" data-panel="integrations">
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h"><h3>Integrations</h3><span class="sub">próximamente</span></div>
+          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
+            <i class="ti ti-plug" style="font-size:28px;opacity:.5"></i>
+            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Integraciones en construcción</div>
+            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">GPS providers, calendarios y más se conectarán acá.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ad-panel" data-panel="security">
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h"><h3>Security &amp; SSO</h3><span class="sub">próximamente</span></div>
+          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
+            <i class="ti ti-key" style="font-size:28px;opacity:.5"></i>
+            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Seguridad y SSO en construcción</div>
+            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">2FA, SSO y políticas de sesión a futuro.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ad-panel" data-panel="audit">
+        <div class="ad-card" style="margin-top:16px">
+          <div class="ad-card-h"><h3>Audit log</h3><span class="sub">últimas 100 acciones del club</span></div>
+          <div id="adAuditFull" class="ad-log">
+            <div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">Cargando…</div>
+          </div>
+        </div>
+      </div>
+
   </main>
 </div>
 
@@ -870,6 +939,32 @@
       </div>`;
     }).join('');
   }
+
+  // ── Full audit log (tab "Audit log") ──
+  let _fullAuditLoaded = false;
+  window.loadFullAudit = async function () {
+    if (_fullAuditLoaded) return;
+    _fullAuditLoaded = true;
+    const host = document.getElementById('adAuditFull');
+    if (!host) return;
+    const { data, error } = await window.sb.from('audit_log')
+      .select('id,table_name,operation,changes,created_at,actor:profiles!actor_id(full_name)')
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) { host.innerHTML = `<div style="padding:20px;color:var(--cm-danger,#DC2626);font:500 12.5px/1.4 var(--cm-font-sans)">No se pudo cargar: ${error.message}</div>`; _fullAuditLoaded = false; return; }
+    if (!data.length) { host.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">No audit entries yet</div>`; return; }
+    host.innerHTML = data.map(r => {
+      const who = r.actor?.full_name || 'System';
+      const { icon, color } = LOG_ICON[r.operation] || LOG_ICON.UPDATE;
+      const det = r.changes ? `<div class="det" style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${JSON.stringify(r.changes)}</div>` : '';
+      return `<div class="ad-log-row">
+        <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
+        <div class="body"><div class="what"><strong>${who}</strong> ${r.operation.toLowerCase()}d <strong>${r.table_name}</strong></div>${det}</div>
+        <span class="when">${relTime(r.created_at)}</span>
+      </div>`;
+    }).join('');
+  };
 
   // ── Module toggles — persisted to club_settings table ────────────
   const MODULES = [
@@ -1383,6 +1478,9 @@
   document.querySelectorAll('.ad-tabs .ad-tab').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('.ad-tabs .ad-tab').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
+    const target = b.dataset.panel;
+    document.querySelectorAll('.ad-panel').forEach(p => p.classList.toggle('is-active', p.dataset.panel === target));
+    if (target === 'audit' && typeof window.loadFullAudit === 'function') window.loadFullAudit();
   }));
   document.querySelectorAll('.ad-cb').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
 </script>
