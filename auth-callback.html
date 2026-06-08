@@ -87,11 +87,15 @@
         const inviteMeta = data.user.user_metadata || {};
         if (inviteMeta.club_id) {
           msgEl.textContent = 'Joining your club…';
-          const { error: joinErr } = await window.sb.from('profiles').insert({
-            id: userId, club_id: inviteMeta.club_id, full_name: inviteMeta.full_name || '',
-            role: inviteMeta.role || 'viewer', email,
-          });
-          if (joinErr) { showError('Join failed: ' + joinErr.message); return; }
+          // El profile lo crea el trigger handle_new_user (con club_id+role del metadata).
+          // Verificamos que exista (con un pequeño reintento) antes de seguir.
+          let joined = false;
+          for (let i = 0; i < 5 && !joined; i++) {
+            const { data: p } = await window.sb.from('profiles')
+              .select('id').eq('id', userId).maybeSingle();
+            if (p) joined = true; else await new Promise(r => setTimeout(r, 400));
+          }
+          if (!joined) { showError('Join is taking too long. Refresh in a moment.'); return; }
           await window.sb.rpc('accept_invitation');
           window.location.replace('Hub.html');
           return;
