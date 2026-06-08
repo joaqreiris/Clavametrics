@@ -626,11 +626,12 @@
 
       <div class="ad-panel" data-panel="roles">
         <div class="ad-card" style="margin-top:16px">
-          <div class="ad-card-h"><h3>Roles</h3><span class="sub">próximamente</span></div>
-          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
-            <i class="ti ti-shield-check" style="font-size:28px;opacity:.5"></i>
-            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Panel de roles en construcción</div>
-            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">Acá irán los 7 roles, sus permisos y cuántos miembros tiene cada uno.</div>
+          <div class="ad-card-h"><h3>Roles</h3><span class="sub">7 roles · el acceso por sección se define en Sections</span></div>
+          <div id="adRolesPanel">
+            <div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">Cargando…</div>
+          </div>
+          <div style="padding:12px 16px;border-top:1px solid var(--cm-border);font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">
+            <strong style="color:var(--cm-fg)">Owner</strong> y <strong style="color:var(--cm-fg)">Admin</strong> tienen acceso total. El resto de los roles ve únicamente las secciones que se le asignen desde el lápiz de cada miembro.
           </div>
         </div>
       </div>
@@ -962,6 +963,36 @@
         <div class="ic" style="color:${color}"><i class="ti ${icon}"></i></div>
         <div class="body"><div class="what"><strong>${who}</strong> ${r.operation.toLowerCase()}d <strong>${r.table_name}</strong></div>${det}</div>
         <span class="when">${relTime(r.created_at)}</span>
+      </div>`;
+    }).join('');
+  };
+
+  // ── Roles panel (tab "Roles") ──
+  let _rolesLoaded = false;
+  window.loadRolesPanel = function () {
+    if (_rolesLoaded) return;
+    _rolesLoaded = true;
+    const host = document.getElementById('adRolesPanel');
+    if (!host) return;
+    const ROLE_DEFS = [
+      { key:'owner',        label:'Owner',        desc:'Acceso total. Único que puede asignar el rol Owner.' },
+      { key:'admin',        label:'Admin',        desc:'Acceso total a administración y a todos los módulos.' },
+      { key:'coach',        label:'Coach',        desc:'Staff técnico. Ve las secciones que se le asignen.' },
+      { key:'physio',       label:'Physio',       desc:'Cuerpo médico. Ve las secciones que se le asignen.' },
+      { key:'analyst',      label:'Analyst',      desc:'Análisis de datos. Ve las secciones que se le asignen.' },
+      { key:'nutritionist', label:'Nutritionist', desc:'Nutrición. Ve las secciones que se le asignen.' },
+      { key:'staff',        label:'Staff',        desc:'Rol general. Ve las secciones que se le asignen.' },
+    ];
+    const counts = {};
+    members.forEach(m => { const r = (m.role || '').toLowerCase(); counts[r] = (counts[r] || 0) + 1; });
+    host.innerHTML = ROLE_DEFS.map(rd => {
+      const rc = roleClass(rd.key);
+      const n  = counts[rd.key] || 0;
+      return `<div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--cm-border)">
+        <span class="ad-role ${rc}" style="flex-shrink:0"><span class="dot"></span>${rd.label}</span>
+        <div style="flex:1;min-width:0;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">${rd.desc}</div>
+        <span style="font:600 14px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${n}</span>
+        <span style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);width:54px">${n === 1 ? 'miembro' : 'miembros'}</span>
       </div>`;
     }).join('');
   };
@@ -1481,6 +1512,7 @@
     const target = b.dataset.panel;
     document.querySelectorAll('.ad-panel').forEach(p => p.classList.toggle('is-active', p.dataset.panel === target));
     if (target === 'audit' && typeof window.loadFullAudit === 'function') window.loadFullAudit();
+    if (target === 'roles' && typeof window.loadRolesPanel === 'function') window.loadRolesPanel();
   }));
   document.querySelectorAll('.ad-cb').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
 </script>
