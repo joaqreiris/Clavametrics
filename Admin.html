@@ -391,19 +391,19 @@
       <div class="ad-toolbar">
         <div class="ad-search">
           <i class="ti ti-search"></i>
-          <input placeholder="Search members by name, email, role…">
+          <input id="adMemberSearch" placeholder="Search members by name, email, role…">
         </div>
         <div style="width:1px;height:24px;background:var(--cm-border)"></div>
-        <button class="ad-pill is-on">All<span class="ct">14</span></button>
-        <button class="ad-pill"><span class="dot" style="background:#F59E0B"></span>Owner<span class="ct">1</span></button>
-        <button class="ad-pill"><span class="dot" style="background:#DC2626"></span>Admin<span class="ct">2</span></button>
-        <button class="ad-pill"><span class="dot" style="background:#2563EB"></span>Coach<span class="ct">3</span></button>
-        <button class="ad-pill"><span class="dot" style="background:#16A34A"></span>Performance<span class="ct">2</span></button>
-        <button class="ad-pill"><span class="dot" style="background:#7C3AED"></span>Medical<span class="ct">3</span></button>
-        <button class="ad-pill"><span class="dot" style="background:#60A5FA"></span>Player<span class="ct">3</span></button>
+        <button class="ad-pill is-on" data-bucket="all">All<span class="ct">14</span></button>
+        <button class="ad-pill" data-bucket="owner"><span class="dot" style="background:#F59E0B"></span>Owner<span class="ct">1</span></button>
+        <button class="ad-pill" data-bucket="admin"><span class="dot" style="background:#DC2626"></span>Admin<span class="ct">2</span></button>
+        <button class="ad-pill" data-bucket="coach"><span class="dot" style="background:#2563EB"></span>Coach<span class="ct">3</span></button>
+        <button class="ad-pill" data-bucket="perf"><span class="dot" style="background:#16A34A"></span>Performance<span class="ct">2</span></button>
+        <button class="ad-pill" data-bucket="medical"><span class="dot" style="background:#7C3AED"></span>Medical<span class="ct">3</span></button>
+        <button class="ad-pill" data-bucket="player"><span class="dot" style="background:#60A5FA"></span>Player<span class="ct">3</span></button>
         <div class="grow"></div>
         <button class="cm-btn is-outline is-sm"><i class="ti ti-filter" style="font-size:14px"></i>Filter</button>
-        <button class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i>Sort</button>
+        <button id="adSortBtn" class="cm-btn is-outline is-sm"><i class="ti ti-arrows-sort" style="font-size:14px"></i>Sort</button>
       </div>
 
       <!-- Members table -->
@@ -722,31 +722,93 @@
     return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
   }
 
-  document.getElementById('adTbody').innerHTML = members.map(m => {
-    const isMe = m.id === profile?.id;
-    const name = m.full_name || m.email || 'Member';
-    const email = m.email || '';
-    const av = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    const rc = roleClass(m.role || m.club_role);
-    const rl = roleLabel(m);
-    const last = relTime(m.last_seen_at || m.updated_at || m.created_at);
+  // ── Members table: render + filtros (search / pills / sort) ──
+  let _roleFilter = 'all';
+  let _search     = '';
+  let _sortKey    = null; // null = orden DB | 'name' | 'recent'
 
-    return `<tr>
-      <td><span class="ad-cb"></span></td>
-      <td><div class="ad-pl">
-        <div class="ad-av${isMe ? ' tn' : ''}">${av}</div>
-        <div>
-          <div class="name">${name}${isMe ? ' <span style="color:var(--cm-fg-muted);font-weight:500">(you)</span>' : ''}</div>
-          ${email ? `<div class="email">${email}</div>` : ''}
-        </div>
-      </div></td>
-      <td><span class="ad-role ${rc}"><span class="dot"></span>${rl}</span></td>
-      <td><div class="ad-sections-cell"><span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">—</span></div></td>
-      <td><span class="ad-last">${last}</span></td>
-      <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
-      <td><div class="ad-row-act">${isMe ? '' : '<button><i class="ti ti-edit"></i></button>'}<button><i class="ti ti-dots"></i></button></div></td>
-    </tr>`;
-  }).join('');
+  const memberBucket = m => roleClass(m.role || m.club_role);
+  const memberTs     = m => new Date(m.last_seen_at || m.updated_at || m.created_at || 0).getTime();
+
+  function renderMembers(list) {
+    document.getElementById('adTbody').innerHTML = list.map(m => {
+      const isMe = m.id === profile?.id;
+      const name = m.full_name || m.email || 'Member';
+      const email = m.email || '';
+      const av = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+      const rc = roleClass(m.role || m.club_role);
+      const rl = roleLabel(m);
+      const last = relTime(m.last_seen_at || m.updated_at || m.created_at);
+      return `<tr>
+        <td><span class="ad-cb"></span></td>
+        <td><div class="ad-pl">
+          <div class="ad-av${isMe ? ' tn' : ''}">${av}</div>
+          <div>
+            <div class="name">${name}${isMe ? ' <span style="color:var(--cm-fg-muted);font-weight:500">(you)</span>' : ''}</div>
+            ${email ? `<div class="email">${email}</div>` : ''}
+          </div>
+        </div></td>
+        <td><span class="ad-role ${rc}"><span class="dot"></span>${rl}</span></td>
+        <td><div class="ad-sections-cell"><span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">—</span></div></td>
+        <td><span class="ad-last">${last}</span></td>
+        <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
+        <td><div class="ad-row-act">${isMe ? '' : '<button><i class="ti ti-edit"></i></button>'}<button><i class="ti ti-dots"></i></button></div></td>
+      </tr>`;
+    }).join('');
+    // Rebind checkbox por fila (las filas se recrean en cada render)
+    document.querySelectorAll('#adTbody .ad-cb').forEach(c =>
+      c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
+    const foot = document.getElementById('adMemberFoot');
+    if (foot) foot.innerHTML = `Showing <strong style="color:var(--cm-fg)">${list.length}</strong> of ${count} members`;
+  }
+
+  function applyFilters() {
+    let list = members.slice();
+    if (_roleFilter !== 'all') list = list.filter(m => memberBucket(m) === _roleFilter);
+    if (_search) {
+      const q = _search.toLowerCase();
+      list = list.filter(m =>
+        (m.full_name || '').toLowerCase().includes(q) ||
+        (m.email || '').toLowerCase().includes(q) ||
+        roleLabel(m).toLowerCase().includes(q));
+    }
+    if (_sortKey === 'recent')    list.sort((a, b) => memberTs(b) - memberTs(a));
+    else if (_sortKey === 'name') list.sort((a, b) => (a.full_name || a.email || '').localeCompare(b.full_name || b.email || ''));
+    renderMembers(list);
+  }
+
+  // Contadores reales en los pills
+  (function setPillCounts() {
+    const counts = { all: members.length };
+    members.forEach(m => { const b = memberBucket(m); counts[b] = (counts[b] || 0) + 1; });
+    document.querySelectorAll('.ad-toolbar .ad-pill[data-bucket]').forEach(p => {
+      const ct = p.querySelector('.ct');
+      if (ct) ct.textContent = counts[p.dataset.bucket] || 0;
+    });
+  })();
+
+  // Pills de rol
+  document.querySelectorAll('.ad-toolbar .ad-pill[data-bucket]').forEach(p =>
+    p.addEventListener('click', () => {
+      document.querySelectorAll('.ad-toolbar .ad-pill').forEach(o => o.classList.remove('is-on'));
+      p.classList.add('is-on');
+      _roleFilter = p.dataset.bucket;
+      applyFilters();
+    }));
+
+  // Búsqueda
+  const _searchEl = document.getElementById('adMemberSearch');
+  if (_searchEl) _searchEl.addEventListener('input', () => { _search = _searchEl.value.trim(); applyFilters(); });
+
+  // Sort (cicla name ↔ recent)
+  const _sortBtn = document.getElementById('adSortBtn');
+  if (_sortBtn) _sortBtn.addEventListener('click', () => {
+    _sortKey = _sortKey === 'name' ? 'recent' : 'name';
+    _sortBtn.title = _sortKey === 'name' ? 'Ordenado por nombre (A–Z)' : 'Ordenado por última actividad';
+    applyFilters();
+  });
+
+  applyFilters();
 
   // ── Audit log ────────────────────────────────────────────────────
   const LOG_ICON = {
@@ -1009,10 +1071,6 @@
   document.querySelectorAll('.ad-tabs .ad-tab').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('.ad-tabs .ad-tab').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
-  }));
-  document.querySelectorAll('.ad-toolbar .ad-pill').forEach(p => p.addEventListener('click', () => {
-    document.querySelectorAll('.ad-toolbar .ad-pill').forEach(o => o.classList.remove('is-on'));
-    p.classList.add('is-on');
   }));
   document.querySelectorAll('.ad-cb').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
 </script>
