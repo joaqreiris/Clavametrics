@@ -723,18 +723,7 @@
 
   function roleClass(r) { return ROLE_CSS[(r || '').toLowerCase()] || 'viewer'; }
 
-  const SECTIONS = [
-    { key:'planner',      icon:'ti-clipboard-list', name:'Planner' },
-    { key:'sessions-lib', icon:'ti-list-tree',      name:'Sessions lib' },
-    { key:'squad',        icon:'ti-users-group',    name:'Squad' },
-    { key:'availability', icon:'ti-user-check',     name:'Availability' },
-    { key:'wellness',     icon:'ti-heartbeat',      name:'Wellness' },
-    { key:'load-monitor', icon:'ti-chart-line',     name:'Load monitor' },
-    { key:'gps',          icon:'ti-radar-2',        name:'GPS analysis' },
-    { key:'injuries',     icon:'ti-bandage',        name:'Injuries' },
-    { key:'nutrition',    icon:'ti-apple',          name:'Nutrition' },
-    { key:'video',        icon:'ti-video',          name:'Video room' },
-  ];
+  const SECTIONS = (window.CM_SECTIONS || []).map(s => ({ key: s.key, icon: s.icon, name: s.name }));
   function sectionsCell(m) {
     const bucket = roleClass(m.role || m.club_role);
     if (bucket === 'owner' || bucket === 'admin')
