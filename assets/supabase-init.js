@@ -45,7 +45,7 @@
       const clubId = await window.getClubId();
       if (!clubId) return null;
       const { data } = await window.sb.from('clubs')
-        .select('id, name, primary_color, logo_url')
+        .select('id, name, country, primary_color, logo_url, created_at')
         .eq('id', clubId)
         .single();
       _club = data;

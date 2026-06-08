@@ -787,7 +787,7 @@
 
   async function renderModules() {
     const { data: saved } = await window.sb
-      .from('club_settings')
+      .from('club_modules')
       .select('module_key, enabled')
       .eq('club_id', clubId);
 
@@ -811,7 +811,7 @@
         const key = toggle.closest('[data-module]').dataset.module;
         const nowOn = toggle.classList.toggle('is-on');
         const { error } = await window.sb
-          .from('club_settings')
+          .from('club_modules')
           .upsert({ club_id: clubId, module_key: key, enabled: nowOn },
                   { onConflict: 'club_id,module_key' });
         if (error) toggle.classList.toggle('is-on'); // revert on failure
