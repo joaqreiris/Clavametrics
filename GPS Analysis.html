@@ -144,17 +144,20 @@
   .gp-grid.is-edit .gp-c { outline:1.5px dashed var(--cm-border-strong); outline-offset:-2px; }
   .gp-grid.is-edit .gp-c:hover { outline-color:var(--cm-accent); }
 
-  .gp-c { grid-column: span 6; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; position:relative; overflow:hidden; box-sizing:border-box; min-width:0; max-width:100%; }
-  .gp-c[data-size="sm"]   { grid-column: span 4;  max-height: 280px; }
-  .gp-c[data-size="md"]   { grid-column: span 6;  max-height: 420px; }
-  .gp-c[data-size="lg"]   { grid-column: span 8;  max-height: 580px; }
-  .gp-c[data-size="full"] { grid-column: span 12; }
-  /* Table cards: S=8/12 cols, M=full width, L=full+taller, FULL=full no cap */
-  .gp-c.is-table[data-size="sm"]   { grid-column: span 8;  max-height: 280px; }
-  .gp-c.is-table[data-size="md"]   { grid-column: span 12; max-height: 420px; }
-  .gp-c.is-table[data-size="lg"]   { grid-column: span 12; max-height: 640px; }
-  .gp-c.is-table[data-size="full"] { grid-column: span 12; max-height: none;  }
-  @media (max-width:1000px) { .gp-c, .gp-c[data-size] { grid-column: span 12; } }
+  /* Width is driven by --gp-span (3..12 cols, set by gp-resize.js from the
+     saved span / drag). data-size stays only as a derived bucket for
+     max-height + back-compat. Drag the corner handle to resize. */
+  .gp-c { grid-column: span var(--gp-span, 6); background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; position:relative; overflow:hidden; box-sizing:border-box; min-width:0; max-width:100%; }
+  .gp-c[data-size="sm"]   { max-height: 280px; }
+  .gp-c[data-size="md"]   { max-height: 420px; }
+  .gp-c[data-size="lg"]   { max-height: 580px; }
+  .gp-c[data-size="full"] { max-height: none;  }
+  /* Table cards keep their own max-height ramp (width still via --gp-span) */
+  .gp-c.is-table[data-size="sm"]   { max-height: 280px; }
+  .gp-c.is-table[data-size="md"]   { max-height: 420px; }
+  .gp-c.is-table[data-size="lg"]   { max-height: 640px; }
+  .gp-c.is-table[data-size="full"] { max-height: none;  }
+  @media (max-width:1000px) { .gp-c, .gp-c[data-size] { grid-column: span 12 !important; } }
   .gp-c.is-dragging { opacity:0.4; outline:2px dashed var(--cm-accent); outline-offset:2px; }
 
   .gp-c-h { display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--cm-border-soft); }
@@ -164,9 +167,33 @@
   .gp-c-h .right > button { width:26px; height:26px; border-radius:6px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
   .gp-c-h .right > button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); border-color:var(--cm-border); }
   .gp-c-h .right > button .ti { font-size:13px; }
-  .size-toggle { display:inline-flex; gap:1px; padding:2px; border:1px solid var(--cm-border); border-radius:5px; background:var(--cm-bg-soft); }
-  .size-toggle button { width:22px; height:22px; border:0; background:transparent; color:var(--cm-fg-muted); font:600 9.5px/1 var(--cm-font-mono); cursor:pointer; border-radius:3px; }
-  .size-toggle button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  /* S/M/L/FULL toggle removed — size is changed only by dragging the corner.
+     Hidden (not deleted from static markup) so the two never coexist. */
+  .size-toggle { display:none !important; }
+
+  /* ── draggable resize (replaces S/M/L/FULL) ───────────────────── */
+  .gp-grid.is-edit .gp-c .gp-c-h { cursor:grab; }
+  .gp-rz { display:none; position:absolute; right:3px; bottom:3px; width:18px; height:18px; cursor:nwse-resize; z-index:6; touch-action:none; }
+  .gp-grid.is-edit .gp-c .gp-rz { display:block; }
+  .gp-rz::before, .gp-rz::after { content:''; position:absolute; right:3px; bottom:3px; background:var(--cm-fg-faint); border-radius:1px; }
+  .gp-rz::before { width:12px; height:2px; }
+  .gp-rz::after  { width:2px;  height:12px; }
+  .gp-grid.is-edit .gp-c:hover .gp-rz::before,
+  .gp-grid.is-edit .gp-c:hover .gp-rz::after { background:var(--cm-accent); }
+  .gp-c.gp-rz-active { outline:1.5px solid var(--cm-accent) !important; outline-offset:-2px; box-shadow:var(--cm-shadow-3); z-index:10; }
+  .gp-c.gp-rz-active .gp-rz::before, .gp-c.gp-rz-active .gp-rz::after { background:var(--cm-accent); }
+
+  /* width badge on the card while resizing */
+  .gp-rz-badge { position:absolute; top:8px; right:8px; z-index:11; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:999px; background:var(--cm-accent); color:var(--cm-fg-on-accent); font:600 10.5px/1 var(--cm-font-mono); white-space:nowrap; box-shadow:var(--cm-shadow-2); pointer-events:none; }
+
+  /* snap-guide overlay drawn over the grid while resizing */
+  .gp-grid.is-resizing { position:relative; }
+  .gp-rz-ov { position:absolute; inset:0; z-index:2; pointer-events:none; display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
+  .gp-rz-ov > i { border-right:1px dashed var(--cm-border-strong); border-left:1px dashed var(--cm-border-strong); opacity:0.5; }
+  .gp-rz-mk { position:absolute; top:-22px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:2px; font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); white-space:nowrap; }
+  .gp-rz-mk::after { content:''; width:1px; height:8px; background:var(--cm-border-strong); }
+  .gp-rz-mk.is-on { color:var(--cm-accent); }
+  .gp-rz-mk.is-on::after { width:2px; height:12px; background:var(--cm-accent); }
 
   .gp-c-b { padding:14px; flex:1; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; min-height:0; min-width:0; }
   /* Card body children must shrink to the card width (never push the grid wider);
@@ -1193,26 +1220,14 @@ function getISOWeek(d) {
   return Math.ceil((((dt - y0) / 86400000) + 1) / 7);
 }
 
+// Size is now changed by dragging the card corner (see gp-resize.js).
+// This shim keeps the old call sites working: it seeds --gp-span and
+// injects the resize handle on the given subtree's cards.
 function initSizeToggles(root) {
-  root.querySelectorAll('.size-toggle').forEach(g =>
-    g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-      g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
-      b.classList.add('is-on');
-      const card = b.closest('.gp-c');
-      if (card) {
-        card.dataset.size = { S:'sm', M:'md', L:'lg', FULL:'full' }[b.textContent.trim()] || 'md';
-        const view = card.closest('.gp-view')?.dataset.view;
-        if (view) saveLayout(view).catch(() => {});
-        requestAnimationFrame(() => {
-          card.querySelectorAll('canvas').forEach(canvas => {
-            Chart?.getChart?.(canvas)?.resize();
-          });
-          // force reflow for non-Chart content
-          void card.querySelector('.gp-c-b')?.offsetHeight;
-        });
-      }
-    }))
-  );
+  if (!root) return;
+  if (window.gpInitResize) { window.gpInitResize(root); return; }
+  // gp-resize.js not ready yet — retry once on next frame
+  requestAnimationFrame(() => window.gpInitResize?.(root));
 }
 
 // ── Popover ───────────────────────────────────────────────────
@@ -1671,6 +1686,7 @@ async function saveLayout(viewKey, overrideDid) {
     const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => ({
       card_id: _deriveCardId(el, idx),
       size: el.dataset.size || 'md',
+      span: window.gpSpanOf ? window.gpSpanOf(el) : (parseInt(el.dataset.span, 10) || undefined),
       position: idx,
       config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
     }));
@@ -1703,13 +1719,14 @@ async function loadLayout(viewKey) {
 }
 
 // ── Restore helpers (size + order) ─────────────────────────────
-function _applyCardSize(card, size) {
-  if (!card || !size) return;
-  card.dataset.size = size;
-  const label = { sm:'S', md:'M', lg:'L', full:'FULL' }[size] || 'M';
-  card.querySelectorAll('.size-toggle button').forEach(btn =>
-    btn.classList.toggle('is-on', btn.textContent.trim() === label)
-  );
+function _applyCardSize(card, size, span) {
+  if (!card) return;
+  // Prefer the saved fine-grained span; fall back to the legacy size bucket.
+  const n = span || (window.gpSpanFromSize
+    ? window.gpSpanFromSize(size || 'md', card.classList.contains('is-table'))
+    : null);
+  if (n && window.gpApplySpan) { window.gpApplySpan(card, n); return; }
+  if (size) card.dataset.size = size;
 }
 
 function _deriveCardId(el, idx) {
@@ -1738,10 +1755,10 @@ async function applyLayoutToView(viewKey) {
   if (!grid) return;
   const activeIds = new Set(layout.map(c => c.card_id));
   _stashAbsentCards(viewKey, activeIds);
-  for (const { card_id, size, config } of layout) {
+  for (const { card_id, size, span, config } of layout) {
     const card = grid.querySelector(`[data-card-id="${card_id}"]`);
     if (!card) continue;
-    _applyCardSize(card, size);
+    _applyCardSize(card, size, span);
     if (!config) continue;
     if (config.metric_key) card.dataset.metricKey = config.metric_key;
     if (card_id === 'weekly-bars' && (config.wkok_yellow != null || config.wkok_red != null)) {
@@ -7433,6 +7450,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 <script src="assets/gp-builder/gp-persist.js" defer></script>
 <script src="assets/gp-builder/gp-builder.js" defer></script>
 <script src="assets/gp-builder/gp-tabs.js" defer></script>
+<script src="assets/gp-builder/gp-resize.js" defer></script>
 <script src="assets/gp-builder/gp-ai.js" defer></script>
 <script src="assets/gp-builder/gp-filterbar.js" defer></script>
 
@@ -7475,21 +7493,9 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     await saveLayout(view).catch(e => console.warn('saveLayoutBtn:', e));
     showToast('Layout guardado');
   });
-  document.querySelectorAll('.size-toggle').forEach(g => g.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    g.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
-    b.classList.add('is-on');
-    const card = b.closest('.gp-c');
-    const map = { 'S':'sm', 'M':'md', 'L':'lg', 'FULL':'full' };
-    if (card) {
-      card.dataset.size = map[b.textContent.trim()] || 'md';
-      const view = card.closest('.gp-view')?.dataset.view;
-      if (view) saveLayout(view).catch(() => {});
-      requestAnimationFrame(() => {
-        card.querySelectorAll('canvas').forEach(canvas => { Chart?.getChart?.(canvas)?.resize(); });
-        void card.querySelector('.gp-c-b')?.offsetHeight;
-      });
-    }
-  })));
+  // Card size is changed by dragging the corner handle (gp-resize.js);
+  // the S/M/L/FULL toggle is gone. Make sure every card has its handle + span.
+  window.gpInitResize?.(document);
   const srcDrawer = document.getElementById('srcDrawer');
   const srcOverlay = document.getElementById('srcOverlay');
   const srcBtn = document.getElementById('srcBtn');

@@ -535,6 +535,10 @@
     el.dataset.cardId   = card.id;
     el.__config         = config;
     el.setAttribute('draggable', 'true');
+    // Width: prefer a saved span, else derive from the size bucket.
+    const _span = config.style?.span
+      || (window.gpSpanFromSize ? window.gpSpanFromSize(el.dataset.size, false) : null);
+    if (_span) el.dataset.span = String(_span);
     el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
     const title = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
     el.innerHTML = `
@@ -542,10 +546,6 @@
         <span class="ttl">${title}</span>
         <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
         <div class="right">
-          <div class="size-toggle">
-            <button>S</button><button>M</button><button>L</button>
-            <button style="width:30px">FULL</button>
-          </div>
           <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
           <button data-del title="Remove"><i class="ti ti-x"></i></button>
         </div>
@@ -554,11 +554,8 @@
         <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
       </div>`;
 
-    // sync size-toggle
-    const sMap = { sm:'S', md:'M', lg:'L', full:'FULL' };
-    el.querySelectorAll('.size-toggle button').forEach(b =>
-      b.classList.toggle('is-on', b.textContent.trim() === (sMap[el.dataset.size] || 'M'))
-    );
+    // size is changed by dragging the corner handle (gp-resize.js seeds it
+    // via the MutationObserver on the grid once this element is attached)
 
     el.querySelector('[data-edit]')?.addEventListener('click', () => {
       if (window.GpBuilder?.openForEdit) window.GpBuilder.openForEdit(el);
