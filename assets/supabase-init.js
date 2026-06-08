@@ -65,6 +65,58 @@
   window.resetSupabaseCache = function () {
     _clubId = null; _profile = null; _club = null;
     _clubIdPromise = null; _clubPromise = null; _profilePromise = null;
+    _modPromise = null;
+  };
+
+  // ── Taxonomía única de secciones (consumida por sidebar + Admin) ──
+  window.CM_SECTIONS = [
+    { key:'planner',          href:'Planner.html',             icon:'ti-clipboard-list',    name:'Planner' },
+    { key:'sessions-lib',     href:'Sessions Library.html',    icon:'ti-list-tree',         name:'Exercise library' },
+    { key:'daily-planning',   href:'Daily Planning.html',      icon:'ti-soccer-field',      name:'Daily planning' },
+    { key:'sessions-history', href:'Sessions History.html',    icon:'ti-history',           name:'Sessions history' },
+    { key:'squad',            href:'Squad.html',               icon:'ti-users-group',       name:'Squad' },
+    { key:'lineup',           href:'Lineup.html',              icon:'ti-clipboard-check',   name:'Lineup' },
+    { key:'availability',     href:'Availability.html',        icon:'ti-user-check',        name:'Availability' },
+    { key:'evaluations',      href:'Evaluations.html',         icon:'ti-chart-dots',        name:'Evaluations' },
+    { key:'match-reports',    href:'Match Reports.html',       icon:'ti-report-analytics',  name:'Match reports' },
+    { key:'wellness',         href:'Wellness.html',            icon:'ti-heartbeat',         name:'Wellness' },
+    { key:'rpe',              href:'RPE.html',                 icon:'ti-activity',          name:'RPE' },
+    { key:'load-monitor',     href:'Load Monitor.html',        icon:'ti-chart-line',        name:'Load monitor' },
+    { key:'gps',              href:'GPS Analysis.html',        icon:'ti-radar-2',           name:'GPS analysis' },
+    { key:'gym-planner',      href:'Gym Planner.html',         icon:'ti-barbell',           name:'Gym planner' },
+    { key:'individual-sc',    href:'Individual Plans.html',    icon:'ti-user-cog',          name:'Individual S&C' },
+    { key:'gym-library',      href:'Gym Library.html',         icon:'ti-books',             name:'Gym library' },
+    { key:'nutrition',        href:'Nutrition.html',           icon:'ti-apple',             name:'Nutrition' },
+    { key:'injuries',         href:'Injuries.html',            icon:'ti-bandage',           name:'Injuries' },
+    { key:'treatments',       href:'Physio.html',              icon:'ti-stethoscope',       name:'Treatments' },
+    { key:'rehab',            href:'Rehab & Preventives.html', icon:'ti-activity-heartbeat',name:'Rehab & preventives' },
+  ];
+
+  let _modPromise = null;
+  // Devuelve { all:boolean, keys:Set } — admin/owner o sin filas asignadas => all:true (acceso completo)
+  window.getMyModules = function () {
+    if (_modPromise) return _modPromise;
+    _modPromise = (async () => {
+      try {
+        const prof = await window.getProfile();
+        const role = (prof?.role || '').toLowerCase();
+        if (role === 'admin' || role === 'owner') return { all: true, keys: new Set() };
+        const clubId = await window.getClubId();
+        const { data: { user } } = await window.sb.auth.getUser();
+        if (!clubId || !user) return { all: true, keys: new Set() }; // fail-open
+        const { data } = await window.sb.from('member_modules')
+          .select('module_key').eq('club_id', clubId).eq('profile_id', user.id);
+        const keys = new Set((data || []).map(r => r.module_key));
+        return { all: keys.size === 0, keys }; // sin filas = no gestionado = acceso completo
+      } catch (e) {
+        return { all: true, keys: new Set() }; // ante error, no bloquear navegación
+      }
+    })();
+    return _modPromise;
+  };
+  window.canAccess = async function (key) {
+    const m = await window.getMyModules();
+    return m.all || m.keys.has(key);
   };
 
   window.setClubLogo = function (url) {
