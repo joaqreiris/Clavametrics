@@ -287,7 +287,7 @@
       <div class="ob-step is-done">
         <div class="ob-step-dot">1</div>
         <div class="ob-step-title">Create account</div>
-        <div class="ob-step-hint">joaquin@clavafc.com</div>
+        <div class="ob-step-hint" id="ob-account-email">—</div>
       </div>
       <div class="ob-step is-current">
         <div class="ob-step-dot">2</div>
@@ -328,7 +328,7 @@
 
     <!-- Crest -->
     <div class="ob-crest-row" style="margin-bottom: 20px">
-      <div class="ob-crest">
+      <div class="ob-crest" id="ob-crest">
         <svg class="placeholder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3Z"/>
         </svg>
@@ -337,7 +337,8 @@
         <h4>Club crest</h4>
         <p>SVG, PNG or JPG · Max 2&nbsp;MB · Square 1:1 recommended</p>
       </div>
-      <button class="cm-btn is-outline is-sm">
+      <input type="file" id="ob-logo-input" accept="image/*" style="display:none">
+      <button class="cm-btn is-outline is-sm" id="ob-logo-btn">
         <i class="ti ti-upload" style="font-size:14px"></i> Upload
       </button>
     </div>
@@ -518,6 +519,9 @@
       if (club?.name)    document.getElementById('club-name').value = club.name;
       if (club?.country) document.getElementById('club-country').value = club.country;
     }
+    const { data: { user: _meUser } } = await window.sb.auth.getUser();
+    const _emailEl = document.getElementById('ob-account-email');
+    if (_emailEl && _meUser?.email) _emailEl.textContent = _meUser.email;
     window.applyClubTheme();
   }
   boot();
@@ -584,6 +588,36 @@
       el.classList.add('is-selected');
     });
   });
+
+  (function wireLogoUpload() {
+    const btn = document.getElementById('ob-logo-btn');
+    const input = document.getElementById('ob-logo-input');
+    const crest = document.getElementById('ob-crest');
+    if (!btn || !input) return;
+    btn.addEventListener('click', () => input.click());
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { alert('Max 2 MB.'); input.value = ''; return; }
+      const clubId = await window.getClubId();
+      if (!clubId) { alert('No club yet. Reload and try again.'); return; }
+      const ext  = file.name.split('.').pop().toLowerCase();
+      const path = `${clubId}/logo.${ext}`;
+      const { error: upErr } = await window.sb.storage
+        .from('club-logos').upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) { alert('Upload failed: ' + upErr.message); return; }
+      const { data: { publicUrl } } = window.sb.storage.from('club-logos').getPublicUrl(path);
+      const { data: dbData, error: dbErr } = await window.sb
+        .from('clubs').update({ logo_url: publicUrl }).eq('id', clubId).select('id');
+      if (dbErr) { alert('Save failed: ' + dbErr.message); return; }
+      if (!dbData?.length) { alert('Save failed: permission denied.'); return; }
+      const displayUrl = publicUrl + '?t=' + Date.now();
+      if (crest) { crest.style.background = 'transparent'; crest.innerHTML = `<img src="${displayUrl}" alt="Club crest" style="width:100%;height:100%;object-fit:contain">`; }
+      if (typeof window.setClubLogo === 'function') window.setClubLogo(displayUrl);
+      else if (typeof window.resetSupabaseCache === 'function') window.resetSupabaseCache();
+      input.value = '';
+    });
+  })();
 </script>
 </body>
 </html>
