@@ -635,7 +635,7 @@
 
   if (club) window.applyClubTheme();
 
-  const [membersRes, auditRes, playersRes] = await Promise.all([
+  const [membersRes, auditRes, playersRes, memberModsRes] = await Promise.all([
     window.sb.from('profiles')
       .select('id,full_name,email,role,club_role,created_at,last_seen_at,updated_at')
       .eq('club_id', clubId)
@@ -648,6 +648,9 @@
     window.sb.from('players')
       .select('id', { count: 'exact', head: true })
       .eq('club_id', clubId),
+    window.sb.from('member_modules')
+      .select('profile_id, module_key')
+      .eq('club_id', clubId),
   ]);
 
   const members     = membersRes.data  || [];
@@ -655,6 +658,8 @@
   const playerCount = playersRes.count ?? 0;
 
   const count = members.length;
+  const sectionMap = {};
+  (memberModsRes.data || []).forEach(r => { (sectionMap[r.profile_id] ||= []).push(r.module_key); });
 
   // ── Org / workspace bar ──────────────────────────────────────────
   const clubName  = club?.name || '—';
@@ -704,6 +709,33 @@
   };
 
   function roleClass(r) { return ROLE_CSS[(r || '').toLowerCase()] || 'viewer'; }
+
+  const SECTIONS = [
+    { key:'planner',      icon:'ti-clipboard-list', name:'Planner' },
+    { key:'sessions-lib', icon:'ti-list-tree',      name:'Sessions lib' },
+    { key:'squad',        icon:'ti-users-group',    name:'Squad' },
+    { key:'availability', icon:'ti-user-check',     name:'Availability' },
+    { key:'wellness',     icon:'ti-heartbeat',      name:'Wellness' },
+    { key:'load-monitor', icon:'ti-chart-line',     name:'Load monitor' },
+    { key:'gps',          icon:'ti-radar-2',        name:'GPS analysis' },
+    { key:'injuries',     icon:'ti-bandage',        name:'Injuries' },
+    { key:'nutrition',    icon:'ti-apple',          name:'Nutrition' },
+    { key:'video',        icon:'ti-video',          name:'Video room' },
+  ];
+  function sectionsCell(m) {
+    const bucket = roleClass(m.role || m.club_role);
+    if (bucket === 'owner' || bucket === 'admin')
+      return `<div class="ad-sections-cell"><span class="ad-sec-chip is-on" title="All"><i class="ti ti-asterisk"></i></span><span class="count">all ${SECTIONS.length}</span></div>`;
+    const keys = sectionMap[m.id] || [];
+    if (!keys.length)
+      return `<div class="ad-sections-cell"><span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">—</span></div>`;
+    const chips = keys.slice(0, 4).map(k => {
+      const s = SECTIONS.find(x => x.key === k);
+      return `<span class="ad-sec-chip is-on"><i class="ti ${s ? s.icon : 'ti-square'}"></i></span>`;
+    }).join('');
+    const extra = keys.length > 4 ? `<span class="count">+ ${keys.length - 4}</span>` : `<span class="count">${keys.length}</span>`;
+    return `<div class="ad-sections-cell">${chips}${extra}</div>`;
+  }
   function roleLabel(p) {
     const parts = [p.role, p.club_role].filter(Boolean);
     return parts.length ? parts.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' · ') : 'Member';
@@ -749,15 +781,17 @@
           </div>
         </div></td>
         <td><span class="ad-role ${rc}"><span class="dot"></span>${rl}</span></td>
-        <td><div class="ad-sections-cell"><span style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">—</span></div></td>
+        <td>${sectionsCell(m)}</td>
         <td><span class="ad-last">${last}</span></td>
         <td><span class="ad-status ok"><span class="d"></span>Active</span></td>
-        <td><div class="ad-row-act">${isMe ? '' : '<button><i class="ti ti-edit"></i></button>'}<button><i class="ti ti-dots"></i></button></div></td>
+        <td><div class="ad-row-act">${isMe ? '' : `<button data-edit="${m.id}"><i class="ti ti-edit"></i></button>`}<button><i class="ti ti-dots"></i></button></div></td>
       </tr>`;
     }).join('');
     // Rebind checkbox por fila (las filas se recrean en cada render)
     document.querySelectorAll('#adTbody .ad-cb').forEach(c =>
       c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
+    document.querySelectorAll('#adTbody [data-edit]').forEach(b =>
+      b.addEventListener('click', e => { e.stopPropagation(); openMemberSectionsModal(b.dataset.edit); }));
     const foot = document.getElementById('adMemberFoot');
     if (foot) foot.innerHTML = `Showing <strong style="color:var(--cm-fg)">${list.length}</strong> of ${count} members`;
   }
@@ -883,6 +917,45 @@
 
   await renderModules();
 
+  // ── Member sections modal ──
+  let _secEditId = null;
+  function openMemberSectionsModal(id) {
+    const m = members.find(x => x.id === id);
+    if (!m) return;
+    _secEditId = id;
+    document.getElementById('secModalName').textContent = m.full_name || m.email || 'Member';
+    const current = new Set(sectionMap[id] || []);
+    document.getElementById('secModalList').innerHTML = SECTIONS.map(s => `
+      <div class="ad-module-row" data-sec="${s.key}">
+        <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ${s.icon}"></i></div>
+        <div class="info"><div class="name">${s.name}</div></div>
+        <div class="ad-toggle${current.has(s.key) ? ' is-on' : ''}"></div>
+      </div>`).join('');
+    document.querySelectorAll('#secModalList .ad-toggle').forEach(t =>
+      t.addEventListener('click', () => t.classList.toggle('is-on')));
+    document.getElementById('secModalBackdrop').style.display = 'flex';
+  }
+  function closeMemberSectionsModal() { document.getElementById('secModalBackdrop').style.display = 'none'; }
+  async function saveMemberSections() {
+    if (!_secEditId) return;
+    const keys = [...document.querySelectorAll('#secModalList [data-sec]')]
+      .filter(r => r.querySelector('.ad-toggle').classList.contains('is-on'))
+      .map(r => r.dataset.sec);
+    await window.sb.from('member_modules').delete().eq('club_id', clubId).eq('profile_id', _secEditId);
+    if (keys.length) {
+      const rows = keys.map(k => ({ club_id: clubId, profile_id: _secEditId, module_key: k }));
+      const { error } = await window.sb.from('member_modules').insert(rows);
+      if (error) { alert('Save failed: ' + error.message); return; }
+    }
+    sectionMap[_secEditId] = keys;
+    closeMemberSectionsModal();
+    applyFilters();
+  }
+  document.getElementById('secModalClose') ?.addEventListener('click', closeMemberSectionsModal);
+  document.getElementById('secModalCancel')?.addEventListener('click', closeMemberSectionsModal);
+  document.getElementById('secModalSave')  ?.addEventListener('click', saveMemberSections);
+  document.getElementById('secModalBackdrop')?.addEventListener('click', e => { if (e.target.id === 'secModalBackdrop') closeMemberSectionsModal(); });
+
   // ── Club logo upload ────────────────────────────────────────────────
   const canUploadLogo = ['admin','owner'].includes(profile?.role) ||
                         ['admin','owner'].includes(profile?.club_role);
@@ -1004,6 +1077,22 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-outline is-sm" onclick="closeAddCategoryModal()">Cancel</button>
       <button class="cm-btn is-primary is-sm" onclick="saveClubSettings()"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Member Sections Modal -->
+<div id="secModalBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:420px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+      <i class="ti ti-layout-grid" style="font-size:18px;color:var(--cm-accent)"></i>
+      <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Sections · <span id="secModalName">—</span></div>
+      <button id="secModalClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="secModalList" style="padding:14px 16px;max-height:60vh;overflow:auto;display:grid;grid-template-columns:1fr;gap:8px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
+      <button class="cm-btn is-outline is-sm" id="secModalCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="secModalSave"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
     </div>
   </div>
 </div>
