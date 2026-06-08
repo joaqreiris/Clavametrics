@@ -151,8 +151,8 @@
     ]},
     { label: 'Workspace', items: [
       { href: '#',           icon: 'ti-settings',    label: 'Settings', extra: 'data-open-settings' },
-      { href: 'Admin.html',  icon: 'ti-user-shield', label: 'Admin' },
-      { href: 'Billing.html',icon: 'ti-credit-card', label: 'Billing' },
+      { href: 'Admin.html',  icon: 'ti-user-shield', label: 'Admin',   adminOnly: true },
+      { href: 'Billing.html',icon: 'ti-credit-card', label: 'Billing', adminOnly: true },
     ]},
   ];
 
@@ -175,7 +175,8 @@
         ${g.items.map(item => {
           const active = isActive(item.href) ? ' is-active' : '';
           const extra  = item.extra ? ` ${item.extra}` : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}><i class="ti ${item.icon}"></i><span>${item.label}</span></a>`;
+          const adm    = item.adminOnly ? ' data-admin-only' : '';
+          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}><i class="ti ${item.icon}"></i><span>${item.label}</span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -306,6 +307,15 @@
       if (initialsEl) initialsEl.textContent = initials;
       if (userNameEl) userNameEl.textContent = full || '–';
       if (userRoleEl) userRoleEl.textContent = [profile.role, profile.club_role].filter(Boolean).join(' · ') || 'Staff';
+    }
+
+    const _role = (profile?.role || '').toLowerCase();
+    if (_role !== 'admin' && _role !== 'owner') {
+      document.querySelectorAll('[data-admin-only]').forEach(el => el.remove());
+      // Si un grupo quedó sin items, ocultar también su label
+      document.querySelectorAll('.hub-nav-group').forEach(g => {
+        if (!g.querySelector('.hub-nav-item')) g.style.display = 'none';
+      });
     }
   }
 
