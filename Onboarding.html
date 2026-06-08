@@ -495,10 +495,11 @@
       if (clubErr) { alert('Setup failed (club): ' + clubErr.message); return; }
 
       const { error: profErr } = await window.sb.from('profiles').insert({
-        id:         user.id,
-        club_id:    newClubId,
-        full_name:  fullName || user.email,
-        role:       'admin',
+        id:        user.id,
+        club_id:   newClubId,
+        email:     user.email,
+        full_name: fullName || user.email,
+        role:      'admin',
       });
       if (profErr) { alert('Setup failed (profile): ' + profErr.message); return; }
 
