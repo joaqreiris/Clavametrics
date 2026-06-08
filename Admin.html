@@ -919,6 +919,7 @@
           .upsert({ club_id: clubId, module_key: key, enabled: nowOn },
                   { onConflict: 'club_id,module_key' });
         if (error) toggle.classList.toggle('is-on'); // revert on failure
+        else window.sb.rpc('log_audit', { p_table: 'club_modules', p_op: 'UPDATE', p_changes: { module: key, enabled: nowOn } });
       });
     });
   }
@@ -956,6 +957,7 @@
       if (error) { alert('Save failed: ' + error.message); return; }
     }
     sectionMap[_secEditId] = keys;
+    window.sb.rpc('log_audit', { p_table: 'member_modules', p_op: 'UPDATE', p_changes: { member: _secEditId, sections: keys } });
     closeMemberSectionsModal();
     applyFilters();
   }
@@ -990,6 +992,7 @@
     }
     const m = members.find(x => x.id === _roleEditId);
     if (m) m.role = newRole;
+    window.sb.rpc('log_audit', { p_table: 'profiles', p_op: 'UPDATE', p_changes: { member: _roleEditId, role: newRole } });
     // Recalcular contadores de los pills desde members actualizado
     const counts = { all: members.length };
     members.forEach(x => { const b = roleClass(x.role || x.club_role); counts[b] = (counts[b] || 0) + 1; });
@@ -1034,6 +1037,7 @@
     const { error } = await window.sb.from('invitations').update({ status: 'revoked' }).eq('id', id);
     if (error) { alert('Revoke failed: ' + error.message); return; }
     invites = invites.filter(x => x.id !== id);
+    window.sb.rpc('log_audit', { p_table: 'invitations', p_op: 'DELETE', p_changes: { id } });
     renderInvites();
   }
   renderInvites();
@@ -1064,6 +1068,7 @@
     }
     const data = res.invitation;
     invites = [data, ...invites.filter(x => x.id !== data.id)];
+    window.sb.rpc('log_audit', { p_table: 'invitations', p_op: 'INSERT', p_changes: { email: data.email, role: data.role } });
     renderInvites();
     closeInviteModal();
   }
