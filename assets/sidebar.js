@@ -124,30 +124,30 @@
       { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks' },
     ]},
     { label: 'Technical', items: [
-      { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Planner' },
-      { href: 'Sessions%20Library.html',icon: 'ti-list-tree',         label: 'Exercise library' },
-      { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning' },
-      { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history' },
-      { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad' },
-      { href: 'Lineup.html',            icon: 'ti-clipboard-check',  label: 'Lineup', count: 'XI' },
-      { href: 'Availability.html',      icon: 'ti-user-check',       label: 'Availability' },
-      { href: 'Evaluations.html',       icon: 'ti-chart-dots',       label: 'Evaluations' },
-      { href: 'Match%20Reports.html',   icon: 'ti-report-analytics', label: 'Match reports' },
+      { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Planner',          key: 'planner' },
+      { href: 'Sessions%20Library.html',icon: 'ti-list-tree',         label: 'Exercise library', key: 'sessions-lib' },
+      { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning',   key: 'daily-planning' },
+      { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history', key: 'sessions-history' },
+      { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad',            key: 'squad' },
+      { href: 'Lineup.html',            icon: 'ti-clipboard-check',  label: 'Lineup', count: 'XI', key: 'lineup' },
+      { href: 'Availability.html',      icon: 'ti-user-check',       label: 'Availability',     key: 'availability' },
+      { href: 'Evaluations.html',       icon: 'ti-chart-dots',       label: 'Evaluations',      key: 'evaluations' },
+      { href: 'Match%20Reports.html',   icon: 'ti-report-analytics', label: 'Match reports',    key: 'match-reports' },
     ]},
     { label: 'Performance', items: [
-      { href: 'Wellness.html',          icon: 'ti-heartbeat',        label: 'Wellness' },
-      { href: 'RPE.html',               icon: 'ti-activity',         label: 'RPE' },
-      { href: 'Load%20Monitor.html',    icon: 'ti-chart-line',       label: 'Load monitor' },
-      { href: 'GPS%20Analysis.html',    icon: 'ti-radar-2',          label: 'GPS analysis' },
-      { href: 'Gym%20Planner.html',      icon: 'ti-barbell',          label: 'Gym planner' },
-      { href: 'Individual%20Plans.html', icon: 'ti-user-cog',         label: 'Individual S&C' },
-      { href: 'Gym%20Library.html',      icon: 'ti-books',            label: 'Gym library' },
-      { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition' },
+      { href: 'Wellness.html',          icon: 'ti-heartbeat',        label: 'Wellness',         key: 'wellness' },
+      { href: 'RPE.html',               icon: 'ti-activity',         label: 'RPE',              key: 'rpe' },
+      { href: 'Load%20Monitor.html',    icon: 'ti-chart-line',       label: 'Load monitor',     key: 'load-monitor' },
+      { href: 'GPS%20Analysis.html',    icon: 'ti-radar-2',          label: 'GPS analysis',     key: 'gps' },
+      { href: 'Gym%20Planner.html',      icon: 'ti-barbell',          label: 'Gym planner',      key: 'gym-planner' },
+      { href: 'Individual%20Plans.html', icon: 'ti-user-cog',         label: 'Individual S&C',   key: 'individual-sc' },
+      { href: 'Gym%20Library.html',      icon: 'ti-books',            label: 'Gym library',      key: 'gym-library' },
+      { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition',        key: 'nutrition' },
     ]},
     { label: 'Medical', items: [
-      { href: 'Injuries.html',              icon: 'ti-bandage',              label: 'Injuries' },
-      { href: 'Physio.html',                icon: 'ti-stethoscope',          label: 'Treatments' },
-      { href: 'Rehab & Preventives.html',   icon: 'ti-activity-heartbeat',   label: 'Rehab & preventives' },
+      { href: 'Injuries.html',              icon: 'ti-bandage',              label: 'Injuries',            key: 'injuries' },
+      { href: 'Physio.html',                icon: 'ti-stethoscope',          label: 'Treatments',          key: 'treatments' },
+      { href: 'Rehab & Preventives.html',   icon: 'ti-activity-heartbeat',   label: 'Rehab & preventives', key: 'rehab' },
     ]},
     { label: 'Workspace', items: [
       { href: '#',           icon: 'ti-settings',    label: 'Settings', extra: 'data-open-settings' },
@@ -176,7 +176,8 @@
           const active = isActive(item.href) ? ' is-active' : '';
           const extra  = item.extra ? ` ${item.extra}` : '';
           const adm    = item.adminOnly ? ' data-admin-only' : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}><i class="ti ${item.icon}"></i><span>${item.label}</span></a>`;
+          const mod    = item.key ? ` data-mod="${item.key}"` : '';
+          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}${mod}><i class="ti ${item.icon}"></i><span>${item.label}</span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -312,11 +313,18 @@
     const _role = (profile?.role || '').toLowerCase();
     if (_role !== 'admin' && _role !== 'owner') {
       document.querySelectorAll('[data-admin-only]').forEach(el => el.remove());
-      // Si un grupo quedó sin items, ocultar también su label
-      document.querySelectorAll('.hub-nav-group').forEach(g => {
-        if (!g.querySelector('.hub-nav-item')) g.style.display = 'none';
-      });
+      const _mods = (typeof window.getMyModules === 'function')
+        ? await window.getMyModules() : { all: true, keys: new Set() };
+      if (!_mods.all) {
+        document.querySelectorAll('[data-mod]').forEach(el => {
+          if (!_mods.keys.has(el.dataset.mod)) el.remove();
+        });
+      }
     }
+    // Ocultar grupos que quedaron sin items
+    document.querySelectorAll('.hub-nav-group').forEach(g => {
+      if (!g.querySelector('.hub-nav-item')) g.style.display = 'none';
+    });
   }
 
   // ── NOTIFICATIONS ────────────────────────────────────────────
