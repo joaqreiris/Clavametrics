@@ -1000,10 +1000,11 @@
       btn.onclick = () => setBuilderMode(btn.dataset.mode);
     });
 
-    // buscador del panel de campos (D&D) — filtra la lista, no toca S.
-    // Delegado en el host estable #gpbDDPane (su innerHTML se reemplaza al re-render).
+    // Eventos del modo D&D, delegados en el host estable #gpbDDPane (su innerHTML
+    // se reemplaza en cada re-render, por eso se delega en el contenedor).
     const ddPane = document.getElementById('gpbDDPane');
     if (ddPane) {
+      // buscador del panel de campos — filtra la lista, no toca S
       ddPane.addEventListener('input', e => {
         const s = e.target.closest('#gpbDDSearch');
         if (!s) return;
@@ -1011,6 +1012,77 @@
         renderDDPanelOnly();
         const ns = document.getElementById('gpbDDSearch');
         if (ns) { ns.focus(); const v = ns.value; ns.setSelectionRange(v.length, v.length); }
+      });
+
+      // inicio del arrastre (campo del panel o chip ya colocado)
+      ddPane.addEventListener('dragstart', e => {
+        const el = e.target.closest('.bdd-field, .bdd-chip');
+        if (!el || el.classList.contains('is-placed')) return;
+        _ddDrag = { id: el.dataset.id, kind: el.dataset.kind, from: el.closest('.bdd-drop') ? 'zone' : 'panel' };
+        el.classList.add('is-dragging');
+        try { e.dataTransfer.setData('text/plain', el.dataset.id); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+      });
+      ddPane.addEventListener('dragend', () => {
+        ddPane.querySelectorAll('.is-dragging').forEach(x => x.classList.remove('is-dragging'));
+        _ddClearFx();
+        _ddDrag = null;
+      });
+
+      // validación de zona + línea de inserción
+      ddPane.addEventListener('dragover', e => {
+        const zone = e.target.closest('.bdd-zone');
+        if (!zone || !_ddDrag) return;
+        _ddClearFx();
+        if (_ddDrag.kind === zone.dataset.accept) {
+          e.preventDefault();                              // compatible → permite soltar
+          e.dataTransfer.dropEffect = 'move';
+          zone.classList.add('is-over');
+          const drop  = zone.querySelector('.bdd-drop');
+          const chips = drop.querySelectorAll('.bdd-chip');
+          if (chips.length) {                              // línea de inserción entre chips
+            const idx = _ddInsertIndex(drop, e.clientY);
+            const ins = document.createElement('div');
+            ins.className = 'bdd-ins';
+            if (idx >= chips.length) drop.appendChild(ins); else drop.insertBefore(ins, chips[idx]);
+          }
+        } else {
+          zone.classList.add('is-bad');                    // incompatible → no preventDefault (not-allowed)
+        }
+      });
+      ddPane.addEventListener('dragleave', e => {
+        const zone = e.target.closest('.bdd-zone');
+        if (zone && !zone.contains(e.relatedTarget)) {
+          zone.classList.remove('is-over', 'is-bad');
+          zone.querySelectorAll('.bdd-ins').forEach(i => i.remove());
+        }
+      });
+      ddPane.addEventListener('drop', e => {
+        const zone = e.target.closest('.bdd-zone');
+        if (!zone || !_ddDrag || _ddDrag.kind !== zone.dataset.accept) { _ddClearFx(); return; }
+        e.preventDefault();
+        const idx = _ddInsertIndex(zone.querySelector('.bdd-drop'), e.clientY);
+        if (_ddDrag.from === 'zone') ddMoveWithin(_ddDrag.kind, _ddDrag.id, idx);
+        else                         ddAddField(_ddDrag.kind, _ddDrag.id, idx);
+        _ddDrag = null;
+        ddSyncFromS();
+      });
+
+      // quitar chip (×) + cambiar tipo (segmented)
+      ddPane.addEventListener('click', e => {
+        const typeBtn = e.target.closest('#gpbDDSeg button[data-type]');
+        if (typeBtn) { ddSetType(typeBtn.dataset.type); return; }
+        const rmDim = e.target.closest('[data-rmdim]');
+        if (rmDim) { S.dimensions = (S.dimensions || []).filter(d => d.id !== rmDim.dataset.rmdim); ddSyncFromS(); return; }
+        const rmMet = e.target.closest('[data-rm]');
+        if (rmMet) { S.metrics = (S.metrics || []).filter(m => m.id !== rmMet.dataset.rm); ddSyncFromS(); return; }
+      });
+
+      // cambiar agregación del chip de métrica (no re-render: el <select> ya refleja el valor)
+      ddPane.addEventListener('change', e => {
+        const sel = e.target.closest('[data-agg-for]');
+        if (!sel) return;
+        const it = (S.metrics || []).find(m => m.id === sel.dataset.aggFor);
+        if (it) it.agg = sel.value;
       });
     }
 
@@ -4056,10 +4128,9 @@
   function _dimPlaced(id){ return !!(S && (S.dimensions || []).some(d => d.id === id)); }
   function _metPlaced(id){ return !!(S && (S.metrics    || []).some(m => m.id === id)); }
 
-  // Fila arrastrable del panel. draggable=false: en Prompt 1 nada arrastra
-  // todavía (el cursor:grab del CSS mantiene el look de la maqueta).
+  // Fila arrastrable del panel. Las ya colocadas (is-placed) no se arrastran.
   function ddFieldRow(id, kind, name, icon, unit, placed) {
-    return `<div class="bdd-field${placed ? ' is-placed' : ''}" draggable="false" data-id="${esc(id)}" data-kind="${kind}">
+    return `<div class="bdd-field${placed ? ' is-placed' : ''}" draggable="${placed ? 'false' : 'true'}" data-id="${esc(id)}" data-kind="${kind}">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(icon)}"></i></span>
       <span class="nm">${esc(name)}</span>${unit ? `<span class="u">${esc(unit)}</span>` : ''}
@@ -4086,11 +4157,10 @@
       </div>`;
   }
 
-  // Chips colocados (reflejan S; en Prompt 1 se muestran pero ×/agg/drag aún
-  // no están cableados — eso es el Prompt 2).
+  // Chips colocados (reflejan S). Arrastrables para reordenar dentro de la zona.
   function ddDimChip(id) {
     const d = DIM_MAP.get(id) || { name: id, icon: 'ti-category-2' };
-    return `<div class="bdd-chip" data-kind="dim" data-id="${esc(id)}" draggable="false">
+    return `<div class="bdd-chip" data-kind="dim" data-id="${esc(id)}" draggable="true">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(d.icon || 'ti-category-2')}"></i></span>
       <span class="nm">${esc(d.name)}</span>
@@ -4100,7 +4170,7 @@
   function ddMetChip(m) {
     const cat  = catalogMap.get(m.id) || { name: m.id, unit: '', group_name: 'custom' };
     const opts = AGGS.map(a => `<option value="${a.id}" ${a.id === m.agg ? 'selected' : ''}>${a.short}</option>`).join('');
-    return `<div class="bdd-chip" data-kind="metric" data-id="${esc(m.id)}" draggable="false">
+    return `<div class="bdd-chip" data-kind="metric" data-id="${esc(m.id)}" draggable="true">
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(metIcon(cat))}"></i></span>
       <span class="nm">${esc(cat.name)}</span>
@@ -4153,6 +4223,96 @@
   function renderDDPanelOnly() {
     const p = document.getElementById('gpbDDPanel');
     if (p) p.innerHTML = ddPanelHTML();
+  }
+
+  // ── D&D · mutaciones sobre el MISMO S + sync (sin renderizar el gráfico) ──
+  let _ddDrag = null;   // { id, kind, from:'panel'|'zone' } durante un arrastre
+
+  // Refleja S tras un cambio por D&D: header (indicador de cambio) + estado del
+  // botón Guardar + re-pintado del pane. NO renderiza el preview (eso es Prompt 3).
+  // El modo clásico se re-sincroniza solo al volver a él (setBuilderMode → syncAll).
+  function ddSyncFromS() {
+    if (!S) return;
+    syncHeader();
+    _ddSyncSave();
+    renderDDPane();
+  }
+  function _ddSyncSave() {
+    const t = VIZ_TYPES[S.type];
+    const valid = S.metrics.length >= t.min;
+    const saveBtn  = document.getElementById('gpbSave');
+    const saveHint = document.getElementById('gpbSaveHint');
+    if (saveBtn)  saveBtn.disabled = !valid;
+    if (saveHint) saveHint.style.display = valid ? 'none' : 'inline';
+  }
+
+  // Cambio de tipo (segmented D&D): misma mutación que el setType clásico
+  // (clamps de métricas/dimensiones según VIZ_TYPES) pero sin renderizar el gráfico.
+  function ddSetType(id) {
+    if (!S || !VIZ_TYPES[id]) return;
+    S.type = id;
+    const t = VIZ_TYPES[id];
+    if (S.metrics.length > t.max) S.metrics = S.metrics.slice(0, t.max);
+    S.metrics.forEach(m => { const cat = catalogMap.get(m.id); if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg'; });
+    if (!S.dimensions) S.dimensions = [];
+    if (S.dimensions.length > (t.dimMax || 0)) S.dimensions = S.dimensions.slice(0, t.dimMax || 0);
+    ddSyncFromS();
+  }
+
+  // Agrega un campo a S respetando las restricciones reales del tipo (VIZ_TYPES).
+  // Default de agg = defaultAgg(kind), idéntico al builder clásico → mismo S.
+  function ddAddField(kind, id, atIndex) {
+    if (!S) return;
+    const t = VIZ_TYPES[S.type];
+    if (kind === 'dim') {
+      if (!DIM_MAP.has(id)) return;
+      if (!S.dimensions) S.dimensions = [];
+      if (S.dimensions.some(d => d.id === id)) return;
+      const dmax = t.dimMax || 0;
+      if (dmax === 0) return;                               // este tipo no toma dimensiones
+      if (dmax === 1) { S.dimensions = [{ id }]; return; }  // una sola → reemplaza
+      if (S.dimensions.length >= dmax) return;
+      const i = atIndex == null ? S.dimensions.length : Math.max(0, Math.min(atIndex, S.dimensions.length));
+      S.dimensions.splice(i, 0, { id });
+    } else {
+      const cat = catalogMap.get(id);
+      if (!cat) return;
+      if (S.metrics.some(m => m.id === id)) return;
+      const agg = defaultAgg(cat.kind || 'accum');
+      if (t.max === 1) { S.metrics = [{ id, agg }]; return; }  // métrica única → reemplaza
+      if (S.metrics.length >= t.max) return;
+      const i = atIndex == null ? S.metrics.length : Math.max(0, Math.min(atIndex, S.metrics.length));
+      S.metrics.splice(i, 0, { id, agg });
+    }
+  }
+
+  // Reordena un chip ya colocado dentro de su array de S.
+  function ddMoveWithin(kind, id, atIndex) {
+    const arr = kind === 'dim' ? S.dimensions : S.metrics;
+    if (!arr) return;
+    const cur = arr.findIndex(x => x.id === id);
+    if (cur < 0) return;
+    const [it] = arr.splice(cur, 1);
+    let idx = atIndex == null ? arr.length : atIndex;
+    if (cur < idx) idx -= 1;                                 // compensa el splice previo
+    idx = Math.max(0, Math.min(idx, arr.length));
+    arr.splice(idx, 0, it);
+  }
+
+  function _ddClearFx() {
+    const host = document.getElementById('gpbDDPane');
+    if (!host) return;
+    host.querySelectorAll('.bdd-zone').forEach(z => z.classList.remove('is-over', 'is-bad'));
+    host.querySelectorAll('.bdd-ins').forEach(i => i.remove());
+  }
+  // Índice de inserción según la Y del cursor entre los chips de una zona.
+  function _ddInsertIndex(dropEl, y) {
+    const chips = [...dropEl.querySelectorAll('.bdd-chip')];
+    for (let i = 0; i < chips.length; i++) {
+      const r = chips[i].getBoundingClientRect();
+      if (y < r.top + r.height / 2) return i;
+    }
+    return chips.length;
   }
 
   // Cambia el modo de construcción. Ambos modos editan el MISMO S → al volver
