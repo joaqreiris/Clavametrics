@@ -952,7 +952,7 @@
   const POS_MAP = { GK:'gk', CB:'cb', LB:'fb', RB:'fb', LW:'wg', RW:'wg', MF:'mf', CM:'mf', DM:'mf', AM:'mf', ST:'st', CF:'st' };
 
   async function boot() {
-    if (!await window.guardModule()) return;
+    if (!(await window.guardModule())) return;
     const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
     if (club) window.applyClubTheme();
     const clubId = await window.getClubId();

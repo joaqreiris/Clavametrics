@@ -735,8 +735,7 @@ let _treatMap = new Map();
 let _editingTreatmentId = null;
 
 (async () => {
-  const ok = await window.guardModule();
-  if (!ok) return;
+  if (!(await window.guardModule())) return;
 
   [_profile, _clubId] = await Promise.all([window.getProfile(), window.getClubId()]);
   if (!_clubId) { document.getElementById('phHeadCtx').textContent = 'No club found — check your profile.'; return; }

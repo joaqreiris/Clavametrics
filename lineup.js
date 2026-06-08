@@ -1058,8 +1058,7 @@
 
     if (!window.requireAuth || !window.sb) return;
 
-    const ok = await window.guardModule();
-    if (!ok) return;
+    if (!(await window.guardModule())) return;
     _clubId = await window.getClubId();
 
     // Load squad, club info, coach, and staff in parallel
