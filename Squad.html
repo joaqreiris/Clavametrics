@@ -1316,8 +1316,9 @@ async function reloadPlayers() {
       if (un) un.remove();
     }
 
-    // Filtro de arriba: todas las categorías (la RLS ya limita qué jugadores se ven)
-    _teams.forEach(t => {
+    // Filtro de arriba: mismas categorías permitidas que el modal (coach solo las suyas)
+    const _filterTeams = _fullAccess ? _teams : _modalTeams;
+    _filterTeams.forEach(t => {
       teamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
     });
     // Modal: solo las categorías permitidas según rol
