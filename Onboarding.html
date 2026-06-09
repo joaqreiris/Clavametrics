@@ -557,10 +557,9 @@
         .eq('id', clubId);
       if (error) throw error;
 
-      // Guardar las categorías elegidas (tabla club_categories ya existe)
-      const { error: catErr } = await window.sb.from('club_categories')
-        .upsert(categories.map((cat, i) => ({ club_id: clubId, name: cat, sort_order: i })),
-                { onConflict: 'club_id,name' });
+      // Guardar las categorías elegidas como teams (fuente única de categorías/planteles)
+      const { error: catErr } = await window.sb.from('teams')
+        .insert(categories.map(cat => ({ club_id: clubId, name: cat })));
       if (catErr) throw catErr;
 
       // Pendiente de migración de schema (columnas aún no existen en clubs):
