@@ -727,19 +727,21 @@
     if (!wrap || !sel) return;
     const { data: allClubs } = await window.sb.from('clubs').select('id, name').order('name');
     if (!allClubs?.length) return;
-    const myClubId = (await window.getProfile())?.club_id;
-    const active   = clubId; // el club activo actual (ya considera override)
+    const active = clubId; // club activo actual (ya considera override)
     sel.innerHTML = allClubs.map(c =>
       `<option value="${c.id}"${c.id === active ? ' selected' : ''}>${c.name}</option>`).join('');
     wrap.style.display = 'flex';
-    const isOverriding = active && myClubId && active !== myClubId;
-    if (exit) exit.style.display = isOverriding ? 'inline-flex' : 'none';
+    // Si hay un override activo en sessionStorage, mostramos "Mi club" — sin comparar IDs
+    const hasOverride = !!(window.getActiveClubOverride && window.getActiveClubOverride());
+    if (exit) exit.style.display = hasOverride ? 'inline-flex' : 'none';
     sel.addEventListener('change', () => {
-      const picked = sel.value;
-      window.setActiveClubOverride(picked === myClubId ? null : picked);
+      window.setActiveClubOverride(sel.value);   // siempre setea el elegido como override
       location.reload();
     });
-    if (exit) exit.addEventListener('click', () => { window.setActiveClubOverride(null); location.reload(); });
+    if (exit) exit.addEventListener('click', () => {
+      window.setActiveClubOverride(null);         // limpia el override → vuelve a tu club
+      location.reload();
+    });
   })();
 
   const [membersRes, auditRes, playersRes, memberModsRes, invitesRes] = await Promise.all([
