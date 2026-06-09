@@ -4398,7 +4398,13 @@
 
   // expr := term (('+'|'-') term)*  ·  term := factor (('*'|'/') factor)*
   // factor := num | metric | fn '(' args ')' | '(' expr ')' | '-' factor
-  function evaluateFormula(src) {
+  //
+  // `resolve(id)` da el valor de la métrica al encontrarla en la fórmula. Por
+  // defecto usa el valor ILUSTRATIVO (sample) — para la validación/preview del
+  // editor. La evaluación REAL por sesión (Prompt 2) pasa un resolve que lee el
+  // valor de esa métrica EN LA FILA/SESIÓN. El parser es el mismo (sin eval).
+  function evaluateFormula(src, resolve) {
+    resolve = resolve || _calcSampleVal;
     const toks = tokenizeFormula(src);
     if (!toks.length) return { ok: false, error: { msg: 'La fórmula está vacía.' } };
     const bad = toks.find(t => t.t === 'bad');
@@ -4423,7 +4429,13 @@
       if (tk.t === 'op' && tk.v === '-') { eat(); return -parseFactor(); }
       if (tk.t === 'op' && tk.v === '+') { eat(); return parseFactor(); }
       if (tk.t === 'num') { eat(); return tk.v; }
-      if (tk.t === 'id') { eat(); if (!_calcKnown(tk.v)) fail('Métrica desconocida: ', tk.v); return _calcSampleVal(tk.v); }
+      if (tk.t === 'id') {
+        eat();
+        if (!_calcKnown(tk.v)) fail('Métrica desconocida: ', tk.v);
+        const val = resolve(tk.v);
+        if (val == null || isNaN(val)) fail('Métrica faltante en la sesión: ', tk.v);   // por-fila: falta el dato
+        return val;
+      }
       if (tk.t === 'fn') {
         const fn = eat().v;
         if (!peek() || peek().t !== 'lp') fail('Falta «(» después de ' + fn + '.');
@@ -4466,6 +4478,65 @@
     }).join(' ');
   }
   function usedFormulaMetrics(src) { return [...new Set(tokenizeFormula(src).filter(t => t.t === 'id' && _calcKnown(t.v)).map(t => t.v))]; }
+
+  // ── Evaluación REAL por fila/sesión (Prompt 2) ──
+  // Evalúa la fórmula para UNA sesión con los valores reales de esa sesión.
+  // `getBaseVal(id)` → valor de la métrica base en esa fila (o null si falta).
+  // CRITERIO de bordes (logueado): métrica faltante en la sesión o división por
+  // cero ⇒ devuelve null — esa sesión NO aporta y NUNCA mete un 0 silencioso que
+  // falsee la agregación. Reusa el MISMO parser controlado (nada de eval).
+  function evalCalcRow(formula, getBaseVal) {
+    const res = evaluateFormula(formula, id => {
+      const v = getBaseVal(id);
+      return (v == null || isNaN(v)) ? NaN : Number(v);   // NaN ⇒ el parser lo marca "faltante"
+    });
+    return res.ok ? { value: res.value, reason: null }
+                  : { value: null, reason: (res.error?.msg || 'inválida') + (res.error?.code || '') };
+  }
+
+  // Computa la métrica calculada POR SESIÓN con datos reales, reusando los helpers
+  // del resolver (getSessionIds/fetchReports/fetchEavMetrics) para traer las
+  // métricas BASE de la fórmula. Devuelve [{date, values, value, reason}] y, salvo
+  // opts.silent, loguea cada sesión (verificable a mano). La AGREGACIÓN sobre el
+  // conjunto de sesiones es el Prompt 3 — acá sólo se computa/inspecciona por fila.
+  async function computeCalcPerSession(calcOrId, opts = {}) {
+    const cm = typeof calcOrId === 'string' ? calcMetrics.find(c => c.id === calcOrId) : calcOrId;
+    if (!cm || !cm.formula) { if (!opts.silent) console.warn('[calc] métrica calculada no encontrada:', calcOrId); return null; }
+    const baseIds = usedFormulaMetrics(cm.formula);
+    if (!baseIds.length) { if (!opts.silent) console.warn('[calc] la fórmula no referencia métricas base:', cm.formula); return null; }
+    if (!window.sb || !_clubId) { if (!opts.silent) console.warn('[calc] sin Supabase/club — no se puede computar real'); return null; }
+
+    const { getSessionIds, fetchReports, fetchEavMetrics, CORE_COLS } = await _importResolver();
+    const scope = opts.scope || S?.scope || 'player';
+    const range = opts.range || S?.range || 'w30';
+    const config = {
+      schema: 'gp.card/v1', viz: 'table', scope: { level: scope },
+      metrics: baseIds.map(id => { const c = catalogMap.get(id) || {}; return { id, agg: 'avg', kind: c.kind || 'accum', unit: c.unit || '', custom: !!c.is_custom }; }),
+      dimensions: [], range: { type: range }, comparison: null, style: {},
+    };
+    const ctx = { clubId: _clubId, playerId: window._gpPlayerId || window.gpState?.playerId || null, mcId: currentMcId() };
+
+    const sessionIds = await getSessionIds(config.range, ctx, window.sb);
+    const rows = sessionIds.length ? await fetchReports(sessionIds, config, ctx, catalogMap, window.sb) : [];
+    const customKeys = baseIds.filter(id => !CORE_COLS.has(id));
+    const eavMap = (rows.length && customKeys.length) ? await fetchEavMetrics(rows.map(r => r.id), customKeys, _clubId, window.sb) : new Map();
+    const rowVal = (row, id) => CORE_COLS.has(id) ? Number(row[id] ?? null) : Number(eavMap.get(row.id)?.[id] ?? null);
+
+    const out = rows.map(row => {
+      const values = {}; baseIds.forEach(id => { values[id] = rowVal(row, id); });
+      const { value, reason } = evalCalcRow(cm.formula, id => values[id]);
+      return { reportId: row.id, sessionId: row.session_id, date: row.training_sessions?.session_date?.slice(0, 10) || null, playerId: row.player_id, values, value, reason };
+    });
+
+    if (!opts.silent) {
+      console.groupCollapsed(`[calc] "${cm.name || cm.id}" = ${cm.formula} · ${out.length} sesión(es) · scope=${scope} range=${range}`);
+      out.forEach(r => console.log(`${r.date || r.reportId}  ${baseIds.map(id => `${id}=${r.values[id]}`).join('  ')}  ⇒  ${r.value == null ? `null (${r.reason})` : r.value}`));
+      const skipped = out.filter(r => r.value == null).length;
+      console.log(`Criterio de bordes: división por cero o métrica faltante ⇒ null (${skipped} sesión/es omitida/s, sin 0 silencioso). Agregación = Prompt 3. Evaluado con parser controlado (sin eval).`);
+      console.groupEnd();
+    }
+    return out;
+  }
 
   const _calcFmt = n => {
     if (!isFinite(n)) return '—';
@@ -4605,6 +4676,7 @@
   }
   function _calcValidate() {
     if (!_calcFEl) return;
+    clearTimeout(_calcPrevTimer); _calcPrevToken++;   // cancela cualquier preview-real pendiente
     const src = _calcGetFormula();
     _calcEdit.formula = src;
     const res = evaluateFormula(src);
@@ -4625,6 +4697,7 @@
       vEl.innerHTML = '<i class="ti ti-circle-check"></i><span>Fórmula válida.</span>';
       if (save) save.disabled = !nameOk;
       _calcRenderPreview(res.value);
+      _calcSchedRealPreview(src);   // best-effort: mejora el preview con una sesión real
     } else {
       _calcFEl.classList.add('bad'); vEl.classList.add('bad');
       const code = res.error.code ? `<code>${esc(res.error.code)}</code>` : '';
@@ -4633,7 +4706,10 @@
       _calcRenderPreview(null);
     }
   }
-  function _calcRenderPreview(value) {
+  // Preview del resultado. Por defecto usa valores ilustrativos (sample); cuando
+  // hay datos reales disponibles (opts.real + opts.session), muestra una SESIÓN
+  // REAL — un valor de verdad al crear la métrica (Prompt 2, punto 5).
+  function _calcRenderPreview(value, opts) {
     const p = document.getElementById('cmfPreview');
     if (!p) return;
     const unit = (document.getElementById('cmfUnit')?.value || '').trim();
@@ -4641,10 +4717,30 @@
       p.innerHTML = '<div class="cmf-preview-empty"><i class="ti ti-math-function"></i>El valor de ejemplo aparece cuando la fórmula es válida.</div>';
       return;
     }
+    const real = !!(opts && opts.real && opts.session);
     const used = usedFormulaMetrics(_calcGetFormula());
-    const subst = used.length ? `<div class="cmf-subst"><div class="ln" style="color:var(--cm-fg-faint)">sesión de ejemplo · 1 partido</div>${used.map(id => { const m = catalogMap.get(id); return `<div class="ln"><b>${esc(id)}</b> <span class="eq">=</span> ${_calcFmt(_calcSampleVal(id))} ${esc(m?.unit || '')}</div>`; }).join('')}</div>` : '';
+    const valOf = real ? (id => opts.session.values[id]) : (id => _calcSampleVal(id));
+    const head = real ? `sesión real · ${esc(opts.session.date || opts.session.reportId || '')}` : 'sesión de ejemplo · 1 partido';
+    const subst = used.length ? `<div class="cmf-subst"><div class="ln" style="color:var(--cm-fg-faint)">${head}</div>${used.map(id => { const m = catalogMap.get(id); return `<div class="ln"><b>${esc(id)}</b> <span class="eq">=</span> ${_calcFmt(valOf(id))} ${esc(m?.unit || '')}</div>`; }).join('')}</div>` : '';
+    const cap = real ? 'valor calculado en una <b>sesión real</b> (antes de agregar)' : 'valor calculado <b>en una sesión</b> de ejemplo (antes de agregar)';
     p.innerHTML = `<div class="cmf-preview-val"><span class="v">${_calcFmt(value)}</span>${unit ? `<span class="u">${esc(unit)}</span>` : ''}</div>
-      <div class="cmf-preview-cap">valor calculado <b>en una sesión</b> de ejemplo (antes de agregar)</div>${subst}`;
+      <div class="cmf-preview-cap">${cap}</div>${subst}`;
+  }
+
+  // Debounced: cuando la fórmula es válida, intenta mejorar el preview con una
+  // sesión REAL (best-effort). Si no hay datos / falla, queda el sample.
+  let _calcPrevTimer = null, _calcPrevToken = 0;
+  function _calcSchedRealPreview(formula) {
+    clearTimeout(_calcPrevTimer);
+    const token = _calcPrevToken;
+    _calcPrevTimer = setTimeout(async () => {
+      try {
+        const rows = await computeCalcPerSession({ id: '__preview', name: 'preview', formula }, { silent: true });
+        if (token !== _calcPrevToken || _calcGetFormula() !== formula) return;   // la fórmula cambió → descartar
+        const real = (rows || []).filter(r => r.value != null);
+        if (real.length) _calcRenderPreview(real[real.length - 1].value, { real: true, session: real[real.length - 1] });
+      } catch (_) { /* queda el preview con sample */ }
+    }, 600);
   }
 
   function _calcSave() {
@@ -4655,6 +4751,8 @@
     const id = _calcEdit.id || _calcSlug(name);
     registerCalcMetric({ id, name, unit, formula, kind: 'calculated' });
     closeCalcEditor();
+    // Prompt 2: evaluación REAL por sesión (logueada, verificable a mano).
+    computeCalcPerSession(id).catch(e => console.warn('[calc] computeCalcPerSession:', e));
     // refrescá el catálogo visible (flyout clásico / panel D&D)
     if (panelEl && !document.getElementById('gpbFly')?.classList.contains('is-open')) { /* noop */ }
     const fly = document.getElementById('gpbFly');
@@ -4771,6 +4869,11 @@
     currentConfig: () => (S ? buildConfig(S) : null),  // exposed for tests
     openForEdit: function (cardEl) { openBuilderForEdit(cardEl); },
     startNew: function () { startBuild(); },   // blank canvas — "Crear a medida" del panel Agregar gráfico
+    // Métricas calculadas — evaluación real por sesión (Prompt 2, inspección).
+    computeCalcPerSession,     // (calcId|{formula}, opts?) → [{date,values,value,reason}] + log
+    evalCalcRow,               // (formula, getBaseVal) → { value, reason } — por fila, sin eval
+    evaluateFormula,           // (src, resolve?) → { ok, value } | { ok:false, error } — parser controlado
+    get calcMetrics() { return calcMetrics; },
   };
 
   // Shared render engine for OTHER dashboards (e.g. Match Performance pilot). Draw-only:
