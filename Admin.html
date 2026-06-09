@@ -1044,12 +1044,15 @@
   ];
 
   async function renderModules() {
-    const { data: saved } = await window.sb
-      .from('club_modules')
-      .select('module_key, enabled')
-      .eq('club_id', clubId);
-
+    const [{ data: saved }, { data: memMods }] = await Promise.all([
+      window.sb.from('club_modules').select('module_key, enabled').eq('club_id', clubId),
+      window.sb.from('member_modules').select('module_key, profile_id').eq('club_id', clubId),
+    ]);
     const settingsMap = Object.fromEntries((saved || []).map(r => [r.module_key, r.enabled]));
+    // Staff real por módulo: admins/owners ven todo; el resto, solo lo asignado
+    const adminCount = members.filter(m => ['admin','owner'].includes((m.role||'').toLowerCase())).length;
+    const perModule = {};
+    (memMods || []).forEach(r => { (perModule[r.module_key] = perModule[r.module_key] || new Set()).add(r.profile_id); });
 
     document.getElementById('adModules').innerHTML = MODULES.map(m => {
       const on = m.key in settingsMap ? settingsMap[m.key] : m.defaultOn;
@@ -1058,7 +1061,7 @@
         <div class="ic" style="background:${m.bg};color:${m.fg}"><i class="ti ${m.icon}"></i></div>
         <div class="info">
           <div class="name">${m.name}</div>
-          <div class="meta">${m.soon ? 'Coming soon' : `${count} staff`}</div>
+          <div class="meta">${m.soon ? 'Coming soon' : `${adminCount + (perModule[m.key]?.size || 0)} staff`}</div>
         </div>
         <div class="ad-toggle${on ? ' is-on' : ''}${m.soon ? ' disabled' : ''}" style="${m.soon ? 'opacity:.4;pointer-events:none' : ''}"></div>
       </div>`;
