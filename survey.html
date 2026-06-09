@@ -122,12 +122,16 @@ function renderForm(){
 }
 function renderRpeForm(){
   if(state.rpe===undefined) state.rpe=6;
+  const parts=Object.keys(L.parts);
   app.innerHTML=brand+
     `<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(picked.name)}</button>`+
     `<h1>${L.hi(picked.name.split(' ')[0])}</h1><div class="sub">${L.rpeSub}</div>`+
     `<div class="card"><div class="label">${L.rpeTitle}<span class="v" id="v_rpe">${state.rpe} / 10</span></div>
       <input type="range" min="1" max="10" value="${state.rpe}" oninput="setV('rpe',this.value)">
       <div class="scale-ends"><span>${L.rpeEnds[0]}</span><span>${L.rpeEnds[1]}</span></div></div>`+
+    `<div class="card"><div class="label">${L.soreQ}</div><div class="body-grid">`+
+      parts.map(k=>`<div class="body-chip" data-k="${k}" onclick="toggleBody('${k}',this)">${L.parts[k]}</div>`).join('')+`</div></div>`+
+    `<div class="card"><div class="label">${L.note}</div><textarea placeholder="${L.notePh}" oninput="state.note=this.value"></textarea></div>`+
     `<button class="btn" id="submitBtn" onclick="submitForm('rpe')">${L.send}</button>`;
 }
 window.setV=(k,v)=>{state[k]=+v;document.getElementById('v_'+k).textContent=v+' / 10';};
@@ -135,7 +139,7 @@ window.toggleBody=(k,el)=>{state.body.has(k)?state.body.delete(k):state.body.add
 window.submitForm=async(kind)=>{
   const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent=L.sending;
   const payload = kind==='rpe'
-    ? { rpe: state.rpe }
+    ? { rpe: state.rpe, body:[...state.body], note: state.note }
     : { sleepQ:state.sleepQ, mood:state.mood, fatigue:state.fatigue, stress:state.stress, soreness:state.soreness, body:[...state.body], note:state.note };
   const {data,error}=await sb.rpc('submit_survey',{p_token:token,p_player_id:picked.id,p_payload:payload});
   if(error||data?.error){btn.disabled=false;btn.textContent=L.retry;alert(L.sendErr+(error?.message||data?.error));return;}
