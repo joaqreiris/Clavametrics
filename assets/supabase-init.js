@@ -25,7 +25,16 @@
       if (!user) return null;
       // Override de super-admin: club activo elegido en el switcher
       const _ov = window.getActiveClubOverride && window.getActiveClubOverride();
-      if (_ov && await window.isSuperAdmin()) { _clubId = _ov; return _clubId; }
+      if (_ov && await window.isSuperAdmin()) {
+        // Cargar tu profile REAL (tu id), independiente del club override
+        if (!_profile) {
+          const { data: realProf } = await window.sb.from('profiles')
+            .select('club_id, role, full_name').eq('id', user.id).single();
+          if (realProf) { _profile = realProf; window.__cm_profile = realProf; }
+        }
+        _clubId = _ov;
+        return _clubId;
+      }
       const { data: profile, error: profileErr } = await window.sb.from('profiles')
         .select('club_id, role, full_name')
         .eq('id', user.id)
