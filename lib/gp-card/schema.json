@@ -43,9 +43,11 @@
         "properties": {
           "id": { "type": "string" },
           "agg": { "type": "string", "enum": ["avg", "total", "median", "max", "min"] },
-          "kind": { "type": "string", "enum": ["accum", "peak"] },
+          "kind": { "type": "string", "enum": ["accum", "peak", "calculated"] },
           "unit": { "type": "string" },
           "custom": { "type": "boolean" },
+          "name": { "type": "string", "$comment": "Display name, carried for calculated metrics so a saved card renders even without the catalog entry." },
+          "formula": { "type": "string", "$comment": "Calculated metric: arithmetic over base metric ids with + - * / ( ) and min/max/abs/round. Evaluated PER SESSION by the controlled parser (never as code), then aggregated like any metric." },
           "line": { "type": "boolean", "$comment": "Bars combo: render this metric as a line on a secondary axis." },
           "format": {
             "$comment": "Optional per-column conditional formatting (table viz). min/max & thresholds are derived from real data at render; only the rule is stored.",

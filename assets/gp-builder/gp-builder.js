@@ -180,7 +180,7 @@
 
   function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
   function fmt(n) { return n >= 1000 ? n.toLocaleString('en-US') : (Number.isInteger(n) ? n : n.toFixed(1)); }
-  function defaultAgg(kind) { return kind === 'peak' ? 'avg' : 'total'; }
+  function defaultAgg(kind) { return (kind === 'peak' || kind === 'calculated') ? 'avg' : 'total'; }
   function isAggOk(agg, kind) { return kind !== 'peak' || (AGG[agg] && AGG[agg].peakOk); }
   function metIcon(m) { return (m && m.calculated) ? 'ti-math-function' : (CAT_ICON[m.group_name] || 'ti-chart-bar'); }
   function metSample(m) { return CAT_SAMPLE[m.group_name] || 100; }
@@ -205,6 +205,10 @@
       metrics: S.metrics.map(m => {
         const cat = catalogMap.get(m.id) || {};
         const out = { id:m.id, agg:m.agg, kind:cat.kind||'accum', unit:cat.unit||'', custom:!!cat.is_custom };
+        // Calculated metric → self-contained card: embed the formula + name so the
+        // resolver can compute it per session and the card re-renders on reload even
+        // if the catalog entry isn't around (the card references the metric by id).
+        if (cat.calculated && cat.formula) { out.kind = 'calculated'; out.formula = cat.formula; out.name = cat.name || m.id; }
         // Per-column conditional format (table viz). Persist the user's rule, or a
         // sensible default for table cards so the formatting survives save/reload.
         if (m.format) out.format = m.format;
@@ -1512,6 +1516,7 @@
   async function resolveAndRenderCard(cardEl, config) {
     const body = cardEl.querySelector('.gp-c-b');
     if (!body) return;
+    _absorbCalcFromConfig(config);   // reabsorbe métricas calculadas embebidas (reload/reuse)
 
     // Per-element request token: the live builder preview re-resolves on every change,
     // so an older (slower) query must not overwrite a newer one. Saved cards each have
@@ -1537,7 +1542,7 @@
       }
       if (stale()) return;
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, enrichMcDiff, CORE_COLS } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, enrichMcDiff, CORE_COLS, neededKeys } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
@@ -1589,8 +1594,8 @@
         return;
       }
 
-      // Step 3: EAV
-      const customKeys = config.metrics.filter(m => !CORE_COLS.has(m.id)).map(m => m.id);
+      // Step 3: EAV (custom metrics + base EAV metrics used by calc formulas)
+      const customKeys = neededKeys(config, catalogMap).eav;
       const eavMap = customKeys.length
         ? await fetchEavMetrics(rows.map(r => r.id), customKeys, _clubId, sb)
         : new Map();
@@ -4572,6 +4577,18 @@
   function _rebuildCalcGroup() {
     catalogGroups = catalogGroups.filter(g => g.g !== 'Calculadas');
     if (calcMetrics.length) catalogGroups.push({ g: 'Calculadas', custom: true, items: calcMetrics.map(c => catalogMap.get(c.id)) });
+  }
+  // Persistencia implícita: una card guardada lleva la fórmula embebida en su
+  // config (buildConfig). Al cargar/renderizar una card, reabsorbé sus métricas
+  // calculadas al catálogo en memoria → vuelven a estar disponibles para editar y
+  // reusar tras un reload, y conservan su nombre. (No pisa una ya existente.)
+  function _absorbCalcFromConfig(config) {
+    if (!config || !Array.isArray(config.metrics)) return;
+    for (const m of config.metrics) {
+      if (m.kind === 'calculated' && m.formula && !catalogMap.get(m.id)?.calculated) {
+        registerCalcMetric({ id: m.id, name: m.name || catalogMap.get(m.id)?.name || m.id, unit: m.unit || '', formula: m.formula, kind: 'calculated' });
+      }
+    }
   }
 
   // ── Editor (overlay modal) ──
