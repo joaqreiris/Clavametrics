@@ -557,16 +557,14 @@
         .eq('id', clubId);
       if (error) throw error;
 
-      // Pending DB migration — columns not yet in schema:
+      // Guardar las categorías elegidas (tabla club_categories ya existe)
+      const { error: catErr } = await window.sb.from('club_categories')
+        .upsert(categories.map((cat, i) => ({ club_id: clubId, name: cat, sort_order: i })),
+                { onConflict: 'club_id,name' });
+      if (catErr) throw catErr;
+
+      // Pendiente de migración de schema (columnas aún no existen en clubs):
       //   short_name, city, timezone → ALTER TABLE clubs ADD COLUMN ...
-      //   categories → needs club_categories table
-      // When migration runs, uncomment:
-      // const short_name = document.getElementById('club-short').value.trim();
-      // const city       = document.getElementById('club-city').value.trim();
-      // const timezone   = document.getElementById('club-tz').value;
-      // await window.sb.from('clubs').update({ short_name, city, timezone }).eq('id', clubId);
-      // await window.sb.from('club_categories')
-      //   .upsert(categories.map(cat => ({ club_id: clubId, name: cat })), { onConflict: 'club_id,name' });
 
       window.location.href = 'Hub.html';
     } catch (err) {
