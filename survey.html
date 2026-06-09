@@ -1,17 +1,13 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Check-in diario · ClavaMetrics</title>
+<title>Daily check-in · ClavaMetrics</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{
-    --bg:#0b0f14; --surface:#141a22; --surface-2:#1c242e; --border:#28323d;
-    --fg:#eef3f8; --fg-muted:#8a97a6; --accent:#34d399; --accent-d:#10b981; --danger:#f87171;
-    --r:14px; --sans:'Inter',-apple-system,system-ui,sans-serif;
-  }
+  :root{--bg:#0b0f14;--surface:#141a22;--surface-2:#1c242e;--border:#28323d;--fg:#eef3f8;--fg-muted:#8a97a6;--accent:#34d399;--accent-d:#10b981;--r:14px;--sans:'Inter',-apple-system,system-ui,sans-serif}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{background:var(--bg);color:var(--fg);font-family:var(--sans);min-height:100vh;min-height:100dvh}
   .wrap{max-width:480px;margin:0 auto;padding:20px 18px 40px;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
@@ -44,76 +40,88 @@
 </style>
 </head>
 <body>
-<div class="wrap" id="app">
-  <div class="brand"><span class="dot"></span>ClavaMetrics</div>
-  <div class="center"><div class="spinner"></div><div>Cargando…</div></div>
-</div>
+<div class="wrap" id="app"><div class="brand"><span class="dot"></span>ClavaMetrics</div><div class="center"><div class="spinner"></div></div></div>
 <script>
-const SB_URL = 'https://xesrumijvdmqjrufgeka.supabase.co';
-const SB_KEY = 'sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
-const sb = supabase.createClient(SB_URL, SB_KEY);
-const app = document.getElementById('app');
-const token = new URLSearchParams(location.search).get('token');
-let players = [], picked = null;
-const state = { sleepQ:7, mood:7, fatigue:5, stress:3, soreness:3, body:new Set(), note:'' };
+const T = {
+  en:{loading:'Loading…',invalid:'Invalid link',expired:'This link has expired or been revoked.',notoken:'Missing token in the link.',
+      who:'Who are you?',whoSub:'Tap your name to start your daily check-in.',notme:n=>'I\'m not '+n,
+      hi:n=>'Hi, '+n+'.',formSub:'Tell us how you slept and how you feel. Takes 40 seconds.',
+      sleep:'Sleep quality',mood:'Mood',energy:'Energy',stress:'Stress',soreness:'Muscle soreness',
+      e_sleep:['Poor','Excellent'],e_mood:['Low','High'],e_energy:['Exhausted','Full'],e_stress:['Calm','Stressed'],e_soreness:['None','A lot'],
+      soreQ:'Any soreness?',note:'Note (optional)',notePh:'Anything you\'d like to add…',
+      send:'Send check-in',sending:'Sending…',retry:'Retry',sendErr:'Could not send: ',
+      done:n=>'Done, '+n+'!',doneSub:'Your check-in was recorded. Thanks.',
+      parts:{hamstring:'Hamstring',quads:'Quads',calves:'Calves',groin:'Groin',knee:'Knee',ankle:'Ankle',shoulder:'Shoulder',back:'Lower back'}},
+  es:{loading:'Cargando…',invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
+      who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar tu check-in diario.',notme:n=>'No soy '+n,
+      hi:n=>'Hola, '+n+'.',formSub:'Contanos cómo dormiste y cómo te sentís. Toma 40 segundos.',
+      sleep:'Calidad de sueño',mood:'Ánimo',energy:'Energía',stress:'Estrés',soreness:'Dolor muscular',
+      e_sleep:['Mala','Excelente'],e_mood:['Bajo','Alto'],e_energy:['Agotado','Pleno'],e_stress:['Tranquilo','Estresado'],e_soreness:['Ninguno','Mucho'],
+      soreQ:'¿Alguna molestia?',note:'Nota (opcional)',notePh:'Algo que quieras agregar…',
+      send:'Enviar check-in',sending:'Enviando…',retry:'Reintentar',sendErr:'No se pudo enviar: ',
+      done:n=>'¡Listo, '+n+'!',doneSub:'Tu check-in se registró. Gracias.',
+      parts:{hamstring:'Isquios',quads:'Cuádriceps',calves:'Gemelos',groin:'Aductores',knee:'Rodilla',ankle:'Tobillo',shoulder:'Hombro',back:'Lumbares'}},
+  pt:{loading:'Carregando…',invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
+      who:'Quem é você?',whoSub:'Toque no seu nome para começar o check-in diário.',notme:n=>'Não sou '+n,
+      hi:n=>'Olá, '+n+'.',formSub:'Conte como dormiu e como se sente. Leva 40 segundos.',
+      sleep:'Qualidade do sono',mood:'Humor',energy:'Energia',stress:'Estresse',soreness:'Dor muscular',
+      e_sleep:['Ruim','Excelente'],e_mood:['Baixo','Alto'],e_energy:['Exausto','Pleno'],e_stress:['Calmo','Estressado'],e_soreness:['Nenhuma','Muita'],
+      soreQ:'Alguma dor?',note:'Nota (opcional)',notePh:'Algo que queira adicionar…',
+      send:'Enviar check-in',sending:'Enviando…',retry:'Tentar de novo',sendErr:'Não foi possível enviar: ',
+      done:n=>'Pronto, '+n+'!',doneSub:'Seu check-in foi registrado. Obrigado.',
+      parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
+};
+const _nav=(navigator.language||'en').toLowerCase();
+const L = T[_nav.startsWith('es')?'es':_nav.startsWith('pt')?'pt':'en'];
 
-const brand = '<div class="brand"><span class="dot"></span>ClavaMetrics</div>';
+const SB_URL='https://xesrumijvdmqjrufgeka.supabase.co';
+const SB_KEY='sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const app=document.getElementById('app');
+const token=new URLSearchParams(location.search).get('token');
+let players=[],picked=null;
+const state={sleepQ:7,mood:7,fatigue:5,stress:3,soreness:3,body:new Set(),note:''};
+const brand='<div class="brand"><span class="dot"></span>ClavaMetrics</div>';
 
-function show404(msg){
-  app.innerHTML = brand + `<div class="center"><i class="ti ti-link-off big"></i><div style="font-size:17px;color:var(--fg)">Link no válido</div><div>${msg||'Este link expiró o fue revocado.'}</div></div>`;
-}
+function show404(msg){app.innerHTML=brand+`<div class="center"><i class="ti ti-link-off big"></i><div style="font-size:17px;color:var(--fg)">${L.invalid}</div><div>${msg||L.expired}</div></div>`;}
 
 async function init(){
-  if(!token){ show404('Falta el token en el link.'); return; }
-  const { data, error } = await sb.rpc('get_survey_players', { p_token: token });
-  if(error || !data || !data.length){ show404(error?.message); return; }
-  players = data;
-  renderPick();
+  if(!token){show404(L.notoken);return;}
+  const {data,error}=await sb.rpc('get_survey_players',{p_token:token});
+  if(error||!data||!data.length){show404(error?.message);return;}
+  players=data;renderPick();
 }
-
 function renderPick(){
-  app.innerHTML = brand +
-    '<h1>¿Quién sos?</h1><div class="sub">Tocá tu nombre para empezar tu check-in diario.</div>' +
-    '<div class="players">' + players.map((p,i)=>
-      `<button class="player-btn" data-i="${i}"><span class="av">${(p.name[0]||'?').toUpperCase()}</span>${p.name}</button>`
-    ).join('') + '</div>';
-  app.querySelectorAll('.player-btn').forEach(b=>b.onclick=()=>{ picked=players[+b.dataset.i]; renderForm(); });
+  app.innerHTML=brand+`<h1>${L.who}</h1><div class="sub">${L.whoSub}</div><div class="players">`+
+    players.map((p,i)=>`<button class="player-btn" data-i="${i}"><span class="av">${(p.name[0]||'?').toUpperCase()}</span>${p.name}</button>`).join('')+`</div>`;
+  app.querySelectorAll('.player-btn').forEach(b=>b.onclick=()=>{picked=players[+b.dataset.i];renderForm();});
 }
-
-function scale(key,label,low,high){
+function scale(key,label,ends){
   return `<div class="card"><div class="label">${label}<span class="v" id="v_${key}">${state[key]} / 10</span></div>
     <input type="range" min="1" max="10" value="${state[key]}" oninput="setV('${key}',this.value)">
-    <div class="scale-ends"><span>${low}</span><span>${high}</span></div></div>`;
+    <div class="scale-ends"><span>${ends[0]}</span><span>${ends[1]}</span></div></div>`;
 }
-
 function renderForm(){
-  const parts=[['hamstring','Isquios'],['quads','Cuádriceps'],['calves','Gemelos'],['groin','Aductores'],['knee','Rodilla'],['ankle','Tobillo'],['shoulder','Hombro'],['back','Lumbares']];
-  app.innerHTML = brand +
-    `<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>No soy ${picked.name}</button>` +
-    `<h1>Hola, ${picked.name.split(' ')[0]}.</h1><div class="sub">Contanos cómo dormiste y cómo te sentís. Toma 40 segundos.</div>` +
-    scale('sleepQ','Calidad de sueño','Mala','Excelente') +
-    scale('mood','Ánimo','Bajo','Alto') +
-    scale('fatigue','Energía','Agotado','Pleno') +
-    scale('stress','Estrés','Tranquilo','Estresado') +
-    scale('soreness','Dolor muscular','Ninguno','Mucho') +
-    `<div class="card"><div class="label">¿Alguna molestia?</div><div class="body-grid">` +
-      parts.map(([k,l])=>`<div class="body-chip" data-k="${k}" onclick="toggleBody('${k}',this)">${l}</div>`).join('') +
-    `</div></div>` +
-    `<div class="card"><div class="label">Nota (opcional)</div><textarea id="note" placeholder="Algo que quieras agregar…" oninput="state.note=this.value"></textarea></div>` +
-    `<button class="btn" id="submitBtn" onclick="submitForm()">Enviar check-in</button>`;
+  const parts=Object.keys(L.parts);
+  app.innerHTML=brand+
+    `<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(picked.name)}</button>`+
+    `<h1>${L.hi(picked.name.split(' ')[0])}</h1><div class="sub">${L.formSub}</div>`+
+    scale('sleepQ',L.sleep,L.e_sleep)+scale('mood',L.mood,L.e_mood)+scale('fatigue',L.energy,L.e_energy)+
+    scale('stress',L.stress,L.e_stress)+scale('soreness',L.soreness,L.e_soreness)+
+    `<div class="card"><div class="label">${L.soreQ}</div><div class="body-grid">`+
+      parts.map(k=>`<div class="body-chip" data-k="${k}" onclick="toggleBody('${k}',this)">${L.parts[k]}</div>`).join('')+`</div></div>`+
+    `<div class="card"><div class="label">${L.note}</div><textarea placeholder="${L.notePh}" oninput="state.note=this.value"></textarea></div>`+
+    `<button class="btn" id="submitBtn" onclick="submitForm()">${L.send}</button>`;
 }
-
-window.setV=(k,v)=>{ state[k]=+v; document.getElementById('v_'+k).textContent=v+' / 10'; };
-window.toggleBody=(k,el)=>{ state.body.has(k)?state.body.delete(k):state.body.add(k); el.classList.toggle('on'); };
-
+window.setV=(k,v)=>{state[k]=+v;document.getElementById('v_'+k).textContent=v+' / 10';};
+window.toggleBody=(k,el)=>{state.body.has(k)?state.body.delete(k):state.body.add(k);el.classList.toggle('on');};
 window.submitForm=async()=>{
-  const btn=document.getElementById('submitBtn'); btn.disabled=true; btn.textContent='Enviando…';
-  const payload={ sleepQ:state.sleepQ, mood:state.mood, fatigue:state.fatigue, stress:state.stress, soreness:state.soreness, body:[...state.body], note:state.note };
-  const { data, error } = await sb.rpc('submit_survey', { p_token: token, p_player_id: picked.id, p_payload: payload });
-  if(error || data?.error){ btn.disabled=false; btn.textContent='Reintentar'; alert('No se pudo enviar: '+(error?.message||data?.error)); return; }
-  app.innerHTML = brand + `<div class="center"><i class="ti ti-circle-check big"></i><div style="font-size:20px;color:var(--fg)">¡Listo, ${picked.name.split(' ')[0]}!</div><div>Tu check-in se registró. Gracias.</div></div>`;
+  const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent=L.sending;
+  const payload={sleepQ:state.sleepQ,mood:state.mood,fatigue:state.fatigue,stress:state.stress,soreness:state.soreness,body:[...state.body],note:state.note};
+  const {data,error}=await sb.rpc('submit_survey',{p_token:token,p_player_id:picked.id,p_payload:payload});
+  if(error||data?.error){btn.disabled=false;btn.textContent=L.retry;alert(L.sendErr+(error?.message||data?.error));return;}
+  app.innerHTML=brand+`<div class="center"><i class="ti ti-circle-check big"></i><div style="font-size:20px;color:var(--fg)">${L.done(picked.name.split(' ')[0])}</div><div>${L.doneSub}</div></div>`;
 };
-
 window.renderPick=renderPick;
 init();
 </script>
