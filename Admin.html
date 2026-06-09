@@ -1137,6 +1137,61 @@
   document.getElementById('secModalClose') ?.addEventListener('click', closeMemberSectionsModal);
   document.getElementById('secModalCancel')?.addEventListener('click', closeMemberSectionsModal);
   document.getElementById('secModalSave')  ?.addEventListener('click', saveMemberSections);
+
+  // ── Member categories (teams) modal ──
+  let _mtEditId = null;
+  let _mtTeams = [];
+  async function openMemberTeamsModal(id) {
+    const m = members.find(x => x.id === id);
+    if (!m) return;
+    _mtEditId = id;
+    document.getElementById('mtModalName').textContent = m.full_name || m.email || 'Member';
+    const list = document.getElementById('mtModalList');
+    list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">Cargando…</div>`;
+    document.getElementById('mtModalBackdrop').style.display = 'flex';
+    const bucket = (m.role || m.club_role || '').toLowerCase();
+    if (bucket === 'admin' || bucket === 'owner') {
+      list.innerHTML = `<div style="padding:24px 16px;text-align:center;color:var(--cm-fg-muted)">
+        <i class="ti ti-shield-check" style="font-size:24px;color:var(--cm-accent);opacity:.7"></i>
+        <div style="font:600 13.5px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:8px">Acceso total por rol</div>
+        <div style="font:500 12px/1.5 var(--cm-font-sans);margin-top:4px">Los ${bucket==='owner'?'owners':'admins'} ven todas las categorías.</div></div>`;
+      document.getElementById('mtModalSave').style.display = 'none';
+      return;
+    }
+    document.getElementById('mtModalSave').style.display = '';
+    const [{ data: teams }, { data: assigned }] = await Promise.all([
+      window.sb.from('teams').select('id,name').eq('club_id', clubId).order('name'),
+      window.sb.from('member_teams').select('team_id').eq('club_id', clubId).eq('profile_id', id),
+    ]);
+    _mtTeams = teams || [];
+    if (!_mtTeams.length) { list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:500 12.5px/1 var(--cm-font-sans)">No hay categorías. Creá categorías primero en "Add club / category".</div>`; document.getElementById('mtModalSave').style.display='none'; return; }
+    const cur = new Set((assigned || []).map(r => r.team_id));
+    list.innerHTML = _mtTeams.map(t => `
+      <div class="ad-module-row" data-team="${t.id}">
+        <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-users-group"></i></div>
+        <div class="info"><div class="name">${t.name}</div></div>
+        <div class="ad-toggle${cur.has(t.id) ? ' is-on' : ''}"></div>
+      </div>`).join('');
+    list.querySelectorAll('.ad-toggle').forEach(tg => tg.addEventListener('click', () => tg.classList.toggle('is-on')));
+  }
+  function closeMemberTeamsModal() { document.getElementById('mtModalBackdrop').style.display = 'none'; }
+  async function saveMemberTeams() {
+    if (!_mtEditId) return;
+    const ids = [...document.querySelectorAll('#mtModalList [data-team]')]
+      .filter(r => r.querySelector('.ad-toggle').classList.contains('is-on'))
+      .map(r => r.dataset.team);
+    await window.sb.from('member_teams').delete().eq('club_id', clubId).eq('profile_id', _mtEditId);
+    if (ids.length) {
+      const rows = ids.map(t => ({ club_id: clubId, profile_id: _mtEditId, team_id: t }));
+      const { error } = await window.sb.from('member_teams').insert(rows);
+      if (error) { alert('Save failed: ' + error.message); return; }
+    }
+    window.sb.rpc('log_audit', { p_table: 'member_teams', p_op: 'UPDATE', p_changes: { member: _mtEditId, teams: ids }, p_club_id: clubId });
+    closeMemberTeamsModal();
+  }
+  document.getElementById('mtModalClose') ?.addEventListener('click', closeMemberTeamsModal);
+  document.getElementById('mtModalCancel')?.addEventListener('click', closeMemberTeamsModal);
+  document.getElementById('mtModalSave')  ?.addEventListener('click', saveMemberTeams);
   document.getElementById('secModalBackdrop')?.addEventListener('click', e => { if (e.target.id === 'secModalBackdrop') closeMemberSectionsModal(); });
 
   // ── Member role modal ──
@@ -1197,7 +1252,7 @@
 
   function openRowMenu(id, btn) {
     _rowMenuId = id;
-    _rowMenu.innerHTML = _rmItem('ti-shield-check','Change role') + _rmItem('ti-layout-grid','Edit sections') + _rmItem('ti-mail','Copy email');
+    _rowMenu.innerHTML = _rmItem('ti-shield-check','Change role') + _rmItem('ti-layout-grid','Edit sections') + _rmItem('ti-users-group','Categorías') + _rmItem('ti-mail','Copy email');
     _rowMenu.style.display = 'block';
     const r = btn.getBoundingClientRect();
     _rowMenu.style.top  = (window.scrollY + r.bottom + 4) + 'px';
@@ -1207,6 +1262,7 @@
       closeRowMenu();
       if (act === 'Change role') openMemberRoleModal(id2);
       else if (act === 'Edit sections') openMemberSectionsModal(id2);
+      else if (act === 'Categorías') openMemberTeamsModal(id2);
       else if (act === 'Copy email') { const mm = members.find(x => x.id === id2); if (mm?.email) navigator.clipboard?.writeText(mm.email); }
     }));
   }
@@ -1502,6 +1558,21 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-outline is-sm" id="secModalCancel">Cancel</button>
       <button class="cm-btn is-primary is-sm" id="secModalSave"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="mtModalBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:420px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+      <i class="ti ti-users-group" style="font-size:18px;color:var(--cm-accent)"></i>
+      <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Categorías · <span id="mtModalName">—</span></div>
+      <button id="mtModalClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    </div>
+    <div id="mtModalList" style="padding:14px 16px;max-height:60vh;overflow:auto;display:grid;grid-template-columns:1fr;gap:8px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
+      <button class="cm-btn is-outline is-sm" id="mtModalCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="mtModalSave"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
     </div>
   </div>
 </div>
