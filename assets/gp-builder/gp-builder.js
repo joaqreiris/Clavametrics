@@ -182,7 +182,7 @@
   function fmt(n) { return n >= 1000 ? n.toLocaleString('en-US') : (Number.isInteger(n) ? n : n.toFixed(1)); }
   function defaultAgg(kind) { return kind === 'peak' ? 'avg' : 'total'; }
   function isAggOk(agg, kind) { return kind !== 'peak' || (AGG[agg] && AGG[agg].peakOk); }
-  function metIcon(m) { return CAT_ICON[m.group_name] || 'ti-chart-bar'; }
+  function metIcon(m) { return (m && m.calculated) ? 'ti-math-function' : (CAT_ICON[m.group_name] || 'ti-chart-bar'); }
   function metSample(m) { return CAT_SAMPLE[m.group_name] || 100; }
 
   function autoTitle(S) {
@@ -1016,6 +1016,7 @@
 
       // inicio del arrastre (campo del panel o chip ya colocado)
       ddPane.addEventListener('dragstart', e => {
+        if (e.target.closest('.cmf-rowacts')) { e.preventDefault(); return; }   // editar/borrar no arrastra
         const el = e.target.closest('.bdd-field, .bdd-chip');
         if (!el || el.classList.contains('is-placed')) return;
         _ddDrag = { id: el.dataset.id, kind: el.dataset.kind, from: el.closest('.bdd-drop') ? 'zone' : 'panel' };
@@ -1067,8 +1068,11 @@
         ddSyncFromS();
       });
 
-      // quitar chip (×) + cambiar tipo (segmented)
+      // quitar chip (×) + cambiar tipo (segmented) + métrica calculada (crear/editar/borrar)
       ddPane.addEventListener('click', e => {
+        if (e.target.closest('[data-calc-add]')) { openCalcEditor(); return; }
+        const cEdit = e.target.closest('[data-calc-edit]'); if (cEdit) { e.stopPropagation(); openCalcEditor(cEdit.dataset.calcEdit); return; }
+        const cDel = e.target.closest('[data-calc-del]'); if (cDel) { e.stopPropagation(); unregisterCalcMetric(cDel.dataset.calcDel); ddSyncFromS(); return; }
         const typeBtn = e.target.closest('#gpbDDSeg button[data-type]');
         if (typeBtn) { ddSetType(typeBtn.dataset.type); return; }
         const rmDim = e.target.closest('[data-rmdim]');
@@ -3980,20 +3984,36 @@
       items.forEach(m => {
         const on  = S.metrics.some(f => f.id === m.id);
         const dis = !on && full;
+        const isCalc = m.calculated;
+        const tail = isCalc
+          ? `<span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span><span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="Editar fórmula"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="Borrar"><i class="ti ti-trash"></i></button></span>`
+          : `<span class="kind ${m.kind}">${m.kind==='peak'?'PEAK':'ACC'}</span>`;
+        const tag = (!isCalc && m.is_custom) ? ' <span style="font-size:9px;color:var(--cm-violet,#7C3AED)">EAV</span>' : '';
         measuresHtml += `<div class="es-fly-row ${on?'is-on':''} ${dis?'is-disabled':''}" data-mid="${esc(m.id)}" draggable="true">
-          <span class="ic"><i class="ti ${metIcon(m)}"></i></span>
+          <span class="ic${isCalc?' is-calc':''}"><i class="ti ${metIcon(m)}"></i></span>
           <span class="nm">
-            <span class="t">${esc(m.name)}${m.is_custom?' <span style="font-size:9px;color:var(--cm-violet,#7C3AED)">EAV</span>':''}</span>
+            <span class="t">${esc(m.name)}${tag}</span>
             <span class="s">${esc(m.unit)}</span>
           </span>
-          <span class="kind ${m.kind}">${m.kind==='peak'?'PEAK':'ACC'}</span>
+          ${tail}
         </div>`;
       });
     });
     if (measuresHtml) html += `<div class="es-fly-grp meas">Medidas</div>` + measuresHtml;
 
     const body = document.getElementById('gpbFlyBody');
-    body.innerHTML = shown ? html : `<div style="padding:22px;text-align:center;color:var(--cm-fg-muted);font:500 12px/1.5 var(--cm-font-sans)">No fields match "${esc(q)}"</div>`;
+    const addCalcBtn = `<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>Métrica calculada</button>`;
+    body.innerHTML = (shown ? html : `<div style="padding:22px;text-align:center;color:var(--cm-fg-muted);font:500 12px/1.5 var(--cm-font-sans)">No fields match "${esc(q)}"</div>`) + addCalcBtn;
+
+    // entrada "+ Métrica calculada" + editar/borrar calculadas
+    body.querySelector('[data-calc-add]')?.addEventListener('click', () => { closeFly(); openCalcEditor(); });
+    body.querySelectorAll('[data-calc-edit]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); closeFly(); openCalcEditor(b.dataset.calcEdit); }));
+    body.querySelectorAll('[data-calc-del]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      unregisterCalcMetric(b.dataset.calcDel);
+      renderFlyBody(document.getElementById('gpbFlySearch').value.trim().toLowerCase());
+      syncAll();
+    }));
 
     // dimension rows → toggle dimension (click only, no drag)
     body.querySelectorAll('[data-did]').forEach(row => {
@@ -4013,6 +4033,7 @@
         if (VIZ_TYPES[S.type].max === 1) closeFly();
       };
       row.addEventListener('dragstart', e => {
+        if (e.target.closest('.cmf-rowacts')) { e.preventDefault(); return; }   // editar/borrar no arrastra
         if (row.classList.contains('is-disabled')) { e.preventDefault(); return; }
         dragMetricId = row.dataset.mid;
         row.classList.add('is-dragging');
@@ -4144,8 +4165,9 @@
     const q = _ddQuery.trim().toLowerCase();
     const hit = (id, name) => !q || name.toLowerCase().includes(q) || id.toLowerCase().includes(q);
     const dimRows = DIMENSIONS.filter(d => hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
-    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, _metPlaced(m.id)));
+    const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, _metPlaced(m.id)));
     const none = '<div class="bdd-grp-h"><span class="hint">sin coincidencias</span></div>';
+    const addCalc = '<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>Métrica calculada</button>';
     return `
       <div class="bdd-col-h"><i class="ti ti-list-details"></i><span class="t">Campos</span><span class="ct">${total}</span></div>
       <div class="bdd-search"><i class="ti ti-search"></i><input id="gpbDDSearch" type="text" placeholder="Buscar campo…" value="${esc(_ddQuery)}"></div>
@@ -4154,7 +4176,21 @@
         ${dimRows.join('') || none}
         <div class="bdd-grp-h"><span class="k">Métricas</span><span class="ln"></span><span class="hint">qué se mide</span></div>
         ${metRows.join('') || none}
+        ${addCalc}
       </div>`;
+  }
+
+  // Fila D&D de una métrica calculada: arrastrable como cualquier métrica, con
+  // distintivo fx (tinte info) + acciones editar/borrar.
+  function ddCalcFieldHTML(m) {
+    const placed = _metPlaced(m.id);
+    return `<div class="bdd-field${placed ? ' is-placed' : ''}" draggable="${placed ? 'false' : 'true'}" data-id="${esc(m.id)}" data-kind="metric">
+      <span class="grip"><i class="ti ti-grip-vertical"></i></span>
+      <span class="ic is-calc"><i class="ti ti-math-function"></i></span>
+      <span class="nm">${esc(m.name)}</span>
+      <span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span>
+      <span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="Editar fórmula"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="Borrar"><i class="ti ti-trash"></i></button></span>
+    </div>`;
   }
 
   // Chips colocados (reflejan S). Arrastrables para reordenar dentro de la zona.
@@ -4323,6 +4359,333 @@
       panelEl.querySelectorAll('.es-p-b > .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === tab));
       if (S) syncAll();
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  MÉTRICAS CALCULADAS · editor de fórmula (Prompt 1 — editor + catálogo)
+  //  Define una métrica nueva por una fórmula aritmética sobre las métricas
+  //  REALES del catálogo (catalogMap). Editor CONTROLADO: tokenizer + parser
+  //  recursivo descendente propio — NUNCA eval/new Function. La validación
+  //  (sintaxis + métricas conocidas) es real; el preview usa valores
+  //  ilustrativos (metSample) — la evaluación con datos reales es el Prompt 2.
+  // ══════════════════════════════════════════════════════════════════════
+
+  const CALC_FUNCS = { min: [2, 99], max: [2, 99], abs: [1, 1], round: [1, 1] };
+  let calcMetrics = [];   // [{ id, name, unit, formula, kind:'calculated' }]
+
+  // "Métrica conocida" en una fórmula = métrica BASE del catálogo (no otra
+  // calculada — Nivel 1 no anida calculadas).
+  function _calcKnown(id) { const m = catalogMap.get(id); return !!m && !m.calculated; }
+  function _calcSampleVal(id) { const m = catalogMap.get(id); return m ? metSample(m) : NaN; }
+
+  function tokenizeFormula(src) {
+    const toks = [];
+    const re = /\s+|[0-9]*\.?[0-9]+|[A-Za-z_][A-Za-z0-9_]*|[+\-*/(),]|[^\s]/g;
+    let m;
+    while ((m = re.exec(src)) !== null) {
+      const s = m[0];
+      if (/^\s+$/.test(s)) continue;
+      if (/^[0-9]*\.?[0-9]+$/.test(s)) toks.push({ t: 'num', v: parseFloat(s), raw: s });
+      else if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(s)) toks.push(CALC_FUNCS[s] ? { t: 'fn', v: s, raw: s } : { t: 'id', v: s, raw: s });
+      else if ('+-*/'.includes(s)) toks.push({ t: 'op', v: s, raw: s });
+      else if (s === '(') toks.push({ t: 'lp', raw: s });
+      else if (s === ')') toks.push({ t: 'rp', raw: s });
+      else if (s === ',') toks.push({ t: 'comma', raw: s });
+      else toks.push({ t: 'bad', v: s, raw: s });
+    }
+    return toks;
+  }
+
+  // expr := term (('+'|'-') term)*  ·  term := factor (('*'|'/') factor)*
+  // factor := num | metric | fn '(' args ')' | '(' expr ')' | '-' factor
+  function evaluateFormula(src) {
+    const toks = tokenizeFormula(src);
+    if (!toks.length) return { ok: false, error: { msg: 'La fórmula está vacía.' } };
+    const bad = toks.find(t => t.t === 'bad');
+    if (bad) return { ok: false, error: { msg: 'Carácter no permitido: ', code: bad.v } };
+
+    let i = 0; const peek = () => toks[i], eat = () => toks[i++]; let err = null;
+    const fail = (msg, code) => { if (!err) err = { msg, code }; throw 'E'; };
+
+    function parseExpr() {
+      let v = parseTerm();
+      while (peek() && peek().t === 'op' && (peek().v === '+' || peek().v === '-')) { const op = eat().v; const r = parseTerm(); v = op === '+' ? v + r : v - r; }
+      return v;
+    }
+    function parseTerm() {
+      let v = parseFactor();
+      while (peek() && peek().t === 'op' && (peek().v === '*' || peek().v === '/')) { const op = eat().v; const r = parseFactor(); if (op === '/') { if (r === 0) fail('División por cero.'); v = v / r; } else v = v * r; }
+      return v;
+    }
+    function parseFactor() {
+      const tk = peek();
+      if (!tk) fail('Falta un operando al final.');
+      if (tk.t === 'op' && tk.v === '-') { eat(); return -parseFactor(); }
+      if (tk.t === 'op' && tk.v === '+') { eat(); return parseFactor(); }
+      if (tk.t === 'num') { eat(); return tk.v; }
+      if (tk.t === 'id') { eat(); if (!_calcKnown(tk.v)) fail('Métrica desconocida: ', tk.v); return _calcSampleVal(tk.v); }
+      if (tk.t === 'fn') {
+        const fn = eat().v;
+        if (!peek() || peek().t !== 'lp') fail('Falta «(» después de ' + fn + '.');
+        eat();
+        const args = [parseExpr()];
+        while (peek() && peek().t === 'comma') { eat(); args.push(parseExpr()); }
+        if (!peek() || peek().t !== 'rp') fail('Paréntesis sin cerrar.');
+        eat();
+        const [lo, hi] = CALC_FUNCS[fn];
+        if (args.length < lo || args.length > hi) fail(`${fn}() espera ${lo === hi ? lo : lo + '+'} argumento${lo > 1 ? 's' : ''}.`);
+        if (fn === 'min') return Math.min(...args);
+        if (fn === 'max') return Math.max(...args);
+        if (fn === 'abs') return Math.abs(args[0]);
+        if (fn === 'round') return Math.round(args[0]);
+      }
+      if (tk.t === 'lp') { eat(); const v = parseExpr(); if (!peek() || peek().t !== 'rp') fail('Paréntesis sin cerrar.'); eat(); return v; }
+      if (tk.t === 'rp') fail('Paréntesis «)» de más.');
+      if (tk.t === 'comma') fail('Coma inesperada.');
+      fail('Token inesperado: ', tk.raw);
+    }
+    try {
+      const v = parseExpr();
+      if (i < toks.length) {
+        const t = toks[i];
+        if (t.t === 'rp') return { ok: false, error: { msg: 'Paréntesis «)» de más.' } };
+        return { ok: false, error: { msg: 'Sobra algo después de la expresión: ', code: t.raw } };
+      }
+      if (!isFinite(v)) return { ok: false, error: { msg: 'Resultado no finito.' } };
+      return { ok: true, value: v };
+    } catch (e) { return { ok: false, error: { msg: err ? err.msg : 'Fórmula inválida.', code: err ? err.code : '' } }; }
+  }
+
+  function highlightFormula(src) {
+    return tokenizeFormula(src).map(t => {
+      if (t.t === 'num') return `<span class="tk-num">${esc(t.raw)}</span>`;
+      if (t.t === 'fn')  return `<span class="tk-fn">${esc(t.raw)}</span>`;
+      if (t.t === 'id')  return _calcKnown(t.v) ? `<span class="tk-met">${esc(t.raw)}</span>` : `<span class="tk-bad">${esc(t.raw)}</span>`;
+      if (t.t === 'op' || t.t === 'lp' || t.t === 'rp' || t.t === 'comma') return `<span class="tk-op">${esc(t.raw)}</span>`;
+      return `<span class="tk-bad">${esc(t.raw)}</span>`;
+    }).join(' ');
+  }
+  function usedFormulaMetrics(src) { return [...new Set(tokenizeFormula(src).filter(t => t.t === 'id' && _calcKnown(t.v)).map(t => t.v))]; }
+
+  const _calcFmt = n => {
+    if (!isFinite(n)) return '—';
+    if (Math.abs(n) >= 1000) return Math.round(n).toLocaleString('es-ES');
+    if (Math.abs(n) >= 100) return Math.round(n).toString();
+    if (Math.abs(n) >= 10) return n.toFixed(1);
+    return n.toFixed(2);
+  };
+
+  // ── Catálogo: registrar / quitar la métrica calculada en catalogMap+groups ──
+  function _calcSlug(name) {
+    let base = (name || 'calc').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'calc';
+    if (/^[0-9]/.test(base)) base = 'm_' + base;
+    let id = base, n = 2;
+    while (catalogMap.has(id)) id = base + '_' + n++;
+    return id;
+  }
+  function registerCalcMetric(cm) {
+    const entry = { id: cm.id, name: cm.name, unit: cm.unit || '', kind: 'calculated', calculated: true,
+      formula: cm.formula, group_name: 'Calculadas', is_custom: true, squad_rollup: true, decimals: 1 };
+    catalogMap.set(cm.id, entry);
+    const i = calcMetrics.findIndex(x => x.id === cm.id);
+    if (i >= 0) calcMetrics[i] = { ...cm }; else calcMetrics.push({ ...cm });
+    _rebuildCalcGroup();
+  }
+  function unregisterCalcMetric(id) {
+    catalogMap.delete(id);
+    calcMetrics = calcMetrics.filter(x => x.id !== id);
+    _rebuildCalcGroup();
+    if (S) S.metrics = (S.metrics || []).filter(m => m.id !== id);   // si estaba en uso, quitarla
+  }
+  function _rebuildCalcGroup() {
+    catalogGroups = catalogGroups.filter(g => g.g !== 'Calculadas');
+    if (calcMetrics.length) catalogGroups.push({ g: 'Calculadas', custom: true, items: calcMetrics.map(c => catalogMap.get(c.id)) });
+  }
+
+  // ── Editor (overlay modal) ──
+  let _calcEdit = { id: null, name: '', unit: '', formula: '' };
+  let _calcFEl = null;
+  let _calcWired = false;
+
+  function injectCalcEditor() {
+    if (document.getElementById('gpbCalc')) return;
+    document.body.insertAdjacentHTML('beforeend', '<div id="gpbCalc" class="cmf-overlay" hidden></div>');
+  }
+
+  function _calcChipsHTML() {
+    return [...catalogMap.values()].filter(m => !m.calculated).map(m =>
+      `<button class="cmf-chip" data-ins="${esc(m.id)}"><i class="ti ${metIcon(m)}"></i>${esc(m.name)}<span class="id">${esc(m.id)}</span></button>`).join('');
+  }
+  function _calcOpsHTML() {
+    const ops = ['+', '-', '*', '/', '(', ')'], fns = ['min', 'max', 'abs', 'round'];
+    return ops.map(o => `<button class="cmf-op" data-ins-op="${o}">${o}</button>`).join('') +
+      fns.map(f => `<button class="cmf-op fn" data-ins-fn="${f}">${f}()</button>`).join('') +
+      `<button class="cmf-op util" data-clear="1"><i class="ti ti-backspace"></i>Limpiar</button>`;
+  }
+  function _calcStageHTML() {
+    const editing = !!_calcEdit.id;
+    return `<div class="cmf-editor-stage" role="dialog" aria-modal="true">
+      <div class="cmf-modal">
+        <div class="cmf-modal-h">
+          <span class="badge"><i class="ti ti-math-function"></i></span>
+          <span class="t">${editing ? 'Editar métrica calculada' : 'Nueva métrica calculada'}<span class="sub">vive en el catálogo · reutilizable en cualquier card</span></span>
+          <button class="x" data-calc-close title="Cerrar"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="cmf-modal-b">
+          <div class="cmf-grid2">
+            <div class="cmf-row"><label class="cmf-label">Nombre</label><input class="cmf-input" id="cmfName" type="text" value="${esc(_calcEdit.name)}" placeholder="Ej. HSR por minuto"></div>
+            <div class="cmf-row"><label class="cmf-label">Unidad <span class="opt">opcional</span></label><input class="cmf-input" id="cmfUnit" type="text" value="${esc(_calcEdit.unit)}" placeholder="m/min"></div>
+          </div>
+          <div class="cmf-row cmf-formula-wrap">
+            <label class="cmf-label">Fórmula</label>
+            <div class="cmf-formula" id="cmfFormula" contenteditable="true" spellcheck="false"></div>
+            <div class="cmf-insert">
+              <span class="cmf-insert-lbl">Insertá una métrica (no hace falta tipear el id):</span>
+              <div class="cmf-chips">${_calcChipsHTML()}</div>
+            </div>
+            <div class="cmf-ops">${_calcOpsHTML()}</div>
+          </div>
+          <div class="cmf-valid idle" id="cmfValid"><i class="ti ti-info-circle"></i><span>Empezá a escribir o insertá una métrica.</span></div>
+        </div>
+        <div class="cmf-modal-f">
+          <div class="cmf-rule"><i class="ti ti-bulb"></i><span>Se calcula <b>por sesión</b> y después se agrega — nunca al revés.</span></div>
+          <button class="cmf-btn ghost" data-calc-close><i class="ti ti-x"></i>Cancelar</button>
+          <button class="cmf-btn primary" id="cmfSave" data-calc-save><i class="ti ti-check"></i>${editing ? 'Guardar cambios' : 'Crear métrica'}</button>
+        </div>
+      </div>
+      <div class="cmf-side">
+        <div class="cmf-card">
+          <div class="cmf-card-h"><i class="ti ti-eye"></i><span class="t">Preview del resultado</span><span class="live"><span class="dot"></span>en vivo</span></div>
+          <div class="cmf-card-b" id="cmfPreview"></div>
+        </div>
+        <div class="cmf-card">
+          <div class="cmf-card-h"><i class="ti ti-help-circle"></i><span class="t">Cómo se calcula</span></div>
+          <div class="cmf-card-b">
+            <div class="cmf-help">
+              <div class="step"><span class="k">1</span><span class="x">En <b>cada sesión</b> se evalúa la fórmula con los valores de esa sesión.</span></div>
+              <div class="step"><span class="k">2</span><span class="x">Después se <b>agrega</b> (promedio, suma…) según la agregación que elijas al usarla.</span></div>
+            </div>
+            <div class="cmf-allowed"><b>Permitido:</b> métricas del catálogo, <code>+ − × ÷ ( )</code> y <code>min, max, abs, round</code>. Sin filtros ni referencias entre filas. <b>La fórmula nunca se ejecuta como código</b> — es un editor controlado.</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function openCalcEditor(editId) {
+    injectCalcEditor();
+    const cm = editId ? calcMetrics.find(c => c.id === editId) : null;
+    _calcEdit = cm ? { id: cm.id, name: cm.name, unit: cm.unit || '', formula: cm.formula }
+                   : { id: null, name: '', unit: '', formula: '' };
+    const ov = document.getElementById('gpbCalc');
+    ov.innerHTML = _calcStageHTML();
+    ov.removeAttribute('hidden');
+    _calcWireOnce();
+    _calcFEl = document.getElementById('cmfFormula');
+    _calcFEl.innerHTML = _calcEdit.formula ? highlightFormula(_calcEdit.formula) : '';
+    _calcValidate();
+    setTimeout(() => _calcCaretEnd(), 30);
+  }
+  function closeCalcEditor() {
+    const ov = document.getElementById('gpbCalc');
+    if (ov) { ov.setAttribute('hidden', ''); ov.innerHTML = ''; }
+    _calcFEl = null;
+  }
+
+  function _calcGetFormula() { return (_calcFEl?.textContent || '').replace(/ /g, ' ').trim(); }
+  function _calcCaretEnd() { if (!_calcFEl) return; _calcFEl.focus(); const r = document.createRange(); r.selectNodeContents(_calcFEl); r.collapse(false); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+  function _calcInsert(txt) {
+    const cur = _calcGetFormula();
+    const join = (!cur || cur.endsWith('(') || txt === ')' || txt.startsWith(')')) ? '' : ' ';
+    _calcEdit.formula = (cur ? cur + join + txt : txt).replace(/\s+/g, ' ').trim();
+    _calcFEl.innerHTML = highlightFormula(_calcEdit.formula);
+    _calcCaretEnd();
+    _calcValidate();
+  }
+  function _calcValidate() {
+    if (!_calcFEl) return;
+    const src = _calcGetFormula();
+    _calcEdit.formula = src;
+    const res = evaluateFormula(src);
+    const vEl = document.getElementById('cmfValid');
+    const save = document.getElementById('cmfSave');
+    const nameOk = (document.getElementById('cmfName')?.value || '').trim().length > 0;
+    _calcFEl.classList.remove('ok', 'bad');
+    vEl.classList.remove('ok', 'bad', 'idle');
+    if (!src) {
+      vEl.classList.add('idle');
+      vEl.innerHTML = '<i class="ti ti-info-circle"></i><span>Empezá a escribir o insertá una métrica.</span>';
+      if (save) save.disabled = true;
+      _calcRenderPreview(null);
+      return;
+    }
+    if (res.ok) {
+      _calcFEl.classList.add('ok'); vEl.classList.add('ok');
+      vEl.innerHTML = '<i class="ti ti-circle-check"></i><span>Fórmula válida.</span>';
+      if (save) save.disabled = !nameOk;
+      _calcRenderPreview(res.value);
+    } else {
+      _calcFEl.classList.add('bad'); vEl.classList.add('bad');
+      const code = res.error.code ? `<code>${esc(res.error.code)}</code>` : '';
+      vEl.innerHTML = `<i class="ti ti-alert-triangle"></i><span>${esc(res.error.msg)}${code}</span>`;
+      if (save) save.disabled = true;
+      _calcRenderPreview(null);
+    }
+  }
+  function _calcRenderPreview(value) {
+    const p = document.getElementById('cmfPreview');
+    if (!p) return;
+    const unit = (document.getElementById('cmfUnit')?.value || '').trim();
+    if (value == null) {
+      p.innerHTML = '<div class="cmf-preview-empty"><i class="ti ti-math-function"></i>El valor de ejemplo aparece cuando la fórmula es válida.</div>';
+      return;
+    }
+    const used = usedFormulaMetrics(_calcGetFormula());
+    const subst = used.length ? `<div class="cmf-subst"><div class="ln" style="color:var(--cm-fg-faint)">sesión de ejemplo · 1 partido</div>${used.map(id => { const m = catalogMap.get(id); return `<div class="ln"><b>${esc(id)}</b> <span class="eq">=</span> ${_calcFmt(_calcSampleVal(id))} ${esc(m?.unit || '')}</div>`; }).join('')}</div>` : '';
+    p.innerHTML = `<div class="cmf-preview-val"><span class="v">${_calcFmt(value)}</span>${unit ? `<span class="u">${esc(unit)}</span>` : ''}</div>
+      <div class="cmf-preview-cap">valor calculado <b>en una sesión</b> de ejemplo (antes de agregar)</div>${subst}`;
+  }
+
+  function _calcSave() {
+    const name = (document.getElementById('cmfName')?.value || '').trim();
+    const unit = (document.getElementById('cmfUnit')?.value || '').trim();
+    const formula = _calcGetFormula();
+    if (!name || !evaluateFormula(formula).ok) return;   // botón ya deshabilitado, doble guarda
+    const id = _calcEdit.id || _calcSlug(name);
+    registerCalcMetric({ id, name, unit, formula, kind: 'calculated' });
+    closeCalcEditor();
+    // refrescá el catálogo visible (flyout clásico / panel D&D)
+    if (panelEl && !document.getElementById('gpbFly')?.classList.contains('is-open')) { /* noop */ }
+    const fly = document.getElementById('gpbFly');
+    if (fly && fly.classList.contains('is-open')) renderFlyBody((document.getElementById('gpbFlySearch')?.value || '').trim().toLowerCase());
+    if (_bMode === 'dd') renderDDPane();
+  }
+
+  function _calcWireOnce() {
+    if (_calcWired) return;
+    _calcWired = true;
+    const ov = document.getElementById('gpbCalc');
+    if (!ov) return;
+    ov.addEventListener('click', e => {
+      if (e.target === ov) { closeCalcEditor(); return; }                 // backdrop
+      if (e.target.closest('[data-calc-close]')) { closeCalcEditor(); return; }
+      if (e.target.closest('[data-calc-save]')) { _calcSave(); return; }
+      const ins = e.target.closest('[data-ins]'); if (ins) { _calcInsert(ins.dataset.ins); return; }
+      const op = e.target.closest('[data-ins-op]'); if (op) { _calcInsert(op.dataset.insOp); return; }
+      const fn = e.target.closest('[data-ins-fn]'); if (fn) { _calcInsert(fn.dataset.insFn + '('); return; }
+      if (e.target.closest('[data-clear]')) { if (_calcFEl) { _calcFEl.innerHTML = ''; _calcEdit.formula = ''; _calcValidate(); _calcFEl.focus(); } return; }
+    });
+    ov.addEventListener('input', e => {
+      if (e.target.id === 'cmfFormula') { _calcValidate(); return; }
+      if (e.target.id === 'cmfName') { _calcValidate(); return; }          // habilita/deshabilita guardar
+      if (e.target.id === 'cmfUnit') { const r = evaluateFormula(_calcGetFormula()); _calcRenderPreview(r.ok ? r.value : null); return; }
+    });
+    ov.addEventListener('blur', e => { if (e.target.id === 'cmfFormula' && _calcFEl) _calcFEl.innerHTML = _calcGetFormula() ? highlightFormula(_calcGetFormula()) : ''; }, true);
+    ov.addEventListener('keydown', e => {
+      if (e.target.id === 'cmfFormula' && e.key === 'Enter') { e.preventDefault(); }
+      if (e.key === 'Escape') closeCalcEditor();
+    });
   }
 
   // ── Public API (used by gp-ai.js) ─────────────────────────────────────
