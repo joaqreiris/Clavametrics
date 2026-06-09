@@ -51,6 +51,7 @@ const T = {
       soreQ:'Any soreness?',note:'Note (optional)',notePh:'Anything you\'d like to add…',
       send:'Send check-in',sending:'Sending…',retry:'Retry',sendErr:'Could not send: ',
       done:n=>'Done, '+n+'!',doneSub:'Your check-in was recorded. Thanks.',
+      rpeTitle:'How hard was today\'s session?',rpeSub:'Rate your effort from 1 (very easy) to 10 (maximal).',rpeEnds:['Very easy','Maximal'],
       parts:{hamstring:'Hamstring',quads:'Quads',calves:'Calves',groin:'Groin',knee:'Knee',ankle:'Ankle',shoulder:'Shoulder',back:'Lower back'}},
   es:{loading:'Cargando…',invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
       who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar tu check-in diario.',notme:n=>'No soy '+n,
@@ -60,6 +61,7 @@ const T = {
       soreQ:'¿Alguna molestia?',note:'Nota (opcional)',notePh:'Algo que quieras agregar…',
       send:'Enviar check-in',sending:'Enviando…',retry:'Reintentar',sendErr:'No se pudo enviar: ',
       done:n=>'¡Listo, '+n+'!',doneSub:'Tu check-in se registró. Gracias.',
+      rpeTitle:'¿Qué tan duro fue el entrenamiento?',rpeSub:'Calificá tu esfuerzo del 1 (muy suave) al 10 (máximo).',rpeEnds:['Muy suave','Máximo'],
       parts:{hamstring:'Isquios',quads:'Cuádriceps',calves:'Gemelos',groin:'Aductores',knee:'Rodilla',ankle:'Tobillo',shoulder:'Hombro',back:'Lumbares'}},
   pt:{loading:'Carregando…',invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
       who:'Quem é você?',whoSub:'Toque no seu nome para começar o check-in diário.',notme:n=>'Não sou '+n,
@@ -69,6 +71,7 @@ const T = {
       soreQ:'Alguma dor?',note:'Nota (opcional)',notePh:'Algo que queira adicionar…',
       send:'Enviar check-in',sending:'Enviando…',retry:'Tentar de novo',sendErr:'Não foi possível enviar: ',
       done:n=>'Pronto, '+n+'!',doneSub:'Seu check-in foi registrado. Obrigado.',
+      rpeTitle:'Quão difícil foi o treino?',rpeSub:'Avalie seu esforço de 1 (muito leve) a 10 (máximo).',rpeEnds:['Muito leve','Máximo'],
       parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _nav=(navigator.language||'en').toLowerCase();
@@ -87,6 +90,9 @@ function show404(msg){app.innerHTML=brand+`<div class="center"><i class="ti ti-l
 
 async function init(){
   if(!token){show404(L.notoken);return;}
+  const meta = await sb.rpc('get_survey_meta',{p_token:token});
+  if(meta.error || !meta.data?.valid){show404(meta.error?.message);return;}
+  window.__scope = meta.data.scope;
   const {data,error}=await sb.rpc('get_survey_players',{p_token:token});
   if(error||!data||!data.length){show404(error?.message);return;}
   players=data;renderPick();
@@ -102,6 +108,7 @@ function scale(key,label,ends){
     <div class="scale-ends"><span>${ends[0]}</span><span>${ends[1]}</span></div></div>`;
 }
 function renderForm(){
+  if(window.__scope === 'rpe') return renderRpeForm();
   const parts=Object.keys(L.parts);
   app.innerHTML=brand+
     `<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(picked.name)}</button>`+
@@ -111,13 +118,25 @@ function renderForm(){
     `<div class="card"><div class="label">${L.soreQ}</div><div class="body-grid">`+
       parts.map(k=>`<div class="body-chip" data-k="${k}" onclick="toggleBody('${k}',this)">${L.parts[k]}</div>`).join('')+`</div></div>`+
     `<div class="card"><div class="label">${L.note}</div><textarea placeholder="${L.notePh}" oninput="state.note=this.value"></textarea></div>`+
-    `<button class="btn" id="submitBtn" onclick="submitForm()">${L.send}</button>`;
+    `<button class="btn" id="submitBtn" onclick="submitForm('wellness')">${L.send}</button>`;
+}
+function renderRpeForm(){
+  if(state.rpe===undefined) state.rpe=6;
+  app.innerHTML=brand+
+    `<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(picked.name)}</button>`+
+    `<h1>${L.hi(picked.name.split(' ')[0])}</h1><div class="sub">${L.rpeSub}</div>`+
+    `<div class="card"><div class="label">${L.rpeTitle}<span class="v" id="v_rpe">${state.rpe} / 10</span></div>
+      <input type="range" min="1" max="10" value="${state.rpe}" oninput="setV('rpe',this.value)">
+      <div class="scale-ends"><span>${L.rpeEnds[0]}</span><span>${L.rpeEnds[1]}</span></div></div>`+
+    `<button class="btn" id="submitBtn" onclick="submitForm('rpe')">${L.send}</button>`;
 }
 window.setV=(k,v)=>{state[k]=+v;document.getElementById('v_'+k).textContent=v+' / 10';};
 window.toggleBody=(k,el)=>{state.body.has(k)?state.body.delete(k):state.body.add(k);el.classList.toggle('on');};
-window.submitForm=async()=>{
+window.submitForm=async(kind)=>{
   const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent=L.sending;
-  const payload={sleepQ:state.sleepQ,mood:state.mood,fatigue:state.fatigue,stress:state.stress,soreness:state.soreness,body:[...state.body],note:state.note};
+  const payload = kind==='rpe'
+    ? { rpe: state.rpe }
+    : { sleepQ:state.sleepQ, mood:state.mood, fatigue:state.fatigue, stress:state.stress, soreness:state.soreness, body:[...state.body], note:state.note };
   const {data,error}=await sb.rpc('submit_survey',{p_token:token,p_player_id:picked.id,p_payload:payload});
   if(error||data?.error){btn.disabled=false;btn.textContent=L.retry;alert(L.sendErr+(error?.message||data?.error));return;}
   app.innerHTML=brand+`<div class="center"><i class="ti ti-circle-check big"></i><div style="font-size:20px;color:var(--fg)">${L.done(picked.name.split(' ')[0])}</div><div>${L.doneSub}</div></div>`;
