@@ -193,7 +193,7 @@
         </div>
         <div class="body">
           <div class="name" id="sideClubName"></div>
-          <div class="club" id="sideTeamLabel"></div>
+          <div class="club" id="sideTeamLabel" style="display:none"></div>
         </div>
         <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
       </div>
