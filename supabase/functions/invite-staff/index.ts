@@ -26,22 +26,29 @@ Deno.serve(async (req) => {
       .select('club_id, role, club_role').eq('id', user.id).single();
     const isAdmin = caller &&
       (['admin','owner'].includes(caller.role) || ['admin','owner'].includes(caller.club_role));
-    if (!caller?.club_id || !isAdmin) return json({ error: 'Not authorized' }, 403);
+    const { data: superRow } = await admin.from('platform_admins').select('user_id').eq('user_id', user.id).maybeSingle();
+    const isSuper = !!superRow;
+    if (!caller?.club_id && !isSuper) return json({ error: 'Not authorized' }, 403);
+    if (!isAdmin && !isSuper) return json({ error: 'Not authorized' }, 403);
 
-    const { email, role, redirectTo } = await req.json();
+    const { email, role, redirectTo, clubId } = await req.json();
+    let targetClub = caller?.club_id;
+    if (clubId && (isSuper || clubId === caller?.club_id)) targetClub = clubId;
+    if (!targetClub) return json({ error: 'No target club' }, 400);
+
     const cleanEmail = String(email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) return json({ error: 'Invalid email' }, 400);
-    const cleanRole = String(role || 'viewer');
+    const cleanRole = String(role || 'staff');
 
     const { error: invErr } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
-      data: { club_id: caller.club_id, role: cleanRole },
+      data: { club_id: targetClub, role: cleanRole },
       redirectTo: redirectTo || undefined,
     });
     const already = invErr && /already.*regist|already exists/i.test(invErr.message);
     if (invErr && !already) return json({ error: invErr.message }, 400);
 
     const { data: row, error: rowErr } = await admin.from('invitations')
-      .upsert({ club_id: caller.club_id, email: cleanEmail, role: cleanRole,
+      .upsert({ club_id: targetClub, email: cleanEmail, role: cleanRole,
                 status: 'pending', invited_by: user.id }, { onConflict: 'club_id,email' })
       .select('id, email, role, status, created_at').single();
     if (rowErr) return json({ error: rowErr.message }, 400);
