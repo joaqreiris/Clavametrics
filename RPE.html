@@ -265,6 +265,14 @@
     <a class="ctx-link" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to Staff Hub</a>
     <h1>Session RPE</h1>
     <div class="ctx-section">
+      <button class="cm-btn is-outline" style="width:100%" onclick="linkPendingRpe(this)">
+        <i class="ti ti-link" style="font-size:15px"></i><span>Asociar RPE pendientes a sus sesiones</span>
+      </button>
+      <p style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">
+        Vincula los RPE que los jugadores enviaron antes de que cargaras la sesión, y calcula la carga (sRPE).
+      </p>
+    </div>
+    <div class="ctx-section">
       <button class="cm-btn is-primary" style="width:100%" onclick="openShareRpe()">
         <i class="ti ti-share" style="font-size:15px"></i>Compartir link con jugadores
       </button>
@@ -740,6 +748,25 @@ async function submitRPE() {
   window.closeShareRpe = closeShareRpe;
   window.genShareRpe = genShareRpe;
   window.copyShareRpe = copyShareRpe;
+
+  async function linkPendingRpe(btn) {
+    const span = btn.querySelector('span');
+    const original = span.textContent;
+    btn.disabled = true; span.textContent = 'Asociando…';
+    try {
+      const cid = await window.getClubId();
+      const { data, error } = await window.sb.rpc('link_pending_rpe', { p_club_id: cid, p_date: null });
+      if (error) { span.textContent = 'Error'; console.warn('[RPE] link_pending error:', error.message); }
+      else {
+        const n = data || 0;
+        span.textContent = n > 0 ? `✓ ${n} RPE asociados` : 'Sin RPE pendientes';
+      }
+    } catch (e) {
+      span.textContent = 'Error'; console.warn('[RPE] link_pending:', e.message);
+    }
+    setTimeout(() => { span.textContent = original; btn.disabled = false; }, 2500);
+  }
+  window.linkPendingRpe = linkPendingRpe;
 
 boot();
 </script>
