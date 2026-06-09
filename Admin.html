@@ -1091,6 +1091,21 @@
     _secEditId = id;
     document.getElementById('secModalName').textContent = m.full_name || m.email || 'Member';
     const current = new Set(sectionMap[id] || []);
+    const _bucket = (m.role || m.club_role || '').toLowerCase();
+    if (_bucket === 'admin' || _bucket === 'owner') {
+      document.getElementById('secModalList').innerHTML =
+        `<div style="padding:28px 20px;text-align:center;color:var(--cm-fg-muted)">
+          <i class="ti ti-shield-check" style="font-size:26px;color:var(--cm-accent);opacity:.7"></i>
+          <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Acceso total por rol</div>
+          <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">Los ${_bucket === 'owner' ? 'owners' : 'admins'} ven todas las secciones automáticamente. No hace falta asignar accesos.</div>
+        </div>`;
+      // Ocultar el botón Save para este caso (no hay nada que guardar)
+      const sv = document.getElementById('secModalSave'); if (sv) sv.style.display = 'none';
+      document.getElementById('secModalBackdrop').style.display = 'flex';
+      return;
+    }
+    // (para roles normales, restaurar el Save por si quedó oculto)
+    const _sv2 = document.getElementById('secModalSave'); if (_sv2) _sv2.style.display = '';
     document.getElementById('secModalList').innerHTML = SECTIONS.map(s => `
       <div class="ad-module-row" data-sec="${s.key}">
         <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ${s.icon}"></i></div>
