@@ -478,6 +478,33 @@
   <aside class="ctx">
     <a class="ctx-link" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to Staff Hub</a>
     <h1>Daily wellness check-in</h1>
+    <div class="ctx-section">
+      <button class="cm-btn is-primary" style="width:100%" onclick="openShareWellness()">
+        <i class="ti ti-share" style="font-size:15px"></i>Compartir link con jugadores
+      </button>
+    </div>
+    <div id="shareWBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:440px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+        <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+          <i class="ti ti-share" style="font-size:18px;color:var(--cm-accent)"></i>
+          <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Compartir wellness</div>
+          <button onclick="closeShareWellness()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+        </div>
+        <div style="padding:18px">
+          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Categoría</label>
+          <select id="shareWTeam" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px"></select>
+          <button class="cm-btn is-primary" style="width:100%" onclick="genShareWellness()"><i class="ti ti-link" style="font-size:14px"></i>Generar link</button>
+          <div id="shareWResult" style="display:none;margin-top:14px">
+            <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Link (válido hasta que lo revoces):</div>
+            <div style="display:flex;gap:8px">
+              <input id="shareWUrl" readonly style="flex:1;height:38px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">
+              <button class="cm-btn is-outline is-sm" onclick="copyShareWellness()" id="shareWCopy"><i class="ti ti-copy" style="font-size:14px"></i>Copiar</button>
+            </div>
+            <a id="shareWWa" target="_blank" class="cm-btn is-outline is-sm" style="width:100%;margin-top:8px;justify-content:center"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Compartir por WhatsApp</a>
+          </div>
+        </div>
+      </div>
+    </div>
     <p>The only player-facing surface in ClavaMetrics. Players get a unique link by SMS or WhatsApp each morning; the form takes under a minute and feeds straight into the Load Monitor.</p>
 
     <div class="ctx-section">
@@ -610,6 +637,51 @@
       return { ok: false };
     }
   };
+
+  async function openShareWellness() {
+    const sel = document.getElementById('shareWTeam');
+    document.getElementById('shareWResult').style.display = 'none';
+    sel.innerHTML = '<option>Cargando…</option>';
+    document.getElementById('shareWBackdrop').style.display = 'flex';
+    const cid = await window.getClubId();
+    const profile = await window.getProfile();
+    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
+    let fullAccess = bucket === 'admin' || bucket === 'owner';
+    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(cid);
+    if (!fullAccess) {
+      let mine = [];
+      try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
+      const s = new Set(mine);
+      teams = teams.filter(t => s.has(t.id));
+    }
+    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    sel.innerHTML = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  }
+  function closeShareWellness() { document.getElementById('shareWBackdrop').style.display = 'none'; }
+  async function genShareWellness() {
+    const teamId = document.getElementById('shareWTeam').value;
+    if (!teamId) return;
+    const cid = await window.getClubId();
+    const token = crypto.randomUUID();
+    const { error } = await window.sb.from('share_links').insert({ club_id: cid, scope: 'wellness', token, team_id: teamId });
+    if (error) { alert('Error: ' + error.message); return; }
+    const url = location.origin + '/survey.html?token=' + token;
+    document.getElementById('shareWUrl').value = url;
+    document.getElementById('shareWWa').href = 'https://wa.me/?text=' + encodeURIComponent('Check-in diario / Daily check-in: ' + url);
+    document.getElementById('shareWResult').style.display = 'block';
+  }
+  function copyShareWellness() {
+    const inp = document.getElementById('shareWUrl');
+    navigator.clipboard?.writeText(inp.value);
+    const btn = document.getElementById('shareWCopy');
+    const old = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i>Copiado';
+    setTimeout(() => btn.innerHTML = old, 1500);
+  }
+  window.openShareWellness = openShareWellness;
+  window.closeShareWellness = closeShareWellness;
+  window.genShareWellness = genShareWellness;
+  window.copyShareWellness = copyShareWellness;
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
