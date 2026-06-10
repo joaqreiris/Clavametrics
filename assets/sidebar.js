@@ -536,9 +536,10 @@
     let html = '';
     if (dmEntries.length) {
       html += `<div class="cm-cp-sect-lbl">Direct messages</div>`;
-      for (const [, d] of dmEntries) {
+      for (const [_k, d] of dmEntries) {
+        d._key = _k;
         const ini = (d.senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
-        html += `<button class="cm-ci" data-chat-nav="1">
+        html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(d._key || '')}">
           <div class="cm-ci-av">${_escHtml(ini)}</div>
           <div class="cm-ci-body">
             <div class="cm-ci-name"><span>${_escHtml(d.senderName || 'Unknown')}</span><span class="time">${_relTime(d.lastAt)}</span></div>
@@ -551,7 +552,7 @@
     if (grpEntry) {
       const d = grpEntry[1];
       html += `<div class="cm-cp-sect-lbl">Team channel</div>`;
-      html += `<button class="cm-ci" data-chat-nav="1">
+      html += `<button class="cm-ci" data-chat-nav="1" data-conv="group">
         <div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
         <div class="cm-ci-body">
           <div class="cm-ci-name"><span># team</span><span class="time">${_relTime(d.lastAt)}</span></div>
@@ -683,8 +684,23 @@
     document.addEventListener('click', e => {
       if (!wrap.contains(e.target)) panel.classList.remove('is-open');
     });
-    panel.addEventListener('click', e => {
-      if (e.target.closest('[data-chat-nav]')) window.location.href = 'Chat%20%26%20Tasks.html';
+    panel.addEventListener('click', async e => {
+      const item = e.target.closest('[data-chat-nav]');
+      if (!item) return;
+      const conv = item.dataset.conv || 'group';
+      // Marcar como leído ya mismo (quita el badge sin esperar)
+      try {
+        const nowIso = new Date().toISOString();
+        await window.sb.from('channel_reads').upsert(
+          { user_id: user.id, club_id: clubId, channel_key: conv, last_read_at: nowIso },
+          { onConflict: 'user_id,club_id,channel_key' }
+        );
+      } catch (_) {}
+      delete _chatUnread[conv];
+      _updateChatBadge();
+      _renderChatPanel();
+      // Navegar a esa conversación
+      window.location.href = 'Chat%20%26%20Tasks.html?conv=' + encodeURIComponent(conv);
     });
   }
 
