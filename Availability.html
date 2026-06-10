@@ -409,7 +409,7 @@
       <div class="av-toolbar">
         <div class="av-mc-picker" style="position:relative">
           <button title="Anterior" onclick="avShiftRange(-1)"><i class="ti ti-chevron-left"></i></button>
-          <span class="label" onclick="avToggleRangeMenu()" style="cursor:pointer"><i class="ti ti-calendar-month"></i><span id="avMcPickerName">—</span><span class="mc-meta" id="avMcPickerDates"></span><i class="ti ti-chevron-down" style="font-size:13px;margin-left:4px"></i></span>
+          <span class="label" onclick="avToggleRangeMenu(event)" style="cursor:pointer"><i class="ti ti-calendar-month"></i><span id="avMcPickerName">—</span><span class="mc-meta" id="avMcPickerDates"></span><i class="ti ti-chevron-down" style="font-size:13px;margin-left:4px"></i></span>
           <button title="Siguiente" onclick="avShiftRange(1)"><i class="ti ti-chevron-right"></i></button>
           <div id="avRangeMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:100;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-pop,0 12px 40px rgba(0,0,0,.18));padding:6px;min-width:200px">
             <button class="av-range-opt" onclick="avSetPreset('mc')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Microciclo actual</button>
@@ -831,7 +831,9 @@
       mcStart = _avRangeOverride.start;
       mcEnd   = _avRangeOverride.end;
       const nameEl = document.getElementById('avMcName');
-      if (nameEl) nameEl.textContent = `${mcStart} → ${mcEnd}`;
+      if (nameEl) nameEl.textContent = 'Rango personalizado';
+      const pickerEl = document.getElementById('avMcPickerName');
+      if (pickerEl) pickerEl.textContent = 'Rango';
     }
     // Fallback: current Monday → following Sunday (14 days)
     if (!mcStart) {
@@ -1169,9 +1171,10 @@
     const start = new Date(d.getTime() - (days-1)*86400000).toISOString().slice(0,10);
     return { start, end: today };
   }
-  window.avToggleRangeMenu = function() {
+  window.avToggleRangeMenu = function(ev) {
+    if (ev) ev.stopPropagation();
     const m = document.getElementById('avRangeMenu');
-    m.style.display = m.style.display === 'none' ? 'block' : 'none';
+    m.style.display = (m.style.display === 'none' || !m.style.display) ? 'block' : 'none';
   };
   window.avSetPreset = function(v) {
     document.getElementById('avRangeMenu').style.display = 'none';
