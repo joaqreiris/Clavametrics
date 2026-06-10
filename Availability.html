@@ -930,6 +930,9 @@
     el('avMcPickerDates') && (el('avMcPickerDates').textContent = ` ${mcStart} → ${mcEnd}`);
 
     renderMatrix(players, avMap, injuredIds);
+    // Si la pestaña Stats está activa, re-renderizar con el nuevo rango
+    const _statsVisible = document.getElementById('viewStats') && document.getElementById('viewStats').style.display !== 'none';
+    if (_statsVisible && typeof avRenderStats === 'function') avRenderStats();
     recalcKPIs();
     updateBulk(); // hide bulk bar (starts with is-on in HTML)
 
@@ -1296,13 +1299,6 @@
       </div>`;
 
     host.innerHTML = `
-      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px;margin-bottom:18px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Evolución de disponibilidad</span>
-          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${from} → ${to}</span>
-        </div>
-        <div style="height:240px"><canvas id="avStatsTrend"></canvas></div>
-      </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
         ${kpi('ti-circle-check','Disponibilidad media', availPct+'<span style="font-size:17px">%</span>', `${tAvail} de ${tTotal} días-jugador`, 'var(--cm-success)')}
         ${kpi('ti-bandage','Días perdidos · lesión', tInjury, tTotal?`${Math.round(tInjury/tTotal*100)}% del período`:'', 'var(--cm-danger)')}
@@ -1338,6 +1334,13 @@
             </div>
           </div>
         </div>
+      </div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px;margin-top:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Evolución de disponibilidad</span>
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${from} → ${to}</span>
+        </div>
+        <div style="height:240px"><canvas id="avStatsTrend"></canvas></div>
       </div>`;
 
     // Tabla ordenable con barras de progreso
