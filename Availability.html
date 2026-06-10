@@ -15,6 +15,7 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -1232,6 +1233,122 @@
     const picker = e.target.closest('.av-mc-picker');
     if (menu && !picker && menu.style.display === 'block') menu.style.display = 'none';
   });
+
+  let _avStatsChart = null;
+  async function avRenderStats() {
+    const host = document.getElementById('viewStats');
+    if (!host) return;
+    host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">Calculando estadísticas…</div>';
+
+    // Rango activo (mismo que la matriz)
+    const from = MC_DATES[0], to = MC_DATES[MC_DATES.length - 1];
+    if (!from || !to) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">Sin rango seleccionado.</div>'; return; }
+
+    // Jugadores del rango/categoría (reusa la lista ya filtrada)
+    let pq = window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID);
+    if (_avTeamId) pq = pq.eq('team_id', _avTeamId);
+    const { data: players } = await pq.order('last_name');
+    if (!players || !players.length) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No hay jugadores en esta categoría.</div>'; return; }
+    const pids = players.map(p => p.id);
+
+    // Availability del rango
+    const { data: avail } = await window.sb.from('availability')
+      .select('player_id, date, status')
+      .eq('club_id', CLUB_ID).in('player_id', pids.map(String))
+      .gte('date', from).lte('date', to);
+
+    // Agregar por jugador
+    const stat = {};
+    players.forEach(p => stat[p.id] = { name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, total:0 });
+    (avail||[]).forEach(r => {
+      const s = stat[r.player_id]; if (!s) return;
+      s.total++;
+      const st = (r.status||'').toLowerCase();
+      if (st === 'available') s.avail++;
+      else if (st === 'partial') s.partial++;
+      else if (st === 'injured') s.injury++;
+      else if (st === 'illness' || st === 'sick') s.illness++;
+    });
+
+    // Totales de equipo
+    let tAvail=0, tInjury=0, tIllness=0, tPartial=0, tTotal=0;
+    Object.values(stat).forEach(s => { tAvail+=s.avail; tInjury+=s.injury; tIllness+=s.illness; tPartial+=s.partial; tTotal+=s.total; });
+    const availPct = tTotal ? Math.round((tAvail/tTotal)*100) : 0;
+
+    // Render
+    const fmtPlayer = (s) => {
+      const pct = s.total ? Math.round((s.avail/s.total)*100) : 0;
+      return `<tr style="border-bottom:1px solid var(--cm-border)">
+        <td style="padding:9px 12px;font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${s.name}</td>
+        <td style="padding:9px 12px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:var(--cm-success)">${s.avail}</td>
+        <td style="padding:9px 12px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:var(--cm-warning)">${s.partial}</td>
+        <td style="padding:9px 12px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:var(--cm-danger)">${s.injury}</td>
+        <td style="padding:9px 12px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:var(--cm-violet)">${s.illness}</td>
+        <td style="padding:9px 12px;text-align:right;font:700 13px/1 var(--cm-font-mono);color:${pct>=80?'var(--cm-success)':pct>=50?'var(--cm-warning)':'var(--cm-danger)'}">${pct}%</td>
+      </tr>`;
+    };
+    const rows = Object.values(stat).sort((a,b) => (b.avail/Math.max(b.total,1)) - (a.avail/Math.max(a.total,1)));
+
+    host.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;padding:16px">
+          <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:8px"><i class="ti ti-circle-check"></i> Disponibilidad media</div>
+          <div style="font:700 28px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${availPct}<span style="font-size:16px">%</span></div>
+          <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px">${tAvail} de ${tTotal} días-jugador</div>
+        </div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;padding:16px">
+          <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:8px"><i class="ti ti-bandage"></i> Días perdidos · lesión</div>
+          <div style="font:700 28px/1 var(--cm-font-sans);color:var(--cm-danger)">${tInjury}</div>
+        </div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;padding:16px">
+          <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:8px"><i class="ti ti-virus"></i> Días perdidos · enfermedad</div>
+          <div style="font:700 28px/1 var(--cm-font-sans);color:var(--cm-violet)">${tIllness}</div>
+        </div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;padding:16px">
+          <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:8px"><i class="ti ti-adjustments"></i> Días modificados</div>
+          <div style="font:700 28px/1 var(--cm-font-sans);color:var(--cm-warning)">${tPartial}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px">
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;overflow:hidden">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--cm-border);font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Ranking por jugador</div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="background:var(--cm-bg-soft)">
+              <th style="padding:8px 12px;text-align:left;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">Jugador</th>
+              <th style="padding:8px 12px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-success)">Disp.</th>
+              <th style="padding:8px 12px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-warning)">Mod.</th>
+              <th style="padding:8px 12px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-danger)">Les.</th>
+              <th style="padding:8px 12px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-violet)">Enf.</th>
+              <th style="padding:8px 12px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">%</th>
+            </tr></thead>
+            <tbody>${rows.map(fmtPlayer).join('')}</tbody>
+          </table>
+        </div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;padding:16px">
+          <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:14px">Desglose del equipo</div>
+          <canvas id="avStatsDonut" height="220"></canvas>
+        </div>
+      </div>`;
+
+    // Donut de desglose
+    if (window.Chart) {
+      if (_avStatsChart) { _avStatsChart.destroy(); _avStatsChart = null; }
+      const ctx = document.getElementById('avStatsDonut');
+      if (ctx) {
+        _avStatsChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Disponible','Modificado','Lesión','Enfermedad'],
+            datasets: [{ data:[tAvail,tPartial,tInjury,tIllness],
+              backgroundColor:['#15803D','#D97706','#DC2626','#7C3AED'], borderWidth:0 }]
+          },
+          options: { plugins:{ legend:{ position:'bottom', labels:{ font:{size:11}, padding:12 } } }, cutout:'62%' }
+        });
+      }
+    }
+  }
+  window.avRenderStats = avRenderStats;
 </script>
 
 <script>
