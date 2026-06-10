@@ -354,6 +354,10 @@
             </div>
           </div>
 
+          <div class="sl-filter-group">
+            <div class="sl-filter-h" style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:14px 0 8px">Categoría</div>
+            <div id="slTeamFilterOpts"></div>
+          </div>
           <div class="sl-rail-foot">
             <button class="cm-btn is-outline is-block" id="clearAllFilters2">
               <i class="ti ti-filter-off" style="font-size:14px"></i>Clear all filters
@@ -383,10 +387,19 @@
   window.applyClubTheme();
   const clubId = await window.getClubId();
   if (!clubId) return;
+  window._slTeams = await window.getTeams(clubId);
+  window._slTeamMap = Object.fromEntries((window._slTeams||[]).map(t => [t.id, t.name]));
+  (function slRenderTeamFilter() {
+    const wrap = document.getElementById('slTeamFilterOpts');
+    if (!wrap || !window._slTeams) return;
+    wrap.innerHTML = window._slTeams.map(t =>
+      `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${t.name}</span></div>`
+    ).join('') + `<div class="sl-opt" data-group="team" data-val="__all__"><span class="cb"></span><span class="lbl">Todas las categorías</span></div>`;
+  })();
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -438,6 +451,7 @@
     matchday:    new Set(),
     gametype:    new Set(),
     focus:       new Set(),
+    team:        new Set(),
   };
   let pillOrient  = 'ALL';
   let searchText  = '';
@@ -464,6 +478,17 @@
       if (filters.gametype.size) {
         const gt = ex.game_type_enabled ? (ex.game_type || 'NONE') : 'NONE';
         if (!filters.gametype.has(gt)) return false;
+      }
+      // Team / category visibility
+      if (filters.team && filters.team.size) {
+        const vt = ex.visible_teams || [];
+        const isAll = vt.length === 0;
+        let match = false;
+        for (const sel of filters.team) {
+          if (sel === '__all__' && isAll) { match = true; break; }
+          if (vt.includes(sel)) { match = true; break; }
+        }
+        if (!match) return false;
       }
       // Focus (OR — has any of selected)
       if (filters.focus.size) {
@@ -595,6 +620,12 @@
         </div>
         <div class="sl-body">
           <div class="title">${ex.name || 'Untitled'}</div>
+          ${(() => {
+            const vt = ex.visible_teams;
+            if (!vt || vt.length === 0) return '<div style="display:inline-flex;align-items:center;gap:4px;font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin:2px 0"><i class="ti ti-world" style="font-size:11px"></i>Todas</div>';
+            const names = vt.map(id => (window._slTeamMap||{})[id]).filter(Boolean);
+            return `<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0">${names.map(n => `<span style="font:600 9.5px/1 var(--cm-font-mono);padding:2px 6px;border-radius:999px;background:var(--cm-accent-soft,rgba(34,197,94,.15));color:var(--cm-accent)">${n}</span>`).join('')}</div>`;
+          })()}
           ${ex.work_time ? `<div class="desc">${ex.work_time} work · ${ex.rest_time||'—'} rest</div>` : ''}
           ${metaParts.length ? `<div class="meta">${metaParts.join('')}</div>` : ''}
         </div>
