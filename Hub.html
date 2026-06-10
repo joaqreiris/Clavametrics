@@ -1327,6 +1327,15 @@ function renderTasks(tasks) {
   if (!ok) return;
 
   const clubId = await window.getClubId();
+  let _hubTeamId = null;
+  try {
+    const _prof = await window.getProfile();
+    const _bucket = (_prof?.role || _prof?.club_role || '').toLowerCase();
+    let _fullAccess = _bucket === 'admin' || _bucket === 'owner';
+    if (!_fullAccess && window.isSuperAdmin) { try { _fullAccess = await window.isSuperAdmin(); } catch {} }
+    if (_fullAccess) { const _pt = await window.sb.rpc('primary_team_id'); _hubTeamId = _pt.data || null; }
+  } catch (e) { console.warn('[Hub] team resolve:', e.message); }
+  const _teamEq = _hubTeamId ? { team_id: _hubTeamId } : {};
   if (!clubId) { window.location.replace('Onboarding.html'); return; }
   window._hubClubId = clubId;
   console.log('[Hub] club_id:', clubId);
@@ -1396,12 +1405,12 @@ function renderTasks(tasks) {
       .eq('club_id', clubId),
     window.sb.from('training_sessions')
       .select('session_date, rpe(player_id, load)')
-      .eq('club_id', clubId).eq('is_historical', false)
+      .eq('club_id', clubId).match(_teamEq).eq('is_historical', false)
       .gte('session_date', date28)
       .lte('session_date', today),
     window.sb.from('training_sessions')
       .select('title, session_date, created_at, profiles(full_name, role)')
-      .eq('club_id', clubId).eq('is_historical', false)
+      .eq('club_id', clubId).match(_teamEq).eq('is_historical', false)
       .gte('session_date', date7)
       .order('created_at', { ascending: false })
       .limit(3),
@@ -1418,14 +1427,14 @@ function renderTasks(tasks) {
       .limit(10),
     window.sb.from('microcycles')
       .select('name, match_date, rival')
-      .eq('club_id', clubId)
+      .eq('club_id', clubId).match(_teamEq)
       .lte('start_date', today)
       .gte('end_date', today)
       .limit(1)
       .maybeSingle(),
     window.sb.from('training_sessions')
       .select('session_time, location, session_type')
-      .eq('club_id', clubId).eq('is_historical', false)
+      .eq('club_id', clubId).match(_teamEq).eq('is_historical', false)
       .eq('session_date', today)
       .order('session_time', { ascending: true })
       .limit(1)
@@ -1563,10 +1572,10 @@ function renderTasks(tasks) {
   // Nearest upcoming match from both calendar_events and microcycles
   const [_nextEvtRes, _nextMcRes] = await Promise.all([
     window.sb.from('calendar_events')
-      .select('date,opponent,title,home_away,rival_crest_url').eq('club_id', clubId).eq('type', 'match')
+      .select('date,opponent,title,home_away,rival_crest_url').eq('club_id', clubId).match(_teamEq).eq('type', 'match')
       .gte('date', today).order('date', { ascending: true }).limit(1).maybeSingle(),
     window.sb.from('microcycles')
-      .select('rival,match_date,home_away').eq('club_id', clubId)
+      .select('rival,match_date,home_away').eq('club_id', clubId).match(_teamEq)
       .not('match_date', 'is', null).not('rival', 'is', null)
       .gte('match_date', today).order('match_date', { ascending: true }).limit(1).maybeSingle(),
   ]);
@@ -1593,7 +1602,7 @@ function renderTasks(tasks) {
     // Sessions this week Mon–Sun — source for sessions_week KPI + Planner footer
     window.sb.from('training_sessions')
       .select('id, session_date, session_type')
-      .eq('club_id', clubId).eq('is_historical', false)
+      .eq('club_id', clubId).match(_teamEq).eq('is_historical', false)
       .gte('session_date', weekStartStr)
       .lte('session_date', weekEndStr),
     // Last match report date — source for Match Reports module footer
