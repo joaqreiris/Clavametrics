@@ -279,6 +279,13 @@
           <div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Cargando…</div>
         </div>
       </div>
+      <div id="rpeChecklistWrap" style="margin-top:18px">
+        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Checklist por sesión</div>
+        <select id="checklistSession" onchange="loadRpeChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px">
+          <option value="">Elegí una sesión…</option>
+        </select>
+        <div id="checklistBody" style="margin-top:10px"></div>
+      </div>
     </div>
     <div class="ctx-section">
       <button class="cm-btn is-primary" style="width:100%" onclick="openShareRpe()">
@@ -849,6 +856,42 @@ async function submitRPE() {
   window.loadPendingRpe = loadPendingRpe;
   window.assignRpe = assignRpe;
   loadPendingRpe();
+
+  async function initRpeChecklist() {
+    try {
+      const cid = await window.getClubId();
+      const sess = await window.sb.rpc('recent_sessions', { p_club_id: cid, p_limit: 8 });
+      const sel = document.getElementById('checklistSession');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Elegí una sesión…</option>' +
+        (sess.data||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')}</option>`).join('');
+    } catch (e) { console.warn('[RPE] checklist init:', e.message); }
+  }
+  async function loadRpeChecklist() {
+    const sid = document.getElementById('checklistSession').value;
+    const body = document.getElementById('checklistBody');
+    if (!sid) { body.innerHTML = ''; return; }
+    body.innerHTML = '<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Cargando…</div>';
+    try {
+      const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sid });
+      if (error) throw error;
+      const rows = data || [];
+      const done = rows.filter(r => r.responded).length;
+      body.innerHTML =
+        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} respondieron</div>` +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+        rows.map(r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
+          <i class="ti ${r.responded?'ti-circle-check':'ti-circle'}" style="font-size:15px;color:${r.responded?'var(--cm-accent)':'var(--cm-fg-muted)'}"></i>
+          <span style="color:${r.responded?'var(--cm-fg)':'var(--cm-fg-muted)'};flex:1">${r.player_name}</span>
+          ${r.responded?`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-accent)">${Number(r.rpe)}</span>`:''}
+        </div>`).join('') +
+        '</div>';
+    } catch (e) {
+      body.innerHTML = `<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">No se pudo cargar.</div>`;
+    }
+  }
+  window.loadRpeChecklist = loadRpeChecklist;
+  initRpeChecklist();
 
 boot();
 </script>
