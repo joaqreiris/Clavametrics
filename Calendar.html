@@ -1985,11 +1985,11 @@ async function fetchAllEvents(dateFrom, dateTo) {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
       .select('id,title,session_type,duration,session_date,notes,sort_order,estimated_rpe,session_time,visible_to,created_at')
-      .eq('club_id', _clubId).eq('is_historical', false)
+      .eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('is_historical', false)
       .gte('session_date', dateFrom).lte('session_date', dateTo).order('session_date'),
     window.sb.from('calendar_events')
       .select('id,title,type,duration_minutes,date,notes,opponent,competition,home_away,start_time,location,sort_order,estimated_rpe,rival_crest_url,recurrence_group_id,visible_to,created_at')
-      .eq('club_id', _clubId)
+      .eq('club_id', _clubId).eq('team_id', _activeTeamId)
       .gte('date', dateFrom).lte('date', dateTo).order('date')
   ]);
   if (sessRes.error) return { error: sessRes.error.message };
@@ -4489,7 +4489,7 @@ async function showImportPreview(fixtures) {
     showCalToast(`${_importParsed.length} fixture${_importParsed.length>1?'s':''} imported.`);
     // Reload match events and re-render ribbon + KPIs
     const { data: ms } = await window.sb.from('calendar_events')
-      .select('id,title,date,opponent,home_away,competition').eq('club_id',_clubId).eq('type','match').order('date');
+      .select('id,title,date,opponent,home_away,competition').eq('club_id',_clubId).eq('team_id',_activeTeamId).eq('type','match').order('date');
     _matchSessions = (ms||[]).map(s => ({...s, session_date: (s.date||'').split('T')[0], title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')}));
     renderSeasonRibbon(_allMCs, _matchSessions);
     renderCalKPIs(_allMCs);
@@ -4675,7 +4675,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load match events from calendar_events for ribbon
   const { data: matchSess } = await window.sb.from('calendar_events')
     .select('id,title,date,opponent,home_away,competition,rival_crest_url')
-    .eq('club_id', _clubId)
+    .eq('club_id', _clubId).eq('team_id', _activeTeamId)
     .eq('type', 'match')
     .order('date');
   _matchSessions = (matchSess||[]).map(s => ({
