@@ -2045,7 +2045,11 @@ async function renderWorkload() {
   const chartEl = document.querySelector('.wk-chart');
   if (!chartEl) return;
   const clubId = _clubId || await window.getClubId();
-  if (!clubId || !_allMCs.length) return;
+  if (!clubId) return;
+  if (!_allMCs.length) {
+    chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans);text-align:center;padding:20px">Sin planificación cargada en esta categoría todavía.</div>';
+    return;
+  }
 
   const sorted = [..._allMCs].sort((a, b) => a.start_date > b.start_date ? 1 : -1);
   const ci = sorted.findIndex(m => m.start_date <= TODAY && m.end_date >= TODAY);
