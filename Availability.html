@@ -367,9 +367,9 @@
         </div>
         <div class="meta">
           <div class="av-segs">
-            <button class="av-seg is-on"><i class="ti ti-table"></i>Matrix</button>
-            <button class="av-seg"><i class="ti ti-calendar-event"></i>Today</button>
-            <button class="av-seg"><i class="ti ti-chart-bar"></i>Stats</button>
+            <button class="av-seg is-on" data-view="matrix" onclick="avSwitchView('matrix')"><i class="ti ti-table"></i>Matrix</button>
+            <button class="av-seg" data-view="today" onclick="avSwitchView('today')"><i class="ti ti-calendar-event"></i>Today</button>
+            <button class="av-seg" data-view="stats" onclick="avSwitchView('stats')"><i class="ti ti-chart-bar"></i>Stats</button>
           </div>
           <select id="avRangeSel" onchange="avOnRangeChange()" style="height:32px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer">
             <option value="mc">Microciclo actual</option>
@@ -448,6 +448,8 @@
         <span class="it">Click cell to edit · drag to multi-select · ⌘+A all</span>
       </div>
 
+      <!-- VIEWS -->
+      <div id="viewMatrix">
       <!-- Matrix -->
       <div class="av-matrix-wrap">
         <div class="av-matrix-scroll">
@@ -486,6 +488,13 @@
           <span id="avFooterCount">Showing <strong style="color:var(--cm-fg)">—</strong> players</span>
         </div>
       </div>
+      </div><!-- /viewMatrix -->
+
+      <div id="viewToday" style="display:none">
+        <div style="padding:40px;text-align:center;color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">Vista de hoy — próximamente.</div>
+      </div>
+
+      <div id="viewStats" style="display:none"></div>
 
     </section>
   </main>
@@ -1173,6 +1182,17 @@
     const f = document.getElementById('avDateFrom').value;
     const t = document.getElementById('avDateTo').value;
     if (f && t && f <= t) { _avRangeOverride = { start: f, end: t }; if (typeof init === 'function') init(); }
+  };
+
+  window.avSwitchView = function(view) {
+    document.querySelectorAll('.av-seg').forEach(b => b.classList.toggle('is-on', b.dataset.view === view));
+    document.getElementById('viewMatrix').style.display = view === 'matrix' ? '' : 'none';
+    document.getElementById('viewToday').style.display  = view === 'today'  ? '' : 'none';
+    document.getElementById('viewStats').style.display  = view === 'stats'  ? '' : 'none';
+    // Los KPIs de arriba: ocultarlos en Stats (Stats tiene sus propios KPIs)
+    const kpis = document.querySelector('.av-kpis');
+    if (kpis) kpis.style.display = view === 'stats' ? 'none' : '';
+    if (view === 'stats' && typeof avRenderStats === 'function') avRenderStats();
   };
 </script>
 
