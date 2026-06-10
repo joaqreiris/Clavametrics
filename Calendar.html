@@ -2061,10 +2061,10 @@ async function renderWorkload() {
   const [sessRes, evtRes] = await Promise.all([
     window.sb.from('training_sessions')
       .select('session_date,duration,estimated_rpe,session_type')
-      .eq('club_id', clubId).eq('is_historical', false).gte('session_date', dateFrom).lte('session_date', dateTo),
+      .eq('club_id', clubId).eq('team_id', _activeTeamId).eq('is_historical', false).gte('session_date', dateFrom).lte('session_date', dateTo),
     window.sb.from('calendar_events')
       .select('date,duration_minutes,estimated_rpe,type')
-      .eq('club_id', clubId).gte('date', dateFrom).lte('date', dateTo)
+      .eq('club_id', clubId).eq('team_id', _activeTeamId).gte('date', dateFrom).lte('date', dateTo)
   ]);
 
   const allSessions = [
@@ -3215,10 +3215,10 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
   showCalToast(wasEdit ? 'Microcycle updated.' : 'Microcycle created.');
 
   let { data: mcs, error: mcRefetchErr } = await window.sb.from('microcycles')
-    .select(MC_FULL_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+    .select(MC_FULL_SELECT).eq('club_id', _clubId).eq('team_id', _activeTeamId).order('start_date', { ascending: false });
   if (mcRefetchErr) {
     const { data: mcsBase } = await window.sb.from('microcycles')
-      .select(MC_BASE_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+      .select(MC_BASE_SELECT).eq('club_id', _clubId).eq('team_id', _activeTeamId).order('start_date', { ascending: false });
     mcs = mcsBase;
   }
   _allMCs = mcs || [];
@@ -4662,11 +4662,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load all MCs ordered by start_date desc for ribbon
   let { data: mcs, error: mcLoadErr } = await window.sb.from('microcycles')
-    .select(MC_FULL_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+    .select(MC_FULL_SELECT).eq('club_id', _clubId).eq('team_id', _activeTeamId).order('start_date', { ascending: false });
   if (mcLoadErr) {
     // Fallback if publish columns not yet added (migration pending)
     const { data: mcsBase } = await window.sb.from('microcycles')
-      .select(MC_BASE_SELECT).eq('club_id', _clubId).order('start_date', { ascending: false });
+      .select(MC_BASE_SELECT).eq('club_id', _clubId).eq('team_id', _activeTeamId).order('start_date', { ascending: false });
     mcs = mcsBase;
   }
 
