@@ -886,10 +886,38 @@ async function submitRPE() {
           ${r.responded?`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-accent)">${Number(r.rpe)}</span>`:''}
         </div>`).join('') +
         '</div>';
+      const pending = rows.filter(r => !r.responded);
+      if (pending.length) {
+        const names = pending.map(r => r.player_name).join(', ');
+        body.innerHTML += `<button onclick="remindRpeMissing('${sid}', this)" data-names="${names.replace(/"/g,'&quot;')}" style="margin-top:12px;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--cm-accent);color:#fff;border:none;border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Recordar a los que faltan (${pending.length})</button>`;
+      }
     } catch (e) {
       body.innerHTML = `<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">No se pudo cargar.</div>`;
     }
   }
+  async function remindRpeMissing(sessionId, btn) {
+    try {
+      const cid = await window.getClubId();
+      let teamId = null;
+      try {
+        const s = await window.sb.from('training_sessions').select('team_id').eq('id', sessionId).single();
+        teamId = s.data?.team_id || null;
+      } catch {}
+      const ins = await window.sb.from('share_links').insert({
+        club_id: cid, scope: 'rpe', team_id: teamId, session_id: sessionId,
+        token: crypto.randomUUID().replace(/-/g,''),
+        expires_at: new Date(Date.now()+7*86400000).toISOString()
+      }).select('token').single();
+      if (ins.error) throw ins.error;
+      const url = location.origin + '/survey.html?token=' + ins.data.token;
+      const names = btn.getAttribute('data-names');
+      const msg = `Recordatorio RPE de la sesión / Session RPE reminder.\nFaltan: ${names}\nCompletá acá: ${url}`;
+      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+    } catch (e) {
+      alert('No se pudo generar el recordatorio: ' + e.message);
+    }
+  }
+  window.remindRpeMissing = remindRpeMissing;
   window.loadRpeChecklist = loadRpeChecklist;
   initRpeChecklist();
 
