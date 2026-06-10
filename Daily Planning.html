@@ -261,6 +261,12 @@
 
   <main class="hub-main">
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="dpTeamSelect" onchange="dpOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer">
+          <option value="">Cargando…</option>
+        </select>
+      </div>
       <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Daily planning</span><span class="sep">/</span><span id="dpCrumbDate">…</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
@@ -471,6 +477,7 @@
 
 <script>
 let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
+let _dpTeamId = null, _dpTeams = [];
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 
@@ -626,7 +633,7 @@ async function loadDay(dateStr) {
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id').eq('club_id', _dpClubId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   const sess = sessResult.data?.[0] || null;
@@ -988,6 +995,7 @@ async function dpAutoSaveSession() {
     const { error } = await window.sb.from('training_sessions').update(payload).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
     saveError = error;
   } else {
+    payload.team_id = _dpTeamId;
     const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
     saveError = error;
     if (!error && data?.id) {
@@ -1193,6 +1201,7 @@ async function dpExportPDF() {
   if (club) await window.applyClubTheme();
 
   _dpProfile = profile;
+  await dpInitTeamSwitch();
   const nameEl = document.getElementById('dpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
 
@@ -1206,7 +1215,7 @@ async function dpExportPDF() {
   const [playersRes, injuriesRes, mcRes, adaptRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
-    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,publish_players,publish_medical,published_at').eq('club_id', clubId).order('start_date'),
+    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,publish_players,publish_medical,published_at').eq('club_id', clubId).eq('team_id', _dpTeamId).order('start_date'),
     window.sb.from('treatments')
       .select('player_id, adaptation_notes, adaptation_sent_at, date')
       .eq('club_id', clubId)
@@ -1251,6 +1260,31 @@ async function dpExportPDF() {
     el.addEventListener('input', dpQueueSave);
   });
 })().catch(console.error);
+
+  async function dpInitTeamSwitch() {
+    _dpClubId = _dpClubId || await window.getClubId();
+    const profile = _dpProfile || await window.getProfile();
+    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
+    let fullAccess = bucket === 'admin' || bucket === 'owner';
+    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(_dpClubId);
+    if (!fullAccess) {
+      let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
+      const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
+    }
+    _dpTeams = teams;
+    const sel = document.getElementById('dpTeamSelect');
+    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _dpTeamId = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t => `<option value="${t.id}" ${t.id===_dpTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function dpOnTeamChange() {
+    _dpTeamId = document.getElementById('dpTeamSelect').value;
+    sessionStorage.setItem('cal_active_team', _dpTeamId);
+    location.reload();
+  }
+  window.dpOnTeamChange = dpOnTeamChange;
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
