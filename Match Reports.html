@@ -446,6 +446,10 @@
   <main class="hub-main">
 
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="mrTeamSelect" onchange="mrOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Match reports</span>
@@ -963,12 +967,15 @@
     if (club) window.applyClubTheme();
     const clubId = await window.getClubId();
     if (!clubId) return;
+    await mrInitTeamSwitch(clubId);
 
     // Load most recent match session
-    const { data: matches } = await window.sb.from('training_sessions')
+    let _mrMatchQ = window.sb.from('training_sessions')
       .select('id, title, session_date, duration, notes')
       .eq('club_id', clubId)
-      .eq('session_type', 'Match')
+      .eq('session_type', 'Match');
+    if (_mrTeamId) _mrMatchQ = _mrMatchQ.eq('team_id', _mrTeamId);
+    const { data: matches } = await _mrMatchQ
       .order('session_date', { ascending: false })
       .limit(1);
 
@@ -1023,6 +1030,23 @@
   }
 
   boot();
+
+  let _mrTeamId = null;
+  async function mrInitTeamSwitch(clubId) {
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('mrTeamSelect');
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _mrTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_mrTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function mrOnTeamChange(){ _mrTeamId=document.getElementById('mrTeamSelect').value; sessionStorage.setItem('cal_active_team',_mrTeamId); location.reload(); }
+  window.mrOnTeamChange = mrOnTeamChange;
 </script>
 
 <script>
