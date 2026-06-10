@@ -336,6 +336,10 @@
 
   <main class="hub-main">
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="ctTeamSelect" onchange="ctOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb"><i class="ti ti-home"></i><span>Workspace</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Chat &amp; tasks</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions">
@@ -707,11 +711,12 @@ async function saveAbout() {
 
 // ── PINNED FILES ──
 async function loadPinnedFiles() {
-  const { data } = await window.sb.from('pinned_files')
+  let _pfQ = window.sb.from('pinned_files')
     .select('id,file_url,file_name,file_type,pinned_at')
     .eq('club_id', currentUser.clubId)
-    .eq('conv_id', 'group')
-    .order('pinned_at', { ascending: false });
+    .eq('conv_id', 'group');
+  if (currentUser.teamId) _pfQ = _pfQ.eq('team_id', currentUser.teamId);
+  const { data } = await _pfQ.order('pinned_at', { ascending: false });
   pinnedFiles = data || [];
   renderPinnedFiles();
 }
@@ -767,7 +772,8 @@ async function savePinFile() {
     file_url:  url,
     file_name: name,
     file_type: type || null,
-    pinned_by: currentUser.id
+    pinned_by: currentUser.id,
+    team_id:   currentUser.teamId || null
   }).select().single();
   if (error) { console.error('Pin file error:', error); alert('Error pinning file: ' + error.message); return; }
   if (data) { pinnedFiles.unshift(data); renderPinnedFiles(); closePinFileForm(); }
@@ -792,8 +798,10 @@ async function boot() {
     id:     session.user.id,
     name:   profile?.full_name || session.user.email.split('@')[0],
     role:   profile?.role || '',
-    clubId: profile?.club_id
+    clubId: profile?.club_id,
+    teamId: null
   };
+  await ctInitTeamSwitch();
 
   if (club) await window.applyClubTheme();
   await Promise.all([loadMembers(), loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles()]);
@@ -819,6 +827,7 @@ async function loadMessages() {
   let q = window.sb.from('messages').select('id,sender_id,recipient_id,content,created_at,sender_name,attachment_url,attachment_name,attachment_size,attachment_type,link_preview').eq('club_id', currentUser.clubId);
   if (activeConv === 'group') {
     q = q.is('recipient_id', null);
+    if (currentUser.teamId) q = q.eq('team_id', currentUser.teamId);
   } else {
     q = q.or(`and(sender_id.eq.${currentUser.id},recipient_id.eq.${activeConv}),and(sender_id.eq.${activeConv},recipient_id.eq.${currentUser.id})`);
   }
@@ -975,6 +984,7 @@ async function sendMessage() {
     content:      content || null,
     message_type: Object.keys(attData).length ? 'file' : 'text',
     recipient_id: activeConv === 'group' ? null : activeConv,
+    team_id: activeConv === 'group' ? (currentUser.teamId || null) : null,
     ...attData,
     ...lpData
   }).select().single();
@@ -1184,10 +1194,11 @@ function updatePillCounts() {
 }
 
 async function loadTasks() {
-  const { data } = await window.sb.from('tasks')
+  let _tkQ = window.sb.from('tasks')
     .select('id,title,description,status,priority,due_date,assigned_to,assigned_to_name,category')
-    .eq('club_id', currentUser.clubId)
-    .order('created_at', { ascending: false });
+    .eq('club_id', currentUser.clubId);
+  if (currentUser.teamId) _tkQ = _tkQ.eq('team_id', currentUser.teamId);
+  const { data } = await _tkQ.order('created_at', { ascending: false });
   allTasks = data || [];
   renderKanban(getFilteredTasks());
   updatePillCounts();
@@ -1314,7 +1325,8 @@ async function saveNewTask() {
     due_date:    document.getElementById('newTaskDue').value || null,
     priority:    document.getElementById('newTaskPriority').value,
     category:    document.getElementById('newTaskCategory').value || 'general',
-    status:      'pending'
+    status:      'pending',
+    team_id:     currentUser.teamId || null
   }).select().single();
   if (error) {
     console.error('Task insert error:', error);
@@ -1645,6 +1657,22 @@ document.getElementById('msgInput')?.addEventListener('input', e => {
 });
 
 boot();
+
+  async function ctInitTeamSwitch() {
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(currentUser.clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('ctTeamSelect');
+    if (!sel) return;
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    currentUser.teamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===currentUser.teamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  window.ctOnTeamChange = function(){ currentUser.teamId=document.getElementById('ctTeamSelect').value; sessionStorage.setItem('cal_active_team',currentUser.teamId); location.reload(); };
 </script>
 <script>
   if ('serviceWorker' in navigator) {
