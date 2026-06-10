@@ -800,7 +800,7 @@
   const seasonStart = (firstSessRes.data || [])[0]?.session_date || from28dStr;
 
   const wellRes = await window.sb.from('wellness')
-    .select('player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at,note,body_areas')
+    .select('id,player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at,note,body_areas,acknowledged_at')
     .eq('club_id', clubId)
     .gte('submitted_at', todayStr + 'T00:00:00')
     .lt('submitted_at', tomorrowStr + 'T00:00:00');
