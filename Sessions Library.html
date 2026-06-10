@@ -354,9 +354,13 @@
             </div>
           </div>
 
-          <div class="sl-filter-group">
-            <div class="sl-filter-h" style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:14px 0 8px">Categoría</div>
-            <div id="slTeamFilterOpts"></div>
+          <div class="sl-acc">
+            <div class="sl-acc-h" data-acc="team">
+              <span class="l">Categoría</span>
+              <span class="ct" id="ctTeamAcc"></span>
+              <i class="ti ti-chevron-down"></i>
+            </div>
+            <div class="sl-acc-b" id="accTeam"></div>
           </div>
           <div class="sl-rail-foot">
             <button class="cm-btn is-outline is-block" id="clearAllFilters2">
@@ -390,11 +394,11 @@
   window._slTeams = await window.getTeams(clubId);
   window._slTeamMap = Object.fromEntries((window._slTeams||[]).map(t => [t.id, t.name]));
   (function slRenderTeamFilter() {
-    const wrap = document.getElementById('slTeamFilterOpts');
+    const wrap = document.getElementById('accTeam');
     if (!wrap || !window._slTeams) return;
     wrap.innerHTML = window._slTeams.map(t =>
-      `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${t.name}</span></div>`
-    ).join('') + `<div class="sl-opt" data-group="team" data-val="__all__"><span class="cb"></span><span class="lbl">Todas las categorías</span></div>`;
+      `<div class="sl-opt" data-group="team" data-val="${t.id}"><span class="cb"></span><span class="lbl">${t.name}</span><span class="ct">—</span></div>`
+    ).join('') + `<div class="sl-opt" data-group="team" data-val="__all__"><span class="cb"></span><span class="lbl">Todas las categorías</span><span class="ct">—</span></div>`;
   })();
 
   // ── Data ─────────────────────────────────────────────────────────
