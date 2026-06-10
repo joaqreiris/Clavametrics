@@ -817,10 +817,27 @@ async function boot() {
 
 // ── MEMBERS ──
 async function loadMembers() {
-  const { data } = await window.sb.from('profiles')
+  const { data: allProfiles } = await window.sb.from('profiles')
     .select('id, full_name, role, avatar_url')
     .eq('club_id', currentUser.clubId);
-  members = data || [];
+  let list = allProfiles || [];
+  // Filtrar por categoría vía member_teams (los asignados a la categoría activa)
+  if (currentUser.teamId) {
+    try {
+      const { data: mt } = await window.sb.from('member_teams')
+        .select('profile_id')
+        .eq('club_id', currentUser.clubId)
+        .eq('team_id', currentUser.teamId);
+      const assigned = new Set((mt || []).map(r => r.profile_id));
+      // Mantener: los asignados a la categoría + siempre el owner y uno mismo
+      list = list.filter(p =>
+        assigned.has(p.id) ||
+        (p.role || '').toLowerCase() === 'owner' ||
+        p.id === currentUser.id
+      );
+    } catch (_) { /* si member_teams falla, mostrar todos */ }
+  }
+  members = list;
   populateAssigneeSelects();
   renderChatRightMembers();
 }
@@ -1009,7 +1026,7 @@ function renderConvList() {
   const lastGroup = messages.length && activeConv === 'group' ? messages[messages.length - 1] : null;
   const groupPreview = lastGroup
     ? `${lastGroup.sender_name}: ${(lastGroup.content || '').slice(0, 40)}`
-    : 'Club-wide channel';
+    : 'Canal de la categoría';
 
   let html = `<div class="chat-list-label">Channels</div>
     <div class="conv${groupActive ? ' is-on' : ''}" onclick="selectConv('group')">
@@ -1077,7 +1094,7 @@ function updateChatHeader() {
       <div class="av"><i class="ti ti-hash"></i></div>
       <div class="info">
         <div class="name"># team</div>
-        <div class="meta"><span class="dot"></span>${members.length} members · Club-wide channel</div>
+        <div class="meta"><span class="dot"></span>${members.length} members · Canal de la categoría</div>
       </div>
       <div class="right">
         <button class="cm-icon-btn"><i class="ti ti-search"></i></button>
