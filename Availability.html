@@ -371,6 +371,15 @@
             <button class="av-seg"><i class="ti ti-calendar-event"></i>Today</button>
             <button class="av-seg"><i class="ti ti-chart-bar"></i>Stats</button>
           </div>
+          <select id="avRangeSel" onchange="avOnRangeChange()" style="height:32px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer">
+            <option value="mc">Microciclo actual</option>
+            <option value="7">Última semana</option>
+            <option value="14">Últimas 2 semanas</option>
+            <option value="30">Último mes</option>
+            <option value="custom">Personalizado…</option>
+          </select>
+          <input type="date" id="avDateFrom" onchange="avOnCustomDate()" style="display:none;height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono)">
+          <input type="date" id="avDateTo" onchange="avOnCustomDate()" style="display:none;height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono)">
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
         </div>
       </header>
@@ -782,6 +791,7 @@
     await avInitTeamSwitch();
 
     todayStr           = new Date().toISOString().split('T')[0];
+    MC_DATES.length = 0;
     const yesterdayStr = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     let mcStart, mcEnd;
 
@@ -804,6 +814,13 @@
       }
     } catch(e) {}
 
+    // Override de rango del selector (pisa el microciclo)
+    if (_avRangeOverride) {
+      mcStart = _avRangeOverride.start;
+      mcEnd   = _avRangeOverride.end;
+      const nameEl = document.getElementById('avMcName');
+      if (nameEl) nameEl.textContent = `${mcStart} → ${mcEnd}`;
+    }
     // Fallback: current Monday → following Sunday (14 days)
     if (!mcStart) {
       const d   = new Date(todayStr + 'T00:00:00Z');
@@ -1131,6 +1148,32 @@
   }
   function avOnTeamChange(){ _avTeamId=document.getElementById('avTeamSelect').value; sessionStorage.setItem('cal_active_team',_avTeamId); location.reload(); }
   window.avOnTeamChange = avOnTeamChange;
+
+  let _avRangeOverride = null; // {start, end} o null = microciclo
+  function avComputeRange(preset) {
+    const today = new Date().toISOString().slice(0,10);
+    const d = new Date(today + 'T00:00:00Z');
+    const days = parseInt(preset, 10);
+    const start = new Date(d.getTime() - (days-1)*86400000).toISOString().slice(0,10);
+    return { start, end: today };
+  }
+  window.avOnRangeChange = function() {
+    const v = document.getElementById('avRangeSel').value;
+    const from = document.getElementById('avDateFrom');
+    const to = document.getElementById('avDateTo');
+    if (v === 'custom') {
+      from.style.display = ''; to.style.display = '';
+      return; // espera a que elija fechas
+    }
+    from.style.display = 'none'; to.style.display = 'none';
+    _avRangeOverride = (v === 'mc') ? null : avComputeRange(v);
+    if (typeof init === 'function') init();
+  };
+  window.avOnCustomDate = function() {
+    const f = document.getElementById('avDateFrom').value;
+    const t = document.getElementById('avDateTo').value;
+    if (f && t && f <= t) { _avRangeOverride = { start: f, end: t }; if (typeof init === 'function') init(); }
+  };
 </script>
 
 <script>
