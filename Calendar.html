@@ -2053,7 +2053,11 @@ async function renderWorkload() {
   const from = Math.max(0, cur - 5);
   const to   = Math.min(sorted.length - 1, cur + 2);
   const mcs  = sorted.slice(from, to + 1);
-  if (!mcs.length) return;
+  if (!mcs.length) {
+    chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans);text-align:center;padding:20px">Sin planificación cargada en esta categoría todavía.</div>';
+    const lbls = document.querySelector('.wk-labels'); if (lbls) lbls.innerHTML = '';
+    return;
+  }
 
   const dateFrom = mcs[0].start_date;
   const dateTo   = mcs[mcs.length - 1].end_date;
