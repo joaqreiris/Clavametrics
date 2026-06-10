@@ -302,6 +302,10 @@
   <main class="hub-main">
 
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="injTeamSelect" onchange="injOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Medical</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Injuries</span>
@@ -1517,11 +1521,14 @@ async function savePhaseStatus(status) {
   const club = await window.getClub();
   _clubId = await window.getClubId();
   if (club) window.applyClubTheme();
+  await injInitTeamSwitch();
 
   // Load players
-  const { data: pData } = await window.sb.from('players')
+  let _injPlQ = window.sb.from('players')
     .select('id,first_name,last_name,position,number')
-    .eq('club_id', _clubId).neq('status','inactive').order('last_name');
+    .eq('club_id', _clubId).neq('status','inactive');
+  if (_injTeamId) _injPlQ = _injPlQ.eq('team_id', _injTeamId);
+  const { data: pData } = await _injPlQ.order('last_name');
   _players = pData || [];
   _playersMap = Object.fromEntries(_players.map(p => [p.id, p]));
   populatePlayerSelect('logPlayer');
@@ -2666,6 +2673,24 @@ async function deleteInjury(id) {
   renderRecentlyResolved();
   renderBodyRegionFilter();
 }
+
+  let _injTeamId = null;
+  async function injInitTeamSwitch() {
+    const clubId = _clubId || await window.getClubId();
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('injTeamSelect');
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _injTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_injTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function injOnTeamChange(){ _injTeamId=document.getElementById('injTeamSelect').value; sessionStorage.setItem('cal_active_team',_injTeamId); location.reload(); }
+  window.injOnTeamChange = injOnTeamChange;
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
