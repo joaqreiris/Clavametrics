@@ -140,6 +140,10 @@
 
   <main class="hub-main">
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="gpTeamSelect" onchange="gpOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Gym planner</span><span class="sep">/</span><span id="gpCrumbDate">—</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions">
@@ -475,6 +479,7 @@
 
 <script>
 let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
+let _gpTeamId = null, _gpTeams = [];
 let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false;
 
 const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'DM', WG:'WG', ST:'ST', CM:'MF', CF:'CF' };
@@ -816,7 +821,7 @@ async function gpLoadDay(dateStr) {
 
   const { data: sess } = await window.sb.from('training_sessions')
     .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe')
-    .eq('club_id', _gpClubId).eq('session_date', dateStr)
+    .eq('club_id', _gpClubId).eq('team_id', _gpTeamId).eq('session_date', dateStr)
     .in('session_type', ['gym'])
     .maybeSingle().catch(() => ({ data: null }));
 
@@ -859,6 +864,7 @@ async function gpAutoSave() {
   if (_gpCurrentSessionId) {
     await window.sb.from('training_sessions').update(payload).eq('id', _gpCurrentSessionId).eq('club_id', _gpClubId);
   } else {
+    payload.team_id = _gpTeamId;
     const { data } = await window.sb.from('training_sessions').insert(payload).select('id').single();
     if (data?.id) { _gpCurrentSessionId = data.id; _gpUpdatePublishBtn(); }
   }
@@ -918,6 +924,8 @@ async function gpExportPDF() {
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   if (club) window.applyClubTheme();
 
+  await gpInitTeamSwitch();
+
   const nameEl = document.getElementById('gpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
 
@@ -927,7 +935,7 @@ async function gpExportPDF() {
 
   const [playersRes, mcRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
-    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away').eq('club_id', clubId).order('start_date')
+    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away').eq('club_id', clubId).eq('team_id', _gpTeamId).order('start_date')
   ]);
   _gpPlayers     = playersRes.data || [];
   _gpMicrocycles = mcRes.data || [];
@@ -948,6 +956,24 @@ async function gpExportPDF() {
   document.getElementById('gpMainBody').addEventListener('input', gpRecalcTotals);
   document.getElementById('gpPlyoBody').addEventListener('input', gpRecalcTotals);
 })().catch(console.error);
+
+  async function gpInitTeamSwitch() {
+    _gpClubId = _gpClubId || await window.getClubId();
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(_gpClubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    _gpTeams = teams;
+    const sel = document.getElementById('gpTeamSelect');
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _gpTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_gpTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function gpOnTeamChange(){ _gpTeamId=document.getElementById('gpTeamSelect').value; sessionStorage.setItem('cal_active_team',_gpTeamId); location.reload(); }
+  window.gpOnTeamChange = gpOnTeamChange;
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
