@@ -266,11 +266,19 @@
     <h1>Session RPE</h1>
     <div class="ctx-section">
       <button class="cm-btn is-outline" style="width:100%" onclick="linkPendingRpe(this)">
-        <i class="ti ti-link" style="font-size:15px"></i><span>Asociar RPE pendientes a sus sesiones</span>
+        <i class="ti ti-link" style="font-size:15px"></i><span>Asociar RPE del día automáticamente</span>
       </button>
       <p style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">
-        Vincula los RPE que los jugadores enviaron antes de que cargaras la sesión, y calcula la carga (sRPE).
+        Vincula los RPE enviados hoy a la sesión de hoy y calcula la carga (sRPE).
       </p>
+      <div id="pendingRpeWrap" style="margin-top:16px">
+        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px">
+          <i class="ti ti-clock-exclamation" style="font-size:14px"></i>RPE tardíos sin sesión
+        </div>
+        <div id="pendingRpeList" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+          <div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Cargando…</div>
+        </div>
+      </div>
     </div>
     <div class="ctx-section">
       <button class="cm-btn is-primary" style="width:100%" onclick="openShareRpe()">
@@ -767,6 +775,69 @@ async function submitRPE() {
     setTimeout(() => { span.textContent = original; btn.disabled = false; }, 2500);
   }
   window.linkPendingRpe = linkPendingRpe;
+
+  let _recentSessions = [];
+  function _sessIcon(t){ return ({match:'ti-ball-football',gym:'ti-barbell',recovery:'ti-activity',tactical:'ti-clipboard-list',conditioning:'ti-run'})[t] || 'ti-clipboard-list'; }
+
+  async function loadPendingRpe() {
+    const list = document.getElementById('pendingRpeList');
+    if (!list) return;
+    try {
+      const cid = await window.getClubId();
+      const [pend, sess] = await Promise.all([
+        window.sb.rpc('get_pending_rpe', { p_club_id: cid }),
+        window.sb.rpc('recent_sessions', { p_club_id: cid, p_limit: 5 })
+      ]);
+      _recentSessions = sess.data || [];
+      const rows = pend.data || [];
+      if (!rows.length) {
+        document.getElementById('pendingRpeWrap').style.display = 'none';
+        return;
+      }
+      document.getElementById('pendingRpeWrap').style.display = 'block';
+      const opts = _recentSessions.map(s =>
+        `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')} (${s.duration||'?'}′)</option>`
+      ).join('');
+      list.innerHTML = rows.map(r => {
+        const d = new Date(r.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+        return `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${r.player_name}</span>
+            <span style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-accent)">RPE ${Number(r.rpe)}</span>
+          </div>
+          <div style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Enviado ${d}</div>
+          <div style="display:flex;gap:6px">
+            <select id="sess_${r.id}" style="flex:1;height:32px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 11.5px/1 var(--cm-font-sans)">
+              <option value="">Elegir sesión…</option>${opts}
+            </select>
+            <button class="cm-btn is-primary is-sm" onclick="assignRpe('${r.id}', this)"><i class="ti ti-check" style="font-size:13px"></i></button>
+          </div>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      list.innerHTML = `<div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">No se pudo cargar.</div>`;
+      console.warn('[RPE] pending:', e.message);
+    }
+  }
+
+  async function assignRpe(rpeId, btn) {
+    const sel = document.getElementById('sess_' + rpeId);
+    const sessionId = sel?.value;
+    if (!sessionId) { sel?.focus(); return; }
+    btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:13px"></i>';
+    try {
+      const { data, error } = await window.sb.rpc('assign_rpe_session', { p_rpe_id: rpeId, p_session_id: sessionId });
+      if (error || data?.error) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>'; alert('Error: ' + (error?.message || data?.error)); return; }
+      btn.closest('div[style*="background"]').style.opacity = '0.4';
+      setTimeout(loadPendingRpe, 600);
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>';
+    }
+  }
+
+  window.loadPendingRpe = loadPendingRpe;
+  window.assignRpe = assignRpe;
+  loadPendingRpe();
 
 boot();
 </script>
