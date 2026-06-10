@@ -3057,6 +3057,10 @@ async function _detectSmartDefault(clubId, userId) {
     window._gpTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===window._gpTeamId?'selected':''}>${t.name}</option>`).join('');
     await gpsResolvePlayerIds();
+    // El filterbar pudo haber cargado antes de tener la categoría: recargarlo ahora
+    if (window.gpFilterBar && typeof window.gpFilterBar.reload === 'function') {
+      try { await window.gpFilterBar.reload(); } catch (e) { console.warn('filterbar reload:', e); }
+    }
   }
   window.gpsResolvePlayerIds = async function gpsResolvePlayerIds() {
     if (!window._gpTeamId) { window._gpPlayerIds = null; return; }
