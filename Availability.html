@@ -141,6 +141,19 @@
   .av-matrix-scroll { overflow-x:auto; }
 
   table.av-matrix { border-collapse:separate; border-spacing:0; width:100%; min-width:1100px; font:var(--cm-body-sm); }
+  /* Modo compacto: rango largo (mes) → columnas chicas, entra todo sin scroll */
+  table.av-matrix.is-dense { min-width:0; }
+  table.av-matrix.is-dense thead th.day { width:auto; min-width:22px; padding-left:1px; padding-right:1px; }
+  table.av-matrix.is-dense thead th.day b { font-size:10px; margin-bottom:1px; }
+  table.av-matrix.is-dense thead th.day .md-tag { font-size:7px; }
+  table.av-matrix.is-dense tbody td .dot,
+  table.av-matrix.is-dense tbody td .av-dot { width:14px !important; height:14px !important; }
+  table.av-matrix.is-dense tbody td { padding-left:1px; padding-right:1px; }
+  /* Modo muy denso (>31 días): aún más chico */
+  table.av-matrix.is-ultra thead th.day { min-width:16px; }
+  table.av-matrix.is-ultra thead th.day b { font-size:8.5px; }
+  table.av-matrix.is-ultra tbody td .dot,
+  table.av-matrix.is-ultra tbody td .av-dot { width:10px !important; height:10px !important; }
   /* Microcycle header band */
   .av-matrix .mc-band {
     background:var(--cm-bg-sunk);
@@ -633,6 +646,13 @@
     });
     h += '<th class="col-sum">Summary · match min</th>';
     tr.innerHTML = h;
+    // Densidad adaptativa según cantidad de días
+    const table = document.getElementById('avMatrix');
+    if (table) {
+      const n = MC_DATES.length;
+      table.classList.toggle('is-dense', n > 16);
+      table.classList.toggle('is-ultra', n > 31);
+    }
   }
 
   // ── Render matrix rows ──
