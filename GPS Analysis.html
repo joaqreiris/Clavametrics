@@ -1686,7 +1686,7 @@ async function saveLayout(viewKey, overrideDid) {
   if (!did) { console.warn(`saveLayout(${viewKey}): unknown viewKey`); return; }
   if (!window.sb) { console.warn(`saveLayout(${viewKey}): Supabase not ready`); return; }
   try {
-    const uid = (await window.sb.auth.getUser())?.data?.user?.id;
+    const uid = await gpsGetUserId();
     const cid = await window.getClubId?.();
     if (!uid || !cid) { console.warn(`saveLayout(${viewKey}): uid=${uid} cid=${cid} — skipping`); return; }
     const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
@@ -1716,7 +1716,7 @@ async function loadLayout(viewKey) {
   const did = _DASHBOARD_IDS[viewKey];
   if (!did || !window.sb) return null;
   try {
-    const uid = (await window.sb.auth.getUser())?.data?.user?.id;
+    const uid = await gpsGetUserId();
     const cid = await window.getClubId?.();
     if (!uid || !cid) return null;
     const { data, error } = await window.sb.from('gps_dashboard_layouts')
@@ -1916,7 +1916,7 @@ async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
 async function _svGetCtx(viewKey) {
   const did = _DASHBOARD_IDS[viewKey];
   if (!did || !window.sb) return null;
-  const uid = (await window.sb.auth.getUser())?.data?.user?.id;
+  const uid = await gpsGetUserId();
   const cid = await window.getClubId?.();
   if (!uid || !cid) return null;
   return { uid, cid, did };
@@ -3065,6 +3065,20 @@ async function _detectSmartDefault(clubId, userId) {
   function gpsOnTeamChange(){ window._gpTeamId=document.getElementById('gpsTeamSelect').value; sessionStorage.setItem('cal_active_team',window._gpTeamId); location.reload(); }
   window.gpsOnTeamChange = gpsOnTeamChange;
   window.gpsResolvePlayerIds = gpsResolvePlayerIds;
+
+  let _gpsUserIdPromise = null;
+  async function gpsGetUserId() {
+    if (window._gpUserId) return window._gpUserId;
+    if (!_gpsUserIdPromise) {
+      _gpsUserIdPromise = window.sb.auth.getUser().then(r => {
+        const uid = r?.data?.user?.id || null;
+        if (uid) window._gpUserId = uid;
+        return uid;
+      });
+    }
+    return _gpsUserIdPromise;
+  }
+  window.gpsGetUserId = gpsGetUserId;
 </script>
 
 <script>
