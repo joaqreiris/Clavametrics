@@ -740,6 +740,17 @@
             <label class="pl-form-label">Description</label>
             <textarea class="pl-form-input" id="plExDescription" rows="3" placeholder="Exercise description…" style="resize:vertical;min-height:60px"></textarea>
           </div>
+          <div class="pl-form-group">
+            <label class="pl-form-label" style="display:flex;align-items:center;gap:8px">
+              <i class="ti ti-eye" style="font-size:14px"></i>Visibilidad por categoría
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);margin:6px 0 8px;cursor:pointer">
+              <input type="checkbox" id="plExVisAll" onchange="plToggleVisAll()" style="width:16px;height:16px;accent-color:var(--cm-accent)">
+              Visible para todas las categorías
+            </label>
+            <div id="plExVisTeams" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">Si no marcás "todas", solo las categorías seleccionadas verán este ejercicio.</div>
+          </div>
 
           <div style="height:1px;background:var(--cm-border-soft);margin-bottom:14px"></div>
 
@@ -2310,7 +2321,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,objective,description')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -2391,6 +2402,7 @@
     document.getElementById('plExMatchDay').value    = ex.match_day != null ? ex.match_day : '';
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
+    plSetVisibilityUI(ex.visible_teams);
 
     setOrientBtn(ex.orientation || null);
     setIntensity(ex.intensity || null);
@@ -2421,10 +2433,12 @@
 
   // ── New exercise ────────────────────────────────────────────────
   document.getElementById('plNewExBtn')?.addEventListener('click', async () => {
+    const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
     const { data, error } = await window.sb.from('exercises').insert({
       club_id:    clubId,
       name:       'New exercise',
-      created_by: profile?.id || null
+      created_by: profile?.id || null,
+      visible_teams: _activeTeam ? [_activeTeam] : null
     }).select().single();
     if (!error && data) {
       await loadExercises();
@@ -2466,7 +2480,8 @@
       game_type:         currentGameTypeOn ? (currentGameType || null) : null,
       objective:         document.getElementById('plExObjective')?.value?.trim()   || null,
       description:       document.getElementById('plExDescription')?.value?.trim() || null,
-      objects_json:      fc.toJSON(ARROW_PROPS)
+      objects_json:      fc.toJSON(ARROW_PROPS),
+      visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
     };
 
     const { error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId);
@@ -2569,6 +2584,38 @@
   updateSpaceOrientation();
 
 })().catch(console.error);
+
+  let _plTeams = [], _plVisibleTeams = [];
+  async function plLoadTeams() {
+    const cid = await window.getClubId();
+    _plTeams = await window.getTeams(cid);
+  }
+  function plRenderVisTeams() {
+    const wrap = document.getElementById('plExVisTeams');
+    const allOn = document.getElementById('plExVisAll').checked;
+    wrap.style.display = allOn ? 'none' : 'flex';
+    if (allOn) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = _plTeams.map(t => {
+      const on = _plVisibleTeams.includes(t.id);
+      return `<button type="button" onclick="plToggleVisTeam('${t.id}')" style="padding:6px 12px;border-radius:999px;border:1px solid ${on?'var(--cm-accent)':'var(--cm-border)'};background:${on?'var(--cm-accent)':'transparent'};color:${on?'#fff':'var(--cm-fg-muted)'};font:500 12px/1 var(--cm-font-sans);cursor:pointer">${t.name}</button>`;
+    }).join('');
+  }
+  window.plToggleVisAll = function() {
+    if (document.getElementById('plExVisAll').checked) _plVisibleTeams = [];
+    plRenderVisTeams();
+  };
+  window.plToggleVisTeam = function(id) {
+    const i = _plVisibleTeams.indexOf(id);
+    if (i >= 0) _plVisibleTeams.splice(i, 1); else _plVisibleTeams.push(id);
+    plRenderVisTeams();
+  };
+  function plSetVisibilityUI(visibleTeams) {
+    const all = !visibleTeams || visibleTeams.length === 0;
+    document.getElementById('plExVisAll').checked = all;
+    _plVisibleTeams = all ? [] : [...visibleTeams];
+    plRenderVisTeams();
+  }
+  plLoadTeams();
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
