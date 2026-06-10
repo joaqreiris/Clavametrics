@@ -3021,11 +3021,13 @@ async function _detectSmartDefault(clubId, userId) {
   }
 
   try {
-    await applyDefaultLayoutGeneric('ind', _IND_DEFAULTS);
-    await applyGrpDefaultLayout();
-    await applyLayoutToView('mind');
-    await applyDefaultLayoutGeneric('mgrp', _MGRP_DEFAULTS);
-    await applyMcDefaultLayout();
+    await Promise.all([
+      applyDefaultLayoutGeneric('ind', _IND_DEFAULTS),
+      applyGrpDefaultLayout(),
+      applyLayoutToView('mind'),
+      applyDefaultLayoutGeneric('mgrp', _MGRP_DEFAULTS),
+      applyMcDefaultLayout()
+    ]);
   } catch (e) {
     console.warn('applyLayout:', e);
   } finally {
