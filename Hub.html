@@ -1336,6 +1336,16 @@ function renderTasks(tasks) {
     if (_fullAccess) { const _pt = await window.sb.rpc('primary_team_id'); _hubTeamId = _pt.data || null; }
   } catch (e) { console.warn('[Hub] team resolve:', e.message); }
   const _teamEq = _hubTeamId ? { team_id: _hubTeamId } : {};
+  let _hubPlayerIds = null;
+  if (_hubTeamId) {
+    try {
+      const _tp = await window.sb.rpc('team_player_ids', { p_team_id: _hubTeamId });
+      _hubPlayerIds = (_tp.data || []).map(r => (typeof r === 'string' ? r : r.team_player_ids || r.id)).filter(Boolean);
+    } catch (e) { console.warn('[Hub] team players:', e.message); }
+  }
+  function _pidFilter(q, col) {
+    return _hubPlayerIds ? q.in(col || 'player_id', _hubPlayerIds) : q;
+  }
   if (!clubId) { window.location.replace('Onboarding.html'); return; }
   window._hubClubId = clubId;
   console.log('[Hub] club_id:', clubId);
@@ -1383,14 +1393,14 @@ function renderTasks(tasks) {
 
   const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, sessActRes, injActRes, gpsActRes, mcRes, todaySessionRes, treatActRes, clearActRes] = await Promise.all([
     window.sb.from('players').select('id', { count: 'exact', head: true })
-      .eq('club_id', clubId),
+      .eq('club_id', clubId).match(_teamEq),
     // expected_return needed for injury_returns_week KPI; include 'recovery' (schema) + 'returning' (legacy)
-    window.sb.from('injuries').select('status, start_date, expected_return')
-      .eq('club_id', clubId).in('status', ['active', 'returning', 'recovery']),
-    window.sb.from('wellness').select('sleep_quality, mood, fatigue, stress, soreness')
+    _pidFilter(window.sb.from('injuries').select('status, start_date, expected_return')
+      .eq('club_id', clubId).in('status', ['active', 'returning', 'recovery'])),
+    _pidFilter(window.sb.from('wellness').select('sleep_quality, mood, fatigue, stress, soreness')
       .eq('club_id', clubId)
       .gte('submitted_at', today + 'T00:00:00')
-      .lte('submitted_at', today + 'T23:59:59'),
+      .lte('submitted_at', today + 'T23:59:59')),
     userId
       ? window.sb.from('tasks')
           .select('id, title, priority, status, due_date, created_by_name')
@@ -1399,10 +1409,10 @@ function renderTasks(tasks) {
           .in('status', ['pending', 'in_progress'])
           .order('due_date', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    window.sb.from('availability').select('status')
-      .eq('club_id', clubId).eq('date', today),
+    (_hubPlayerIds ? window.sb.from('availability').select('status').eq('club_id', clubId).eq('date', today).in('player_id', _hubPlayerIds.map(String))
+                   : window.sb.from('availability').select('status').eq('club_id', clubId).eq('date', today)),
     window.sb.from('players').select('status')
-      .eq('club_id', clubId),
+      .eq('club_id', clubId).match(_teamEq),
     window.sb.from('training_sessions')
       .select('session_date, rpe(player_id, load)')
       .eq('club_id', clubId).match(_teamEq).eq('is_historical', false)
