@@ -496,15 +496,17 @@
     const clubId = await window.getClubId?.();
     if (!clubId || !window.sb) return;
 
+    const _gpTeam = window._gpTeamId || null;
+    const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position')
+      .eq('club_id', clubId).neq('status', 'inactive');
+    const _seQ = window.sb.from('training_sessions').select('session_attributes')
+      .eq('club_id', clubId).limit(3000);
+    const _mcQ = window.sb.from('microcycles').select('id,name,start_date')
+      .eq('club_id', clubId);
     const [{ data: players }, { data: sessions }, { data: mcs }, { data: reports }] = await Promise.all([
-      window.sb.from('players').select('id,first_name,last_name,number,position')
-        .eq('club_id', clubId).neq('status', 'inactive').order('last_name'),
-      window.sb.from('training_sessions').select('session_attributes')
-        .eq('club_id', clubId).limit(3000),
-      window.sb.from('microcycles').select('id,name,start_date')
-        .eq('club_id', clubId).order('start_date', { ascending: false }),
-      // Relación REAL para filtros encadenados: un gps_report por fila con su sesión
-      // (fecha, md_code, microciclo) y la posición del jugador.
+      (_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name'),
+      (_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
+      (_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false }),
       window.sb.from('gps_reports')
         .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id), players!inner(position)')
         .eq('club_id', clubId).limit(20000),
