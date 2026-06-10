@@ -2766,8 +2766,8 @@ window.refreshDashboard = async function (opts = {}) {
   const clubId = window._gpClubId || (await window.getClubId());
   if (!clubId) return;
   window._gpClubId = clubId;
-  if (!window._gpTeamId && document.getElementById('gpsTeamSelect')) { await gpsInitTeamSwitch(); }
-  if (window._gpTeamId && window._gpPlayerIds === null) { await gpsResolvePlayerIds(); }
+  if (!window._gpTeamId && document.getElementById('gpsTeamSelect')) { await window.gpsInitTeamSwitch(); }
+  if (window._gpTeamId && window._gpPlayerIds === null) { await window.gpsResolvePlayerIds(); }
 
   // If a specific session was just imported, ensure the date range covers it
   if (opts.sessionId) {
@@ -3035,7 +3035,7 @@ async function _detectSmartDefault(clubId, userId) {
 
   window._gpTeamId = null;
   window._gpPlayerIds = null;
-  async function gpsInitTeamSwitch() {
+  window.gpsInitTeamSwitch = async function gpsInitTeamSwitch() {
     const clubId = window._gpClubId || await window.getClubId();
     const prof = await window.getProfile();
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
@@ -3050,7 +3050,7 @@ async function _detectSmartDefault(clubId, userId) {
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===window._gpTeamId?'selected':''}>${t.name}</option>`).join('');
     await gpsResolvePlayerIds();
   }
-  async function gpsResolvePlayerIds() {
+  window.gpsResolvePlayerIds = async function gpsResolvePlayerIds() {
     if (!window._gpTeamId) { window._gpPlayerIds = null; return; }
     try {
       const { data } = await window.sb.from('players').select('id').eq('club_id', window._gpClubId || await window.getClubId()).eq('team_id', window._gpTeamId);
