@@ -207,6 +207,10 @@
 
   <main class="hub-main">
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="shTeamSelect" onchange="shOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Sessions history</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
@@ -410,7 +414,7 @@
   let allSessions = [], filteredSessions = [], currentPage = 0;
   let activeDays = 30, searchText = '';
   let activeView = 'list';
-  let shClubId = null;
+  let shClubId = null, shTeamId = null;
   let _detailSessId = null;
   let calendarMonth = new Date();
   let microcycles = [];
@@ -493,6 +497,7 @@
     ]);
     microcycles = mcRes.data || [];
     totalActivePlayers = plRes.count || 0;
+    await shInitTeamSwitch();
     await loadSessions(clubId);
   }
 
@@ -503,6 +508,7 @@
       .from('training_sessions')
       .select('id,club_id,session_date,title,notes,session_type,duration,estimated_rpe,is_historical,rpe(rpe,duration,load)')
       .eq('club_id', clubId);
+    if (shTeamId) q = q.eq('team_id', shTeamId);
     if (!_showHistorical) q = q.eq('is_historical', false);
     const { data, error } = await q.order('session_date', { ascending: false });
     if (error) { console.error(error); return; }
@@ -821,6 +827,7 @@
       club_id: sess.club_id, session_date: sess.session_date,
       title: `Copy of ${sess.title||'Untitled'}`, notes: sess.notes,
       session_type: sess.session_type, duration: sess.duration,
+      team_id: shTeamId || sess.team_id || null,
     });
     if (error) { alert('Error: ' + error.message); btn.disabled = false; return; }
     btn.innerHTML = '<i class="ti ti-check"></i>';
@@ -1293,6 +1300,22 @@
 
   // Close panel with Escape key
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _detailSessId) closeDetailPanel(); });
+
+  async function shInitTeamSwitch() {
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(shClubId || await window.getClubId());
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('shTeamSelect');
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    shTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===shTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function shOnTeamChange(){ shTeamId=document.getElementById('shTeamSelect').value; sessionStorage.setItem('cal_active_team',shTeamId); location.reload(); }
+  window.shOnTeamChange = shOnTeamChange;
 
   boot();
 </script>
