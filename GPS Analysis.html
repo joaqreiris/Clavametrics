@@ -3442,10 +3442,12 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // `acwrDaily` drives the ACWR chart when a different base metric is chosen.
   const acwrMetric = document.getElementById('card-acwr')?.dataset.metricKey || 'player_load';
   const _acwrCols  = acwrMetric !== 'player_load' ? `,${acwrMetric}` : '';
-  const { data: histLoads } = await window.sb.from('gps_reports')
+  let _hlQ = window.sb.from('gps_reports')
     .select(`session_id,player_load${_acwrCols}`)
     .in('session_id', hids.slice(0, 400))
     .eq('club_id', clubId);
+  if (window._gpPlayerIds && window._gpPlayerIds.length) _hlQ = _hlQ.in('player_id', window._gpPlayerIds);
+  const { data: histLoads } = await _hlQ;
 
   // Build session → avg load map
   const loadBySession = {};
@@ -3747,10 +3749,11 @@ async function _fetchReports(state) {
   const CHUNK = 400;
   let allReports = [];
   for (let i = 0; i < sessionIds.length; i += CHUNK) {
-    const { data: chunk } = await window.sb.from('gps_reports')
+    let _chQ = window.sb.from('gps_reports')
       .select('player_id,session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,accelerations,decelerations,max_speed,avg_speed,player_load,hmld,time_played,distance_per_minute,players(first_name,last_name,number,position)')
-      .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId)
-      .order('total_distance', { ascending: false });
+      .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId);
+    if (window._gpPlayerIds && window._gpPlayerIds.length) _chQ = _chQ.in('player_id', window._gpPlayerIds);
+    const { data: chunk } = await _chQ.order('total_distance', { ascending: false });
     if (chunk?.length) allReports = allReports.concat(chunk);
   }
 
@@ -6588,10 +6591,12 @@ async function renderMatchMax(report) {
       // Core metrics: fetch all in one query
       const coreKeys = metricKeys.filter(k => _XM_CORE_KEYS.has(k));
       if (coreKeys.length) {
-        const { data: rpts } = await window.sb.from('gps_reports')
+        let _rptsQ = window.sb.from('gps_reports')
           .select(`session_id,${coreKeys.join(',')}`)
           .in('session_id', sids)
-          .eq('club_id', clubId)
+          .eq('club_id', clubId);
+        if (window._gpPlayerIds && window._gpPlayerIds.length) _rptsQ = _rptsQ.in('player_id', window._gpPlayerIds);
+        const { data: rpts } = await _rptsQ
           .eq('player_id', pid);
         coreKeys.forEach(k => {
           const vals = (rpts || []).map(r => +(r[k] || 0)).filter(v => v > 0);
@@ -6603,10 +6608,12 @@ async function renderMatchMax(report) {
       // Custom EAV metrics
       const customKeys = metricKeys.filter(k => !_XM_CORE_KEYS.has(k));
       if (customKeys.length) {
-        const { data: coreRows } = await window.sb.from('gps_reports')
+        let _crQ = window.sb.from('gps_reports')
           .select('id,session_id')
           .in('session_id', sids)
-          .eq('club_id', clubId)
+          .eq('club_id', clubId);
+        if (window._gpPlayerIds && window._gpPlayerIds.length) _crQ = _crQ.in('player_id', window._gpPlayerIds);
+        const { data: coreRows } = await _crQ
           .eq('player_id', pid);
         const rptIds = (coreRows || []).map(r => r.id);
         if (rptIds.length) {
@@ -6784,19 +6791,23 @@ async function renderWeeklyBars(state) {
   // Fetch metric values for the player
   const loadBySid = {};
   if (_WB_CORE_COLS.has(metricKey)) {
-    const { data: rpts } = await window.sb.from('gps_reports')
+    let _rptsQ2 = window.sb.from('gps_reports')
       .select(`session_id,${metricKey}`)
       .in('session_id', allSids)
-      .eq('club_id', clubId)
+      .eq('club_id', clubId);
+    if (window._gpPlayerIds && window._gpPlayerIds.length) _rptsQ2 = _rptsQ2.in('player_id', window._gpPlayerIds);
+    const { data: rpts } = await _rptsQ2
       .eq('player_id', pid);
     (rpts || []).forEach(r => {
       loadBySid[r.session_id] = (loadBySid[r.session_id] || 0) + (r[metricKey] || 0);
     });
   } else {
-    const { data: coreRows } = await window.sb.from('gps_reports')
+    let _crQ2 = window.sb.from('gps_reports')
       .select('id,session_id')
       .in('session_id', allSids)
-      .eq('club_id', clubId)
+      .eq('club_id', clubId);
+    if (window._gpPlayerIds && window._gpPlayerIds.length) _crQ2 = _crQ2.in('player_id', window._gpPlayerIds);
+    const { data: coreRows } = await _crQ2
       .eq('player_id', pid);
     const rptToSid = Object.fromEntries((coreRows || []).map(r => [r.id, r.session_id]));
     const rptIds   = (coreRows || []).map(r => r.id);
