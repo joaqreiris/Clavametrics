@@ -1271,6 +1271,23 @@
     const availPct = tTotal ? Math.round((tAvail/tTotal)*100) : 0;
     window._avStatRows = Object.values(stat);
 
+    // Serie temporal: por cada día del rango, contar estados
+    const byDate = {};
+    MC_DATES.forEach(d => byDate[d] = { avail:0, partial:0, injury:0, illness:0 });
+    (avail||[]).forEach(r => {
+      const b = byDate[r.date]; if (!b) return;
+      const st = (r.status||'').toLowerCase();
+      if (st === 'available') b.avail++;
+      else if (st === 'partial') b.partial++;
+      else if (st === 'injured') b.injury++;
+      else if (st === 'illness' || st === 'sick') b.illness++;
+    });
+    const tsDates = MC_DATES.map(d => { const x = new Date(d+'T00:00:00Z'); return `${x.getUTCDate()}/${x.getUTCMonth()+1}`; });
+    const tsAvail = MC_DATES.map(d => byDate[d].avail);
+    const tsPartial = MC_DATES.map(d => byDate[d].partial);
+    const tsInjury = MC_DATES.map(d => byDate[d].injury);
+    const tsIllness = MC_DATES.map(d => byDate[d].illness);
+
     const kpi = (icon, label, value, sub, color) => `
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px;position:relative;overflow:hidden">
         <div style="display:flex;align-items:center;gap:7px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:12px"><i class="ti ${icon}" style="font-size:15px;color:${color}"></i>${label}</div>
@@ -1279,6 +1296,13 @@
       </div>`;
 
     host.innerHTML = `
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Evolución de disponibilidad</span>
+          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${from} → ${to}</span>
+        </div>
+        <div style="height:240px"><canvas id="avStatsTrend"></canvas></div>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
         ${kpi('ti-circle-check','Disponibilidad media', availPct+'<span style="font-size:17px">%</span>', `${tAvail} de ${tTotal} días-jugador`, 'var(--cm-success)')}
         ${kpi('ti-bandage','Días perdidos · lesión', tInjury, tTotal?`${Math.round(tInjury/tTotal*100)}% del período`:'', 'var(--cm-danger)')}
@@ -1348,6 +1372,39 @@
         renderRows();
       });
     });
+
+    // Área chart de evolución temporal
+    if (window.Chart) {
+      if (window._avTrendChart) { window._avTrendChart.destroy(); window._avTrendChart = null; }
+      const tctx = document.getElementById('avStatsTrend');
+      if (tctx) {
+        const mk = (label, data, color) => ({
+          label, data, borderColor: color, backgroundColor: color+'33',
+          fill: true, tension: 0.35, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, stack: 'a'
+        });
+        window._avTrendChart = new Chart(tctx, {
+          type: 'line',
+          data: { labels: tsDates, datasets: [
+            mk('Disponible', tsAvail, '#16A34A'),
+            mk('Modificado', tsPartial, '#D97706'),
+            mk('Lesión', tsInjury, '#DC2626'),
+            mk('Enfermedad', tsIllness, '#7C3AED')
+          ]},
+          options: {
+            responsive:true, maintainAspectRatio:false,
+            interaction:{ mode:'index', intersect:false },
+            scales:{
+              x:{ grid:{ display:false }, ticks:{ font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:12 } },
+              y:{ stacked:true, beginAtZero:true, grid:{ color:'rgba(148,163,184,.12)' }, ticks:{ font:{size:10}, precision:0 }, title:{ display:true, text:'Jugadores', font:{size:10} } }
+            },
+            plugins:{
+              legend:{ position:'bottom', labels:{ font:{size:11.5}, padding:14, usePointStyle:true, pointStyle:'circle' } },
+              tooltip:{ callbacks:{ title:(items)=>`Día ${items[0].label}` } }
+            }
+          }
+        });
+      }
+    }
 
     // Donut pulido
     if (window.Chart) {
