@@ -323,6 +323,10 @@
   <main class="hub-main">
 
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="avTeamSelect" onchange="avOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Clava FC</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Availability</span>
@@ -775,6 +779,8 @@
     }
     window.getClub().then(c => { if (c) window.applyClubTheme(); });
 
+    await avInitTeamSwitch();
+
     todayStr           = new Date().toISOString().split('T')[0];
     const yesterdayStr = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     let mcStart, mcEnd;
@@ -816,7 +822,7 @@
     // Fetch all data
     const { data: playersData, error: playersErr } = await window.sb
       .from('players').select('id, first_name, last_name, position, number')
-      .eq('club_id', CLUB_ID).order('last_name');
+      .eq('club_id', CLUB_ID).match(_avTeamId ? { team_id: _avTeamId } : {}).order('last_name');
 
     console.log('[Availability] currentClubId en Availability:', CLUB_ID);
     console.log('[Availability] players:', playersData, '| error:', playersErr?.message || null);
@@ -1107,6 +1113,24 @@
     g.querySelectorAll('.av-seg').forEach(o => o.classList.remove('is-on'));
     s.classList.add('is-on');
   })));
+
+  let _avTeamId = null;
+  async function avInitTeamSwitch() {
+    const clubId = CLUB_ID || await window.getClubId();
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('avTeamSelect');
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _avTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_avTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function avOnTeamChange(){ _avTeamId=document.getElementById('avTeamSelect').value; sessionStorage.setItem('cal_active_team',_avTeamId); location.reload(); }
+  window.avOnTeamChange = avOnTeamChange;
 </script>
 
 <script>
