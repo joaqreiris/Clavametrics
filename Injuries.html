@@ -1736,10 +1736,21 @@ async function savePhaseStatus(status) {
 
 // ═══════════════ LOAD ═══════════════
 async function loadAll() {
-  const { data, error } = await window.sb.from('injuries')
+  // Categoría sin jugadores → no hay lesiones
+  if (_injTeamId && _players && _players.length === 0) {
+    _allInjuries = [];
+    _phasesMap = {};
+    updateKPIs(); updateTabCounts(); applyFilters();
+    renderBodyMap(); renderTypeBreakdown(); renderRecentlyResolved();
+    return;
+  }
+  let _injQ = window.sb.from('injuries')
     .select('*, players:player_id(first_name,last_name,number,position)')
-    .eq('club_id', _clubId)
-    .order('start_date', { ascending: false });
+    .eq('club_id', _clubId);
+  if (_injTeamId && _players && _players.length) {
+    _injQ = _injQ.in('player_id', _players.map(p => p.id));
+  }
+  const { data, error } = await _injQ.order('start_date', { ascending: false });
   if (error) { console.error('[Injuries]', error); return; }
   _allInjuries = data || [];
 
