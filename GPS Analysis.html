@@ -2324,9 +2324,11 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   // ── Player pill ────────────────────────────────────────────
   if (pill.id === 'playerPill') {
     const clubId = await window.getClubId();
-    const { data: players } = await window.sb.from('players')
+    let _plQ2327 = window.sb.from('players')
       .select('id,first_name,last_name,position,number')
-      .eq('club_id', clubId).neq('status', 'inactive').order('last_name');
+      .eq('club_id', clubId).neq('status', 'inactive');
+    if (window._gpTeamId) _plQ2327 = _plQ2327.eq('team_id', window._gpTeamId);
+    const { data: players } = await _plQ2327.order('last_name');
     if (!players?.length) { showToast('No players found'); return; }
     // Inject "All players" option into search popover via wrapper
     closePop();
@@ -7693,8 +7695,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (!clubId || !window.sb) return;
 
       const [{ data: players }, { data: mcs }] = await Promise.all([
-        window.sb.from('players').select('id,first_name,last_name,number,position')
-          .eq('club_id', clubId).neq('status','inactive').order('last_name'),
+        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').eq('team_id', window._gpTeamId).order('last_name') : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('last_name')),
         window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
           .eq('club_id', clubId).order('start_date', { ascending: false }).limit(50),
       ]);
@@ -8636,8 +8637,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           .select('id,session_date,session_type,title,match_day_offset,session_attributes,microcycle_id')
           .eq('club_id', clubId).neq('session_type', 'rehab')
           .order('session_date', { ascending: true }),
-        window.sb.from('players').select('id,first_name,last_name,number,position')
-          .eq('club_id', clubId).neq('status','inactive'),
+        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive')),
         window.sb.from('microcycles').select('id,name,start_date,match_date,rival')
           .eq('club_id', clubId).order('start_date', { ascending: true }),
       ]);
@@ -9914,7 +9914,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const [teamAcwr, playerAcwr, players] = await Promise.all([
         window.gpsACWR.calculateTeamACWR({ clubId, refDate }),
         window.gpsACWR.calculatePlayerACWR({ clubId, refDate }),
-        window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive'),
+        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive')),
       ]);
 
       _playerMap = Object.fromEntries((players.data || []).map(p => [p.id, p]));
@@ -11517,9 +11517,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         window.sb.from('gps_reports')
           .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
           .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId),
-        window.sb.from('players')
-          .select('id,first_name,last_name,number,position')
-          .eq('club_id', clubId).neq('status', 'inactive'),
+        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive')),
       ]);
 
       const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
