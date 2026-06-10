@@ -686,6 +686,12 @@
   <main class="hub-main">
 
     <div class="hub-topbar">
+      <div class="cal-team-switch" style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="calTeamSelect" onchange="onTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer">
+          <option value="">Cargando…</option>
+        </select>
+      </div>
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Clava FC</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Calendar</span>
@@ -1420,6 +1426,7 @@
 <script>
 // ── State ──────────────────────────────────────────────────────
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editEvtSource = null, _editMcId = null;
+let _activeTeamId = null, _myTeams = [];
 let _currentUserId = null, _currentUserName = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
@@ -3037,9 +3044,11 @@ async function saveEvt() {
       // Type changed from training to calendar event: migrate
       await window.sb.from('training_sessions').delete().eq('id', _editEvtId);
       payload.club_id = clubId;
+      payload.team_id = _activeTeamId;
       ({ error } = await window.sb.from('calendar_events').insert(payload));
     } else {
       payload.club_id = clubId;
+      payload.team_id = _activeTeamId;
       ({ error } = await window.sb.from('calendar_events').insert(payload));
     }
   } else {
@@ -3051,9 +3060,11 @@ async function saveEvt() {
       // Type changed from calendar event to training: migrate
       await window.sb.from('calendar_events').delete().eq('id', _editEvtId);
       payload.club_id = clubId;
+      payload.team_id = _activeTeamId;
       ({ error } = await window.sb.from('training_sessions').insert(payload));
     } else {
       payload.club_id = clubId;
+      payload.team_id = _activeTeamId;
       ({ error } = await window.sb.from('training_sessions').insert(payload));
     }
   }
@@ -3193,6 +3204,7 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
     ({ error } = await window.sb.from('microcycles').update(payload).eq('id', _editMcId));
   } else {
     payload.id = crypto.randomUUID();
+    payload.team_id = _activeTeamId;
     ({ error } = await window.sb.from('microcycles').insert(payload));
   }
   saving.style.display = 'none'; saveBtn.disabled = false;
@@ -4629,6 +4641,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   _clubId = await window.getClubId();
+  await initTeamSwitch();
   _currentUserId   = profile?.id        || null;
   _currentUserName = profile?.full_name || null;
   if (club) window.applyClubTheme();
@@ -4716,6 +4729,31 @@ document.addEventListener('DOMContentLoaded', () => {
   const newEvtBtn = document.querySelector('.hub-topbar .cm-btn.is-primary');
   if (newEvtBtn) newEvtBtn.addEventListener('click', () => openEvtModal(null));
 })().catch(console.error);
+
+  async function initTeamSwitch() {
+    _clubId = _clubId || await window.getClubId();
+    const profile = await window.getProfile();
+    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
+    let fullAccess = bucket === 'admin' || bucket === 'owner';
+    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(_clubId);
+    if (!fullAccess) {
+      let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
+      const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
+    }
+    _myTeams = teams;
+    const sel = document.getElementById('calTeamSelect');
+    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _activeTeamId = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t => `<option value="${t.id}" ${t.id===_activeTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function onTeamChange() {
+    _activeTeamId = document.getElementById('calTeamSelect').value;
+    sessionStorage.setItem('cal_active_team', _activeTeamId);
+    location.reload();
+  }
+  window.onTeamChange = onTeamChange;
 </script>
 
 <!-- Publish Manage modal -->
