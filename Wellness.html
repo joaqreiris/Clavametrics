@@ -482,6 +482,11 @@
       <button class="cm-btn is-primary" style="width:100%" onclick="openShareWellness()">
         <i class="ti ti-share" style="font-size:15px"></i>Compartir link con jugadores
       </button>
+      <div id="wellChecklistWrap" style="margin-top:18px">
+        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Check-in de hoy</div>
+        <select id="wellChkTeam" onchange="loadWellChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px"></select>
+        <div id="wellChkBody" style="margin-top:10px"></div>
+      </div>
     </div>
     <div id="shareWBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:440px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
@@ -682,6 +687,50 @@
   window.closeShareWellness = closeShareWellness;
   window.genShareWellness = genShareWellness;
   window.copyShareWellness = copyShareWellness;
+
+  async function initWellChecklist() {
+    const sel = document.getElementById('wellChkTeam');
+    if (!sel) return;
+    const cid = await window.getClubId();
+    const profile = await window.getProfile();
+    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
+    let fullAccess = bucket === 'admin' || bucket === 'owner';
+    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(cid);
+    if (!fullAccess) {
+      let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
+      const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
+    }
+    sel.innerHTML = (fullAccess ? '<option value="">Todo el club</option>' : '') +
+      teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+    loadWellChecklist();
+  }
+  async function loadWellChecklist() {
+    const body = document.getElementById('wellChkBody');
+    const teamId = document.getElementById('wellChkTeam').value || null;
+    body.innerHTML = '<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Cargando…</div>';
+    try {
+      const cid = await window.getClubId();
+      const { data, error } = await window.sb.rpc('wellness_status', { p_club_id: cid, p_team_id: teamId, p_date: null });
+      if (error) throw error;
+      const rows = data || [];
+      const done = rows.filter(r => r.responded).length;
+      body.innerHTML =
+        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} completaron</div>` +
+        '<div style="display:flex;flex-direction:column;gap:4px">' +
+        rows.map(r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
+          <i class="ti ${r.responded?'ti-circle-check':'ti-circle'}" style="font-size:15px;color:${r.responded?'var(--cm-accent)':'var(--cm-fg-muted)'}"></i>
+          <span style="color:${r.responded?'var(--cm-fg)':'var(--cm-fg-muted)'};flex:1">${r.player_name}</span>
+          ${r.responded&&r.readiness!=null?`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-accent)">${r.readiness}</span>`:''}
+        </div>`).join('') +
+        '</div>';
+    } catch (e) {
+      body.innerHTML = `<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">No se pudo cargar.</div>`;
+      console.warn('[Wellness] checklist:', e.message);
+    }
+  }
+  window.loadWellChecklist = loadWellChecklist;
+  initWellChecklist();
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
