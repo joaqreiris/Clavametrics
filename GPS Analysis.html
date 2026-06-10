@@ -2765,6 +2765,7 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
 // ── refreshDashboard — reusable after import ──────────────────
 // opts.sessionId: if provided, update date range to cover that session
 window.refreshDashboard = async function (opts = {}) {
+  if (window.__gpResolverCache) window.__gpResolverCache.clear();
   const clubId = window._gpClubId || (await window.getClubId());
   if (!clubId) return;
   window._gpClubId = clubId;
