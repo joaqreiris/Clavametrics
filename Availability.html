@@ -371,15 +371,6 @@
             <button class="av-seg" data-view="today" onclick="avSwitchView('today')"><i class="ti ti-calendar-event"></i>Today</button>
             <button class="av-seg" data-view="stats" onclick="avSwitchView('stats')"><i class="ti ti-chart-bar"></i>Stats</button>
           </div>
-          <select id="avRangeSel" onchange="avOnRangeChange()" style="height:32px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer">
-            <option value="mc">Microciclo actual</option>
-            <option value="7">Última semana</option>
-            <option value="14">Últimas 2 semanas</option>
-            <option value="30">Último mes</option>
-            <option value="custom">Personalizado…</option>
-          </select>
-          <input type="date" id="avDateFrom" onchange="avOnCustomDate()" style="display:none;height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono)">
-          <input type="date" id="avDateTo" onchange="avOnCustomDate()" style="display:none;height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono)">
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
         </div>
       </header>
@@ -416,10 +407,22 @@
 
       <!-- Toolbar -->
       <div class="av-toolbar">
-        <div class="av-mc-picker">
-          <button title="Previous"><i class="ti ti-chevron-left"></i></button>
-          <span class="label"><i class="ti ti-calendar-month"></i><span id="avMcPickerName">—</span><span class="mc-meta" id="avMcPickerDates"></span></span>
-          <button title="Next"><i class="ti ti-chevron-right"></i></button>
+        <div class="av-mc-picker" style="position:relative">
+          <button title="Anterior" onclick="avShiftRange(-1)"><i class="ti ti-chevron-left"></i></button>
+          <span class="label" onclick="avToggleRangeMenu()" style="cursor:pointer"><i class="ti ti-calendar-month"></i><span id="avMcPickerName">—</span><span class="mc-meta" id="avMcPickerDates"></span><i class="ti ti-chevron-down" style="font-size:13px;margin-left:4px"></i></span>
+          <button title="Siguiente" onclick="avShiftRange(1)"><i class="ti ti-chevron-right"></i></button>
+          <div id="avRangeMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:100;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-pop,0 12px 40px rgba(0,0,0,.18));padding:6px;min-width:200px">
+            <button class="av-range-opt" onclick="avSetPreset('mc')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Microciclo actual</button>
+            <button class="av-range-opt" onclick="avSetPreset('7')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Última semana</button>
+            <button class="av-range-opt" onclick="avSetPreset('14')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Últimas 2 semanas</button>
+            <button class="av-range-opt" onclick="avSetPreset('30')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Último mes</button>
+            <div style="border-top:1px solid var(--cm-border);margin:5px 0"></div>
+            <div style="padding:6px 10px;display:flex;flex-direction:column;gap:6px">
+              <label style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">Personalizado</label>
+              <input type="date" id="avDateFrom" onchange="avOnCustomDate()" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
+              <input type="date" id="avDateTo" onchange="avOnCustomDate()" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
+            </div>
+          </div>
         </div>
         <div style="width:1px;height:24px;background:var(--cm-border)"></div>
         <button class="av-pill-filter is-on" data-pos="all">All<span class="ct" id="avPillAll">—</span></button>
@@ -1166,16 +1169,26 @@
     const start = new Date(d.getTime() - (days-1)*86400000).toISOString().slice(0,10);
     return { start, end: today };
   }
-  window.avOnRangeChange = function() {
-    const v = document.getElementById('avRangeSel').value;
-    const from = document.getElementById('avDateFrom');
-    const to = document.getElementById('avDateTo');
-    if (v === 'custom') {
-      from.style.display = ''; to.style.display = '';
-      return; // espera a que elija fechas
-    }
-    from.style.display = 'none'; to.style.display = 'none';
+  window.avToggleRangeMenu = function() {
+    const m = document.getElementById('avRangeMenu');
+    m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  };
+  window.avSetPreset = function(v) {
+    document.getElementById('avRangeMenu').style.display = 'none';
     _avRangeOverride = (v === 'mc') ? null : avComputeRange(v);
+    if (typeof init === 'function') init();
+  };
+  window.avShiftRange = function(dir) {
+    // calcula el rango actual visible y lo desplaza su mismo tamaño
+    if (!MC_DATES.length) return;
+    const start = MC_DATES[0], end = MC_DATES[MC_DATES.length - 1];
+    const spanDays = MC_DATES.length;
+    const ms = new Date(start + 'T00:00:00Z').getTime() + dir * spanDays * 86400000;
+    const me = new Date(end   + 'T00:00:00Z').getTime() + dir * spanDays * 86400000;
+    _avRangeOverride = {
+      start: new Date(ms).toISOString().slice(0,10),
+      end:   new Date(me).toISOString().slice(0,10)
+    };
     if (typeof init === 'function') init();
   };
   window.avOnCustomDate = function() {
@@ -1194,6 +1207,12 @@
     if (kpis) kpis.style.display = view === 'stats' ? 'none' : '';
     if (view === 'stats' && typeof avRenderStats === 'function') avRenderStats();
   };
+
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('avRangeMenu');
+    const picker = e.target.closest('.av-mc-picker');
+    if (menu && !picker && menu.style.display === 'block') menu.style.display = 'none';
+  });
 </script>
 
 <script>
