@@ -731,6 +731,10 @@
 
   <main class="hub-main">
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="evTeamSelect" onchange="evOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Evaluations</span><span class="sep">/</span><span>F. Domínguez</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
@@ -1481,15 +1485,18 @@
     await Promise.all([window.getProfile(), window.getClub()]);
     window.applyClubTheme();
     clubId = await window.getClubId();
+    await evInitTeamSwitch();
     if (!clubId) return;
     await Promise.all([loadRoster(), loadKPIs()]);
   }
 
   // ── Roster (populates subjective left panel + all player selects) ──
   async function loadRoster() {
-    const { data } = await window.sb.from('players')
+    let _evPlQ = window.sb.from('players')
       .select('id, first_name, last_name, position')
-      .eq('club_id', clubId).order('last_name');
+      .eq('club_id', clubId);
+    if (_evTeamId) _evPlQ = _evPlQ.eq('team_id', _evTeamId);
+    const { data } = await _evPlQ.order('last_name');
     allPlayers = data || [];
     renderRoster();
     const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
@@ -1501,7 +1508,9 @@
 
   async function loadKPIs() {
     const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0];
-    const { data } = await window.sb.from('evaluations').select('player_id').eq('club_id', clubId).gte('test_date', cutoff);
+    let _evQ1 = window.sb.from('evaluations').select('player_id').eq('club_id', clubId).gte('test_date', cutoff);
+    if (_evTeamPlayerIds) _evQ1 = _evQ1.in('player_id', _evTeamPlayerIds);
+    const { data } = await _evQ1;
     const unique = new Set((data || []).map(e => e.player_id)).size;
     const el = document.getElementById('kpiEvQuarter');
     if (el) el.innerHTML = `${unique} <sub>/ ${allPlayers.length || '—'}</sub>`;
@@ -1801,10 +1810,11 @@
     rankEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
     document.getElementById('squadChartTitle').textContent = `Squad ranking · ${_squadCompTest}`;
     // Ranking for selected test
-    const { data: rankData } = await window.sb.from('evaluations')
+    let _evQ2 = window.sb.from('evaluations')
       .select('player_id, value, unit, test_date, players!player_id(first_name, last_name, position)')
-      .eq('club_id', clubId).eq('evaluation_type', _squadCompTest)
-      .order('test_date', { ascending: false });
+      .eq('club_id', clubId).eq('evaluation_type', _squadCompTest);
+    if (_evTeamPlayerIds) _evQ2 = _evQ2.in('player_id', _evTeamPlayerIds);
+    const { data: rankData } = await _evQ2.order('test_date', { ascending: false });
     const byPlayer = {};
     (rankData || []).forEach(e => {
       if (!byPlayer[e.player_id]) {
@@ -1826,9 +1836,11 @@
     }).join('') : '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No results for this test yet</div>';
     // Heatmap: all types per player
     if (!heatEl) return;
-    const { data: heatData } = await window.sb.from('evaluations')
+    let _evQ3 = window.sb.from('evaluations')
       .select('player_id, evaluation_type, value, unit, test_date, players!player_id(first_name, last_name)')
-      .eq('club_id', clubId).order('test_date', { ascending: false });
+      .eq('club_id', clubId);
+    if (_evTeamPlayerIds) _evQ3 = _evQ3.in('player_id', _evTeamPlayerIds);
+    const { data: heatData } = await _evQ3.order('test_date', { ascending: false });
     const heatByP = {};
     (heatData||[]).forEach(e => {
       if (!heatByP[e.player_id]) { const p = e.players||{}; heatByP[e.player_id] = { name: p.first_name?`${p.first_name} ${p.last_name}`:'—', tests:{} }; }
@@ -1858,9 +1870,11 @@
     if (_squadLoaded) return;
     const grid = document.getElementById('squadViewGrid');
     if (!clubId) return;
-    const { data } = await window.sb.from('evaluations')
+    let _evQ4 = window.sb.from('evaluations')
       .select('player_id, evaluation_type, value, unit, test_date, players!player_id(first_name, last_name, position)')
-      .eq('club_id', clubId).order('test_date', { ascending: false });
+      .eq('club_id', clubId);
+    if (_evTeamPlayerIds) _evQ4 = _evQ4.in('player_id', _evTeamPlayerIds);
+    const { data } = await _evQ4.order('test_date', { ascending: false });
     const byPlayer = {};
     (data||[]).forEach(e => {
       if (!byPlayer[e.player_id]) { const p=e.players||{}; byPlayer[e.player_id]={ name:p.first_name?`${p.first_name} ${p.last_name}`:'—', position:p.position||'', tests:{}, latest:e.test_date }; }
@@ -1887,9 +1901,10 @@
     if (_historyLoaded) return;
     const list = document.getElementById('historyViewList');
     if (!clubId) return;
-    const { data } = await window.sb.from('evaluations')
-      .select('test_date, player_id, evaluation_type').eq('club_id', clubId)
-      .order('test_date', { ascending: false });
+    let _evQ5 = window.sb.from('evaluations')
+      .select('test_date, player_id, evaluation_type').eq('club_id', clubId);
+    if (_evTeamPlayerIds) _evQ5 = _evQ5.in('player_id', _evTeamPlayerIds);
+    const { data } = await _evQ5.order('test_date', { ascending: false });
     const byDate = {};
     (data||[]).forEach(e => { if (!byDate[e.test_date]) byDate[e.test_date]={players:new Set(),types:new Set()}; byDate[e.test_date].players.add(e.player_id); byDate[e.test_date].types.add(e.evaluation_type); });
     const rounds = Object.entries(byDate);
@@ -1916,9 +1931,11 @@
     document.getElementById('roundMTitle').textContent = new Date(date+'T00:00:00').toLocaleDateString([],{weekday:'long',month:'long',day:'numeric',year:'numeric'});
     document.getElementById('roundMSub').textContent = 'Loading…';
     document.getElementById('roundMBody').innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted)">Loading…</div>';
-    const { data } = await window.sb.from('evaluations')
+    let _evQ6 = window.sb.from('evaluations')
       .select('player_id, evaluation_type, value, unit, notes, players!player_id(first_name, last_name)')
-      .eq('club_id', clubId).eq('test_date', date).order('evaluation_type');
+      .eq('club_id', clubId).eq('test_date', date);
+    if (_evTeamPlayerIds) _evQ6 = _evQ6.in('player_id', _evTeamPlayerIds);
+    const { data } = await _evQ6.order('evaluation_type');
     if (!data || !data.length) { document.getElementById('roundMBody').innerHTML='<div style="padding:24px;text-align:center;color:var(--cm-fg-muted)">No data for this date</div>'; return; }
     document.getElementById('roundMSub').textContent = `${new Set(data.map(e=>e.player_id)).size} players · ${new Set(data.map(e=>e.evaluation_type)).size} tests`;
     const byType = {};
@@ -3391,6 +3408,30 @@
   }
 
   boot();
+
+  let _evTeamId = null, _evTeamPlayerIds = null;
+  async function evInitTeamSwitch() {
+    const cid = clubId || await window.getClubId();
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(cid);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('evTeamSelect');
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _evTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_evTeamId?'selected':''}>${t.name}</option>`).join('');
+    await evResolvePlayerIds();
+  }
+  async function evResolvePlayerIds() {
+    if (!_evTeamId) { _evTeamPlayerIds = null; return; }
+    const { data } = await window.sb.from('players').select('id').eq('club_id', clubId || await window.getClubId()).eq('team_id', _evTeamId);
+    _evTeamPlayerIds = (data||[]).map(r => r.id);
+  }
+  function evOnTeamChange(){ _evTeamId=document.getElementById('evTeamSelect').value; sessionStorage.setItem('cal_active_team',_evTeamId); location.reload(); }
+  window.evOnTeamChange = evOnTeamChange;
 
 </script>
 <script>
