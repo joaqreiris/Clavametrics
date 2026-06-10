@@ -821,7 +821,15 @@ async function loadMembers() {
     .select('id, full_name, role, avatar_url')
     .eq('club_id', currentUser.clubId);
   let list = allProfiles || [];
-  // Filtrar por categoría vía member_teams (los asignados a la categoría activa)
+
+  // Excluir SIEMPRE a los super-admins de la plataforma (no son staff del club)
+  try {
+    const { data: padmins } = await window.sb.from('platform_admins').select('user_id');
+    const superIds = new Set((padmins || []).map(r => r.user_id));
+    list = list.filter(p => !superIds.has(p.id));
+  } catch (_) { /* si no se puede leer, seguir */ }
+
+  // Filtrar por categoría vía member_teams (solo los asignados a la categoría activa, + uno mismo)
   if (currentUser.teamId) {
     try {
       const { data: mt } = await window.sb.from('member_teams')
@@ -829,14 +837,10 @@ async function loadMembers() {
         .eq('club_id', currentUser.clubId)
         .eq('team_id', currentUser.teamId);
       const assigned = new Set((mt || []).map(r => r.profile_id));
-      // Mantener: los asignados a la categoría + siempre el owner y uno mismo
-      list = list.filter(p =>
-        assigned.has(p.id) ||
-        (p.role || '').toLowerCase() === 'owner' ||
-        p.id === currentUser.id
-      );
-    } catch (_) { /* si member_teams falla, mostrar todos */ }
+      list = list.filter(p => assigned.has(p.id) || p.id === currentUser.id);
+    } catch (_) { /* si member_teams falla, mostrar todos los del club (sin super-admins) */ }
   }
+
   members = list;
   populateAssigneeSelects();
   renderChatRightMembers();
