@@ -170,6 +170,8 @@
   .lm-flag { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:50%; background:var(--cm-danger,#ef4444); color:#fff; font-size:11px; margin-left:6px; cursor:help; vertical-align:middle; position:relative; }
   .lm-flag .lm-tip { display:none; position:absolute; bottom:calc(100% + 6px); right:-4px; z-index:50; background:var(--cm-fg-strong,#0f172a); color:#fff; font:500 11px/1.4 var(--cm-font-sans); padding:8px 10px; border-radius:8px; width:200px; text-align:left; box-shadow:0 8px 24px rgba(0,0,0,.25); white-space:normal; }
   .lm-flag:hover .lm-tip { display:block; }
+  .lm-flag.is-ack { background:var(--cm-fg-muted,#64748b); cursor:pointer; }
+  .lm-flag { cursor:pointer; }
   .lm-flag .lm-tip .areas { color:#fca5a5; font-weight:600; margin-bottom:2px; text-transform:capitalize; }
   .lm-table .col-zone { width:90px; text-align:right; }
 
@@ -940,8 +942,9 @@
         : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span></div></td>`;
       const areas = (w && Array.isArray(w.body_areas)) ? w.body_areas : [];
       const noteTxt = (w && w.note) ? w.note : '';
+      const ackd = w && w.acknowledged_at;
       const flag = (areas.length || noteTxt)
-        ? `<span class="lm-flag"><i class="ti ti-alert-triangle"></i><span class="lm-tip">${areas.length?`<div class="areas">${areas.join(', ')}</div>`:''}${noteTxt?noteTxt.replace(/</g,'&lt;'):'Sin nota'}</span></span>`
+        ? `<span class="lm-flag${ackd?' is-ack':''}" onclick="lmOpenAction('${w.id}','${(fullName||'').replace(/'/g,"\\'")}','${areas.join(',')}','${(noteTxt||'').replace(/'/g,"\\'").replace(/</g,'&lt;')}','${p.id}',${ackd?'true':'false'})" title="${ackd?'Revisado':'Click para accionar'}"><i class="ti ti-${ackd?'circle-check':'alert-triangle'}"></i><span class="lm-tip">${areas.length?`<div class="areas">${areas.join(', ')}</div>`:''}${noteTxt?noteTxt.replace(/</g,'&lt;'):'Sin nota'}${ackd?'<div style="margin-top:4px;color:#86efac">✓ Revisado</div>':''}</span></span>`
         : '';
       const cellWell = well != null
         ? `<td><div class="lm-cell"><span class="lm-cell-v ${well>=7?'good':well>=5?'warn':'danger'}">${well.toFixed(1)}</span>${flag}<div class="lm-cell-bar"><span class="lm-cell-fill ${well>=7?'green':well>=5?'amber':'red'}" style="width:${Math.round(well*10)}%"></span></div></div></td>`
@@ -1328,6 +1331,49 @@
 
   await loadData('28d');
 })().catch(console.error);
+
+  let _lmAct = {};
+  window.lmOpenAction = function(wid, name, areas, note, playerId, ackd) {
+    _lmAct = { wid, name, areas, note, playerId };
+    document.getElementById('lmActName').textContent = name || 'Jugador';
+    document.getElementById('lmActAreas').textContent = areas ? areas.replace(/,/g, ', ') : 'Sin zona';
+    document.getElementById('lmActNote').textContent = note || 'Sin nota';
+    document.getElementById('lmActAck').style.display = ackd ? 'none' : 'flex';
+    document.getElementById('lmActBackdrop').style.display = 'flex';
+  };
+  window.lmCloseAction = function() { document.getElementById('lmActBackdrop').style.display = 'none'; };
+  window.lmMarkSeen = async function() {
+    const btn = document.getElementById('lmActAck'); btn.disabled = true;
+    try {
+      const { error } = await window.sb.rpc('acknowledge_wellness', { p_wellness_id: _lmAct.wid });
+      if (error) throw error;
+      lmCloseAction();
+      location.reload();
+    } catch (e) { alert('Error: ' + e.message); btn.disabled = false; }
+  };
+  window.lmCreateFollowup = async function() {
+    const btn = document.getElementById('lmActFollow'); btn.disabled = true;
+    try {
+      const clubId = await window.getClubId();
+      const firstArea = (_lmAct.areas || '').split(',')[0] || null;
+      const { error } = await window.sb.from('injuries').insert({
+        club_id: clubId,
+        player_id: _lmAct.playerId,
+        injury_type: 'Molestia reportada (wellness)',
+        injury_category: 'other',
+        severity: 'minor',
+        body_area: firstArea,
+        status: 'active',
+        start_date: new Date().toISOString().slice(0,10),
+        notes: `Auto-creado desde molestia reportada (wellness). Zonas: ${_lmAct.areas}. Nota del jugador: ${_lmAct.note||'—'}`
+      });
+      if (error) throw error;
+      try { await window.sb.rpc('acknowledge_wellness', { p_wellness_id: _lmAct.wid }); } catch {}
+      lmCloseAction();
+      alert('Seguimiento creado en Injuries ✓');
+      location.reload();
+    } catch (e) { alert('Error al crear seguimiento: ' + e.message); btn.disabled = false; }
+  };
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
@@ -1361,5 +1407,20 @@
     });
   }
 </script>
+<div id="lmActBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center" onclick="if(event.target===this)lmCloseAction()">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4,14px);width:420px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2);padding:22px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="width:34px;height:34px;border-radius:9px;background:var(--cm-danger,#ef4444);color:#fff;display:flex;align-items:center;justify-content:center"><i class="ti ti-alert-triangle" style="font-size:18px"></i></span>
+      <div style="font:700 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="lmActName">Jugador</div>
+    </div>
+    <div style="font:500 13px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin:8px 0 4px"><strong style="color:var(--cm-danger,#ef4444);text-transform:capitalize" id="lmActAreas">—</strong></div>
+    <div style="font:400 13px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:var(--cm-bg-soft);border-radius:8px;padding:10px 12px;margin-bottom:18px" id="lmActNote">—</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button id="lmActFollow" onclick="lmCreateFollowup()" style="width:100%;height:42px;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--cm-danger,#ef4444);color:#fff;border:none;border-radius:9px;font:600 13.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-medical-cross" style="font-size:16px"></i>Crear seguimiento en Injuries</button>
+      <button id="lmActAck" onclick="lmMarkSeen()" style="width:100%;height:42px;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;color:var(--cm-fg);border:1px solid var(--cm-border);border-radius:9px;font:600 13.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-circle-check" style="font-size:16px"></i>Marcar como visto</button>
+      <button onclick="lmCloseAction()" style="width:100%;height:38px;background:transparent;color:var(--cm-fg-muted);border:none;font:500 13px/1 var(--cm-font-sans);cursor:pointer">Cancelar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
