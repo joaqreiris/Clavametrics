@@ -323,7 +323,7 @@
       <button class="ad-tab" data-panel="roles"><i class="ti ti-shield-check"></i>Roles<span class="ct">7</span></button>
       <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i>Sections<span class="ct">14</span></button>
       <button class="ad-tab" data-panel="subscription"><i class="ti ti-credit-card"></i>Subscription</button>
-      <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i>Integrations<span class="ct">4</span></button>
+      <button class="ad-tab" data-panel="notifications"><i class="ti ti-bell-cog"></i>Notifications</button>
       <button class="ad-tab" data-panel="security"><i class="ti ti-key"></i>Security &amp; SSO</button>
       <button class="ad-tab" data-panel="audit"><i class="ti ti-history"></i>Audit log</button>
     </div>
@@ -665,13 +665,28 @@
         </div>
       </div>
 
-      <div class="ad-panel" data-panel="integrations">
+      <div class="ad-panel" data-panel="notifications">
         <div class="ad-card" style="margin-top:16px">
-          <div class="ad-card-h"><h3>Integrations</h3><span class="sub">próximamente</span></div>
-          <div style="padding:40px 24px;text-align:center;color:var(--cm-fg-muted)">
-            <i class="ti ti-plug" style="font-size:28px;opacity:.5"></i>
-            <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Integraciones en construcción</div>
-            <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">GPS providers, calendarios y más se conectarán acá.</div>
+          <div class="ad-card-h">
+            <h3>Notificaciones del club</h3>
+            <span class="sub">Quién recibe cada alerta y con qué alcance</span>
+          </div>
+          <div style="padding:0 0 8px">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--cm-border);background:var(--cm-bg-soft);display:flex;align-items:center;gap:8px">
+              <i class="ti ti-alert-triangle" style="font-size:16px;color:var(--cm-danger)"></i>
+              <span style="font:600 13.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Molestia reportada (wellness / RPE)</span>
+            </div>
+            <table class="ad-table">
+              <thead><tr>
+                <th>Rol</th><th style="width:90px;text-align:center">Recibe</th><th style="width:220px">Alcance</th>
+              </tr></thead>
+              <tbody id="notifMatrixBody">
+                <tr><td colspan="3" style="padding:20px;text-align:center;color:var(--cm-fg-muted)">Cargando…</td></tr>
+              </tbody>
+            </table>
+            <div style="display:flex;justify-content:flex-end;padding:14px 16px">
+              <button class="cm-btn is-primary is-sm" id="notifSaveBtn" onclick="saveNotifSettings(this)"><i class="ti ti-check" style="font-size:14px"></i>Guardar cambios</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1683,8 +1698,71 @@
     document.querySelectorAll('.ad-panel').forEach(p => p.classList.toggle('is-active', p.dataset.panel === target));
     if (target === 'audit' && typeof window.loadFullAudit === 'function') window.loadFullAudit();
     if (target === 'roles' && typeof window.loadRolesPanel === 'function') window.loadRolesPanel();
+    if (target === 'notifications' && typeof window.loadNotifSettings === 'function') window.loadNotifSettings();
   }));
   document.querySelectorAll('.ad-cb').forEach(c => c.addEventListener('click', e => { e.stopPropagation(); c.classList.toggle('is-on'); }));
+
+  const NOTIF_ROLES = [
+    { bucket:'medical', label:'Cuerpo médico / Físio', defScope:'club',  defOn:true },
+    { bucket:'sc',      label:'Preparador físico (S&C)', defScope:'team', defOn:true },
+    { bucket:'coach',   label:'Coach',                  defScope:'team', defOn:true },
+    { bucket:'admin',   label:'Admin / Dueño',          defScope:'club', defOn:true },
+    { bucket:'analyst', label:'Analista',               defScope:'team', defOn:false }
+  ];
+  let _notifSettings = {};
+
+  async function loadNotifSettings() {
+    const body = document.getElementById('notifMatrixBody');
+    if (!body) return;
+    try {
+      const cid = await window.getClubId();
+      const { data } = await window.sb.from('notification_settings')
+        .select('role, enabled, scope').eq('club_id', cid).eq('alert_type', 'discomfort');
+      _notifSettings = {};
+      (data || []).forEach(r => { _notifSettings[r.role] = { enabled: r.enabled, scope: r.scope }; });
+      body.innerHTML = NOTIF_ROLES.map(r => {
+        const cfg = _notifSettings[r.bucket] || { enabled: r.defOn, scope: r.defScope };
+        return `<tr>
+          <td>${r.label}</td>
+          <td style="text-align:center">
+            <input type="checkbox" id="nf_on_${r.bucket}" ${cfg.enabled?'checked':''}
+              onchange="document.getElementById('nf_sc_'+'${r.bucket}').disabled=!this.checked"
+              style="width:16px;height:16px;accent-color:var(--cm-accent);cursor:pointer">
+          </td>
+          <td>
+            <select id="nf_sc_${r.bucket}" ${cfg.enabled?'':'disabled'}
+              style="height:32px;width:100%;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12.5px/1 var(--cm-font-sans);padding:0 8px">
+              <option value="club" ${cfg.scope==='club'?'selected':''}>Todo el club</option>
+              <option value="team" ${cfg.scope==='team'?'selected':''}>Solo sus categorías</option>
+            </select>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--cm-fg-muted)">No se pudo cargar.</td></tr>`;
+      console.warn('[Admin] notif settings:', e.message);
+    }
+  }
+
+  async function saveNotifSettings(btn) {
+    btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = 'Guardando…';
+    try {
+      const cid = await window.getClubId();
+      const rows = NOTIF_ROLES.map(r => ({
+        club_id: cid, alert_type: 'discomfort', role: r.bucket,
+        enabled: document.getElementById('nf_on_' + r.bucket).checked,
+        scope: document.getElementById('nf_sc_' + r.bucket).value
+      }));
+      const { error } = await window.sb.from('notification_settings')
+        .upsert(rows, { onConflict: 'club_id,alert_type,role' });
+      if (error) { btn.innerHTML = 'Error'; console.warn(error.message); }
+      else { btn.innerHTML = '✓ Guardado'; }
+    } catch (e) { btn.innerHTML = 'Error'; console.warn(e.message); }
+    setTimeout(() => { btn.innerHTML = old; btn.disabled = false; }, 2000);
+  }
+
+  window.loadNotifSettings = loadNotifSettings;
+  window.saveNotifSettings = saveNotifSettings;
 </script>
 </body>
 </html>
