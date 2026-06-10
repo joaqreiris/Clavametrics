@@ -806,6 +806,9 @@ async function boot() {
   if (club) await window.applyClubTheme();
   await Promise.all([loadMembers(), loadMessages(), loadTasks(), loadAbout(), loadPinnedFiles()]);
   await loadDmPreviews();
+  // Abrir conversación específica si viene de ?conv= (del panel de notificaciones)
+  const _convParam = new URLSearchParams(location.search).get('conv');
+  if (_convParam) { activeConv = _convParam; await loadMessages(); }
   renderConvList();
   updateChatHeader();
   subscribeRealtime();
