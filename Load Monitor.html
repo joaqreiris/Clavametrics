@@ -310,6 +310,10 @@
   <main class="hub-main">
 
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="lmTeamSelect" onchange="lmOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+      </div>
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Load monitor</span>
@@ -780,11 +784,14 @@
   console.log('[DIAG] Wellness data:', wellnessData?.length, '| error:', wellnessError, '| first row:', wellnessData?.[0]);
   // ── FIN DIAGNÓSTICO ────────────────────────────────────────────────────────
 
-  const playersRes = await window.sb.from('players')
+  await lmInitTeamSwitch();
+
+  let _lmPlayersQ = window.sb.from('players')
     .select('id,first_name,last_name,number,position,status')
     .eq('club_id', clubId)
-    .in('status', ['available','injured','modified','unavailable'])
-    .order('number');
+    .in('status', ['available','injured','modified','unavailable']);
+  if (_lmTeamId) _lmPlayersQ = _lmPlayersQ.eq('team_id', _lmTeamId);
+  const playersRes = await _lmPlayersQ.order('number');
   const players = playersRes.data || [];
   const total   = players.length;
   console.log('[LM] players cargados:', total, players.map(p=>`${p.first_name} ${p.last_name} (${p.status})`));
@@ -1374,6 +1381,24 @@
       location.reload();
     } catch (e) { alert('Error al crear seguimiento: ' + e.message); btn.disabled = false; }
   };
+
+  let _lmTeamId = null;
+  async function lmInitTeamSwitch() {
+    const clubId = await window.getClubId();
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('lmTeamSelect');
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _lmTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_lmTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  function lmOnTeamChange(){ _lmTeamId=document.getElementById('lmTeamSelect').value; sessionStorage.setItem('cal_active_team',_lmTeamId); location.reload(); }
+  window.lmOnTeamChange = lmOnTeamChange;
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
