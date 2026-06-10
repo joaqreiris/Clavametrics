@@ -119,6 +119,22 @@
   // ── Module-level lineup context (set in init)
   let _lineupId   = null;
   let _clubId     = null;
+  let _luTeamId   = null;
+  async function luInitTeamSwitch (clubId) {
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('luTeamSelect');
+    if (!sel) return;
+    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _luTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_luTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  window.luOnTeamChange = function(){ _luTeamId=document.getElementById('luTeamSelect').value; sessionStorage.setItem('cal_active_team',_luTeamId); location.reload(); };
   let _saveTimer  = null;
   let _allPlayers    = [];
   let _picker               = null;
@@ -521,12 +537,13 @@
   // ── Player picker ─────────────────────────────────────────────
 
   async function loadSquadPlayers (clubId) {
-    const { data } = await window.sb
+    let _luPlQ = window.sb
       .from('players')
       .select('id,first_name,last_name,number,position,nationality')
       .eq('club_id', clubId)
-      .neq('status', 'inactive')
-      .order('last_name');
+      .neq('status', 'inactive');
+    if (_luTeamId) _luPlQ = _luPlQ.eq('team_id', _luTeamId);
+    const { data } = await _luPlQ.order('last_name');
     _allPlayers = data || [];
     _playersLoading = false;
   }
@@ -694,12 +711,14 @@
   // ── Supabase: load next match from calendar_events
   async function loadNextMatch (clubId) {
     const today = new Date().toISOString().split('T')[0];
-    const { data } = await window.sb
+    let _luMatchQ = window.sb
       .from('calendar_events')
       .select('id,opponent,date,start_time,location,competition,home_away,title,rival_crest_url')
       .eq('club_id', clubId)
       .eq('type', 'match')
-      .gte('date', today)
+      .gte('date', today);
+    if (_luTeamId) _luMatchQ = _luMatchQ.eq('team_id', _luTeamId);
+    const { data } = await _luMatchQ
       .order('date', { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -1060,6 +1079,7 @@
 
     if (!(await window.guardModule())) return;
     _clubId = await window.getClubId();
+    await luInitTeamSwitch(_clubId);
 
     // Load squad, club info, coach, and staff in parallel
     await Promise.all([
