@@ -2797,12 +2797,15 @@ window.refreshDashboard = async function (opts = {}) {
     .select('id', { count: 'exact', head: true })
     .eq('club_id', clubId)
     .gte('session_date', from).lte('session_date', to);
+  if (window._gpTeamId) sessQry = sessQry.eq('team_id', window._gpTeamId);
   if (!window.gpState.includeHistorical) sessQry = sessQry.eq('is_historical', false);
   const { count: sessionCount } = await sessQry;
 
-  const { count: playerCount } = await window.sb.from('players')
+  let _pcQ = window.sb.from('players')
     .select('id', { count: 'exact', head: true })
     .eq('club_id', clubId).neq('status', 'inactive');
+  if (window._gpTeamId) _pcQ = _pcQ.eq('team_id', window._gpTeamId);
+  const { count: playerCount } = await _pcQ;
 
   _updateGpSub(playerCount, sessionCount);
 
@@ -5438,6 +5441,7 @@ window.renderView = async function () {
         ? POSITIONS.find(p => p.toLowerCase() === (match.rawPosition || '').toLowerCase().slice(0, 2)) || 'MF'
         : 'MF';
       const rec = { club_id: _wizState.clubId, first_name: fn, last_name: ln, position: pos, number: match.rawJersey || null, status: 'available' };
+      if (window._gpTeamId) rec.team_id = window._gpTeamId;
       if (match.rawExtGpsId) rec.external_gps_id = match.rawExtGpsId;
       rowData.push({ rowEl, key, match, fn, ln });
       insertArr.push(rec);
@@ -6295,7 +6299,7 @@ window.renderView = async function () {
             if (!sessionId) {
               const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
               const { data: newSess, error } = await window.sb.from('training_sessions')
-                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical })
+                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) })
                 .select('id').single();
               if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
               sessionId = newSess.id;
@@ -6317,7 +6321,7 @@ window.renderView = async function () {
             if (!sessionId) {
               const title = `${type.charAt(0).toUpperCase() + type.slice(1)} · ${date}`;
               const { data: newSess, error } = await window.sb.from('training_sessions')
-                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical })
+                .insert({ club_id: clubId, title, session_date: date, session_type: type, is_historical: isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) })
                 .select('id').single();
               if (error) { finishWithError(`Could not create session for ${date}: ${error.message}`); return; }
               sessionId = newSess.id;
@@ -6335,7 +6339,7 @@ window.renderView = async function () {
           const date  = sessionInfo.date  || new Date().toISOString().slice(0, 10);
           const type  = sessionInfo.sessionType || sessionType || 'training';
           const title = sessionInfo.title || `GPS import · ${date}`;
-          const payload = { club_id: clubId, title, session_date: date, session_type: type, is_historical: !!isHistorical };
+          const payload = { club_id: clubId, title, session_date: date, session_type: type, is_historical: !!isHistorical, ...(window._gpTeamId ? { team_id: window._gpTeamId } : {}) };
           const { data: newSess, error } = await window.sb.from('training_sessions')
             .insert(payload).select('id').single();
           if (error) { finishWithError('Could not create session: ' + error.message); return; }
