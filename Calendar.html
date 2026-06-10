@@ -740,8 +740,8 @@
         </div>
         <div class="cal-kpi">
           <div class="cal-kpi-l"><i class="ti ti-activity"></i>Planned load</div>
-          <div class="cal-kpi-v">3,420 <sub>AU</sub></div>
-          <div class="cal-kpi-t"><span style="color:var(--cm-success);font:600 12px/1 var(--cm-font-mono)">−6% vs prev MC</span></div>
+          <div class="cal-kpi-v" id="calLoadV">— <sub>AU</sub></div>
+          <div class="cal-kpi-t" id="calLoadT">Loading…</div>
         </div>
       </div>
 
@@ -4284,6 +4284,43 @@ function renderCalKPIs(mcs) {
     kpiNext.textContent  = '—';
     kpiNextT.textContent = 'No upcoming matches';
   }
+
+  (async () => {
+    const loadV = document.getElementById('calLoadV');
+    const loadT = document.getElementById('calLoadT');
+    if (!loadV) return;
+    const sorted = [...mcs].sort((a,b) => a.start_date > b.start_date ? 1 : -1);
+    const ci = sorted.findIndex(m => m.start_date <= TODAY && m.end_date >= TODAY);
+    const curIdx = ci >= 0 ? ci : sorted.length - 1;
+    const cur = sorted[curIdx];
+    const prev = sorted[curIdx - 1];
+    if (!cur) { loadV.innerHTML = '— <sub>AU</sub>'; loadT.textContent = 'No microcycle'; return; }
+    async function mcAu(mc) {
+      if (!mc) return null;
+      const [s, e] = await Promise.all([
+        window.sb.from('training_sessions').select('duration,estimated_rpe')
+          .eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('is_historical', false)
+          .gte('session_date', mc.start_date).lte('session_date', mc.end_date),
+        window.sb.from('calendar_events').select('duration_minutes,estimated_rpe')
+          .eq('club_id', _clubId).eq('team_id', _activeTeamId)
+          .gte('date', mc.start_date).lte('date', mc.end_date)
+      ]);
+      const au = [...(s.data||[]).map(r=>({d:r.duration,r:r.estimated_rpe})),
+                  ...(e.data||[]).map(r=>({d:r.duration_minutes,r:r.estimated_rpe}))]
+        .filter(x => x.d && x.r).reduce((sum,x) => sum + x.d * x.r, 0);
+      return au;
+    }
+    const curAu = await mcAu(cur);
+    const prevAu = await mcAu(prev);
+    loadV.innerHTML = `${curAu.toLocaleString()} <sub>AU</sub>`;
+    if (prevAu && prevAu > 0) {
+      const pct = Math.round(((curAu - prevAu) / prevAu) * 100);
+      const color = pct <= 0 ? 'var(--cm-success)' : 'var(--cm-warning)';
+      loadT.innerHTML = `<span style="color:${color};font:600 12px/1 var(--cm-font-mono)">${pct >= 0 ? '+' : ''}${pct}% vs prev MC</span>`;
+    } else {
+      loadT.textContent = 'No prev MC to compare';
+    }
+  })();
 
   // Match density: dedupe dates from both sources
   const matchDates21 = new Set([
