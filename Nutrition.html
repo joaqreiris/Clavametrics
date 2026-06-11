@@ -205,9 +205,9 @@
           <div class="ctx" id="nuCtx"><strong>27 players</strong> · 4 active plans · 6 weigh-ins this week · MD-2 carb-loading window opens <strong>tomorrow</strong></div>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-template" style="font-size:14px"></i>Plan templates</button>
+          <button class="cm-btn is-outline is-sm" id="nuBtnTemplates"><i class="ti ti-template" style="font-size:14px"></i>Plan templates</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import body comp</button>
-          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New plan</button>
+          <button class="cm-btn is-primary is-sm" id="nuBtnNewPlan"><i class="ti ti-plus" style="font-size:14px"></i>New plan</button>
         </div>
       </header>
 
@@ -314,7 +314,7 @@
             <div class="right">
               <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Share with player</button>
               <button class="cm-btn is-outline is-sm"><i class="ti ti-history" style="font-size:14px"></i>History</button>
-              <button class="cm-btn is-primary is-sm"><i class="ti ti-edit" style="font-size:14px"></i>Edit plan</button>
+              <button class="cm-btn is-primary is-sm" id="nuBtnEditPlan"><i class="ti ti-edit" style="font-size:14px"></i>Edit plan</button>
             </div>
           </header>
 
@@ -778,6 +778,370 @@
     ov.classList.add('on');
   }
 
+  // ═══════════════════════════════════════════════════════════
+  //  FASE C — Templates, asignaciones y "Today's meal plan"
+  // ═══════════════════════════════════════════════════════════
+  const nuEsc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const DAY_TYPES = ['MD','MD-1','MD-2','MD-3','MD+1','rest','custom'];
+  const mealIcon = name => {
+    const n = (name || '').toLowerCase();
+    if (n.includes('break')) return 'ti-coffee';
+    if (n.includes('lunch')) return 'ti-bowl';
+    if (n.includes('dinner')) return 'ti-moon';
+    if (n.includes('snack')) return 'ti-apple';
+    if (n.includes('train') || n.includes('pre') || n.includes('post')) return 'ti-bolt';
+    return 'ti-tools-kitchen-2';
+  };
+  const allItems = st => st.meals.flatMap(m => (m.items || []).filter(i => i.food));
+
+  // CSS extra para los modales de templates/asignación
+  function nuTplStyle() {
+    if (document.getElementById('nuTplStyle')) return;
+    const s = document.createElement('style'); s.id = 'nuTplStyle';
+    s.textContent = `
+      .nu-modal.wide{width:780px}
+      .nu-tpl-list{display:flex;flex-direction:column;gap:6px;max-height:54vh;overflow:auto}
+      .nu-tpl-row{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--cm-border);border-radius:9px;cursor:pointer}
+      .nu-tpl-row:hover{border-color:var(--cm-accent)}
+      .nu-tpl-row .nm{font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+      .nu-tpl-row .mt{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px}
+      .nu-dt{display:inline-flex;height:18px;padding:0 7px;border-radius:4px;background:var(--cm-accent-soft);color:var(--cm-accent);font:600 10px/18px var(--cm-font-mono)}
+      .nu-meal-ed{border:1px solid var(--cm-border-soft);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px;margin-bottom:8px;background:var(--cm-bg-soft)}
+      .nu-meal-ed .mh{display:flex;gap:8px;align-items:center}
+      .nu-meal-ed .mh input{height:30px}
+      .nu-meal-ed .mh .nm{flex:1}.nu-meal-ed .mh .tm{width:96px}
+      .nu-item-row{display:grid;grid-template-columns:1fr 70px auto;gap:8px;align-items:center}
+      .nu-item-row .fn{font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)}
+      .nu-item-row .mm{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px}
+      .nu-item-row input{height:30px;text-align:right}
+      .nu-x{width:26px;height:26px;border-radius:6px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer}
+      .nu-srch{position:relative}
+      .nu-srch-res{position:absolute;top:34px;left:0;right:0;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;box-shadow:var(--cm-shadow-2,0 8px 24px rgba(0,0,0,.15));z-index:9500;max-height:230px;overflow:auto}
+      .nu-srch-res div{padding:8px 10px;cursor:pointer;font:500 12.5px/1.2 var(--cm-font-sans);display:flex;justify-content:space-between;gap:8px}
+      .nu-srch-res div:hover{background:var(--cm-bg-soft)}
+      .nu-srch-res .k{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)}
+      .nu-tot{display:flex;gap:14px;flex-wrap:wrap;padding:10px 12px;border:1px dashed var(--cm-border);border-radius:9px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong)}
+      .nu-tot span small{color:var(--cm-fg-muted);font-weight:500;margin-left:3px}
+    `;
+    document.head.appendChild(s);
+  }
+
+  async function nuSearchFoods(q) {
+    if (!q || q.trim().length < 2) return [];
+    const { data } = await window.sb.from('foods')
+      .select('id,name,category,kcal,protein_g,carbs_g,fats_g,fiber_g,default_unit,per_unit_grams')
+      .ilike('name', '%' + q.trim() + '%').order('name').limit(15);
+    return data || [];
+  }
+
+  // ── Templates manager ──────────────────────────────────────
+  let _tpl = null; // estado del editor en curso
+
+  async function openTemplatesManager() {
+    nuBuildModal(); nuTplStyle();
+    let ov = document.getElementById('nuTplModal');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'nuTplModal'; ov.className = 'nu-modal-ov';
+      ov.innerHTML = `<div class="nu-modal wide" role="dialog" aria-modal="true">
+        <div class="nu-modal-h"><i class="ti ti-template" style="color:var(--cm-accent);font-size:18px"></i>
+          <h3 id="nutpl_title">Plan templates</h3>
+          <button class="x" id="nutpl_close"><i class="ti ti-x"></i></button></div>
+        <div class="nu-modal-b" id="nutpl_body"></div>
+        <div class="nu-modal-f" id="nutpl_foot"></div></div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#nutpl_close').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+    }
+    await renderTplList();
+    ov.classList.add('on');
+  }
+
+  async function renderTplList() {
+    const ov = document.getElementById('nuTplModal');
+    ov.querySelector('#nutpl_title').textContent = 'Plan templates';
+    const { data: tpls } = await window.sb.from('meal_plan_templates')
+      .select('id,name,day_type,base_kcal').eq('club_id', clubId).order('day_type').order('name');
+    const body = ov.querySelector('#nutpl_body');
+    body.innerHTML = (tpls && tpls.length)
+      ? `<div class="nu-tpl-list">${tpls.map(t => `
+          <div class="nu-tpl-row" data-id="${t.id}">
+            <div style="flex:1"><div class="nm">${nuEsc(t.name)}</div>
+              <div class="mt">${t.base_kcal ? Math.round(t.base_kcal) + ' kcal base' : 'no items yet'}</div></div>
+            ${t.day_type ? `<span class="nu-dt">${nuEsc(t.day_type)}</span>` : ''}
+            <i class="ti ti-chevron-right" style="color:var(--cm-fg-faint)"></i></div>`).join('')}</div>`
+      : `<div style="color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans);padding:8px 0">No templates yet. Create one to start building meal plans.</div>`;
+    body.querySelectorAll('.nu-tpl-row').forEach(r =>
+      r.onclick = () => openTplEditor(r.dataset.id));
+    ov.querySelector('#nutpl_foot').innerHTML =
+      `<button class="cm-btn is-primary is-sm" id="nutpl_new" style="margin-left:auto"><i class="ti ti-plus" style="font-size:14px"></i>New template</button>`;
+    ov.querySelector('#nutpl_new').onclick = () => openTplEditor(null);
+  }
+
+  async function openTplEditor(id) {
+    const ov = document.getElementById('nuTplModal');
+    _tpl = id ? await loadFullTemplate(id) : { id: null, name: '', day_type: 'MD-1', meals: [
+      { name: 'Breakfast', time_hint: '08:00', items: [] },
+      { name: 'Lunch', time_hint: '13:30', items: [] },
+      { name: 'Dinner', time_hint: '21:00', items: [] },
+    ] };
+    ov.querySelector('#nutpl_title').textContent = id ? 'Edit template' : 'New template';
+    renderTplEditor();
+  }
+
+  async function loadFullTemplate(id) {
+    const { data } = await window.sb.from('meal_plan_templates')
+      .select('id,name,day_type,base_kcal, meal_plan_meals(id,name,time_hint,meal_order, meal_plan_items(id,quantity_g,note, food:foods(*)))')
+      .eq('id', id).single();
+    const meals = (data.meal_plan_meals || []).sort((a, b) => (a.meal_order || 0) - (b.meal_order || 0))
+      .map(m => ({ name: m.name, time_hint: m.time_hint, items: (m.meal_plan_items || [])
+        .filter(it => it.food).map(it => ({ food_id: it.food.id, food: it.food, quantity_g: it.quantity_g, note: it.note })) }));
+    return { id: data.id, name: data.name, day_type: data.day_type, meals };
+  }
+
+  function renderTplEditor() {
+    const ov = document.getElementById('nuTplModal');
+    const body = ov.querySelector('#nutpl_body');
+    const tot = NC.totalForItems(allItems(_tpl));
+    body.innerHTML = `
+      <div class="nu-grid" style="grid-template-columns:1fr 160px">
+        <div class="nu-fld"><label>Template name</label><input id="te_name" value="${nuEsc(_tpl.name)}" placeholder="e.g. MD-1 carb loading"></div>
+        <div class="nu-fld"><label>Day type</label><select id="te_dt">${DAY_TYPES.map(d => `<option value="${d}" ${d === _tpl.day_type ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+      </div>
+      <div class="nu-sec">Meals</div>
+      <div id="te_meals">${_tpl.meals.map((m, mi) => mealEditorHTML(m, mi)).join('')}</div>
+      <button class="cm-btn is-outline is-sm" id="te_addmeal"><i class="ti ti-plus" style="font-size:14px"></i>Add meal</button>
+      <div class="nu-tot">
+        <span>${Math.round(tot.kcal)}<small>kcal</small></span>
+        <span>${Math.round(tot.protein_g)}<small>g protein</small></span>
+        <span>${Math.round(tot.carbs_g)}<small>g carbs</small></span>
+        <span>${Math.round(tot.fats_g)}<small>g fat</small></span>
+        <span>${Math.round(tot.fiber_g)}<small>g fiber</small></span>
+      </div>`;
+    // foot
+    ov.querySelector('#nutpl_foot').innerHTML = `
+      <button class="cm-btn is-ghost is-sm" id="te_back"><i class="ti ti-arrow-left" style="font-size:14px"></i>Back</button>
+      ${_tpl.id ? '<button class="cm-btn is-outline is-sm" id="te_del" style="color:var(--cm-danger)"><i class="ti ti-trash" style="font-size:14px"></i>Delete</button>' : ''}
+      <button class="cm-btn is-primary is-sm" id="te_save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i>Save template</button>`;
+    bindTplEditor();
+  }
+
+  function mealEditorHTML(m, mi) {
+    return `<div class="nu-meal-ed" data-mi="${mi}">
+      <div class="mh">
+        <i class="ti ${mealIcon(m.name)}" style="color:var(--cm-fg-muted)"></i>
+        <input class="nm" data-f="name" value="${nuEsc(m.name)}" placeholder="Meal name">
+        <input class="tm" data-f="time" value="${nuEsc(m.time_hint)}" placeholder="time">
+        <button class="nu-x" data-act="delmeal" title="Remove meal"><i class="ti ti-x"></i></button>
+      </div>
+      ${(m.items || []).map((it, ii) => {
+        const mm = NC.macrosForItem(it);
+        return `<div class="nu-item-row" data-ii="${ii}">
+          <div><div class="fn">${nuEsc(it.food.name)}</div><div class="mm">${Math.round(mm.kcal)} kcal · P${Math.round(mm.protein_g)} C${Math.round(mm.carbs_g)} F${Math.round(mm.fats_g)}</div></div>
+          <input type="number" data-act="qty" value="${it.quantity_g}" step="5" min="0">
+          <button class="nu-x" data-act="delitem"><i class="ti ti-x"></i></button>
+        </div>`;
+      }).join('')}
+      <div class="nu-srch">
+        <input data-act="search" placeholder="+ add food (type to search…)" style="height:30px;width:100%">
+        <div class="nu-srch-res" style="display:none"></div>
+      </div>
+    </div>`;
+  }
+
+  function bindTplEditor() {
+    const ov = document.getElementById('nuTplModal');
+    const body = ov.querySelector('#nutpl_body');
+    body.querySelector('#te_name').oninput = e => { _tpl.name = e.target.value; };
+    body.querySelector('#te_dt').onchange = e => { _tpl.day_type = e.target.value; };
+    body.querySelector('#te_addmeal').onclick = () => { _tpl.meals.push({ name: 'Meal ' + (_tpl.meals.length + 1), time_hint: '', items: [] }); renderTplEditor(); };
+    ov.querySelector('#te_back').onclick = renderTplList;
+    ov.querySelector('#te_save').onclick = saveTemplateFromEditor;
+    const del = ov.querySelector('#te_del');
+    if (del) del.onclick = deleteTemplate;
+
+    body.querySelectorAll('.nu-meal-ed').forEach(mEl => {
+      const mi = +mEl.dataset.mi; const meal = _tpl.meals[mi];
+      mEl.querySelector('[data-f="name"]').oninput = e => { meal.name = e.target.value; };
+      mEl.querySelector('[data-f="time"]').oninput = e => { meal.time_hint = e.target.value; };
+      mEl.querySelector('[data-act="delmeal"]').onclick = () => { _tpl.meals.splice(mi, 1); renderTplEditor(); };
+      mEl.querySelectorAll('.nu-item-row').forEach(iEl => {
+        const ii = +iEl.dataset.ii;
+        iEl.querySelector('[data-act="qty"]').onchange = e => { meal.items[ii].quantity_g = parseFloat(e.target.value) || 0; renderTplEditor(); };
+        iEl.querySelector('[data-act="delitem"]').onclick = () => { meal.items.splice(ii, 1); renderTplEditor(); };
+      });
+      // búsqueda de alimentos
+      const sInput = mEl.querySelector('[data-act="search"]');
+      const sRes = mEl.querySelector('.nu-srch-res');
+      let tmr = null;
+      sInput.oninput = () => {
+        clearTimeout(tmr);
+        tmr = setTimeout(async () => {
+          const res = await nuSearchFoods(sInput.value);
+          if (!res.length) { sRes.style.display = 'none'; return; }
+          sRes.innerHTML = res.map((f, k) => `<div data-k="${k}"><span>${nuEsc(f.name)}</span><span class="k">${Math.round(f.kcal)} kcal/100${f.default_unit === 'ml' ? 'ml' : 'g'}</span></div>`).join('');
+          sRes.style.display = 'block';
+          sRes.querySelectorAll('div[data-k]').forEach(d => d.onclick = () => {
+            const f = res[+d.dataset.k];
+            const qty = f.default_unit === 'unit' && f.per_unit_grams ? f.per_unit_grams : 100;
+            meal.items.push({ food_id: f.id, food: f, quantity_g: qty, note: null });
+            sRes.style.display = 'none'; renderTplEditor();
+          });
+        }, 220);
+      };
+      sInput.onblur = () => setTimeout(() => { sRes.style.display = 'none'; }, 200);
+    });
+  }
+
+  async function saveTemplateFromEditor() {
+    const ov = document.getElementById('nuTplModal');
+    if (!(_tpl.name || '').trim()) { alert('Template name is required.'); return; }
+    const btn = ov.querySelector('#te_save'); btn.disabled = true;
+    try {
+      const base_kcal = Math.round(NC.totalForItems(allItems(_tpl)).kcal);
+      let id = _tpl.id;
+      if (id) {
+        await window.sb.from('meal_plan_templates').update({ name: _tpl.name.trim(), day_type: _tpl.day_type, base_kcal }).eq('id', id);
+      } else {
+        const { data, error } = await window.sb.from('meal_plan_templates')
+          .insert({ club_id: clubId, name: _tpl.name.trim(), day_type: _tpl.day_type, base_kcal, created_by: profile?.id || null })
+          .select('id').single();
+        if (error) throw error; id = data.id; _tpl.id = id;
+      }
+      await window.sb.from('meal_plan_meals').delete().eq('template_id', id); // cascada borra items
+      for (let i = 0; i < _tpl.meals.length; i++) {
+        const m = _tpl.meals[i];
+        const { data: md, error: me } = await window.sb.from('meal_plan_meals')
+          .insert({ template_id: id, meal_order: i + 1, name: (m.name || 'Meal ' + (i + 1)).trim(), time_hint: m.time_hint || null })
+          .select('id').single();
+        if (me) throw me;
+        const items = (m.items || []).filter(it => it.food_id && it.quantity_g > 0)
+          .map(it => ({ meal_id: md.id, food_id: it.food_id, quantity_g: it.quantity_g, note: it.note || null }));
+        if (items.length) { const { error: ie } = await window.sb.from('meal_plan_items').insert(items); if (ie) throw ie; }
+      }
+      await renderTplList();
+      if (_nuCurrent) loadPlayerDetail(_nuCurrent.player); // refresca por si el template asignado cambió
+    } catch (err) {
+      alert('Could not save template: ' + (err.message || err));
+    } finally { btn.disabled = false; }
+  }
+
+  async function deleteTemplate() {
+    if (!_tpl.id) return;
+    if (!confirm('Delete this template? Assignments using it will be removed.')) return;
+    const { error } = await window.sb.from('meal_plan_templates').delete().eq('id', _tpl.id);
+    if (error) { alert('Could not delete: ' + error.message); return; }
+    await renderTplList();
+    if (_nuCurrent) loadPlayerDetail(_nuCurrent.player);
+  }
+
+  // ── Asignar template a jugador ─────────────────────────────
+  async function openAssignModal() {
+    if (!_nuCurrent) { alert('Select a player first.'); return; }
+    nuBuildModal(); nuTplStyle();
+    const p = _nuCurrent.player, tgt = _nuCurrent.target;
+    const { data: tpls } = await window.sb.from('meal_plan_templates')
+      .select('id,name,day_type,base_kcal').eq('club_id', clubId).order('name');
+    if (!tpls || !tpls.length) { alert('No templates yet. Create one in "Plan templates" first.'); return; }
+    let ov = document.getElementById('nuAssignModal');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'nuAssignModal'; ov.className = 'nu-modal-ov';
+      ov.innerHTML = `<div class="nu-modal" role="dialog" aria-modal="true">
+        <div class="nu-modal-h"><i class="ti ti-clipboard-plus" style="color:var(--cm-accent);font-size:18px"></i>
+          <h3 id="na_title">Assign plan</h3><button class="x" id="na_close"><i class="ti ti-x"></i></button></div>
+        <div class="nu-modal-b">
+          <div class="nu-fld"><label>Template</label><select id="na_tpl"></select></div>
+          <div class="nu-grid">
+            <div class="nu-fld"><label>Apply to date</label><input id="na_date" type="date"></div>
+            <div class="nu-fld"><label>or day type (recurring)</label><select id="na_dt"><option value="">—</option>${DAY_TYPES.map(d => `<option value="${d}">${d}</option>`).join('')}</select></div>
+            <div class="nu-fld"><label>Scale factor</label><input id="na_scale" type="number" step="0.01" value="1"></div>
+          </div>
+          <div class="nu-info"><div class="b" id="na_hint"></div></div>
+        </div>
+        <div class="nu-modal-f"><button class="cm-btn is-outline is-sm" id="na_cancel">Cancel</button>
+          <button class="cm-btn is-primary is-sm" id="na_save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i>Assign</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#na_close').onclick = ov.querySelector('#na_cancel').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+    }
+    const $ = id => ov.querySelector('#' + id);
+    $('na_title').textContent = `Assign plan · ${p._name || 'player'}`;
+    $('na_tpl').innerHTML = tpls.map(t => `<option value="${t.id}" data-kcal="${t.base_kcal || ''}">${nuEsc(t.name)}${t.day_type ? ' · ' + t.day_type : ''}</option>`).join('');
+    $('na_date').value = new Date().toISOString().slice(0, 10);
+    $('na_dt').value = '';
+    const recalcScale = () => {
+      const baseK = parseFloat($('na_tpl').selectedOptions[0]?.dataset.kcal) || null;
+      const target = tgt && tgt.kcal_target;
+      if (baseK && target) {
+        $('na_scale').value = (target / baseK).toFixed(2);
+        $('na_hint').textContent = `Template base ${Math.round(baseK)} kcal → player target ${Math.round(target)} kcal · auto scale ×${(target / baseK).toFixed(2)}.`;
+      } else {
+        $('na_scale').value = '1';
+        $('na_hint').textContent = baseK ? 'Player has no kcal target — set targets to auto-scale. Using ×1.' : 'Template has no base kcal yet. Using ×1.';
+      }
+    };
+    $('na_tpl').onchange = recalcScale; recalcScale();
+    $('na_save').onclick = async () => {
+      const tplId = $('na_tpl').value;
+      const date = $('na_date').value || null;
+      const dt = $('na_dt').value || null;
+      if (!date && !dt) { alert('Pick a date or a day type.'); return; }
+      const btn = $('na_save'); btn.disabled = true;
+      // evitar duplicados: borrar asignación previa del mismo jugador para esa fecha o day_type
+      let dq = window.sb.from('player_meal_assignments').delete().eq('player_id', p.id).eq('club_id', clubId);
+      dq = date ? dq.eq('assigned_date', date) : dq.eq('day_type', dt);
+      await dq;
+      const { error } = await window.sb.from('player_meal_assignments').insert({
+        player_id: p.id, club_id: clubId, template_id: tplId,
+        assigned_date: date, day_type: dt, scale_factor: parseFloat($('na_scale').value) || 1.0,
+      });
+      btn.disabled = false;
+      if (error) { alert('Could not assign: ' + error.message); return; }
+      ov.classList.remove('on');
+      loadPlayerDetail(p);
+    };
+    ov.classList.add('on');
+  }
+
+  // ── Render "Today's meal plan" desde la asignación real ────
+  async function renderMealPlan(p) {
+    const wrap = document.querySelector('.nu-meals');
+    const label = document.querySelector('.nu-section-l');
+    if (!wrap) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: asgs } = await window.sb.from('player_meal_assignments')
+      .select('id,assigned_date,day_type,scale_factor, template:meal_plan_templates(id,name,day_type, meal_plan_meals(id,name,time_hint,meal_order, meal_plan_items(id,quantity_g, food:foods(*))))')
+      .eq('player_id', p.id).eq('club_id', clubId)
+      .order('assigned_date', { ascending: false, nullsFirst: false });
+    const list = asgs || [];
+    // preferencia: fecha = hoy > asignación por day_type (recurrente) > más reciente
+    const asg = list.find(a => a.assigned_date === today) || list.find(a => a.day_type) || list[0];
+    if (!asg || !asg.template) {
+      if (label) label.textContent = "Today's meal plan";
+      wrap.innerHTML = `<div style="grid-column:1/-1;padding:18px;border:1px dashed var(--cm-border);border-radius:10px;text-align:center;color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">
+        No meal plan assigned. <button class="cm-btn is-primary is-sm" id="nuAssignEmpty" style="margin-left:8px"><i class="ti ti-plus" style="font-size:14px"></i>Assign plan</button></div>`;
+      const b = wrap.querySelector('#nuAssignEmpty'); if (b) b.onclick = openAssignModal;
+      return;
+    }
+    const sf = asg.scale_factor || 1;
+    const meals = (asg.template.meal_plan_meals || []).sort((a, b) => (a.meal_order || 0) - (b.meal_order || 0));
+    if (label) label.textContent = `Today's meal plan · ${asg.template.name}${sf !== 1 ? ' · ×' + sf : ''}`;
+    wrap.innerHTML = meals.map(m => {
+      const items = (m.meal_plan_items || []).filter(it => it.food)
+        .map(it => ({ food: it.food, quantity_g: (it.quantity_g || 0) * sf }));
+      const tot = NC.totalForItems(items);
+      const names = items.map(it => it.food.name).join(' · ') || '—';
+      return `<div class="nu-meal">
+        <div class="nu-meal-h"><div class="nu-meal-ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ${mealIcon(m.name)}"></i></div>
+          <div class="nu-meal-name">${nuEsc(m.name)}</div><div class="nu-meal-time">${nuEsc(m.time_hint || '')}</div></div>
+        <div class="nu-meal-kcal">${Math.round(tot.kcal)} <small>kcal</small></div>
+        <div class="nu-meal-mac"><span>C ${Math.round(tot.carbs_g)}g</span><span>P ${Math.round(tot.protein_g)}g</span><span>F ${Math.round(tot.fats_g)}g</span></div>
+        <div class="nu-meal-items">${nuEsc(names)}</div>
+      </div>`;
+    }).join('');
+  }
+
   async function loadPlayerDetail(p) {
     // Header
     const av = document.querySelector('.nu-d-head .av');
@@ -809,6 +1173,7 @@
     ]);
     _nuCurrent = { player: p, target: tgt || null, bodyComp: bc || null };
     renderTargets(p, tgt, bc);
+    renderMealPlan(p);
 
     const kcalRef = (tgt && tgt.kcal_target) ? tgt.kcal_target : 2500;
     const refs = {
@@ -891,6 +1256,14 @@
       nuList.appendChild(row);
     });
   });
+
+  // wiring de la toolbar (Fase C)
+  const btnTpl = document.getElementById('nuBtnTemplates');
+  if (btnTpl) btnTpl.onclick = openTemplatesManager;
+  const btnNew = document.getElementById('nuBtnNewPlan');
+  if (btnNew) btnNew.onclick = openAssignModal;
+  const btnEdit = document.getElementById('nuBtnEditPlan');
+  if (btnEdit) btnEdit.onclick = openAssignModal;
 })();
   let _nuTeamId = null;
   async function nuInitTeamSwitch(clubId) {
