@@ -490,7 +490,7 @@
       </button>
       <div id="wellChecklistWrap" style="margin-top:18px">
         <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Check-in de hoy</div>
-        <select id="wellChkTeam" onchange="loadWellChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px"></select>
+        <select id="wellChkTeam" onchange="if(this.value)sessionStorage.setItem('cal_active_team',this.value);loadWellChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px"></select>
         <div id="wellChkBody" style="margin-top:10px"></div>
       </div>
     </div>
@@ -707,8 +707,10 @@
       let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
       const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
     }
+    const _savedTeam = sessionStorage.getItem('cal_active_team');
+    const _useTeam = (_savedTeam && teams.some(t => t.id === _savedTeam)) ? _savedTeam : (fullAccess ? '' : (teams[0]?.id || ''));
     sel.innerHTML = (fullAccess ? '<option value="">Todo el club</option>' : '') +
-      teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+      teams.map(t => `<option value="${t.id}" ${t.id === _useTeam ? 'selected' : ''}>${t.name}</option>`).join('');
     loadWellChecklist();
   }
   async function loadWellChecklist() {
