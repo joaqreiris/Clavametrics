@@ -25,6 +25,10 @@
   <main class="hub-main">
 
     <header class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="rpvTeamSelect" onchange="rpvOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+      </div>
       <div class="hub-crumb">
         <i class="ti ti-activity-heartbeat"></i>
         <span class="now">Rehab &amp; preventives</span>
@@ -157,8 +161,14 @@
 (async () => {
   if (!(await window.guardModule())) return;
   const [clubId] = await Promise.all([window.getClubId(), window.applyClubTheme()]);
-
-  const { data: plans, error } = await window.sb
+  await rpvInitTeamSwitch(clubId);
+  // Si la categoría no tiene jugadores, no hay planes
+  if (_rpvTeamId && _rpvPlayerIds && _rpvPlayerIds.length === 0) {
+    const EMPTY_ROW = '<tr><td colspan="8" style="text-align:center;padding:20px 16px;font:var(--cm-body-sm);color:var(--cm-fg-faint)">No active plans</td></tr>';
+    document.querySelectorAll('.po-tbl tbody').forEach(b => { b.innerHTML = EMPTY_ROW; });
+    return;
+  }
+  let _rpvBootQ = window.sb
     .from('rehab_plans')
     .select(`
       id, kind, phase, phase_type, status, diagnosis, risk_metric, source_label,
@@ -169,9 +179,11 @@
     `)
     .eq('club_id', clubId)
     .not('status', 'in', '("cleared","archived")');
+  if (_rpvPlayerIds) _rpvBootQ = _rpvBootQ.in('player_id', _rpvPlayerIds);
+  const { data: plans, error } = await _rpvBootQ;
   if (error) {
     console.warn('[rehab] query error:', error);
-    const EMPTY_ROW = '<tr><td colspan="8" style="text-align:center;padding:20px 16px;font:var(--cm-body-sm);color:var(--cm-fg-faint)">Sin planes activos</td></tr>';
+    const EMPTY_ROW = '<tr><td colspan="8" style="text-align:center;padding:20px 16px;font:var(--cm-body-sm);color:var(--cm-fg-faint)">No active plans</td></tr>';
     document.querySelectorAll('.po-tbl tbody').forEach(b => { b.innerHTML = EMPTY_ROW; });
     return;
   }
@@ -242,7 +254,7 @@
   }).join('');
 
   const tbodies = document.querySelectorAll('.po-tbl tbody');
-  const EMPTY_ROW = '<tr><td colspan="8" style="text-align:center;padding:20px 16px;font:var(--cm-body-sm);color:var(--cm-fg-faint)">Sin planes activos</td></tr>';
+  const EMPTY_ROW = '<tr><td colspan="8" style="text-align:center;padding:20px 16px;font:var(--cm-body-sm);color:var(--cm-fg-faint)">No active plans</td></tr>';
   if (tbodies[0]) tbodies[0].innerHTML = rehabRows || EMPTY_ROW;
   if (tbodies[1]) tbodies[1].innerHTML = prevRows  || EMPTY_ROW;
 
@@ -261,7 +273,9 @@
   setKpi(2, blocked.length, blocked.map(p=>`<strong>${full(p.players)}</strong>`).join(' · ') || '—');
   (async () => {
     const m0 = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-    const { count } = await window.sb.from('rehab_plans')
+    let _rpvCountQ = window.sb.from('rehab_plans');
+    if (_rpvPlayerIds) _rpvCountQ = _rpvCountQ.in('player_id', _rpvPlayerIds);
+    const { count } = await _rpvCountQ
       .select('id', { count:'exact', head:true })
       .eq('club_id', clubId).eq('status','cleared').gte('updated_at', m0);
     setKpi(3, count ?? 0, null);
@@ -448,6 +462,26 @@
   // Initial sort
   document.querySelectorAll('.po-tbl tbody').forEach(sortTbody);
 })();
+  let _rpvTeamId = null, _rpvPlayerIds = null;
+  async function rpvInitTeamSwitch(clubId) {
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('rpvTeamSelect');
+    if (!sel) return;
+    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team');
+    _rpvTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_rpvTeamId?'selected':''}>${t.name}</option>`).join('');
+    if (_rpvTeamId) {
+      const { data } = await window.sb.from('players').select('id').eq('club_id', clubId).eq('team_id', _rpvTeamId);
+      _rpvPlayerIds = (data||[]).map(r => r.id);
+    }
+  }
+  window.rpvOnTeamChange = function(){ _rpvTeamId=document.getElementById('rpvTeamSelect').value; sessionStorage.setItem('cal_active_team',_rpvTeamId); localStorage.setItem('cal_active_team',_rpvTeamId); location.reload(); };
 </script>
 
 <script>window.__CM_TWEAK_DEFAULTS = { theme: 'hybrid', accent: 'green' };</script>
