@@ -31,6 +31,12 @@
 .hub-brand .body{flex:1;min-width:0}
 .hub-brand .name{font:600 14px/1.1 var(--cm-font-sans);letter-spacing:-0.01em;color:var(--cm-side-fg)}
 .hub-brand .club{font:500 11.5px/1.2 var(--cm-font-mono);color:var(--cm-side-fg-muted);margin-top:2px}
+.cm-team-chip{display:flex;align-items:center;gap:5px;margin-top:5px;position:relative;background:var(--cm-side-item-active-bg);border:1px solid var(--cm-side-border);border-radius:6px;padding:0 7px;height:26px;transition:border-color .15s,background .15s}
+.cm-team-chip:hover{border-color:var(--cm-side-accent)}
+.cm-team-chip > .ti:first-child{font-size:13px;color:var(--cm-side-fg-muted);flex-shrink:0}
+.cm-team-chip select{flex:1;min-width:0;appearance:none;-webkit-appearance:none;background:transparent;border:none;outline:none;color:var(--cm-side-fg);font:600 12px/1 var(--cm-font-sans);cursor:pointer;padding:0;text-overflow:ellipsis}
+.cm-team-chip select option{background:var(--cm-side-bg);color:var(--cm-side-fg)}
+.cm-team-chip-caret{font-size:12px;color:var(--cm-side-fg-muted);flex-shrink:0;pointer-events:none}
 .hub-brand .switch{width:24px;height:24px;border-radius:6px;border:1px solid var(--cm-side-border);background:transparent;color:var(--cm-side-fg-muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .hub-brand .switch:hover{background:var(--cm-side-item-active-bg);color:var(--cm-side-fg)}
 .hub-brand .switch .ti{font-size:14px}
@@ -193,15 +199,13 @@
         </div>
         <div class="body">
           <div class="name" id="sideClubName"></div>
-          <div class="club" id="sideTeamLabel" style="display:none"></div>
+          <div class="cm-team-chip">
+            <i class="ti ti-users-group"></i>
+            <select id="cmGlobalTeam"><option value="">…</option></select>
+            <i class="ti ti-chevron-down cm-team-chip-caret"></i>
+          </div>
         </div>
         <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
-      </div>
-      <div class="cm-team-switcher" style="padding:8px 14px 4px">
-        <label style="display:block;font:600 9.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin-bottom:5px">Categoría</label>
-        <select id="cmGlobalTeam" style="width:100%;height:34px;padding:0 9px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer">
-          <option value="">Cargando…</option>
-        </select>
       </div>
       <nav class="hub-nav">${renderNav()}</nav>
       <div class="hub-side-foot">
@@ -230,7 +234,7 @@
     if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
     let teams = await window.getTeams(clubId);
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
-    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    if (!teams.length) { const chip = sel.closest('.cm-team-chip'); if (chip) chip.style.display = 'none'; return; }
     const saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team');
     const active = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
     // Persistir en ambos (sessionStorage para la sesión, localStorage para que sobreviva)
