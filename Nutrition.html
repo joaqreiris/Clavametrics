@@ -13,6 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/nutrition-calc.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -515,7 +516,7 @@
   if (club) window.applyClubTheme();
   await nuInitTeamSwitch(clubId);
   let _nuPlQ = window.sb.from('players')
-    .select('id,first_name,last_name,number,position,weight')
+    .select('id,first_name,last_name,number,position,weight,height,date_of_birth')
     .eq('club_id', clubId)
     .neq('status', 'inactive');
   if (_nuTeamId) _nuPlQ = _nuPlQ.eq('team_id', _nuTeamId);
@@ -546,6 +547,237 @@
   const nuList = document.getElementById('nuList');
   if (!nuList) return;
 
+  // ── Targets: estado actual + helpers ───────────────────────
+  let _nuCurrent = null;
+  const NC = window.nutriCalc;
+
+  function nuAge(dob) {
+    if (!dob) return null;
+    const d = new Date(dob); if (isNaN(d)) return null;
+    const t = new Date(); let a = t.getFullYear() - d.getFullYear();
+    const m = t.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && t.getDate() < d.getDate())) a--;
+    return a;
+  }
+  const nuFmtDate = d => { try { return new Date(d).toLocaleDateString('en-US', { day:'numeric', month:'short' }); } catch { return d; } };
+  const gkg = (g, w) => (g != null && w) ? `${(g / w).toFixed(1)} g/kg` : '';
+
+  // Render del panel de targets (.nu-phase) desde nutrition_targets real
+  function renderTargets(p, tgt, bc) {
+    const card = document.querySelector('.nu-phase');
+    if (!card) return;
+    const w = (bc && bc.weight_kg) || p.weight || null;
+    if (!tgt) {
+      card.innerHTML = `
+        <h4>Targets</h4>
+        <div style="color:var(--cm-fg-muted);font:500 12.5px/1.5 var(--cm-font-sans);margin:6px 0 2px">No nutrition target set for this player yet.</div>
+        <button class="cm-btn is-primary is-sm" id="nuSetTargetBtn" style="margin-top:10px"><i class="ti ti-calculator" style="font-size:14px"></i>Set targets</button>`;
+      card.querySelector('#nuSetTargetBtn').onclick = openTargetEditor;
+      return;
+    }
+    const gkStyle = 'color:var(--cm-fg-muted);font:500 11px/1 var(--cm-font-mono);margin-left:auto;margin-right:6px';
+    const model = (NC.RMR_MODELS[tgt.rmr_model] || {}).label || tgt.rmr_model;
+    const water = tgt.hydration_ml
+      ? `${(tgt.hydration_ml / 1000).toFixed(1)} L${w ? ' · ' + Math.round(tgt.hydration_ml / w) + ' ml/kg' : ''}` : '—';
+    const bft = tgt.body_fat_target_pct != null
+      ? `${tgt.body_fat_target_pct}%${tgt.target_date ? ' by ' + nuFmtDate(tgt.target_date) : ''}` : '—';
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <h4 style="margin:0">Targets</h4>
+        <span class="pill"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>${model}${tgt.manual_override ? ' · MANUAL' : ''}</span>
+        <button class="cm-btn is-ghost is-sm" id="nuEditTargetBtn" style="margin-left:auto;height:26px"><i class="ti ti-edit" style="font-size:13px"></i>Edit</button>
+      </div>
+      <div class="item"><i class="ti ti-flame"></i>Daily kcal target<strong>${tgt.kcal_target != null ? Math.round(tgt.kcal_target).toLocaleString() + ' kcal' : '—'}</strong></div>
+      <div class="item"><i class="ti ti-bread"></i>Carbs <span style="${gkStyle}">${gkg(tgt.carbs_g, w)}</span><strong>${tgt.carbs_g != null ? Math.round(tgt.carbs_g) + ' g' : '—'}</strong></div>
+      <div class="item"><i class="ti ti-meat"></i>Protein <span style="${gkStyle}">${gkg(tgt.protein_g, w)}</span><strong>${tgt.protein_g != null ? Math.round(tgt.protein_g) + ' g' : '—'}</strong></div>
+      <div class="item"><i class="ti ti-egg"></i>Fat <span style="${gkStyle}">${gkg(tgt.fats_g, w)}</span><strong>${tgt.fats_g != null ? Math.round(tgt.fats_g) + ' g' : '—'}</strong></div>
+      <div class="item"><i class="ti ti-droplet"></i>Water<strong>${water}</strong></div>
+      <div class="item"><i class="ti ti-target"></i>Body fat target<strong>${bft}</strong></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--cm-fg-faint);font:500 10.5px/1.3 var(--cm-font-mono)">
+        <i class="ti ti-bolt" style="font-size:11px"></i>RMR ${tgt.rmr_kcal != null ? Math.round(tgt.rmr_kcal) : '—'} · TDEE ${tgt.tdee_kcal != null ? Math.round(tgt.tdee_kcal) : '—'} · AF ${tgt.activity_factor ?? '—'}</div>`;
+    card.querySelector('#nuEditTargetBtn').onclick = openTargetEditor;
+  }
+
+  // ── Modal: calculadora de RMR/TDEE + targets ───────────────
+  function nuBuildModal() {
+    if (document.getElementById('nuTargetModal')) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      .nu-modal-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9000;display:none;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow:auto}
+      .nu-modal-ov.on{display:flex}
+      .nu-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4,12px);width:560px;max-width:100%;box-shadow:var(--cm-shadow-3,0 20px 50px rgba(0,0,0,.25))}
+      .nu-modal-h{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border-soft)}
+      .nu-modal-h h3{font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0}
+      .nu-modal-h .x{margin-left:auto;width:28px;height:28px;border-radius:7px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer}
+      .nu-modal-b{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+      .nu-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+      .nu-fld{display:flex;flex-direction:column;gap:4px}
+      .nu-fld label{font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.02em;text-transform:uppercase;color:var(--cm-fg-muted)}
+      .nu-fld input,.nu-fld select,.nu-modal-b textarea{height:34px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft,var(--cm-surface));color:var(--cm-fg-strong);font:500 13px/1 var(--cm-font-sans);padding:0 9px}
+      .nu-modal-b textarea{height:auto;min-height:48px;padding:8px 9px;resize:vertical}
+      .nu-fld input[readonly]{background:var(--cm-bg-soft);color:var(--cm-fg-muted);font-family:var(--cm-font-mono)}
+      .nu-sec{font:600 11px/1 var(--cm-font-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--cm-fg-faint);margin:2px 0 -4px}
+      .nu-info{background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);border-radius:8px;padding:9px 11px}
+      .nu-info .b{font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg)}
+      .nu-info .c{font:500 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:4px}
+      .nu-warn{color:#B45309;font:500 11.5px/1.4 var(--cm-font-sans)}
+      .nu-modal-f{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--cm-border-soft)}
+      .nu-chk{display:flex;align-items:center;gap:6px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)}
+    `;
+    document.head.appendChild(style);
+    const ov = document.createElement('div');
+    ov.id = 'nuTargetModal'; ov.className = 'nu-modal-ov';
+    ov.innerHTML = `
+      <div class="nu-modal" role="dialog" aria-modal="true">
+        <div class="nu-modal-h">
+          <i class="ti ti-calculator" style="color:var(--cm-accent);font-size:18px"></i>
+          <h3 id="nuf_title">Nutrition targets</h3>
+          <button class="x" id="nuf_close"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="nu-modal-b">
+          <div class="nu-sec">Anthropometrics</div>
+          <div class="nu-grid">
+            <div class="nu-fld"><label>Sex</label><select id="nuf_sex"><option value="male">Male</option><option value="female">Female</option></select></div>
+            <div class="nu-fld"><label>Weight (kg)</label><input id="nuf_weight" type="number" step="0.1"></div>
+            <div class="nu-fld"><label>Height (cm)</label><input id="nuf_height" type="number" step="0.1"></div>
+            <div class="nu-fld"><label>Age (y)</label><input id="nuf_age" type="number"></div>
+            <div class="nu-fld"><label>Body fat (%)</label><input id="nuf_bf" type="number" step="0.1"></div>
+            <div class="nu-fld"><label>Activity factor</label><input id="nuf_af" type="number" step="0.05" value="1.6"></div>
+          </div>
+          <div class="nu-sec">RMR model</div>
+          <div class="nu-fld"><select id="nuf_model"></select></div>
+          <div class="nu-info"><div class="b" id="nuf_blurb"></div><div class="c" id="nuf_cite"></div></div>
+          <div class="nu-warn" id="nuf_warn" style="display:none"></div>
+          <div class="nu-grid">
+            <div class="nu-fld"><label>RMR (kcal)</label><input id="nuf_rmr" readonly></div>
+            <div class="nu-fld"><label>TDEE (kcal)</label><input id="nuf_tdee" readonly></div>
+            <div class="nu-fld"><label>kcal target</label><input id="nuf_kcal" type="number"></div>
+          </div>
+          <div class="nu-sec">Macro &amp; hydration targets</div>
+          <div class="nu-grid">
+            <div class="nu-fld"><label>Protein (g)</label><input id="nuf_protein" type="number"></div>
+            <div class="nu-fld"><label>Carbs (g)</label><input id="nuf_carbs" type="number"></div>
+            <div class="nu-fld"><label>Fat (g)</label><input id="nuf_fats" type="number"></div>
+            <div class="nu-fld"><label>Hydration (ml)</label><input id="nuf_hyd" type="number"></div>
+            <div class="nu-fld"><label>Body fat target (%)</label><input id="nuf_bftarget" type="number" step="0.1"></div>
+            <div class="nu-fld"><label>Target date</label><input id="nuf_bfdate" type="date"></div>
+          </div>
+          <div class="nu-fld"><label>Notes</label><textarea id="nuf_notes" placeholder="Optional notes for this target…"></textarea></div>
+        </div>
+        <div class="nu-modal-f">
+          <label class="nu-chk"><input type="checkbox" id="nuf_manual"> Manual override (don't auto-recalc)</label>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="cm-btn is-outline is-sm" id="nuf_cancel">Cancel</button>
+            <button class="cm-btn is-primary is-sm" id="nuf_save"><i class="ti ti-check" style="font-size:14px"></i>Save targets</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+
+    // poblar selector de modelos
+    const msel = ov.querySelector('#nuf_model');
+    msel.innerHTML = Object.entries(NC.RMR_MODELS)
+      .map(([k, m]) => `<option value="${k}">${m.label}${m.recommended ? ' (recommended)' : ''}</option>`).join('');
+
+    const $ = id => ov.querySelector('#' + id);
+    const close = () => ov.classList.remove('on');
+    $('nuf_close').onclick = close; $('nuf_cancel').onclick = close;
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+
+    function recompute() {
+      const model = $('nuf_model').value;
+      const meta = NC.RMR_MODELS[model] || {};
+      $('nuf_blurb').textContent = meta.blurb || '';
+      $('nuf_cite').textContent = meta.cite || '';
+      const inputs = {
+        weightKg:   parseFloat($('nuf_weight').value) || null,
+        heightCm:   parseFloat($('nuf_height').value) || null,
+        age:        parseFloat($('nuf_age').value) || null,
+        sex:        $('nuf_sex').value,
+        bodyFatPct: parseFloat($('nuf_bf').value) || null,
+      };
+      const rmr = NC.computeRMR(model, inputs);
+      $('nuf_rmr').value = rmr != null ? rmr : '';
+      const tdee = NC.computeTDEE(rmr, parseFloat($('nuf_af').value) || 1.6);
+      $('nuf_tdee').value = tdee != null ? tdee : '';
+      // aviso si faltan inputs requeridos por el modelo
+      const labels = { weight:'weight', height:'height', age:'age', sex:'sex', bodyFat:'body fat %' };
+      const miss = (meta.needs || []).filter(n =>
+        (n === 'weight' && !inputs.weightKg) || (n === 'height' && !inputs.heightCm) ||
+        (n === 'age' && !inputs.age) || (n === 'bodyFat' && !inputs.bodyFatPct));
+      const w = $('nuf_warn');
+      if (miss.length) { w.style.display = 'block'; w.textContent = `${meta.label} needs: ${miss.map(m => labels[m]).join(', ')}.`; }
+      else w.style.display = 'none';
+      // auto-rellenar targets salvo override manual
+      if (!$('nuf_manual').checked) {
+        $('nuf_kcal').value = tdee != null ? tdee : '';
+        const s = NC.suggestTargets(tdee, inputs.weightKg);
+        if (s) { $('nuf_protein').value = s.protein_g; $('nuf_carbs').value = s.carbs_g; $('nuf_fats').value = s.fats_g; $('nuf_hyd').value = s.hydration_ml; }
+      }
+    }
+    ['nuf_sex','nuf_weight','nuf_height','nuf_age','nuf_bf','nuf_af','nuf_model'].forEach(id =>
+      $(id).addEventListener('input', recompute));
+    // editar kcal/macros a mano marca override
+    ['nuf_kcal','nuf_protein','nuf_carbs','nuf_fats','nuf_hyd'].forEach(id =>
+      $(id).addEventListener('input', () => { $('nuf_manual').checked = true; }));
+
+    $('nuf_save').onclick = async () => {
+      if (!_nuCurrent) return;
+      const p = _nuCurrent.player;
+      const num = id => { const v = parseFloat($(id).value); return isNaN(v) ? null : v; };
+      const payload = {
+        player_id: p.id, club_id: clubId,
+        sex: $('nuf_sex').value,
+        rmr_model: $('nuf_model').value,
+        rmr_kcal: num('nuf_rmr'), activity_factor: num('nuf_af'), tdee_kcal: num('nuf_tdee'),
+        kcal_target: num('nuf_kcal'), protein_g: num('nuf_protein'), carbs_g: num('nuf_carbs'),
+        fats_g: num('nuf_fats'), hydration_ml: num('nuf_hyd'),
+        body_fat_target_pct: num('nuf_bftarget'), target_date: $('nuf_bfdate').value || null,
+        manual_override: $('nuf_manual').checked, notes: $('nuf_notes').value.trim() || null,
+        updated_by: profile?.id || null,
+      };
+      const btn = $('nuf_save'); btn.disabled = true;
+      const { error } = await window.sb.from('nutrition_targets').upsert(payload, { onConflict: 'player_id' });
+      btn.disabled = false;
+      if (error) { alert('Could not save target: ' + error.message); return; }
+      close();
+      loadPlayerDetail(p);
+    };
+
+    ov._recompute = recompute; // expuesto para openTargetEditor
+  }
+
+  function openTargetEditor() {
+    if (!_nuCurrent) return;
+    nuBuildModal();
+    const ov = document.getElementById('nuTargetModal');
+    const $ = id => ov.querySelector('#' + id);
+    const { player: p, target: t, bodyComp: bc } = _nuCurrent;
+    $('nuf_title').textContent = `Targets · ${p._name || 'player'}`;
+    // prefill: target existente > body comp > player
+    $('nuf_sex').value     = (t && t.sex) || 'male';
+    $('nuf_weight').value  = (bc && bc.weight_kg) || p.weight || '';
+    $('nuf_height').value  = p.height || '';
+    $('nuf_age').value     = nuAge(p.date_of_birth) ?? '';
+    $('nuf_bf').value      = (bc && bc.body_fat_pct != null) ? bc.body_fat_pct : '';
+    $('nuf_af').value      = (t && t.activity_factor) || 1.6;
+    $('nuf_model').value   = (t && t.rmr_model) || 'ten_haaf';
+    $('nuf_manual').checked = !!(t && t.manual_override);
+    $('nuf_bftarget').value = (t && t.body_fat_target_pct != null) ? t.body_fat_target_pct : '';
+    $('nuf_bfdate').value   = (t && t.target_date) || '';
+    $('nuf_notes').value    = (t && t.notes) || '';
+    ov._recompute();
+    // si hay target guardado, respetar sus valores exactos (no pisar con auto)
+    if (t) {
+      if (t.kcal_target != null) $('nuf_kcal').value = t.kcal_target;
+      if (t.protein_g != null)   $('nuf_protein').value = t.protein_g;
+      if (t.carbs_g != null)     $('nuf_carbs').value = t.carbs_g;
+      if (t.fats_g != null)      $('nuf_fats').value = t.fats_g;
+      if (t.hydration_ml != null) $('nuf_hyd').value = t.hydration_ml;
+    }
+    ov.classList.add('on');
+  }
+
   async function loadPlayerDetail(p) {
     // Header
     const av = document.querySelector('.nu-d-head .av');
@@ -561,16 +793,30 @@
     const dateSubEl = document.querySelector('.nu-card-h .sub');
     if (dateSubEl) dateSubEl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', day:'numeric', month:'short' });
 
-    // Today's nutrition entry for this player, filtered by club_id
-    const { data: nu } = await window.sb.from('nutrition')
-      .select('calories,protein,carbs,fats,hydration')
-      .eq('player_id', p.id)
-      .eq('club_id', clubId)
-      .gte('created_at', today)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Today's intake + active target + latest body composition (paralelo, club-scoped)
+    const [{ data: nu }, { data: tgt }, { data: bc }] = await Promise.all([
+      window.sb.from('nutrition')
+        .select('calories,protein,carbs,fats,hydration')
+        .eq('player_id', p.id).eq('club_id', clubId)
+        .gte('created_at', today).order('created_at', { ascending: false })
+        .limit(1).maybeSingle(),
+      window.sb.from('nutrition_targets')
+        .select('*').eq('player_id', p.id).eq('club_id', clubId).maybeSingle(),
+      window.sb.from('body_composition')
+        .select('weight_kg,body_fat_pct,measured_date')
+        .eq('player_id', p.id).eq('club_id', clubId)
+        .order('measured_date', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    _nuCurrent = { player: p, target: tgt || null, bodyComp: bc || null };
+    renderTargets(p, tgt, bc);
 
+    const kcalRef = (tgt && tgt.kcal_target) ? tgt.kcal_target : 2500;
+    const refs = {
+      carbs:   (tgt && tgt.carbs_g)      || 350,
+      protein: (tgt && tgt.protein_g)    || 150,
+      fats:    (tgt && tgt.fats_g)       || 80,
+      water:   (tgt && tgt.hydration_ml) ? tgt.hydration_ml / 1000 : 3,
+    };
     const CIRC = 264; // 2π × r42
     const donutV   = document.querySelector('.nu-donut-v');
     const donutL   = document.querySelector('.nu-donut-l');
@@ -580,22 +826,22 @@
     const macroFills = document.querySelectorAll('.nu-macro-fill');
 
     if (nu) {
-      // Donut — calories as % of 2500 kcal reference
+      // Donut — calories as % of the player's kcal target (fallback 2500)
       const kcal   = nu.calories || 0;
-      const kcalPct = Math.min(1, kcal / 2500);
+      const kcalPct = Math.min(1, kcal / kcalRef);
       if (donutV)   donutV.textContent  = kcal ? kcal.toLocaleString() : '—';
-      if (donutL)   donutL.textContent  = 'kcal today';
+      if (donutL)   donutL.textContent  = `kcal of ${Math.round(kcalRef).toLocaleString()}`;
       if (donutPc)  donutPc.textContent = kcal ? Math.round(kcalPct * 100) + '%' : '';
       if (ringFill) ringFill.setAttribute('stroke-dasharray', `${Math.round(kcalPct * CIRC)} ${CIRC}`);
 
       // Macro rows: [0]=Carbs, [1]=Protein, [2]=Fat, [3]=Fiber(N/A), [4]=Water
-      // Reference daily amounts for bar fill calculation
+      // Reference = target del jugador (o defaults si no hay target)
       const DATA = [
-        { val: nu.carbs,     ref: 350, label: 'g carbs' },
-        { val: nu.protein,   ref: 150, label: 'g protein' },
-        { val: nu.fats,      ref: 80,  label: 'g fat' },
-        { val: null,         ref: null, label: null },       // Fiber — not in schema
-        { val: nu.hydration, ref: 3,   label: 'L water' },
+        { val: nu.carbs,     ref: refs.carbs,   label: 'g carbs' },
+        { val: nu.protein,   ref: refs.protein, label: 'g protein' },
+        { val: nu.fats,      ref: refs.fats,    label: 'g fat' },
+        { val: null,         ref: null,         label: null },       // Fiber — not in schema
+        { val: nu.hydration, ref: refs.water,   label: 'L water' },
       ];
       DATA.forEach(({ val, ref, label }, i) => {
         if (!macroVals[i]) return;
