@@ -422,13 +422,13 @@
           <span class="label" onclick="avToggleRangeMenu(event)" style="cursor:pointer"><i class="ti ti-calendar-month"></i><span id="avMcPickerName">—</span><span class="mc-meta" id="avMcPickerDates"></span><i class="ti ti-chevron-down" style="font-size:13px;margin-left:4px"></i></span>
           <button title="Siguiente" onclick="avShiftRange(1)"><i class="ti ti-chevron-right"></i></button>
           <div id="avRangeMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:100;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;box-shadow:var(--cm-shadow-pop,0 12px 40px rgba(0,0,0,.18));padding:6px;min-width:200px">
-            <button class="av-range-opt" onclick="avSetPreset('mc')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Microciclo actual</button>
-            <button class="av-range-opt" onclick="avSetPreset('7')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Última semana</button>
-            <button class="av-range-opt" onclick="avSetPreset('14')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Últimas 2 semanas</button>
-            <button class="av-range-opt" onclick="avSetPreset('30')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Último mes</button>
+            <button class="av-range-opt" onclick="avSetPreset('mc')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Current microcycle</button>
+            <button class="av-range-opt" onclick="avSetPreset('7')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Last week</button>
+            <button class="av-range-opt" onclick="avSetPreset('14')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Last 2 weeks</button>
+            <button class="av-range-opt" onclick="avSetPreset('30')" style="display:block;width:100%;text-align:left;padding:8px 10px;background:none;border:none;border-radius:7px;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer">Last month</button>
             <div style="border-top:1px solid var(--cm-border);margin:5px 0"></div>
             <div style="padding:6px 10px;display:flex;flex-direction:column;gap:6px">
-              <label style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">Personalizado</label>
+              <label style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">Custom</label>
               <input type="date" id="avDateFrom" onchange="avOnCustomDate()" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
               <input type="date" id="avDateTo" onchange="avOnCustomDate()" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
             </div>
@@ -504,7 +504,7 @@
       </div><!-- /viewMatrix -->
 
       <div id="viewToday" style="display:none">
-        <div style="padding:40px;text-align:center;color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">Vista de hoy — próximamente.</div>
+        <div style="padding:40px;text-align:center;color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">Today view — coming soon.</div>
       </div>
 
       <div id="viewStats" style="display:none"></div>
@@ -848,9 +848,9 @@
       mcStart = _avRangeOverride.start;
       mcEnd   = _avRangeOverride.end;
       const nameEl = document.getElementById('avMcName');
-      if (nameEl) nameEl.textContent = 'Rango personalizado';
+      if (nameEl) nameEl.textContent = 'Custom range';
       const pickerEl = document.getElementById('avMcPickerName');
-      if (pickerEl) pickerEl.textContent = 'Rango';
+      if (pickerEl) pickerEl.textContent = 'Range';
     }
     // Fallback: current Monday → following Sunday (14 days)
     if (!mcStart) {
@@ -1300,16 +1300,16 @@
 
     host.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
-        ${kpi('ti-circle-check','Disponibilidad media', availPct+'<span style="font-size:17px">%</span>', `${tAvail} de ${tTotal} días-jugador`, 'var(--cm-success)')}
-        ${kpi('ti-bandage','Días perdidos · lesión', tInjury, tTotal?`${Math.round(tInjury/tTotal*100)}% del período`:'', 'var(--cm-danger)')}
-        ${kpi('ti-virus','Días perdidos · enfermedad', tIllness, tTotal?`${Math.round(tIllness/tTotal*100)}% del período`:'', 'var(--cm-violet)')}
-        ${kpi('ti-adjustments','Días modificados', tPartial, tTotal?`${Math.round(tPartial/tTotal*100)}% del período`:'', 'var(--cm-warning)')}
+        ${kpi('ti-circle-check','Avg availability', availPct+'<span style="font-size:17px">%</span>', `${tAvail} of ${tTotal} player-days`, 'var(--cm-success)')}
+        ${kpi('ti-bandage','Days lost · injury', tInjury, tTotal?`${Math.round(tInjury/tTotal*100)}% of period`:'', 'var(--cm-danger)')}
+        ${kpi('ti-virus','Days lost · illness', tIllness, tTotal?`${Math.round(tIllness/tTotal*100)}% of period`:'', 'var(--cm-violet)')}
+        ${kpi('ti-adjustments','Modified days', tPartial, tTotal?`${Math.round(tPartial/tTotal*100)}% of period`:'', 'var(--cm-warning)')}
       </div>
 
       <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:18px">
         <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;overflow:hidden">
           <div style="padding:15px 18px;border-bottom:1px solid var(--cm-border);display:flex;align-items:center;justify-content:space-between">
-            <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Ranking por jugador</span>
+            <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Player ranking</span>
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">click en columna para ordenar</span>
           </div>
           <table style="width:100%;border-collapse:collapse" id="avStatsTable">
@@ -1319,18 +1319,18 @@
               <th data-sort="partial" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-warning);cursor:pointer">Mod.</th>
               <th data-sort="injury" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-danger);cursor:pointer">Les.</th>
               <th data-sort="illness" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-violet);cursor:pointer">Enf.</th>
-              <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:130px">% Disponibilidad</th>
+              <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:130px">% Availability</th>
             </tr></thead>
             <tbody id="avStatsTbody"></tbody>
           </table>
         </div>
         <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px">
-          <div style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">Desglose del equipo</div>
+          <div style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:6px">Team breakdown</div>
           <div style="position:relative;height:240px;display:flex;align-items:center;justify-content:center">
             <canvas id="avStatsDonut"></canvas>
             <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
               <div style="font:700 34px/1 var(--cm-font-sans);color:var(--cm-fg-strong);letter-spacing:-0.02em">${availPct}%</div>
-              <div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px">disponible</div>
+              <div style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:2px">available</div>
             </div>
           </div>
         </div>
