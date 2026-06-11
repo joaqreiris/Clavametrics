@@ -858,11 +858,19 @@ async function submitRPE() {
   async function initRpeChecklist() {
     try {
       const cid = await window.getClubId();
-      const sess = await window.sb.rpc('recent_sessions', { p_club_id: cid, p_limit: 8 });
+      const activeTeam = sessionStorage.getItem('cal_active_team');
+      // Query directa filtrada por categoría activa (en vez del RPC que no filtra por team)
+      let _ssQ = window.sb.from('training_sessions')
+        .select('id, session_date, title, session_type, team_id')
+        .eq('club_id', cid);
+      if (activeTeam) _ssQ = _ssQ.eq('team_id', activeTeam);
+      const { data: sess } = await _ssQ
+        .order('session_date', { ascending: false })
+        .limit(8);
       const sel = document.getElementById('checklistSession');
       if (!sel) return;
       sel.innerHTML = '<option value="">Elegí una sesión…</option>' +
-        (sess.data||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')}</option>`).join('');
+        (sess||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')}</option>`).join('');
     } catch (e) { console.warn('[RPE] checklist init:', e.message); }
   }
   async function loadRpeChecklist() {
