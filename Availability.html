@@ -1250,15 +1250,15 @@
   async function avRenderStats() {
     const host = document.getElementById('viewStats');
     if (!host) return;
-    host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">Calculando estadísticas…</div>';
+    host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">Calculating stats…</div>';
 
     const from = MC_DATES[0], to = MC_DATES[MC_DATES.length - 1];
-    if (!from || !to) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">Sin rango seleccionado.</div>'; return; }
+    if (!from || !to) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No range selected.</div>'; return; }
 
     let pq = window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID);
     if (_avTeamId) pq = pq.eq('team_id', _avTeamId);
     const { data: players } = await pq.order('last_name');
-    if (!players || !players.length) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No hay jugadores en esta categoría.</div>'; return; }
+    if (!players || !players.length) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No players in this team.</div>'; return; }
     const pids = players.map(p => p.id);
 
     const { data: avail } = await window.sb.from('availability')
@@ -1330,15 +1330,15 @@
         <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;overflow:hidden">
           <div style="padding:15px 18px;border-bottom:1px solid var(--cm-border);display:flex;align-items:center;justify-content:space-between">
             <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Player ranking</span>
-            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">click en columna para ordenar</span>
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">click a column to sort</span>
           </div>
           <table style="width:100%;border-collapse:collapse" id="avStatsTable">
             <thead><tr style="background:var(--cm-bg-soft)">
               <th data-sort="name" style="padding:9px 16px;text-align:left;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted);cursor:pointer">Jugador</th>
-              <th data-sort="avail" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-success);cursor:pointer">Disp.</th>
+              <th data-sort="avail" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-success);cursor:pointer">Avail.</th>
               <th data-sort="partial" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-warning);cursor:pointer">Mod.</th>
-              <th data-sort="injury" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-danger);cursor:pointer">Les.</th>
-              <th data-sort="illness" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-violet);cursor:pointer">Enf.</th>
+              <th data-sort="injury" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-danger);cursor:pointer">Inj.</th>
+              <th data-sort="illness" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-violet);cursor:pointer">Ill.</th>
               <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:130px">% Availability</th>
             </tr></thead>
             <tbody id="avStatsTbody"></tbody>
@@ -1356,11 +1356,11 @@
         </div>
       </div>
       <div class="aev-controls" style="margin-top:22px;margin-bottom:0">
-        <div class="aev-segs" id="aevRangeSegs" role="group" aria-label="Rango">
-          <button class="aev-seg" data-range="mc">Microciclo</button>
-          <button class="aev-seg" data-range="7">1 semana <span class="n">7d</span></button>
-          <button class="aev-seg" data-range="14">2 semanas <span class="n">14d</span></button>
-          <button class="aev-seg" data-range="30">1 mes <span class="n">30d</span></button>
+        <div class="aev-segs" id="aevRangeSegs" role="group" aria-label="Range">
+          <button class="aev-seg" data-range="mc">Microcycle</button>
+          <button class="aev-seg" data-range="7">1 week <span class="n">7d</span></button>
+          <button class="aev-seg" data-range="14">2 weeks <span class="n">14d</span></button>
+          <button class="aev-seg" data-range="30">1 month <span class="n">30d</span></button>
         </div>
         <div class="aev-range-meta" id="aev-range-meta">—</div>
         <div class="aev-legend" id="aev-legend"></div>
@@ -1370,17 +1370,17 @@
       <section class="aev-block">
         <div class="aev-block-h">
           <span class="aev-tag">B</span>
-          <span class="t">Línea de % disponible · zona saludable</span>
-          <span class="d">% del plantel disponible vs. umbral &gt;85%</span>
+          <span class="t">Available % line · healthy zone</span>
+          <span class="d">% of squad available vs. &gt;85% threshold</span>
         </div>
         <div class="aev-card">
           <div class="aev-card-h">
-            <span class="ttl">Disponibilidad del equipo</span>
-            <span class="sub">% sobre plantel total</span>
+            <span class="ttl">Team availability</span>
+            <span class="sub">% of total squad</span>
             <div class="right">
-              <span class="aev-stat"><span class="v" id="aev-b-stat-now">—</span><span class="k">actual</span></span>
-              <span class="aev-stat"><span class="v" id="aev-b-stat-avg">—</span><span class="k">media</span></span>
-              <span class="aev-stat"><span class="v" id="aev-b-stat-min">—</span><span class="k">mínimo</span></span>
+              <span class="aev-stat"><span class="v" id="aev-b-stat-now">—</span><span class="k">current</span></span>
+              <span class="aev-stat"><span class="v" id="aev-b-stat-avg">—</span><span class="k">average</span></span>
+              <span class="aev-stat"><span class="v" id="aev-b-stat-min">—</span><span class="k">minimum</span></span>
             </div>
           </div>
           <div class="aev-card-b" id="aev-b-body"></div>
@@ -1391,23 +1391,23 @@
       <section class="aev-block">
         <div class="aev-block-h">
           <span class="aev-tag">C</span>
-          <span class="t">Heatmap calendario</span>
-          <span class="d">Cada día coloreado por % de disponibilidad</span>
+          <span class="t">Calendar heatmap</span>
+          <span class="d">Each day colored by availability %</span>
         </div>
         <div class="aev-card">
           <div class="aev-card-h">
-            <span class="ttl">Calendario de disponibilidad</span>
+            <span class="ttl">Availability calendar</span>
             <span class="sub" id="aev-c-sub">—</span>
             <div class="right">
-              <span class="aev-stat"><span class="v" id="aev-c-stat-best">—</span><span class="k">mejor día</span></span>
-              <span class="aev-stat"><span class="v" id="aev-c-stat-worst">—</span><span class="k">peor día</span></span>
+              <span class="aev-stat"><span class="v" id="aev-c-stat-best">—</span><span class="k">best day</span></span>
+              <span class="aev-stat"><span class="v" id="aev-c-stat-worst">—</span><span class="k">worst day</span></span>
             </div>
           </div>
           <div class="aev-card-b">
             <div class="hm">
               <div class="hm-grid" id="aev-c-grid"></div>
               <div class="hm-scale">
-                <div class="lab">% disponibilidad</div>
+                <div class="lab">% availability</div>
                 <div class="bar"></div>
                 <div class="ticks"><span>&lt;70</span><span>80</span><span>90</span><span>100</span></div>
                 <div class="rows" id="aev-c-rows"></div>
@@ -1471,10 +1471,10 @@
       const ctx = document.getElementById('avStatsDonut');
       if (ctx) {
         const segs = [
-          { label:'Disponible', val:tAvail, color:'#16A34A' },
-          { label:'Modificado', val:tPartial, color:'#D97706' },
-          { label:'Lesión', val:tInjury, color:'#DC2626' },
-          { label:'Enfermedad', val:tIllness, color:'#7C3AED' }
+          { label:'Available', val:tAvail, color:'#16A34A' },
+          { label:'Modified', val:tPartial, color:'#D97706' },
+          { label:'Injury', val:tInjury, color:'#DC2626' },
+          { label:'Illness', val:tIllness, color:'#7C3AED' }
         ].filter(s => s.val > 0);
         _avStatsChart = new Chart(ctx, {
           type: 'doughnut',
