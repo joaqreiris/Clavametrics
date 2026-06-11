@@ -164,9 +164,9 @@
 
   /* ─── Variante C — Heatmap calendario ───────────────────── */
   function bucket(pct) {
-    if (pct < 70) return { c: colorOf("les"), lab: "Crítico" };
-    if (pct < 80) return { c: colorOf("mod"), lab: "Bajo" };
-    if (pct < 90) return { c: "#84CC16",      lab: "Aceptable" };
+    if (pct < 70) return { c: colorOf("les"), lab: "Critical" };
+    if (pct < 80) return { c: colorOf("mod"), lab: "Low" };
+    if (pct < 90) return { c: "#84CC16",      lab: "Acceptable" };
     return { c: colorOf("disp"), lab: "Optimal" };
   }
   function renderHeatmap() {
@@ -207,10 +207,10 @@
     if (!rows) return;
     rows.innerHTML = "";
     [
-      { c: colorOf("disp"), b: "Óptimo", r: "≥ 90%" },
-      { c: "#84CC16",       b: "Aceptable", r: "80–89%" },
-      { c: colorOf("mod"),  b: "Bajo", r: "70–79%" },
-      { c: colorOf("les"),  b: "Crítico", r: "< 70%" },
+      { c: colorOf("disp"), b: "Optimal", r: "≥ 90%" },
+      { c: "#84CC16",       b: "Acceptable", r: "80–89%" },
+      { c: colorOf("mod"),  b: "Low", r: "70–79%" },
+      { c: colorOf("les"),  b: "Critical", r: "< 70%" },
     ].forEach((x) => {
       const d = document.createElement("div"); d.className = "r";
       d.innerHTML = `<span class="ch" style="background:${x.c}"></span><span><b>${x.b}</b> · ${x.r}</span>`;

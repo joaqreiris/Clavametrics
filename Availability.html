@@ -431,8 +431,9 @@
             <div style="border-top:1px solid var(--cm-border);margin:5px 0"></div>
             <div style="padding:6px 10px;display:flex;flex-direction:column;gap:6px">
               <label style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted)">Custom</label>
-              <input type="date" id="avDateFrom" onchange="avOnCustomDate()" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
-              <input type="date" id="avDateTo" onchange="avOnCustomDate()" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
+              <input type="date" id="avDateFrom" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
+              <input type="date" id="avDateTo" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-mono)">
+              <button onclick="avOnCustomDate()" style="height:30px;background:var(--cm-accent,#2f6fed);color:#fff;border:none;border-radius:7px;font:600 12px/1 var(--cm-font-sans);cursor:pointer">Apply</button>
             </div>
           </div>
         </div>
@@ -1224,9 +1225,14 @@
     if (typeof init === 'function') init();
   };
   window.avOnCustomDate = function() {
-    const f = document.getElementById('avDateFrom').value;
-    const t = document.getElementById('avDateTo').value;
-    if (f && t && f <= t) { _avRangePreset = 'custom'; _avRangeOverride = { start: f, end: t }; if (typeof init === 'function') init(); }
+    let f = document.getElementById('avDateFrom').value;
+    let t = document.getElementById('avDateTo').value;
+    if (!f || !t) return;
+    if (f > t) { const _x = f; f = t; t = _x; }
+    _avRangePreset = 'custom';
+    _avRangeOverride = { start: f, end: t };
+    document.getElementById('avRangeMenu').style.display = 'none';
+    if (typeof init === 'function') init();
   };
 
   window.avSwitchView = function(view) {
