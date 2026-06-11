@@ -496,6 +496,8 @@
     });
 
     // Realtime — new notifications pushed to this user
+    // Limpiar canal viejo si existe (evita duplicados que saturan realtime)
+    try { window.sb.getChannels().filter(c => c.topic.includes('cm-notif')).forEach(c => window.sb.removeChannel(c)); } catch(_){}
     window.sb.channel(`cm-notifs-${user.id}`)
       .on('postgres_changes', {
         event: 'INSERT',
@@ -658,6 +660,7 @@
     _updateChatBadge();
 
     // Realtime
+    try { window.sb.getChannels().filter(c => c.topic.includes('cm-chat-notif')).forEach(c => window.sb.removeChannel(c)); } catch(_){}
     window.sb.channel(`cm-chat-notif-${clubId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${clubId}` }, payload => {
         const msg = payload.new;
