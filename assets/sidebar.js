@@ -515,6 +515,7 @@
 
   // ── CHAT NOTIFICATIONS ────────────────────────────────────────
   let _chatUnread = {};
+  let _chatRecent = {};
 
   function _escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -532,7 +533,7 @@
     const list = document.getElementById('cm-cp-list');
     if (!list) return;
     const entries = Object.entries(_chatUnread).sort((a, b) => (b[1].lastAt || '') > (a[1].lastAt || '') ? 1 : -1);
-    if (!entries.length) { list.innerHTML = '<div class="cm-cp-empty">No unread messages</div>'; return; }
+    // (sin return temprano: el historial se muestra debajo aunque no haya no leídos)
     const dmEntries = entries.filter(([k]) => k !== 'group');
     const grpEntry  = entries.find(([k]) => k === 'group');
     let html = '';
@@ -562,6 +563,33 @@
         </div>
         <div class="cm-ci-count">${d.count > 9 ? '9+' : d.count}</div>
       </button>`;
+    }
+    // ── Historial de conversaciones recientes (además de los no leídos) ──
+    const recentArr = Object.values(_chatRecent || {})
+      .sort((a, b) => (b.lastAt || '') > (a.lastAt || '') ? 1 : -1);
+    // Excluir las que ya están como no leídas (no repetir)
+    const unreadKeys = new Set(Object.keys(_chatUnread));
+    const recentToShow = recentArr.filter(r => !unreadKeys.has(r.key)).slice(0, 4);
+    if (recentToShow.length) {
+      html += `<div class="cm-cp-sect-lbl">Recientes</div>`;
+      for (const r of recentToShow) {
+        const ini = r.isGroup ? '' : (r.senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+        const av = r.isGroup
+          ? `<div class="cm-ci-av grp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>`
+          : `<div class="cm-ci-av">${_escHtml(ini)}</div>`;
+        const name = r.isGroup ? '# team' : (r.senderName || 'Unknown');
+        html += `<button class="cm-ci" data-chat-nav="1" data-conv="${_escHtml(r.key)}">
+          ${av}
+          <div class="cm-ci-body">
+            <div class="cm-ci-name"><span>${_escHtml(name)}</span><span class="time">${_relTime(r.lastAt)}</span></div>
+            <div class="cm-ci-preview">${_escHtml((r.lastMsg || '').slice(0,40))}</div>
+          </div>
+        </button>`;
+      }
+    }
+    // Si no hay nada (ni no leídos ni recientes)
+    if (!entries.length && !recentToShow.length) {
+      html = '<div class="cm-cp-empty">No hay conversaciones</div>';
     }
     list.innerHTML = html;
   }
@@ -654,6 +682,21 @@
         _chatUnread[key].lastMsg    = msg.content || '';
         _chatUnread[key].lastAt     = msg.created_at;
         _chatUnread[key].senderName = msg.sender_name || '';
+      }
+    }
+    // Historial: agrupar por conversación (reusa recentMsgs ya cargado)
+    _chatRecent = {};
+    for (const msg of (recentMsgs || [])) {
+      const isGroup = !msg.recipient_id;
+      if (!isGroup && msg.recipient_id !== user.id) continue;
+      const key = isGroup ? 'group' : msg.sender_id;
+      if (!_chatRecent[key] || msg.created_at > _chatRecent[key].lastAt) {
+        _chatRecent[key] = {
+          key, isGroup,
+          lastMsg: msg.content || '',
+          lastAt: msg.created_at,
+          senderName: msg.sender_name || ''
+        };
       }
     }
     _renderChatPanel();
