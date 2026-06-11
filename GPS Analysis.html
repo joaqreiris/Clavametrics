@@ -887,7 +887,7 @@
               </div>
             </div>
             <div class="gp-c-b" id="sc-vs-body" style="padding:4px 14px 12px">
-              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:16px 0">Elegí una sesión de referencia para comparar.</div>
+              <div class="gp-empty" style="color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans);padding:16px 0">Pick a reference session to compare.</div>
             </div>
           </div>
 
@@ -1575,7 +1575,7 @@ function _acPaths(active) {
       <span class="tick"><i class="ti ti-check"></i></span></button>`;
   return `<div class="ac-paths">
     ${card('ti-flask','Plantilla basada en evidencia','Cards listas, validadas científicamente.','recomendado',active==='tpl','tpl')}
-    ${card('ti-adjustments-alt','Crear a medida','Elegí métricas, tipo y agregación · abre el Chart builder.','',active==='custom','custom')}</div>`;
+    ${card('ti-adjustments-alt','Build custom','Pick metrics, type and aggregation · opens the Chart builder.','',active==='custom','custom')}</div>`;
 }
 function _acTplCard(t) {
   return `<div class="ac-tpl" data-actpl="${t.id}">
@@ -1600,8 +1600,8 @@ function _acPanel(active, dashName) {
   if (active === 'custom') {
     return `<div class="ac-panel" style="width:600px">${_acHeader(dashName)}${_acPaths('custom')}
       <div class="ac-custom"><span class="ic"><i class="ti ti-adjustments-alt"></i></span>
-        <span class="t">Crear a medida</span>
-        <span class="d">Elegí las métricas, el tipo de gráfico y la agregación. Se abre el Chart builder con un lienzo en blanco.</span>
+        <span class="t">Build custom</span>
+        <span class="d">Pick the metrics, chart type and aggregation. The Chart builder opens with a blank canvas.</span>
         <button class="go ac-open-builder" type="button"><i class="ti ti-arrow-right"></i>Abrir Chart builder</button></div>
       <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>¿No sabés por dónde empezar? Probá una plantilla basada en evidencia.</span>
         <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancelar</button></span></div></div>`;
@@ -1626,7 +1626,7 @@ function _acInsertCard(cardId, name) {
     showToast(`${name} ya está en este dashboard`); return;
   }
   let card = document.getElementById(cardId) || _cardStash.get(cardId);
-  if (!card) { showToast(`${name}: card no disponible`, true); return; }
+  if (!card) { showToast(`${name}: card unavailable`, true); return; }
   _cardStash.delete(cardId);
   const addBtn = grid.querySelector('.gp-add');
   if (addBtn) grid.insertBefore(card, addBtn); else grid.appendChild(card);
@@ -1704,11 +1704,11 @@ async function saveLayout(viewKey, overrideDid) {
     );
     if (error) {
       console.error('saveLayout: Supabase error:', error);
-      showToast('Error al guardar layout — revisá la consola', true);
+      showToast('Failed to save layout — check the console', true);
     }
   } catch (err) {
     console.error('saveLayout:', err);
-    showToast('Error al guardar layout — revisá la consola', true);
+    showToast('Failed to save layout — check the console', true);
   }
 }
 
@@ -1939,7 +1939,7 @@ async function _svList(viewKey) {
 
 async function _svSave(viewKey, name) {
   const ctx = await _svGetCtx(viewKey);
-  if (!ctx) { showToast('Error al guardar — sesión no disponible', true); return; }
+  if (!ctx) { showToast('Failed to save — session unavailable', true); return; }
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
   if (!grid) return;
   const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => ({
@@ -1954,7 +1954,7 @@ async function _svSave(viewKey, name) {
     { user_id: ctx.uid, club_id: ctx.cid, dashboard_id: snapDid, layout, updated_at: new Date().toISOString() },
     { onConflict: 'user_id,club_id,dashboard_id' }
   );
-  if (error) { console.error('_svSave:', error); showToast('Error al guardar vista', true); return; }
+  if (error) { console.error('_svSave:', error); showToast('Failed to save view', true); return; }
   showToast(`Vista "${name}" guardada`);
 }
 
@@ -1967,7 +1967,7 @@ async function _svDelete(viewKey, snapDid) {
 
 async function _svLoad(viewKey, snapDid, name) {
   const ctx = await _svGetCtx(viewKey);
-  if (!ctx) { showToast('Error al cargar — sesión no disponible', true); return; }
+  if (!ctx) { showToast('Failed to load — session unavailable', true); return; }
   const { data, error } = await window.sb.from('gps_dashboard_layouts')
     .select('layout').eq('user_id', ctx.uid).eq('club_id', ctx.cid).eq('dashboard_id', snapDid).maybeSingle();
   if (error || !data?.layout?.length) { showToast('Vista no encontrada', true); return; }
@@ -2433,7 +2433,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
           showToast(`Vista "${item.data.name}" eliminada`);
         }
       });
-    }).catch(e => { console.error('_svList:', e); showToast('Error al cargar vistas', true); });
+    }).catch(e => { console.error('_svList:', e); showToast('Failed to load views', true); });
     return;
   }
 
@@ -3427,7 +3427,7 @@ function _renderVelProfile() {
 function _showCardError(cardId, err) {
   const card = document.getElementById(cardId);
   const body = card?.querySelector('.gp-c-b');
-  if (body) body.innerHTML = '<div style="display:flex;align-items:center;gap:6px;padding:14px;color:var(--cm-danger);font:500 11.5px/1.4 var(--cm-font-sans)"><i class="ti ti-alert-triangle" style="font-size:14px;flex-shrink:0"></i>Error al cargar esta tarjeta</div>';
+  if (body) body.innerHTML = '<div style="display:flex;align-items:center;gap:6px;padding:14px;color:var(--cm-danger);font:500 11.5px/1.4 var(--cm-font-sans)"><i class="ti ti-alert-triangle" style="font-size:14px;flex-shrink:0"></i>Failed to load this card</div>';
   console.error('[GPS card ' + cardId + ']', err);
 }
 
@@ -11265,7 +11265,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       if (equivalents.length < _ZT_MIN) {
         body.innerHTML = `<div style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
-          Sin sesiones ${matchKey} equivalentes suficientes (encontradas: ${equivalents.length}, mínimo: ${_ZT_MIN}).
+          Not enough equivalent ${matchKey} sessions (found: ${equivalents.length}, minimum: ${_ZT_MIN}).
         </div>`;
         return;
       }
@@ -11329,7 +11329,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     } catch (e) {
       console.warn('renderZt:', e);
-      body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Error al calcular.</div>';
+      body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Calculation failed.</div>';
     }
   }
 
@@ -11527,7 +11527,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     const compareSessionId = st?.compareSessionId;
     if (!compareSessionId) {
-      body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Elegí una fecha comparativa para ver el heatmap de outliers.</div>';
+      body.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Pick a comparison date to see the outlier heatmap.</div>';
       return;
     }
 
@@ -11591,7 +11591,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     } catch (e) {
       console.warn('renderScOutliers:', e);
       const body2 = document.getElementById('outliersBody');
-      if (body2) body2.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted)">Error al calcular.</div>';
+      if (body2) body2.innerHTML = '<div style="padding:12px 0 12px 10px;color:var(--cm-fg-muted)">Calculation failed.</div>';
     }
   }
 
@@ -11752,7 +11752,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     ).slice(0, 30);
 
     if (!candidates.length) {
-      sel.innerHTML = `<option value="">Sin sesiones ${mdCode} disponibles</option>`;
+      sel.innerHTML = `<option value="">No ${mdCode} sessions available</option>`;
       return;
     }
     sel.innerHTML = '<option value="">Compare with…</option>';
@@ -11777,7 +11777,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       return;
     }
     if (!refId) {
-      body.innerHTML = '<div class="gp-empty" style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Elegí una sesión de referencia en el selector de arriba.</div>';
+      body.innerHTML = '<div class="gp-empty" style="padding:16px 0;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">Pick a reference session in the selector above.</div>';
       return;
     }
     if (!window.sb) return;
@@ -11836,7 +11836,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     } catch (e) {
       console.warn('renderVsSession:', e);
-      body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Error al calcular.</div>';
+      body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Calculation failed.</div>';
     }
   }
 
