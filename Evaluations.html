@@ -2718,9 +2718,9 @@
     const total = ds+hs+il+sm+aslr+tsp+rs;
     const resEl=document.getElementById('paResults'), zoneEl=document.getElementById('paZones');
     let riskLevel, riskCls, riskColor;
-    if (total<=14) { riskLevel='ALTO RIESGO de lesión'; riskCls='developing'; riskColor='#B91C1C'; }
-    else if (total<=16) { riskLevel='Riesgo moderado'; riskCls='intermediate'; riskColor='#B45309'; }
-    else { riskLevel='Rango óptimo'; riskCls='elite'; riskColor='#15803D'; }
+    if (total<=14) { riskLevel='HIGH injury risk'; riskCls='developing'; riskColor='#B91C1C'; }
+    else if (total<=16) { riskLevel='Moderate risk'; riskCls='intermediate'; riskColor='#B45309'; }
+    else { riskLevel='Optimal range'; riskCls='elite'; riskColor='#15803D'; }
     const asym=[];
     if (Math.abs(hsL-hsR)>1) asym.push(`Hurdle Step (L=${hsL} R=${hsR})`);
     if (Math.abs(ilL-ilR)>1) asym.push(`In-Line Lunge (L=${ilL} R=${ilR})`);
@@ -2757,13 +2757,13 @@
       return `<tr><td style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${b.name}</td><td style="text-align:center">${lr}</td><td style="text-align:center;font:700 14px/1 var(--cm-font-mono);color:${sc}">${b.s}</td><td style="text-align:center;color:${sc};letter-spacing:-1px;font-size:12px">${dots}</td></tr>`;
     }).join('');
     zoneEl.innerHTML = `
-      <div class="pa-section" style="margin-top:0">Desglose por test</div>
+      <div class="pa-section" style="margin-top:0">Breakdown by test</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
         <table class="pa-zone-table"><thead><tr><th>Test</th><th style="text-align:center">L / R</th><th style="text-align:center">Score</th><th></th></tr></thead><tbody>${brkRows}</tbody></table>
       </div>
       <div class="pa-section">Referencia · Kiesel et al. (2007)</div>
       <div class="pt-formula" style="font-size:11px">
-        Score ≤ 14 → ALTO RIESGO de lesión (OR 11.7)<br>Score 15–16 → Riesgo moderado<br>Score 17–21 → Rango óptimo<br>
+        Score ≤ 14 → HIGH injury risk (OR 11.7)<br>Score 15–16 → Moderate risk<br>Score 17–21 → Optimal range<br>
         <span class="cit">Cook (2010) · Kiesel, Plisky &amp; Voight (2007)</span>
       </div>`;
     document.getElementById('paFootInfo').textContent = `FMS ${total}/21 · ${riskLevel}${asym.length?` · ${asym.length} asimetría(s)`:''}${pains.length?` · ⚠ dolor en ${pains.length} test(s)`:''}`;
@@ -2801,7 +2801,7 @@
       ${asymAlert?`<div style="margin-top:5px;padding:8px;background:rgba(217,119,6,0.1);border-radius:6px;border:1px solid rgba(217,119,6,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">🟡 Asimetría bilateral detectada (${Math.abs(lCm-rCm).toFixed(1)} cm)</div>`:''}
     </div>`;
     zoneEl.innerHTML=`
-      <div class="pa-section" style="margin-top:0">Rangos · Weight-Bearing Lunge Test</div>
+      <div class="pa-section" style="margin-top:0">Ranges · Weight-Bearing Lunge Test</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
         <table class="pa-zone-table"><thead><tr><th>Clasificación</th><th class="r">Distancia</th><th class="r">Tibial</th></tr></thead>
         <tbody>
@@ -2836,7 +2836,7 @@
       if (ir<20) alerts.push({lv:'red',msg:`🔴 IR ${side} = ${ir}° — Rotación interna severamente limitada (riesgo cadera/ingle)`});
       else if (has(er)&&ir<25&&er>65) alerts.push({lv:'red',msg:`🔴 BIBE ${side}: IR=${ir}° + ER=${er}° — Déficit rotación interna — evaluar FAI`});
       else if (ir<30) alerts.push({lv:'warn',msg:`🟡 IR ${side} = ${ir}° — Rotación interna reducida — monitorear`});
-      if (has(er)&&(ir+er)<80) alerts.push({lv:'warn',msg:`🟡 Rango total ${side} = ${ir+er}° — Revisar movilidad de cadera`});
+      if (has(er)&&(ir+er)<80) alerts.push({lv:'warn',msg:`🟡 Total range ${side} = ${ir+er}° — Review hip mobility`});
     });
     if (has(irL)&&has(irR)&&Math.abs(irL-irR)>15) alerts.push({lv:'warn',msg:`🟡 Asimetría bilateral IR: L=${irL}° R=${irR}° (dif. ${Math.abs(irL-irR)}°)`});
     const sideCard=(ir,er,label)=>(!has(ir)&&!has(er))?'':
@@ -2851,7 +2851,7 @@
       ${alerts.map(a=>`<div style="margin-top:5px;padding:7px 10px;border-radius:6px;border:1px solid ${a.lv==='red'?'rgba(220,38,38,0.25)':'rgba(217,119,6,0.25)'};background:${a.lv==='red'?'rgba(220,38,38,0.1)':'rgba(217,119,6,0.1)'};font:500 12px/1.4 var(--cm-font-sans);color:${a.lv==='red'?'#B91C1C':'#B45309'}">${a.msg}</div>`).join('')}
     </div>`;
     zoneEl.innerHTML=`
-      <div class="pa-section" style="margin-top:0">Rangos normales en atletas · Lerebours et al. (2016)</div>
+      <div class="pa-section" style="margin-top:0">Normal athlete ranges · Lerebours et al. (2016)</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
         <table class="pa-zone-table"><thead><tr><th>Movimiento</th><th class="r">Normal</th><th class="r">Alerta</th></tr></thead>
         <tbody>

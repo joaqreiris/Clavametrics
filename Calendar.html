@@ -695,7 +695,7 @@
       <div class="cal-team-switch" style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
         <select id="calTeamSelect" onchange="onTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer">
-          <option value="">Cargando…</option>
+          <option value="">Loading…</option>
         </select>
       </div>
       <div class="hub-crumb">
@@ -2053,7 +2053,7 @@ async function renderWorkload() {
   const clubId = _clubId || await window.getClubId();
   if (!clubId) return;
   if (!_allMCs.length) {
-    chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans);text-align:center;padding:20px">Sin planificación cargada en esta categoría todavía.</div>';
+    chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans);text-align:center;padding:20px">No plan loaded for this team yet.</div>';
     return;
   }
 
@@ -2064,7 +2064,7 @@ async function renderWorkload() {
   const to   = Math.min(sorted.length - 1, cur + 2);
   const mcs  = sorted.slice(from, to + 1);
   if (!mcs.length) {
-    chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans);text-align:center;padding:20px">Sin planificación cargada en esta categoría todavía.</div>';
+    chartEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:500 12.5px/1.4 var(--cm-font-sans);text-align:center;padding:20px">No plan loaded for this team yet.</div>';
     const lbls = document.querySelector('.wk-labels'); if (lbls) lbls.innerHTML = '';
     return;
   }
@@ -4794,7 +4794,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     _myTeams = teams;
     const sel = document.getElementById('calTeamSelect');
-    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    if (!teams.length) { sel.innerHTML = '<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _activeTeamId = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t => `<option value="${t.id}" ${t.id===_activeTeamId?'selected':''}>${t.name}</option>`).join('');

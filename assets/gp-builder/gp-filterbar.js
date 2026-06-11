@@ -252,7 +252,7 @@
         `<button class="fb-link" type="button" data-act="all">Seleccionar todo</button>` +
         `<button class="fb-link" type="button" data-act="none">Limpiar</button>` +
       `</div>` +
-      `<div class="fb-list"><div class="fb-empty">Cargando…</div></div>`;
+      `<div class="fb-list"><div class="fb-empty">Loading…</div></div>`;
 
     panel.addEventListener('click', e => e.stopPropagation());
     panel.querySelector('.fb-search input').addEventListener('input', e => filterList(cfg.key, e.target.value));

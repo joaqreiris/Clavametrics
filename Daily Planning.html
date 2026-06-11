@@ -270,7 +270,7 @@
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
         <select id="dpTeamSelect" onchange="dpOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer">
-          <option value="">Cargando…</option>
+          <option value="">Loading…</option>
         </select>
       </div>
       <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Daily planning</span><span class="sep">/</span><span id="dpCrumbDate">…</span></div>
@@ -1280,7 +1280,7 @@ async function dpExportPDF() {
     }
     _dpTeams = teams;
     const sel = document.getElementById('dpTeamSelect');
-    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    if (!teams.length) { sel.innerHTML = '<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _dpTeamId = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t => `<option value="${t.id}" ${t.id===_dpTeamId?'selected':''}>${t.name}</option>`).join('');

@@ -282,13 +282,13 @@
           <i class="ti ti-clock-exclamation" style="font-size:14px"></i>RPE tardíos sin sesión
         </div>
         <div id="pendingRpeList" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-          <div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Cargando…</div>
+          <div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
         </div>
       </div>
       <div id="rpeChecklistWrap" style="margin-top:18px">
         <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Checklist por sesión</div>
         <select id="checklistSession" onchange="loadRpeChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px">
-          <option value="">Elegí una sesión…</option>
+          <option value="">Pick a session…</option>
         </select>
         <div id="checklistBody" style="margin-top:10px"></div>
       </div>
@@ -306,7 +306,7 @@
           <button onclick="closeShareRpe()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
         </div>
         <div style="padding:18px">
-          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Categoría</label>
+          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Team</label>
           <select id="shareRTeam" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px"></select>
           <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 6px">Sesión (opcional · para checklist exacta)</label>
           <select id="shareRSession" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px">
@@ -724,7 +724,7 @@ async function submitRPE() {
   async function openShareRpe() {
     const sel = document.getElementById('shareRTeam');
     document.getElementById('shareRResult').style.display = 'none';
-    sel.innerHTML = '<option>Cargando…</option>';
+    sel.innerHTML = '<option>Loading…</option>';
     document.getElementById('shareRBackdrop').style.display = 'flex';
     const cid = await window.getClubId();
     const profile = await window.getProfile();
@@ -738,7 +738,7 @@ async function submitRPE() {
       const s = new Set(mine);
       teams = teams.filter(t => s.has(t.id));
     }
-    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    if (!teams.length) { sel.innerHTML = '<option value="">No teams</option>'; return; }
     sel.innerHTML = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
     try {
       const sess = await window.sb.rpc('recent_sessions', { p_club_id: cid, p_limit: 8 });
@@ -869,7 +869,7 @@ async function submitRPE() {
         .limit(8);
       const sel = document.getElementById('checklistSession');
       if (!sel) return;
-      sel.innerHTML = '<option value="">Elegí una sesión…</option>' +
+      sel.innerHTML = '<option value="">Pick a session…</option>' +
         (sess||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')}</option>`).join('');
     } catch (e) { console.warn('[RPE] checklist init:', e.message); }
   }
@@ -877,7 +877,7 @@ async function submitRPE() {
     const sid = document.getElementById('checklistSession').value;
     const body = document.getElementById('checklistBody');
     if (!sid) { body.innerHTML = ''; return; }
-    body.innerHTML = '<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Cargando…</div>';
+    body.innerHTML = '<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>';
     try {
       const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sid });
       if (error) throw error;
