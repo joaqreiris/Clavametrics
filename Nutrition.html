@@ -206,7 +206,7 @@
         </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm" id="nuBtnTemplates"><i class="ti ti-template" style="font-size:14px"></i>Plan templates</button>
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-import" style="font-size:14px"></i>Import body comp</button>
+          <button class="cm-btn is-outline is-sm" id="nuBtnWeighIn"><i class="ti ti-scale" style="font-size:14px"></i>Add weigh-in</button>
           <button class="cm-btn is-primary is-sm" id="nuBtnNewPlan"><i class="ti ti-plus" style="font-size:14px"></i>New plan</button>
         </div>
       </header>
@@ -424,51 +424,15 @@
                 <h4>Body composition · last 12 weeks</h4>
                 <span class="sub">Weight + body fat % · DEXA + 7-fold</span>
                 <div class="right">
-                  <div style="display:inline-flex;padding:3px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;gap:2px">
-                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:var(--cm-surface);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1);font:500 12px/1 var(--cm-font-sans)">Both</button>
-                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans)">Weight</button>
-                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans)">% fat</button>
-                    <button class="cm-btn is-sm" style="height:26px;padding:0 10px;border:0;background:transparent;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans)">Lean mass</button>
+                  <div id="nuBcToggle" style="display:inline-flex;padding:3px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;gap:2px">
+                    <button class="cm-btn is-sm nu-bc-tg is-on" data-bcmode="both" style="height:26px;padding:0 10px;border:0;font:500 12px/1 var(--cm-font-sans)">Both</button>
+                    <button class="cm-btn is-sm nu-bc-tg" data-bcmode="weight" style="height:26px;padding:0 10px;border:0;font:500 12px/1 var(--cm-font-sans)">Weight</button>
+                    <button class="cm-btn is-sm nu-bc-tg" data-bcmode="fat" style="height:26px;padding:0 10px;border:0;font:500 12px/1 var(--cm-font-sans)">% fat</button>
+                    <button class="cm-btn is-sm nu-bc-tg" data-bcmode="lean" style="height:26px;padding:0 10px;border:0;font:500 12px/1 var(--cm-font-sans)">Lean mass</button>
                   </div>
-                  <button><i class="ti ti-dots"></i></button>
                 </div>
               </div>
-              <svg viewBox="0 0 800 200" font-family="Geist, ui-sans-serif">
-                <g stroke="var(--cm-border-soft)" stroke-width="1">
-                  <line x1="40" y1="30" x2="780" y2="30"/>
-                  <line x1="40" y1="85" x2="780" y2="85"/>
-                  <line x1="40" y1="140" x2="780" y2="140"/>
-                </g>
-                <text x="34" y="34" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">76 / 12</text>
-                <text x="34" y="88" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">75 / 10</text>
-                <text x="34" y="144" text-anchor="end" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">74 / 8</text>
-                <line x1="40" y1="65" x2="780" y2="65" stroke="var(--cm-success)" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
-                <text x="44" y="61" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-success)">Target · 8.5% fat</text>
-                <!-- Weight line (green) -->
-                <path d="M 40,40 L 124,46 L 208,52 L 292,58 L 376,68 L 460,78 L 544,88 L 628,98 L 712,108 L 780,118" fill="none" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <g fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2">
-                  <circle cx="40" cy="40" r="3"/><circle cx="208" cy="52" r="3"/><circle cx="376" cy="68" r="3"/><circle cx="544" cy="88" r="3"/><circle cx="712" cy="108" r="3"/><circle cx="780" cy="118" r="4"/>
-                </g>
-                <!-- Body fat line (orange) -->
-                <path d="M 40,50 L 124,60 L 208,70 L 292,80 L 376,90 L 460,98 L 544,108 L 628,118 L 712,128 L 780,135" fill="none" stroke="#F59E0B" stroke-width="2.5" stroke-dasharray="6 3" stroke-linecap="round"/>
-                <g fill="#F59E0B" stroke="var(--cm-surface)" stroke-width="2">
-                  <circle cx="40" cy="50" r="3"/><circle cx="376" cy="90" r="3"/><circle cx="712" cy="128" r="3"/><circle cx="780" cy="135" r="4"/>
-                </g>
-                <g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">
-                  <text x="40" y="180" text-anchor="middle">W1</text>
-                  <text x="208" y="180" text-anchor="middle">W3</text>
-                  <text x="376" y="180" text-anchor="middle">W6</text>
-                  <text x="544" y="180" text-anchor="middle">W9</text>
-                  <text x="780" y="180" text-anchor="end">Today</text>
-                </g>
-                <g transform="translate(40, 198)" font-size="11" font-family="Geist, sans-serif" fill="var(--cm-fg-muted)">
-                  <rect x="0" y="-8" width="11" height="11" fill="var(--cm-accent)" rx="2"/>
-                  <text x="17" y="2">Weight (kg) · 75.6 → 74.5 (−1.1)</text>
-                  <rect x="220" y="-8" width="11" height="11" fill="#F59E0B" rx="2"/>
-                  <text x="237" y="2">Body fat (%) · 10.6 → 9.4 (−1.2)</text>
-                  <text x="500" y="2" fill="var(--cm-success)" font-weight="600">↗ on track</text>
-                </g>
-              </svg>
+              <div id="nuBcChart"></div>
             </div>
 
             <!-- ATTENTIONS & REFERRALS -->
@@ -1142,6 +1106,180 @@
     }).join('');
   }
 
+  // ═══════════════════════════════════════════════════════════
+  //  FASE D — Composición corporal (weigh-ins + gráfico evolución)
+  // ═══════════════════════════════════════════════════════════
+  let _bcData = [];
+  let _bcMode = 'both';
+  const BCX0 = 44, BCX1 = 780, BCYT = 30, BCYB = 140;
+
+  async function renderBodyComp(p) {
+    const cutoff = new Date(Date.now() - 84 * 864e5).toISOString().slice(0, 10); // ~12 semanas
+    const { data } = await window.sb.from('body_composition')
+      .select('measured_date,weight_kg,body_fat_pct,lean_mass_kg,method')
+      .eq('player_id', p.id).eq('club_id', clubId)
+      .gte('measured_date', cutoff).order('measured_date', { ascending: true });
+    _bcData = data || [];
+    drawBodyComp();
+  }
+
+  function drawBodyComp() {
+    const host = document.getElementById('nuBcChart');
+    if (!host) return;
+    const rows = _bcData;
+    if (!rows.length) {
+      host.innerHTML = `<div style="padding:30px;text-align:center;color:var(--cm-fg-muted);font:500 13px/1.5 var(--cm-font-sans)">No body composition data in the last 12 weeks.<br><button class="cm-btn is-primary is-sm" id="nuBcAdd" style="margin-top:10px"><i class="ti ti-plus" style="font-size:14px"></i>Add weigh-in</button></div>`;
+      const b = host.querySelector('#nuBcAdd'); if (b) b.onclick = openWeighInModal;
+      return;
+    }
+    // estado visual de los toggles
+    document.querySelectorAll('.nu-bc-tg').forEach(btn => {
+      const on = btn.dataset.bcmode === _bcMode;
+      btn.style.background = on ? 'var(--cm-surface)' : 'transparent';
+      btn.style.color = on ? 'var(--cm-fg-strong)' : 'var(--cm-fg-muted)';
+      btn.style.boxShadow = on ? 'var(--cm-shadow-1)' : 'none';
+    });
+
+    const n = rows.length;
+    const today = new Date().toISOString().slice(0, 10);
+    const x = i => n === 1 ? BCX1 : (BCX0 + (BCX1 - BCX0) * i / (n - 1));
+    const leanVal = r => r.lean_mass_kg != null ? r.lean_mass_kg
+      : (r.weight_kg != null && r.body_fat_pct != null ? NC.leanMass(r.weight_kg, r.body_fat_pct) : null);
+    const SER = {
+      weight: { color: 'var(--cm-accent)', dash: '', get: r => r.weight_kg, label: 'Weight (kg)' },
+      fat:    { color: '#F59E0B', dash: '6 3', get: r => r.body_fat_pct, label: 'Body fat (%)' },
+      lean:   { color: '#8B5CF6', dash: '', get: r => leanVal(r), label: 'Lean mass (kg)' },
+    };
+    const active = _bcMode === 'both' ? ['weight', 'fat'] : [_bcMode];
+    const scaleFor = getter => {
+      const vs = rows.map(getter).filter(v => v != null);
+      if (!vs.length) return null;
+      let mn = Math.min(...vs), mx = Math.max(...vs);
+      if (mn === mx) { mn -= 1; mx += 1; }
+      const pad = (mx - mn) * 0.18; mn -= pad; mx += pad;
+      return { mn, mx, y: v => BCYB - (v - mn) / (mx - mn) * (BCYB - BCYT) };
+    };
+    const scales = {}; active.forEach(k => { scales[k] = scaleFor(SER[k].get); });
+    const inv = (sc, y) => sc.mn + (BCYB - y) / (BCYB - BCYT) * (sc.mx - sc.mn);
+    const prim = scales[active[0]];
+
+    // gridlines + ejes
+    const gy = [BCYT, (BCYT + BCYB) / 2, BCYB];
+    let svg = `<g stroke="var(--cm-border-soft)" stroke-width="1">${gy.map(y => `<line x1="${BCX0}" y1="${y}" x2="${BCX1}" y2="${y}"/>`).join('')}</g>`;
+    if (prim) svg += `<g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">${gy.map(y => `<text x="${BCX0 - 6}" y="${y + 3}" text-anchor="end">${inv(prim, y).toFixed(1)}</text>`).join('')}</g>`;
+    if (_bcMode === 'both' && scales.fat) svg += `<g font-size="10" font-family="Geist Mono, monospace" fill="#F59E0B">${gy.map(y => `<text x="${BCX1 + 6}" y="${y + 3}">${inv(scales.fat, y).toFixed(1)}</text>`).join('')}</g>`;
+
+    // línea de target de %graso
+    const tgtBf = _nuCurrent && _nuCurrent.target && _nuCurrent.target.body_fat_target_pct;
+    if (tgtBf != null && active.includes('fat') && scales.fat) {
+      const ty = scales.fat.y(tgtBf);
+      if (ty >= BCYT && ty <= BCYB) svg += `<line x1="${BCX0}" y1="${ty}" x2="${BCX1}" y2="${ty}" stroke="var(--cm-success)" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"/><text x="${BCX0 + 4}" y="${ty - 4}" font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-success)">Target · ${tgtBf}% fat</text>`;
+    }
+
+    // series (paths + puntos)
+    active.forEach(k => {
+      const s = SER[k], sc = scales[k]; if (!sc) return;
+      const pts = [];
+      rows.forEach((r, i) => { const v = s.get(r); if (v != null) pts.push([x(i), sc.y(v)]); });
+      if (!pts.length) return;
+      const d = 'M ' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' L ');
+      svg += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"${s.dash ? ` stroke-dasharray="${s.dash}"` : ''}/>`;
+      svg += `<g fill="${s.color}" stroke="var(--cm-surface)" stroke-width="2">${pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3"/>`).join('')}</g>`;
+    });
+
+    // etiquetas eje x (primera, media, última)
+    const idxs = n === 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
+    svg += `<g font-size="10" font-family="Geist Mono, monospace" fill="var(--cm-fg-muted)">${idxs.map((i, k) => {
+      const dt = rows[i].measured_date;
+      const lbl = dt === today ? 'Today' : nuFmtDate(dt);
+      const anchor = k === 0 ? 'start' : (k === idxs.length - 1 ? 'end' : 'middle');
+      return `<text x="${x(i).toFixed(1)}" y="170" text-anchor="${anchor}">${lbl}</text>`;
+    }).join('')}</g>`;
+
+    // leyenda con delta inicio→fin
+    const delta = getter => {
+      const vs = rows.map(getter);
+      const first = vs.find(v => v != null);
+      const last = [...vs].reverse().find(v => v != null);
+      if (first == null || last == null) return null;
+      return { first, last, d: last - first };
+    };
+    let lx = BCX0, leg = '';
+    active.forEach(k => {
+      const s = SER[k], dd = delta(s.get); if (!dd) return;
+      const sign = dd.d >= 0 ? '+' : '−';
+      leg += `<rect x="${lx}" y="190" width="11" height="11" fill="${s.color}" rx="2"/><text x="${lx + 16}" y="199">${s.label} · ${dd.first.toFixed(1)} → ${dd.last.toFixed(1)} (${sign}${Math.abs(dd.d).toFixed(1)})</text>`;
+      lx += 270;
+    });
+    const fatD = delta(SER.fat.get);
+    if (active.includes('fat') && fatD && fatD.d < 0) leg += `<text x="${BCX1}" y="199" text-anchor="end" fill="var(--cm-success)" font-weight="600">↘ on track</text>`;
+    svg += `<g font-size="11" font-family="Geist, sans-serif" fill="var(--cm-fg-muted)">${leg}</g>`;
+
+    host.innerHTML = `<svg viewBox="0 0 800 210" font-family="Geist, ui-sans-serif" style="width:100%;display:block">${svg}</svg>`;
+  }
+
+  // ── Modal: registrar weigh-in ──────────────────────────────
+  async function openWeighInModal() {
+    if (!_nuCurrent) { alert('Select a player first.'); return; }
+    nuBuildModal();
+    const p = _nuCurrent.player;
+    let ov = document.getElementById('nuWeighModal');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'nuWeighModal'; ov.className = 'nu-modal-ov';
+      ov.innerHTML = `<div class="nu-modal" role="dialog" aria-modal="true">
+        <div class="nu-modal-h"><i class="ti ti-scale" style="color:var(--cm-accent);font-size:18px"></i>
+          <h3 id="wi_title">Add weigh-in</h3><button class="x" id="wi_close"><i class="ti ti-x"></i></button></div>
+        <div class="nu-modal-b">
+          <div class="nu-grid">
+            <div class="nu-fld"><label>Date</label><input id="wi_date" type="date"></div>
+            <div class="nu-fld"><label>Weight (kg)</label><input id="wi_weight" type="number" step="0.1"></div>
+            <div class="nu-fld"><label>Body fat (%)</label><input id="wi_bf" type="number" step="0.1"></div>
+            <div class="nu-fld"><label>Method</label><select id="wi_method"><option value="scale">Scale</option><option value="skinfold">Skinfold</option><option value="bia">BIA</option><option value="dexa">DEXA</option></select></div>
+            <div class="nu-fld"><label>Lean mass (auto)</label><input id="wi_lean" readonly></div>
+          </div>
+          <div class="nu-fld"><label>Notes</label><textarea id="wi_notes" placeholder="Optional…"></textarea></div>
+        </div>
+        <div class="nu-modal-f"><button class="cm-btn is-outline is-sm" id="wi_cancel">Cancel</button>
+          <button class="cm-btn is-primary is-sm" id="wi_save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i>Save weigh-in</button></div>
+      </div>`;
+      document.body.appendChild(ov);
+      const $ = id => ov.querySelector('#' + id);
+      $('wi_close').onclick = $('wi_cancel').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+      const recalcLean = () => {
+        const w = parseFloat($('wi_weight').value), bf = parseFloat($('wi_bf').value);
+        const lm = NC.leanMass(isNaN(w) ? null : w, isNaN(bf) ? null : bf);
+        $('wi_lean').value = lm != null ? lm + ' kg' : '';
+      };
+      $('wi_weight').addEventListener('input', recalcLean);
+      $('wi_bf').addEventListener('input', recalcLean);
+      $('wi_save').onclick = async () => {
+        const pl = _nuCurrent.player;
+        const w = parseFloat($('wi_weight').value), bf = parseFloat($('wi_bf').value);
+        if (isNaN(w) && isNaN(bf)) { alert('Enter at least weight or body fat.'); return; }
+        const btn = $('wi_save'); btn.disabled = true;
+        const { error } = await window.sb.from('body_composition').insert({
+          player_id: pl.id, club_id: clubId,
+          measured_date: $('wi_date').value || new Date().toISOString().slice(0, 10),
+          weight_kg: isNaN(w) ? null : w, body_fat_pct: isNaN(bf) ? null : bf,
+          lean_mass_kg: NC.leanMass(isNaN(w) ? null : w, isNaN(bf) ? null : bf),
+          method: $('wi_method').value, notes: $('wi_notes').value.trim() || null,
+          created_by: profile?.id || null,
+        });
+        btn.disabled = false;
+        if (error) { alert('Could not save weigh-in: ' + error.message); return; }
+        ov.classList.remove('on');
+        loadPlayerDetail(pl);
+      };
+    }
+    const $ = id => ov.querySelector('#' + id);
+    $('wi_title').textContent = `Add weigh-in · ${p._name || 'player'}`;
+    $('wi_date').value = new Date().toISOString().slice(0, 10);
+    $('wi_weight').value = ''; $('wi_bf').value = ''; $('wi_lean').value = '';
+    $('wi_notes').value = ''; $('wi_method').value = 'scale';
+    ov.classList.add('on');
+  }
+
   async function loadPlayerDetail(p) {
     // Header
     const av = document.querySelector('.nu-d-head .av');
@@ -1174,6 +1312,7 @@
     _nuCurrent = { player: p, target: tgt || null, bodyComp: bc || null };
     renderTargets(p, tgt, bc);
     renderMealPlan(p);
+    renderBodyComp(p);
 
     const kcalRef = (tgt && tgt.kcal_target) ? tgt.kcal_target : 2500;
     const refs = {
@@ -1264,6 +1403,10 @@
   if (btnNew) btnNew.onclick = openAssignModal;
   const btnEdit = document.getElementById('nuBtnEditPlan');
   if (btnEdit) btnEdit.onclick = openAssignModal;
+  const btnWeigh = document.getElementById('nuBtnWeighIn');
+  if (btnWeigh) btnWeigh.onclick = openWeighInModal;
+  document.querySelectorAll('.nu-bc-tg').forEach(btn =>
+    btn.onclick = () => { _bcMode = btn.dataset.bcmode; drawBodyComp(); });
 })();
   let _nuTeamId = null;
   async function nuInitTeamSwitch(clubId) {
