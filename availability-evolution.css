@@ -120,14 +120,26 @@
 
 /* ─── Calendar heatmap ────────────────────────────────────── */
 .hm { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
-.hm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; flex: 1; min-width: 320px; }
+.hm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; flex: 1; min-width: 280px; }
 .hm-dow { text-align: center; font: 600 10px/1 var(--cm-font-mono); letter-spacing: 0.06em; color: var(--cm-fg-faint); padding-bottom: 3px; }
-.hm-cell { aspect-ratio: 1 / 1; border-radius: var(--cm-r-3); border: 1px solid var(--cm-border-soft); padding: 7px 8px; display: flex; flex-direction: column; cursor: default; position: relative; transition: transform var(--cm-dur-1) var(--cm-ease), box-shadow var(--cm-dur-1) var(--cm-ease); min-height: 58px; }
+.hm-cell { aspect-ratio: 1 / 1; border-radius: var(--cm-r-2); border: 1px solid var(--cm-border-soft); padding: 4px 5px; display: flex; flex-direction: column; cursor: default; position: relative; transition: transform var(--cm-dur-1) var(--cm-ease), box-shadow var(--cm-dur-1) var(--cm-ease); min-height: 42px; }
 .hm-cell.empty { background: transparent; border-color: transparent; }
 .hm-cell:not(.empty):hover { transform: translateY(-1px); box-shadow: var(--cm-shadow-2); z-index: 2; }
-.hm-cell .d { font: 600 12px/1 var(--cm-font-mono); }
-.hm-cell .p { margin-top: auto; font: 700 13px/1 var(--cm-font-mono); }
-.hm-cell .sub { font: 500 9px/1 var(--cm-font-mono); opacity: 0.78; margin-top: 2px; }
+.hm-cell .d { font: 600 10px/1 var(--cm-font-mono); }
+.hm-cell .p { margin-top: auto; font: 700 11px/1 var(--cm-font-mono); }
+.hm-cell .sub { display: none; }
+
+/* ── Densidad DENSE (> 5 semanas): celda más chica, solo día ── */
+.hm-grid.hm-dense { gap: 3px; }
+.hm-grid.hm-dense .hm-cell { min-height: 28px; padding: 2px 3px; border-radius: 4px; }
+.hm-grid.hm-dense .hm-cell .d { font-size: 8.5px; }
+.hm-grid.hm-dense .hm-cell .p { font-size: 9px; }
+
+/* ── Densidad MINI (temporada larga > 90 días): solo color, estilo GitHub ── */
+.hm-grid.hm-mini { gap: 2px; }
+.hm-grid.hm-mini .hm-cell { min-height: 15px; padding: 0; border-radius: 3px; }
+.hm-grid.hm-mini .hm-cell .d,
+.hm-grid.hm-mini .hm-cell .p { display: none; }
 .hm-cell.is-out { opacity: 0.4; }
 .hm-cell.is-match::after { content: ""; position: absolute; top: 6px; right: 6px; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.5; }
 
