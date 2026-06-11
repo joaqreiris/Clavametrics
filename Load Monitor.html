@@ -312,7 +312,7 @@
     <div class="hub-topbar">
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
-        <select id="lmTeamSelect" onchange="lmOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+        <select id="lmTeamSelect" onchange="lmOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
       </div>
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span>
@@ -1392,7 +1392,7 @@
     let teams = await window.getTeams(clubId);
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('lmTeamSelect');
-    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _lmTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_lmTeamId?'selected':''}>${t.name}</option>`).join('');

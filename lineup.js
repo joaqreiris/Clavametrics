@@ -129,7 +129,7 @@
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('luTeamSelect');
     if (!sel) return;
-    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _luTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_luTeamId?'selected':''}>${t.name}</option>`).join('');

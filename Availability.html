@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Availability — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
+<link rel="stylesheet" href="availability-evolution.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
   <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
@@ -16,6 +17,7 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="availability-evolution-bc.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -335,7 +337,7 @@
     <div class="hub-topbar">
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
-        <select id="avTeamSelect" onchange="avOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Cargando…</option></select>
+        <select id="avTeamSelect" onchange="avOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
       </div>
       <div class="hub-crumb">
         <i class="ti ti-home"></i><span>Clava FC</span><span class="sep">/</span>
@@ -900,6 +902,10 @@
     if (mcMatchDate && mcMatchDate >= mcStart && mcMatchDate <= mcEnd)
       matchDates[mcMatchDate] = matchDates[mcMatchDate] || mcRival || 'Match';
 
+    // Exponer match-dates para que avRenderStats marque los días de partido
+    // en la evolución (misma fuente que el matrix). NO query nueva.
+    window.__avMatchDates = matchDates;
+
     renderHeader(matchDates);
 
     players    = playersData || [];
@@ -1175,7 +1181,7 @@
     let teams = await window.getTeams(clubId);
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('avTeamSelect');
-    if (!teams.length) { sel.innerHTML='<option value="">Sin categorías</option>'; return; }
+    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _avTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_avTeamId?'selected':''}>${t.name}</option>`).join('');
@@ -1274,22 +1280,33 @@
     const availPct = tTotal ? Math.round((tAvail/tTotal)*100) : 0;
     window._avStatRows = Object.values(stat);
 
-    // Serie temporal: por cada día del rango, contar estados
-    const byDate = {};
-    MC_DATES.forEach(d => byDate[d] = { avail:0, partial:0, injury:0, illness:0 });
-    (avail||[]).forEach(r => {
-      const b = byDate[r.date]; if (!b) return;
-      const st = (r.status||'').toLowerCase();
-      if (st === 'available') b.avail++;
-      else if (st === 'partial') b.partial++;
-      else if (st === 'injured') b.injury++;
-      else if (st === 'illness' || st === 'sick') b.illness++;
+    // ── Serie diaria para AvEvolution (línea % + heatmap) ──
+    // 6 categorías que suman N (cada player aporta 1 por día). Se arma desde
+    // `players` y `avail` ya en memoria (team-scoped, mismo rango). Sin query nueva.
+    // TODO(Seasons): acotar el rango a los días de la temporada activa (ej 25-26)
+    // por categoría. Hoy los días sin fila se cuentan como `disp`, lo que en
+    // offseason/vacaciones infla la disponibilidad. Cuando exista la tabla
+    // seasons (tipo + inicio/fin por categoría), filtrar aquí los días inactivos.
+    const evoN = players.length;
+    const evoByKey = {};
+    (avail||[]).forEach(r => { evoByKey[r.player_id + '|' + r.date] = r; });
+    const DB2CAT = { available:'disp', partial:'mod', limited:'mod', injured:'les', unavailable:'les', sick:'enf', illness:'enf', away:'sel', absent:'aus' };
+    const matchSet = window.__avMatchDates || {};
+    const evoDays = MC_DATES.map(dStr => {
+      const c = { disp:0, mod:0, les:0, enf:0, sel:0, aus:0 };
+      players.forEach(p => {
+        const row = evoByKey[p.id + '|' + dStr];
+        if (!row) { c.disp++; return; }        // sin fila = disponible (decisión tomada)
+        c[DB2CAT[(row.status||'').toLowerCase()] || 'disp']++;
+      });
+      return {
+        date: new Date(dStr + 'T00:00:00'),     // local: fShort/getDate() del render usan hora local
+        disp:c.disp, mod:c.mod, les:c.les, enf:c.enf, sel:c.sel, aus:c.aus,
+        total: evoN,
+        pct: evoN ? Math.round((c.disp / evoN) * 100) : 0,
+        match: !!matchSet[dStr],
+      };
     });
-    const tsDates = MC_DATES.map(d => { const x = new Date(d+'T00:00:00Z'); return `${x.getUTCDate()}/${x.getUTCMonth()+1}`; });
-    const tsAvail = MC_DATES.map(d => byDate[d].avail);
-    const tsPartial = MC_DATES.map(d => byDate[d].partial);
-    const tsInjury = MC_DATES.map(d => byDate[d].injury);
-    const tsIllness = MC_DATES.map(d => byDate[d].illness);
 
     const kpi = (icon, label, value, sub, color) => `
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px;position:relative;overflow:hidden">

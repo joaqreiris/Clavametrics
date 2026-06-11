@@ -608,7 +608,7 @@
     const unreadKeys = new Set(Object.keys(_chatUnread));
     const recentToShow = recentArr.filter(r => !unreadKeys.has(r.key)).slice(0, 4);
     if (recentToShow.length) {
-      html += `<div class="cm-cp-sect-lbl">Recientes</div>`;
+      html += `<div class="cm-cp-sect-lbl">Recent</div>`;
       for (const r of recentToShow) {
         const ini = r.isGroup ? '' : (r.senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
         const av = r.isGroup
@@ -626,7 +626,7 @@
     }
     // Si no hay nada (ni no leídos ni recientes)
     if (!entries.length && !recentToShow.length) {
-      html = '<div class="cm-cp-empty">No hay conversaciones</div>';
+      html = '<div class="cm-cp-empty">No conversations</div>';
     }
     list.innerHTML = html;
   }
