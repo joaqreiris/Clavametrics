@@ -273,11 +273,11 @@
   setKpi(2, blocked.length, blocked.map(p=>`<strong>${full(p.players)}</strong>`).join(' · ') || '—');
   (async () => {
     const m0 = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
-    let _rpvCountQ = window.sb.from('rehab_plans');
-    if (_rpvPlayerIds) _rpvCountQ = _rpvCountQ.in('player_id', _rpvPlayerIds);
-    const { count } = await _rpvCountQ
+    let _rpvCountQ = window.sb.from('rehab_plans')
       .select('id', { count:'exact', head:true })
       .eq('club_id', clubId).eq('status','cleared').gte('updated_at', m0);
+    if (_rpvPlayerIds) _rpvCountQ = _rpvCountQ.in('player_id', _rpvPlayerIds);
+    const { count } = await _rpvCountQ;
     setKpi(3, count ?? 0, null);
   })();
 
@@ -419,11 +419,13 @@
       const existing = document.getElementById('po-history-panel');
       if (existing) { existing.remove(); return; }
 
-      const { data: hist } = await window.sb
+      let _rpvHistQ = window.sb
         .from('rehab_plans')
         .select('kind, status, phase, updated_at, players(first_name, last_name)')
         .eq('club_id', clubId)
-        .in('status', ['cleared','archived'])
+        .in('status', ['cleared','archived']);
+      if (_rpvPlayerIds) _rpvHistQ = _rpvHistQ.in('player_id', _rpvPlayerIds);
+      const { data: hist } = await _rpvHistQ
         .order('updated_at', { ascending: false })
         .limit(30);
 
