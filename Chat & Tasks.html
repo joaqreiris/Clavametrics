@@ -1396,6 +1396,8 @@ function updateTasksBadge() {
 
 // ── REALTIME ──
 function subscribeRealtime() {
+  // Limpiar canales viejos de esta página antes de re-suscribir (evita duplicados)
+  try { window.sb.getChannels().filter(c => ['cm-chat-messages','cm-tasks'].includes(c.topic.replace('realtime:',''))).forEach(c => window.sb.removeChannel(c)); } catch(_){}
   window.sb.channel('cm-chat-messages')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `club_id=eq.${currentUser.clubId}` }, handleNewMessage)
     .subscribe();
