@@ -167,12 +167,18 @@
     if (pct < 70) return { c: colorOf("les"), lab: "Crítico" };
     if (pct < 80) return { c: colorOf("mod"), lab: "Bajo" };
     if (pct < 90) return { c: "#84CC16",      lab: "Aceptable" };
-    return { c: colorOf("disp"), lab: "Óptimo" };
+    return { c: colorOf("disp"), lab: "Optimal" };
   }
   function renderHeatmap() {
     const grid = document.getElementById("aev-c-grid");
     if (!grid) return;
     grid.innerHTML = "";
+    // Densidad adaptable según cantidad de días: estándar / dense / mini
+    const _n = data.length;
+    grid.classList.remove("hm-dense", "hm-mini");
+    if (_n > 90) grid.classList.add("hm-mini");        // temporada larga → mini
+    else if (_n > 35) grid.classList.add("hm-dense");  // > ~5 semanas → denso
+    // (≤35 días → estándar reducido, sin clase extra)
     DOW1.forEach((d) => {
       const h = document.createElement("div"); h.className = "hm-dow"; h.textContent = d; grid.appendChild(h);
     });
