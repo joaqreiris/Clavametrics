@@ -17,18 +17,18 @@
   const SVGNS = "http://www.w3.org/2000/svg";
 
   const STATUS = [
-    { key: "disp", label: "Disponible",  v: "--st-disp" },
-    { key: "mod",  label: "Modificado",  v: "--st-mod"  },
-    { key: "les",  label: "Lesión",      v: "--st-les"  },
-    { key: "enf",  label: "Enfermedad",  v: "--st-enf"  },
-    { key: "sel",  label: "Selección",   v: "--st-sel"  },
-    { key: "aus",  label: "Ausente",     v: "--st-aus"  },
+    { key: "disp", label: "Available",   v: "--st-disp" },
+    { key: "mod",  label: "Modified",    v: "--st-mod"  },
+    { key: "les",  label: "Injury",      v: "--st-les"  },
+    { key: "enf",  label: "Illness",     v: "--st-enf"  },
+    { key: "sel",  label: "Nat. team",   v: "--st-sel"  },
+    { key: "aus",  label: "Absent",      v: "--st-aus"  },
   ];
   const STACK = ["disp", "mod", "les", "enf", "sel", "aus"];
 
-  const DOW  = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const DOW  = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const DOW1 = ["L", "M", "X", "J", "V", "S", "D"]; // lunes primero
-  const MON  = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const MON  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const fShort = (d) => `${d.getDate()} ${MON[d.getMonth()]}`;
@@ -156,7 +156,7 @@
       guide.setAttribute("x1", X(i)); guide.setAttribute("x2", X(i)); guide.classList.add("on");
       mk.setAttribute("cx", X(i)); mk.setAttribute("cy", Y(r.pct)); mk.classList.add("on");
       mk.setAttribute("stroke", r.pct < 85 ? colorOf("les") : "var(--cm-fg-strong)");
-      const head = `<div class="tc">${fFull(r.date)}</div><div class="tr"><i style="background:${colorOf("disp")}"></i>Disponible<b>${r.pct}%</b></div><div class="tr"><i style="background:var(--cm-fg-faint)"></i>Jugadores<b>${r.disp}/${N}</b></div>`;
+      const head = `<div class="tc">${fFull(r.date)}</div><div class="tr"><i style="background:${colorOf("disp")}"></i>Available<b>${r.pct}%</b></div><div class="tr"><i style="background:var(--cm-fg-faint)"></i>Players<b>${r.disp}/${N}</b></div>`;
       showTip(head, e.clientX, e.clientY);
     });
     hit.addEventListener("mouseleave", () => { guide.classList.remove("on"); mk.classList.remove("on"); hideTip(); });
@@ -229,7 +229,7 @@
 
     const meta = document.getElementById("aev-range-meta");
     if (meta) meta.innerHTML =
-      `<b>${fShort(data[0].date)}</b> → <b>${fShort(last.date)}</b> · ${n} días · ${data.filter((r) => r.match).length} partidos`;
+      `<b>${fShort(data[0].date)}</b> → <b>${fShort(last.date)}</b> · ${n} days · ${data.filter((r) => r.match).length} matches`;
   }
 
   /* ─── Leyenda ───────────────────────────────────────────── */
