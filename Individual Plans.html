@@ -325,11 +325,13 @@
   window.applyClubTheme?.();
 
   // ── Fetch active individual plans ──────────────────────────
-  const { data: plans } = await window.sb.from('individual_plans')
-    .select('id,name,status,created_at,players(first_name,last_name,position,number)')
+  const _ipTeam = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team') || null;
+  let _ipQ = window.sb.from('individual_plans')
+    .select('id,name,status,created_at,players!inner(first_name,last_name,position,number,team_id)')
     .eq('club_id', clubId)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false });
+    .eq('status', 'active');
+  if (_ipTeam) _ipQ = _ipQ.eq('players.team_id', _ipTeam);
+  const { data: plans } = await _ipQ.order('created_at', { ascending: false });
 
   if (!plans?.length) return;
 
