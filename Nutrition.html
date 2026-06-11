@@ -187,6 +187,10 @@
 
   <main class="hub-main">
     <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="nuTeamSelect" onchange="nuOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+      </div>
       <div class="hub-crumb"><i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Nutrition</span><span class="sep">/</span><span>F. Domínguez</span></div>
       <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
@@ -509,12 +513,13 @@
   const clubId = await window.getClubId();
 
   if (club) window.applyClubTheme();
-
-  const { data: players } = await window.sb.from('players')
+  await nuInitTeamSwitch(clubId);
+  let _nuPlQ = window.sb.from('players')
     .select('id,first_name,last_name,number,position,weight')
     .eq('club_id', clubId)
-    .neq('status', 'inactive')
-    .order('last_name');
+    .neq('status', 'inactive');
+  if (_nuTeamId) _nuPlQ = _nuPlQ.eq('team_id', _nuTeamId);
+  const { data: players } = await _nuPlQ.order('last_name');
 
   const list = players || [];
   list.forEach(p => { p._name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
@@ -641,6 +646,22 @@
     });
   });
 })();
+  let _nuTeamId = null;
+  async function nuInitTeamSwitch(clubId) {
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    const sel = document.getElementById('nuTeamSelect');
+    if (!sel) return;
+    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team');
+    _nuTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_nuTeamId?'selected':''}>${t.name}</option>`).join('');
+  }
+  window.nuOnTeamChange = function(){ _nuTeamId=document.getElementById('nuTeamSelect').value; sessionStorage.setItem('cal_active_team',_nuTeamId); localStorage.setItem('cal_active_team',_nuTeamId); location.reload(); };
 </script>
 
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
