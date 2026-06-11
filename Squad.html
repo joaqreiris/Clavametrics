@@ -1333,9 +1333,14 @@ async function reloadPlayers() {
     });
     teamSel?.addEventListener('change', async () => {
       _currentTeamId = teamSel.value || null;
+      if (_currentTeamId) sessionStorage.setItem('cal_active_team', _currentTeamId);
       await reloadPlayers();
     });
-    // Pre-select current team in selector if filtering
+    // Arrancar en la categoría activa (heredada de otras páginas)
+    const _savedTeam = sessionStorage.getItem('cal_active_team');
+    if (_savedTeam && _filterTeams.some(t => t.id === _savedTeam)) {
+      _currentTeamId = _savedTeam;
+    }
     if (_currentTeamId && teamSel) teamSel.value = _currentTeamId;
   }
 
