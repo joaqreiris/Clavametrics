@@ -197,6 +197,12 @@
         </div>
         <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
       </div>
+      <div class="cm-team-switcher" style="padding:8px 14px 4px">
+        <label style="display:block;font:600 9.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin-bottom:5px">Categoría</label>
+        <select id="cmGlobalTeam" style="width:100%;height:34px;padding:0 9px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer">
+          <option value="">Cargando…</option>
+        </select>
+      </div>
       <nav class="hub-nav">${renderNav()}</nav>
       <div class="hub-side-foot">
         <div class="hub-user" id="sideUserBtn">
@@ -214,6 +220,31 @@
   }
 
   // ── INJECT ───────────────────────────────────────────────────
+  async function _initGlobalTeamSwitcher(profile, club) {
+    const sel = document.getElementById('cmGlobalTeam');
+    if (!sel || typeof window.getTeams !== 'function') return;
+    const clubId = club?.id || (window.getClubId && await window.getClubId());
+    if (!clubId) return;
+    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
+    if (!teams.length) { sel.innerHTML = '<option value="">Sin categorías</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team');
+    const active = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
+    // Persistir en ambos (sessionStorage para la sesión, localStorage para que sobreviva)
+    sessionStorage.setItem('cal_active_team', active);
+    localStorage.setItem('cal_active_team', active);
+    sel.innerHTML = teams.map(t => `<option value="${t.id}" ${t.id===active?'selected':''}>${t.name}</option>`).join('');
+    sel.addEventListener('change', () => {
+      const v = sel.value;
+      sessionStorage.setItem('cal_active_team', v);
+      localStorage.setItem('cal_active_team', v);
+      location.reload();
+    });
+  }
+
   function inject() {
     const root = document.getElementById('hub-side-root');
     if (!root) return;
@@ -299,6 +330,8 @@
     const userRoleEl  = document.getElementById('userRole');
 
     if (nameEl && club?.name)         nameEl.textContent = club.name;
+    // Selector global de categoría
+    try { await _initGlobalTeamSwitcher(profile, club); } catch (e) { console.warn('team switcher:', e); }
     if (teamLabelEl && profile?.club_role) teamLabelEl.textContent = profile.club_role;
     const markEl = document.querySelector('.hub-brand .mark');
     if (markEl) applyLogoToMark(markEl, club?.logo_url);
