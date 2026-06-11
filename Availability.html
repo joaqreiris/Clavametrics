@@ -1262,21 +1262,27 @@
     const pids = players.map(p => p.id);
 
     const { data: avail } = await window.sb.from('availability')
-      .select('player_id, date, status')
+      .select('player_id, date, status, minutes')
       .eq('club_id', CLUB_ID).in('player_id', pids.map(String))
       .gte('date', from).lte('date', to);
 
     const stat = {};
-    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, total:0 });
+    players.forEach(p => stat[p.id] = { id:p.id, name: `${p.last_name||''} ${p.first_name||''}`.trim(), number: p.number, avail:0, partial:0, injury:0, illness:0, absent:0, national:0, minutes:0, total:0 });
     (avail||[]).forEach(r => {
       const s = stat[r.player_id]; if (!s) return;
       s.total++;
+      s.minutes += (r.minutes || 0);
       const st = (r.status||'').toLowerCase();
       if (st === 'available') s.avail++;
       else if (st === 'partial') s.partial++;
       else if (st === 'injured') s.injury++;
       else if (st === 'illness' || st === 'sick') s.illness++;
+      else if (st === 'absent') s.absent++;
+      else if (st === 'away' || st === 'national') s.national++;
     });
+    // Techo de minutos del equipo (el jugador que más jugó marca el 100%)
+    const _maxMin = Math.max(1, ...Object.values(stat).map(s => s.minutes));
+    Object.values(stat).forEach(s => { s.partPct = Math.round((s.minutes/_maxMin)*100); });
 
     let tAvail=0, tInjury=0, tIllness=0, tPartial=0, tTotal=0;
     Object.values(stat).forEach(s => { tAvail+=s.avail; tInjury+=s.injury; tIllness+=s.illness; tPartial+=s.partial; tTotal+=s.total; });
@@ -1334,12 +1340,16 @@
           </div>
           <table style="width:100%;border-collapse:collapse" id="avStatsTable">
             <thead><tr style="background:var(--cm-bg-soft)">
-              <th data-sort="name" style="padding:9px 16px;text-align:left;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted);cursor:pointer">Jugador</th>
+              <th data-sort="name" style="padding:9px 16px;text-align:left;font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.05em;color:var(--cm-fg-muted);cursor:pointer">Player</th>
               <th data-sort="avail" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-success);cursor:pointer">Avail.</th>
               <th data-sort="partial" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-warning);cursor:pointer">Mod.</th>
               <th data-sort="injury" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-danger);cursor:pointer">Inj.</th>
               <th data-sort="illness" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-violet);cursor:pointer">Ill.</th>
-              <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:130px">% Availability</th>
+              <th data-sort="absent" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer">Abs.</th>
+              <th data-sort="national" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer">Nat.</th>
+              <th data-sort="minutes" style="padding:9px 10px;text-align:center;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);cursor:pointer">Min</th>
+              <th data-sort="pct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);cursor:pointer;min-width:120px">% Availability</th>
+              <th data-sort="partPct" style="padding:9px 16px;text-align:right;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-info,#2563eb);cursor:pointer;min-width:120px">% Minutes</th>
             </tr></thead>
             <tbody id="avStatsTbody"></tbody>
           </table>
@@ -1439,7 +1449,11 @@
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.partial?'var(--cm-warning)':'var(--cm-fg-faint,#cbd5e1)'}">${s.partial}</td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.injury?'var(--cm-danger)':'var(--cm-fg-faint,#cbd5e1)'}">${s.injury}</td>
           <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.illness?'var(--cm-violet)':'var(--cm-fg-faint,#cbd5e1)'}">${s.illness}</td>
-          <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:80px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:${barColor};min-width:36px;text-align:right">${pct}%</span></div></td>
+          <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.absent?'var(--cm-fg-muted)':'var(--cm-fg-faint,#cbd5e1)'}">${s.absent}</td>
+          <td style="padding:10px;text-align:center;font:600 13px/1 var(--cm-font-mono);color:${s.national?'var(--cm-info,#2563eb)':'var(--cm-fg-faint,#cbd5e1)'}">${s.national}</td>
+          <td style="padding:10px;text-align:center;font:700 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${s.minutes}'</td>
+          <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${barColor};border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:${barColor};min-width:36px;text-align:right">${pct}%</span></div></td>
+          <td style="padding:10px 16px"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="flex:1;max-width:70px;height:6px;background:var(--cm-bg-soft);border-radius:3px;overflow:hidden"><div style="width:${s.partPct}%;height:100%;background:var(--cm-info,#2563eb);border-radius:3px"></div></div><span style="font:700 12.5px/1 var(--cm-font-mono);color:var(--cm-info,#2563eb);min-width:36px;text-align:right">${s.partPct}%</span></div></td>
         </tr>`;
       }).join('');
     }
