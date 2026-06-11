@@ -1372,12 +1372,6 @@
         </div>
       </div>
       <div class="aev-controls" style="margin-top:22px;margin-bottom:0">
-        <div class="aev-segs" id="aevRangeSegs" role="group" aria-label="Range">
-          <button class="aev-seg" data-range="mc">Microcycle</button>
-          <button class="aev-seg" data-range="7">1 week <span class="n">7d</span></button>
-          <button class="aev-seg" data-range="14">2 weeks <span class="n">14d</span></button>
-          <button class="aev-seg" data-range="30">1 month <span class="n">30d</span></button>
-        </div>
         <div class="aev-range-meta" id="aev-range-meta">—</div>
         <div class="aev-legend" id="aev-legend"></div>
       </div>
@@ -1472,13 +1466,6 @@
       });
     });
 
-    // Filtro de fecha dentro de Stats: segmentos cableados al control de rango
-    // global de la página (avSetPreset → init() → re-render). Matrix y Stats
-    // comparten una sola fuente de rango (MC_DATES); el activo se resalta.
-    document.querySelectorAll('#aevRangeSegs .aev-seg').forEach(b => {
-      b.classList.toggle('is-on', b.dataset.range === _avRangePreset);
-      b.addEventListener('click', () => window.avSetPreset(b.dataset.range));
-    });
 
     // Evolución de disponibilidad: línea de % (SVG) + heatmap calendario.
     // Reemplaza al área-chart de Chart.js. Render dibuja sobre los #aev-*

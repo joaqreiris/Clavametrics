@@ -128,7 +128,7 @@
     if (!compact) el("text", { class: "thresh-lbl", x: pad.l + plotW - 2, y: Y(85) - 5, "text-anchor": "end" }, svg).textContent = "85% objetivo";
 
     if (!compact) {
-      const step = n <= 14 ? 2 : n <= 30 ? 5 : 7;
+      const step = n <= 14 ? 2 : n <= 30 ? 5 : n <= 60 ? 7 : n <= 100 ? 14 : Math.ceil(n / 8);
       for (let i = 0; i < n; i += step) {
         el("text", { class: "axis-txt", x: X(i), y: h - 6, "text-anchor": "middle" }, svg).textContent = fShort(data[i].date);
       }
