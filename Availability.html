@@ -1190,6 +1190,7 @@
   window.avOnTeamChange = avOnTeamChange;
 
   let _avRangeOverride = null; // {start, end} o null = microciclo
+  let _avRangePreset   = 'mc'; // preset activo del filtro de fecha (refleja segmentos en Stats)
   function avComputeRange(preset) {
     const today = new Date().toISOString().slice(0,10);
     const d = new Date(today + 'T00:00:00Z');
@@ -1204,6 +1205,7 @@
   };
   window.avSetPreset = function(v) {
     document.getElementById('avRangeMenu').style.display = 'none';
+    _avRangePreset = v;
     _avRangeOverride = (v === 'mc') ? null : avComputeRange(v);
     if (typeof init === 'function') init();
   };
@@ -1214,6 +1216,7 @@
     const spanDays = MC_DATES.length;
     const ms = new Date(start + 'T00:00:00Z').getTime() + dir * spanDays * 86400000;
     const me = new Date(end   + 'T00:00:00Z').getTime() + dir * spanDays * 86400000;
+    _avRangePreset = 'custom';
     _avRangeOverride = {
       start: new Date(ms).toISOString().slice(0,10),
       end:   new Date(me).toISOString().slice(0,10)
@@ -1223,7 +1226,7 @@
   window.avOnCustomDate = function() {
     const f = document.getElementById('avDateFrom').value;
     const t = document.getElementById('avDateTo').value;
-    if (f && t && f <= t) { _avRangeOverride = { start: f, end: t }; if (typeof init === 'function') init(); }
+    if (f && t && f <= t) { _avRangePreset = 'custom'; _avRangeOverride = { start: f, end: t }; if (typeof init === 'function') init(); }
   };
 
   window.avSwitchView = function(view) {
@@ -1352,13 +1355,69 @@
           </div>
         </div>
       </div>
-      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:14px;padding:18px;margin-top:18px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <span style="font:600 14.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Evolución de disponibilidad</span>
-          <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${from} → ${to}</span>
+      <div class="aev-controls" style="margin-top:22px;margin-bottom:0">
+        <div class="aev-segs" id="aevRangeSegs" role="group" aria-label="Rango">
+          <button class="aev-seg" data-range="mc">Microciclo</button>
+          <button class="aev-seg" data-range="7">1 semana <span class="n">7d</span></button>
+          <button class="aev-seg" data-range="14">2 semanas <span class="n">14d</span></button>
+          <button class="aev-seg" data-range="30">1 mes <span class="n">30d</span></button>
         </div>
-        <div style="height:240px"><canvas id="avStatsTrend"></canvas></div>
-      </div>`;
+        <div class="aev-range-meta" id="aev-range-meta">—</div>
+        <div class="aev-legend" id="aev-legend"></div>
+      </div>
+
+      <!-- Variante B — Línea de % disponible + zona saludable -->
+      <section class="aev-block">
+        <div class="aev-block-h">
+          <span class="aev-tag">B</span>
+          <span class="t">Línea de % disponible · zona saludable</span>
+          <span class="d">% del plantel disponible vs. umbral &gt;85%</span>
+        </div>
+        <div class="aev-card">
+          <div class="aev-card-h">
+            <span class="ttl">Disponibilidad del equipo</span>
+            <span class="sub">% sobre plantel total</span>
+            <div class="right">
+              <span class="aev-stat"><span class="v" id="aev-b-stat-now">—</span><span class="k">actual</span></span>
+              <span class="aev-stat"><span class="v" id="aev-b-stat-avg">—</span><span class="k">media</span></span>
+              <span class="aev-stat"><span class="v" id="aev-b-stat-min">—</span><span class="k">mínimo</span></span>
+            </div>
+          </div>
+          <div class="aev-card-b" id="aev-b-body"></div>
+        </div>
+      </section>
+
+      <!-- Variante C — Heatmap calendario -->
+      <section class="aev-block">
+        <div class="aev-block-h">
+          <span class="aev-tag">C</span>
+          <span class="t">Heatmap calendario</span>
+          <span class="d">Cada día coloreado por % de disponibilidad</span>
+        </div>
+        <div class="aev-card">
+          <div class="aev-card-h">
+            <span class="ttl">Calendario de disponibilidad</span>
+            <span class="sub" id="aev-c-sub">—</span>
+            <div class="right">
+              <span class="aev-stat"><span class="v" id="aev-c-stat-best">—</span><span class="k">mejor día</span></span>
+              <span class="aev-stat"><span class="v" id="aev-c-stat-worst">—</span><span class="k">peor día</span></span>
+            </div>
+          </div>
+          <div class="aev-card-b">
+            <div class="hm">
+              <div class="hm-grid" id="aev-c-grid"></div>
+              <div class="hm-scale">
+                <div class="lab">% disponibilidad</div>
+                <div class="bar"></div>
+                <div class="ticks"><span>&lt;70</span><span>80</span><span>90</span><span>100</span></div>
+                <div class="rows" id="aev-c-rows"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="bc-tip" id="aev-tip"></div>`;
 
     // Tabla ordenable con barras de progreso
     let _sortKey = 'pct', _sortDir = -1;
@@ -1393,38 +1452,18 @@
       });
     });
 
-    // Área chart de evolución temporal
-    if (window.Chart) {
-      if (window._avTrendChart) { window._avTrendChart.destroy(); window._avTrendChart = null; }
-      const tctx = document.getElementById('avStatsTrend');
-      if (tctx) {
-        const mk = (label, data, color) => ({
-          label, data, borderColor: color, backgroundColor: color+'33',
-          fill: true, tension: 0.35, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, stack: 'a'
-        });
-        window._avTrendChart = new Chart(tctx, {
-          type: 'line',
-          data: { labels: tsDates, datasets: [
-            mk('Disponible', tsAvail, '#16A34A'),
-            mk('Modificado', tsPartial, '#D97706'),
-            mk('Lesión', tsInjury, '#DC2626'),
-            mk('Enfermedad', tsIllness, '#7C3AED')
-          ]},
-          options: {
-            responsive:true, maintainAspectRatio:false,
-            interaction:{ mode:'index', intersect:false },
-            scales:{
-              x:{ grid:{ display:false }, ticks:{ font:{size:10}, maxRotation:0, autoSkip:true, maxTicksLimit:12 } },
-              y:{ stacked:true, beginAtZero:true, grid:{ color:'rgba(148,163,184,.12)' }, ticks:{ font:{size:10}, precision:0 }, title:{ display:true, text:'Jugadores', font:{size:10} } }
-            },
-            plugins:{
-              legend:{ position:'bottom', labels:{ font:{size:11.5}, padding:14, usePointStyle:true, pointStyle:'circle' } },
-              tooltip:{ callbacks:{ title:(items)=>`Día ${items[0].label}` } }
-            }
-          }
-        });
-      }
-    }
+    // Filtro de fecha dentro de Stats: segmentos cableados al control de rango
+    // global de la página (avSetPreset → init() → re-render). Matrix y Stats
+    // comparten una sola fuente de rango (MC_DATES); el activo se resalta.
+    document.querySelectorAll('#aevRangeSegs .aev-seg').forEach(b => {
+      b.classList.toggle('is-on', b.dataset.range === _avRangePreset);
+      b.addEventListener('click', () => window.avSetPreset(b.dataset.range));
+    });
+
+    // Evolución de disponibilidad: línea de % (SVG) + heatmap calendario.
+    // Reemplaza al área-chart de Chart.js. Render dibuja sobre los #aev-*
+    // recién insertados; lee los tokens --st-* en vivo (re-render en tweakchange).
+    if (window.AvEvolution) window.AvEvolution.render(host, evoDays, { total: evoN });
 
     // Donut pulido
     if (window.Chart) {
@@ -1452,6 +1491,13 @@
     }
   }
   window.avRenderStats = avRenderStats;
+
+  // Repintar la evolución (SVG/heatmap) al cambiar el tema: colorOf() lee los
+  // tokens --st-* en cada render, los SVG ya dibujados no se actualizan solos.
+  window.addEventListener('tweakchange', () => {
+    const sv = document.getElementById('viewStats');
+    if (sv && sv.style.display !== 'none') avRenderStats();
+  });
 </script>
 
 <script>
