@@ -1295,7 +1295,7 @@
   let _suppressHistory = false;
   let _handleDragging  = false;
   let _rebuilding      = false;
-  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_coneColor','_barrierColor','_goalpostColor','_team','_playerId'];
+  const ARROW_PROPS    = ['_type','_arrowId','_x1','_y1','_cx','_cy','_x2','_y2','_arrowColor','_arrowDash','_arrowCurved','_coneColor','_barrierColor','_goalpostColor','_team','_playerId','_objPath'];
   let _polyPoints      = [];
   let _polyPreview     = null;
   let _polyLastT       = 0;
@@ -2013,8 +2013,14 @@
     _uid = data?.user?.id || null;
     return _uid;
   }
-  function _objUrl(path) {
-    return window.sb.storage.from(FIELD_BUCKET).getPublicUrl(path).data.publicUrl;
+  // Signed URLs work whether the bucket is private (RLS per folder) or public,
+  // so this is robust to how the bucket migration was set up. Long TTL so the
+  // URL stored inside objects_json keeps working; images are also re-signed on
+  // load (see _resignCustomObjects) as a backstop.
+  const _OBJ_URL_TTL = 60 * 60 * 24 * 365 * 5; // ~5 years
+  async function _signOne(path) {
+    const { data } = await window.sb.storage.from(FIELD_BUCKET).createSignedUrl(path, _OBJ_URL_TTL);
+    return data?.signedUrl || null;
   }
   function _toast(msg, isError = false) {
     const t = Object.assign(document.createElement('div'), {
@@ -2027,7 +2033,7 @@
 
   // Insert a custom object onto the canvas. PNG → fabric.Image, SVG → grouped
   // SVG elements. Saved into objects_json automatically (it's a Fabric object).
-  function addCustomObject(url) {
+  function addCustomObject(url, path) {
     if (!url) return;
     // Land it at a clearly visible, grabbable size relative to the field
     // (the larger side ≈ 16% of the canvas, min 120px), keeping aspect ratio.
@@ -2041,23 +2047,39 @@
       obj.set({                          // make sure scale + rotate handles are live
         hasControls: true, hasBorders: true,
         lockRotation: false, lockScalingX: false, lockScalingY: false, lockUniScaling: false,
-        cornerSize: 11, touchCornerSize: 24, transparentCorners: false
+        cornerSize: 11, touchCornerSize: 24, transparentCorners: false,
+        _objPath: path || null          // keep the storage path so PNG src can be re-signed on reload
       });
       obj.setCoords();
       finishAdd(obj, 'custom_object');
     };
-    const isSvg = /\.svg(\?|$)/i.test(url);
+    const isSvg = /\.svg(\?|$)/i.test(url) || (path && /\.svg$/i.test(path));
     if (isSvg) {
+      // SVG is rasterised into vector paths → persists in objects_json without any URL.
       fabric.loadSVGFromURL(url, (objs, opts) => {
         if (!objs || !objs.length) { _toast('Could not load SVG.', true); return; }
         _place(fabric.util.groupSVGElements(objs, opts));
       });
     } else {
       fabric.Image.fromURL(url, img => {
-        if (!img) { _toast('Could not load image.', true); return; }
+        if (!img || !img.width) { _toast('Could not load image. Check the storage bucket.', true); return; }
         _place(img);
       }, { crossOrigin: 'anonymous' });
     }
+  }
+
+  // After loading a saved exercise, refresh any custom PNG src with a fresh
+  // signed URL (the one baked into objects_json may have expired / rotated).
+  async function _resignCustomObjects() {
+    const imgs = fc.getObjects().filter(o => o.type === 'image' && o._objPath);
+    if (!imgs.length) return;
+    const { data } = await window.sb.storage.from(FIELD_BUCKET)
+      .createSignedUrls(imgs.map(o => o._objPath), _OBJ_URL_TTL);
+    let changed = false;
+    (data || []).forEach((res, i) => {
+      if (res?.signedUrl) { imgs[i].setSrc(res.signedUrl, () => fc.renderAll(), { crossOrigin: 'anonymous' }); changed = true; }
+    });
+    if (changed) fc.renderAll();
   }
 
   async function loadCustomObjects() {
@@ -2070,17 +2092,20 @@
     if (error) { host.innerHTML = ''; return; }
     const files = (data || []).filter(f => f.name && /\.(png|svg)$/i.test(f.name));
     if (!files.length) { host.innerHTML = '<div class="pl-myobj-empty">No custom objects yet.</div>'; return; }
-    host.innerHTML = files.map(f => {
-      const path = `${uid}/${f.name}`;
-      const url  = _objUrl(path);
-      const name = f.name.replace(/\.(png|svg)$/i, '').slice(0, 12);
-      return `<div class="pl-myobj" data-url="${url}" title="${f.name}">
-        <img src="${url}" alt="">
+    const paths = files.map(f => `${uid}/${f.name}`);
+    const { data: signed } = await window.sb.storage.from(FIELD_BUCKET).createSignedUrls(paths, _OBJ_URL_TTL);
+    const urlFor = {};
+    (signed || []).forEach((s, i) => { if (s?.signedUrl) urlFor[paths[i]] = s.signedUrl; });
+    host.innerHTML = files.map((f, i) => {
+      const path = paths[i];
+      const url  = urlFor[path] || '';
+      return `<div class="pl-myobj" data-url="${url}" data-path="${path}" title="${f.name}">
+        <img src="${url}" alt="" loading="lazy">
         <button class="pl-myobj-del" data-del="${path}" title="Delete object"><i class="ti ti-trash"></i></button>
       </div>`;
     }).join('');
     host.querySelectorAll('.pl-myobj').forEach(el => {
-      el.addEventListener('click', () => addCustomObject(el.dataset.url));
+      el.addEventListener('click', () => addCustomObject(el.dataset.url, el.dataset.path));
     });
     host.querySelectorAll('.pl-myobj-del').forEach(btn => {
       btn.addEventListener('click', async e => {
@@ -2600,7 +2625,7 @@
     _arrowData.clear();
     _loadingExercise = true;
     if (ex.objects_json) {
-      fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); fc.renderAll(); _loadingExercise = false; _dirty = false; });
+      fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _loadingExercise = false; _dirty = false; });
     } else {
       fc.clear(); fc.renderAll();
       _loadingExercise = false; _dirty = false;
