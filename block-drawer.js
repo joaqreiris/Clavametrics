@@ -42,7 +42,7 @@
     try {
       const clubId = await window.getClubId();
       const { data, error } = await window.sb.from('gym_exercises')
-        .select('id,name,muscle_group,category,complexity,equipment,usable_in')
+        .select('id,name,muscle_group,category,complexity,equipment,usable_in,is_default')
         .eq('club_id', clubId)
         .contains('usable_in', [want])
         .order('name');
@@ -60,7 +60,7 @@
       equip:       e.equipment || 'None',
       type:        e.category || '',
       complexity:  e.complexity || '',
-      custom:      false
+      custom:      !e.is_default          // club-owned exercises (not the seeded defaults)
     }));
     libCache[context] = mapped;
     LIB = mapped.slice();
@@ -237,7 +237,7 @@
       onclick: () => { state.equip = eq; renderBody(); renderFooter(); }
     }, eq));
     const customTog = h('div', { class: 'bd-toggle-row' },
-      h('span', { class: 'lbl' }, 'Custom by physio only'),
+      h('span', { class: 'lbl' }, 'Club custom only'),
       h('div', {
         class: 'bd-toggle' + (state.customOnly ? ' is-on' : ''),
         onclick: () => { state.customOnly = !state.customOnly; renderBody(); }
