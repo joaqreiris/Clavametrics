@@ -22,141 +22,51 @@
     { id: 'assess', label: 'Assessment', icon: 'ti-target',        defaults: '1 ex · 12 min · RPE 4' }
   ];
 
-  // ─── Data: shared exercise library (region / equipment / patterns) ───
-  const LIB = [
-    // ── Hamstring ──
-    { id: 'nord',     name: 'Nordic hamstring lower',             region: 'Hamstring', equip: 'Bodyweight', custom: false, sets: 4, reps: 6,      load: 'BW',      tempo: '4-0-1', rest: '2:00' },
-    { id: 'nord2',    name: 'Nordic eccentric (band-assisted)',   region: 'Hamstring', equip: 'Band',       custom: false, sets: 3, reps: 6,      load: 'BW',      tempo: '4-0-1', rest: '2:00' },
-    { id: 'rdl',      name: 'Single-leg RDL',                    region: 'Hamstring', equip: 'KB',         custom: false, sets: 4, reps: 8,      load: '20kg',    tempo: '3-1-1', rest: '1:30' },
-    { id: 'rdlbb',    name: 'Romanian DL (bilateral)',            region: 'Hamstring', equip: 'Barbell',    custom: false, sets: 4, reps: 6,      load: '70% 1RM', tempo: '3-1-1', rest: '2:00' },
-    { id: 'iso',      name: 'Hamstring isometric hold (90°)',     region: 'Hamstring', equip: 'Bodyweight', custom: true,  sets: 3, reps: '30s',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'hsw',      name: 'Hamstring switch · single-leg',     region: 'Hamstring', equip: 'Cable',      custom: true,  sets: 3, reps: 10,     load: '15kg',    tempo: '3-0-1', rest: '1:30' },
-    { id: 'glbrc',    name: 'Glute bridge hamstring curl (TRX)', region: 'Hamstring', equip: 'TRX',        custom: false, sets: 3, reps: 10,     load: 'BW',      tempo: '3-1-1', rest: '1:30' },
-    { id: 'hswalk',   name: 'Hamstring walkout',                  region: 'Hamstring', equip: 'Bodyweight', custom: false, sets: 3, reps: 8,      load: 'BW',      tempo: '2-0-2', rest: '1:30' },
-    { id: 'lgcurl',   name: 'Prone leg curl (machine)',           region: 'Hamstring', equip: 'Machine',    custom: false, sets: 4, reps: 10,     load: '40% 1RM', tempo: '3-1-1', rest: '1:30' },
-    { id: 'slgm',     name: 'Single-leg good morning (BB)',       region: 'Hamstring', equip: 'Barbell',    custom: false, sets: 3, reps: 8,      load: '30% 1RM', tempo: '3-1-1', rest: '1:30' },
-    { id: 'bandgm',   name: 'Banded good morning',                region: 'Hamstring', equip: 'Band',       custom: false, sets: 3, reps: 12,     load: 'BW',      tempo: '2-1-1', rest: '1:00' },
-    { id: 'spansq',   name: 'Spanish squat (hamstring focus)',    region: 'Hamstring', equip: 'Band',       custom: true,  sets: 3, reps: '45s',  load: 'BW',      tempo: '—',     rest: '1:30' },
-    // ── Adductor ──
-    { id: 'cop',      name: 'Copenhagen adductor',                region: 'Adductor',  equip: 'Bodyweight', custom: true,  sets: 3, reps: 8,      load: 'BW',      tempo: '5-0-1', rest: '1:30' },
-    { id: 'copisom',  name: 'Copenhagen isometric hold',          region: 'Adductor',  equip: 'Bodyweight', custom: true,  sets: 3, reps: '30s',  load: 'BW',      tempo: '—',     rest: '1:30' },
-    { id: 'cossk',    name: 'Cossack squat',                      region: 'Adductor',  equip: 'KB',         custom: false, sets: 3, reps: 6,      load: '16kg',    tempo: '3-1-1', rest: '1:30' },
-    { id: 'addmach',  name: 'Adductor machine',                   region: 'Adductor',  equip: 'Machine',    custom: false, sets: 3, reps: 15,     load: '40% 1RM', tempo: '2-1-2', rest: '1:00' },
-    { id: 'cabadd',   name: 'Cable hip adduction (standing)',     region: 'Adductor',  equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '10kg',    tempo: '2-1-2', rest: '1:00' },
-    { id: 'addiso',   name: 'Adductor squeeze isometric',         region: 'Adductor',  equip: 'Bodyweight', custom: false, sets: 3, reps: '45s',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'latlng',   name: 'Lateral lunge',                      region: 'Adductor',  equip: 'KB',         custom: false, sets: 3, reps: 8,      load: '16kg',    tempo: '3-1-1', rest: '1:30' },
-    { id: 'frogsq',   name: 'Frog squat isometric',               region: 'Adductor',  equip: 'Bodyweight', custom: false, sets: 3, reps: '40s',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'starexc',  name: 'Star excursion (anterior reach)',    region: 'Adductor',  equip: 'Bodyweight', custom: true,  sets: 3, reps: 8,      load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'sidelhadd',name: 'Side-lying hip adduction',           region: 'Adductor',  equip: 'Band',       custom: false, sets: 3, reps: 15,     load: 'BW',      tempo: '2-1-2', rest: '0:45' },
-    { id: 'sumosdl',  name: 'Sumo squat (adductor emphasis)',     region: 'Adductor',  equip: 'Barbell',    custom: false, sets: 4, reps: 6,      load: '70% 1RM', tempo: '3-0-1', rest: '2:00' },
-    // ── Glute ──
-    { id: 'hipt',     name: 'Hip thrust',                         region: 'Glute',     equip: 'Barbell',    custom: false, sets: 5, reps: 5,      load: '60% 1RM', tempo: '2-1-1', rest: '2:30' },
-    { id: 'slhipt',   name: 'Single-leg hip thrust',              region: 'Glute',     equip: 'Barbell',    custom: false, sets: 3, reps: 8,      load: '30% 1RM', tempo: '2-2-1', rest: '1:30' },
-    { id: 'glbr',     name: 'Glute bridge (floor)',               region: 'Glute',     equip: 'Bodyweight', custom: false, sets: 3, reps: 15,     load: 'BW',      tempo: '2-2-1', rest: '1:00' },
-    { id: 'bglbr',    name: 'Banded glute bridge',                region: 'Glute',     equip: 'Band',       custom: false, sets: 3, reps: 15,     load: 'BW',      tempo: '2-2-1', rest: '1:00' },
-    { id: 'cabpt',    name: 'Cable pull-through',                  region: 'Glute',     equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '20kg',    tempo: '2-1-1', rest: '1:30' },
-    { id: 'clamb',    name: 'Clamshell (band)',                   region: 'Glute',     equip: 'Band',       custom: false, sets: 3, reps: 20,     load: 'BW',      tempo: '2-1-2', rest: '0:45' },
-    { id: 'mwalk',    name: 'Monster walk (lateral band)',        region: 'Glute',     equip: 'Band',       custom: false, sets: 3, reps: '15m',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'firehyd',  name: 'Fire hydrant',                       region: 'Glute',     equip: 'Band',       custom: false, sets: 3, reps: 15,     load: 'BW',      tempo: '2-1-2', rest: '0:45' },
-    { id: 'donkey',   name: 'Donkey kick (cable)',                region: 'Glute',     equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '10kg',    tempo: '2-1-2', rest: '0:45' },
-    { id: 'ghd',      name: 'Back extension (GHD)',               region: 'Glute',     equip: 'Machine',    custom: false, sets: 3, reps: 10,     load: 'BW',      tempo: '2-1-1', rest: '1:30' },
-    { id: 'bsq',      name: 'Bulgarian split squat',              region: 'Glute',     equip: 'KB',         custom: false, sets: 4, reps: 8,      load: '2×16kg',  tempo: '3-1-1', rest: '2:00' },
-    { id: 'sumodl',   name: 'Sumo deadlift',                      region: 'Glute',     equip: 'Barbell',    custom: false, sets: 4, reps: 5,      load: '80% 1RM', tempo: '2-1-1', rest: '3:00' },
-    // ── Quad ──
-    { id: 'sqt',      name: 'Back squat',                         region: 'Quad',      equip: 'Barbell',    custom: false, sets: 5, reps: 5,      load: '80% 1RM', tempo: '3-0-1', rest: '3:00' },
-    { id: 'gobsq',    name: 'Goblet squat',                       region: 'Quad',      equip: 'KB',         custom: false, sets: 4, reps: 10,     load: '24kg',    tempo: '3-1-1', rest: '1:30' },
-    { id: 'hacksq',   name: 'Hack squat (machine)',               region: 'Quad',      equip: 'Machine',    custom: false, sets: 4, reps: 8,      load: '60% 1RM', tempo: '3-1-1', rest: '2:00' },
-    { id: 'legpr',    name: 'Leg press (bilateral)',              region: 'Quad',      equip: 'Machine',    custom: false, sets: 4, reps: 10,     load: '70% 1RM', tempo: '3-1-1', rest: '2:00' },
-    { id: 'legext',   name: 'Leg extension',                      region: 'Quad',      equip: 'Machine',    custom: false, sets: 3, reps: 12,     load: '40% 1RM', tempo: '3-1-2', rest: '1:30' },
-    { id: 'stepup',   name: 'Step-up (lateral)',                  region: 'Quad',      equip: 'KB',         custom: false, sets: 3, reps: 10,     load: '2×12kg',  tempo: '2-1-1', rest: '1:30' },
-    { id: 'boxsq',    name: 'Box squat',                          region: 'Quad',      equip: 'Barbell',    custom: false, sets: 4, reps: 5,      load: '70% 1RM', tempo: '3-0-X', rest: '3:00' },
-    { id: 'frontsq',  name: 'Front squat',                        region: 'Quad',      equip: 'Barbell',    custom: false, sets: 4, reps: 5,      load: '75% 1RM', tempo: '3-0-1', rest: '3:00' },
-    { id: 'lunge',    name: 'Reverse lunge',                      region: 'Quad',      equip: 'KB',         custom: false, sets: 3, reps: 10,     load: '2×14kg',  tempo: '3-1-1', rest: '1:30' },
-    { id: 'tke',      name: 'Terminal knee extension (band)',     region: 'Quad',      equip: 'Band',       custom: true,  sets: 3, reps: 15,     load: 'BW',      tempo: '2-2-1', rest: '1:00' },
-    { id: 'sissysq',  name: 'Sissy squat (assisted)',             region: 'Quad',      equip: 'Bodyweight', custom: true,  sets: 3, reps: 8,      load: 'BW',      tempo: '3-1-1', rest: '1:30' },
-    { id: 'walllsit', name: 'Wall sit isometric',                 region: 'Quad',      equip: 'Bodyweight', custom: false, sets: 3, reps: '45s',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    // ── Core ──
-    { id: 'pall',     name: 'Pallof press',                       region: 'Core',      equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '10kg',    tempo: '2-2-1', rest: '1:00' },
-    { id: 'plk',      name: 'Side plank w/ adduction',           region: 'Core',      equip: 'Bodyweight', custom: false, sets: 3, reps: '40s',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'deadbug',  name: 'Dead bug',                           region: 'Core',      equip: 'Bodyweight', custom: false, sets: 3, reps: 10,     load: 'BW',      tempo: '2-2-1', rest: '1:00' },
-    { id: 'hollow',   name: 'Hollow body hold',                   region: 'Core',      equip: 'Bodyweight', custom: false, sets: 3, reps: '30s',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'trxfo',    name: 'TRX fallout',                        region: 'Core',      equip: 'TRX',        custom: false, sets: 3, reps: 10,     load: 'BW',      tempo: '3-1-2', rest: '1:30' },
-    { id: 'birddog',  name: 'Bird dog',                           region: 'Core',      equip: 'Bodyweight', custom: false, sets: 3, reps: 10,     load: 'BW',      tempo: '2-2-1', rest: '1:00' },
-    { id: 'cabchop',  name: 'Cable chop (rotational)',            region: 'Core',      equip: 'Cable',      custom: false, sets: 3, reps: 10,     load: '12kg',    tempo: '2-1-2', rest: '1:00' },
-    { id: 'antirot',  name: 'Anti-rotation press (1-arm)',        region: 'Core',      equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '8kg',     tempo: '2-2-1', rest: '1:00' },
-    { id: 'rkcplk',   name: 'RKC plank',                          region: 'Core',      equip: 'Bodyweight', custom: false, sets: 3, reps: '20s',  load: 'BW',      tempo: '—',     rest: '1:00' },
-    { id: 'suitscar', name: 'Suitcase carry',                     region: 'Core',      equip: 'KB',         custom: false, sets: 3, reps: '30m',  load: '24kg',    tempo: '—',     rest: '1:30' },
-    { id: 'ovhcar',   name: 'Overhead carry',                     region: 'Core',      equip: 'KB',         custom: false, sets: 3, reps: '20m',  load: '16kg',    tempo: '—',     rest: '1:30' },
-    { id: 'coplan',   name: 'Copenhagen plank (long)',            region: 'Core',      equip: 'Bodyweight', custom: false, sets: 3, reps: '25s',  load: 'BW',      tempo: '—',     rest: '1:30' },
-    // ── Push ──
-    { id: 'bench',    name: 'Bench press',                        region: 'Push',      equip: 'Barbell',    custom: false, sets: 5, reps: 5,      load: '75% 1RM', tempo: '2-1-1', rest: '2:30' },
-    { id: 'incbench', name: 'Incline bench press',                region: 'Push',      equip: 'Barbell',    custom: false, sets: 4, reps: 8,      load: '65% 1RM', tempo: '3-1-1', rest: '2:00' },
-    { id: 'ohpbb',    name: 'Overhead press (BB)',                region: 'Push',      equip: 'Barbell',    custom: false, sets: 4, reps: 6,      load: '70% 1RM', tempo: '2-1-1', rest: '2:30' },
-    { id: 'ohpdb',    name: 'DB overhead press (seated)',         region: 'Push',      equip: 'DB',         custom: false, sets: 3, reps: 10,     load: '2×20kg',  tempo: '2-1-1', rest: '2:00' },
-    { id: 'pushup',   name: 'Push-up (feet elevated)',            region: 'Push',      equip: 'Bodyweight', custom: false, sets: 4, reps: 12,     load: 'BW',      tempo: '3-1-1', rest: '1:30' },
-    { id: 'incdbp',   name: 'Incline DB press',                   region: 'Push',      equip: 'DB',         custom: false, sets: 3, reps: 10,     load: '2×22kg',  tempo: '3-1-1', rest: '1:30' },
-    { id: 'dips',     name: 'Dips (weighted)',                    region: 'Push',      equip: 'Bodyweight', custom: false, sets: 4, reps: 8,      load: '+10kg',   tempo: '3-1-1', rest: '2:00' },
-    { id: 'cgbench',  name: 'Close-grip bench press',             region: 'Push',      equip: 'Barbell',    custom: false, sets: 4, reps: 8,      load: '65% 1RM', tempo: '2-1-1', rest: '2:00' },
-    { id: 'lmpress',  name: 'Landmine press (1-arm)',             region: 'Push',      equip: 'Barbell',    custom: false, sets: 3, reps: 10,     load: '25kg',    tempo: '2-1-1', rest: '1:30' },
-    { id: 'dbflp',    name: 'DB floor press',                     region: 'Push',      equip: 'DB',         custom: false, sets: 3, reps: 10,     load: '2×22kg',  tempo: '2-1-1', rest: '1:30' },
-    { id: 'tripd',    name: 'Tricep pushdown (cable)',            region: 'Push',      equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '15kg',    tempo: '2-1-2', rest: '1:00' },
-    { id: 'pikpu',    name: 'Pike push-up',                       region: 'Push',      equip: 'Bodyweight', custom: false, sets: 3, reps: 10,     load: 'BW',      tempo: '3-1-1', rest: '1:30' },
-    // ── Pull ──
-    { id: 'row',      name: 'Bent-over row',                      region: 'Pull',      equip: 'Barbell',    custom: false, sets: 4, reps: 8,      load: '70% 1RM', tempo: '2-1-1', rest: '2:00' },
-    { id: 'pullup',   name: 'Pull-up (weighted)',                 region: 'Pull',      equip: 'Bodyweight', custom: false, sets: 4, reps: 6,      load: '+5kg',    tempo: '3-0-1', rest: '2:30' },
-    { id: 'latpd',    name: 'Lat pulldown (wide grip)',           region: 'Pull',      equip: 'Cable',      custom: false, sets: 3, reps: 10,     load: '70% 1RM', tempo: '3-1-1', rest: '1:30' },
-    { id: 'seacrow',  name: 'Seated cable row',                   region: 'Pull',      equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '60% 1RM', tempo: '2-1-2', rest: '1:30' },
-    { id: 'dbrowa',   name: 'Single-arm DB row',                  region: 'Pull',      equip: 'DB',         custom: false, sets: 4, reps: 10,     load: '28kg',    tempo: '2-1-1', rest: '1:30' },
-    { id: 'facepull', name: 'Face pull (cable)',                  region: 'Pull',      equip: 'Cable',      custom: false, sets: 3, reps: 15,     load: '12kg',    tempo: '2-1-2', rest: '1:00' },
-    { id: 'invrow',   name: 'Inverted row (TRX)',                 region: 'Pull',      equip: 'TRX',        custom: false, sets: 3, reps: 10,     load: 'BW',      tempo: '3-1-1', rest: '1:30' },
-    { id: 'cssrow',   name: 'Chest-supported DB row',             region: 'Pull',      equip: 'DB',         custom: false, sets: 4, reps: 10,     load: '2×22kg',  tempo: '2-1-2', rest: '1:30' },
-    { id: 'bandpa',   name: 'Band pull-apart',                    region: 'Pull',      equip: 'Band',       custom: false, sets: 3, reps: 20,     load: 'BW',      tempo: '2-1-2', rest: '0:45' },
-    { id: 'meadrow',  name: 'Meadows row',                        region: 'Pull',      equip: 'Barbell',    custom: false, sets: 3, reps: 10,     load: '30kg',    tempo: '2-1-1', rest: '1:30' },
-    { id: 'cabpullover', name: 'Cable pullover',                  region: 'Pull',      equip: 'Cable',      custom: false, sets: 3, reps: 12,     load: '15kg',    tempo: '3-1-2', rest: '1:00' },
-    { id: 'chinup',   name: 'Chin-up (supinated grip)',           region: 'Pull',      equip: 'Bodyweight', custom: false, sets: 3, reps: 8,      load: 'BW',      tempo: '3-0-1', rest: '2:00' },
-    // ── Power ──
-    { id: 'hop',      name: 'Hop & stick',                        region: 'Power',     equip: 'Bodyweight', custom: false, sets: 4, reps: 4,      load: 'BW',      tempo: '—',     rest: '1:30' },
-    { id: 'sled',     name: 'Sled push',                          region: 'Power',     equip: 'Sled',       custom: false, sets: 4, reps: '15m',  load: '40kg',    tempo: '—',     rest: '2:00' },
-    { id: 'boxjmp',   name: 'Box jump',                           region: 'Power',     equip: 'Bodyweight', custom: false, sets: 4, reps: 5,      load: 'BW',      tempo: '—',     rest: '2:00' },
-    { id: 'depthjmp', name: 'Depth jump',                         region: 'Power',     equip: 'Bodyweight', custom: false, sets: 4, reps: 4,      load: 'BW',      tempo: '—',     rest: '2:30' },
-    { id: 'bdjmp',    name: 'Broad jump (horizontal)',            region: 'Power',     equip: 'Bodyweight', custom: false, sets: 4, reps: 4,      load: 'BW',      tempo: '—',     rest: '2:00' },
-    { id: 'latbnd',   name: 'Lateral bound (bilateral)',          region: 'Power',     equip: 'Bodyweight', custom: false, sets: 4, reps: 5,      load: 'BW',      tempo: '—',     rest: '1:30' },
-    { id: 'slhopdist',name: 'Single-leg hop for distance',        region: 'Power',     equip: 'Bodyweight', custom: true,  sets: 3, reps: 5,      load: 'BW',      tempo: '—',     rest: '2:00' },
-    { id: 'triplehop',name: 'Triple hop (distance)',              region: 'Power',     equip: 'Bodyweight', custom: true,  sets: 3, reps: 3,      load: 'BW',      tempo: '—',     rest: '2:30' },
-    { id: 'mbslam',   name: 'Medicine ball slam',                 region: 'Power',     equip: 'MedBall',    custom: false, sets: 4, reps: 8,      load: '6kg',     tempo: '—',     rest: '1:30' },
-    { id: 'kbswing',  name: 'Kettlebell swing',                   region: 'Power',     equip: 'KB',         custom: false, sets: 4, reps: 10,     load: '24kg',    tempo: '—',     rest: '1:30' },
-    { id: 'powclean', name: 'Power clean',                        region: 'Power',     equip: 'Barbell',    custom: false, sets: 4, reps: 3,      load: '70% 1RM', tempo: '—',     rest: '2:30' },
-    { id: 'jmpsq',    name: 'Jump squat (loaded)',                region: 'Power',     equip: 'DB',         custom: false, sets: 4, reps: 5,      load: '2×10kg',  tempo: '—',     rest: '2:00' },
-    { id: 'hurdhop',  name: 'Hurdle hop (bilateral)',             region: 'Power',     equip: 'Bodyweight', custom: false, sets: 4, reps: 5,      load: 'BW',      tempo: '—',     rest: '2:00' },
-    // ── Cond. ──
-    { id: 'shut',     name: 'Shuttle 20m',                        region: 'Cond.',     equip: 'None',       custom: false, sets: 4, reps: 6,      load: '—',       tempo: '—',     rest: '1:30' },
-    { id: 'int1515',  name: '15:15 intervals · 90% MAS',         region: 'Cond.',     equip: 'None',       custom: false, sets: 8, reps: '15s',  load: '5.4 m/s', tempo: '—',     rest: '15s'  },
-    { id: 'tempo',    name: 'Tempo continuous · 70% HRmax',       region: 'Cond.',     equip: 'None',       custom: false, sets: 1, reps: '12 min',load: '140 bpm', tempo: '—',     rest: '—'    },
-    { id: 'int3030',  name: '30:30 intervals · 95% MAS',         region: 'Cond.',     equip: 'None',       custom: false, sets: 6, reps: '30s',  load: '5.7 m/s', tempo: '—',     rest: '30s'  },
-    { id: 'spr40m',   name: '40m sprint repeats',                 region: 'Cond.',     equip: 'None',       custom: false, sets: 6, reps: 1,      load: 'Max',     tempo: '—',     rest: '3:00' },
-    { id: 'rep200m',  name: '200m repeats',                       region: 'Cond.',     equip: 'None',       custom: false, sets: 5, reps: 1,      load: '75% max', tempo: '—',     rest: '2:30' },
-    { id: 'aero6',    name: 'Aerobic continuous · 65% HRmax',    region: 'Cond.',     equip: 'None',       custom: false, sets: 1, reps: '20 min',load: '130 bpm', tempo: '—',     rest: '—'    },
-    { id: 'pag505',   name: '505 agility test / drill',           region: 'Cond.',     equip: 'None',       custom: false, sets: 4, reps: 3,      load: '—',       tempo: '—',     rest: '2:00' },
-    { id: 'proagil',  name: 'Pro agility (5-10-5)',               region: 'Cond.',     equip: 'None',       custom: false, sets: 4, reps: 3,      load: '—',       tempo: '—',     rest: '2:00' },
-    { id: 'yoyo1',    name: 'Yo-yo intermittent level 1',        region: 'Cond.',     equip: 'None',       custom: false, sets: 1, reps: 'Test',  load: '—',       tempo: '—',     rest: '—'    },
-    { id: 'ssg44',    name: 'Small-sided game 4v4',               region: 'Cond.',     equip: 'None',       custom: false, sets: 4, reps: '4 min',load: '—',       tempo: '—',     rest: '2:00' },
-    // ── Mobility ──
-    { id: 'fbow',     name: 'Foam roll · posterior chain',        region: 'Mobility',  equip: 'Roller',     custom: false, sets: 1, reps: '3 min',load: '—',       tempo: '—',     rest: '0:30' },
-    { id: 'hflxstr',  name: 'Hip flexor stretch (kneeling)',      region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: '45s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'pigeon',   name: 'Pigeon pose (hip capsule)',          region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: '60s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'throt',    name: 'Thoracic rotation (foam roller)',    region: 'Mobility',  equip: 'Roller',     custom: false, sets: 2, reps: '45s',  load: '—',       tempo: '—',     rest: '0:30' },
-    { id: 'ankldorf', name: 'Ankle dorsiflexion drill (wall)',    region: 'Mobility',  equip: 'Bodyweight', custom: true,  sets: 2, reps: 10,     load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'hband',    name: 'Hamstring band stretch (supine)',    region: 'Mobility',  equip: 'Band',       custom: false, sets: 2, reps: '60s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'couchstr', name: 'Couch stretch (quad/hip flexor)',    region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: '60s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'addstr',   name: 'Adductor rock-back stretch',         region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: '45s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: '9090hip',  name: '90/90 hip rotation',                region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: 10,     load: 'BW',      tempo: '2-1-2', rest: '0:30' },
-    { id: 'catcow',   name: 'Cat-cow spinal mobilisation',        region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: '45s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'wgs',      name: "World's greatest stretch",           region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: 8,      load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'deepsq',   name: 'Deep squat hold (assisted)',         region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: '60s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-    { id: 'pecstr',   name: 'Pec doorway stretch',                region: 'Mobility',  equip: 'Bodyweight', custom: false, sets: 2, reps: '45s',  load: 'BW',      tempo: '—',     rest: '0:30' },
-  ];
-  const REGIONS = ['All','Hamstring','Adductor','Glute','Quad','Core','Push','Pull','Power','Cond.','Mobility'];
-  const EQUIPS  = ['Any','Barbell','KB','Bodyweight','Cable','Sled','Roller'];
+  // ─── Data: shared exercise library — loaded from gym_exercises per context ───
+  // Mapped picker shape: { id, exercise_id, name, region, equip, type, complexity, custom }
+  let LIB = [];
+  let REGIONS = ['All'];
+  let EQUIPS  = ['Any'];
+  const libCache = {};                                  // context -> mapped array (fetched once per context)
+  const CTX_USABLE = { ip: 'individual', rehab: 'rehab', prev: 'preventive' };
+
+  function recomputeFilterOpts() {
+    REGIONS = ['All', ...[...new Set(LIB.map(e => e.region).filter(Boolean))].sort()];
+    EQUIPS  = ['Any', ...[...new Set(LIB.map(e => e.equip).filter(Boolean))].sort()];
+  }
+
+  async function ensureLibrary(context) {
+    if (libCache[context]) { LIB = libCache[context].slice(); recomputeFilterOpts(); return; }
+    const want = CTX_USABLE[context] || 'rehab';
+    let rows = [];
+    try {
+      const clubId = await window.getClubId();
+      const { data, error } = await window.sb.from('gym_exercises')
+        .select('id,name,muscle_group,category,complexity,equipment,usable_in')
+        .eq('club_id', clubId)
+        .contains('usable_in', [want])
+        .order('name');
+      if (error) throw error;
+      rows = data || [];
+    } catch (err) {
+      console.error('[block-drawer] exercise library load failed:', err);
+      rows = [];
+    }
+    const mapped = rows.map(e => ({
+      id:          e.id,
+      exercise_id: e.id,
+      name:        e.name || 'Unnamed',
+      region:      e.muscle_group || 'Other',
+      equip:       e.equipment || 'None',
+      type:        e.category || '',
+      complexity:  e.complexity || '',
+      custom:      false
+    }));
+    libCache[context] = mapped;
+    LIB = mapped.slice();
+    recomputeFilterOpts();
+  }
+
 
   // ─── State ───
   let state = {
@@ -339,52 +249,59 @@
       h('div', null, h('div', { class: 'group-l' }, 'Source'), customTog)
     );
 
-    // list
-    const filtered = LIB.filter(ex => {
-      if (state.region !== 'All' && ex.region !== state.region) return false;
-      if (state.equip !== 'Any' && ex.equip !== state.equip) return false;
-      if (state.customOnly && !ex.custom) return false;
-      if (state.query && !ex.name.toLowerCase().includes(state.query.toLowerCase())) return false;
-      return true;
-    });
+    // list — loading state until the library has been fetched for this context
+    const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+    let listInner;
+    if (!libCache[state.context]) {
+      listInner = h('div', { class: 'bd-empty' },
+        h('i', { class: 'ti ti-loader-2' }),
+        h('div', null, 'Loading exercise library…'));
+    } else {
+      const filtered = LIB.filter(ex => {
+        if (state.region !== 'All' && ex.region !== state.region) return false;
+        if (state.equip !== 'Any' && ex.equip !== state.equip) return false;
+        if (state.customOnly && !ex.custom) return false;
+        if (state.query && !ex.name.toLowerCase().includes(state.query.toLowerCase())) return false;
+        return true;
+      });
 
-    const listInner = filtered.length === 0
-      ? h('div', { class: 'bd-empty' },
-          h('i', { class: 'ti ti-mood-empty' }),
-          h('div', null, 'No exercises match these filters.'),
-          h('div', { style: 'margin-top:6px' }, 'Try widening the region or equipment.'))
-      : filtered.map(ex => {
-          const on = state.selected.includes(ex.id);
-          return h('div', {
-            class: 'bd-ex' + (on ? ' is-on' : '') + (ex.custom ? ' is-custom' : ''),
-            onclick: () => {
-              const i = state.selected.indexOf(ex.id);
-              if (i >= 0) {
-                state.selected.splice(i, 1);
-                delete state.sets[ex.id];
-              } else {
-                state.selected.push(ex.id);
-                // seed default sets
-                state.sets[ex.id] = seedSets(ex);
+      listInner = filtered.length === 0
+        ? h('div', { class: 'bd-empty' },
+            h('i', { class: 'ti ti-mood-empty' }),
+            h('div', null, 'No exercises match these filters.'),
+            h('div', { style: 'margin-top:6px' }, 'Try widening the region or equipment.'))
+        : filtered.map(ex => {
+            const on = state.selected.includes(ex.id);
+            return h('div', {
+              class: 'bd-ex' + (on ? ' is-on' : '') + (ex.custom ? ' is-custom' : ''),
+              onclick: () => {
+                const i = state.selected.indexOf(ex.id);
+                if (i >= 0) {
+                  state.selected.splice(i, 1);
+                  delete state.sets[ex.id];
+                } else {
+                  state.selected.push(ex.id);
+                  // sets/reps belong to the plan, not the library — seed blank rows
+                  state.sets[ex.id] = seedSets(ex);
+                }
+                renderBody(); renderFooter();
               }
-              renderBody(); renderFooter();
-            }
-          },
-            h('div', { class: 'check' }),
-            h('div', { class: 'body' },
-              h('div', { class: 'name' }, ex.name),
-              h('div', { class: 'meta' },
-                h('span', null, ex.region),
-                h('span', { class: 'sep' }, '·'),
-                h('span', null, ex.equip),
-                h('span', { class: 'sep' }, '·'),
-                h('span', null, ex.sets + '×' + ex.reps),
-                ex.custom ? h('span', { class: 'tag' }, 'Custom') : null
-              )
-            ),
-            h('div', { class: 'defaults' }, ex.sets + '×' + ex.reps)
-          );
-        });
+            },
+              h('div', { class: 'check' }),
+              h('div', { class: 'body' },
+                h('div', { class: 'name' }, ex.name),
+                h('div', { class: 'meta' },
+                  h('span', null, ex.region),
+                  ex.equip ? h('span', { class: 'sep' }, '·') : null,
+                  ex.equip ? h('span', null, ex.equip) : null,
+                  ex.type ? h('span', { class: 'sep' }, '·') : null,
+                  ex.type ? h('span', null, cap(ex.type)) : null
+                )
+              ),
+              ex.complexity ? h('div', { class: 'defaults' }, ex.complexity) : null
+            );
+          });
+    }
 
     const list = h('div', { class: 'bd-list-col' },
       h('div', { class: 'bd-search' },
@@ -405,13 +322,14 @@
     );
   }
 
-  function seedSets(ex) {
-    const setRows = [];
-    const n = typeof ex.sets === 'number' ? ex.sets : 3;
-    for (let i = 0; i < n; i++) {
-      setRows.push({ reps: ex.reps, load: ex.load, tempo: ex.tempo, rest: ex.rest });
-    }
-    return setRows;
+  function seedSets(/* ex */) {
+    // The real library has no sets/reps — those are block parameters.
+    // Seed 3 blank rows the coach fills in.
+    return [
+      { reps: '', load: '', tempo: '', rest: '' },
+      { reps: '', load: '', tempo: '', rest: '' },
+      { reps: '', load: '', tempo: '', rest: '' }
+    ];
   }
 
   function renderStep3() {
@@ -552,9 +470,8 @@
       )
     );
 
-    const seedRow = isFree
-      ? { reps: '', load: '', tempo: '', rest: '' }
-      : { reps: ex.reps, load: ex.load, tempo: ex.tempo, rest: ex.rest };
+    // Blank seed for "Add set" — values are plan-level, not from the library
+    const seedRow = { reps: '', load: '', tempo: '', rest: '' };
 
     const tbl = h('table', { class: 'bd-sets-tbl' },
       h('thead', null,
@@ -663,7 +580,7 @@
   }
 
   // ─── Open / Close / Save ───
-  function open(opts) {
+  async function open(opts) {
     build();
     opts = opts || {};
     const existing = opts.existing;
@@ -686,14 +603,7 @@
       sets: {},
       freeNames: {}, exExtras: {}, freeCount: 0
     };
-    // Seed from library IDs (legacy / create flow)
-    if (existing && existing.exerciseIds) {
-      existing.exerciseIds.forEach(exId => {
-        const ex = LIB.find(e => e.id === exId);
-        if (ex) state.sets[exId] = (existing.sets && existing.sets[exId]) || seedSets(ex);
-      });
-    }
-    // Seed from DB exercises jsonb (edit flow — free-text)
+    // Seed from DB exercises jsonb (edit flow — free-text). Does not need the library.
     if (existing?.exercises?.length) {
       existing.exercises.forEach((ex, i) => {
         const fid = '__free__' + i;
@@ -712,6 +622,17 @@
       backdrop.classList.add('is-open');
       drawer.classList.add('is-open');
     }, 0);
+
+    // Load the shared library for this context, then seed library-linked sets + refresh
+    await ensureLibrary(state.context);
+    if (!state.open) return;
+    if (existing && existing.exerciseIds) {
+      existing.exerciseIds.forEach(exId => {
+        const ex = LIB.find(e => e.id === exId);
+        if (ex && !state.sets[exId]) state.sets[exId] = (existing.sets && existing.sets[exId]) || seedSets(ex);
+      });
+    }
+    renderAll();
   }
 
   function close() {
@@ -744,10 +665,10 @@
         const extras = state.exExtras[exId] || {};
         return {
           name: isFree ? (state.freeNames[exId] || '') : (ex?.name || exId),
+          exercise_id: isFree ? null : (ex?.exercise_id || null),  // linked to gym_exercises
           sets: state.sets[exId] || [],
           side: extras.side  || null,
           flag: extras.flag  || null
-          // TODO: exercise_id cuando se linkee la Exercise library
         };
       })
     };
