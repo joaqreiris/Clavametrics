@@ -135,19 +135,38 @@
   // Active week — swapped by applyMode
   let WEEK = WEEK_REHAB;
 
-  // ─── Data: physio's exercise library ───
-  const LIBRARY = [
-    { name: 'Nordic hamstring lower', region: 'Hamstring', sets: 4, reps: 6, custom: false },
-    { name: 'Single-leg RDL — KB', region: 'Hamstring', sets: 4, reps: 8, custom: false },
-    { name: 'Copenhagen adductor — eccentric', region: 'Adductor', sets: 3, reps: 8, custom: true },
-    { name: 'Hip thrust — barbell', region: 'Glute', sets: 5, reps: 5, custom: false },
-    { name: 'Cossack squat — loaded', region: 'Adductor', sets: 3, reps: 6, custom: false },
-    { name: 'RM hamstring switch — single-leg', region: 'Hamstring', sets: 3, reps: 10, custom: true },
-    { name: 'Pallof press — anti-rotation', region: 'Core', sets: 3, reps: 12, custom: false },
-    { name: 'Hip 90/90 isometric hold', region: 'Glute', sets: 3, reps: '30s', custom: false },
-    { name: 'Single-leg bridge — banded', region: 'Glute', sets: 3, reps: 12, custom: true },
-    { name: 'Side plank w/ adduction', region: 'Core', sets: 3, reps: '40s', custom: false }
-  ];
+  // ─── Data: preventive exercise library — loaded from gym_exercises ───
+  let LIBRARY = [];          // mapped rows: { id, name, region, category, complexity, equipment, custom }
+  let libRegion = 'All';     // active region chip
+  let libQuery  = '';        // search box
+  let libLoaded = false;
+
+  async function loadLibrary() {
+    try {
+      const clubId = await window.getClubId();
+      const { data, error } = await window.sb.from('gym_exercises')
+        .select('id,name,muscle_group,category,complexity,equipment,usable_in,is_default')
+        .eq('club_id', clubId)
+        .contains('usable_in', ['preventive'])
+        .order('name');
+      if (error) throw error;
+      LIBRARY = (data || []).map(ex => ({
+        id:         ex.id,
+        name:       ex.name || 'Unnamed',
+        region:     ex.muscle_group || 'Other',
+        category:   ex.category || '',
+        complexity: ex.complexity || '',
+        equipment:  ex.equipment || '',
+        custom:     !ex.is_default          // the 120 defaults are not "custom"; club-owned ones are
+      }));
+    } catch (err) {
+      console.error('[rehab-planner] preventive library load failed:', err);
+      LIBRARY = [];
+    }
+    libLoaded = true;
+    renderLibChips();
+    renderLibrary();
+  }
 
   // ─── Helpers ───
   const TYPE_LABEL = {
@@ -171,22 +190,52 @@
   const $ = (sel, ctx) => (ctx || document).querySelector(sel);
   const $$ = (sel, ctx) => Array.from((ctx || document).querySelectorAll(sel));
 
-  // ─── Render: physio exercise library ───
+  // ─── Render: preventive exercise library (region chips) ───
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+
+  function renderLibChips() {
+    const root = $('#lib-filters');
+    if (!root) return;
+    const regions = [...new Set(LIBRARY.map(e => e.region).filter(Boolean))].sort();
+    root.innerHTML = ['All', ...regions].map(r =>
+      `<button class="rp-lib-chip${libRegion === r ? ' is-on' : ''}" data-region="${r}">${r}</button>`
+    ).join('');
+    $$('#lib-filters .rp-lib-chip').forEach(b => b.addEventListener('click', () => {
+      libRegion = b.dataset.region;
+      renderLibChips();
+      renderLibrary();
+    }));
+  }
+
+  // ─── Render: preventive exercise library list ───
   function renderLibrary() {
     const root = $('#lib-list');
     if (!root) return;
     root.innerHTML = '';
-    LIBRARY.forEach(ex => {
+    const q = libQuery.trim().toLowerCase();
+    const rows = LIBRARY.filter(ex => {
+      if (libRegion !== 'All' && ex.region !== libRegion) return false;
+      if (q && !ex.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    if (!rows.length) {
+      root.innerHTML = `<div style="padding:18px 8px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${libLoaded ? 'No exercises match.' : 'Loading library…'}</div>`;
+      return;
+    }
+
+    rows.forEach(ex => {
       const row = document.createElement('div');
       row.className = 'rp-lib-ex' + (ex.custom ? ' is-custom' : '');
+      // The library has no real sets/reps — show muscle_group · category · complexity
       row.innerHTML = `
         <span class="grip"><i class="ti ti-grip-vertical"></i></span>
         <div class="body">
           <div class="name">${ex.name}</div>
           <div class="meta">
             <span>${ex.region}</span>
-            <span class="sep">·</span>
-            <span>${ex.sets}×${ex.reps}</span>
+            ${ex.category ? `<span class="sep">·</span><span>${cap(ex.category)}</span>` : ''}
+            ${ex.complexity ? `<span class="sep">·</span><span>${ex.complexity}</span>` : ''}
             ${ex.custom ? '<span class="tag">Custom</span>' : ''}
           </div>
         </div>
@@ -456,7 +505,19 @@
     renderKanban();
     renderTable();
     renderTimeline();
-    renderLibrary();
+    renderLibrary();     // paints "Loading library…" placeholder
+    loadLibrary();       // fetch real preventive exercises, then re-render chips + list
+
+    // Library search
+    const libSearch = $('#lib-search');
+    if (libSearch) libSearch.addEventListener('input', e => { libQuery = e.target.value; renderLibrary(); });
+
+    // "New exercise" → centralized creation in Gym Library
+    const goGymLib = () => { window.location.href = 'Gym Library.html'; };
+    const libNewTop = $('#lib-new-top');
+    const libNewFoot = $('#lib-new-foot');
+    if (libNewTop) libNewTop.addEventListener('click', goGymLib);
+    if (libNewFoot) libNewFoot.addEventListener('click', goGymLib);
 
     // picker → planner
     $$('.rp-type').forEach(btn => {
