@@ -157,15 +157,17 @@
   .pl-m2-orient.o-vel { background:var(--cm-info-bg);    color:var(--cm-info);    border-color:var(--cm-info-bd); }
   .pl-m2-orient.o-end { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
 
-  .pl-m2-ref { display:grid; grid-template-columns: repeat(4,1fr); gap:3px; margin-top:8px; }
-  .pl-m2-ref div {
-    padding:4px 3px; border-radius:4px;
-    font:600 9px/1 var(--cm-font-mono);
-    text-align:center; letter-spacing:0.04em;
+  .pl-m2-ref { display:grid; grid-template-columns: repeat(4,1fr); gap:4px; margin-top:8px; }
+  .pl-m2-ref > div {
+    display:flex; flex-direction:column; align-items:center; gap:1px;
+    padding:4px 6px; border-radius:4px;
+    text-align:center; line-height:1.25;
     opacity:0.35;
     transition:opacity 150ms;
   }
-  .pl-m2-ref div.is-active { opacity:1; }
+  .pl-m2-ref > div b   { font:600 10.5px/1 var(--cm-font-sans); letter-spacing:0.01em; }
+  .pl-m2-ref > div span { font:600 9px/1 var(--cm-font-mono); letter-spacing:0.02em; opacity:0.85; }
+  .pl-m2-ref > div.is-active { opacity:1; }
   .pl-m2-ref .r-act { background:var(--cm-warning-bg); color:var(--cm-warning); }
   .pl-m2-ref .r-str { background:var(--cm-danger-bg);  color:var(--cm-danger); }
   .pl-m2-ref .r-vel { background:var(--cm-info-bg);    color:var(--cm-info); }
@@ -873,11 +875,11 @@
               <i class="ti ti-target-arrow" style="font-size:11px"></i><span id="plM2OrientText">—</span>
             </div>
           </div>
-          <div class="pl-m2-ref" style="gap:2px;margin-bottom:6px">
-            <div class="r-act" data-ref="ACTIVATION" style="font-size:7.5px;padding:3px 2px">Act&lt;40</div>
-            <div class="r-str" data-ref="STRENGTH"   style="font-size:7.5px;padding:3px 2px">Str 40–80</div>
-            <div class="r-vel" data-ref="VELOCITY"   style="font-size:7.5px;padding:3px 2px">Vel 80–160</div>
-            <div class="r-end" data-ref="ENDURANCE"  style="font-size:7.5px;padding:3px 2px">End&gt;160</div>
+          <div class="pl-m2-ref" style="margin-bottom:6px">
+            <div class="r-act" data-ref="ACTIVATION"><b>Act</b><span>&lt;40</span></div>
+            <div class="r-str" data-ref="STRENGTH"><b>Str</b><span>40–80</span></div>
+            <div class="r-vel" data-ref="VELOCITY"><b>Vel</b><span>80–160</span></div>
+            <div class="r-end" data-ref="ENDURANCE"><b>End</b><span>&gt;160</span></div>
           </div>
           <div style="display:flex;align-items:baseline;gap:6px">
             <span style="font:500 9px/1 var(--cm-font-mono);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted)">Field</span>
@@ -1085,9 +1087,9 @@
               <button class="pl-dock-btn pl-drop-opt" title="Circle"><i class="ti ti-circle"></i><span>Circle / Ellipse</span></button>
               <div class="pl-drop-sep"></div>
               <button class="pl-drop-opt" data-shape="triangle"><i class="ti ti-triangle"></i><span>Triangle zone</span></button>
-              <button class="pl-drop-opt" data-shape="diamond"><span style="font-size:13px;line-height:1;flex-shrink:0">&#9670;</span><span>Diamond</span></button>
-              <button class="pl-drop-opt" data-shape="pentagon"><span style="font-size:13px;line-height:1;flex-shrink:0">&#11040;</span><span>Pentagon</span></button>
-              <button class="pl-drop-opt" data-shape="hexagon"><span style="font-size:13px;line-height:1;flex-shrink:0">&#11041;</span><span>Hexagon</span></button>
+              <button class="pl-drop-opt" data-shape="diamond"><svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><polygon points="12,3 21,12 12,21 3,12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Diamond</span></button>
+              <button class="pl-drop-opt" data-shape="pentagon"><svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Pentagon</span></button>
+              <button class="pl-drop-opt" data-shape="hexagon"><svg viewBox="0 0 24 24" fill="none" style="width:16px;height:16px;flex-shrink:0"><polygon points="12,3 19.8,7.5 19.8,16.5 12,21 4.2,16.5 4.2,7.5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><span>Hexagon</span></button>
               <button class="pl-drop-opt" data-shape="free"><i class="ti ti-pencil"></i><span>Free polygon</span></button>
             </div>
           </div>
