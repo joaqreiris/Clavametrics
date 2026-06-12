@@ -658,7 +658,9 @@
   .pl-drop-opt .ti { font-size:18px; flex-shrink:0; }
   .pl-drop-opt svg { width:18px !important; height:18px !important; flex-shrink:0; }
   .pl-drop-team-row { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:6px; transition:background 80ms; }
-  .pl-drop-team-row:hover { background:var(--cm-bg-soft); }
+  .pl-drop-team-row:hover { background:var(--cm-bg-soft); cursor:pointer; }
+  .pl-drop-team-row.is-active-team { background:var(--cm-accent-soft); box-shadow:inset 2px 0 0 var(--cm-accent); }
+  .pl-drop-team-row.is-active-team .pl-drop-team-name { color:var(--cm-fg-strong); font-weight:600; }
   .pl-drop-team-row .pl-dock-btn { width:28px; height:28px; flex-shrink:0; border-radius:50%; }
   .pl-drop-team-name { flex:1; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .pl-drop-team-row .pl-team-swatch { width:20px; height:18px; border-radius:4px; cursor:pointer; display:block; border:1px solid rgba(0,0,0,0.15); }
@@ -1185,27 +1187,39 @@
   const today = new Date().toISOString().split('T')[0];
 
   // ── Available players ───────────────────────────────────────────
-  const { data: playersData } = await window.sb.from('players')
-    .select('id,first_name,last_name,number,position')
-    .eq('club_id', clubId).neq('status', 'inactive');
-  const players = playersData || [];
-
-  const availRes = await window.sb.from('availability')
-    .select('player_id,status').eq('club_id', clubId).eq('date', today);
-  const availMap = Object.fromEntries((availRes.data||[]).map(a => [a.player_id, a.status]));
-  const hasAvail = (availRes.data||[]).length > 0;
   const statusClass = { available:'is-success', partial:'is-warning', limited:'is-warning', unavailable:'is-danger', away:'is-warning' };
 
-  const pillData = hasAvail
-    ? players.filter(p => { const s = availMap[p.id]; return !s || s === 'available' || s === 'partial' || s === 'limited'; })
-        .map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
-    : players.map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
+  // Canonical active team source: the same sessionStorage key the rest of the
+  // app uses (Calendar topbar, Availability, etc.). Empty/null = "All teams" → no filter.
+  const _activeTeamId = () => sessionStorage.getItem('cal_active_team') || null;
 
+  let pillData = [];
   const _placedPlayerIds = new Set();
   let activeTeam = 't1';
 
   const headEl  = document.getElementById('plAvailHead');
   const pillsEl = document.getElementById('plAvailPills');
+
+  async function loadAvailable() {
+    let pq = window.sb.from('players')
+      .select('id,first_name,last_name,number,position')
+      .eq('club_id', clubId).neq('status', 'inactive');
+    const teamId = _activeTeamId();
+    if (teamId) pq = pq.eq('team_id', teamId);   // null = "All teams" → no team filter
+    const { data: playersData } = await pq;
+    const players = playersData || [];
+
+    const availRes = await window.sb.from('availability')
+      .select('player_id,status').eq('club_id', clubId).eq('date', today);
+    const availMap = Object.fromEntries((availRes.data||[]).map(a => [a.player_id, a.status]));
+    const hasAvail = (availRes.data||[]).length > 0;
+
+    pillData = hasAvail
+      ? players.filter(p => { const s = availMap[p.id]; return !s || s === 'available' || s === 'partial' || s === 'limited'; })
+          .map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:statusClass[availMap[p.id]]||'is-success' }))
+      : players.map(p => ({ id:p.id, number:p.number??null, lastName:p.last_name||p.first_name||'?', label:`${p.number ? p.number+' ' : ''}${p.last_name||p.first_name||'?'}`, cls:'is-success' }));
+    renderAvailPills();
+  }
 
   function renderAvailPills() {
     if (headEl) headEl.innerHTML = `<i class="ti ti-users"></i>Available · ${pillData.length}`;
@@ -1231,7 +1245,12 @@
       });
     });
   }
-  renderAvailPills();
+  await loadAvailable();
+  // Re-run the roster load when the active team changes elsewhere, so a topbar
+  // category switch is reflected here. sessionStorage 'storage' events fire
+  // cross-tab; same-tab switchers can call window.plReloadAvailable().
+  window.plReloadAvailable = loadAvailable;
+  window.addEventListener('storage', e => { if (e.key === 'cal_active_team') loadAvailable(); });
 
   // ── Fabric.js canvas init ───────────────────────────────────────
   await new Promise(r => requestAnimationFrame(r));
@@ -1429,11 +1448,21 @@
     renderAvailPills();
   }
 
-  // Track active team from dock buttons
-  ['Team1','Team2','Team3','Team4'].forEach((title, i) => {
-    document.querySelector(`#plTeamGrp .pl-dock-btn[title="${title}"]`)
-      ?.addEventListener('click', () => { activeTeam = `t${i+1}`; });
+  // Track the active team (drop destination) from the popover rows themselves,
+  // not the tiny dot button — clicking anywhere on a Team A/B/C/D row selects it.
+  // Rows revealed later via "Add team" (t3/t4) wire up here too (hidden ≠ absent).
+  function setActiveTeam(key) {
+    activeTeam = key;
+    document.querySelectorAll('#plDropTeamsMenu .pl-drop-team-row').forEach((row, i) => {
+      const on = (`t${i+1}` === key);
+      row.classList.toggle('is-active-team', on);
+      row.querySelector('.pl-dock-btn')?.classList.toggle('is-on', on);
+    });
+  }
+  document.querySelectorAll('#plDropTeamsMenu .pl-drop-team-row').forEach((row, i) => {
+    row.addEventListener('click', () => setActiveTeam(`t${i+1}`));
   });
+  setActiveTeam('t1');
 
   // Drag-and-drop from Available panel to canvas
   fieldEl.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
@@ -2026,13 +2055,8 @@
     });
   });
 
-  // Teams group: single-select but keep menu open (user may also adjust color)
-  document.getElementById('plTeamGrp')?.querySelectorAll('.pl-dock-btn').forEach(b => {
-    b.addEventListener('click', () => {
-      document.getElementById('plTeamGrp')?.querySelectorAll('.pl-dock-btn').forEach(o => o.classList.remove('is-on'));
-      b.classList.add('is-on');
-    });
-  });
+  // Teams group: single-select highlight is handled by setActiveTeam() (row-based),
+  // which keeps the menu open so the user can also adjust the color.
 
   // Polygon shapes in Zones dropdown (data-shape buttons, no pl-dock-btn class)
   document.querySelectorAll('#plDropZonesMenu [data-shape]').forEach(opt => {
