@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Annual planner — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#15803D">
+  <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  .ap-page { padding:24px 28px 64px; max-width:1100px; width:100%; }
+  .ap-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:20px; flex-wrap:wrap; }
+  .ap-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ap-head .sub { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+
+  .ap-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:14px; padding:20px 22px; }
+  .ap-card-h { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .ap-card-h .ic { width:32px; height:32px; border-radius:8px; background:var(--cm-bg-soft); display:flex; align-items:center; justify-content:center; }
+  .ap-card-h .t { font:600 15px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ap-card-h .d { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+
+  .ap-grid3 { display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:12px; }
+  .ap-field label { display:block; font:600 10px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:5px; }
+  .ap-field input, .ap-field select { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); }
+
+  .ap-btn { height:34px; padding:0 16px; border-radius:8px; font:600 13px/1 var(--cm-font-sans); cursor:pointer; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-strong); }
+  .ap-btn.primary { background:var(--cm-accent, #2f6fed); color:#fff; border:none; }
+  .ap-empty { text-align:center; padding:30px 16px; color:var(--cm-fg-muted); }
+  .ap-empty .ti { font-size:26px; color:var(--cm-fg-faint); margin-bottom:8px; }
+  .ap-row { display:flex; align-items:center; gap:12px; padding:11px 12px; background:var(--cm-bg-soft); border-radius:9px; }
+  .ap-row + .ap-row { margin-top:7px; }
+  .ap-pill { font:600 10px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:6px; }
+  .ap-pill.active { background:rgba(34,197,94,0.12); color:var(--cm-success,#16a34a); }
+  .ap-pill.archived { background:var(--cm-bg); color:var(--cm-fg-muted); }
+  .is-hidden { display:none !important; }
+</style>
+</head>
+<body class="cm">
+
+  <div class="hub-shell">
+    <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="apTeamSelect" onchange="apOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+      </div>
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span id="apClubName">Club</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Annual planner</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, sessions…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="ap-page">
+      <header class="ap-head">
+        <h1>Annual planner</h1>
+        <span class="sub" id="apSeasonSub">Season setup</span>
+      </header>
+
+      <!-- ── Season setup ──────────────────────────────────────── -->
+      <div class="ap-card">
+        <div class="ap-card-h">
+          <div class="ic"><i class="ti ti-calendar-cog" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <div>
+            <div class="t">Season setup</div>
+            <div class="d">Each category has its own season</div>
+          </div>
+          <button class="ap-btn" id="apNewSeasonBtn" onclick="apShowForm()" style="margin-left:auto">New season</button>
+        </div>
+
+        <!-- Existing seasons list -->
+        <div id="apSeasonsList"></div>
+
+        <!-- Create / edit form -->
+        <div id="apSeasonForm" class="is-hidden" style="margin-top:14px">
+          <div class="ap-grid3" style="margin-bottom:14px">
+            <div class="ap-field"><label>Season name</label><input type="text" id="apName" placeholder="2025/26"></div>
+            <div class="ap-field"><label>Start</label><input type="date" id="apStart"></div>
+            <div class="ap-field"><label>End</label><input type="date" id="apEnd"></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px">
+            <button class="ap-btn" onclick="apHideForm()">Cancel</button>
+            <button class="ap-btn primary" onclick="apSaveSeason()">Save season</button>
+          </div>
+        </div>
+
+        <!-- Phases placeholder (next step) -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--cm-border);font:var(--cm-body-sm);color:var(--cm-fg-faint)">
+          <i class="ti ti-layout-rows" style="font-size:13px;vertical-align:-2px"></i> Phases editor — coming next
+        </div>
+      </div>
+    </section>
+  </div>
+
+<script>
+let _apClubId = null, _apTeamId = null;
+
+function apOnTeamChange(){
+  const v = document.getElementById('apTeamSelect').value;
+  if (v) { sessionStorage.setItem('cal_active_team', v); localStorage.setItem('cal_active_team', v); }
+  location.reload();
+}
+
+async function apInitTeam(){
+  const sel = document.getElementById('apTeamSelect');
+  let teams = [];
+  try {
+    const { data } = await window.sb.from('teams').select('id,name').eq('club_id', _apClubId).order('name');
+    teams = data || [];
+  } catch(_) {}
+
+  // Coach: restringir a sus categorías (mismo patrón que el resto de módulos).
+  try {
+    const profile = await window.getProfile();
+    const role = (profile?.role || '').toLowerCase();
+    const fullAccess = ['admin','owner','super-admin','super_admin'].includes(role) || profile?.is_super_admin;
+    if (!fullAccess) {
+      const mine = (await window.sb.rpc('my_team_ids')).data || [];
+      if (mine.length) teams = teams.filter(t => mine.includes(t.id));
+    }
+  } catch(_) {}
+
+  const saved = sessionStorage.getItem('cal_active_team') || localStorage.getItem('cal_active_team');
+  _apTeamId = (saved && teams.some(t => t.id === saved)) ? saved : (teams[0]?.id || null);
+
+  sel.innerHTML = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('') || '<option value="">No teams</option>';
+  if (_apTeamId) sel.value = _apTeamId;
+}
+
+async function apLoadSeasons(){
+  const list = document.getElementById('apSeasonsList');
+  let q = window.sb.from('seasons').select('*').eq('club_id', _apClubId);
+  if (_apTeamId) q = q.eq('team_id', _apTeamId);
+  const { data: seasons, error } = await q.order('start_date', { ascending: false });
+
+  if (error) { list.innerHTML = `<div class="ap-empty">Couldn't load seasons.</div>`; return; }
+
+  if (!seasons || !seasons.length) {
+    list.innerHTML = `<div class="ap-empty">
+      <div><i class="ti ti-calendar-plus"></i></div>
+      <div style="font-weight:600;color:var(--cm-fg);margin-bottom:3px">No season yet</div>
+      <div style="font:var(--cm-body-sm)">Create the first season for this category to start planning.</div>
+    </div>`;
+    apShowForm();
+    return;
+  }
+
+  list.innerHTML = seasons.map(s => {
+    const st = s.status === 'archived' ? 'archived' : 'active';
+    return `<div class="ap-row">
+      <i class="ti ti-calendar-stats" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+      <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:90px">${s.name}</span>
+      <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${s.start_date} → ${s.end_date}</span>
+      <span class="ap-pill ${st}" style="margin-left:auto">${st}</span>
+    </div>`;
+  }).join('');
+}
+
+function apShowForm(){ document.getElementById('apSeasonForm').classList.remove('is-hidden'); }
+function apHideForm(){ document.getElementById('apSeasonForm').classList.add('is-hidden'); }
+
+async function apSaveSeason(){
+  const name  = document.getElementById('apName').value.trim();
+  const start = document.getElementById('apStart').value;
+  const end   = document.getElementById('apEnd').value;
+  if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
+  if (start > end) { alert('Start date must be before end date.'); return; }
+
+  const { error } = await window.sb.from('seasons').insert({
+    club_id: _apClubId,
+    team_id: _apTeamId,
+    name, start_date: start, end_date: end, status: 'active'
+  });
+  if (error) { alert('Could not save: ' + error.message); return; }
+
+  apHideForm();
+  document.getElementById('apName').value = '';
+  document.getElementById('apStart').value = '';
+  document.getElementById('apEnd').value = '';
+  await apLoadSeasons();
+}
+
+(async function apInit(){
+  _apClubId = await window.getClubId();
+  try { const club = await window.getClub(); if (club?.name) document.getElementById('apClubName').textContent = club.name; } catch(_){}
+  await apInitTeam();
+  await apLoadSeasons();
+})();
+</script>
+
+</body>
+</html>
