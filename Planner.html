@@ -2029,22 +2029,33 @@
   // SVG elements. Saved into objects_json automatically (it's a Fabric object).
   function addCustomObject(url) {
     if (!url) return;
-    const TARGET = 50;
+    // Land it at a clearly visible, grabbable size relative to the field
+    // (the larger side ≈ 16% of the canvas, min 120px), keeping aspect ratio.
+    const TARGET = Math.max(120, Math.round(Math.min(fc.width, fc.height) * 0.16));
+    const _place = obj => {
+      const w = obj.getScaledWidth()  || TARGET;
+      const h = obj.getScaledHeight() || TARGET;
+      const factor = TARGET / Math.max(w, h, 1);
+      obj.scaleX = (obj.scaleX || 1) * factor;
+      obj.scaleY = (obj.scaleY || 1) * factor;
+      obj.set({                          // make sure scale + rotate handles are live
+        hasControls: true, hasBorders: true,
+        lockRotation: false, lockScalingX: false, lockScalingY: false, lockUniScaling: false,
+        cornerSize: 11, touchCornerSize: 24, transparentCorners: false
+      });
+      obj.setCoords();
+      finishAdd(obj, 'custom_object');
+    };
     const isSvg = /\.svg(\?|$)/i.test(url);
     if (isSvg) {
       fabric.loadSVGFromURL(url, (objs, opts) => {
         if (!objs || !objs.length) { _toast('Could not load SVG.', true); return; }
-        const grp = fabric.util.groupSVGElements(objs, opts);
-        const s = TARGET / Math.max(grp.width || TARGET, grp.height || TARGET, 1);
-        grp.set({ scaleX: s, scaleY: s });
-        finishAdd(grp, 'custom_object');
+        _place(fabric.util.groupSVGElements(objs, opts));
       });
     } else {
       fabric.Image.fromURL(url, img => {
         if (!img) { _toast('Could not load image.', true); return; }
-        const s = TARGET / Math.max(img.width, img.height, 1);
-        img.set({ scaleX: s, scaleY: s });
-        finishAdd(img, 'custom_object');
+        _place(img);
       }, { crossOrigin: 'anonymous' });
     }
   }
