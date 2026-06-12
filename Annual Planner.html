@@ -12,6 +12,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" defer></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
@@ -230,11 +232,11 @@
         </div>
 
         <div id="apImportPanel" class="is-hidden" style="margin-bottom:16px;padding:14px;background:var(--cm-bg-soft);border-radius:10px">
-          <div style="font:600 10px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Drop a CSV or browse</div>
+          <div style="font:600 10px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Drop a file (CSV, Excel or PDF) or browse</div>
           <label class="ap-dropzone" id="apDrop">
             <i class="ti ti-upload" style="font-size:20px"></i>
-            <div style="font:500 12.5px/1.4 var(--cm-font-sans);margin-top:6px" id="apDropLabel">Drag &amp; drop a .csv here, or click to choose</div>
-            <input type="file" id="apImpFile" accept=".csv,.txt" style="display:none">
+            <div style="font:500 12.5px/1.4 var(--cm-font-sans);margin-top:6px" id="apDropLabel">Drag &amp; drop a CSV, Excel or PDF here, or click to choose</div>
+            <input type="file" id="apImpFile" accept=".csv,.txt,.xlsx,.xls,.pdf" style="display:none">
           </label>
           <div style="display:flex;align-items:center;gap:8px;margin:12px 0;color:var(--cm-fg-faint);font:var(--cm-body-sm)"><span style="flex:1;height:1px;background:var(--cm-border)"></span>or paste<span style="flex:1;height:1px;background:var(--cm-border)"></span></div>
           <textarea class="ap-ta" id="apImpPaste" placeholder="date, opponent, home_away, competition, time&#10;2025-08-18, Real Madrid, home, La Liga, 21:00&#10;25/08/2025, Sevilla, away, La Liga"></textarea>
@@ -436,7 +438,7 @@ function apRenderTimeline(){
 
 let _apEditingPhase = null;
 let _apComps = [], _apEditingComp = null;
-let _apMatches = [], _apImportRows = [], _apImportNewComps = [];
+let _apMatches = [], _apImportRows = [], _apImportNewComps = [], _apEditingMatch = null;
 const COMP_TYPES = {
   league:        { label:'League',        color:'#185FA5', bg:'#E6F1FB', tx:'#0C447C' },
   cup:           { label:'Cup',           color:'#534AB7', bg:'#EEEDFE', tx:'#3C3489' },
@@ -444,6 +446,11 @@ const COMP_TYPES = {
   friendly:      { label:'Friendly',      color:'#888780', bg:'#F1EFE8', tx:'#444441' },
   supercup:      { label:'Supercup',      color:'#D85A30', bg:'#FAECE7', tx:'#993C1D' }
 };
+const LEGACY_COMP_CLASS = { league:'league', cup:'cup', international:'international', friendly:'friendly', supercup:'cup' };
+function apLegacyClass(compId){
+  const c = _apComps.find(x => x.id === compId);
+  return c ? (LEGACY_COMP_CLASS[c.comp_type] || null) : null;
+}
 function apRenderPhasesList(){
   const wrap = document.getElementById('apPhasesList');
   if (!_apPhases.length) { wrap.innerHTML = ''; return; }
@@ -641,6 +648,7 @@ function apRenderMatchesList(){
   document.getElementById('apMatchesSub').textContent = _apMatches.length ? `${_apMatches.length} match${_apMatches.length>1?'es':''}` : 'No matches yet';
   if (!_apMatches.length) { wrap.innerHTML = `<div class="ap-tl-empty" style="position:static;padding:16px 0">No matches yet — import fixtures above</div>`; return; }
   wrap.innerHTML = _apMatches.map(m => {
+    if (m.id === _apEditingMatch) return apMatchEditRow(m);
     const comp = _apComps.find(c => c.id === m.competition_id);
     const compHtml = comp
       ? `<span class="ap-badge" style="background:color-mix(in srgb, ${comp.color} 14%, transparent);color:${comp.color}">${comp.name}</span>`
@@ -652,9 +660,48 @@ function apRenderMatchesList(){
       <span style="display:inline-flex;align-items:center;gap:4px;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)"><i class="ti ti-${m.home_away==='away'?'plane':'home'}" style="font-size:13px"></i>${m.home_away==='away'?'Away':'Home'}</span>
       ${compHtml}
       ${time}
-      <button class="ap-iconbtn" onclick="apDeleteMatch('${m.id}')" title="Delete" style="margin-left:auto"><i class="ti ti-trash" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn is-edit" onclick="apEditMatch('${m.id}')" title="Edit" style="margin-left:auto"><i class="ti ti-pencil" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn" onclick="apDeleteMatch('${m.id}')" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
     </div>`;
   }).join('');
+  if (_apEditingMatch) apSyncDateBtn('apMatchEdit_date');
+}
+
+function apMatchEditRow(m){
+  const compOpts = `<option value="">— No competition</option>` +
+    _apComps.map(c => `<option value="${c.id}"${c.id===m.competition_id?' selected':''}>${c.name}</option>`).join('');
+  const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
+  return `
+    <div class="ap-phase-row" style="flex-wrap:wrap;gap:8px">
+      <input type="date" id="apMatchEdit_date" style="display:none" value="${m.date}">
+      <button type="button" class="ap-datebtn" id="apMatchEdit_date_btn" onclick="apOpenCal('apMatchEdit_date', this)" style="width:auto;min-width:150px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(m.date)}</span></button>
+      <input id="apMatchEdit_opp" value="${(m.opponent||'').replace(/"/g,'&quot;')}" placeholder="Opponent" style="${fld};min-width:130px;font:600 13px/1 var(--cm-font-sans)">
+      <select id="apMatchEdit_ha" style="${fld};font:500 12px/1 var(--cm-font-sans)"><option value="home"${m.home_away!=='away'?' selected':''}>Home</option><option value="away"${m.home_away==='away'?' selected':''}>Away</option></select>
+      <select id="apMatchEdit_comp" style="${fld};font:500 12px/1 var(--cm-font-sans)">${compOpts}</select>
+      <input type="time" id="apMatchEdit_time" value="${m.start_time?m.start_time.slice(0,5):''}" style="${fld};font:500 12px/1 var(--cm-font-mono)">
+      <button class="ap-iconbtn is-edit" onclick="apSaveMatchEdit('${m.id}')" title="Save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn" onclick="apCancelMatchEdit()" title="Cancel"><i class="ti ti-x" style="font-size:14px"></i></button>
+    </div>`;
+}
+
+function apEditMatch(id){ _apEditingMatch = id; apRenderMatchesList(); }
+function apCancelMatchEdit(){ _apEditingMatch = null; apRenderMatchesList(); }
+
+async function apSaveMatchEdit(id){
+  const date = document.getElementById('apMatchEdit_date').value;
+  const opp  = document.getElementById('apMatchEdit_opp').value.trim();
+  const ha   = document.getElementById('apMatchEdit_ha').value;
+  const cid  = document.getElementById('apMatchEdit_comp').value || null;
+  const time = document.getElementById('apMatchEdit_time').value || null;
+  if (!date || !opp) { alert('Date and opponent are required.'); return; }
+  const { error } = await window.sb.from('calendar_events').update({
+    date, opponent: opp, home_away: ha,
+    competition_id: cid, competition: apLegacyClass(cid),
+    start_time: time, title: `vs ${opp}`
+  }).eq('id', id);
+  if (error) { alert('Could not update: ' + error.message); return; }
+  _apEditingMatch = null;
+  await apLoadMatches();
 }
 
 async function apDeleteMatch(id){
@@ -672,7 +719,7 @@ function apToggleImport(){
     document.getElementById('apImpPaste').value = '';
     document.getElementById('apImpBody').innerHTML = '';
     document.getElementById('apImpNewComps').innerHTML = '';
-    document.getElementById('apDropLabel').textContent = 'Drag & drop a .csv here, or click to choose';
+    document.getElementById('apDropLabel').textContent = 'Drag & drop a CSV, Excel or PDF here, or click to choose';
   }
 }
 
@@ -774,15 +821,24 @@ async function apImportConfirm(){
   const btn = document.getElementById('apImpConfirm');
   btn.disabled = true;
 
-  const compByName = {};
-  _apComps.forEach(c => compByName[(c.name || '').toLowerCase()] = c.id);
+  const compByName = {}, compTypeByName = {};
+  _apComps.forEach(c => { compByName[(c.name || '').toLowerCase()] = c.id; compTypeByName[(c.name || '').toLowerCase()] = c.comp_type; });
   for (const name of _apImportNewComps){
     const { data, error } = await window.sb.from('competitions')
       .insert({ season_id: _apSeasonId, name, comp_type: 'league', color: COMP_TYPES.league.color })
       .select('id').single();
     if (error) { btn.disabled = false; alert(`Could not create competition "${name}": ${error.message}`); return; }
     compByName[name.toLowerCase()] = data.id;
+    compTypeByName[name.toLowerCase()] = 'league';
   }
+
+  // calendar_events.competition is a constrained CLASS (league/cup/international/friendly), not the name.
+  // The real competition (name + color) lives in competition_id.
+  const LEGACY_COMP = { league:'league', cup:'cup', international:'international', friendly:'friendly', supercup:'cup' };
+  const legacyComp = (f) => {
+    const ct = f.competition ? compTypeByName[f.competition.toLowerCase()] : null;
+    return ct ? (LEGACY_COMP[ct] || null) : null;
+  };
 
   const rows = valid.map(f => ({
     id: crypto.randomUUID(),
@@ -790,7 +846,7 @@ async function apImportConfirm(){
     competition_id: f.competition ? (compByName[f.competition.toLowerCase()] || null) : null,
     title: `vs ${f.opponent}`, type: 'match', date: f.date,
     opponent: f.opponent, home_away: f.home_away,
-    competition: f.competition || null, start_time: f.time || null,
+    competition: legacyComp(f), start_time: f.time || null,
     duration_minutes: null
   }));
   const { error } = await window.sb.from('calendar_events').insert(rows);
@@ -812,9 +868,51 @@ function apWireImport(){
 }
 async function apReadFile(f){
   document.getElementById('apDropLabel').textContent = f.name;
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'xlsx' || ext === 'xls') return apReadXlsx(f);
+  if (ext === 'pdf') return apReadPdf(f);
   const text = await f.text();
   document.getElementById('apImpPaste').value = text;
   apImportParse();
+}
+
+async function apReadXlsx(f){
+  if (!window.XLSX) { alert('Excel support is still loading — try again in a moment.'); return; }
+  try {
+    const buf = await f.arrayBuffer();
+    const wb  = XLSX.read(buf, { type: 'array' });
+    const ws  = wb.Sheets[wb.SheetNames[0]];
+    const csv = XLSX.utils.sheet_to_csv(ws);
+    document.getElementById('apImpPaste').value = csv;
+    apImportParse();
+  } catch (e) { alert('Could not read the Excel file: ' + e.message); }
+}
+
+async function apReadPdf(f){
+  if (!window.pdfjsLib) { alert('PDF support is still loading — try again in a moment.'); return; }
+  try {
+    if (pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    }
+    const buf = await f.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const lines = [];
+    for (let p = 1; p <= pdf.numPages; p++){
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      const byY = {};
+      content.items.forEach(it => {
+        const y = Math.round(it.transform[5]);
+        (byY[y] = byY[y] || []).push(it);
+      });
+      Object.keys(byY).sort((a,b) => b - a).forEach(y => {
+        const row = byY[y].sort((a,b) => a.transform[4] - b.transform[4]).map(it => it.str.trim()).filter(Boolean);
+        if (row.length) lines.push(row.join(', '));
+      });
+    }
+    document.getElementById('apImpPaste').value = lines.join('\n');
+    apImportParse();
+  } catch (e) { alert('Could not read the PDF: ' + e.message + '. If it is a scanned PDF, paste the fixtures as text instead.'); }
 }
 
 /* ── Date picker (calendar popover) ───────────────────────── */
