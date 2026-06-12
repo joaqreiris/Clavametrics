@@ -127,6 +127,8 @@
     { label: 'Overview', items: [
       { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub' },
       { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar' },
+      { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner' },
+      { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner' },
       { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks' },
     ]},
     { label: 'Technical', items: [
