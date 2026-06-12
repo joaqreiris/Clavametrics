@@ -365,7 +365,7 @@ function apRenderSeasonsList(){
   }).join('');
 }
 
-function apSelectSeason(id){
+async function apSelectSeason(id){
   const s = _apSeasons.find(x => x.id === id);
   if (!s) return;
   _apSeasonId = s.id; _apSeasonStart = s.start_date; _apSeasonEnd = s.end_date;
@@ -375,14 +375,14 @@ function apSelectSeason(id){
   document.getElementById('apPhaseStart').value = s.start_date;
   document.getElementById('apPhaseEnd').value = s.end_date;
   apSyncDateBtn('apPhaseStart'); apSyncDateBtn('apPhaseEnd');
-  apLoadPhases();
   document.getElementById('apCompsCard').classList.remove('is-hidden');
   document.getElementById('apCompsSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
-  apLoadComps();
   document.getElementById('apMatchesCard').classList.remove('is-hidden');
-  apLoadMatches();
   document.getElementById('apTimelineCard').classList.remove('is-hidden');
-  apLoadTimeline();
+  await apLoadPhases();
+  await apLoadComps();
+  await apLoadMatches();
+  await apLoadTimeline();
 }
 
 function apShowForm(){ document.getElementById('apSeasonForm').classList.remove('is-hidden'); }
@@ -948,15 +948,17 @@ async function apLoadTimeline(){
   const sStart = _apSeasonStart, sEnd = _apSeasonEnd;
   let miq = window.sb.from('microcycles').select('name,start_date,end_date').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
   if (_apTeamId) miq = miq.eq('team_id', _apTeamId);
-  const [ph, mt, cp, ma, me, mi] = await Promise.all([
-    window.sb.from('season_phases').select('name,color,start_date,end_date,counts_availability').eq('season_id', _apSeasonId).order('start_date'),
-    window.sb.from('calendar_events').select('date,opponent,home_away,competition_id').eq('season_id', _apSeasonId).eq('type','match').order('date'),
-    window.sb.from('competitions').select('id,name,color').eq('season_id', _apSeasonId),
+  const [ma, me, mi] = await Promise.all([
     window.sb.from('macrocycles').select('name,objective,start_date,end_date,color').eq('season_id', _apSeasonId).order('start_date'),
     window.sb.from('mesocycles').select('name,objective,start_date,end_date,macrocycles!inner(season_id)').eq('macrocycles.season_id', _apSeasonId).order('start_date'),
     miq
   ]);
-  _apTL = { phases:ph.data||[], matches:mt.data||[], comps:cp.data||[], macros:ma.data||[], mesos:me.data||[], micros:mi.data||[] };
+  _apTL = {
+    phases: _apPhases || [],
+    matches: _apMatches || [],
+    comps: _apComps || [],
+    macros: ma.data || [], mesos: me.data || [], micros: mi.data || []
+  };
   apTLRender();
 }
 
