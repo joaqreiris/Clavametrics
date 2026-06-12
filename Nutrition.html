@@ -197,7 +197,7 @@
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
     </div>
 
-    <section class="nu-page">
+    <section class="nu-page" id="nuPage" style="opacity:0">
 
       <header class="nu-head">
         <div>
@@ -466,6 +466,10 @@
       <div id="nuTabView" style="display:none"></div>
 
     </section>
+    <style>@keyframes nuspin{to{transform:rotate(360deg)}}</style>
+    <div id="nuBoot" style="position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:var(--cm-bg,var(--cm-surface,#fff))">
+      <i class="ti ti-loader-2" style="font-size:30px;color:var(--cm-fg-muted);animation:nuspin .8s linear infinite"></i>
+    </div>
   </main>
 </div>
 
@@ -475,6 +479,12 @@
 <script>
 (async () => {
   if (!(await window.guardModule())) return;
+
+  // failsafe: nunca dejar la página atrapada tras el spinner de carga
+  setTimeout(() => {
+    const pg = document.getElementById('nuPage'); if (pg) pg.style.opacity = '1';
+    const boot = document.getElementById('nuBoot'); if (boot) boot.remove();
+  }, 8000);
 
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
   const clubId = await window.getClubId();
@@ -1653,9 +1663,8 @@
     ]);
     _nuCurrent = { player: p, target: tgt || null, bodyComp: bc || null };
     renderTargets(p, tgt, bc);
-    renderMealPlan(p);
-    renderBodyComp(p);
     renderFlags(p, tgt, bc, nu);
+    await Promise.all([renderMealPlan(p), renderBodyComp(p)]);
 
     const kcalRef = (tgt && tgt.kcal_target) ? tgt.kcal_target : 2500;
     const refs = {
@@ -1712,7 +1721,7 @@
   }
 
   nuList.innerHTML = '';
-  let first = true;
+  let first = true, firstP = null;
   Object.entries(grouped).forEach(([grpName, grpPlayers]) => {
     if (!grpPlayers.length) return;
     const grpEl = document.createElement('div');
@@ -1725,7 +1734,7 @@
       const num      = p.number ? `#${p.number} · ` : '';
       const row = document.createElement('div');
       row.className = 'nu-row' + (first ? ' is-on' : '');
-      if (first) { first = false; loadPlayerDetail(p); }
+      if (first) { first = false; firstP = p; }
       row.innerHTML = `
         <div class="nu-av">${initials}</div>
         <div><div class="name">${p._name || '—'}</div><div class="meta">${num}${p.position || ''}</div></div>
@@ -1769,6 +1778,18 @@
     if (key === 'individual') { if (indivView) indivView.style.display = ''; if (tabView) tabView.style.display = 'none'; }
     else { if (indivView) indivView.style.display = 'none'; if (tabView) tabView.style.display = ''; renderTab(key); }
   });
+
+  // Reveal: recién mostrar la página cuando el primer jugador esté cargado
+  // (evita el flash de los datos mock del HTML estático). loadKPIs corre en
+  // paralelo y rellena los KPIs (que ya muestran "—") sin bloquear el reveal.
+  try { if (firstP) await loadPlayerDetail(firstP); }
+  catch (e) { console.error('Nutrition init', e); }
+  finally {
+    const pg = document.getElementById('nuPage');
+    if (pg) { pg.style.transition = 'opacity .18s ease'; pg.style.opacity = '1'; }
+    const boot = document.getElementById('nuBoot');
+    if (boot) boot.remove();
+  }
 })();
   let _nuTeamId = null;
   async function nuInitTeamSwitch(clubId) {
