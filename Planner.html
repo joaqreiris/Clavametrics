@@ -665,6 +665,16 @@
   .pl-drop-team-name { flex:1; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .pl-drop-team-row .pl-team-swatch { width:20px; height:18px; border-radius:4px; cursor:pointer; display:block; border:1px solid rgba(0,0,0,0.15); }
   .pl-drop-sep { height:1px; background:var(--cm-border-soft); margin:3px 4px; }
+  .pl-myobj-head { padding:4px 16px 2px; font:600 9px/1 var(--cm-font-mono); letter-spacing:.08em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  #plMyObjects { display:flex; flex-wrap:wrap; gap:6px; padding:4px 12px 6px; max-height:148px; overflow-y:auto; }
+  #plMyObjects:empty { display:none; }
+  .pl-myobj-empty { padding:2px 16px 6px; font:400 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-faint); }
+  .pl-myobj { position:relative; width:46px; height:46px; border:1px solid var(--cm-border); border-radius:7px; background:var(--cm-bg-soft); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:border-color 80ms; }
+  .pl-myobj:hover { border-color:var(--cm-accent); }
+  .pl-myobj img { max-width:34px; max-height:34px; object-fit:contain; pointer-events:none; }
+  .pl-myobj-del { position:absolute; top:-6px; right:-6px; width:16px; height:16px; border:0; border-radius:50%; background:var(--cm-danger); color:#fff; cursor:pointer; display:none; align-items:center; justify-content:center; padding:0; }
+  .pl-myobj-del .ti { font-size:10px; }
+  .pl-myobj:hover .pl-myobj-del { display:flex; }
 </style>
 </head>
 <body class="cm">
@@ -1047,6 +1057,10 @@
                 <span>Goal post</span>
               </button>
               <button class="pl-dock-btn pl-drop-opt" title="Mannequin"><i class="ti ti-walk"></i><span>Mannequin</span></button>
+              <div class="pl-drop-sep"></div>
+              <div class="pl-myobj-head">My objects</div>
+              <div id="plMyObjects"></div>
+              <button class="pl-drop-opt" id="plUploadObjBtn"><i class="ti ti-upload"></i><span>Upload object…</span></button>
             </div>
           </div>
 
@@ -1988,6 +2002,110 @@
     if (dockActions[title]) btn.addEventListener('click', ()=>dockActions[title]());
   });
 
+  // ── Custom field objects (per-user uploads) ─────────────────────
+  // Files live in storage `field-objects/{auth.uid()}/...`; RLS scopes
+  // list/insert/delete to the owner, so other users never see them.
+  const FIELD_BUCKET = 'field-objects';
+  let _uid = null;
+  async function _objUid() {
+    if (_uid) return _uid;
+    const { data } = await window.sb.auth.getUser();
+    _uid = data?.user?.id || null;
+    return _uid;
+  }
+  function _objUrl(path) {
+    return window.sb.storage.from(FIELD_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+  function _toast(msg, isError = false) {
+    const t = Object.assign(document.createElement('div'), {
+      textContent: msg,
+      style: `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${isError ? 'var(--cm-danger)' : 'var(--cm-success)'};color:#fff;padding:8px 16px;border-radius:8px;font:600 13px/1 var(--cm-font-sans);z-index:9999;pointer-events:none`
+    });
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+  }
+
+  // Insert a custom object onto the canvas. PNG → fabric.Image, SVG → grouped
+  // SVG elements. Saved into objects_json automatically (it's a Fabric object).
+  function addCustomObject(url) {
+    if (!url) return;
+    const TARGET = 50;
+    const isSvg = /\.svg(\?|$)/i.test(url);
+    if (isSvg) {
+      fabric.loadSVGFromURL(url, (objs, opts) => {
+        if (!objs || !objs.length) { _toast('Could not load SVG.', true); return; }
+        const grp = fabric.util.groupSVGElements(objs, opts);
+        const s = TARGET / Math.max(grp.width || TARGET, grp.height || TARGET, 1);
+        grp.set({ scaleX: s, scaleY: s });
+        finishAdd(grp, 'custom_object');
+      });
+    } else {
+      fabric.Image.fromURL(url, img => {
+        if (!img) { _toast('Could not load image.', true); return; }
+        const s = TARGET / Math.max(img.width, img.height, 1);
+        img.set({ scaleX: s, scaleY: s });
+        finishAdd(img, 'custom_object');
+      }, { crossOrigin: 'anonymous' });
+    }
+  }
+
+  async function loadCustomObjects() {
+    const host = document.getElementById('plMyObjects');
+    if (!host) return;
+    const uid = await _objUid();
+    if (!uid) { host.innerHTML = ''; return; }
+    const { data, error } = await window.sb.storage.from(FIELD_BUCKET)
+      .list(uid, { sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) { host.innerHTML = ''; return; }
+    const files = (data || []).filter(f => f.name && /\.(png|svg)$/i.test(f.name));
+    if (!files.length) { host.innerHTML = '<div class="pl-myobj-empty">No custom objects yet.</div>'; return; }
+    host.innerHTML = files.map(f => {
+      const path = `${uid}/${f.name}`;
+      const url  = _objUrl(path);
+      const name = f.name.replace(/\.(png|svg)$/i, '').slice(0, 12);
+      return `<div class="pl-myobj" data-url="${url}" title="${f.name}">
+        <img src="${url}" alt="">
+        <button class="pl-myobj-del" data-del="${path}" title="Delete object"><i class="ti ti-trash"></i></button>
+      </div>`;
+    }).join('');
+    host.querySelectorAll('.pl-myobj').forEach(el => {
+      el.addEventListener('click', () => addCustomObject(el.dataset.url));
+    });
+    host.querySelectorAll('.pl-myobj-del').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();   // don't insert, and keep the menu open
+        if (!confirm('Delete this object from your palette?')) return;
+        const { error: delErr } = await window.sb.storage.from(FIELD_BUCKET).remove([btn.dataset.del]);
+        if (delErr) { _toast('Could not delete: ' + delErr.message, true); return; }
+        loadCustomObjects();
+      });
+    });
+  }
+
+  async function uploadCustomObject(file) {
+    const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+    const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
+    if (!isSvg && !isPng) { _toast('Only PNG or SVG files are allowed.', true); return; }
+    const uid = await _objUid();
+    if (!uid) { _toast('You must be logged in to upload.', true); return; }
+    const ext  = isSvg ? 'svg' : 'png';
+    const path = `${uid}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await window.sb.storage.from(FIELD_BUCKET)
+      .upload(path, file, { contentType: isSvg ? 'image/svg+xml' : 'image/png', upsert: false });
+    if (error) { _toast('Upload failed: ' + error.message, true); return; }
+    _toast('Object uploaded');
+    await loadCustomObjects();
+  }
+
+  document.getElementById('plUploadObjBtn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = 'image/png,image/svg+xml';
+    inp.onchange = ev => { const f = ev.target.files?.[0]; if (f) uploadCustomObject(f); };
+    inp.click();
+  });
+  loadCustomObjects();
+
   // FAB
   document.getElementById('plFabText')?.addEventListener('click', ()=>{
     const t=new fabric.IText('Annotation',{...center(),originX:'center',originY:'center',fill:'rgba(255,255,255,0.9)',fontSize:13,fontFamily:'sans-serif',_type:'text'});
@@ -2110,7 +2228,7 @@
   });
 
   document.getElementById('plShareChatBtn')?.addEventListener('click', async () => {
-    if (!currentExerciseId) { alert('Select or create an exercise first.'); return; }
+    if (!currentExerciseId) { alert('Save the exercise first.'); return; }
     const ex = exercises.find(e => e.id === currentExerciseId);
     if (!ex) return;
     const btn = document.getElementById('plShareChatBtn');
@@ -2205,6 +2323,31 @@
   let currentFocus         = [];
   let currentGameType      = null;
   let currentGameTypeOn    = false;
+
+  // ── Draft / unsaved-changes tracking ────────────────────────────
+  // You can draw freely without a saved exercise row. While there is no
+  // currentExerciseId, anything on the canvas is an in-memory "Unsaved draft".
+  let _dirty = false;            // unsaved changes vs the persisted row (or vs empty)
+  let _loadingExercise = false;  // suppress dirty-marking while we populate the canvas
+  function _hasDrawing() {
+    return fc.getObjects().some(o => o._type !== 'arrow_handle' && o._type !== '_preview');
+  }
+  function updateDraftStatus() {
+    if (currentExerciseId) return;   // labels for saved exercises are set on select/save
+    const txt = _hasDrawing() ? 'Unsaved draft' : 'No exercise selected';
+    const stat  = document.getElementById('plCanvasStat');
+    const label = document.getElementById('plFieldLabel');
+    if (stat)  stat.textContent  = txt;
+    if (label) label.textContent = txt;
+  }
+  function markDirty() {
+    if (_loadingExercise) return;
+    _dirty = true;
+    updateDraftStatus();
+  }
+  fc.on('object:added',    markDirty);
+  fc.on('object:removed',  markDirty);
+  fc.on('object:modified', markDirty);
 
   // ── Intensity toggle ────────────────────────────────────────────
   function setIntensity(val) {
@@ -2444,10 +2587,12 @@
 
     // Canvas
     _arrowData.clear();
+    _loadingExercise = true;
     if (ex.objects_json) {
-      fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); fc.renderAll(); });
+      fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); fc.renderAll(); _loadingExercise = false; _dirty = false; });
     } else {
       fc.clear(); fc.renderAll();
+      _loadingExercise = false; _dirty = false;
     }
     _historyStack = [];
 
@@ -2465,6 +2610,20 @@
 
   // ── New exercise ────────────────────────────────────────────────
   document.getElementById('plNewExBtn')?.addEventListener('click', async () => {
+    // Drew something without a row yet → adopt the canvas into a real exercise
+    // (first save = INSERT) instead of discarding it. Canvas is kept intact.
+    if (!currentExerciseId && _hasDrawing()) {
+      await saveExercise();
+      setTimeout(() => document.getElementById('plExName')?.select(), 100);
+      return;
+    }
+    // Active exercise with unsaved changes → don't lose them silently.
+    if (currentExerciseId && _dirty) {
+      if (confirm('You have unsaved changes. Save before creating a new exercise?')) {
+        await saveExercise();
+      }
+    }
+    // Create a fresh blank exercise.
     const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
     const { data, error } = await window.sb.from('exercises').insert({
       club_id:    clubId,
@@ -2480,10 +2639,9 @@
   });
 
   // ── Save exercise ───────────────────────────────────────────────
+  // First save with no row yet → INSERT (carrying the current canvas); later
+  // saves → UPDATE. Never inserts on every stroke — only on explicit Save/New.
   async function saveExercise() {
-    if (!currentExerciseId) {
-      alert('Select or create an exercise first.'); return;
-    }
     const btn = document.getElementById('plSaveBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="ti ti-loader" style="font-size:14px"></i>Saving…';
@@ -2516,18 +2674,36 @@
       visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
     };
 
-    const { error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId);
+    let error;
+    if (currentExerciseId) {
+      ({ error } = await window.sb.from('exercises').update(payload).eq('id', currentExerciseId));
+    } else {
+      // First save: INSERT the draft (canvas + meta) and adopt the new row.
+      const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
+      const insertPayload = { ...payload, club_id: clubId, created_by: profile?.id || null };
+      if (insertPayload.visible_teams == null && _activeTeam) insertPayload.visible_teams = [_activeTeam];
+      const res = await window.sb.from('exercises').insert(insertPayload).select('id').single();
+      error = res.error;
+      if (!error && res.data) currentExerciseId = res.data.id;
+    }
+
     btn.disabled = false;
     if (!error) {
+      _dirty = false;
       btn.innerHTML = '<i class="ti ti-check" style="font-size:14px;color:var(--cm-success)"></i>Saved';
       setTimeout(() => { btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save'; }, 1800);
       await loadExercises();
-      // Update field label with new name
+      // A freshly inserted draft now has a real row: reveal its config + label it.
+      document.getElementById('plExSummarySection')?.style.setProperty('display', '');
+      document.getElementById('plExConfigSection')?.style.setProperty('display', '');
       const newName = payload.name;
       const label = document.getElementById('plFieldLabel');
       if (label) label.textContent = newName;
       const crumb = document.getElementById('plCrumbEx');
       if (crumb) crumb.textContent = newName;
+      const canvasStat = document.getElementById('plCanvasStat');
+      if (canvasStat) canvasStat.innerHTML = `Exercise · <strong style="color:var(--cm-fg)">${newName}</strong>`;
+      renderExerciseList();
     } else {
       btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save';
       alert('Error saving: ' + error.message);
