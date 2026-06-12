@@ -227,7 +227,7 @@
         <button class="nu-tab"><i class="ti ti-users-group"></i>Squad overview</button>
       </div>
 
-      <div class="nu-layout">
+      <div class="nu-layout" id="nuIndividualView">
 
         <!-- Roster -->
         <aside class="nu-roster">
@@ -462,6 +462,8 @@
         </section>
 
       </div>
+
+      <div id="nuTabView" style="display:none"></div>
 
     </section>
   </main>
@@ -1401,6 +1403,129 @@
     if ($('kpiFlagsT')) $('kpiFlagsT').innerHTML = `<span class="nu-kpi-d ${high ? 'warn' : 'up'}">${high} high</span> · ${watch} watch`;
   }
 
+  // ═══════════════════════════════════════════════════════════
+  //  Tabs squad — Anthropometrics / Hydration / Supplements / Overview
+  // ═══════════════════════════════════════════════════════════
+  function nuTabStyle() {
+    if (document.getElementById('nuTabStyle')) return;
+    const s = document.createElement('style'); s.id = 'nuTabStyle';
+    s.textContent = `
+      .nu-tabwrap{background:var(--cm-surface);border:1px solid var(--cm-border);border-top:0;border-radius:0 0 var(--cm-r-4,12px) var(--cm-r-4,12px);box-shadow:var(--cm-shadow-1);padding:16px 18px}
+      .nu-tabwrap h3{font:600 15px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0 0 3px}
+      .nu-tabwrap .sub{font:500 12px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:12px;display:block}
+      .nu-tbl{width:100%;border-collapse:collapse;font:500 13px/1.3 var(--cm-font-sans)}
+      .nu-tbl th{text-align:left;font:600 10.5px/1 var(--cm-font-mono);letter-spacing:.03em;text-transform:uppercase;color:var(--cm-fg-muted);padding:0 10px 8px;border-bottom:1px solid var(--cm-border)}
+      .nu-tbl td{padding:9px 10px;border-bottom:1px solid var(--cm-border-soft);color:var(--cm-fg);vertical-align:top}
+      .nu-tbl tr:hover td{background:var(--cm-bg-soft)}
+      .nu-tbl .pn{font-weight:600;color:var(--cm-fg-strong)}
+      .nu-tbl .mut{color:var(--cm-fg-muted);font-family:var(--cm-font-mono);font-size:12px}
+      .nu-pill-s{display:inline-flex;height:18px;padding:0 7px;border-radius:4px;font:600 10px/18px var(--cm-font-mono)}
+      .nu-pill-s.ok{background:var(--cm-success-bg,rgba(22,163,74,.12));color:var(--cm-success)}
+      .nu-pill-s.no{background:rgba(245,158,11,.14);color:#B45309}
+      .nu-chip{display:inline-block;margin:2px 3px 0 0;padding:2px 7px;border-radius:5px;background:var(--cm-accent-soft);color:var(--cm-accent);font:600 10.5px/1.5 var(--cm-font-mono)}
+    `;
+    document.head.appendChild(s);
+  }
+
+  async function fetchSquad() {
+    const ids = list.map(p => p.id);
+    const today = new Date().toISOString().slice(0, 10);
+    const [tg, nuT, bcAll, asg] = await Promise.all([
+      window.sb.from('nutrition_targets').select('player_id,kcal_target,hydration_ml,body_fat_target_pct').eq('club_id', clubId).in('player_id', ids),
+      window.sb.from('nutrition').select('player_id,calories,hydration').eq('club_id', clubId).gte('created_at', today).in('player_id', ids),
+      window.sb.from('body_composition').select('player_id,measured_date,weight_kg,body_fat_pct,lean_mass_kg').eq('club_id', clubId).in('player_id', ids).order('measured_date', { ascending: false }),
+      window.sb.from('player_meal_assignments').select('player_id,scale_factor,assigned_date,day_type, template:meal_plan_templates(name, meal_plan_meals(meal_plan_items(quantity_g, food:foods(name,category))))').eq('club_id', clubId).in('player_id', ids),
+    ]);
+    const tMap = {}; (tg.data || []).forEach(t => tMap[t.player_id] = t);
+    const nuMap = {}; (nuT.data || []).forEach(n => { if (!nuMap[n.player_id]) nuMap[n.player_id] = n; });
+    const bcMap = {}; (bcAll.data || []).forEach(r => { if (!bcMap[r.player_id]) bcMap[r.player_id] = r; }); // desc → latest
+    const asgMap = {}; (asg.data || []).forEach(a => (asgMap[a.player_id] = asgMap[a.player_id] || []).push(a));
+    return { tMap, nuMap, bcMap, asgMap, today };
+  }
+
+  const pickAssignment = (arr, today) => !arr || !arr.length ? null
+    : (arr.find(a => a.assigned_date === today) || arr.find(a => a.day_type) || arr[0]);
+  const tabShell = (title, sub, inner) => `<div class="nu-tabwrap"><h3>${title}</h3><span class="sub">${sub}</span>${inner}</div>`;
+
+  function anthroHTML(sq) {
+    const rows = list.map(p => {
+      const bc = sq.bcMap[p.id];
+      const lean = bc ? (bc.lean_mass_kg != null ? bc.lean_mass_kg
+        : (bc.weight_kg != null && bc.body_fat_pct != null ? NC.leanMass(bc.weight_kg, bc.body_fat_pct) : null)) : null;
+      return `<tr>
+        <td class="pn">${nuEsc(p._name)} <span class="mut">${p.number ? '#' + p.number + ' · ' : ''}${p.position || ''}</span></td>
+        <td>${p.height ? p.height + ' cm' : '—'}</td>
+        <td>${bc && bc.weight_kg != null ? bc.weight_kg + ' kg' : (p.weight ? p.weight + ' kg' : '—')}</td>
+        <td>${bc && bc.body_fat_pct != null ? bc.body_fat_pct + '%' : '—'}</td>
+        <td>${lean != null ? lean + ' kg' : '—'}</td>
+        <td class="mut">${bc ? nuFmtDate(bc.measured_date) : 'no data'}</td></tr>`;
+    }).join('');
+    return tabShell('Anthropometrics', 'Latest body composition per player',
+      '<table class="nu-tbl"><thead><tr><th>Player</th><th>Height</th><th>Weight</th><th>Body fat</th><th>Lean mass</th><th>Last measured</th></tr></thead><tbody>' + rows + '</tbody></table>');
+  }
+
+  function hydrationHTML(sq) {
+    const rows = list.map(p => {
+      const t = sq.tMap[p.id], n = sq.nuMap[p.id];
+      const tgtMl = (t && t.hydration_ml) || (p.weight ? 35 * p.weight : null);
+      const todayMl = n && n.hydration != null ? n.hydration * 1000 : null;
+      const pct = tgtMl && todayMl != null ? Math.round(todayMl / tgtMl * 100) : null;
+      const hit = pct != null && pct >= 95;
+      return `<tr>
+        <td class="pn">${nuEsc(p._name)} <span class="mut">${p.position || ''}</span></td>
+        <td>${tgtMl ? (tgtMl / 1000).toFixed(1) + ' L' : '—'}<span class="mut">${p.weight && !(t && t.hydration_ml) ? ' · 35 ml/kg' : ''}</span></td>
+        <td>${todayMl != null ? (todayMl / 1000).toFixed(1) + ' L' : '—'}</td>
+        <td>${pct != null ? pct + '%' : '—'}</td>
+        <td>${todayMl == null ? '<span class="mut">no log</span>' : (hit ? '<span class="nu-pill-s ok">on target</span>' : '<span class="nu-pill-s no">below</span>')}</td></tr>`;
+    }).join('');
+    return tabShell('Hydration today', 'Intake vs target (player target or 35 ml/kg)',
+      '<table class="nu-tbl"><thead><tr><th>Player</th><th>Target</th><th>Today</th><th>%</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table>');
+  }
+
+  function supplementsHTML(sq) {
+    const rows = list.map(p => {
+      const a = pickAssignment(sq.asgMap[p.id], sq.today);
+      let chips;
+      if (a && a.template) {
+        const sf = a.scale_factor || 1, sup = [];
+        (a.template.meal_plan_meals || []).forEach(m => (m.meal_plan_items || []).forEach(it => {
+          if (it.food && it.food.category === 'supplement')
+            sup.push(`<span class="nu-chip">${nuEsc(it.food.name)} ${Math.round((it.quantity_g || 0) * sf)}g</span>`);
+        }));
+        chips = sup.length ? sup.join('') : '<span class="mut">none in plan</span>';
+      } else chips = '<span class="mut">no plan</span>';
+      return `<tr><td class="pn">${nuEsc(p._name)} <span class="mut">${p.position || ''}</span></td><td>${chips}</td></tr>`;
+    }).join('');
+    return tabShell('Supplements', "Supplements present in each player's assigned plan (daily, scaled)",
+      '<table class="nu-tbl"><thead><tr><th>Player</th><th>Supplements</th></tr></thead><tbody>' + rows + '</tbody></table>');
+  }
+
+  function squadHTML(sq) {
+    const rows = list.map(p => {
+      const t = sq.tMap[p.id], bc = sq.bcMap[p.id], a = pickAssignment(sq.asgMap[p.id], sq.today);
+      const flags = computeFlags(p, t || null, bc || null, sq.nuMap[p.id] || null).filter(f => f.sev === 'high' || f.sev === 'warn').length;
+      return `<tr>
+        <td class="pn">${nuEsc(p._name)} <span class="mut">${p.position || ''}</span></td>
+        <td>${t && t.kcal_target ? Math.round(t.kcal_target).toLocaleString() + ' kcal' : '<span class="mut">no target</span>'}</td>
+        <td>${bc && bc.body_fat_pct != null ? bc.body_fat_pct + '%' : '—'}</td>
+        <td>${a && a.template ? nuEsc(a.template.name) : '<span class="mut">none</span>'}</td>
+        <td>${flags ? '<span class="nu-pill-s no">' + flags + '</span>' : '<span class="nu-pill-s ok">0</span>'}</td></tr>`;
+    }).join('');
+    return tabShell('Squad overview', 'Targets, body fat, plan and flags per player',
+      '<table class="nu-tbl"><thead><tr><th>Player</th><th>kcal target</th><th>Body fat</th><th>Plan</th><th>Flags</th></tr></thead><tbody>' + rows + '</tbody></table>');
+  }
+
+  async function renderTab(which) {
+    const host = document.getElementById('nuTabView');
+    nuTabStyle();
+    host.innerHTML = `<div class="nu-tabwrap"><span class="sub">Loading…</span></div>`;
+    const sq = await fetchSquad();
+    host.innerHTML = which === 'anthro' ? anthroHTML(sq)
+      : which === 'hydration' ? hydrationHTML(sq)
+      : which === 'supplements' ? supplementsHTML(sq)
+      : squadHTML(sq);
+  }
+
   async function loadPlayerDetail(p) {
     // Header
     const av = document.querySelector('.nu-d-head .av');
@@ -1531,6 +1656,19 @@
     btn.onclick = () => { _bcMode = btn.dataset.bcmode; drawBodyComp(); });
 
   loadKPIs(); // KPIs del squad (Fase E)
+
+  // Tabs: Individual / Anthropometrics / Hydration / Supplements / Plan templates / Squad overview
+  const TAB_KEYS = ['individual', 'anthro', 'hydration', 'supplements', 'templates', 'squad'];
+  const tabBtns = document.querySelectorAll('.nu-tabs .nu-tab');
+  const indivView = document.getElementById('nuIndividualView');
+  const tabView = document.getElementById('nuTabView');
+  tabBtns.forEach((btn, i) => btn.onclick = () => {
+    const key = TAB_KEYS[i];
+    if (key === 'templates') { openTemplatesManager(); return; } // modal, no cambia la tab activa
+    tabBtns.forEach(b => b.classList.remove('is-on')); btn.classList.add('is-on');
+    if (key === 'individual') { if (indivView) indivView.style.display = ''; if (tabView) tabView.style.display = 'none'; }
+    else { if (indivView) indivView.style.display = 'none'; if (tabView) tabView.style.display = ''; renderTab(key); }
+  });
 })();
   let _nuTeamId = null;
   async function nuInitTeamSwitch(clubId) {
