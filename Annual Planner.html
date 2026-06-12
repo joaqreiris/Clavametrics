@@ -68,6 +68,7 @@
   .ap-switch { display:inline-flex; align-items:center; gap:6px; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; user-select:none; }
   .ap-iconbtn { width:28px; height:28px; border-radius:7px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
   .ap-iconbtn:hover { color:var(--cm-danger,#dc2626); border-color:var(--cm-danger,#dc2626); }
+  .ap-iconbtn.is-edit:hover { color:var(--cm-accent,#2f6fed); border-color:var(--cm-accent,#2f6fed); }
   .ap-grid5 { display:grid; grid-template-columns:1.1fr 1.1fr .95fr .95fr 54px auto; gap:10px; align-items:end; }
 
   /* Date picker */
@@ -348,10 +349,11 @@ function apRenderTimeline(){
   tl.innerHTML = html;
 }
 
+let _apEditingPhase = null;
 function apRenderPhasesList(){
   const wrap = document.getElementById('apPhasesList');
   if (!_apPhases.length) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = _apPhases.map(p => `
+  wrap.innerHTML = _apPhases.map(p => p.id === _apEditingPhase ? apPhaseEditRow(p) : `
     <div class="ap-phase-row">
       <input type="color" class="ap-dot-input" value="${p.color}" onchange="apUpdateColor('${p.id}', this.value)" title="Change color">
       <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:120px">${p.name}</span>
@@ -359,8 +361,45 @@ function apRenderPhasesList(){
       <label class="ap-switch" style="margin-left:auto">
         <input type="checkbox" ${p.counts_availability ? 'checked' : ''} onchange="apToggleCounts('${p.id}', this.checked)"> counts
       </label>
+      <button class="ap-iconbtn is-edit" onclick="apEditPhase('${p.id}')" title="Edit"><i class="ti ti-pencil" style="font-size:14px"></i></button>
       <button class="ap-iconbtn" onclick="apDeletePhase('${p.id}')" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
     </div>`).join('');
+  // Sync inline date buttons of the row in edit mode (if any)
+  if (_apEditingPhase) { apSyncDateBtn('apEdit_start'); apSyncDateBtn('apEdit_end'); }
+}
+
+function apPhaseEditRow(p){
+  return `
+    <div class="ap-phase-row">
+      <input type="color" class="ap-dot-input" value="${p.color}" onchange="apUpdateColor('${p.id}', this.value)" title="Change color">
+      <input id="apEdit_name" value="${(p.name||'').replace(/"/g,'&quot;')}" style="min-width:120px;height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:600 13px/1 var(--cm-font-sans)">
+      <input type="date" id="apEdit_start" style="display:none" value="${p.start_date}">
+      <button type="button" class="ap-datebtn" id="apEdit_start_btn" onclick="apOpenCal('apEdit_start', this)"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(p.start_date)}</span></button>
+      <span style="color:var(--cm-fg-faint)">→</span>
+      <input type="date" id="apEdit_end" style="display:none" value="${p.end_date}">
+      <button type="button" class="ap-datebtn" id="apEdit_end_btn" onclick="apOpenCal('apEdit_end', this)"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(p.end_date)}</span></button>
+      <button class="ap-iconbtn is-edit" onclick="apSaveEdit('${p.id}')" title="Save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn" onclick="apCancelEdit()" title="Cancel"><i class="ti ti-x" style="font-size:14px"></i></button>
+    </div>`;
+}
+
+function apEditPhase(id){ _apEditingPhase = id; apRenderPhasesList(); }
+function apCancelEdit(){ _apEditingPhase = null; apRenderPhasesList(); }
+
+async function apSaveEdit(id){
+  const name  = document.getElementById('apEdit_name').value.trim();
+  const start = document.getElementById('apEdit_start').value;
+  const end   = document.getElementById('apEdit_end').value;
+  if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
+  if (start > end) { alert('Start must be before end.'); return; }
+  if (start < _apSeasonStart || end > _apSeasonEnd) {
+    if (!confirm('This phase falls partly outside the season range. Save anyway?')) return;
+  }
+  const { error } = await window.sb.from('season_phases')
+    .update({ name, start_date: start, end_date: end }).eq('id', id);
+  if (error) { alert('Could not update phase: ' + error.message); return; }
+  _apEditingPhase = null;
+  await apLoadPhases();
 }
 
 async function apAddPhase(){
