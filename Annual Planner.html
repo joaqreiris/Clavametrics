@@ -85,6 +85,16 @@
   .ap-imp-table td { padding:7px 9px; border-top:1px solid var(--cm-border); color:var(--cm-fg-strong); }
   .ap-imp-table tr.bad td { background:color-mix(in srgb, var(--cm-danger,#dc2626) 9%, transparent); }
 
+  /* Timeline */
+  .ap-tl-axis { position:relative; height:15px; margin-bottom:4px; }
+  .ap-tl-lane-lbl { font:600 9.5px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-faint); margin:9px 0 3px; }
+  .ap-tl-track { position:relative; }
+  .ap-tl-band { position:absolute; top:0; bottom:0; border-radius:4px; display:flex; align-items:center; justify-content:center; font:600 9.5px/1 var(--cm-font-sans); color:#fff; overflow:hidden; white-space:nowrap; }
+  .ap-tl-band.nocount { background-image:repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.22) 4px, rgba(255,255,255,.22) 8px); }
+  .ap-tl-dot { position:absolute; top:50%; transform:translate(-50%,-50%); width:9px; height:9px; border-radius:50%; }
+  .ap-tl-today { position:absolute; top:0; bottom:0; width:2px; background:var(--cm-fg-strong); z-index:5; }
+  .ap-tl-hint { position:absolute; left:2px; top:50%; transform:translateY(-50%); font:var(--cm-body-sm); color:var(--cm-fg-faint); }
+
   /* Date picker */
   .ap-datebtn { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); text-align:left; cursor:pointer; display:flex; align-items:center; gap:7px; }
   .ap-datebtn:hover { border-color:var(--cm-border-strong, var(--cm-border)); }
@@ -257,6 +267,19 @@
 
         <div id="apMatchesList"></div>
       </div>
+
+      <!-- ── Timeline ──────────────────────────────────────────── -->
+      <div class="ap-card is-hidden" id="apTimelineCard" style="margin-top:16px">
+        <div class="ap-card-h">
+          <div class="ic"><i class="ti ti-timeline" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <div>
+            <div class="t">Timeline</div>
+            <div class="d" id="apTimelineSub">—</div>
+          </div>
+        </div>
+        <div id="apTimelineBody"></div>
+        <div id="apTimelineLegend" style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;border-top:1px solid var(--cm-border);margin-top:12px;padding-top:11px;font:var(--cm-body-sm);color:var(--cm-fg-faint)"></div>
+      </div>
     </section>
     </main>
   </div>
@@ -317,6 +340,7 @@ async function apLoadSeasons(){
     document.getElementById('apPhasesCard').classList.add('is-hidden');
     document.getElementById('apCompsCard').classList.add('is-hidden');
     document.getElementById('apMatchesCard').classList.add('is-hidden');
+    document.getElementById('apTimelineCard').classList.add('is-hidden');
     apShowForm();
     return;
   }
@@ -357,6 +381,8 @@ function apSelectSeason(id){
   apLoadComps();
   document.getElementById('apMatchesCard').classList.remove('is-hidden');
   apLoadMatches();
+  document.getElementById('apTimelineCard').classList.remove('is-hidden');
+  apLoadTimeline();
 }
 
 function apShowForm(){ document.getElementById('apSeasonForm').classList.remove('is-hidden'); }
@@ -913,6 +939,107 @@ async function apReadPdf(f){
     document.getElementById('apImpPaste').value = lines.join('\n');
     apImportParse();
   } catch (e) { alert('Could not read the PDF: ' + e.message + '. If it is a scanned PDF, paste the fixtures as text instead.'); }
+}
+
+/* ── Timeline (static render) ──────────────────────────────── */
+let _apTL = { phases:[], matches:[], comps:[], macros:[], mesos:[], micros:[] };
+
+async function apLoadTimeline(){
+  const sStart = _apSeasonStart, sEnd = _apSeasonEnd;
+  let miq = window.sb.from('microcycles').select('name,start_date,end_date').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
+  if (_apTeamId) miq = miq.eq('team_id', _apTeamId);
+  const [ph, mt, cp, ma, me, mi] = await Promise.all([
+    window.sb.from('season_phases').select('name,color,start_date,end_date,counts_availability').eq('season_id', _apSeasonId).order('start_date'),
+    window.sb.from('calendar_events').select('date,opponent,home_away,competition_id').eq('season_id', _apSeasonId).eq('type','match').order('date'),
+    window.sb.from('competitions').select('id,name,color').eq('season_id', _apSeasonId),
+    window.sb.from('macrocycles').select('name,objective,start_date,end_date,color').eq('season_id', _apSeasonId).order('start_date'),
+    window.sb.from('mesocycles').select('name,objective,start_date,end_date,macrocycles!inner(season_id)').eq('macrocycles.season_id', _apSeasonId).order('start_date'),
+    miq
+  ]);
+  _apTL = { phases:ph.data||[], matches:mt.data||[], comps:cp.data||[], macros:ma.data||[], mesos:me.data||[], micros:mi.data||[] };
+  apTLRender();
+}
+
+function apTLpos(start, end){
+  const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
+  const left = apClamp(apDays(_apSeasonStart, start) / total * 100, 0, 100);
+  const width = apClamp(apDays(start, end) / total * 100, 0, 100 - left);
+  return { left, width };
+}
+
+function apTLMonthMarks(){
+  const start = new Date(_apSeasonStart + 'T00:00:00'), end = new Date(_apSeasonEnd + 'T00:00:00');
+  const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const marks = [];
+  let cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (cur <= end){
+    const next = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    const segStart = cur < start ? start : cur;
+    const segEnd = next > end ? end : next;
+    const left = (segStart - start) / 86400000 / total * 100;
+    const width = (segEnd - segStart) / 86400000 / total * 100;
+    marks.push({ left, width, label: MON[cur.getMonth()] });
+    cur = next;
+  }
+  return marks;
+}
+
+function apTLRender(){
+  const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
+  const marks = apTLMonthMarks();
+  const compColor = {}; _apTL.comps.forEach(c => compColor[c.id] = c.color);
+  const today = new Date().toISOString().slice(0,10);
+  const todayPos = (today >= _apSeasonStart && today <= _apSeasonEnd) ? apClamp(apDays(_apSeasonStart, today) / total * 100, 0, 100) : null;
+
+  const axis = marks.map(m => `<span style="position:absolute;left:${m.left}%;width:${m.width}%;text-align:center;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${m.label}</span>`).join('');
+  const grid = marks.map(m => `<div style="position:absolute;top:0;bottom:0;left:${m.left}%;width:1px;background:var(--cm-border-soft,var(--cm-border));opacity:.45"></div>`).join('');
+
+  const phases = _apTL.phases.length ? _apTL.phases.map(p => {
+    const { left, width } = apTLpos(p.start_date, p.end_date);
+    return `<div class="ap-tl-band${p.counts_availability?'':' nocount'}" style="left:${left}%;width:${width}%;background:${p.color}" title="${p.name}${p.counts_availability?'':' · does not count'}">${width>8?p.name:''}</div>`;
+  }).join('') : `<span class="ap-tl-hint">No phases yet</span>`;
+
+  const matches = _apTL.matches.length ? _apTL.matches.map(m => {
+    const pos = apClamp(apDays(_apSeasonStart, m.date) / total * 100, 0, 100);
+    const col = compColor[m.competition_id] || 'var(--cm-fg-muted)';
+    return `<span class="ap-tl-dot" style="left:${pos}%;background:${col}" title="${apFmtDate(m.date)} · ${m.home_away==='away'?'@ ':'vs '}${m.opponent||''}"></span>`;
+  }).join('') : `<span class="ap-tl-hint">No matches yet</span>`;
+
+  const macros = _apTL.macros.length ? _apTL.macros.map(mc => {
+    const { left, width } = apTLpos(mc.start_date, mc.end_date);
+    const col = mc.color || '#534AB7';
+    return `<div style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:color-mix(in srgb, ${col} 16%, transparent);border:.5px solid ${col};border-radius:5px;padding:0 7px;display:flex;flex-direction:column;justify-content:center;overflow:hidden" title="${mc.name}${mc.objective?' · '+mc.objective:''}"><span style="font:600 10px/1.1 var(--cm-font-sans);color:var(--cm-fg-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${mc.name}</span>${mc.objective?`<span style="font:500 8.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${mc.objective}</span>`:''}</div>`;
+  }).join('') : `<span class="ap-tl-hint">No macrocycles yet — add them in Periodization</span>`;
+
+  const mesos = _apTL.mesos.length ? _apTL.mesos.map(ms => {
+    const { left, width } = apTLpos(ms.start_date, ms.end_date);
+    return `<div style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:var(--cm-bg-soft);border:.5px solid var(--cm-border);border-radius:4px;display:flex;align-items:center;justify-content:center;font:500 9px/1 var(--cm-font-sans);color:var(--cm-fg-muted);overflow:hidden;white-space:nowrap;padding:0 4px" title="${ms.name}${ms.objective?' · '+ms.objective:''}">${width>6?ms.name:''}</div>`;
+  }).join('') : `<span class="ap-tl-hint">No mesocycles yet</span>`;
+
+  const micros = _apTL.micros.length ? _apTL.micros.map(mi => {
+    const { left, width } = apTLpos(mi.start_date, mi.end_date);
+    return `<div style="position:absolute;left:${left}%;width:${Math.max(width,0.4)}%;top:2px;bottom:2px;background:var(--cm-border);border-radius:2px" title="${mi.name||'Microcycle'} · ${mi.start_date} → ${mi.end_date}"></div>`;
+  }).join('') : `<span class="ap-tl-hint">No microcycles in this range</span>`;
+
+  const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
+
+  document.getElementById('apTimelineSub').textContent = `${_apTL.matches.length} match${_apTL.matches.length===1?'':'es'} · ${_apTL.micros.length} microcycle${_apTL.micros.length===1?'':'s'}`;
+  document.getElementById('apTimelineBody').innerHTML = `
+    <div class="ap-tl-axis">${axis}</div>
+    <div style="position:relative">
+      ${grid}${todayLine}
+      <div class="ap-tl-lane-lbl">Phases</div><div class="ap-tl-track" style="height:22px">${phases}</div>
+      <div class="ap-tl-lane-lbl">Matches</div><div class="ap-tl-track" style="height:16px">${matches}</div>
+      <div class="ap-tl-lane-lbl">Macrocycles</div><div class="ap-tl-track" style="height:30px">${macros}</div>
+      <div class="ap-tl-lane-lbl">Mesocycles</div><div class="ap-tl-track" style="height:20px">${mesos}</div>
+      <div class="ap-tl-lane-lbl">Microcycles · synced with Calendar</div><div class="ap-tl-track" style="height:12px">${micros}</div>
+    </div>`;
+
+  const leg = document.getElementById('apTimelineLegend');
+  leg.innerHTML = _apTL.comps.length
+    ? _apTL.comps.map(c => `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:${c.color}"></span>${c.name}</span>`).join('')
+    : '<span>No competitions yet</span>';
 }
 
 /* ── Date picker (calendar popover) ───────────────────────── */
