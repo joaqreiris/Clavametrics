@@ -64,10 +64,28 @@
   .ap-phase-row { display:flex; align-items:center; gap:11px; padding:9px 12px; background:var(--cm-bg-soft); border-radius:8px; }
   .ap-phase-row + .ap-phase-row { margin-top:6px; }
   .ap-dot { width:11px; height:11px; border-radius:3px; flex:0 0 auto; }
+  .ap-dot-input { width:24px; height:24px; padding:0; border:1px solid var(--cm-border); border-radius:6px; background:none; cursor:pointer; flex:0 0 auto; }
   .ap-switch { display:inline-flex; align-items:center; gap:6px; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; user-select:none; }
   .ap-iconbtn { width:28px; height:28px; border-radius:7px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
   .ap-iconbtn:hover { color:var(--cm-danger,#dc2626); border-color:var(--cm-danger,#dc2626); }
-  .ap-grid5 { display:grid; grid-template-columns:1.2fr 1.2fr 1fr 1fr auto; gap:10px; align-items:end; }
+  .ap-grid5 { display:grid; grid-template-columns:1.1fr 1.1fr .95fr .95fr 54px auto; gap:10px; align-items:end; }
+
+  /* Date picker */
+  .ap-datebtn { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); text-align:left; cursor:pointer; display:flex; align-items:center; gap:7px; }
+  .ap-datebtn:hover { border-color:var(--cm-border-strong, var(--cm-border)); }
+  .ap-datebtn .ti { font-size:15px; color:var(--cm-fg-muted); flex:0 0 auto; }
+  .ap-datebtn .lbl.ph { color:var(--cm-fg-faint); }
+  .ap-cal { position:absolute; z-index:200; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:12px; box-shadow:var(--cm-shadow-pop, 0 12px 40px rgba(0,0,0,.18)); padding:12px; width:248px; }
+  .ap-cal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .ap-cal-head button { width:28px; height:28px; border:none; background:transparent; border-radius:7px; cursor:pointer; color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; }
+  .ap-cal-head button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .ap-cal-title { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ap-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+  .ap-cal-dow { text-align:center; font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:4px 0; }
+  .ap-cal-day { aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg); border-radius:7px; cursor:pointer; border:1px solid transparent; }
+  .ap-cal-day:hover { background:var(--cm-bg-soft); }
+  .ap-cal-day.is-sel { background:var(--cm-accent,#2f6fed); color:#fff; }
+  .ap-cal-day.is-today { border-color:var(--cm-accent,#2f6fed); }
   .is-hidden { display:none !important; }
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 </style>
@@ -121,8 +139,8 @@
         <div id="apSeasonForm" class="is-hidden" style="margin-top:14px">
           <div class="ap-grid3" style="margin-bottom:14px">
             <div class="ap-field"><label>Season name</label><input type="text" id="apName" placeholder="2025/26"></div>
-            <div class="ap-field"><label>Start</label><input type="date" id="apStart"></div>
-            <div class="ap-field"><label>End</label><input type="date" id="apEnd"></div>
+            <div class="ap-field"><label>Start</label><input type="date" id="apStart" style="display:none"><button type="button" class="ap-datebtn" id="apStart_btn" onclick="apOpenCal('apStart', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
+            <div class="ap-field"><label>End</label><input type="date" id="apEnd" style="display:none"><button type="button" class="ap-datebtn" id="apEnd_btn" onclick="apOpenCal('apEnd', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
           </div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button class="ap-btn" onclick="apHideForm()">Cancel</button>
@@ -150,8 +168,9 @@
           <div class="ap-grid5">
             <div class="ap-field"><label>Phase type</label><select id="apPhaseType" onchange="apOnPhaseTypeChange()"></select></div>
             <div class="ap-field"><label>Name</label><input id="apPhaseName" placeholder="Preseason"></div>
-            <div class="ap-field"><label>Start</label><input type="date" id="apPhaseStart"></div>
-            <div class="ap-field"><label>End</label><input type="date" id="apPhaseEnd"></div>
+            <div class="ap-field"><label>Start</label><input type="date" id="apPhaseStart" style="display:none"><button type="button" class="ap-datebtn" id="apPhaseStart_btn" onclick="apOpenCal('apPhaseStart', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
+            <div class="ap-field"><label>End</label><input type="date" id="apPhaseEnd" style="display:none"><button type="button" class="ap-datebtn" id="apPhaseEnd_btn" onclick="apOpenCal('apPhaseEnd', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
+            <div class="ap-field"><label>Color</label><input type="color" id="apPhaseColor" value="#0F6E56" style="height:36px;padding:2px;cursor:pointer"></div>
             <button class="ap-btn primary" onclick="apAddPhase()">Add phase</button>
           </div>
           <label class="ap-switch" style="margin-top:11px"><input type="checkbox" id="apPhaseCounts" checked> Counts for availability <span style="color:var(--cm-fg-faint)">· off for break / off-season</span></label>
@@ -248,6 +267,7 @@ function apSelectSeason(id){
   document.getElementById('apPhasesSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
   document.getElementById('apPhaseStart').value = s.start_date;
   document.getElementById('apPhaseEnd').value = s.end_date;
+  apSyncDateBtn('apPhaseStart'); apSyncDateBtn('apPhaseEnd');
   apLoadPhases();
 }
 
@@ -271,6 +291,7 @@ async function apSaveSeason(){
   document.getElementById('apName').value = '';
   document.getElementById('apStart').value = '';
   document.getElementById('apEnd').value = '';
+  apSyncDateBtn('apStart'); apSyncDateBtn('apEnd');
   await apLoadSeasons();
   if (data?.id) apSelectSeason(data.id);
 }
@@ -290,6 +311,7 @@ function apOnPhaseTypeChange(){
   const nameInput = document.getElementById('apPhaseName');
   if (!nameInput.value.trim()) nameInput.placeholder = t.name;
   document.getElementById('apPhaseCounts').checked = !!t.default_counts_availability;
+  if (t.color) document.getElementById('apPhaseColor').value = t.color;
 }
 
 /* ── Phases ───────────────────────────────────────────────── */
@@ -331,7 +353,7 @@ function apRenderPhasesList(){
   if (!_apPhases.length) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = _apPhases.map(p => `
     <div class="ap-phase-row">
-      <span class="ap-dot" style="background:${p.color}"></span>
+      <input type="color" class="ap-dot-input" value="${p.color}" onchange="apUpdateColor('${p.id}', this.value)" title="Change color">
       <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:120px">${p.name}</span>
       <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${p.start_date} → ${p.end_date}</span>
       <label class="ap-switch" style="margin-left:auto">
@@ -348,6 +370,7 @@ async function apAddPhase(){
   const start  = document.getElementById('apPhaseStart').value;
   const end    = document.getElementById('apPhaseEnd').value;
   const counts = document.getElementById('apPhaseCounts').checked;
+  const color  = document.getElementById('apPhaseColor').value || (type ? type.color : '#888780');
   if (!name || !start || !end) { alert('Type, name, start and end are required.'); return; }
   if (start > end) { alert('Start must be before end.'); return; }
   if (start < _apSeasonStart || end > _apSeasonEnd) {
@@ -358,7 +381,7 @@ async function apAddPhase(){
     season_id: _apSeasonId,
     phase_type_id: typeId || null,
     name,
-    color: type ? type.color : '#888780',
+    color,
     start_date: start, end_date: end,
     counts_availability: counts,
     sort_order: _apPhases.length
@@ -376,11 +399,90 @@ async function apToggleCounts(id, val){
   apRenderTimeline();
 }
 
+async function apUpdateColor(id, color){
+  const { error } = await window.sb.from('season_phases').update({ color }).eq('id', id);
+  if (error) { alert('Could not update color: ' + error.message); return; }
+  const p = _apPhases.find(x => x.id === id); if (p) p.color = color;
+  apRenderTimeline();
+}
+
 async function apDeletePhase(id){
   if (!confirm('Delete this phase?')) return;
   const { error } = await window.sb.from('season_phases').delete().eq('id', id);
   if (error) { alert('Could not delete: ' + error.message); return; }
   await apLoadPhases();
+}
+
+/* ── Date picker (calendar popover) ───────────────────────── */
+function apFmtDate(v){
+  if(!v) return null;
+  const d = new Date(v + 'T00:00:00');
+  const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+  return `${dow}, ${d.getDate()} ${mon} ${d.getFullYear()}`;
+}
+function apSyncDateBtn(id){
+  const inp = document.getElementById(id), btn = document.getElementById(id + '_btn');
+  if(!inp || !btn) return;
+  const lbl = btn.querySelector('.lbl');
+  if(inp.value){ lbl.textContent = apFmtDate(inp.value); lbl.classList.remove('ph'); }
+  else { lbl.textContent = 'Select date'; lbl.classList.add('ph'); }
+}
+let _apCalEl = null, _apCalFor = null, _apCalMonth = null;
+function apOpenCal(id, anchor){
+  if(_apCalEl && _apCalFor === id){ apCloseCal(); return; }
+  apCloseCal();
+  _apCalFor = id;
+  const inp = document.getElementById(id);
+  const base = inp.value ? new Date(inp.value + 'T00:00:00') : new Date();
+  _apCalMonth = new Date(base.getFullYear(), base.getMonth(), 1);
+  _apCalEl = document.createElement('div');
+  _apCalEl.className = 'ap-cal';
+  document.body.appendChild(_apCalEl);
+  apRenderCal();
+  const r = anchor.getBoundingClientRect();
+  _apCalEl.style.top  = (window.scrollY + r.bottom + 6) + 'px';
+  _apCalEl.style.left = (window.scrollX + r.left) + 'px';
+  setTimeout(() => document.addEventListener('click', apCalOutside), 0);
+}
+function apCalOutside(e){
+  if(_apCalEl && !_apCalEl.contains(e.target) && !e.target.closest('.ap-datebtn')) apCloseCal();
+}
+function apCloseCal(){
+  if(_apCalEl){ _apCalEl.remove(); _apCalEl = null; _apCalFor = null; document.removeEventListener('click', apCalOutside); }
+}
+function apCalNav(delta){
+  _apCalMonth = new Date(_apCalMonth.getFullYear(), _apCalMonth.getMonth() + delta, 1);
+  apRenderCal();
+}
+function apRenderCal(){
+  const y = _apCalMonth.getFullYear(), m = _apCalMonth.getMonth();
+  const monNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const selV = document.getElementById(_apCalFor).value;
+  const today = new Date().toISOString().slice(0,10);
+  const first = new Date(y, m, 1).getDay();
+  const daysIn = new Date(y, m + 1, 0).getDate();
+  let cells = '';
+  for(let i = 0; i < first; i++) cells += '<div></div>';
+  for(let d = 1; d <= daysIn; d++){
+    const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cls = 'ap-cal-day' + (ds === selV ? ' is-sel' : '') + (ds === today ? ' is-today' : '');
+    cells += `<div class="${cls}" onclick="apPickDay('${ds}')">${d}</div>`;
+  }
+  const dows = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => `<div class="ap-cal-dow">${d}</div>`).join('');
+  _apCalEl.innerHTML =
+    `<div class="ap-cal-head">
+       <button type="button" onclick="apCalNav(-1)"><i class="ti ti-chevron-left"></i></button>
+       <span class="ap-cal-title">${monNames[m]} ${y}</span>
+       <button type="button" onclick="apCalNav(1)"><i class="ti ti-chevron-right"></i></button>
+     </div>
+     <div class="ap-cal-grid">${dows}${cells}</div>`;
+}
+function apPickDay(ds){
+  const inp = document.getElementById(_apCalFor);
+  inp.value = ds;
+  apSyncDateBtn(_apCalFor);
+  apCloseCal();
 }
 
 /* ── Init ─────────────────────────────────────────────────── */
