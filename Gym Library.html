@@ -124,6 +124,16 @@
   .gm-del-box{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:24px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--cm-shadow-3)}
   .gm-del-box p{font:var(--cm-body);color:var(--cm-fg-muted);margin:0}
 
+  /* Video lightbox */
+  .gl-video-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:300;display:none;align-items:center;justify-content:center;padding:24px}
+  .gl-video-overlay.is-open{display:flex}
+  .gl-video-box{position:relative;width:100%;max-width:880px}
+  .gl-video-frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:var(--cm-r-4);overflow:hidden;box-shadow:var(--cm-shadow-3)}
+  .gl-video-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .gl-video-close{position:absolute;top:-40px;right:0;width:32px;height:32px;border-radius:8px;border:0;background:var(--cm-surface);color:var(--cm-fg);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--cm-shadow-2)}
+  .gl-video-close:hover{background:var(--cm-bg-soft)}
+  .gl-video-close .ti{font-size:18px}
+
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -163,7 +173,6 @@
       <div class="gl-toolbar">
         <div class="gl-search"><i class="ti ti-search"></i><input id="gl-search-input" placeholder="Search exercise name, cues, muscles…"></div>
         <select class="gl-sel" id="gl-sel-muscle"><option value="">All muscles</option></select>
-        <select class="gl-sel" id="gl-sel-category"><option value="">All categories</option></select>
         <select class="gl-sel" id="gl-sel-complexity">
           <option value="">All complexity</option>
           <option value="Low">Low</option>
@@ -279,6 +288,16 @@
   </div>
 </div>
 
+<!-- Video lightbox -->
+<div class="gl-video-overlay" id="gl-video-modal">
+  <div class="gl-video-box">
+    <button class="gl-video-close" id="gl-video-close" title="Close (Esc)"><i class="ti ti-x"></i></button>
+    <div class="gl-video-frame">
+      <iframe id="gl-video-iframe" src="" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+    </div>
+  </div>
+</div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -291,6 +310,7 @@
 <script type="text/babel" src="theme-tweaks.jsx"></script>
 <script>
 const CPLX_CSS = { Low:'low', Medium:'med', High:'high' };
+const CATEGORY_ORDER = ['strength','power','olympic','mobility','activation','core','balance','conditioning','prehab','speed','cooldown'];
 let ALL_EXERCISES = [];
 let CLUB_ID = null;
 let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', usableIn:'', view:'grid' };
@@ -299,6 +319,33 @@ let editingId = null;
 
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function youtubeId(url) {
+  if (!url) return null;
+  const patterns = [
+    /youtube\.com\/watch\?(?:.*&)?v=([\w-]{11})/,
+    /youtu\.be\/([\w-]{11})/,
+    /youtube\.com\/embed\/([\w-]{11})/,
+    /youtube\.com\/shorts\/([\w-]{11})/
+  ];
+  for (const re of patterns) { const m = url.match(re); if (m) return m[1]; }
+  return null;
+}
+
+function openVideo(url) {
+  const id = youtubeId(url);
+  if (!id) { window.open(url, '_blank'); return; }  // non-YouTube → fallback to new tab
+  document.getElementById('gl-video-iframe').src =
+    `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`;
+  document.getElementById('gl-video-modal').classList.add('is-open');
+}
+
+function closeVideo() {
+  const modal = document.getElementById('gl-video-modal');
+  if (!modal.classList.contains('is-open')) return;
+  modal.classList.remove('is-open');
+  document.getElementById('gl-video-iframe').src = '';  // stop playback
 }
 
 async function boot() {
@@ -318,9 +365,8 @@ async function reloadExercises(rebuild = true) {
   ALL_EXERCISES = data || [];
   if (rebuild) {
     renderStats();
-    renderMuscleChips();
+    renderCategoryChips();
     renderMuscleSelect();
-    renderCategorySelect();
     renderEquipmentSelect();
     applyFilters();
   } else {
@@ -330,9 +376,8 @@ async function reloadExercises(rebuild = true) {
 
 function buildUI() {
   renderStats();
-  renderMuscleChips();
+  renderCategoryChips();
   renderMuscleSelect();
-  renderCategorySelect();
   renderEquipmentSelect();
   applyFilters();
 }
@@ -353,21 +398,32 @@ function muscleCounts() {
   return counts;
 }
 
-function renderMuscleChips() {
-  const counts = muscleCounts();
+function categoryCounts() {
+  const counts = {};
+  for (const e of ALL_EXERCISES) {
+    const c = e.category || 'other';
+    counts[c] = (counts[c]||0) + 1;
+  }
+  return counts;
+}
+
+function renderCategoryChips() {
+  const counts = categoryCounts();
   const total = ALL_EXERCISES.length;
   const strip = document.getElementById('gl-muscles-strip');
-  const isAll = activeFilters.muscle === '';
-  let html = `<button class="gl-m-chip${isAll?' is-on':''}" data-muscle="">All <span class="ct">${total}</span></button>`;
-  html += Object.entries(counts).sort((a,b) => b[1]-a[1]).map(([m,c]) => {
-    const on = activeFilters.muscle === m ? ' is-on' : '';
-    return `<button class="gl-m-chip${on}" data-muscle="${esc(m)}">${esc(m)} <span class="ct">${c}</span></button>`;
+  // canonical order first, then any unexpected category alphabetically
+  const ordered = CATEGORY_ORDER.filter(c => counts[c] != null)
+    .concat(Object.keys(counts).filter(c => !CATEGORY_ORDER.includes(c)).sort());
+  const isAll = activeFilters.category === '';
+  let html = `<button class="gl-m-chip${isAll?' is-on':''}" data-category="">All <span class="ct">${total}</span></button>`;
+  html += ordered.map(c => {
+    const on = activeFilters.category === c ? ' is-on' : '';
+    return `<button class="gl-m-chip${on}" data-category="${esc(c)}">${esc(cap(c))} <span class="ct">${counts[c]}</span></button>`;
   }).join('');
   strip.innerHTML = html;
-  strip.querySelectorAll('.gl-m-chip').forEach(c => c.addEventListener('click', () => {
-    activeFilters.muscle = c.dataset.muscle;
+  strip.querySelectorAll('.gl-m-chip').forEach(ch => ch.addEventListener('click', () => {
+    activeFilters.category = ch.dataset.category;
     syncChips();
-    syncMuscleSelect();
     applyFilters();
   }));
 }
@@ -383,14 +439,6 @@ function renderMuscleSelect() {
     ).join('');
 }
 
-function renderCategorySelect() {
-  const cats = [...new Set(ALL_EXERCISES.map(e => e.category).filter(Boolean))].sort();
-  const sel = document.getElementById('gl-sel-category');
-  const cur = activeFilters.category;
-  sel.innerHTML = `<option value="">All categories</option>` +
-    cats.map(c => `<option value="${esc(c)}"${cur===c?' selected':''}>${esc(cap(c))}</option>`).join('');
-}
-
 function renderEquipmentSelect() {
   const eq = [...new Set(ALL_EXERCISES.map(e => e.equipment).filter(Boolean))].sort();
   const sel = document.getElementById('gl-sel-equipment');
@@ -401,12 +449,8 @@ function renderEquipmentSelect() {
 
 function syncChips() {
   document.getElementById('gl-muscles-strip').querySelectorAll('.gl-m-chip').forEach(c => {
-    c.classList.toggle('is-on', c.dataset.muscle === activeFilters.muscle);
+    c.classList.toggle('is-on', c.dataset.category === activeFilters.category);
   });
-}
-
-function syncMuscleSelect() {
-  document.getElementById('gl-sel-muscle').value = activeFilters.muscle;
 }
 
 function applyFilters() {
@@ -497,10 +541,13 @@ function cardHTML(e) {
   const hasVideo = !!e.video_url;
   const muscle = e.muscle_group || '';
   const videoEsc = hasVideo ? esc(e.video_url) : '';
+  const vidId = hasVideo ? youtubeId(e.video_url) : null;
 
   return `<div class="gl-card" data-id="${esc(e.id)}">
     <div class="gl-thumb">
-      <div class="gl-thumb-ph"><span>${initials}</span></div>
+      ${vidId
+        ? `<img src="https://img.youtube.com/vi/${vidId}/hqdefault.jpg" alt="" loading="lazy">`
+        : `<div class="gl-thumb-ph"><span>${initials}</span></div>`}
       ${e.complexity ? `<span class="gl-cplx-badge ${cplxCss}">${esc(e.complexity)}</span>` : ''}
       ${e.is_default ? `<span class="gl-default-pill">Default</span>` : ''}
       ${hasVideo ? `<span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span><button class="gl-thumb-play btn-play" data-video="${videoEsc}"><i class="ti ti-player-play"></i></button>` : ''}
@@ -532,7 +579,7 @@ function attachCardListeners() {
   }));
   document.querySelectorAll('#gl-grid .btn-play').forEach(b => b.addEventListener('click', ev => {
     ev.stopPropagation();
-    if (b.dataset.video) window.open(b.dataset.video, '_blank');
+    if (b.dataset.video) openVideo(b.dataset.video);
   }));
 }
 
@@ -656,7 +703,6 @@ function clearFilters() {
   document.getElementById('gl-search-input').value = '';
   document.getElementById('gl-sel-muscle').value = '';
   document.getElementById('gl-sel-complexity').value = '';
-  document.getElementById('gl-sel-category').value = '';
   document.getElementById('gl-sel-equipment').value = '';
   document.getElementById('gl-sel-usable').value = '';
   syncChips();
@@ -671,17 +717,11 @@ function attachListeners() {
 
   document.getElementById('gl-sel-muscle').addEventListener('change', e => {
     activeFilters.muscle = e.target.value;
-    syncChips();
     applyFilters();
   });
 
   document.getElementById('gl-sel-complexity').addEventListener('change', e => {
     activeFilters.complexity = e.target.value;
-    applyFilters();
-  });
-
-  document.getElementById('gl-sel-category').addEventListener('change', e => {
-    activeFilters.category = e.target.value;
     applyFilters();
   });
 
@@ -709,7 +749,10 @@ function attachListeners() {
   document.getElementById('gm-save').addEventListener('click', saveExercise);
   document.getElementById('gm-cancel').addEventListener('click', closeModal);
   document.getElementById('gl-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); document.getElementById('gl-del-modal').classList.remove('is-open'); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeVideo(); document.getElementById('gl-del-modal').classList.remove('is-open'); } });
+
+  document.getElementById('gl-video-close').addEventListener('click', closeVideo);
+  document.getElementById('gl-video-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeVideo(); });
 
   document.getElementById('gm-del-confirm').addEventListener('click', doDelete);
   document.getElementById('gm-del-cancel').addEventListener('click', () => document.getElementById('gl-del-modal').classList.remove('is-open'));
