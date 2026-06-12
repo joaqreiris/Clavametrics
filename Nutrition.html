@@ -312,8 +312,8 @@
               </div>
             </div>
             <div class="right">
-              <button class="cm-btn is-outline is-sm"><i class="ti ti-share-2" style="font-size:14px"></i>Share with player</button>
-              <button class="cm-btn is-outline is-sm"><i class="ti ti-history" style="font-size:14px"></i>History</button>
+              <button class="cm-btn is-outline is-sm" id="nuBtnShare"><i class="ti ti-share-2" style="font-size:14px"></i>Share with player</button>
+              <button class="cm-btn is-outline is-sm" id="nuBtnHistory"><i class="ti ti-history" style="font-size:14px"></i>History</button>
               <button class="cm-btn is-primary is-sm" id="nuBtnEditPlan"><i class="ti ti-edit" style="font-size:14px"></i>Edit plan</button>
             </div>
           </header>
@@ -1526,6 +1526,102 @@
       : squadHTML(sq);
   }
 
+  // ── Share with player (link tokenizado anon) ───────────────
+  async function openShareModal() {
+    if (!_nuCurrent) { alert('Select a player first.'); return; }
+    nuBuildModal();
+    const p = _nuCurrent.player;
+    let { data: link } = await window.sb.from('share_links')
+      .select('id,token').eq('club_id', clubId).eq('player_id', p.id).eq('scope', 'nutrition').eq('revoked', false)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (!link) {
+      const { data, error } = await window.sb.from('share_links')
+        .insert({ club_id: clubId, player_id: p.id, scope: 'nutrition', created_by: profile?.id || null })
+        .select('id,token').single();
+      if (error) { alert('Could not create link: ' + error.message); return; }
+      link = data;
+    }
+    const base = location.href.replace(/[^/]*(\?.*)?$/, '');
+    const url = base + 'shared-nutrition.html?token=' + link.token;
+    let ov = document.getElementById('nuShareModal');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'nuShareModal'; ov.className = 'nu-modal-ov';
+      ov.innerHTML = `<div class="nu-modal" role="dialog" aria-modal="true">
+        <div class="nu-modal-h"><i class="ti ti-share-2" style="color:var(--cm-accent);font-size:18px"></i><h3 id="sh_title">Share with player</h3><button class="x" id="sh_close"><i class="ti ti-x"></i></button></div>
+        <div class="nu-modal-b">
+          <div style="font:500 12.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted)">Anyone with this link can view this player's targets and meal plan. No medical, body-composition or private notes are exposed. Revoke anytime.</div>
+          <div class="nu-fld"><label>Player link</label><div style="display:flex;gap:8px"><input id="sh_url" readonly style="flex:1"><button class="cm-btn is-primary is-sm" id="sh_copy"><i class="ti ti-copy" style="font-size:14px"></i>Copy</button></div></div>
+          <div id="sh_msg" style="font:600 11.5px/1 var(--cm-font-mono);color:var(--cm-success);height:12px"></div>
+        </div>
+        <div class="nu-modal-f">
+          <button class="cm-btn is-outline is-sm" id="sh_revoke" style="color:var(--cm-danger)"><i class="ti ti-link-off" style="font-size:14px"></i>Revoke &amp; regenerate</button>
+          <a class="cm-btn is-outline is-sm" id="sh_open" target="_blank" rel="noopener" style="margin-left:auto;text-decoration:none"><i class="ti ti-external-link" style="font-size:14px"></i>Open</a>
+          <button class="cm-btn is-primary is-sm" id="sh_done">Done</button>
+        </div></div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#sh_close').onclick = ov.querySelector('#sh_done').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+      ov.querySelector('#sh_copy').onclick = async () => {
+        const inp = ov.querySelector('#sh_url');
+        try { await navigator.clipboard.writeText(inp.value); } catch { inp.select(); document.execCommand('copy'); }
+        const m = ov.querySelector('#sh_msg'); m.textContent = 'Copied to clipboard'; setTimeout(() => m.textContent = '', 1800);
+      };
+      ov.querySelector('#sh_revoke').onclick = async () => {
+        if (!confirm('Revoke this link? The current URL stops working and a new one is generated.')) return;
+        await window.sb.from('share_links').update({ revoked: true }).eq('id', ov.dataset.linkId);
+        ov.classList.remove('on'); openShareModal();
+      };
+    }
+    ov.dataset.linkId = link.id;
+    ov.querySelector('#sh_title').textContent = `Share · ${p._name || 'player'}`;
+    ov.querySelector('#sh_url').value = url;
+    ov.querySelector('#sh_open').href = url;
+    ov.querySelector('#sh_msg').textContent = '';
+    ov.classList.add('on');
+  }
+
+  // ── History (weigh-ins + asignaciones de plan) ─────────────
+  async function openHistoryModal() {
+    if (!_nuCurrent) { alert('Select a player first.'); return; }
+    nuBuildModal(); nuTabStyle();
+    const p = _nuCurrent.player, t = _nuCurrent.target;
+    const [{ data: bc }, { data: asg }] = await Promise.all([
+      window.sb.from('body_composition').select('measured_date,weight_kg,body_fat_pct,lean_mass_kg,method')
+        .eq('player_id', p.id).eq('club_id', clubId).order('measured_date', { ascending: false }),
+      window.sb.from('player_meal_assignments').select('assigned_date,day_type,scale_factor,created_at, template:meal_plan_templates(name)')
+        .eq('player_id', p.id).eq('club_id', clubId).order('created_at', { ascending: false }),
+    ]);
+    let ov = document.getElementById('nuHistModal');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'nuHistModal'; ov.className = 'nu-modal-ov';
+      ov.innerHTML = `<div class="nu-modal wide" role="dialog" aria-modal="true">
+        <div class="nu-modal-h"><i class="ti ti-history" style="color:var(--cm-accent);font-size:18px"></i><h3 id="hi_title">History</h3><button class="x" id="hi_close"><i class="ti ti-x"></i></button></div>
+        <div class="nu-modal-b" id="hi_body"></div>
+        <div class="nu-modal-f"><button class="cm-btn is-primary is-sm" id="hi_done" style="margin-left:auto">Done</button></div></div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#hi_close').onclick = ov.querySelector('#hi_done').onclick = () => ov.classList.remove('on');
+      ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+    }
+    ov.querySelector('#hi_title').textContent = `History · ${p._name || 'player'}`;
+    const tgtLine = t
+      ? `${t.kcal_target ? Math.round(t.kcal_target).toLocaleString() + ' kcal' : '—'} · P ${t.protein_g ?? '—'} / C ${t.carbs_g ?? '—'} / F ${t.fats_g ?? '—'} g · ${(NC.RMR_MODELS[t.rmr_model] || {}).label || t.rmr_model || '—'}${t.body_fat_target_pct != null ? ' · BF goal ' + t.body_fat_target_pct + '%' : ''}`
+      : '<span class="mut">No target set.</span>';
+    const wRows = (bc && bc.length) ? bc.map(r => {
+      const lean = r.lean_mass_kg != null ? r.lean_mass_kg : (r.weight_kg != null && r.body_fat_pct != null ? NC.leanMass(r.weight_kg, r.body_fat_pct) : null);
+      return `<tr><td>${nuFmtDate(r.measured_date)}</td><td>${r.weight_kg != null ? r.weight_kg + ' kg' : '—'}</td><td>${r.body_fat_pct != null ? r.body_fat_pct + '%' : '—'}</td><td>${lean != null ? lean + ' kg' : '—'}</td><td class="mut">${nuEsc(r.method || '—')}</td></tr>`;
+    }).join('') : '';
+    const aRows = (asg && asg.length) ? asg.map(a =>
+      `<tr><td>${a.assigned_date ? nuFmtDate(a.assigned_date) : (a.day_type ? nuEsc(a.day_type) + ' (recurring)' : '—')}</td><td>${a.template ? nuEsc(a.template.name) : '<span class="mut">—</span>'}</td><td>×${a.scale_factor ?? 1}</td></tr>`).join('') : '';
+    ov.querySelector('#hi_body').innerHTML = `
+      <div class="sec" style="font:600 11px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.04em;color:var(--cm-fg-faint);margin-bottom:6px">Current target</div>
+      <div style="font:500 13px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-bottom:16px">${tgtLine}</div>
+      <div class="sec" style="font:600 11px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.04em;color:var(--cm-fg-faint);margin-bottom:6px">Weigh-ins (${bc ? bc.length : 0})</div>
+      ${wRows ? `<table class="nu-tbl" style="margin-bottom:18px"><thead><tr><th>Date</th><th>Weight</th><th>Body fat</th><th>Lean mass</th><th>Method</th></tr></thead><tbody>${wRows}</tbody></table>` : '<div style="color:var(--cm-fg-muted);font:500 12.5px/1.5 var(--cm-font-sans);margin-bottom:16px">No weigh-ins recorded.</div>'}
+      <div class="sec" style="font:600 11px/1 var(--cm-font-mono);text-transform:uppercase;letter-spacing:.04em;color:var(--cm-fg-faint);margin-bottom:6px">Plan assignments (${asg ? asg.length : 0})</div>
+      ${aRows ? `<table class="nu-tbl"><thead><tr><th>When</th><th>Template</th><th>Scale</th></tr></thead><tbody>${aRows}</tbody></table>` : '<div style="color:var(--cm-fg-muted);font:500 12.5px/1.5 var(--cm-font-sans)">No plan assignments yet.</div>'}`;
+    ov.classList.add('on');
+  }
+
   async function loadPlayerDetail(p) {
     // Header
     const av = document.querySelector('.nu-d-head .av');
@@ -1652,6 +1748,10 @@
   if (btnEdit) btnEdit.onclick = openAssignModal;
   const btnWeigh = document.getElementById('nuBtnWeighIn');
   if (btnWeigh) btnWeigh.onclick = openWeighInModal;
+  const btnShare = document.getElementById('nuBtnShare');
+  if (btnShare) btnShare.onclick = openShareModal;
+  const btnHist = document.getElementById('nuBtnHistory');
+  if (btnHist) btnHist.onclick = openHistoryModal;
   document.querySelectorAll('.nu-bc-tg').forEach(btn =>
     btn.onclick = () => { _bcMode = btn.dataset.bcmode; drawBodyComp(); });
 
