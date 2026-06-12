@@ -66,6 +66,7 @@
   .gl-cplx-badge.low{background:rgba(34,197,94,0.85);color:#fff}
   .gl-cplx-badge.med{background:rgba(245,158,11,0.85);color:#fff}
   .gl-cplx-badge.high{background:rgba(220,38,38,0.85);color:#fff}
+  .gl-default-pill{position:absolute;top:34px;left:8px;display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:4px;background:rgba(0,0,0,0.5);color:#fff;font:600 9.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;backdrop-filter:blur(6px)}
   .gl-video-tag{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 7px;border-radius:4px;background:rgba(0,0,0,0.55);color:#fff;font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;backdrop-filter:blur(6px)}
   .gl-video-tag .ti{font-size:12px}
 
@@ -115,6 +116,9 @@
   .gm-field label{font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
   .gm-field input,.gm-field select,.gm-field textarea{height:34px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:var(--cm-r-3);color:var(--cm-fg);font:var(--cm-body-sm);outline:none;width:100%;box-sizing:border-box}
   .gm-field textarea{height:72px;padding:8px 10px;resize:vertical}
+  .gm-usable{display:flex;flex-wrap:wrap;gap:8px 14px;padding:2px 0}
+  .gm-usable label{display:inline-flex;align-items:center;gap:5px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer}
+  .gm-usable input{width:auto;height:auto;accent-color:var(--cm-accent)}
   .gm-field input:focus,.gm-field select:focus,.gm-field textarea:focus{border-color:var(--cm-border-strong)}
   .gm-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:4px}
   .gm-del-box{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:24px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--cm-shadow-3)}
@@ -147,7 +151,7 @@
       <header class="gl-head">
         <div>
           <h1>Gym library</h1>
-          <div class="ctx"><strong><span id="gl-stat-total">0</span> exercises</strong> · indexed by muscle group &amp; complexity · <span id="gl-stat-video">0</span> with video</div>
+          <div class="ctx"><strong><span id="gl-stat-total">0</span> exercises</strong> · indexed by muscle group, category &amp; complexity · <span id="gl-stat-video">0</span> with video</div>
         </div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm" disabled title="Próximamente"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
@@ -159,14 +163,20 @@
       <div class="gl-toolbar">
         <div class="gl-search"><i class="ti ti-search"></i><input id="gl-search-input" placeholder="Search exercise name, cues, muscles…"></div>
         <select class="gl-sel" id="gl-sel-muscle"><option value="">All muscles</option></select>
+        <select class="gl-sel" id="gl-sel-category"><option value="">All categories</option></select>
         <select class="gl-sel" id="gl-sel-complexity">
           <option value="">All complexity</option>
           <option value="Low">Low</option>
           <option value="Medium">Medium</option>
           <option value="High">High</option>
         </select>
-        <select class="gl-sel" disabled title="Próximamente — columna equipment no disponible">
-          <option>All equipment</option>
+        <select class="gl-sel" id="gl-sel-equipment"><option value="">All equipment</option></select>
+        <select class="gl-sel" id="gl-sel-usable">
+          <option value="">All modules</option>
+          <option value="gym">Gym</option>
+          <option value="individual">Individual</option>
+          <option value="rehab">Rehab</option>
+          <option value="preventive">Preventive</option>
         </select>
         <div class="grow"></div>
         <div class="gl-segs">
@@ -204,12 +214,41 @@
           <input id="gm-muscle" placeholder="e.g. Quadriceps" maxlength="80">
         </div>
         <div class="gm-field">
+          <label>Category</label>
+          <select id="gm-category-type">
+            <option value="strength">Strength</option>
+            <option value="power">Power</option>
+            <option value="olympic">Olympic</option>
+            <option value="mobility">Mobility</option>
+            <option value="activation">Activation</option>
+            <option value="core">Core</option>
+            <option value="balance">Balance</option>
+            <option value="conditioning">Conditioning</option>
+            <option value="prehab">Prehab</option>
+            <option value="speed">Speed</option>
+            <option value="cooldown">Cooldown</option>
+          </select>
+        </div>
+        <div class="gm-field">
           <label>Complexity</label>
-          <select id="gm-category">
+          <select id="gm-complexity">
             <option value="Low">Low</option>
             <option value="Medium">Medium</option>
             <option value="High">High</option>
           </select>
+        </div>
+        <div class="gm-field">
+          <label>Equipment</label>
+          <input id="gm-equipment" placeholder="e.g. Barbell (optional)" maxlength="80">
+        </div>
+        <div class="gm-field">
+          <label>Usable in</label>
+          <div class="gm-usable">
+            <label><input type="checkbox" class="gm-usable-cb" value="gym" checked> Gym</label>
+            <label><input type="checkbox" class="gm-usable-cb" value="individual"> Individual</label>
+            <label><input type="checkbox" class="gm-usable-cb" value="rehab"> Rehab</label>
+            <label><input type="checkbox" class="gm-usable-cb" value="preventive"> Preventive</label>
+          </div>
         </div>
         <div class="gm-field">
           <label>Description</label>
@@ -254,7 +293,8 @@
 const CPLX_CSS = { Low:'low', Medium:'med', High:'high' };
 let ALL_EXERCISES = [];
 let CLUB_ID = null;
-let activeFilters = { search:'', muscle:'', complexity:'', view:'grid' };
+let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', usableIn:'', view:'grid' };
+const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 let editingId = null;
 
 function esc(s) {
@@ -272,7 +312,7 @@ async function boot() {
 
 async function reloadExercises(rebuild = true) {
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,description,muscle_group,category,video_url')
+    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default')
     .eq('club_id', CLUB_ID)
     .order('name');
   ALL_EXERCISES = data || [];
@@ -280,6 +320,8 @@ async function reloadExercises(rebuild = true) {
     renderStats();
     renderMuscleChips();
     renderMuscleSelect();
+    renderCategorySelect();
+    renderEquipmentSelect();
     applyFilters();
   } else {
     buildUI();
@@ -290,6 +332,8 @@ function buildUI() {
   renderStats();
   renderMuscleChips();
   renderMuscleSelect();
+  renderCategorySelect();
+  renderEquipmentSelect();
   applyFilters();
 }
 
@@ -339,6 +383,22 @@ function renderMuscleSelect() {
     ).join('');
 }
 
+function renderCategorySelect() {
+  const cats = [...new Set(ALL_EXERCISES.map(e => e.category).filter(Boolean))].sort();
+  const sel = document.getElementById('gl-sel-category');
+  const cur = activeFilters.category;
+  sel.innerHTML = `<option value="">All categories</option>` +
+    cats.map(c => `<option value="${esc(c)}"${cur===c?' selected':''}>${esc(cap(c))}</option>`).join('');
+}
+
+function renderEquipmentSelect() {
+  const eq = [...new Set(ALL_EXERCISES.map(e => e.equipment).filter(Boolean))].sort();
+  const sel = document.getElementById('gl-sel-equipment');
+  const cur = activeFilters.equipment;
+  sel.innerHTML = `<option value="">All equipment</option>` +
+    eq.map(q => `<option value="${esc(q)}"${cur===q?' selected':''}>${esc(cap(q))}</option>`).join('');
+}
+
 function syncChips() {
   document.getElementById('gl-muscles-strip').querySelectorAll('.gl-m-chip').forEach(c => {
     c.classList.toggle('is-on', c.dataset.muscle === activeFilters.muscle);
@@ -353,10 +413,16 @@ function applyFilters() {
   const search = activeFilters.search.toLowerCase();
   const muscle = activeFilters.muscle;
   const complexity = activeFilters.complexity;
+  const category = activeFilters.category;
+  const equipment = activeFilters.equipment;
+  const usableIn = activeFilters.usableIn;
 
   const visible = ALL_EXERCISES.filter(e => {
     if (muscle && e.muscle_group !== muscle) return false;
-    if (complexity && e.category !== complexity) return false;
+    if (complexity && e.complexity !== complexity) return false;
+    if (category && e.category !== category) return false;
+    if (equipment && e.equipment !== equipment) return false;
+    if (usableIn && !(e.usable_in || []).includes(usableIn)) return false;
     if (search) {
       const hay = `${e.name||''} ${e.description||''} ${e.muscle_group||''}`.toLowerCase();
       if (!hay.includes(search)) return false;
@@ -427,7 +493,7 @@ function appendAddCard(grid) {
 
 function cardHTML(e) {
   const initials = (e.name||'').split(' ').map(w => w[0]||'').join('').slice(0,2).toUpperCase();
-  const cplxCss = CPLX_CSS[e.category] || 'med';
+  const cplxCss = CPLX_CSS[e.complexity] || 'med';
   const hasVideo = !!e.video_url;
   const muscle = e.muscle_group || '';
   const videoEsc = hasVideo ? esc(e.video_url) : '';
@@ -435,14 +501,18 @@ function cardHTML(e) {
   return `<div class="gl-card" data-id="${esc(e.id)}">
     <div class="gl-thumb">
       <div class="gl-thumb-ph"><span>${initials}</span></div>
-      <span class="gl-cplx-badge ${cplxCss}">${esc(e.category||'—')}</span>
+      ${e.complexity ? `<span class="gl-cplx-badge ${cplxCss}">${esc(e.complexity)}</span>` : ''}
+      ${e.is_default ? `<span class="gl-default-pill">Default</span>` : ''}
       ${hasVideo ? `<span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span><button class="gl-thumb-play btn-play" data-video="${videoEsc}"><i class="ti ti-player-play"></i></button>` : ''}
     </div>
     <div class="gl-body">
       <div class="gl-name">${esc(e.name||'Unnamed')}</div>
       <div class="gl-muscles-row">${muscle ? `<span class="gl-muscle">${esc(muscle)}</span>` : ''}</div>
       <div class="gl-desc">${esc(e.description||'')}</div>
-      <div class="gl-foot"><span class="grow"></span>
+      <div class="gl-foot">
+        ${e.category ? `<span class="gl-tag">${esc(cap(e.category))}</span>` : ''}
+        ${e.equipment ? `<span class="gl-tag">${esc(e.equipment)}</span>` : ''}
+        <span class="grow"></span>
         <button class="btn-add-plan" title="Add to plan"><i class="ti ti-plus"></i></button>
         <button class="btn-edit" data-id="${esc(e.id)}" title="Edit exercise"><i class="ti ti-edit"></i></button>
         <button class="btn-del" data-id="${esc(e.id)}" title="Delete exercise"><i class="ti ti-trash"></i></button>
@@ -494,9 +564,13 @@ function openModal(id) {
     saveBtn.textContent = 'Save';
     document.getElementById('gm-name').value = ex.name || '';
     document.getElementById('gm-muscle').value = ex.muscle_group || '';
-    document.getElementById('gm-category').value = ex.category || 'Low';
+    document.getElementById('gm-category-type').value = ex.category || 'strength';
+    document.getElementById('gm-complexity').value = ex.complexity || 'Low';
+    document.getElementById('gm-equipment').value = ex.equipment || '';
     document.getElementById('gm-desc').value = ex.description || '';
     document.getElementById('gm-video').value = ex.video_url || '';
+    const usable = ex.usable_in || [];
+    document.querySelectorAll('.gm-usable-cb').forEach(cb => { cb.checked = usable.includes(cb.value); });
   } else {
     titleEl.textContent = 'New exercise';
     saveBtn.textContent = 'Create';
@@ -516,11 +590,17 @@ async function saveExercise() {
   const name = document.getElementById('gm-name').value.trim();
   if (!name) { document.getElementById('gm-name').focus(); return; }
 
+  let usableIn = [...document.querySelectorAll('.gm-usable-cb')].filter(cb => cb.checked).map(cb => cb.value);
+  if (!usableIn.length) usableIn = ['gym'];
+
   const payload = {
     club_id: CLUB_ID,
     name,
     muscle_group: document.getElementById('gm-muscle').value.trim() || null,
-    category: document.getElementById('gm-category').value,
+    category: document.getElementById('gm-category-type').value,
+    complexity: document.getElementById('gm-complexity').value,
+    equipment: document.getElementById('gm-equipment').value.trim() || null,
+    usable_in: usableIn,
     description: document.getElementById('gm-desc').value.trim() || null,
     video_url: document.getElementById('gm-video').value.trim() || null,
   };
@@ -570,9 +650,15 @@ function clearFilters() {
   activeFilters.search = '';
   activeFilters.muscle = '';
   activeFilters.complexity = '';
+  activeFilters.category = '';
+  activeFilters.equipment = '';
+  activeFilters.usableIn = '';
   document.getElementById('gl-search-input').value = '';
   document.getElementById('gl-sel-muscle').value = '';
   document.getElementById('gl-sel-complexity').value = '';
+  document.getElementById('gl-sel-category').value = '';
+  document.getElementById('gl-sel-equipment').value = '';
+  document.getElementById('gl-sel-usable').value = '';
   syncChips();
   applyFilters();
 }
@@ -591,6 +677,21 @@ function attachListeners() {
 
   document.getElementById('gl-sel-complexity').addEventListener('change', e => {
     activeFilters.complexity = e.target.value;
+    applyFilters();
+  });
+
+  document.getElementById('gl-sel-category').addEventListener('change', e => {
+    activeFilters.category = e.target.value;
+    applyFilters();
+  });
+
+  document.getElementById('gl-sel-equipment').addEventListener('change', e => {
+    activeFilters.equipment = e.target.value;
+    applyFilters();
+  });
+
+  document.getElementById('gl-sel-usable').addEventListener('change', e => {
+    activeFilters.usableIn = e.target.value;
     applyFilters();
   });
 
