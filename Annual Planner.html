@@ -268,6 +268,33 @@
         <div id="apMatchesList"></div>
       </div>
 
+      <!-- ── Periodization ─────────────────────────────────────── -->
+      <div class="ap-card is-hidden" id="apPeriodCard" style="margin-top:16px">
+        <div class="ap-card-h">
+          <div class="ic"><i class="ti ti-stack-2" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <div>
+            <div class="t">Periodization</div>
+            <div class="d" id="apPeriodSub">—</div>
+          </div>
+        </div>
+
+        <div id="apPeriodList"></div>
+
+        <div style="margin-top:16px;padding-top:15px;border-top:1px solid var(--cm-border)">
+          <div style="font:600 10px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">New macrocycle</div>
+          <input type="date" id="apMacroStart" style="display:none">
+          <input type="date" id="apMacroEnd" style="display:none">
+          <div style="display:grid;grid-template-columns:1.1fr 1.4fr .95fr .95fr 54px auto;gap:8px;align-items:end">
+            <div class="ap-field"><label>Name</label><input id="apMacroName" placeholder="Macrocycle"></div>
+            <div class="ap-field"><label>Objective</label><input id="apMacroObj" placeholder="Objective"></div>
+            <div class="ap-field"><label>Start</label><button type="button" class="ap-datebtn" id="apMacroStart_btn" onclick="apOpenCal('apMacroStart', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
+            <div class="ap-field"><label>End</label><button type="button" class="ap-datebtn" id="apMacroEnd_btn" onclick="apOpenCal('apMacroEnd', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
+            <div class="ap-field"><label>Color</label><input type="color" id="apMacroColor" value="#534AB7" style="height:36px;padding:2px;cursor:pointer"></div>
+            <button class="ap-btn primary" onclick="apAddMacro()">Add</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Timeline ──────────────────────────────────────────── -->
       <div class="ap-card is-hidden" id="apTimelineCard" style="margin-top:16px">
         <div class="ap-card-h">
@@ -340,6 +367,7 @@ async function apLoadSeasons(){
     document.getElementById('apPhasesCard').classList.add('is-hidden');
     document.getElementById('apCompsCard').classList.add('is-hidden');
     document.getElementById('apMatchesCard').classList.add('is-hidden');
+    document.getElementById('apPeriodCard').classList.add('is-hidden');
     document.getElementById('apTimelineCard').classList.add('is-hidden');
     apShowForm();
     return;
@@ -378,10 +406,12 @@ async function apSelectSeason(id){
   document.getElementById('apCompsCard').classList.remove('is-hidden');
   document.getElementById('apCompsSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
   document.getElementById('apMatchesCard').classList.remove('is-hidden');
+  document.getElementById('apPeriodCard').classList.remove('is-hidden');
   document.getElementById('apTimelineCard').classList.remove('is-hidden');
   await apLoadPhases();
   await apLoadComps();
   await apLoadMatches();
+  await apLoadPeriodization();
   await apLoadTimeline();
 }
 
@@ -465,6 +495,14 @@ function apRenderTimeline(){
 let _apEditingPhase = null;
 let _apComps = [], _apEditingComp = null;
 let _apMatches = [], _apImportRows = [], _apImportNewComps = [], _apEditingMatch = null;
+let _apMacros = [], _apMesos = [], _apExpandedMacro = null, _apEditingMacro = null, _apEditingMeso = null;
+const LOAD_MODELS = {
+  structured: { label:'Structured', bg:'#E1F5EE', tx:'#085041' },
+  tactical:   { label:'Tactical',   bg:'#EEEDFE', tx:'#3C3489' },
+  verheijen:  { label:'Verheijen',  bg:'#FAEEDA', tx:'#633806' },
+  atr:        { label:'ATR',        bg:'#E6F1FB', tx:'#0C447C' },
+  integral:   { label:'Integral',   bg:'#FAECE7', tx:'#993C1D' }
+};
 const COMP_TYPES = {
   league:        { label:'League',        color:'#185FA5', bg:'#E6F1FB', tx:'#0C447C' },
   cup:           { label:'Cup',           color:'#534AB7', bg:'#EEEDFE', tx:'#3C3489' },
@@ -939,6 +977,214 @@ async function apReadPdf(f){
     document.getElementById('apImpPaste').value = lines.join('\n');
     apImportParse();
   } catch (e) { alert('Could not read the PDF: ' + e.message + '. If it is a scanned PDF, paste the fixtures as text instead.'); }
+}
+
+/* ── Periodization (macro → meso) ──────────────────────────── */
+function apFmtShort(v){
+  if (!v) return '—';
+  const d = new Date(v + 'T00:00:00');
+  return `${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]}`;
+}
+
+async function apLoadPeriodization(){
+  const { data: macros } = await window.sb.from('macrocycles').select('*').eq('season_id', _apSeasonId).order('start_date');
+  _apMacros = macros || [];
+  const ids = _apMacros.map(m => m.id);
+  if (ids.length){
+    const { data: mesos } = await window.sb.from('mesocycles').select('*').in('macrocycle_id', ids).order('start_date');
+    _apMesos = mesos || [];
+  } else _apMesos = [];
+  apRenderPeriodization();
+}
+
+function apRenderPeriodization(){
+  document.getElementById('apPeriodSub').textContent = _apMacros.length ? `${_apMacros.length} macrocycle${_apMacros.length>1?'s':''}` : 'No macrocycles yet';
+  const wrap = document.getElementById('apPeriodList');
+  wrap.innerHTML = _apMacros.length
+    ? _apMacros.map(apMacroBlock).join('')
+    : `<div class="ap-tl-empty" style="position:static;padding:14px 0">No macrocycles yet — add one below</div>`;
+  if (_apEditingMacro) { apSyncDateBtn('apMacroEdit_start'); apSyncDateBtn('apMacroEdit_end'); }
+  if (_apExpandedMacro && !_apEditingMeso) { apSyncDateBtn('apMesoStart'); apSyncDateBtn('apMesoEnd'); }
+  if (_apEditingMeso) { apSyncDateBtn('apMesoEdit_start'); apSyncDateBtn('apMesoEdit_end'); }
+}
+
+function apMacroBlock(mc){
+  if (mc.id === _apEditingMacro) return apMacroEditRow(mc);
+  const expanded = mc.id === _apExpandedMacro;
+  const mesos = _apMesos.filter(m => m.macrocycle_id === mc.id);
+  const head = `<div class="ap-phase-row" style="background:var(--cm-bg-soft)">
+    <button class="ap-iconbtn" onclick="apToggleMacro('${mc.id}')" title="Expand"><i class="ti ti-chevron-${expanded?'down':'right'}" style="font-size:15px"></i></button>
+    <input type="color" class="ap-dot-input" value="${mc.color||'#534AB7'}" onchange="apUpdateMacroColor('${mc.id}', this.value)" title="Change color">
+    <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${mc.name}</span>
+    ${mc.objective?`<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${mc.objective}</span>`:''}
+    <span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${apFmtShort(mc.start_date)} → ${apFmtShort(mc.end_date)}${mesos.length?` · ${mesos.length} meso`:''}</span>
+    <button class="ap-iconbtn is-edit" onclick="apEditMacro('${mc.id}')" title="Edit"><i class="ti ti-pencil" style="font-size:14px"></i></button>
+    <button class="ap-iconbtn" onclick="apDeleteMacro('${mc.id}')" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
+  </div>`;
+  if (!expanded) return head;
+  const mesoRows = mesos.map(ms => ms.id === _apEditingMeso ? apMesoEditRow(ms) : apMesoRow(ms)).join('');
+  return head + `<div style="margin-left:24px;border-left:1.5px solid var(--cm-border);padding-left:12px;margin:6px 0 10px;display:flex;flex-direction:column;gap:6px">${mesoRows || '<span class="ap-tl-hint" style="position:static">No mesocycles yet</span>'}${apMesoAddForm(mc)}</div>`;
+}
+
+function apMacroEditRow(mc){
+  const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
+  return `<div class="ap-phase-row" style="flex-wrap:wrap;gap:8px;background:var(--cm-bg-soft)">
+    <input type="date" id="apMacroEdit_start" style="display:none" value="${mc.start_date}">
+    <input type="date" id="apMacroEdit_end" style="display:none" value="${mc.end_date}">
+    <input type="color" class="ap-dot-input" value="${mc.color||'#534AB7'}" onchange="apUpdateMacroColor('${mc.id}', this.value)" title="Change color">
+    <input id="apMacroEdit_name" value="${(mc.name||'').replace(/"/g,'&quot;')}" placeholder="Name" style="${fld};min-width:110px;font:600 13px/1 var(--cm-font-sans)">
+    <input id="apMacroEdit_obj" value="${(mc.objective||'').replace(/"/g,'&quot;')}" placeholder="Objective" style="${fld};min-width:140px;font:500 12px/1 var(--cm-font-sans)">
+    <button type="button" class="ap-datebtn" id="apMacroEdit_start_btn" onclick="apOpenCal('apMacroEdit_start', this)" style="width:auto;min-width:130px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mc.start_date)}</span></button>
+    <button type="button" class="ap-datebtn" id="apMacroEdit_end_btn" onclick="apOpenCal('apMacroEdit_end', this)" style="width:auto;min-width:130px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mc.end_date)}</span></button>
+    <button class="ap-iconbtn is-edit" onclick="apSaveMacroEdit('${mc.id}')" title="Save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i></button>
+    <button class="ap-iconbtn" onclick="apCancelMacroEdit()" title="Cancel"><i class="ti ti-x" style="font-size:14px"></i></button>
+  </div>`;
+}
+
+function apMesoRow(ms){
+  const lm = LOAD_MODELS[ms.load_model] || LOAD_MODELS.structured;
+  return `<div class="ap-phase-row" style="border:1px solid var(--cm-border);background:var(--cm-surface)">
+    <span style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:100px">${ms.name}</span>
+    ${ms.objective?`<span style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${ms.objective}</span>`:''}
+    <span class="ap-badge" style="background:${lm.bg};color:${lm.tx}">${lm.label}</span>
+    <span style="margin-left:auto;font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${apFmtShort(ms.start_date)} → ${apFmtShort(ms.end_date)}</span>
+    <button class="ap-iconbtn is-edit" onclick="apEditMeso('${ms.id}')" title="Edit"><i class="ti ti-pencil" style="font-size:13px"></i></button>
+    <button class="ap-iconbtn" onclick="apDeleteMeso('${ms.id}')" title="Delete"><i class="ti ti-trash" style="font-size:13px"></i></button>
+  </div>`;
+}
+
+function apMesoEditRow(ms){
+  const fld = 'height:30px;padding:0 7px;background:var(--cm-bg-soft);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:6px';
+  const opts = Object.keys(LOAD_MODELS).map(k => `<option value="${k}"${k===ms.load_model?' selected':''}>${LOAD_MODELS[k].label}</option>`).join('');
+  return `<div class="ap-phase-row" style="flex-wrap:wrap;gap:7px;border:1px solid var(--cm-border);background:var(--cm-surface)">
+    <input type="date" id="apMesoEdit_start" style="display:none" value="${ms.start_date}">
+    <input type="date" id="apMesoEdit_end" style="display:none" value="${ms.end_date}">
+    <input id="apMesoEdit_name" value="${(ms.name||'').replace(/"/g,'&quot;')}" placeholder="Name" style="${fld};min-width:95px;font:600 12.5px/1 var(--cm-font-sans)">
+    <input id="apMesoEdit_obj" value="${(ms.objective||'').replace(/"/g,'&quot;')}" placeholder="Objective" style="${fld};min-width:120px;font:500 11px/1 var(--cm-font-sans)">
+    <button type="button" class="ap-datebtn" id="apMesoEdit_start_btn" onclick="apOpenCal('apMesoEdit_start', this)" style="width:auto;min-width:120px;height:30px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(ms.start_date)}</span></button>
+    <button type="button" class="ap-datebtn" id="apMesoEdit_end_btn" onclick="apOpenCal('apMesoEdit_end', this)" style="width:auto;min-width:120px;height:30px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(ms.end_date)}</span></button>
+    <select id="apMesoEdit_model" style="${fld};font:500 11px/1 var(--cm-font-sans)">${opts}</select>
+    <button class="ap-iconbtn is-edit" onclick="apSaveMesoEdit('${ms.id}')" title="Save" style="margin-left:auto"><i class="ti ti-check" style="font-size:13px"></i></button>
+    <button class="ap-iconbtn" onclick="apCancelMesoEdit()" title="Cancel"><i class="ti ti-x" style="font-size:13px"></i></button>
+  </div>`;
+}
+
+function apMesoAddForm(mc){
+  const opts = Object.keys(LOAD_MODELS).map(k => `<option value="${k}">${LOAD_MODELS[k].label}</option>`).join('');
+  return `<div style="display:grid;grid-template-columns:1.1fr 1.3fr .95fr .95fr 1fr auto;gap:7px;align-items:end;margin-top:3px">
+    <input type="date" id="apMesoStart" style="display:none" value="${mc.start_date}">
+    <input type="date" id="apMesoEnd" style="display:none" value="${mc.end_date}">
+    <div class="ap-field"><label>Name</label><input id="apMesoName" placeholder="Mesocycle" style="height:32px"></div>
+    <div class="ap-field"><label>Objective</label><input id="apMesoObj" placeholder="Objective" style="height:32px"></div>
+    <div class="ap-field"><label>Start</label><button type="button" class="ap-datebtn" id="apMesoStart_btn" onclick="apOpenCal('apMesoStart', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mc.start_date)}</span></button></div>
+    <div class="ap-field"><label>End</label><button type="button" class="ap-datebtn" id="apMesoEnd_btn" onclick="apOpenCal('apMesoEnd', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mc.end_date)}</span></button></div>
+    <div class="ap-field"><label>Load model</label><select id="apMesoModel" style="height:32px">${opts}</select></div>
+    <button class="ap-btn primary" onclick="apAddMeso('${mc.id}')" style="height:32px" title="Add mesocycle"><i class="ti ti-plus" style="font-size:14px"></i></button>
+  </div>`;
+}
+
+function apToggleMacro(id){ _apExpandedMacro = (_apExpandedMacro === id ? null : id); _apEditingMeso = null; apRenderPeriodization(); }
+function apEditMacro(id){ _apEditingMacro = id; apRenderPeriodization(); }
+function apCancelMacroEdit(){ _apEditingMacro = null; apRenderPeriodization(); }
+function apEditMeso(id){ _apEditingMeso = id; apRenderPeriodization(); }
+function apCancelMesoEdit(){ _apEditingMeso = null; apRenderPeriodization(); }
+
+async function apUpdateMacroColor(id, color){
+  const { error } = await window.sb.from('macrocycles').update({ color }).eq('id', id);
+  if (error) { alert('Could not update color: ' + error.message); return; }
+  const m = _apMacros.find(x => x.id === id); if (m) m.color = color;
+  apLoadTimeline();
+}
+
+async function apAddMacro(){
+  const name = document.getElementById('apMacroName').value.trim();
+  const obj  = document.getElementById('apMacroObj').value.trim();
+  const start= document.getElementById('apMacroStart').value;
+  const end  = document.getElementById('apMacroEnd').value;
+  const color= document.getElementById('apMacroColor').value || '#534AB7';
+  if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
+  if (end < start) { alert('End must be after start.'); return; }
+  if (start < _apSeasonStart || end > _apSeasonEnd) { alert(`Macrocycle must stay within the season (${apFmtShort(_apSeasonStart)} → ${apFmtShort(_apSeasonEnd)}).`); return; }
+  const { error } = await window.sb.from('macrocycles').insert({ season_id: _apSeasonId, name, objective: obj||null, start_date: start, end_date: end, color });
+  if (error) { alert('Could not add macrocycle: ' + error.message); return; }
+  document.getElementById('apMacroName').value = '';
+  document.getElementById('apMacroObj').value = '';
+  document.getElementById('apMacroStart').value = '';
+  document.getElementById('apMacroEnd').value = '';
+  apSyncDateBtn('apMacroStart'); apSyncDateBtn('apMacroEnd');
+  await apLoadPeriodization();
+  await apLoadTimeline();
+}
+
+async function apSaveMacroEdit(id){
+  const name = document.getElementById('apMacroEdit_name').value.trim();
+  const obj  = document.getElementById('apMacroEdit_obj').value.trim();
+  const start= document.getElementById('apMacroEdit_start').value;
+  const end  = document.getElementById('apMacroEdit_end').value;
+  if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
+  if (end < start) { alert('End must be after start.'); return; }
+  if (start < _apSeasonStart || end > _apSeasonEnd) { alert(`Macrocycle must stay within the season (${apFmtShort(_apSeasonStart)} → ${apFmtShort(_apSeasonEnd)}).`); return; }
+  const { error } = await window.sb.from('macrocycles').update({ name, objective: obj||null, start_date: start, end_date: end }).eq('id', id);
+  if (error) { alert('Could not update: ' + error.message); return; }
+  _apEditingMacro = null;
+  await apLoadPeriodization();
+  await apLoadTimeline();
+}
+
+async function apDeleteMacro(id){
+  const mesos = _apMesos.filter(m => m.macrocycle_id === id);
+  if (!confirm(mesos.length ? `Delete this macrocycle and its ${mesos.length} mesocycle${mesos.length>1?'s':''}?` : 'Delete this macrocycle?')) return;
+  if (mesos.length){
+    const { error: e1 } = await window.sb.from('mesocycles').delete().eq('macrocycle_id', id);
+    if (e1) { alert('Could not delete mesocycles: ' + e1.message); return; }
+  }
+  const { error } = await window.sb.from('macrocycles').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  if (_apExpandedMacro === id) _apExpandedMacro = null;
+  await apLoadPeriodization();
+  await apLoadTimeline();
+}
+
+async function apAddMeso(macroId){
+  const mc = _apMacros.find(m => m.id === macroId);
+  const name = document.getElementById('apMesoName').value.trim();
+  const obj  = document.getElementById('apMesoObj').value.trim();
+  const start= document.getElementById('apMesoStart').value;
+  const end  = document.getElementById('apMesoEnd').value;
+  const model= document.getElementById('apMesoModel').value;
+  if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
+  if (end < start) { alert('End must be after start.'); return; }
+  if (mc && (start < mc.start_date || end > mc.end_date)) { alert(`Mesocycle dates must stay within the macrocycle (${apFmtShort(mc.start_date)} → ${apFmtShort(mc.end_date)}).`); return; }
+  const { error } = await window.sb.from('mesocycles').insert({ macrocycle_id: macroId, name, objective: obj||null, start_date: start, end_date: end, load_model: model });
+  if (error) { alert('Could not add mesocycle: ' + error.message); return; }
+  await apLoadPeriodization();
+  await apLoadTimeline();
+}
+
+async function apSaveMesoEdit(id){
+  const ms = _apMesos.find(m => m.id === id);
+  const mc = ms ? _apMacros.find(m => m.id === ms.macrocycle_id) : null;
+  const name = document.getElementById('apMesoEdit_name').value.trim();
+  const obj  = document.getElementById('apMesoEdit_obj').value.trim();
+  const start= document.getElementById('apMesoEdit_start').value;
+  const end  = document.getElementById('apMesoEdit_end').value;
+  const model= document.getElementById('apMesoEdit_model').value;
+  if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
+  if (end < start) { alert('End must be after start.'); return; }
+  if (mc && (start < mc.start_date || end > mc.end_date)) { alert(`Mesocycle dates must stay within the macrocycle (${apFmtShort(mc.start_date)} → ${apFmtShort(mc.end_date)}).`); return; }
+  const { error } = await window.sb.from('mesocycles').update({ name, objective: obj||null, start_date: start, end_date: end, load_model: model }).eq('id', id);
+  if (error) { alert('Could not update: ' + error.message); return; }
+  _apEditingMeso = null;
+  await apLoadPeriodization();
+  await apLoadTimeline();
+}
+
+async function apDeleteMeso(id){
+  if (!confirm('Delete this mesocycle?')) return;
+  const { error } = await window.sb.from('mesocycles').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  await apLoadPeriodization();
+  await apLoadTimeline();
 }
 
 /* ── Timeline (static render) ──────────────────────────────── */
