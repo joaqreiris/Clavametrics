@@ -46,11 +46,28 @@
   .ap-btn.primary { background:var(--cm-accent, #2f6fed); color:#fff; border:none; }
   .ap-empty { text-align:center; padding:30px 16px; color:var(--cm-fg-muted); }
   .ap-empty .ti { font-size:26px; color:var(--cm-fg-faint); margin-bottom:8px; }
-  .ap-row { display:flex; align-items:center; gap:12px; padding:11px 12px; background:var(--cm-bg-soft); border-radius:9px; }
+  .ap-row { display:flex; align-items:center; gap:12px; padding:11px 12px; background:var(--cm-bg-soft); border-radius:9px; cursor:pointer; border:1px solid transparent; }
   .ap-row + .ap-row { margin-top:7px; }
+  .ap-row:hover { border-color:var(--cm-border); }
+  .ap-row.is-sel { border-color:var(--cm-accent, #2f6fed); background:color-mix(in srgb, var(--cm-accent, #2f6fed) 7%, var(--cm-bg-soft)); }
   .ap-pill { font:600 10px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:6px; }
   .ap-pill.active { background:rgba(34,197,94,0.12); color:var(--cm-success,#16a34a); }
   .ap-pill.archived { background:var(--cm-bg); color:var(--cm-fg-muted); }
+
+  /* Phases */
+  .ap-timeline { position:relative; height:40px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; overflow:hidden; margin-bottom:16px; }
+  .ap-tl-seg { position:absolute; top:0; bottom:0; display:flex; align-items:center; justify-content:center; font:600 10px/1 var(--cm-font-sans); color:#fff; overflow:hidden; white-space:nowrap; box-shadow:inset -1px 0 0 rgba(255,255,255,.25); }
+  .ap-tl-seg.no-count { background-image:repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,.20) 5px, rgba(255,255,255,.20) 10px); }
+  .ap-tl-today { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--cm-fg-strong); z-index:3; }
+  .ap-tl-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:var(--cm-body-sm); color:var(--cm-fg-faint); }
+
+  .ap-phase-row { display:flex; align-items:center; gap:11px; padding:9px 12px; background:var(--cm-bg-soft); border-radius:8px; }
+  .ap-phase-row + .ap-phase-row { margin-top:6px; }
+  .ap-dot { width:11px; height:11px; border-radius:3px; flex:0 0 auto; }
+  .ap-switch { display:inline-flex; align-items:center; gap:6px; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; user-select:none; }
+  .ap-iconbtn { width:28px; height:28px; border-radius:7px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+  .ap-iconbtn:hover { color:var(--cm-danger,#dc2626); border-color:var(--cm-danger,#dc2626); }
+  .ap-grid5 { display:grid; grid-template-columns:1.2fr 1.2fr 1fr 1fr auto; gap:10px; align-items:end; }
   .is-hidden { display:none !important; }
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 </style>
@@ -113,9 +130,31 @@
           </div>
         </div>
 
-        <!-- Phases placeholder (next step) -->
-        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--cm-border);font:var(--cm-body-sm);color:var(--cm-fg-faint)">
-          <i class="ti ti-layout-rows" style="font-size:13px;vertical-align:-2px"></i> Phases editor — coming next
+        <!-- Phases placeholder removed — phases live in their own card below -->
+      </div>
+
+      <!-- ── Phases ────────────────────────────────────────────── -->
+      <div class="ap-card is-hidden" id="apPhasesCard" style="margin-top:16px">
+        <div class="ap-card-h">
+          <div class="ic"><i class="ti ti-layout-rows" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <div>
+            <div class="t">Phases</div>
+            <div class="d" id="apPhasesSub">—</div>
+          </div>
+        </div>
+
+        <div class="ap-timeline" id="apTimeline"></div>
+        <div id="apPhasesList"></div>
+
+        <div style="margin-top:16px;padding-top:15px;border-top:1px solid var(--cm-border)">
+          <div class="ap-grid5">
+            <div class="ap-field"><label>Phase type</label><select id="apPhaseType" onchange="apOnPhaseTypeChange()"></select></div>
+            <div class="ap-field"><label>Name</label><input id="apPhaseName" placeholder="Preseason"></div>
+            <div class="ap-field"><label>Start</label><input type="date" id="apPhaseStart"></div>
+            <div class="ap-field"><label>End</label><input type="date" id="apPhaseEnd"></div>
+            <button class="ap-btn primary" onclick="apAddPhase()">Add phase</button>
+          </div>
+          <label class="ap-switch" style="margin-top:11px"><input type="checkbox" id="apPhaseCounts" checked> Counts for availability <span style="color:var(--cm-fg-faint)">· off for break / off-season</span></label>
         </div>
       </div>
     </section>
@@ -124,6 +163,9 @@
 
 <script>
 let _apClubId = null, _apTeamId = null;
+let _apSeasons = [];
+let _apSeasonId = null, _apSeasonStart = null, _apSeasonEnd = null;
+let _apPhaseTypes = [], _apPhases = [];
 
 function apOnTeamChange(){
   const v = document.getElementById('apTeamSelect').value;
@@ -164,26 +206,49 @@ async function apLoadSeasons(){
   const { data: seasons, error } = await q.order('start_date', { ascending: false });
 
   if (error) { list.innerHTML = `<div class="ap-empty">Couldn't load seasons.</div>`; return; }
+  _apSeasons = seasons || [];
 
-  if (!seasons || !seasons.length) {
+  if (!_apSeasons.length) {
     list.innerHTML = `<div class="ap-empty">
       <div><i class="ti ti-calendar-plus"></i></div>
       <div style="font-weight:600;color:var(--cm-fg);margin-bottom:3px">No season yet</div>
       <div style="font:var(--cm-body-sm)">Create the first season for this category to start planning.</div>
     </div>`;
+    document.getElementById('apPhasesCard').classList.add('is-hidden');
     apShowForm();
     return;
   }
 
-  list.innerHTML = seasons.map(s => {
+  apRenderSeasonsList();
+  // Auto-seleccionar la primera activa (o la primera)
+  const active = _apSeasons.find(s => s.status !== 'archived') || _apSeasons[0];
+  apSelectSeason(active.id);
+}
+
+function apRenderSeasonsList(){
+  const list = document.getElementById('apSeasonsList');
+  list.innerHTML = _apSeasons.map(s => {
     const st = s.status === 'archived' ? 'archived' : 'active';
-    return `<div class="ap-row">
+    const sel = s.id === _apSeasonId ? ' is-sel' : '';
+    return `<div class="ap-row${sel}" onclick="apSelectSeason('${s.id}')">
       <i class="ti ti-calendar-stats" style="font-size:16px;color:var(--cm-fg-muted)"></i>
       <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:90px">${s.name}</span>
       <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${s.start_date} → ${s.end_date}</span>
       <span class="ap-pill ${st}" style="margin-left:auto">${st}</span>
     </div>`;
   }).join('');
+}
+
+function apSelectSeason(id){
+  const s = _apSeasons.find(x => x.id === id);
+  if (!s) return;
+  _apSeasonId = s.id; _apSeasonStart = s.start_date; _apSeasonEnd = s.end_date;
+  apRenderSeasonsList();
+  document.getElementById('apPhasesCard').classList.remove('is-hidden');
+  document.getElementById('apPhasesSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
+  document.getElementById('apPhaseStart').value = s.start_date;
+  document.getElementById('apPhaseEnd').value = s.end_date;
+  apLoadPhases();
 }
 
 function apShowForm(){ document.getElementById('apSeasonForm').classList.remove('is-hidden'); }
@@ -196,11 +261,10 @@ async function apSaveSeason(){
   if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
   if (start > end) { alert('Start date must be before end date.'); return; }
 
-  const { error } = await window.sb.from('seasons').insert({
-    club_id: _apClubId,
-    team_id: _apTeamId,
+  const { data, error } = await window.sb.from('seasons').insert({
+    club_id: _apClubId, team_id: _apTeamId,
     name, start_date: start, end_date: end, status: 'active'
-  });
+  }).select('id').single();
   if (error) { alert('Could not save: ' + error.message); return; }
 
   apHideForm();
@@ -208,13 +272,124 @@ async function apSaveSeason(){
   document.getElementById('apStart').value = '';
   document.getElementById('apEnd').value = '';
   await apLoadSeasons();
+  if (data?.id) apSelectSeason(data.id);
 }
 
+/* ── Phase types ──────────────────────────────────────────── */
+async function apLoadPhaseTypes(){
+  const { data } = await window.sb.from('phase_types').select('*').order('is_preset', { ascending:false }).order('name');
+  _apPhaseTypes = data || [];
+  const sel = document.getElementById('apPhaseType');
+  sel.innerHTML = _apPhaseTypes.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  apOnPhaseTypeChange();
+}
+
+function apOnPhaseTypeChange(){
+  const t = _apPhaseTypes.find(x => x.id === document.getElementById('apPhaseType').value);
+  if (!t) return;
+  const nameInput = document.getElementById('apPhaseName');
+  if (!nameInput.value.trim()) nameInput.placeholder = t.name;
+  document.getElementById('apPhaseCounts').checked = !!t.default_counts_availability;
+}
+
+/* ── Phases ───────────────────────────────────────────────── */
+function apDays(a, b){ return Math.max(0, (Date.parse(b) - Date.parse(a)) / 86400000); }
+function apClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+async function apLoadPhases(){
+  const { data } = await window.sb.from('season_phases').select('*').eq('season_id', _apSeasonId).order('start_date');
+  _apPhases = data || [];
+  apRenderTimeline();
+  apRenderPhasesList();
+}
+
+function apRenderTimeline(){
+  const tl = document.getElementById('apTimeline');
+  const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
+  let html = '';
+  if (!_apPhases.length) {
+    html = `<div class="ap-tl-empty">No phases yet — add one below</div>`;
+  } else {
+    _apPhases.forEach(p => {
+      let left = apClamp(apDays(_apSeasonStart, p.start_date) / total * 100, 0, 100);
+      let width = apClamp(apDays(p.start_date, p.end_date) / total * 100, 0, 100 - left);
+      const noCount = p.counts_availability ? '' : ' no-count';
+      const lbl = width > 9 ? p.name : '';
+      html += `<div class="ap-tl-seg${noCount}" style="left:${left}%;width:${width}%;background:${p.color}" title="${p.name}">${lbl}</div>`;
+    });
+  }
+  const today = new Date().toISOString().slice(0,10);
+  if (today >= _apSeasonStart && today <= _apSeasonEnd) {
+    const pos = apClamp(apDays(_apSeasonStart, today) / total * 100, 0, 100);
+    html += `<div class="ap-tl-today" style="left:${pos}%" title="Today"></div>`;
+  }
+  tl.innerHTML = html;
+}
+
+function apRenderPhasesList(){
+  const wrap = document.getElementById('apPhasesList');
+  if (!_apPhases.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = _apPhases.map(p => `
+    <div class="ap-phase-row">
+      <span class="ap-dot" style="background:${p.color}"></span>
+      <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:120px">${p.name}</span>
+      <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${p.start_date} → ${p.end_date}</span>
+      <label class="ap-switch" style="margin-left:auto">
+        <input type="checkbox" ${p.counts_availability ? 'checked' : ''} onchange="apToggleCounts('${p.id}', this.checked)"> counts
+      </label>
+      <button class="ap-iconbtn" onclick="apDeletePhase('${p.id}')" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
+    </div>`).join('');
+}
+
+async function apAddPhase(){
+  const typeId = document.getElementById('apPhaseType').value;
+  const type   = _apPhaseTypes.find(t => t.id === typeId);
+  const name   = document.getElementById('apPhaseName').value.trim() || (type ? type.name : '');
+  const start  = document.getElementById('apPhaseStart').value;
+  const end    = document.getElementById('apPhaseEnd').value;
+  const counts = document.getElementById('apPhaseCounts').checked;
+  if (!name || !start || !end) { alert('Type, name, start and end are required.'); return; }
+  if (start > end) { alert('Start must be before end.'); return; }
+  if (start < _apSeasonStart || end > _apSeasonEnd) {
+    if (!confirm('This phase falls partly outside the season range. Add anyway?')) return;
+  }
+
+  const { error } = await window.sb.from('season_phases').insert({
+    season_id: _apSeasonId,
+    phase_type_id: typeId || null,
+    name,
+    color: type ? type.color : '#888780',
+    start_date: start, end_date: end,
+    counts_availability: counts,
+    sort_order: _apPhases.length
+  });
+  if (error) { alert('Could not add phase: ' + error.message); return; }
+
+  document.getElementById('apPhaseName').value = '';
+  await apLoadPhases();
+}
+
+async function apToggleCounts(id, val){
+  const { error } = await window.sb.from('season_phases').update({ counts_availability: val }).eq('id', id);
+  if (error) { alert('Could not update: ' + error.message); return; }
+  const p = _apPhases.find(x => x.id === id); if (p) p.counts_availability = val;
+  apRenderTimeline();
+}
+
+async function apDeletePhase(id){
+  if (!confirm('Delete this phase?')) return;
+  const { error } = await window.sb.from('season_phases').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  await apLoadPhases();
+}
+
+/* ── Init ─────────────────────────────────────────────────── */
 (async function apInit(){
   _apClubId = await window.getClubId();
   try { window.applyClubTheme(); } catch(_){}
   try { const club = await window.getClub(); if (club?.name) document.getElementById('apClubName').textContent = club.name; } catch(_){}
   await apInitTeam();
+  await apLoadPhaseTypes();
   await apLoadSeasons();
 })();
 </script>
