@@ -70,6 +70,8 @@
   .ap-iconbtn:hover { color:var(--cm-danger,#dc2626); border-color:var(--cm-danger,#dc2626); }
   .ap-iconbtn.is-edit:hover { color:var(--cm-accent,#2f6fed); border-color:var(--cm-accent,#2f6fed); }
   .ap-grid5 { display:grid; grid-template-columns:1.1fr 1.1fr .95fr .95fr 54px auto; gap:10px; align-items:end; }
+  .ap-grid-comp { display:grid; grid-template-columns:1.6fr 1fr 54px auto; gap:10px; align-items:end; }
+  .ap-badge { font:600 10px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:6px; }
 
   /* Date picker */
   .ap-datebtn { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); text-align:left; cursor:pointer; display:flex; align-items:center; gap:7px; }
@@ -177,6 +179,34 @@
           <label class="ap-switch" style="margin-top:11px"><input type="checkbox" id="apPhaseCounts" checked> Counts for availability <span style="color:var(--cm-fg-faint)">· off for break / off-season</span></label>
         </div>
       </div>
+
+      <!-- ── Competitions ──────────────────────────────────────── -->
+      <div class="ap-card is-hidden" id="apCompsCard" style="margin-top:16px">
+        <div class="ap-card-h">
+          <div class="ic"><i class="ti ti-trophy" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <div>
+            <div class="t">Competitions</div>
+            <div class="d" id="apCompsSub">—</div>
+          </div>
+        </div>
+
+        <div id="apCompsList"></div>
+
+        <div style="margin-top:16px;padding-top:15px;border-top:1px solid var(--cm-border)">
+          <div class="ap-grid-comp">
+            <div class="ap-field"><label>Name</label><input id="apCompName" placeholder="New competition"></div>
+            <div class="ap-field"><label>Type</label><select id="apCompType" onchange="apOnCompTypeChange()">
+              <option value="league">League</option>
+              <option value="cup">Cup</option>
+              <option value="international">International</option>
+              <option value="friendly">Friendly</option>
+              <option value="supercup">Supercup</option>
+            </select></div>
+            <div class="ap-field"><label>Color</label><input type="color" id="apCompColor" value="#185FA5" style="height:36px;padding:2px;cursor:pointer"></div>
+            <button class="ap-btn primary" onclick="apAddComp()">Add</button>
+          </div>
+        </div>
+      </div>
     </section>
     </main>
   </div>
@@ -235,6 +265,7 @@ async function apLoadSeasons(){
       <div style="font:var(--cm-body-sm)">Create the first season for this category to start planning.</div>
     </div>`;
     document.getElementById('apPhasesCard').classList.add('is-hidden');
+    document.getElementById('apCompsCard').classList.add('is-hidden');
     apShowForm();
     return;
   }
@@ -270,6 +301,9 @@ function apSelectSeason(id){
   document.getElementById('apPhaseEnd').value = s.end_date;
   apSyncDateBtn('apPhaseStart'); apSyncDateBtn('apPhaseEnd');
   apLoadPhases();
+  document.getElementById('apCompsCard').classList.remove('is-hidden');
+  document.getElementById('apCompsSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
+  apLoadComps();
 }
 
 function apShowForm(){ document.getElementById('apSeasonForm').classList.remove('is-hidden'); }
@@ -350,6 +384,14 @@ function apRenderTimeline(){
 }
 
 let _apEditingPhase = null;
+let _apComps = [], _apEditingComp = null;
+const COMP_TYPES = {
+  league:        { label:'League',        color:'#185FA5', bg:'#E6F1FB', tx:'#0C447C' },
+  cup:           { label:'Cup',           color:'#534AB7', bg:'#EEEDFE', tx:'#3C3489' },
+  international: { label:'International',  color:'#BA7517', bg:'#FAEEDA', tx:'#633806' },
+  friendly:      { label:'Friendly',      color:'#888780', bg:'#F1EFE8', tx:'#444441' },
+  supercup:      { label:'Supercup',      color:'#D85A30', bg:'#FAECE7', tx:'#993C1D' }
+};
 function apRenderPhasesList(){
   const wrap = document.getElementById('apPhasesList');
   if (!_apPhases.length) { wrap.innerHTML = ''; return; }
@@ -450,6 +492,87 @@ async function apDeletePhase(id){
   const { error } = await window.sb.from('season_phases').delete().eq('id', id);
   if (error) { alert('Could not delete: ' + error.message); return; }
   await apLoadPhases();
+}
+
+/* ── Competitions ─────────────────────────────────────────── */
+function apOnCompTypeChange(){
+  const t = COMP_TYPES[document.getElementById('apCompType').value];
+  if (t) document.getElementById('apCompColor').value = t.color;
+}
+
+async function apLoadComps(){
+  const { data } = await window.sb.from('competitions').select('*').eq('season_id', _apSeasonId).order('created_at');
+  _apComps = data || [];
+  apRenderCompsList();
+}
+
+function apCompBadge(type){
+  const t = COMP_TYPES[type] || COMP_TYPES.league;
+  return `<span class="ap-badge" style="background:${t.bg};color:${t.tx}">${t.label}</span>`;
+}
+
+function apRenderCompsList(){
+  const wrap = document.getElementById('apCompsList');
+  if (!_apComps.length) { wrap.innerHTML = `<div class="ap-tl-empty" style="position:static;padding:14px 0">No competitions yet — add one below</div>`; return; }
+  wrap.innerHTML = _apComps.map(c => c.id === _apEditingComp ? apCompEditRow(c) : `
+    <div class="ap-phase-row">
+      <input type="color" class="ap-dot-input" value="${c.color}" onchange="apUpdateCompColor('${c.id}', this.value)" title="Change color">
+      <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:150px">${c.name}</span>
+      ${apCompBadge(c.comp_type)}
+      <button class="ap-iconbtn is-edit" onclick="apEditComp('${c.id}')" title="Edit" style="margin-left:auto"><i class="ti ti-pencil" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn" onclick="apDeleteComp('${c.id}')" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
+    </div>`).join('');
+}
+
+function apCompEditRow(c){
+  const opts = Object.keys(COMP_TYPES).map(k => `<option value="${k}"${k===c.comp_type?' selected':''}>${COMP_TYPES[k].label}</option>`).join('');
+  return `
+    <div class="ap-phase-row">
+      <input type="color" class="ap-dot-input" value="${c.color}" onchange="apUpdateCompColor('${c.id}', this.value)" title="Change color">
+      <input id="apCompEdit_name" value="${(c.name||'').replace(/"/g,'&quot;')}" style="min-width:150px;height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:600 13px/1 var(--cm-font-sans)">
+      <select id="apCompEdit_type" style="height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 12px/1 var(--cm-font-sans)">${opts}</select>
+      <button class="ap-iconbtn is-edit" onclick="apSaveCompEdit('${c.id}')" title="Save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn" onclick="apCancelCompEdit()" title="Cancel"><i class="ti ti-x" style="font-size:14px"></i></button>
+    </div>`;
+}
+
+function apEditComp(id){ _apEditingComp = id; apRenderCompsList(); }
+function apCancelCompEdit(){ _apEditingComp = null; apRenderCompsList(); }
+
+async function apSaveCompEdit(id){
+  const name = document.getElementById('apCompEdit_name').value.trim();
+  const type = document.getElementById('apCompEdit_type').value;
+  if (!name) { alert('Name is required.'); return; }
+  const { error } = await window.sb.from('competitions').update({ name, comp_type: type }).eq('id', id);
+  if (error) { alert('Could not update: ' + error.message); return; }
+  _apEditingComp = null;
+  await apLoadComps();
+}
+
+async function apAddComp(){
+  const name  = document.getElementById('apCompName').value.trim();
+  const type  = document.getElementById('apCompType').value;
+  const color = document.getElementById('apCompColor').value || (COMP_TYPES[type] ? COMP_TYPES[type].color : '#185FA5');
+  if (!name) { alert('Name is required.'); return; }
+  const { error } = await window.sb.from('competitions').insert({
+    season_id: _apSeasonId, name, comp_type: type, color
+  });
+  if (error) { alert('Could not add competition: ' + error.message); return; }
+  document.getElementById('apCompName').value = '';
+  await apLoadComps();
+}
+
+async function apUpdateCompColor(id, color){
+  const { error } = await window.sb.from('competitions').update({ color }).eq('id', id);
+  if (error) { alert('Could not update color: ' + error.message); return; }
+  const c = _apComps.find(x => x.id === id); if (c) c.color = color;
+}
+
+async function apDeleteComp(id){
+  if (!confirm('Delete this competition?')) return;
+  const { error } = await window.sb.from('competitions').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  await apLoadComps();
 }
 
 /* ── Date picker (calendar popover) ───────────────────────── */
