@@ -73,6 +73,16 @@
   .ap-grid-comp { display:grid; grid-template-columns:1.6fr 1fr 54px auto; gap:10px; align-items:end; }
   .ap-badge { font:600 10px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:6px; }
 
+  /* Import */
+  .ap-dropzone { display:block; border:1.5px dashed var(--cm-border); border-radius:10px; padding:18px; text-align:center; color:var(--cm-fg-muted); cursor:pointer; transition:border-color .15s, background .15s; }
+  .ap-dropzone:hover, .ap-dropzone.drag { border-color:var(--cm-accent,#2f6fed); background:color-mix(in srgb, var(--cm-accent,#2f6fed) 5%, transparent); }
+  .ap-ta { width:100%; box-sizing:border-box; min-height:92px; padding:8px 10px; border:1px solid var(--cm-border); border-radius:8px; background:var(--cm-surface); color:var(--cm-fg-strong); font:500 12.5px/1.5 var(--cm-font-mono); resize:vertical; outline:none; }
+  .ap-imp-wrap { border:1px solid var(--cm-border); border-radius:9px; overflow:hidden; }
+  .ap-imp-table { width:100%; border-collapse:collapse; font:500 12.5px/1.3 var(--cm-font-sans); }
+  .ap-imp-table th { text-align:left; padding:7px 9px; font:600 10px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-muted); background:var(--cm-bg-soft); }
+  .ap-imp-table td { padding:7px 9px; border-top:1px solid var(--cm-border); color:var(--cm-fg-strong); }
+  .ap-imp-table tr.bad td { background:color-mix(in srgb, var(--cm-danger,#dc2626) 9%, transparent); }
+
   /* Date picker */
   .ap-datebtn { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); text-align:left; cursor:pointer; display:flex; align-items:center; gap:7px; }
   .ap-datebtn:hover { border-color:var(--cm-border-strong, var(--cm-border)); }
@@ -207,6 +217,44 @@
           </div>
         </div>
       </div>
+
+      <!-- ── Matches ───────────────────────────────────────────── -->
+      <div class="ap-card is-hidden" id="apMatchesCard" style="margin-top:16px">
+        <div class="ap-card-h">
+          <div class="ic"><i class="ti ti-ball-football" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <div>
+            <div class="t">Matches</div>
+            <div class="d" id="apMatchesSub">—</div>
+          </div>
+          <button class="ap-btn" id="apImportToggle" onclick="apToggleImport()" style="margin-left:auto"><i class="ti ti-file-import" style="font-size:14px;vertical-align:-2px"></i> Import fixtures</button>
+        </div>
+
+        <div id="apImportPanel" class="is-hidden" style="margin-bottom:16px;padding:14px;background:var(--cm-bg-soft);border-radius:10px">
+          <div style="font:600 10px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Drop a CSV or browse</div>
+          <label class="ap-dropzone" id="apDrop">
+            <i class="ti ti-upload" style="font-size:20px"></i>
+            <div style="font:500 12.5px/1.4 var(--cm-font-sans);margin-top:6px" id="apDropLabel">Drag &amp; drop a .csv here, or click to choose</div>
+            <input type="file" id="apImpFile" accept=".csv,.txt" style="display:none">
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;margin:12px 0;color:var(--cm-fg-faint);font:var(--cm-body-sm)"><span style="flex:1;height:1px;background:var(--cm-border)"></span>or paste<span style="flex:1;height:1px;background:var(--cm-border)"></span></div>
+          <textarea class="ap-ta" id="apImpPaste" placeholder="date, opponent, home_away, competition, time&#10;2025-08-18, Real Madrid, home, La Liga, 21:00&#10;25/08/2025, Sevilla, away, La Liga"></textarea>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="ap-btn" onclick="apImportParse()"><i class="ti ti-scan" style="font-size:14px;vertical-align:-2px"></i> Parse &amp; preview</button></div>
+
+          <div id="apImpPreview" class="is-hidden" style="margin-top:14px">
+            <div id="apImpNewComps"></div>
+            <div class="ap-imp-wrap" style="margin-top:10px"><table class="ap-imp-table"><thead><tr><th>Date</th><th>Opponent</th><th style="text-align:center">H/A</th><th>Competition</th><th style="text-align:center"></th></tr></thead><tbody id="apImpBody"></tbody></table></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+              <span id="apImpSummary" style="font:var(--cm-body-sm);color:var(--cm-fg-muted)"></span>
+              <span style="margin-left:auto;display:inline-flex;gap:8px">
+                <button class="ap-btn" onclick="apToggleImport()">Cancel</button>
+                <button class="ap-btn primary" id="apImpConfirm" onclick="apImportConfirm()">Import</button>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div id="apMatchesList"></div>
+      </div>
     </section>
     </main>
   </div>
@@ -266,6 +314,7 @@ async function apLoadSeasons(){
     </div>`;
     document.getElementById('apPhasesCard').classList.add('is-hidden');
     document.getElementById('apCompsCard').classList.add('is-hidden');
+    document.getElementById('apMatchesCard').classList.add('is-hidden');
     apShowForm();
     return;
   }
@@ -304,6 +353,8 @@ function apSelectSeason(id){
   document.getElementById('apCompsCard').classList.remove('is-hidden');
   document.getElementById('apCompsSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
   apLoadComps();
+  document.getElementById('apMatchesCard').classList.remove('is-hidden');
+  apLoadMatches();
 }
 
 function apShowForm(){ document.getElementById('apSeasonForm').classList.remove('is-hidden'); }
@@ -385,6 +436,7 @@ function apRenderTimeline(){
 
 let _apEditingPhase = null;
 let _apComps = [], _apEditingComp = null;
+let _apMatches = [], _apImportRows = [], _apImportNewComps = [];
 const COMP_TYPES = {
   league:        { label:'League',        color:'#185FA5', bg:'#E6F1FB', tx:'#0C447C' },
   cup:           { label:'Cup',           color:'#534AB7', bg:'#EEEDFE', tx:'#3C3489' },
@@ -575,6 +627,196 @@ async function apDeleteComp(id){
   await apLoadComps();
 }
 
+/* ── Matches + fixture import ──────────────────────────────── */
+async function apLoadMatches(){
+  const { data } = await window.sb.from('calendar_events')
+    .select('id,date,opponent,home_away,competition,competition_id,start_time')
+    .eq('season_id', _apSeasonId).eq('type', 'match').order('date');
+  _apMatches = data || [];
+  apRenderMatchesList();
+}
+
+function apRenderMatchesList(){
+  const wrap = document.getElementById('apMatchesList');
+  document.getElementById('apMatchesSub').textContent = _apMatches.length ? `${_apMatches.length} match${_apMatches.length>1?'es':''}` : 'No matches yet';
+  if (!_apMatches.length) { wrap.innerHTML = `<div class="ap-tl-empty" style="position:static;padding:16px 0">No matches yet — import fixtures above</div>`; return; }
+  wrap.innerHTML = _apMatches.map(m => {
+    const comp = _apComps.find(c => c.id === m.competition_id);
+    const compHtml = comp
+      ? `<span class="ap-badge" style="background:color-mix(in srgb, ${comp.color} 14%, transparent);color:${comp.color}">${comp.name}</span>`
+      : (m.competition ? `<span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${m.competition}</span>` : '');
+    const time = m.start_time ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${m.start_time.slice(0,5)}</span>` : '';
+    return `<div class="ap-phase-row">
+      <span style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:135px">${apFmtDate(m.date)}</span>
+      <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:140px">vs ${m.opponent || '—'}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted)"><i class="ti ti-${m.home_away==='away'?'plane':'home'}" style="font-size:13px"></i>${m.home_away==='away'?'Away':'Home'}</span>
+      ${compHtml}
+      ${time}
+      <button class="ap-iconbtn" onclick="apDeleteMatch('${m.id}')" title="Delete" style="margin-left:auto"><i class="ti ti-trash" style="font-size:14px"></i></button>
+    </div>`;
+  }).join('');
+}
+
+async function apDeleteMatch(id){
+  if (!confirm('Delete this match?')) return;
+  const { error } = await window.sb.from('calendar_events').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  await apLoadMatches();
+}
+
+function apToggleImport(){
+  const p = document.getElementById('apImportPanel');
+  p.classList.toggle('is-hidden');
+  if (p.classList.contains('is-hidden')) {
+    document.getElementById('apImpPreview').classList.add('is-hidden');
+    document.getElementById('apImpPaste').value = '';
+    document.getElementById('apImpBody').innerHTML = '';
+    document.getElementById('apImpNewComps').innerHTML = '';
+    document.getElementById('apDropLabel').textContent = 'Drag & drop a .csv here, or click to choose';
+  }
+}
+
+function apParseDate(s){
+  s = (s || '').trim();
+  let m;
+  if (m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  if (m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  return null;
+}
+function apNormHA(s){
+  s = (s || '').trim().toLowerCase();
+  return ['away','a','visitante','v','fuera'].includes(s) ? 'away' : 'home';
+}
+function apNormTime(s){
+  const m = (s || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  return m ? `${m[1].padStart(2,'0')}:${m[2]}` : '';
+}
+
+function apParseDelimited(text){
+  const lines = (text || '').replace(/\r/g,'').split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  const delim = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') ? ';' : ',');
+  const head = lines[0].split(delim).map(s => s.trim().toLowerCase());
+  const KNOWN = ['date','opponent','rival','home_away','home/away','h/a','ha','competition','comp','time','kickoff'];
+  const hasHeader = head.some(h => KNOWN.includes(h));
+  let cols = { date:0, opp:1, ha:2, comp:3, time:4 }, start = 0;
+  if (hasHeader) {
+    cols = {};
+    head.forEach((h,i) => {
+      if (h==='date') cols.date=i;
+      else if (h==='opponent'||h==='rival') cols.opp=i;
+      else if (h==='home_away'||h==='home/away'||h==='h/a'||h==='ha') cols.ha=i;
+      else if (h==='competition'||h==='comp') cols.comp=i;
+      else if (h==='time'||h==='kickoff') cols.time=i;
+    });
+    start = 1;
+  }
+  const rows = [];
+  for (let i = start; i < lines.length; i++){
+    const p = lines[i].split(delim).map(s => s.trim());
+    const date = apParseDate(p[cols.date] ?? '');
+    const opponent = (cols.opp != null ? (p[cols.opp] ?? '') : '').trim();
+    rows.push({
+      raw: lines[i],
+      rawDate: (p[cols.date] ?? '').trim(),
+      date, opponent,
+      home_away: apNormHA(cols.ha != null ? p[cols.ha] : ''),
+      competition: (cols.comp != null ? (p[cols.comp] ?? '') : '').trim(),
+      time: (cols.time != null ? apNormTime(p[cols.time] ?? '') : ''),
+      valid: !!date && !!opponent
+    });
+  }
+  return rows;
+}
+
+function apImportParse(){
+  const text = document.getElementById('apImpPaste').value;
+  _apImportRows = apParseDelimited(text);
+  const existing = new Set(_apComps.map(c => (c.name || '').toLowerCase()));
+  _apImportNewComps = [...new Set(
+    _apImportRows.filter(r => r.competition).map(r => r.competition)
+      .filter(n => !existing.has(n.toLowerCase()))
+  )];
+  apRenderImportPreview();
+}
+
+function apRenderImportPreview(){
+  const prev = document.getElementById('apImpPreview');
+  if (!_apImportRows.length) { prev.classList.add('is-hidden'); alert('Nothing to parse. Check the format.'); return; }
+  prev.classList.remove('is-hidden');
+
+  const nc = document.getElementById('apImpNewComps');
+  if (_apImportNewComps.length) {
+    nc.innerHTML = `<div style="display:flex;align-items:flex-start;gap:8px;background:color-mix(in srgb, var(--cm-warning,#d97706) 12%, transparent);border-radius:8px;padding:10px 12px;font:var(--cm-body-sm);color:var(--cm-fg-strong);line-height:1.5">
+      <i class="ti ti-alert-circle" style="font-size:16px;flex:0 0 auto;margin-top:1px;color:var(--cm-warning,#d97706)"></i>
+      <span>${_apImportNewComps.length} new competition${_apImportNewComps.length>1?'s':''} will be created: <b>${_apImportNewComps.join('</b>, <b>')}</b>. You can edit type/color afterwards.</span></div>`;
+  } else nc.innerHTML = '';
+
+  document.getElementById('apImpBody').innerHTML = _apImportRows.map(r => `
+    <tr class="${r.valid?'':'bad'}">
+      <td style="font-family:var(--cm-font-mono)">${r.valid ? apFmtDate(r.date) : (r.rawDate || '—')}</td>
+      <td>${r.opponent || '—'}</td>
+      <td style="text-align:center">${r.home_away==='away'?'A':'H'}</td>
+      <td>${r.competition || '<span style="color:var(--cm-fg-faint)">—</span>'}</td>
+      <td style="text-align:center">${r.valid
+        ? '<i class="ti ti-check" style="color:var(--cm-success,#16a34a);font-size:15px"></i>'
+        : '<i class="ti ti-alert-triangle" style="color:var(--cm-danger,#dc2626);font-size:15px" title="Unparseable date or missing opponent"></i>'}</td>
+    </tr>`).join('');
+
+  const ok = _apImportRows.filter(r => r.valid).length, bad = _apImportRows.length - ok;
+  document.getElementById('apImpSummary').textContent = `${ok} valid${bad?` · ${bad} flagged (skipped)`:''}`;
+  document.getElementById('apImpConfirm').textContent = ok ? `Import ${ok} match${ok>1?'es':''}` : 'Import';
+}
+
+async function apImportConfirm(){
+  const valid = _apImportRows.filter(r => r.valid);
+  if (!valid.length) { alert('No valid rows to import.'); return; }
+  const btn = document.getElementById('apImpConfirm');
+  btn.disabled = true;
+
+  const compByName = {};
+  _apComps.forEach(c => compByName[(c.name || '').toLowerCase()] = c.id);
+  for (const name of _apImportNewComps){
+    const { data, error } = await window.sb.from('competitions')
+      .insert({ season_id: _apSeasonId, name, comp_type: 'league', color: COMP_TYPES.league.color })
+      .select('id').single();
+    if (error) { btn.disabled = false; alert(`Could not create competition "${name}": ${error.message}`); return; }
+    compByName[name.toLowerCase()] = data.id;
+  }
+
+  const rows = valid.map(f => ({
+    id: crypto.randomUUID(),
+    club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
+    competition_id: f.competition ? (compByName[f.competition.toLowerCase()] || null) : null,
+    title: `vs ${f.opponent}`, type: 'match', date: f.date,
+    opponent: f.opponent, home_away: f.home_away,
+    competition: f.competition || null, start_time: f.time || null,
+    duration_minutes: null
+  }));
+  const { error } = await window.sb.from('calendar_events').insert(rows);
+  btn.disabled = false;
+  if (error) { alert('Could not import: ' + error.message); return; }
+
+  apToggleImport();
+  await apLoadComps();
+  await apLoadMatches();
+}
+
+function apWireImport(){
+  const drop = document.getElementById('apDrop'), file = document.getElementById('apImpFile');
+  if (!drop || !file) return;
+  ['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave','dragend'].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove('drag')));
+  drop.addEventListener('drop', async e => { e.preventDefault(); drop.classList.remove('drag'); const f = e.dataTransfer.files[0]; if (f) await apReadFile(f); });
+  file.addEventListener('change', async function(){ if (this.files[0]) await apReadFile(this.files[0]); });
+}
+async function apReadFile(f){
+  document.getElementById('apDropLabel').textContent = f.name;
+  const text = await f.text();
+  document.getElementById('apImpPaste').value = text;
+  apImportParse();
+}
+
 /* ── Date picker (calendar popover) ───────────────────────── */
 function apFmtDate(v){
   if(!v) return null;
@@ -654,6 +896,7 @@ function apPickDay(ds){
   try { const club = await window.getClub(); if (club?.name) document.getElementById('apClubName').textContent = club.name; } catch(_){}
   await apInitTeam();
   await apLoadPhaseTypes();
+  apWireImport();
   await apLoadSeasons();
 })();
 </script>
