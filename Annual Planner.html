@@ -94,6 +94,11 @@
   .ap-tl-dot { position:absolute; top:50%; transform:translate(-50%,-50%); width:9px; height:9px; border-radius:50%; }
   .ap-tl-today { position:absolute; top:0; bottom:0; width:2px; background:var(--cm-fg-strong); z-index:5; }
   .ap-tl-hint { position:absolute; left:2px; top:50%; transform:translateY(-50%); font:var(--cm-body-sm); color:var(--cm-fg-faint); }
+  .ap-tl-dot { cursor:default; }
+  .ap-tlpop { position:absolute; z-index:300; display:none; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:9px; box-shadow:var(--cm-shadow-pop, 0 10px 30px rgba(0,0,0,.18)); padding:8px 11px; max-width:240px; pointer-events:none; }
+  .ap-tlpop-h { display:flex; align-items:center; gap:6px; font:600 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:3px; }
+  .ap-tlpop-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+  .ap-tlpop-l { font:500 11px/1.45 var(--cm-font-sans); color:var(--cm-fg-muted); }
 
   /* Date picker */
   .ap-datebtn { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); text-align:left; cursor:pointer; display:flex; align-items:center; gap:7px; }
@@ -303,8 +308,13 @@
             <div class="t">Timeline</div>
             <div class="d" id="apTimelineSub">—</div>
           </div>
+          <div style="margin-left:auto;display:inline-flex;align-items:center;gap:6px">
+            <button class="ap-iconbtn" id="apTLZoomOut" onclick="apTLZoomStep(-1)" title="Zoom out"><i class="ti ti-minus" style="font-size:15px"></i></button>
+            <span id="apTLZoomLabel" style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);min-width:78px;text-align:center">Full season</span>
+            <button class="ap-iconbtn" id="apTLZoomIn" onclick="apTLZoomStep(1)" title="Zoom in"><i class="ti ti-plus" style="font-size:15px"></i></button>
+          </div>
         </div>
-        <div id="apTimelineBody"></div>
+        <div id="apTimelineScroll" style="overflow-x:auto;overflow-y:hidden"><div id="apTimelineBody"></div></div>
         <div id="apTimelineLegend" style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;border-top:1px solid var(--cm-border);margin-top:12px;padding-top:11px;font:var(--cm-body-sm);color:var(--cm-fg-faint)"></div>
       </div>
     </section>
@@ -1189,6 +1199,8 @@ async function apDeleteMeso(id){
 
 /* ── Timeline (static render) ──────────────────────────────── */
 let _apTL = { phases:[], matches:[], comps:[], macros:[], mesos:[], micros:[] };
+let _apTLTips = [], _apTLpop = null, _apTLwired = false;
+let _apTLZoom = 0, _apTLLevels = [];
 
 async function apLoadTimeline(){
   const sStart = _apSeasonStart, sEnd = _apSeasonEnd;
@@ -1236,38 +1248,54 @@ function apTLMonthMarks(){
 function apTLRender(){
   const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
   const marks = apTLMonthMarks();
-  const compColor = {}; _apTL.comps.forEach(c => compColor[c.id] = c.color);
+  const compColor = {}, compName = {};
+  _apTL.comps.forEach(c => { compColor[c.id] = c.color; compName[c.id] = c.name; });
   const today = new Date().toISOString().slice(0,10);
   const todayPos = (today >= _apSeasonStart && today <= _apSeasonEnd) ? apClamp(apDays(_apSeasonStart, today) / total * 100, 0, 100) : null;
+  _apTLLevels = [{label:'Full season',days:null},{label:'6 months',days:183},{label:'3 months',days:91},{label:'6 weeks',days:42}].filter(l => l.days === null || l.days < total);
+  if (_apTLZoom >= _apTLLevels.length) _apTLZoom = 0;
+
+  _apTLTips = [];
+  const tip = (o) => (_apTLTips.push(o) - 1);
+  const range = (a, b) => `${apFmtShort(a)} → ${apFmtShort(b)}`;
 
   const axis = marks.map(m => `<span style="position:absolute;left:${m.left}%;width:${m.width}%;text-align:center;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${m.label}</span>`).join('');
   const grid = marks.map(m => `<div style="position:absolute;top:0;bottom:0;left:${m.left}%;width:1px;background:var(--cm-border-soft,var(--cm-border));opacity:.45"></div>`).join('');
 
   const phases = _apTL.phases.length ? _apTL.phases.map(p => {
     const { left, width } = apTLpos(p.start_date, p.end_date);
-    return `<div class="ap-tl-band${p.counts_availability?'':' nocount'}" style="left:${left}%;width:${width}%;background:${p.color}" title="${p.name}${p.counts_availability?'':' · does not count'}">${width>8?p.name:''}</div>`;
+    const t = tip({ title:p.name, color:p.color, lines:[range(p.start_date,p.end_date), p.counts_availability?'Counts for availability':'Does not count for availability'] });
+    return `<div class="ap-tl-band${p.counts_availability?'':' nocount'}" data-tip="${t}" style="left:${left}%;width:${width}%;background:${p.color}">${width>8?p.name:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No phases yet</span>`;
 
   const matches = _apTL.matches.length ? _apTL.matches.map(m => {
     const pos = apClamp(apDays(_apSeasonStart, m.date) / total * 100, 0, 100);
     const col = compColor[m.competition_id] || 'var(--cm-fg-muted)';
-    return `<span class="ap-tl-dot" style="left:${pos}%;background:${col}" title="${apFmtDate(m.date)} · ${m.home_away==='away'?'@ ':'vs '}${m.opponent||''}"></span>`;
+    const lines = [apFmtDate(m.date), m.home_away==='away'?'Away':'Home'];
+    if (compName[m.competition_id]) lines.push(compName[m.competition_id]);
+    if (m.start_time) lines.push('Kick-off ' + m.start_time.slice(0,5));
+    const t = tip({ title:(m.home_away==='away'?'@ ':'vs ')+(m.opponent||'—'), color:compColor[m.competition_id]||'', lines });
+    return `<span class="ap-tl-dot" data-tip="${t}" style="left:${pos}%;background:${col}"></span>`;
   }).join('') : `<span class="ap-tl-hint">No matches yet</span>`;
 
   const macros = _apTL.macros.length ? _apTL.macros.map(mc => {
     const { left, width } = apTLpos(mc.start_date, mc.end_date);
     const col = mc.color || '#534AB7';
-    return `<div style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:color-mix(in srgb, ${col} 16%, transparent);border:.5px solid ${col};border-radius:5px;padding:0 7px;display:flex;flex-direction:column;justify-content:center;overflow:hidden" title="${mc.name}${mc.objective?' · '+mc.objective:''}"><span style="font:600 10px/1.1 var(--cm-font-sans);color:var(--cm-fg-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${mc.name}</span>${mc.objective?`<span style="font:500 8.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${mc.objective}</span>`:''}</div>`;
+    const t = tip({ title:mc.name, color:col, lines:[mc.objective||'', range(mc.start_date,mc.end_date)].filter(Boolean) });
+    return `<div data-tip="${t}" style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:color-mix(in srgb, ${col} 16%, transparent);border:.5px solid ${col};border-radius:5px;padding:0 7px;display:flex;flex-direction:column;justify-content:center;overflow:hidden"><span style="font:600 10px/1.1 var(--cm-font-sans);color:var(--cm-fg-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${mc.name}</span>${mc.objective?`<span style="font:500 8.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${mc.objective}</span>`:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No macrocycles yet — add them in Periodization</span>`;
 
   const mesos = _apTL.mesos.length ? _apTL.mesos.map(ms => {
     const { left, width } = apTLpos(ms.start_date, ms.end_date);
-    return `<div style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:var(--cm-bg-soft);border:.5px solid var(--cm-border);border-radius:4px;display:flex;align-items:center;justify-content:center;font:500 9px/1 var(--cm-font-sans);color:var(--cm-fg-muted);overflow:hidden;white-space:nowrap;padding:0 4px" title="${ms.name}${ms.objective?' · '+ms.objective:''}">${width>6?ms.name:''}</div>`;
+    const lm = (LOAD_MODELS[ms.load_model] || LOAD_MODELS.structured).label;
+    const t = tip({ title:ms.name, lines:[ms.objective||'', range(ms.start_date,ms.end_date), 'Model: '+lm].filter(Boolean) });
+    return `<div data-tip="${t}" style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:var(--cm-bg-soft);border:.5px solid var(--cm-border);border-radius:4px;display:flex;align-items:center;justify-content:center;font:500 9px/1 var(--cm-font-sans);color:var(--cm-fg-muted);overflow:hidden;white-space:nowrap;padding:0 4px">${width>6?ms.name:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No mesocycles yet</span>`;
 
   const micros = _apTL.micros.length ? _apTL.micros.map(mi => {
     const { left, width } = apTLpos(mi.start_date, mi.end_date);
-    return `<div style="position:absolute;left:${left}%;width:${Math.max(width,0.4)}%;top:2px;bottom:2px;background:var(--cm-border);border-radius:2px" title="${mi.name||'Microcycle'} · ${mi.start_date} → ${mi.end_date}"></div>`;
+    const t = tip({ title:mi.name||'Microcycle', lines:[range(mi.start_date,mi.end_date)] });
+    return `<div data-tip="${t}" style="position:absolute;left:${left}%;width:${Math.max(width,0.4)}%;top:2px;bottom:2px;background:var(--cm-border);border-radius:2px;cursor:default"></div>`;
   }).join('') : `<span class="ap-tl-hint">No microcycles in this range</span>`;
 
   const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
@@ -1288,7 +1316,72 @@ function apTLRender(){
   leg.innerHTML = _apTL.comps.length
     ? _apTL.comps.map(c => `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:${c.color}"></span>${c.name}</span>`).join('')
     : '<span>No competitions yet</span>';
+
+  apTLWire();
+  apTLApplyZoom(false);
 }
+
+function apTLZoomStep(dir){
+  _apTLZoom = apClamp(_apTLZoom + dir, 0, _apTLLevels.length - 1);
+  apTLApplyZoom(true);
+}
+
+function apTLApplyZoom(focus){
+  const wrap = document.getElementById('apTimelineScroll');
+  const body = document.getElementById('apTimelineBody');
+  if (!wrap || !body || !_apTLLevels.length) return;
+  const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
+  const lvl = _apTLLevels[_apTLZoom] || _apTLLevels[0];
+  const windowDays = lvl.days ? Math.min(lvl.days, total) : total;
+  const pct = 100 * total / windowDays;
+  body.style.width = pct + '%';
+  document.getElementById('apTLZoomLabel').textContent = lvl.label;
+  document.getElementById('apTLZoomOut').disabled = _apTLZoom === 0;
+  document.getElementById('apTLZoomIn').disabled = _apTLZoom === _apTLLevels.length - 1;
+  wrap.style.cursor = pct > 100 ? 'grab' : 'default';
+  requestAnimationFrame(() => {
+    const sw = body.scrollWidth || body.offsetWidth;
+    if (pct <= 100) { wrap.scrollLeft = 0; return; }
+    const today = new Date().toISOString().slice(0,10);
+    let frac = 0.5;
+    if (today >= _apSeasonStart && today <= _apSeasonEnd) frac = apDays(_apSeasonStart, today) / total;
+    if (focus) wrap.scrollLeft = Math.max(0, frac * sw - wrap.clientWidth / 2);
+  });
+}
+
+function apTLWire(){
+  if (_apTLwired) return; _apTLwired = true;
+  const body = document.getElementById('apTimelineBody');
+  body.addEventListener('mouseover', e => { const el = e.target.closest('[data-tip]'); if (el) apTLshowTip(+el.dataset.tip, el); });
+  body.addEventListener('mouseout',  e => { const el = e.target.closest('[data-tip]'); if (el) apTLhideTip(); });
+
+  const sc = document.getElementById('apTimelineScroll');
+  let down = false, sx = 0, sl = 0, moved = false;
+  const start = x => { down = true; moved = false; sx = x; sl = sc.scrollLeft; if (sc.style.cursor === 'grab') sc.style.cursor = 'grabbing'; };
+  const move  = x => { if (!down) return; const dx = x - sx; if (Math.abs(dx) > 3) { moved = true; apTLhideTip(); } sc.scrollLeft = sl - dx; };
+  const end   = () => { down = false; if (sc.style.cursor === 'grabbing') sc.style.cursor = 'grab'; };
+  sc.addEventListener('mousedown', e => start(e.clientX));
+  window.addEventListener('mousemove', e => move(e.clientX));
+  window.addEventListener('mouseup', end);
+  sc.addEventListener('touchstart', e => start(e.touches[0].clientX), { passive:true });
+  sc.addEventListener('touchmove',  e => move(e.touches[0].clientX),  { passive:true });
+  sc.addEventListener('touchend', end);
+}
+
+function apTLshowTip(idx, el){
+  const t = _apTLTips[idx]; if (!t) return;
+  if (!_apTLpop){ _apTLpop = document.createElement('div'); _apTLpop.className = 'ap-tlpop'; document.body.appendChild(_apTLpop); }
+  _apTLpop.innerHTML = `<div class="ap-tlpop-h">${t.color?`<span class="ap-tlpop-dot" style="background:${t.color}"></span>`:''}${t.title}</div>${(t.lines||[]).map(l => `<div class="ap-tlpop-l">${l}</div>`).join('')}`;
+  _apTLpop.style.display = 'block';
+  const r = el.getBoundingClientRect(), pr = _apTLpop.getBoundingClientRect();
+  let left = window.scrollX + r.left + r.width/2 - pr.width/2;
+  left = Math.max(window.scrollX + 8, Math.min(left, window.scrollX + document.documentElement.clientWidth - pr.width - 8));
+  let top = window.scrollY + r.top - pr.height - 8;
+  if (top < window.scrollY + 4) top = window.scrollY + r.bottom + 8;
+  _apTLpop.style.left = left + 'px';
+  _apTLpop.style.top = top + 'px';
+}
+function apTLhideTip(){ if (_apTLpop) _apTLpop.style.display = 'none'; }
 
 /* ── Date picker (calendar popover) ───────────────────────── */
 function apFmtDate(v){
