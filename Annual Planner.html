@@ -1388,9 +1388,21 @@ async function apLoadTimeline(){
     window.sb.from('mesocycles').select('name,objective,start_date,end_date,macrocycles!inner(season_id)').eq('macrocycles.season_id', _apSeasonId).order('start_date'),
     miq
   ]);
+  const evMatches = (_apMatches || []).map(m => ({
+    date: m.date, opponent: m.opponent, home_away: m.home_away,
+    competition_id: m.competition_id || null, start_time: m.start_time || null, src: 'event'
+  }));
+  const seenDates = new Set(evMatches.map(m => m.date));
+  const embMatches = (mi.data || [])
+    .filter(x => x.match_date && !seenDates.has(x.match_date))
+    .map(x => ({
+      date: x.match_date, opponent: x.rival, home_away: x.home_away || 'home',
+      competition_id: null, start_time: x.match_time || null, src: 'micro'
+    }));
+  const allMatches = evMatches.concat(embMatches).sort((a, b) => a.date.localeCompare(b.date));
   _apTL = {
     phases: _apPhases || [],
-    matches: _apMatches || [],
+    matches: allMatches,
     comps: _apComps || [],
     macros: ma.data || [], mesos: me.data || [], micros: mi.data || []
   };
@@ -1410,12 +1422,17 @@ function apMicroEditorRender(){
   const mi = _apTL.micros.find(m => m.id === _apSelectedMicro);
   if (!mi){ ed.classList.add('is-hidden'); ed.innerHTML = ''; return; }
   ed.classList.remove('is-hidden');
-  const match = (_apMatches || []).find(m => m.date >= mi.start_date && m.date <= mi.end_date);
+  const inRangeEv = (_apMatches || []).filter(m => m.date >= mi.start_date && m.date <= mi.end_date);
+  const match = mi.match_date
+    ? { date: mi.match_date, opponent: mi.rival, home_away: mi.home_away }
+    : (inRangeEv[0] || null);
   const mesoOpts = '<option value="">— No mesocycle</option>' + (_apMesos || []).map(ms => `<option value="${ms.id}"${ms.id===mi.mesocycle_id?' selected':''}>${ms.name}</option>`).join('');
   const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
   const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dp = mi.day_plan || {};
-  const microMatchDates = (_apMatches || []).filter(m => m.date >= mi.start_date && m.date <= mi.end_date).map(m => m.date);
+  const _mdSet = new Set(inRangeEv.map(m => m.date));
+  if (mi.match_date) _mdSet.add(mi.match_date);
+  const microMatchDates = [..._mdSet].sort();
   const typeOpts = Object.keys(DAY_TYPES).map(k => `<option value="${k}">${DAY_TYPES[k].label}</option>`).join('');
   let dayCards = '';
   const cur = new Date(mi.start_date + 'T00:00:00'), endD = new Date(mi.end_date + 'T00:00:00');
@@ -1469,7 +1486,7 @@ function apEmbedMatch(start, end){
   const m = (_apMatches || []).find(x => x.date >= start && x.date <= end);
   return m
     ? { match_date: m.date, rival: m.opponent || null, home_away: m.home_away || 'home', match_time: m.start_time || null }
-    : { match_date: null, rival: null, home_away: null, match_time: null };
+    : null;
 }
 
 async function apSaveMicro(){
@@ -1484,9 +1501,9 @@ async function apSaveMicro(){
   if (end < start){ alert('End must be after start.'); return; }
   const emb = apEmbedMatch(start, end);
   const payload = {
-    name, start_date: start, end_date: end, color, season_id: _apSeasonId,
-    match_date: emb.match_date, rival: emb.rival, home_away: emb.home_away, match_time: emb.match_time
+    name, start_date: start, end_date: end, color, season_id: _apSeasonId
   };
+  if (emb) Object.assign(payload, emb);
   if (mesoEl) payload.mesocycle_id = mesoEl.value || null;
   if (typeEl) payload.micro_type = typeEl.value || null;
   const { error } = await window.sb.from('microcycles').update(payload).eq('id', id);
@@ -1518,11 +1535,11 @@ async function apAddMicro(){
   const wk = apMonSun(base);
   const start = wk.start < _apSeasonStart ? _apSeasonStart : wk.start;
   const end   = wk.end   > _apSeasonEnd   ? _apSeasonEnd   : wk.end;
-  const emb = apEmbedMatch(start, end);
+  const emb = apEmbedMatch(start, end) || {};
   const { data, error } = await window.sb.from('microcycles').insert({
     id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
     name: 'New microcycle', start_date: start, end_date: end, color: '#6E8AC4',
-    match_date: emb.match_date, rival: emb.rival, home_away: emb.home_away, match_time: emb.match_time
+    match_date: emb.match_date || null, rival: emb.rival || null, home_away: emb.home_away || null, match_time: emb.match_time || null
   }).select('id').single();
   if (error){ alert('Could not add microcycle: ' + error.message); return; }
   await apLoadTimeline();
@@ -1533,7 +1550,7 @@ async function apAddMicro(){
 }
 
 async function apGenerateWeeks(){
-  const matches = (_apMatches || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+  const matches = (_apTL.matches || []).slice().sort((a,b) => a.date.localeCompare(b.date));
   if (!matches.length){ alert('No matches yet — import or add matches first.'); return; }
   const existing = _apTL.micros.map(m => ({ s:m.start_date, e:m.end_date }));
   const weeks = [], seen = new Set();
@@ -1548,10 +1565,10 @@ async function apGenerateWeeks(){
   let n = _apTL.micros.length;
   const rows = weeks.map(w => {
     n++;
-    const emb = apEmbedMatch(w.start, w.end);
+    const emb = apEmbedMatch(w.start, w.end) || {};
     return { id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
       name: `MC ${n}`, start_date: w.start, end_date: w.end, color: '#6E8AC4',
-      match_date: emb.match_date, rival: emb.rival, home_away: emb.home_away, match_time: emb.match_time };
+      match_date: emb.match_date || null, rival: emb.rival || null, home_away: emb.home_away || null, match_time: emb.match_time || null };
   });
   const { error } = await window.sb.from('microcycles').insert(rows);
   if (error){ alert('Could not generate: ' + error.message); return; }
@@ -1650,7 +1667,7 @@ function apTLRender(){
     const { left, width } = apTLpos(mi.start_date, mi.end_date);
     const col = (mi.color && /^#/.test(mi.color)) ? mi.color : '#6E8AC4';
     const sel = mi.id === _apSelectedMicro;
-    const matchIn = _apMatches.find(m => m.date >= mi.start_date && m.date <= mi.end_date);
+    const matchIn = _apTL.matches.find(m => m.date >= mi.start_date && m.date <= mi.end_date);
     const lines = [range(mi.start_date, mi.end_date)];
     if (matchIn) lines.push(`contains ${matchIn.home_away==='away'?'@':'vs'} ${matchIn.opponent||'match'}`);
     const t = tip({ title:mi.name||'Microcycle', color:col, lines });
