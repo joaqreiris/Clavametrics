@@ -349,7 +349,14 @@
           </div>
         </div>
         <div id="apTimelineScroll" style="overflow-x:auto;overflow-y:hidden"><div id="apTimelineBody"></div></div>
-        <div id="apTimelineLegend" style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;border-top:1px solid var(--cm-border);margin-top:12px;padding-top:11px;font:var(--cm-body-sm);color:var(--cm-fg-faint)"></div>
+        <div id="apMicroToolbar" style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--cm-border);margin-top:12px;padding-top:11px">
+          <span style="font:600 10px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted)">Microcycles</span>
+          <span style="margin-left:auto;display:inline-flex;gap:8px">
+            <button class="ap-btn" onclick="apGenerateWeeks()"><i class="ti ti-wand" style="font-size:14px;vertical-align:-2px"></i> Generate weeks from matches</button>
+            <button class="ap-btn" onclick="apAddMicro()"><i class="ti ti-plus" style="font-size:14px;vertical-align:-2px"></i> Add microcycle</button>
+          </span>
+        </div>
+        <div id="apTimelineLegend" style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:11px;font:var(--cm-body-sm);color:var(--cm-fg-faint)"></div>
         <div id="apMicroEditor" class="is-hidden" style="margin-top:14px;padding:14px;background:var(--cm-bg-soft);border-radius:10px"></div>
       </div>
     </section>
@@ -359,7 +366,7 @@
 <script>
 let _apClubId = null, _apTeamId = null;
 let _apSeasons = [];
-let _apSeasonId = null, _apSeasonStart = null, _apSeasonEnd = null;
+let _apSeasonId = null, _apSeasonStart = null, _apSeasonEnd = null, _apEditingSeason = null;
 let _apPhaseTypes = [], _apPhases = [];
 
 function apOnTeamChange(){
@@ -427,15 +434,48 @@ async function apLoadSeasons(){
 function apRenderSeasonsList(){
   const list = document.getElementById('apSeasonsList');
   list.innerHTML = _apSeasons.map(s => {
+    if (s.id === _apEditingSeason) return apSeasonEditRow(s);
     const st = s.status === 'archived' ? 'archived' : 'active';
     const sel = s.id === _apSeasonId ? ' is-sel' : '';
     return `<div class="ap-row${sel}" onclick="apSelectSeason('${s.id}')">
       <i class="ti ti-calendar-stats" style="font-size:16px;color:var(--cm-fg-muted)"></i>
       <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:90px">${s.name}</span>
-      <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${s.start_date} → ${s.end_date}</span>
+      <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${apFmtShort(s.start_date)} → ${apFmtShort(s.end_date)}</span>
       <span class="ap-pill ${st}" style="margin-left:auto">${st}</span>
+      <button class="ap-iconbtn is-edit" onclick="event.stopPropagation(); apEditSeason('${s.id}')" title="Edit dates"><i class="ti ti-pencil" style="font-size:14px"></i></button>
     </div>`;
   }).join('');
+  if (_apEditingSeason){ apSyncDateBtn('apSeasonEd_start'); apSyncDateBtn('apSeasonEd_end'); }
+}
+
+function apSeasonEditRow(s){
+  const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
+  return `<div class="ap-row" style="flex-wrap:wrap;gap:8px">
+    <input type="date" id="apSeasonEd_start" style="display:none" value="${s.start_date}">
+    <input type="date" id="apSeasonEd_end" style="display:none" value="${s.end_date}">
+    <input id="apSeasonEd_name" value="${(s.name||'').replace(/"/g,'&quot;')}" style="${fld};min-width:120px;font:600 14px/1 var(--cm-font-sans)">
+    <button type="button" class="ap-datebtn" id="apSeasonEd_start_btn" onclick="apOpenCal('apSeasonEd_start', this)" style="width:auto;min-width:140px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(s.start_date)}</span></button>
+    <button type="button" class="ap-datebtn" id="apSeasonEd_end_btn" onclick="apOpenCal('apSeasonEd_end', this)" style="width:auto;min-width:140px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(s.end_date)}</span></button>
+    <button class="ap-iconbtn is-edit" onclick="apSaveSeasonEdit('${s.id}')" title="Save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i></button>
+    <button class="ap-iconbtn" onclick="apCancelSeasonEdit()" title="Cancel"><i class="ti ti-x" style="font-size:14px"></i></button>
+  </div>`;
+}
+
+function apEditSeason(id){ _apEditingSeason = id; apRenderSeasonsList(); }
+function apCancelSeasonEdit(){ _apEditingSeason = null; apRenderSeasonsList(); }
+
+async function apSaveSeasonEdit(id){
+  const name  = document.getElementById('apSeasonEd_name').value.trim();
+  const start = document.getElementById('apSeasonEd_start').value;
+  const end   = document.getElementById('apSeasonEd_end').value;
+  if (!name || !start || !end){ alert('Name, start and end are required.'); return; }
+  if (start > end){ alert('Start must be before end.'); return; }
+  const { error } = await window.sb.from('seasons').update({ name, start_date: start, end_date: end }).eq('id', id);
+  if (error){ alert('Could not update season: ' + error.message); return; }
+  _apEditingSeason = null;
+  await apLoadSeasons();
+  if (id === _apSeasonId) await apSelectSeason(id);
+  else apRenderSeasonsList();
 }
 
 async function apSelectSeason(id){
@@ -640,6 +680,19 @@ async function apAddPhase(){
 
   document.getElementById('apPhaseName').value = '';
   await apLoadPhases();
+  const nextStart = apDefaultPhaseStart();
+  document.getElementById('apPhaseStart').value = nextStart;
+  document.getElementById('apPhaseEnd').value = '';
+  apSyncDateBtn('apPhaseStart'); apSyncDateBtn('apPhaseEnd');
+}
+
+function apDefaultPhaseStart(){
+  if (!_apPhases.length) return _apSeasonStart;
+  let maxEnd = _apPhases[0].end_date;
+  _apPhases.forEach(p => { if (p.end_date > maxEnd) maxEnd = p.end_date; });
+  const d = new Date(maxEnd + 'T00:00:00'); d.setDate(d.getDate() + 1);
+  const next = d.toISOString().slice(0,10);
+  return next > _apSeasonEnd ? _apSeasonEnd : next;
 }
 
 async function apToggleCounts(id, val){
@@ -735,6 +788,8 @@ async function apUpdateCompColor(id, color){
   const { error } = await window.sb.from('competitions').update({ color }).eq('id', id);
   if (error) { alert('Could not update color: ' + error.message); return; }
   const c = _apComps.find(x => x.id === id); if (c) c.color = color;
+  apRenderCompsList();
+  if (_apSeasonId) await apLoadTimeline();
 }
 
 async function apDeleteComp(id){
@@ -1270,10 +1325,47 @@ async function apDeleteMeso(id){
 let _apTL = { phases:[], matches:[], comps:[], macros:[], mesos:[], micros:[] };
 let _apTLTips = [], _apTLpop = null, _apTLwired = false;
 let _apTLZoom = 0, _apTLLevels = [], _apSelectedMicro = null;
+const DAY_TYPES = {
+  off:            { label:'Off',          bg:'#F1EFE8', tx:'#444441', dot:'#888780' },
+  recovery:       { label:'Recovery',     bg:'#E9F0FB', tx:'#1B3A66', dot:'#85B7EB' },
+  introductory:   { label:'Introductory', bg:'#E9F0FB', tx:'#1B3A66', dot:'#5E8FCF' },
+  muscle_tension: { label:'Tension',      bg:'#FAECE7', tx:'#993C1D', dot:'#D85A30' },
+  duration:       { label:'Duration',     bg:'#EAF3DE', tx:'#3B6D11', dot:'#639922' },
+  speed:          { label:'Speed',        bg:'#EEEDFE', tx:'#3C3489', dot:'#534AB7' },
+  activation:     { label:'Activation',   bg:'#E1F5EE', tx:'#085041', dot:'#1D9E75' },
+  tactical:       { label:'Tactical',     bg:'#FBF0DA', tx:'#6B4A07', dot:'#C79A2E' },
+  match:          { label:'Match',        bg:'#E6F1FB', tx:'#0C447C', dot:'#185FA5' }
+};
+function apNearestMatch(ds){
+  const md = (_apMatches || []).map(m => m.date);
+  let next = null, prev = null;
+  md.forEach(d => { if (d >= ds && (!next || d < next)) next = d; if (d <= ds && (!prev || d > prev)) prev = d; });
+  return { next, prev, isMatch: md.includes(ds),
+           dNext: next ? Math.round(apDays(ds, next)) : 99,
+           dPrev: prev ? Math.round(apDays(prev, ds)) : 99 };
+}
+function apMDlabel(ds){
+  const n = apNearestMatch(ds);
+  if (n.isMatch) return 'MD';
+  if (n.dNext <= 6 && n.dNext <= n.dPrev) return 'MD-' + n.dNext;
+  if (n.dPrev <= 6) return 'MD+' + n.dPrev;
+  return '';
+}
+function apDefaultDayType(ds){
+  const n = apNearestMatch(ds);
+  if (n.isMatch) return 'match';
+  if (n.dPrev === 1) return 'recovery';          // MD+1 compensatory
+  if (n.dNext === 1) return 'activation';         // MD-1
+  if (n.dNext === 2) return 'speed';              // MD-2
+  if (n.dNext === 3) return 'duration';           // MD-3
+  if (n.dNext === 4) return 'muscle_tension';     // MD-4
+  if (n.dPrev === 2) return 'recovery';           // MD+2
+  return 'off';
+}
 
 async function apLoadTimeline(){
   const sStart = _apSeasonStart, sEnd = _apSeasonEnd;
-  let miq = window.sb.from('microcycles').select('id,name,start_date,end_date,color,mesocycle_id,match_date,rival,home_away,match_time').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
+  let miq = window.sb.from('microcycles').select('id,name,start_date,end_date,color,mesocycle_id,match_date,rival,home_away,match_time,day_plan').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
   if (_apTeamId) miq = miq.eq('team_id', _apTeamId);
   const [ma, me, mi] = await Promise.all([
     window.sb.from('macrocycles').select('name,objective,start_date,end_date,color').eq('season_id', _apSeasonId).order('start_date'),
@@ -1305,6 +1397,26 @@ function apMicroEditorRender(){
   const match = (_apMatches || []).find(m => m.date >= mi.start_date && m.date <= mi.end_date);
   const mesoOpts = '<option value="">— No mesocycle</option>' + (_apMesos || []).map(ms => `<option value="${ms.id}"${ms.id===mi.mesocycle_id?' selected':''}>${ms.name}</option>`).join('');
   const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const dp = mi.day_plan || {};
+  const typeOpts = Object.keys(DAY_TYPES).map(k => `<option value="${k}">${DAY_TYPES[k].label}</option>`).join('');
+  let dayCards = '';
+  const cur = new Date(mi.start_date + 'T00:00:00'), endD = new Date(mi.end_date + 'T00:00:00');
+  let guard = 0;
+  while (cur <= endD && guard++ < 60){
+    const ds = cur.toISOString().slice(0,10);
+    const type = dp[ds] || apDefaultDayType(ds);
+    const dt = DAY_TYPES[type] || DAY_TYPES.off;
+    const md = apMDlabel(ds);
+    const opts = typeOpts.replace(`value="${type}"`, `value="${type}" selected`);
+    dayCards += `<div style="border:0.5px solid var(--cm-border);border-radius:8px;padding:7px 5px 6px;text-align:center;background:${dt.bg}">
+      <div style="font:600 10px/1 var(--cm-font-sans);color:${dt.tx}">${DOW[cur.getDay()]}</div>
+      <div style="font:600 13px/1 var(--cm-font-mono);color:${dt.tx};margin:2px 0">${cur.getDate()}</div>
+      <div style="font:500 8px/1 var(--cm-font-mono);color:${dt.tx};opacity:.65;margin-bottom:5px;min-height:8px">${md}</div>
+      <select onchange="apSetDayType('${ds}', this.value)" style="width:100%;font:500 9px/1 var(--cm-font-sans);border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-surface);color:var(--cm-fg-strong);height:23px;cursor:pointer">${opts}</select>
+    </div>`;
+    cur.setDate(cur.getDate() + 1);
+  }
   ed.innerHTML = `
     <input type="date" id="apMicroEd_start" style="display:none" value="${mi.start_date}">
     <input type="date" id="apMicroEd_end" style="display:none" value="${mi.end_date}">
@@ -1321,7 +1433,13 @@ function apMicroEditorRender(){
       <div class="ap-field"><label>Mesocycle</label><select id="apMicroEd_meso" style="${fld};font:500 12px/1 var(--cm-font-sans)">${mesoOpts}</select></div>
       <button class="ap-btn primary" onclick="apSaveMicro()" style="height:32px" title="Save"><i class="ti ti-check" style="font-size:14px"></i></button>
       <button class="ap-iconbtn" onclick="apDeleteMicro()" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
-    </div>`;
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--cm-border);margin-top:14px;padding-top:12px;margin-bottom:9px">
+      <span style="font:600 10px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted)">Week plan</span>
+      <span style="font:500 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">defaults follow MD- counting · change any day below</span>
+      <button class="ap-btn" onclick="apResetMorphocycle()" style="margin-left:auto;height:28px;font-size:11.5px"><i class="ti ti-refresh" style="font-size:13px;vertical-align:-2px"></i> Reset to morphocycle</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(66px,1fr));gap:5px">${dayCards}</div>`;
 }
 
 function apEmbedMatch(start, end){
@@ -1357,6 +1475,78 @@ async function apDeleteMicro(){
   if (error){ alert('Could not delete: ' + error.message); return; }
   _apSelectedMicro = null;
   await apLoadTimeline();
+  apMicroEditorRender();
+}
+
+function apMonSun(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const mon = new Date(d); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+  return { start: mon.toISOString().slice(0,10), end: sun.toISOString().slice(0,10) };
+}
+
+async function apAddMicro(){
+  let base = new Date().toISOString().slice(0,10);
+  if (base < _apSeasonStart || base > _apSeasonEnd) base = _apSeasonStart;
+  const wk = apMonSun(base);
+  const start = wk.start < _apSeasonStart ? _apSeasonStart : wk.start;
+  const end   = wk.end   > _apSeasonEnd   ? _apSeasonEnd   : wk.end;
+  const emb = apEmbedMatch(start, end);
+  const { data, error } = await window.sb.from('microcycles').insert({
+    id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
+    name: 'New microcycle', start_date: start, end_date: end, color: '#6E8AC4',
+    match_date: emb.match_date, rival: emb.rival, home_away: emb.home_away, match_time: emb.match_time
+  }).select('id').single();
+  if (error){ alert('Could not add microcycle: ' + error.message); return; }
+  await apLoadTimeline();
+  _apSelectedMicro = data.id;
+  apTLRender();
+  apMicroEditorRender();
+  document.getElementById('apMicroEditor').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+async function apGenerateWeeks(){
+  const matches = (_apMatches || []).slice().sort((a,b) => a.date.localeCompare(b.date));
+  if (!matches.length){ alert('No matches yet — import or add matches first.'); return; }
+  const existing = _apTL.micros.map(m => ({ s:m.start_date, e:m.end_date }));
+  const weeks = [], seen = new Set();
+  for (const m of matches){
+    const wk = apMonSun(m.date);
+    if (seen.has(wk.start)) continue; seen.add(wk.start);
+    if (existing.some(x => x.s <= wk.end && x.e >= wk.start)) continue;
+    weeks.push(wk);
+  }
+  if (!weeks.length){ alert('Every match week already has a microcycle.'); return; }
+  if (!confirm(`Generate ${weeks.length} microcycle week${weeks.length>1?'s':''} (Mon–Sun) from your matches? Existing weeks are kept, and you can edit everything afterwards.`)) return;
+  let n = _apTL.micros.length;
+  const rows = weeks.map(w => {
+    n++;
+    const emb = apEmbedMatch(w.start, w.end);
+    return { id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
+      name: `MC ${n}`, start_date: w.start, end_date: w.end, color: '#6E8AC4',
+      match_date: emb.match_date, rival: emb.rival, home_away: emb.home_away, match_time: emb.match_time };
+  });
+  const { error } = await window.sb.from('microcycles').insert(rows);
+  if (error){ alert('Could not generate: ' + error.message); return; }
+  await apLoadTimeline();
+}
+
+async function apSetDayType(ds, type){
+  const mi = _apTL.micros.find(m => m.id === _apSelectedMicro); if (!mi) return;
+  const dp = Object.assign({}, mi.day_plan || {});
+  dp[ds] = type;
+  mi.day_plan = dp;
+  const { error } = await window.sb.from('microcycles').update({ day_plan: dp }).eq('id', mi.id);
+  if (error){ alert('Could not update day: ' + error.message); return; }
+  apMicroEditorRender();
+}
+
+async function apResetMorphocycle(){
+  const mi = _apTL.micros.find(m => m.id === _apSelectedMicro); if (!mi) return;
+  if (!confirm('Reset every day to its morphocycle default (MD- based)?')) return;
+  mi.day_plan = {};
+  const { error } = await window.sb.from('microcycles').update({ day_plan: {} }).eq('id', mi.id);
+  if (error){ alert('Could not reset: ' + error.message); return; }
   apMicroEditorRender();
 }
 
