@@ -86,7 +86,15 @@
   .ap-imp-table tr.bad td { background:color-mix(in srgb, var(--cm-danger,#dc2626) 9%, transparent); }
 
   /* Timeline */
-  .ap-tl-axis { position:relative; height:15px; margin-bottom:4px; }
+  .ap-tl-axis { position:relative; margin-bottom:4px; }
+  .ap-tl-axis-m { position:relative; height:14px; }
+  .ap-tl-axis-m .ap-tl-m { position:absolute; text-align:center; font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ap-tl-axis-sub { position:relative; height:13px; margin-top:1px; }
+  .ap-tl-axis-sub .ap-tl-w, .ap-tl-axis-sub .ap-tl-d { position:absolute; transform:translateX(-50%); font:500 9px/1 var(--cm-font-mono); color:var(--cm-fg-faint); white-space:nowrap; }
+  .ap-tl-axis-sub .ap-tl-d.we { opacity:.45; }
+  .ap-tl-gl { position:absolute; top:0; bottom:0; width:1px; }
+  .ap-tl-gl-m { background:var(--cm-border); opacity:.5; }
+  .ap-tl-gl-w { background:var(--cm-border); opacity:.25; }
   .ap-tl-lane-lbl { font:600 9.5px/1 var(--cm-font-sans); letter-spacing:.04em; text-transform:uppercase; color:var(--cm-fg-faint); margin:9px 0 3px; }
   .ap-tl-track { position:relative; }
   .ap-tl-band { position:absolute; top:0; bottom:0; border-radius:4px; display:flex; align-items:center; justify-content:center; font:600 9.5px/1 var(--cm-font-sans); color:#fff; overflow:hidden; white-space:nowrap; }
@@ -100,6 +108,13 @@
   .ap-tlpop-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
   .ap-tlpop-l { font:500 11px/1.45 var(--cm-font-sans); color:var(--cm-fg-muted); }
 
+  /* Collapsible cards */
+  .ap-collapse { background:none; border:none; cursor:pointer; color:var(--cm-fg-muted); padding:4px; margin-right:2px; display:flex; align-items:center; border-radius:6px; flex:0 0 auto; }
+  .ap-collapse:hover { background:var(--cm-bg-soft); color:var(--cm-fg-strong); }
+  .ap-collapse i { transition:transform .15s; }
+  .ap-card.is-collapsed > :not(.ap-card-h) { display:none; }
+  .ap-card.is-collapsed .ap-collapse i { transform:rotate(-90deg); }
+
   /* Date picker */
   .ap-datebtn { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); text-align:left; cursor:pointer; display:flex; align-items:center; gap:7px; }
   .ap-datebtn:hover { border-color:var(--cm-border-strong, var(--cm-border)); }
@@ -110,6 +125,9 @@
   .ap-cal-head button { width:28px; height:28px; border:none; background:transparent; border-radius:7px; cursor:pointer; color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; }
   .ap-cal-head button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
   .ap-cal-title { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ap-cal-sel { display:flex; gap:5px; align-items:center; }
+  .ap-cal-sel select { height:28px; padding:0 6px; border:1px solid var(--cm-border); border-radius:7px; background:var(--cm-surface); color:var(--cm-fg-strong); font:600 12px/1 var(--cm-font-sans); cursor:pointer; outline:none; }
+  .ap-cal-sel select:hover { border-color:var(--cm-accent,#2f6fed); }
   .ap-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
   .ap-cal-dow { text-align:center; font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:4px 0; }
   .ap-cal-day { aspect-ratio:1/1; display:flex; align-items:center; justify-content:center; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg); border-radius:7px; cursor:pointer; border:1px solid transparent; }
@@ -154,7 +172,7 @@
       <!-- ── Season setup ──────────────────────────────────────── -->
       <div class="ap-card">
         <div class="ap-card-h">
-          <div class="ic"><i class="ti ti-calendar-cog" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-calendar-cog" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
             <div class="t">Season setup</div>
             <div class="d">Each category has its own season</div>
@@ -184,7 +202,7 @@
       <!-- ── Phases ────────────────────────────────────────────── -->
       <div class="ap-card is-hidden" id="apPhasesCard" style="margin-top:16px">
         <div class="ap-card-h">
-          <div class="ic"><i class="ti ti-layout-rows" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-layout-rows" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
             <div class="t">Phases</div>
             <div class="d" id="apPhasesSub">—</div>
@@ -210,7 +228,7 @@
       <!-- ── Competitions ──────────────────────────────────────── -->
       <div class="ap-card is-hidden" id="apCompsCard" style="margin-top:16px">
         <div class="ap-card-h">
-          <div class="ic"><i class="ti ti-trophy" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-trophy" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
             <div class="t">Competitions</div>
             <div class="d" id="apCompsSub">—</div>
@@ -238,12 +256,15 @@
       <!-- ── Matches ───────────────────────────────────────────── -->
       <div class="ap-card is-hidden" id="apMatchesCard" style="margin-top:16px">
         <div class="ap-card-h">
-          <div class="ic"><i class="ti ti-ball-football" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-ball-football" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
             <div class="t">Matches</div>
             <div class="d" id="apMatchesSub">—</div>
           </div>
-          <button class="ap-btn" id="apImportToggle" onclick="apToggleImport()" style="margin-left:auto"><i class="ti ti-file-import" style="font-size:14px;vertical-align:-2px"></i> Import fixtures</button>
+          <span style="margin-left:auto;display:inline-flex;gap:8px">
+            <button class="ap-btn" id="apAddMatchToggle" onclick="apToggleAddMatch()"><i class="ti ti-plus" style="font-size:14px;vertical-align:-2px"></i> Add match</button>
+            <button class="ap-btn" id="apImportToggle" onclick="apToggleImport()"><i class="ti ti-file-import" style="font-size:14px;vertical-align:-2px"></i> Import fixtures</button>
+          </span>
         </div>
 
         <div id="apImportPanel" class="is-hidden" style="margin-bottom:16px;padding:14px;background:var(--cm-bg-soft);border-radius:10px">
@@ -270,13 +291,26 @@
           </div>
         </div>
 
+        <div id="apMatchAddPanel" class="is-hidden" style="margin-bottom:16px;padding:14px;background:var(--cm-bg-soft);border-radius:10px">
+          <div style="font:600 10px/1 var(--cm-font-sans);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Add a match</div>
+          <input type="date" id="apNewMatchDate" style="display:none">
+          <div style="display:grid;grid-template-columns:1.1fr 1.3fr .8fr 1.1fr .8fr auto;gap:8px;align-items:end">
+            <div class="ap-field"><label>Date</label><button type="button" class="ap-datebtn" id="apNewMatchDate_btn" onclick="apOpenCal('apNewMatchDate', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
+            <div class="ap-field"><label>Opponent</label><input id="apNewMatchOpp" placeholder="Opponent"></div>
+            <div class="ap-field"><label>H/A</label><select id="apNewMatchHA"><option value="home">Home</option><option value="away">Away</option></select></div>
+            <div class="ap-field"><label>Competition</label><select id="apNewMatchComp"></select></div>
+            <div class="ap-field"><label>Time</label><input type="time" id="apNewMatchTime"></div>
+            <button class="ap-btn primary" onclick="apAddMatch()">Add</button>
+          </div>
+        </div>
+
         <div id="apMatchesList"></div>
       </div>
 
       <!-- ── Periodization ─────────────────────────────────────── -->
       <div class="ap-card is-hidden" id="apPeriodCard" style="margin-top:16px">
         <div class="ap-card-h">
-          <div class="ic"><i class="ti ti-stack-2" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-stack-2" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
             <div class="t">Periodization</div>
             <div class="d" id="apPeriodSub">—</div>
@@ -303,7 +337,7 @@
       <!-- ── Timeline ──────────────────────────────────────────── -->
       <div class="ap-card is-hidden" id="apTimelineCard" style="margin-top:16px">
         <div class="ap-card-h">
-          <div class="ic"><i class="ti ti-timeline" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
+          <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-timeline" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
             <div class="t">Timeline</div>
             <div class="d" id="apTimelineSub">—</div>
@@ -316,6 +350,7 @@
         </div>
         <div id="apTimelineScroll" style="overflow-x:auto;overflow-y:hidden"><div id="apTimelineBody"></div></div>
         <div id="apTimelineLegend" style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;border-top:1px solid var(--cm-border);margin-top:12px;padding-top:11px;font:var(--cm-body-sm);color:var(--cm-fg-faint)"></div>
+        <div id="apMicroEditor" class="is-hidden" style="margin-top:14px;padding:14px;background:var(--cm-bg-soft);border-radius:10px"></div>
       </div>
     </section>
     </main>
@@ -471,6 +506,7 @@ function apOnPhaseTypeChange(){
 /* ── Phases ───────────────────────────────────────────────── */
 function apDays(a, b){ return Math.max(0, (Date.parse(b) - Date.parse(a)) / 86400000); }
 function apClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+function apToggleCard(btn){ btn.closest('.ap-card').classList.toggle('is-collapsed'); }
 
 async function apLoadPhases(){
   const { data } = await window.sb.from('season_phases').select('*').eq('season_id', _apSeasonId).order('start_date');
@@ -785,9 +821,42 @@ async function apDeleteMatch(id){
   await apLoadMatches();
 }
 
+function apToggleAddMatch(){
+  const p = document.getElementById('apMatchAddPanel');
+  p.classList.toggle('is-hidden');
+  if (!p.classList.contains('is-hidden')) {
+    document.getElementById('apImportPanel').classList.add('is-hidden');
+    document.getElementById('apNewMatchComp').innerHTML = '<option value="">— No competition</option>' + _apComps.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  }
+}
+
+async function apAddMatch(){
+  const date = document.getElementById('apNewMatchDate').value;
+  const opp  = document.getElementById('apNewMatchOpp').value.trim();
+  const ha   = document.getElementById('apNewMatchHA').value;
+  const cid  = document.getElementById('apNewMatchComp').value || null;
+  const time = document.getElementById('apNewMatchTime').value || null;
+  if (!date || !opp) { alert('Date and opponent are required.'); return; }
+  const { error } = await window.sb.from('calendar_events').insert({
+    id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
+    competition_id: cid, competition: apLegacyClass(cid),
+    title: `vs ${opp}`, type: 'match', date, opponent: opp, home_away: ha,
+    start_time: time, duration_minutes: null
+  });
+  if (error) { alert('Could not add match: ' + error.message); return; }
+  document.getElementById('apNewMatchOpp').value = '';
+  document.getElementById('apNewMatchDate').value = '';
+  apSyncDateBtn('apNewMatchDate');
+  document.getElementById('apNewMatchTime').value = '';
+  apToggleAddMatch();
+  await apLoadMatches();
+  await apLoadTimeline();
+}
+
 function apToggleImport(){
   const p = document.getElementById('apImportPanel');
   p.classList.toggle('is-hidden');
+  if (!p.classList.contains('is-hidden')) document.getElementById('apMatchAddPanel').classList.add('is-hidden');
   if (p.classList.contains('is-hidden')) {
     document.getElementById('apImpPreview').classList.add('is-hidden');
     document.getElementById('apImpPaste').value = '';
@@ -1200,11 +1269,11 @@ async function apDeleteMeso(id){
 /* ── Timeline (static render) ──────────────────────────────── */
 let _apTL = { phases:[], matches:[], comps:[], macros:[], mesos:[], micros:[] };
 let _apTLTips = [], _apTLpop = null, _apTLwired = false;
-let _apTLZoom = 0, _apTLLevels = [];
+let _apTLZoom = 0, _apTLLevels = [], _apSelectedMicro = null;
 
 async function apLoadTimeline(){
   const sStart = _apSeasonStart, sEnd = _apSeasonEnd;
-  let miq = window.sb.from('microcycles').select('name,start_date,end_date').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
+  let miq = window.sb.from('microcycles').select('id,name,start_date,end_date,color,mesocycle_id,match_date,rival,home_away,match_time').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
   if (_apTeamId) miq = miq.eq('team_id', _apTeamId);
   const [ma, me, mi] = await Promise.all([
     window.sb.from('macrocycles').select('name,objective,start_date,end_date,color').eq('season_id', _apSeasonId).order('start_date'),
@@ -1218,6 +1287,77 @@ async function apLoadTimeline(){
     macros: ma.data || [], mesos: me.data || [], micros: mi.data || []
   };
   apTLRender();
+}
+
+function apMicroSelect(id){
+  _apSelectedMicro = (_apSelectedMicro === id ? null : id);
+  apTLRender();
+  apMicroEditorRender();
+}
+
+function apMicroEditorRender(){
+  const ed = document.getElementById('apMicroEditor');
+  if (!ed) return;
+  if (!_apSelectedMicro){ ed.classList.add('is-hidden'); ed.innerHTML = ''; return; }
+  const mi = _apTL.micros.find(m => m.id === _apSelectedMicro);
+  if (!mi){ ed.classList.add('is-hidden'); ed.innerHTML = ''; return; }
+  ed.classList.remove('is-hidden');
+  const match = (_apMatches || []).find(m => m.date >= mi.start_date && m.date <= mi.end_date);
+  const mesoOpts = '<option value="">— No mesocycle</option>' + (_apMesos || []).map(ms => `<option value="${ms.id}"${ms.id===mi.mesocycle_id?' selected':''}>${ms.name}</option>`).join('');
+  const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
+  ed.innerHTML = `
+    <input type="date" id="apMicroEd_start" style="display:none" value="${mi.start_date}">
+    <input type="date" id="apMicroEd_end" style="display:none" value="${mi.end_date}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="width:16px;height:16px;border-radius:4px;background:${mi.color||'#6E8AC4'}"></span>
+      <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${mi.name||'Microcycle'}</span>
+      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${match?`contains: ${match.home_away==='away'?'@':'vs'} ${match.opponent} · ${apFmtShort(match.date)}`:'no match this week'}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1.1fr .95fr .95fr 54px 1.1fr auto auto;gap:8px;align-items:end">
+      <div class="ap-field"><label>Name</label><input id="apMicroEd_name" value="${(mi.name||'').replace(/"/g,'&quot;')}" style="height:32px"></div>
+      <div class="ap-field"><label>Start</label><button type="button" class="ap-datebtn" id="apMicroEd_start_btn" onclick="apOpenCal('apMicroEd_start', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mi.start_date)}</span></button></div>
+      <div class="ap-field"><label>End</label><button type="button" class="ap-datebtn" id="apMicroEd_end_btn" onclick="apOpenCal('apMicroEd_end', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mi.end_date)}</span></button></div>
+      <div class="ap-field"><label>Color</label><input type="color" id="apMicroEd_color" value="${mi.color||'#6E8AC4'}" style="height:32px;padding:2px;cursor:pointer"></div>
+      <div class="ap-field"><label>Mesocycle</label><select id="apMicroEd_meso" style="${fld};font:500 12px/1 var(--cm-font-sans)">${mesoOpts}</select></div>
+      <button class="ap-btn primary" onclick="apSaveMicro()" style="height:32px" title="Save"><i class="ti ti-check" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn" onclick="apDeleteMicro()" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
+    </div>`;
+}
+
+function apEmbedMatch(start, end){
+  const m = (_apMatches || []).find(x => x.date >= start && x.date <= end);
+  return m
+    ? { match_date: m.date, rival: m.opponent || null, home_away: m.home_away || 'home', match_time: m.start_time || null }
+    : { match_date: null, rival: null, home_away: null, match_time: null };
+}
+
+async function apSaveMicro(){
+  const id = _apSelectedMicro; if (!id) return;
+  const name  = document.getElementById('apMicroEd_name').value.trim();
+  const start = document.getElementById('apMicroEd_start').value;
+  const end   = document.getElementById('apMicroEd_end').value;
+  const color = document.getElementById('apMicroEd_color').value;
+  const meso  = document.getElementById('apMicroEd_meso').value || null;
+  if (!name || !start || !end){ alert('Name, start and end are required.'); return; }
+  if (end < start){ alert('End must be after start.'); return; }
+  const emb = apEmbedMatch(start, end);
+  const { error } = await window.sb.from('microcycles').update({
+    name, start_date: start, end_date: end, color, mesocycle_id: meso, season_id: _apSeasonId,
+    match_date: emb.match_date, rival: emb.rival, home_away: emb.home_away, match_time: emb.match_time
+  }).eq('id', id);
+  if (error){ alert('Could not save: ' + error.message); return; }
+  await apLoadTimeline();
+  apMicroEditorRender();
+}
+
+async function apDeleteMicro(){
+  const id = _apSelectedMicro; if (!id) return;
+  if (!confirm('Delete this microcycle? It will also disappear from the Calendar.')) return;
+  const { error } = await window.sb.from('microcycles').delete().eq('id', id);
+  if (error){ alert('Could not delete: ' + error.message); return; }
+  _apSelectedMicro = null;
+  await apLoadTimeline();
+  apMicroEditorRender();
 }
 
 function apTLpos(start, end){
@@ -1247,7 +1387,6 @@ function apTLMonthMarks(){
 
 function apTLRender(){
   const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
-  const marks = apTLMonthMarks();
   const compColor = {}, compName = {};
   _apTL.comps.forEach(c => { compColor[c.id] = c.color; compName[c.id] = c.name; });
   const today = new Date().toISOString().slice(0,10);
@@ -1258,9 +1397,6 @@ function apTLRender(){
   _apTLTips = [];
   const tip = (o) => (_apTLTips.push(o) - 1);
   const range = (a, b) => `${apFmtShort(a)} → ${apFmtShort(b)}`;
-
-  const axis = marks.map(m => `<span style="position:absolute;left:${m.left}%;width:${m.width}%;text-align:center;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${m.label}</span>`).join('');
-  const grid = marks.map(m => `<div style="position:absolute;top:0;bottom:0;left:${m.left}%;width:1px;background:var(--cm-border-soft,var(--cm-border));opacity:.45"></div>`).join('');
 
   const phases = _apTL.phases.length ? _apTL.phases.map(p => {
     const { left, width } = apTLpos(p.start_date, p.end_date);
@@ -1294,22 +1430,25 @@ function apTLRender(){
 
   const micros = _apTL.micros.length ? _apTL.micros.map(mi => {
     const { left, width } = apTLpos(mi.start_date, mi.end_date);
-    const t = tip({ title:mi.name||'Microcycle', lines:[range(mi.start_date,mi.end_date)] });
-    return `<div data-tip="${t}" style="position:absolute;left:${left}%;width:${Math.max(width,0.4)}%;top:2px;bottom:2px;background:var(--cm-border);border-radius:2px;cursor:default"></div>`;
+    const col = mi.color || '#6E8AC4';
+    const hasMatch = !!mi.match_date || _apMatches.some(m => m.date >= mi.start_date && m.date <= mi.end_date);
+    const sel = mi.id === _apSelectedMicro;
+    const t = tip({ title:mi.name||'Microcycle', color:col, lines:[range(mi.start_date,mi.end_date), hasMatch?'contains a match':''].filter(Boolean) });
+    return `<div data-tip="${t}" data-micro="${mi.id}" onclick="apMicroSelect('${mi.id}')" style="position:absolute;left:${left}%;width:${Math.max(width,0.6)}%;top:1px;bottom:1px;background:color-mix(in srgb, ${col} 22%, transparent);border:${sel?'2px':'0.5px'} solid ${col};border-radius:4px;display:flex;align-items:center;justify-content:center;gap:3px;overflow:hidden;cursor:pointer;font:600 9px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${width>4?(mi.name||'MC'):''}${hasMatch?`<span style="width:5px;height:5px;border-radius:50%;background:${col};flex:0 0 auto"></span>`:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No microcycles in this range</span>`;
 
   const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
 
   document.getElementById('apTimelineSub').textContent = `${_apTL.matches.length} match${_apTL.matches.length===1?'':'es'} · ${_apTL.micros.length} microcycle${_apTL.micros.length===1?'':'s'}`;
   document.getElementById('apTimelineBody').innerHTML = `
-    <div class="ap-tl-axis">${axis}</div>
+    <div class="ap-tl-axis" id="apTLAxisRow"></div>
     <div style="position:relative">
-      ${grid}${todayLine}
+      <div id="apTLGrid" style="position:absolute;top:0;bottom:0;left:0;right:0;pointer-events:none"></div>${todayLine}
       <div class="ap-tl-lane-lbl">Phases</div><div class="ap-tl-track" style="height:22px">${phases}</div>
       <div class="ap-tl-lane-lbl">Matches</div><div class="ap-tl-track" style="height:16px">${matches}</div>
       <div class="ap-tl-lane-lbl">Macrocycles</div><div class="ap-tl-track" style="height:30px">${macros}</div>
       <div class="ap-tl-lane-lbl">Mesocycles</div><div class="ap-tl-track" style="height:20px">${mesos}</div>
-      <div class="ap-tl-lane-lbl">Microcycles · synced with Calendar</div><div class="ap-tl-track" style="height:12px">${micros}</div>
+      <div class="ap-tl-lane-lbl">Microcycles · synced with Calendar</div><div class="ap-tl-track" style="height:22px">${micros}</div>
     </div>`;
 
   const leg = document.getElementById('apTimelineLegend');
@@ -1335,6 +1474,9 @@ function apTLApplyZoom(focus){
   const windowDays = lvl.days ? Math.min(lvl.days, total) : total;
   const pct = 100 * total / windowDays;
   body.style.width = pct + '%';
+  const built = apTLAxisHTML(windowDays);
+  const axisEl = document.getElementById('apTLAxisRow'); if (axisEl) axisEl.innerHTML = built.axis;
+  const gridEl = document.getElementById('apTLGrid');    if (gridEl) gridEl.innerHTML = built.grid;
   document.getElementById('apTLZoomLabel').textContent = lvl.label;
   document.getElementById('apTLZoomOut').disabled = _apTLZoom === 0;
   document.getElementById('apTLZoomIn').disabled = _apTLZoom === _apTLLevels.length - 1;
@@ -1347,6 +1489,44 @@ function apTLApplyZoom(focus){
     if (today >= _apSeasonStart && today <= _apSeasonEnd) frac = apDays(_apSeasonStart, today) / total;
     if (focus) wrap.scrollLeft = Math.max(0, frac * sw - wrap.clientWidth / 2);
   });
+}
+
+function apTLAxisHTML(windowDays){
+  const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
+  const start = new Date(_apSeasonStart + 'T00:00:00'), end = new Date(_apSeasonEnd + 'T00:00:00');
+  const pos = d => apClamp((d - start) / 86400000 / total * 100, 0, 100);
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const showWeeks = windowDays <= 130;
+  const showDays  = windowDays <= 48;
+
+  let monthLbl = '', grid = '';
+  const marks = apTLMonthMarks();
+  monthLbl = marks.map(m => `<span class="ap-tl-m" style="left:${m.left}%;width:${m.width}%">${m.label}</span>`).join('');
+  grid += marks.map(m => `<div class="ap-tl-gl ap-tl-gl-m" style="left:${m.left}%"></div>`).join('');
+
+  let subLbl = '';
+  if (showWeeks){
+    const cur = new Date(start);
+    while (cur.getDay() !== 1 && cur <= end) cur.setDate(cur.getDate() + 1);
+    while (cur <= end){
+      const l = pos(cur);
+      grid += `<div class="ap-tl-gl ap-tl-gl-w" style="left:${l}%"></div>`;
+      if (!showDays) subLbl += `<span class="ap-tl-w" style="left:${l}%">${cur.getDate()} ${MON[cur.getMonth()]}</span>`;
+      cur.setDate(cur.getDate() + 7);
+    }
+  }
+  if (showDays){
+    const cur = new Date(start);
+    while (cur <= end){
+      const l = pos(cur);
+      const we = cur.getDay() === 0 || cur.getDay() === 6;
+      if (cur.getDay() === 1) grid += `<div class="ap-tl-gl ap-tl-gl-w" style="left:${l}%"></div>`;
+      subLbl += `<span class="ap-tl-d${we ? ' we' : ''}" style="left:${l}%">${cur.getDate()}</span>`;
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  const axis = `<div class="ap-tl-axis-m">${monthLbl}</div>` + (subLbl ? `<div class="ap-tl-axis-sub">${subLbl}</div>` : '');
+  return { axis, grid };
 }
 
 function apTLWire(){
@@ -1440,14 +1620,22 @@ function apRenderCal(){
     cells += `<div class="${cls}" onclick="apPickDay('${ds}')">${d}</div>`;
   }
   const dows = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => `<div class="ap-cal-dow">${d}</div>`).join('');
+  const monthOpts = monNames.map((nm,i) => `<option value="${i}"${i===m?' selected':''}>${nm}</option>`).join('');
+  let yearOpts = '';
+  for (let yy = y - 6; yy <= y + 6; yy++) yearOpts += `<option value="${yy}"${yy===y?' selected':''}>${yy}</option>`;
   _apCalEl.innerHTML =
     `<div class="ap-cal-head">
        <button type="button" onclick="event.stopPropagation(); apCalNav(-1)"><i class="ti ti-chevron-left"></i></button>
-       <span class="ap-cal-title">${monNames[m]} ${y}</span>
+       <span class="ap-cal-sel">
+         <select class="ap-cal-msel" onchange="event.stopPropagation(); apCalSetMonth(this.value)">${monthOpts}</select>
+         <select class="ap-cal-ysel" onchange="event.stopPropagation(); apCalSetYear(this.value)">${yearOpts}</select>
+       </span>
        <button type="button" onclick="event.stopPropagation(); apCalNav(1)"><i class="ti ti-chevron-right"></i></button>
      </div>
      <div class="ap-cal-grid">${dows}${cells}</div>`;
 }
+function apCalSetMonth(v){ _apCalMonth = new Date(_apCalMonth.getFullYear(), +v, 1); apRenderCal(); }
+function apCalSetYear(v){ _apCalMonth = new Date(+v, _apCalMonth.getMonth(), 1); apRenderCal(); }
 function apPickDay(ds){
   const inp = document.getElementById(_apCalFor);
   inp.value = ds;
