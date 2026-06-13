@@ -46,6 +46,13 @@
   .cal-pager .label { padding:0 14px; height:32px; display:inline-flex; align-items:center; gap:6px; border-left:1px solid var(--cm-border); border-right:1px solid var(--cm-border); font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg); }
   .cal-pager .label .yr { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
   .cal-pager .ti { font-size:14px; }
+  .cal-zoomgrp { display:inline-flex; align-items:center; gap:0; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); overflow:hidden; }
+  .cal-zoomgrp button { border:0; background:transparent; padding:0 10px; height:32px; color:var(--cm-fg-muted); cursor:pointer; display:inline-flex; align-items:center; font:600 11px/1 var(--cm-font-mono); letter-spacing:.03em; }
+  .cal-zoomgrp button:hover { color:var(--cm-fg); }
+  .cal-zoomgrp button + button { border-left:1px solid var(--cm-border); }
+  .cal-zoomgrp .ti { font-size:15px; }
+  .cal-ribbon-body.is-grabbing { cursor:grabbing; user-select:none; }
+  .cal-ribbon-body.is-zoomed { cursor:grab; }
 
   .cal-segs { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); gap:2px; }
   .cal-seg { padding:0 12px; height:30px; display:inline-flex; align-items:center; gap:6px; border-radius:5px; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; border:0; background:transparent; }
@@ -762,11 +769,15 @@
           <h3>Season ribbon</h3>
           <span class="sub" id="calRibbonSub">—</span>
           <div class="right">
-            <button class="cm-icon-btn" id="calSeasonSettingsBtn" title="Season settings"><i class="ti ti-settings-2"></i></button>
             <div class="cal-pager">
               <button title="Previous period"><i class="ti ti-chevron-left"></i></button>
-              <span class="label" id="calRibbonPagerLabel" style="cursor:pointer;user-select:none" title="Click to jump to date range">—<span class="yr"></span></span>
+              <span class="label" id="calRibbonPagerLabel" style="cursor:pointer;user-select:none" title="Click to jump to a date range">—<span class="yr"></span></span>
               <button title="Next period"><i class="ti ti-chevron-right"></i></button>
+            </div>
+            <div class="cal-zoomgrp">
+              <button id="calRibbonZoomOut" title="Zoom out"><i class="ti ti-zoom-out"></i></button>
+              <button id="calRibbonToday" title="Jump to today">Today</button>
+              <button id="calRibbonZoomIn" title="Zoom in"><i class="ti ti-zoom-in"></i></button>
             </div>
             <button id="calRibbonReset" style="display:none;height:28px;padding:0 9px;border-radius:5px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;color:var(--cm-fg-muted);cursor:pointer" title="Reset to full season view">Reset</button>
             <div class="cal-segs">
@@ -1444,6 +1455,7 @@ let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeason
 let _seasonSettings = null;  // { season_start, season_end, season_name, competition } from club_settings
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
+let _ribbonZoom = 1;         // ribbon horizontal zoom factor (1 = fit width, >1 = wider + scroll)
 let _monthEvts = []; // full session objects for month view click handlers
 let _pendingCrestUrl = null; // staged crest URL after Storage upload, written to DB on save
 let _pubMedCount = 0, _pubBoardCount = 0; // profile counts by role
@@ -3338,6 +3350,48 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
       if (pagerLabel) pagerLabel.innerHTML = `${yr}<span class="yr">${MONTHS_SHORT[visStart.getMonth()]} → ${MONTHS_SHORT[visEnd.getMonth()]}</span>`;
     }, 40);
   });
+
+  // ── Zoom + drag-pan ──
+  const ribbonEl = () => rb.querySelector('.cal-ribbon');
+  function applyRibbonZoom(){
+    const el = ribbonEl(); if (!el) return;
+    if (_ribbonZoom > 1){ el.style.width = (_ribbonZoom * 100) + '%'; rb.classList.add('is-zoomed'); }
+    else { el.style.width = ''; rb.classList.remove('is-zoomed'); }
+    const reset = document.getElementById('calRibbonReset');
+    if (reset) reset.style.display = (_ribbonZoom > 1 || _ribbonViewRange) ? '' : 'none';
+  }
+  window._applyRibbonZoom = applyRibbonZoom;
+  function todayPct(){
+    if (!_ribbonMeta) return 50;
+    return Math.max(0, Math.min(100, (Date.now() - _ribbonMeta.ribbonStart.getTime()) / _ribbonMeta.totalMs * 100));
+  }
+  function centerOn(pct){
+    const el = ribbonEl(); if (!el) return;
+    rb.scrollLeft = el.scrollWidth * (pct / 100) - rb.clientWidth / 2;
+  }
+  function setZoom(z){
+    _ribbonZoom = Math.max(1, Math.min(6, z));
+    applyRibbonZoom();
+    requestAnimationFrame(() => centerOn(todayPct()));
+  }
+  document.getElementById('calRibbonZoomIn')?.addEventListener('click', () => setZoom(_ribbonZoom + 1));
+  document.getElementById('calRibbonZoomOut')?.addEventListener('click', () => setZoom(_ribbonZoom - 1));
+  document.getElementById('calRibbonToday')?.addEventListener('click', () => { if (_ribbonZoom === 1) setZoom(2); else centerOn(todayPct()); });
+
+  let _drag = null, _moved = false;
+  rb.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    _drag = { x: e.clientX, sl: rb.scrollLeft }; _moved = false;
+    rb.classList.add('is-grabbing');
+  });
+  window.addEventListener('pointermove', e => {
+    if (!_drag) return;
+    const dx = e.clientX - _drag.x;
+    if (Math.abs(dx) > 4) _moved = true;
+    rb.scrollLeft = _drag.sl - dx;
+  });
+  window.addEventListener('pointerup', () => { if (_drag){ _drag = null; rb.classList.remove('is-grabbing'); } });
+  rb.addEventListener('click', e => { if (_moved){ e.stopPropagation(); e.preventDefault(); _moved = false; } }, true);
 })();
 
 // ── Season Settings modal ─────────────────────────────────────
@@ -3354,7 +3408,7 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
   };
   const closeSeason = () => document.getElementById('calSeasonBackdrop').classList.remove('is-open');
 
-  document.getElementById('calSeasonSettingsBtn').addEventListener('click', openSeason);
+  document.getElementById('calSeasonSettingsBtn')?.addEventListener('click', openSeason);
   document.getElementById('calSeasonClose').addEventListener('click', closeSeason);
   document.getElementById('calSeasonCancel').addEventListener('click', closeSeason);
   document.getElementById('calSeasonBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeSeason(); });
@@ -3491,7 +3545,9 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
 // ── Ribbon Reset button ───────────────────────────────────────
 document.getElementById('calRibbonReset')?.addEventListener('click', () => {
   _ribbonViewRange = null;
+  _ribbonZoom = 1;
   renderSeasonRibbon(_allMCs, _matchSessions);
+  if (window._applyRibbonZoom) window._applyRibbonZoom();
 });
 
 // ── Filter pills ──────────────────────────────────────────────
@@ -4008,6 +4064,7 @@ function renderSeasonRibbon(mcs, extraMatches) {
 
   // Auto-scroll ribbon to center TODAY line
   requestAnimationFrame(() => {
+    if (window._applyRibbonZoom) window._applyRibbonZoom();
     const rb = document.querySelector('.cal-ribbon-body');
     if (!rb) return;
     const totalW = rb.querySelector('.cal-ribbon')?.scrollWidth || rb.scrollWidth;
