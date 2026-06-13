@@ -1,0 +1,134 @@
+/* =============================================================
+   ClavaMetrics — Marketing surfaces (Home, Pricing, …)
+   Built on clavametrics.css tokens. Light theme is the default
+   marketing canvas; everything respects data-theme + accent tweaks.
+   ============================================================= */
+
+/* ─── Brand lock ───
+   Marketing is a fixed public brand surface: always the light canvas
+   with the pitch-green signature accent — independent of whatever
+   in-app theme/accent a logged-in user last persisted. Scoped to
+   body.cm so it wins over any token set on <html>. */
+body.cm {
+  --cm-accent:        #15803D;
+  --cm-accent-hover:  #166534;
+  --cm-accent-press:  #14532D;
+  --cm-accent-soft:   #ECFDF5;
+  --cm-fg-on-accent:  #FFFFFF;
+  --cm-focus-ring:    rgba(21,128,61,0.22);
+}
+
+/* ───────────────────────── Top navigation ───────────────────────── */
+.mk-nav {
+  position: sticky; top: 0; z-index: var(--cm-z-sticky, 50);
+  display: flex; align-items: center; gap: 24px;
+  height: 64px; padding: 0 32px;
+  background: color-mix(in srgb, var(--cm-bg) 88%, transparent);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  border-bottom: 1px solid var(--cm-border);
+}
+.mk-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.mk-brand .mark {
+  width: 28px; height: 28px; border-radius: 7px;
+  background: var(--cm-accent); color: var(--cm-fg-on-accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.mk-brand .mark svg { width: 17px; height: 17px; }
+.mk-brand .name { font: 600 15px/1 var(--cm-font-sans); letter-spacing: -0.01em; color: var(--cm-fg-strong); }
+.mk-links { display: flex; align-items: center; gap: 2px; margin-left: 8px; }
+.mk-links a {
+  padding: 8px 12px; border-radius: var(--cm-r-3);
+  font: 500 13.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted);
+  text-decoration: none; transition: color var(--cm-dur-1), background var(--cm-dur-1);
+}
+.mk-links a:hover { color: var(--cm-fg); background: var(--cm-bg-soft); }
+.mk-links a.is-active { color: var(--cm-fg-strong); }
+.mk-cta { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.mk-cta .signin { font: 500 13.5px/1 var(--cm-font-sans); color: var(--cm-fg); text-decoration: none; padding: 8px 12px; }
+.mk-cta .signin:hover { color: var(--cm-fg-strong); }
+.mk-lang {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 30px; padding: 0 9px; border-radius: var(--cm-r-3);
+  border: 1px solid var(--cm-border); background: transparent;
+  font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-muted);
+  cursor: pointer; transition: border-color var(--cm-dur-1), color var(--cm-dur-1);
+}
+.mk-lang:hover { color: var(--cm-fg); border-color: var(--cm-border-strong); }
+.mk-lang .ti { font-size: 15px; }
+.mk-burger { display: none; }
+
+@media (max-width: 880px) {
+  .mk-nav { gap: 12px; padding: 0 18px; }
+  .mk-links, .mk-cta .signin { display: none; }
+}
+
+/* ───────────────────────── Shared section chrome ───────────────────────── */
+.mk-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 500 11.5px/1 var(--cm-font-mono);
+  letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase;
+  color: var(--cm-accent);
+  padding: 6px 12px; border-radius: var(--cm-r-pill);
+  background: var(--cm-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--cm-accent) 22%, transparent);
+}
+.mk-eyebrow::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.mk-eyebrow.is-plain { background: var(--cm-bg-soft); color: var(--cm-fg-muted); border-color: var(--cm-border); }
+.mk-eyebrow.is-plain::before { background: var(--cm-fg-faint); }
+
+.mk-section { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
+.mk-section-head { text-align: center; max-width: 640px; margin: 0 auto 40px; }
+.mk-section-head h2 {
+  font: 600 34px/1.12 var(--cm-font-sans);
+  letter-spacing: -0.025em; color: var(--cm-fg-strong);
+  text-wrap: balance; margin: 16px 0 0;
+}
+.mk-section-head p {
+  margin: 12px auto 0; max-width: 56ch;
+  font: 400 15.5px/1.55 var(--cm-font-sans); color: var(--cm-fg-muted);
+  text-wrap: pretty;
+}
+.mk-section-head .mk-eyebrow { margin-bottom: 0; }
+
+/* ───────────────────────── Footer ───────────────────────── */
+.mk-foot {
+  border-top: 1px solid var(--cm-border);
+  background: var(--cm-bg-soft);
+  margin-top: 96px;
+}
+.mk-foot-inner {
+  max-width: 1240px; margin: 0 auto; padding: 56px 32px 28px;
+  display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 40px;
+}
+@media (max-width: 860px) { .mk-foot-inner { grid-template-columns: 1fr 1fr; gap: 32px; } }
+@media (max-width: 520px) { .mk-foot-inner { grid-template-columns: 1fr 1fr; } }
+.mk-foot-brand .mk-brand { margin-bottom: 14px; }
+.mk-foot-brand p { font: 400 13.5px/1.55 var(--cm-font-sans); color: var(--cm-fg-muted); max-width: 34ch; }
+.mk-foot-social { display: flex; gap: 8px; margin-top: 18px; }
+.mk-foot-social a {
+  width: 32px; height: 32px; border-radius: var(--cm-r-2);
+  border: 1px solid var(--cm-border); color: var(--cm-fg-muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none; transition: color var(--cm-dur-1), border-color var(--cm-dur-1), background var(--cm-dur-1);
+}
+.mk-foot-social a:hover { color: var(--cm-fg-strong); border-color: var(--cm-border-strong); background: var(--cm-surface); }
+.mk-foot-col h4 {
+  font: 600 11px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow);
+  text-transform: uppercase; color: var(--cm-fg-faint); margin: 0 0 14px;
+}
+.mk-foot-col a {
+  display: block; font: 400 13.5px/1 var(--cm-font-sans);
+  color: var(--cm-fg-muted); text-decoration: none; padding: 7px 0;
+  transition: color var(--cm-dur-1);
+}
+.mk-foot-col a:hover { color: var(--cm-fg-strong); }
+.mk-foot-bottom {
+  max-width: 1240px; margin: 0 auto; padding: 18px 32px 32px;
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  border-top: 1px solid var(--cm-border);
+  font: var(--cm-meta); color: var(--cm-fg-muted); flex-wrap: wrap;
+}
+.mk-foot-bottom .legal { display: flex; gap: 18px; }
+.mk-foot-bottom .legal a { color: var(--cm-fg-muted); text-decoration: none; }
+.mk-foot-bottom .legal a:hover { color: var(--cm-fg-strong); }
