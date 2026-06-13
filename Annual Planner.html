@@ -1336,31 +1336,27 @@ const DAY_TYPES = {
   tactical:       { label:'Tactical',     bg:'#FBF0DA', tx:'#6B4A07', dot:'#C79A2E' },
   match:          { label:'Match',        bg:'#E6F1FB', tx:'#0C447C', dot:'#185FA5' }
 };
-function apNearestMatch(ds){
-  const md = (_apMatches || []).map(m => m.date);
+function apMDinfo(ds, matchDates){
+  if (matchDates.includes(ds)) return { label:'MD', type:'match' };
   let next = null, prev = null;
-  md.forEach(d => { if (d >= ds && (!next || d < next)) next = d; if (d <= ds && (!prev || d > prev)) prev = d; });
-  return { next, prev, isMatch: md.includes(ds),
-           dNext: next ? Math.round(apDays(ds, next)) : 99,
-           dPrev: prev ? Math.round(apDays(prev, ds)) : 99 };
-}
-function apMDlabel(ds){
-  const n = apNearestMatch(ds);
-  if (n.isMatch) return 'MD';
-  if (n.dNext <= 6 && n.dNext <= n.dPrev) return 'MD-' + n.dNext;
-  if (n.dPrev <= 6) return 'MD+' + n.dPrev;
-  return '';
-}
-function apDefaultDayType(ds){
-  const n = apNearestMatch(ds);
-  if (n.isMatch) return 'match';
-  if (n.dPrev === 1) return 'recovery';          // MD+1 compensatory
-  if (n.dNext === 1) return 'activation';         // MD-1
-  if (n.dNext === 2) return 'speed';              // MD-2
-  if (n.dNext === 3) return 'duration';           // MD-3
-  if (n.dNext === 4) return 'muscle_tension';     // MD-4
-  if (n.dPrev === 2) return 'recovery';           // MD+2
-  return 'off';
+  matchDates.forEach(d => { if (d >= ds && (!next || d < next)) next = d; if (d <= ds && (!prev || d > prev)) prev = d; });
+  const dNext = next ? Math.round(apDays(ds, next)) : 99;
+  const dPrev = prev ? Math.round(apDays(prev, ds)) : 99;
+  const useNext = dNext <= dPrev;
+  let label = '';
+  if (useNext && dNext < 99) label = 'MD-' + dNext;
+  else if (dPrev < 99) label = 'MD+' + dPrev;
+  let type = 'off';
+  if (useNext){
+    if (dNext === 1) type = 'activation';
+    else if (dNext === 2) type = 'speed';
+    else if (dNext === 3) type = 'duration';
+    else if (dNext === 4) type = 'muscle_tension';
+    else if (dNext === 5) type = 'recovery';
+  } else {
+    if (dPrev === 1 || dPrev === 2) type = 'recovery';
+  }
+  return { label, type };
 }
 
 async function apLoadTimeline(){
@@ -1399,15 +1395,17 @@ function apMicroEditorRender(){
   const fld = 'height:32px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px';
   const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const dp = mi.day_plan || {};
+  const microMatchDates = (_apMatches || []).filter(m => m.date >= mi.start_date && m.date <= mi.end_date).map(m => m.date);
   const typeOpts = Object.keys(DAY_TYPES).map(k => `<option value="${k}">${DAY_TYPES[k].label}</option>`).join('');
   let dayCards = '';
   const cur = new Date(mi.start_date + 'T00:00:00'), endD = new Date(mi.end_date + 'T00:00:00');
   let guard = 0;
   while (cur <= endD && guard++ < 60){
     const ds = cur.toISOString().slice(0,10);
-    const type = dp[ds] || apDefaultDayType(ds);
+    const info = apMDinfo(ds, microMatchDates);
+    const type = dp[ds] || info.type;
     const dt = DAY_TYPES[type] || DAY_TYPES.off;
-    const md = apMDlabel(ds);
+    const md = info.label;
     const opts = typeOpts.replace(`value="${type}"`, `value="${type}" selected`);
     dayCards += `<div style="border:0.5px solid var(--cm-border);border-radius:8px;padding:7px 5px 6px;text-align:center;background:${dt.bg}">
       <div style="font:600 10px/1 var(--cm-font-sans);color:${dt.tx}">${DOW[cur.getDay()]}</div>
@@ -1421,7 +1419,7 @@ function apMicroEditorRender(){
     <input type="date" id="apMicroEd_start" style="display:none" value="${mi.start_date}">
     <input type="date" id="apMicroEd_end" style="display:none" value="${mi.end_date}">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <span style="width:16px;height:16px;border-radius:4px;background:${mi.color||'#6E8AC4'}"></span>
+      <span style="width:16px;height:16px;border-radius:4px;background:${(mi.color&&/^#/.test(mi.color))?mi.color:'#6E8AC4'}"></span>
       <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${mi.name||'Microcycle'}</span>
       <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${match?`contains: ${match.home_away==='away'?'@':'vs'} ${match.opponent} · ${apFmtShort(match.date)}`:'no match this week'}</span>
     </div>
@@ -1429,7 +1427,7 @@ function apMicroEditorRender(){
       <div class="ap-field"><label>Name</label><input id="apMicroEd_name" value="${(mi.name||'').replace(/"/g,'&quot;')}" style="height:32px"></div>
       <div class="ap-field"><label>Start</label><button type="button" class="ap-datebtn" id="apMicroEd_start_btn" onclick="apOpenCal('apMicroEd_start', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mi.start_date)}</span></button></div>
       <div class="ap-field"><label>End</label><button type="button" class="ap-datebtn" id="apMicroEd_end_btn" onclick="apOpenCal('apMicroEd_end', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mi.end_date)}</span></button></div>
-      <div class="ap-field"><label>Color</label><input type="color" id="apMicroEd_color" value="${mi.color||'#6E8AC4'}" style="height:32px;padding:2px;cursor:pointer"></div>
+      <div class="ap-field"><label>Color</label><input type="color" id="apMicroEd_color" value="${(mi.color&&/^#/.test(mi.color))?mi.color:'#6E8AC4'}" style="height:32px;padding:2px;cursor:pointer"></div>
       <div class="ap-field"><label>Mesocycle</label><select id="apMicroEd_meso" style="${fld};font:500 12px/1 var(--cm-font-sans)">${mesoOpts}</select></div>
       <button class="ap-btn primary" onclick="apSaveMicro()" style="height:32px" title="Save"><i class="ti ti-check" style="font-size:14px"></i></button>
       <button class="ap-iconbtn" onclick="apDeleteMicro()" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
@@ -1597,11 +1595,12 @@ function apTLRender(){
   const matches = _apTL.matches.length ? _apTL.matches.map(m => {
     const pos = apClamp(apDays(_apSeasonStart, m.date) / total * 100, 0, 100);
     const col = compColor[m.competition_id] || 'var(--cm-fg-muted)';
-    const lines = [apFmtDate(m.date), m.home_away==='away'?'Away':'Home'];
+    const away = m.home_away === 'away';
+    const lines = [apFmtDate(m.date), away ? 'Away' : 'Home'];
     if (compName[m.competition_id]) lines.push(compName[m.competition_id]);
     if (m.start_time) lines.push('Kick-off ' + m.start_time.slice(0,5));
-    const t = tip({ title:(m.home_away==='away'?'@ ':'vs ')+(m.opponent||'—'), color:compColor[m.competition_id]||'', lines });
-    return `<span class="ap-tl-dot" data-tip="${t}" style="left:${pos}%;background:${col}"></span>`;
+    const t = tip({ title:(away ? '@ ' : 'vs ') + (m.opponent || '—'), color:compColor[m.competition_id] || '', lines });
+    return `<span data-tip="${t}" style="position:absolute;left:${pos}%;transform:translateX(-50%);top:1px;bottom:1px;display:flex;align-items:center;justify-content:center;min-width:15px;padding:0 4px;border-radius:4px;background:color-mix(in srgb, ${col} 16%, var(--cm-surface));border:1px solid ${col};font:700 8.5px/1 var(--cm-font-mono);color:${col}">${away ? 'A' : 'H'}</span>`;
   }).join('') : `<span class="ap-tl-hint">No matches yet</span>`;
 
   const macros = _apTL.macros.length ? _apTL.macros.map(mc => {
@@ -1620,11 +1619,13 @@ function apTLRender(){
 
   const micros = _apTL.micros.length ? _apTL.micros.map(mi => {
     const { left, width } = apTLpos(mi.start_date, mi.end_date);
-    const col = mi.color || '#6E8AC4';
-    const hasMatch = !!mi.match_date || _apMatches.some(m => m.date >= mi.start_date && m.date <= mi.end_date);
+    const col = (mi.color && /^#/.test(mi.color)) ? mi.color : '#6E8AC4';
     const sel = mi.id === _apSelectedMicro;
-    const t = tip({ title:mi.name||'Microcycle', color:col, lines:[range(mi.start_date,mi.end_date), hasMatch?'contains a match':''].filter(Boolean) });
-    return `<div data-tip="${t}" data-micro="${mi.id}" onclick="apMicroSelect('${mi.id}')" style="position:absolute;left:${left}%;width:${Math.max(width,0.6)}%;top:1px;bottom:1px;background:color-mix(in srgb, ${col} 22%, transparent);border:${sel?'2px':'0.5px'} solid ${col};border-radius:4px;display:flex;align-items:center;justify-content:center;gap:3px;overflow:hidden;cursor:pointer;font:600 9px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${width>4?(mi.name||'MC'):''}${hasMatch?`<span style="width:5px;height:5px;border-radius:50%;background:${col};flex:0 0 auto"></span>`:''}</div>`;
+    const matchIn = _apMatches.find(m => m.date >= mi.start_date && m.date <= mi.end_date);
+    const lines = [range(mi.start_date, mi.end_date)];
+    if (matchIn) lines.push(`contains ${matchIn.home_away==='away'?'@':'vs'} ${matchIn.opponent||'match'}`);
+    const t = tip({ title:mi.name||'Microcycle', color:col, lines });
+    return `<div data-tip="${t}" data-micro="${mi.id}" onclick="apMicroSelect('${mi.id}')" style="position:absolute;left:${left}%;width:${Math.max(width,0.6)}%;top:1px;bottom:1px;background:color-mix(in srgb, ${col} 22%, transparent);border:${sel?'2px':'0.5px'} solid ${col};border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font:600 9px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${width>4?(mi.name||'MC'):''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No microcycles in this range</span>`;
 
   const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
@@ -1635,10 +1636,10 @@ function apTLRender(){
     <div style="position:relative">
       <div id="apTLGrid" style="position:absolute;top:0;bottom:0;left:0;right:0;pointer-events:none"></div>${todayLine}
       <div class="ap-tl-lane-lbl">Phases</div><div class="ap-tl-track" style="height:22px">${phases}</div>
-      <div class="ap-tl-lane-lbl">Matches</div><div class="ap-tl-track" style="height:16px">${matches}</div>
       <div class="ap-tl-lane-lbl">Macrocycles</div><div class="ap-tl-track" style="height:30px">${macros}</div>
       <div class="ap-tl-lane-lbl">Mesocycles</div><div class="ap-tl-track" style="height:20px">${mesos}</div>
       <div class="ap-tl-lane-lbl">Microcycles · synced with Calendar</div><div class="ap-tl-track" style="height:22px">${micros}</div>
+      <div class="ap-tl-lane-lbl">Matches · home / away</div><div class="ap-tl-track" style="height:18px">${matches}</div>
     </div>`;
 
   const leg = document.getElementById('apTimelineLegend');
