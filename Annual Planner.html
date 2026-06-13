@@ -1464,6 +1464,7 @@ function apMicroEditorRender(){
       <span style="width:16px;height:16px;border-radius:4px;background:${(mi.color&&/^#/.test(mi.color))?mi.color:'#6E8AC4'}"></span>
       <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${mi.name||'Microcycle'}</span>
       <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${match?`contains: ${match.home_away==='away'?'@':'vs'} ${match.opponent} · ${apFmtShort(match.date)}`:'no match this week'}</span>
+      <button class="ap-btn" onclick="apOpenMicroInCalendar('${mi.id}')" style="margin-left:auto;height:30px;display:inline-flex;align-items:center;gap:6px"><i class="ti ti-calendar-event" style="font-size:14px"></i>Open in Calendar</button>
     </div>
     <div style="display:grid;grid-template-columns:${gridCols};gap:8px;align-items:end">
       <div class="ap-field"><label>Name</label><input id="apMicroEd_name" value="${(mi.name||'').replace(/"/g,'&quot;')}" style="height:32px"></div>
@@ -1510,6 +1511,10 @@ async function apSaveMicro(){
   if (error){ alert('Could not save: ' + error.message); return; }
   await apLoadTimeline();
   apMicroEditorRender();
+}
+
+function apOpenMicroInCalendar(id){
+  window.location.href = 'Calendar.html?mc=' + encodeURIComponent(id);
 }
 
 async function apDeleteMicro(){
@@ -1596,8 +1601,11 @@ async function apResetMorphocycle(){
 
 function apTLpos(start, end){
   const total = apDays(_apSeasonStart, _apSeasonEnd) || 1;
-  const left = apClamp(apDays(_apSeasonStart, start) / total * 100, 0, 100);
-  const width = apClamp(apDays(start, end) / total * 100, 0, 100 - left);
+  const vStart = start < _apSeasonStart ? _apSeasonStart : start;
+  const vEnd   = end   > _apSeasonEnd   ? _apSeasonEnd   : end;
+  if (vEnd < vStart) return { left: 0, width: 0 };
+  const left  = apClamp(apDays(_apSeasonStart, vStart) / total * 100, 0, 100);
+  const width = apClamp(apDays(vStart, vEnd) / total * 100, 0, 100 - left);
   return { left, width };
 }
 
@@ -1640,13 +1648,14 @@ function apTLRender(){
 
   const matches = _apTL.matches.length ? _apTL.matches.map(m => {
     const pos = apClamp(apDays(_apSeasonStart, m.date) / total * 100, 0, 100);
-    const col = compColor[m.competition_id] || 'var(--cm-fg-muted)';
     const away = m.home_away === 'away';
+    const col   = away ? 'var(--cm-info)'    : 'var(--cm-success)';
+    const colBg = away ? 'var(--cm-info-bg)' : 'var(--cm-success-bg)';
     const lines = [apFmtDate(m.date), away ? 'Away' : 'Home'];
     if (compName[m.competition_id]) lines.push(compName[m.competition_id]);
     if (m.start_time) lines.push('Kick-off ' + m.start_time.slice(0,5));
-    const t = tip({ title:(away ? '@ ' : 'vs ') + (m.opponent || '—'), color:compColor[m.competition_id] || '', lines });
-    return `<span data-tip="${t}" style="position:absolute;left:${pos}%;transform:translateX(-50%);top:1px;bottom:1px;display:flex;align-items:center;justify-content:center;min-width:15px;padding:0 4px;border-radius:4px;background:color-mix(in srgb, ${col} 16%, var(--cm-surface));border:1px solid ${col};font:700 8.5px/1 var(--cm-font-mono);color:${col}">${away ? 'A' : 'H'}</span>`;
+    const t = tip({ title:(away ? '@ ' : 'vs ') + (m.opponent || '—'), color:col, lines });
+    return `<span data-tip="${t}" style="position:absolute;left:${pos}%;transform:translateX(-50%);top:1px;bottom:1px;display:flex;align-items:center;justify-content:center;min-width:15px;padding:0 4px;border-radius:4px;background:${colBg};border:1px solid ${col};font:700 8.5px/1 var(--cm-font-mono);color:${col}">${away ? 'A' : 'H'}</span>`;
   }).join('') : `<span class="ap-tl-hint">No matches yet</span>`;
 
   const macros = _apTL.macros.length ? _apTL.macros.map(mc => {
@@ -1663,16 +1672,20 @@ function apTLRender(){
     return `<div data-tip="${t}" style="position:absolute;left:${left}%;width:${width}%;top:0;bottom:0;background:var(--cm-bg-soft);border:.5px solid var(--cm-border);border-radius:4px;display:flex;align-items:center;justify-content:center;font:500 9px/1 var(--cm-font-sans);color:var(--cm-fg-muted);overflow:hidden;white-space:nowrap;padding:0 4px">${width>6?ms.name:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No mesocycles yet</span>`;
 
+  const _today = new Date().toISOString().slice(0,10);
   const micros = _apTL.micros.length ? _apTL.micros.map(mi => {
     const { left, width } = apTLpos(mi.start_date, mi.end_date);
-    const col = (mi.color && /^#/.test(mi.color)) ? mi.color : '#6E8AC4';
     const sel = mi.id === _apSelectedMicro;
+    const isCurrent = mi.start_date <= _today && mi.end_date >= _today;
+    const bg = sel ? 'var(--cm-accent)' : 'var(--cm-accent-soft)';
+    const bd = sel ? 'var(--cm-accent)' : (isCurrent ? 'var(--cm-accent)' : 'var(--cm-border)');
+    const fg = sel ? 'var(--cm-fg-on-accent)' : 'var(--cm-fg-strong)';
     const matchIn = _apTL.matches.find(m => m.date >= mi.start_date && m.date <= mi.end_date);
     const lines = [range(mi.start_date, mi.end_date)];
     if (matchIn) lines.push(`contains ${matchIn.home_away==='away'?'@':'vs'} ${matchIn.opponent||'match'}`);
-    const t = tip({ title:mi.name||'Microcycle', color:col, lines });
+    const t = tip({ title:mi.name||'Microcycle', lines });
     const mLbl = (mi.name || 'MC').replace(/\s+/g, '');
-    return `<div data-tip="${t}" data-micro="${mi.id}" onclick="apMicroSelect('${mi.id}')" style="position:absolute;left:${left}%;width:${Math.max(width,0.6)}%;top:1px;bottom:1px;background:color-mix(in srgb, ${col} 22%, transparent);border:${sel?'2px':'0.5px'} solid ${col};border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font:600 ${width>4?9:7.5}px/1 var(--cm-font-sans);letter-spacing:-.2px;color:var(--cm-fg-strong);padding:0 1px;white-space:nowrap">${width>1?mLbl:''}</div>`;
+    return `<div data-tip="${t}" data-micro="${mi.id}" onclick="apMicroSelect('${mi.id}')" style="position:absolute;left:${left}%;width:${Math.max(width,0.6)}%;top:1px;bottom:1px;background:${bg};border:${isCurrent&&!sel?'1.5px':'0.5px'} solid ${bd};border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font:600 ${width>4?9:7.5}px/1 var(--cm-font-mono);letter-spacing:-.2px;color:${fg};padding:0 1px;white-space:nowrap">${width>1?mLbl:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No microcycles in this range</span>`;
 
   const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
@@ -1691,9 +1704,11 @@ function apTLRender(){
     </div>`;
 
   const leg = document.getElementById('apTimelineLegend');
-  leg.innerHTML = _apTL.comps.length
+  const haLegend = `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:3px;background:var(--cm-success-bg);border:1px solid var(--cm-success)"></span>Home</span><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:3px;background:var(--cm-info-bg);border:1px solid var(--cm-info)"></span>Away</span>`;
+  const compLegend = _apTL.comps.length
     ? _apTL.comps.map(c => `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:${c.color}"></span>${c.name}</span>`).join('')
-    : '<span>No competitions yet</span>';
+    : '';
+  leg.innerHTML = haLegend + compLegend;
 
   apTLWire();
   apTLApplyZoom(false);
