@@ -2035,7 +2035,14 @@ async function fetchAllEvents(dateFrom, dateTo) {
     created_at: e.created_at || null,
     source: 'event'
   }));
-  return { data: [...norm, ...evts].sort(sortSessions) };
+  // Dedup matches: a match can exist both as a calendar_events event and as a
+  // training_sessions row. Keep the calendar_events one (canonical: time, competition,
+  // crest) and drop any training_sessions 'match' on the same date.
+  const eventMatchDates = new Set(evts.filter(e => e.session_type === 'match').map(e => e.session_date));
+  const merged = [...norm, ...evts].filter(s =>
+    !(s.source === 'session' && s.session_type === 'match' && eventMatchDates.has(s.session_date))
+  );
+  return { data: merged.sort(sortSessions) };
 }
 
 // ── Load sessions for current MC ──────────────────────────────
