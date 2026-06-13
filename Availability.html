@@ -534,6 +534,7 @@
   // ── State ──
   let CLUB_ID    = null;
   let MC_DATES   = [];
+  let NON_COUNTING_DATES = new Set();  // days inside season phases with counts_availability=false (break/offseason)
   let todayIdx   = -1;
   let avMap             = {};   // player_id|date → availability row — shared across init + handlers
   let players           = [];   // current club players
@@ -868,6 +869,29 @@
     let cur = new Date(mcStart + 'T00:00:00Z');
     const end = new Date(mcEnd + 'T00:00:00Z');
     while (cur <= end) { MC_DATES.push(cur.toISOString().slice(0, 10)); cur = new Date(cur.getTime() + 86400000); }
+
+    // ── Seasons nexus: drop days inside phases that don't count for availability ──
+    // (break / offseason). Phases live in season_phases, scoped per category via seasons.team_id.
+    NON_COUNTING_DATES = new Set();
+    try {
+      let sq = window.sb.from('seasons').select('id');
+      if (_avTeamId) sq = sq.eq('team_id', _avTeamId); else sq = sq.eq('club_id', CLUB_ID);
+      const { data: seas } = await sq;
+      const seasonIds = (seas || []).map(s => s.id);
+      if (seasonIds.length) {
+        const { data: phs } = await window.sb.from('season_phases')
+          .select('start_date,end_date,counts_availability')
+          .in('season_id', seasonIds)
+          .eq('counts_availability', false)
+          .lte('start_date', mcEnd)
+          .gte('end_date', mcStart);
+        (phs || []).forEach(ph => {
+          MC_DATES.forEach(d => { if (d >= ph.start_date && d <= ph.end_date) NON_COUNTING_DATES.add(d); });
+        });
+      }
+    } catch (e) { console.warn('[Availability] seasons phase filter skipped:', e?.message); }
+    if (NON_COUNTING_DATES.size) MC_DATES = MC_DATES.filter(d => !NON_COUNTING_DATES.has(d));
+
     todayIdx = MC_DATES.indexOf(todayStr);
 
     // Fetch all data
@@ -919,7 +943,7 @@
 
     // Auto-fill: fill injury range first, then today's defaults
     await autofillInjuryRange(injuriesData || [], avMap, todayStr);
-    await autofillToday(players, avMap, injuredIds, todayStr);
+    if (!NON_COUNTING_DATES.has(todayStr)) await autofillToday(players, avMap, injuredIds, todayStr);
 
     // Update toolbar counts
     const posCounts = { gk:0, cb:0, fb:0, mf:0, wg:0, st:0 };
