@@ -124,7 +124,14 @@
   .ap-page.is-big #apMatchesCard,
   .ap-page.is-big #apPeriodCard { display:none; }
   .ap-page.is-big #apTimelineCard { margin-top:0; }
-  .ap-page.is-big #apTimelineScroll { min-height:320px; }
+  #apBigPanels { display:none; }
+  .ap-page.is-big #apBigPanels { display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:12px; margin-bottom:16px; }
+  #apBigExtras { display:none; }
+  .ap-page.is-big #apBigExtras { display:grid; grid-template-columns:1.7fr 1fr; gap:14px; margin-top:16px; }
+  .ap-kpi { background:var(--cm-bg-soft); border-radius:10px; padding:12px 14px; }
+  .ap-kpi .k-lbl { font:500 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-muted); display:flex; align-items:center; gap:5px; }
+  .ap-kpi .k-val { font:500 21px/1.1 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:5px; }
+  .ap-kpi .k-sub { font:500 12px/1.2 var(--cm-font-mono); color:var(--cm-fg-faint); margin-top:3px; }
   #apSetupBackBar { display:none; }
   .ap-page.is-setup #apSetupBackBar { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
 
@@ -198,6 +205,9 @@
         <button class="ap-btn" onclick="apSetView('big')"><i class="ti ti-arrow-left" style="font-size:14px;vertical-align:-2px"></i> Back to timeline</button>
         <span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Configure the active season — all sections start collapsed, open what you need.</span>
       </div>
+
+      <!-- ── Big view: KPI strip ── -->
+      <div id="apBigPanels"></div>
 
       <!-- ── Season setup ──────────────────────────────────────── -->
       <div class="ap-card is-collapsed" id="apSeasonCard">
@@ -390,6 +400,9 @@
         <div id="apTimelineLegend" style="display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:11px;font:var(--cm-body-sm);color:var(--cm-fg-faint)"></div>
         <div id="apMicroEditor" class="is-hidden" style="margin-top:14px;padding:14px;background:var(--cm-bg-soft);border-radius:10px"></div>
       </div>
+
+      <!-- ── Big view: density + competitions ── -->
+      <div id="apBigExtras"></div>
     </section>
     </main>
   </div>
@@ -599,6 +612,7 @@ function apSetView(mode){
     apSyncEditMode();
     apMicroEditorRender();
     if (_apSeasonId) { try { apTLApplyZoom(false); } catch(_){} }
+    apRenderBig();
   } else {
     ['apSeasonCard','apPhasesCard','apCompsCard','apMatchesCard','apPeriodCard','apTimelineCard'].forEach(id => {
       const c = document.getElementById(id); if (c) c.classList.add('is-collapsed');
@@ -629,6 +643,96 @@ function apSyncEditMode(){
 }
 
 function apEditThisMicro(id){ _apEditMode = true; _apSelectedMicro = id; apSyncEditMode(); apMicroEditorRender(); }
+
+function apRenderBig(){
+  if (_apView !== 'big') return;
+  const panels = document.getElementById('apBigPanels');
+  const extras = document.getElementById('apBigExtras');
+  if (!panels || !extras) return;
+  const s = _apSeasons.find(x => x.id === _apSeasonId);
+  if (!s){ panels.innerHTML = ''; extras.innerHTML = ''; return; }
+  const today = new Date().toISOString().slice(0,10);
+  const micros = _apTL.micros || [], matches = _apTL.matches || [], phases = _apTL.phases || [], comps = _apTL.comps || [];
+
+  // Current microcycle + today's MD
+  const curMicro = micros.find(m => m.start_date <= today && m.end_date >= today);
+  let mdToday = '—';
+  if (curMicro){
+    const ov = curMicro.day_plan && curMicro.day_plan['md::' + today];
+    if (ov !== undefined && ov !== null && ov !== '') mdToday = ov === 'none' ? '—' : ov;
+    else {
+      const set = new Set(matches.filter(m => m.date >= curMicro.start_date && m.date <= curMicro.end_date).map(m => m.date));
+      if (curMicro.match_date) set.add(curMicro.match_date);
+      mdToday = apMDinfo(today, [...set].sort()).label || '—';
+    }
+  }
+  // Next match
+  const next = matches.filter(m => m.date >= today).sort((a,b) => a.date.localeCompare(b.date))[0];
+  const din = next ? Math.round(apDays(today, next.date)) : null;
+  // Progress
+  const tot = apDays(s.start_date, s.end_date) || 1;
+  const done = apClamp(apDays(s.start_date, today), 0, tot);
+  const pct = Math.round(done / tot * 100);
+  const wkTot = Math.ceil(tot / 7), wkNow = apClamp(Math.ceil(done / 7), 0, wkTot);
+  // Active phase
+  const ph = phases.find(p => p.start_date <= today && p.end_date >= today);
+
+  const card = (icon, lbl, val, sub, extra) =>
+    `<div class="ap-kpi"><div class="k-lbl"><i class="ti ${icon}" style="font-size:14px"></i> ${lbl}</div><div class="k-val">${val}</div>${extra||''}${sub?`<div class="k-sub">${sub}</div>`:''}</div>`;
+
+  panels.innerHTML =
+    card('ti-target', 'Current microcycle',
+      curMicro ? `${(curMicro.name||'MC')} · ${mdToday}` : 'Off-season',
+      curMicro ? `${apFmtShort(curMicro.start_date)} – ${apFmtShort(curMicro.end_date)}` : 'Today is outside any microcycle') +
+    card('ti-ball-football', 'Next match',
+      next ? `${next.home_away==='away'?'@':'vs'} ${next.opponent||'—'}` : 'No upcoming',
+      next ? `${next.home_away==='away'?'Away':'Home'} · ${apFmtShort(next.date)}${din>=0?` · in ${din}d`:''}` : 'Season finished') +
+    card('ti-progress', 'Season progress', `${pct}%`, `Week ${wkNow} of ${wkTot}`,
+      `<div style="height:5px;border-radius:3px;background:var(--cm-border);margin-top:7px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--cm-accent)"></div></div>`) +
+    card('ti-layers-subtract', 'Active phase',
+      ph ? ph.name : 'Between phases',
+      ph ? `${Math.round(apDays(ph.start_date, ph.end_date))+1} days · ${ph.counts_availability?'counts':'no count'}` : '');
+
+  // Match density per month
+  const monthOf = d => d.slice(0,7);
+  const counts = {};
+  matches.forEach(m => { const k = monthOf(m.date); counts[k] = (counts[k]||0) + 1; });
+  const monthsArr = [];
+  let md = new Date(s.start_date.slice(0,7) + '-01T00:00:00');
+  const endM = new Date(s.end_date.slice(0,7) + '-01T00:00:00');
+  let g = 0;
+  while (md <= endM && g++ < 24){ monthsArr.push(md.toISOString().slice(0,7)); md.setMonth(md.getMonth()+1); }
+  const MN = ['J','F','M','A','M','J','J','A','S','O','N','D'];
+  const maxC = Math.max(1, ...monthsArr.map(k => counts[k]||0));
+  const densBars = monthsArr.map(k => {
+    const v = counts[k]||0; const h = Math.round(v/maxC*40) + 4;
+    const col = v >= 4 ? 'var(--cm-danger)' : 'var(--cm-accent)';
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px" title="${v} match${v===1?'':'es'}">
+      <div style="font:600 9px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${v||''}</div>
+      <div style="width:100%;max-width:18px;height:${h}px;border-radius:3px;background:${col}"></div>
+      <div style="font:500 10px/1 var(--cm-font-sans);color:var(--cm-fg-faint)">${MN[+k.slice(5,7)-1]}</div>
+    </div>`;
+  }).join('');
+
+  // Competitions breakdown
+  let home = 0, away = 0, untag = 0; const cc = {};
+  matches.forEach(m => { (m.home_away==='away'?away++:home++); if (m.competition_id) cc[m.competition_id] = (cc[m.competition_id]||0)+1; else untag++; });
+  const compRows = comps.map(c => `<span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:${c.color||'var(--cm-fg-muted)'}"></span>${c.name} · ${cc[c.id]||0}</span>`).join('')
+    + (untag ? `<span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:var(--cm-border)"></span>Untagged · ${untag}</span>` : '');
+
+  extras.innerHTML = `
+    <div style="background:var(--cm-bg-soft);border-radius:10px;padding:12px 14px">
+      <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:12px">Match density · per month</div>
+      <div style="display:flex;align-items:flex-end;gap:5px;height:62px">${densBars}</div>
+    </div>
+    <div style="background:var(--cm-bg-soft);border-radius:10px;padding:12px 14px">
+      <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px">Breakdown · ${matches.length} matches</div>
+      <div style="display:flex;gap:14px;margin-bottom:10px;font:500 12.5px/1 var(--cm-font-sans)">
+        <span style="color:var(--cm-success)">Home ${home}</span><span style="color:var(--cm-info)">Away ${away}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-fg-muted)">${compRows||'<span>No competitions yet</span>'}</div>
+    </div>`;
+}
 
 function apNewSeasonFromBig(){
   apSetView('setup');
@@ -1818,16 +1922,17 @@ function apTLRender(){
   const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
 
   document.getElementById('apTimelineSub').textContent = `${_apTL.matches.length} match${_apTL.matches.length===1?'':'es'} · ${_apTL.micros.length} microcycle${_apTL.micros.length===1?'':'s'}`;
+  const H = (_apView === 'big') ? { ph:34, mi:40, ma:26, mac:38, mes:26 } : { ph:22, mi:22, ma:18, mac:30, mes:20 };
   const blockLanes = apModelCfg().usesBlocks ? `
-      <div class="ap-tl-lane-lbl">Macrocycles</div><div class="ap-tl-track" style="height:30px">${macros}</div>
-      <div class="ap-tl-lane-lbl">Mesocycles</div><div class="ap-tl-track" style="height:20px">${mesos}</div>` : '';
+      <div class="ap-tl-lane-lbl">Macrocycles</div><div class="ap-tl-track" style="height:${H.mac}px">${macros}</div>
+      <div class="ap-tl-lane-lbl">Mesocycles</div><div class="ap-tl-track" style="height:${H.mes}px">${mesos}</div>` : '';
   document.getElementById('apTimelineBody').innerHTML = `
     <div class="ap-tl-axis" id="apTLAxisRow"></div>
     <div style="position:relative">
       <div id="apTLGrid" style="position:absolute;top:0;bottom:0;left:0;right:0;pointer-events:none"></div>${todayLine}
-      <div class="ap-tl-lane-lbl">Phases</div><div class="ap-tl-track" style="height:22px">${phases}</div>${blockLanes}
-      <div class="ap-tl-lane-lbl">Microcycles · synced with Calendar</div><div class="ap-tl-track" style="height:22px">${micros}</div>
-      <div class="ap-tl-lane-lbl">Matches · home / away</div><div class="ap-tl-track" style="height:18px">${matches}</div>
+      <div class="ap-tl-lane-lbl">Phases</div><div class="ap-tl-track" style="height:${H.ph}px">${phases}</div>${blockLanes}
+      <div class="ap-tl-lane-lbl">Microcycles · synced with Calendar</div><div class="ap-tl-track" style="height:${H.mi}px">${micros}</div>
+      <div class="ap-tl-lane-lbl">Matches · home / away</div><div class="ap-tl-track" style="height:${H.ma}px">${matches}</div>
     </div>`;
 
   const leg = document.getElementById('apTimelineLegend');
@@ -1839,6 +1944,7 @@ function apTLRender(){
 
   apTLWire();
   apTLApplyZoom(false);
+  apRenderBig();
 }
 
 function apTLZoomStep(dir){
