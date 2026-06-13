@@ -1671,7 +1671,8 @@ function apTLRender(){
     const lines = [range(mi.start_date, mi.end_date)];
     if (matchIn) lines.push(`contains ${matchIn.home_away==='away'?'@':'vs'} ${matchIn.opponent||'match'}`);
     const t = tip({ title:mi.name||'Microcycle', color:col, lines });
-    return `<div data-tip="${t}" data-micro="${mi.id}" onclick="apMicroSelect('${mi.id}')" style="position:absolute;left:${left}%;width:${Math.max(width,0.6)}%;top:1px;bottom:1px;background:color-mix(in srgb, ${col} 22%, transparent);border:${sel?'2px':'0.5px'} solid ${col};border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font:600 9px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${width>4?(mi.name||'MC'):''}</div>`;
+    const mLbl = (mi.name || 'MC').replace(/\s+/g, '');
+    return `<div data-tip="${t}" data-micro="${mi.id}" onclick="apMicroSelect('${mi.id}')" style="position:absolute;left:${left}%;width:${Math.max(width,0.6)}%;top:1px;bottom:1px;background:color-mix(in srgb, ${col} 22%, transparent);border:${sel?'2px':'0.5px'} solid ${col};border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font:600 ${width>4?9:7.5}px/1 var(--cm-font-sans);letter-spacing:-.2px;color:var(--cm-fg-strong);padding:0 1px;white-space:nowrap">${width>1?mLbl:''}</div>`;
   }).join('') : `<span class="ap-tl-hint">No microcycles in this range</span>`;
 
   const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
