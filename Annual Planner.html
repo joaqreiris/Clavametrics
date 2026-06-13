@@ -114,6 +114,19 @@
   .ap-collapse i { transition:transform .15s; }
   .ap-card.is-collapsed > :not(.ap-card-h) { display:none; }
   .ap-card.is-collapsed .ap-collapse i { transform:rotate(-90deg); }
+  /* ── Big timeline view ── */
+  #apBigBar { display:none; }
+  .ap-page.is-big #apBigBar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .ap-page.is-big > .ap-head { display:none; }
+  .ap-page.is-big #apSeasonCard,
+  .ap-page.is-big #apPhasesCard,
+  .ap-page.is-big #apCompsCard,
+  .ap-page.is-big #apMatchesCard,
+  .ap-page.is-big #apPeriodCard { display:none; }
+  .ap-page.is-big #apTimelineCard { margin-top:0; }
+  .ap-page.is-big #apTimelineScroll { min-height:320px; }
+  #apSetupBackBar { display:none; }
+  .ap-page.is-setup #apSetupBackBar { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
 
   /* Date picker */
   .ap-datebtn { width:100%; box-sizing:border-box; height:36px; padding:0 10px; background:var(--cm-bg-soft); color:var(--cm-fg-strong); border:1px solid var(--cm-border); border-radius:8px; font:500 13px/1 var(--cm-font-sans); text-align:left; cursor:pointer; display:flex; align-items:center; gap:7px; }
@@ -169,8 +182,25 @@
         <span class="sub" id="apSeasonSub">Season setup</span>
       </header>
 
+      <!-- ── Big timeline view bar ── -->
+      <div id="apBigBar">
+        <div style="display:flex;flex-direction:column;gap:2px;margin-right:auto">
+          <span style="font:700 20px/1.1 var(--cm-font-sans);color:var(--cm-fg-strong)" id="apBigTitle">Season</span>
+          <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" id="apBigSub">—</span>
+        </div>
+        <button class="ap-btn" id="apBigEditBtn" onclick="apToggleEditMode()"><i class="ti ti-pencil" style="font-size:14px;vertical-align:-2px"></i> Edit microcycles</button>
+        <button class="ap-btn" onclick="apSetView('setup')"><i class="ti ti-settings" style="font-size:14px;vertical-align:-2px"></i> Season setup</button>
+        <button class="ap-btn primary" onclick="apNewSeasonFromBig()"><i class="ti ti-plus" style="font-size:14px;vertical-align:-2px"></i> New season</button>
+      </div>
+
+      <!-- ── Setup back bar ── -->
+      <div id="apSetupBackBar">
+        <button class="ap-btn" onclick="apSetView('big')"><i class="ti ti-arrow-left" style="font-size:14px;vertical-align:-2px"></i> Back to timeline</button>
+        <span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Configure the active season — all sections start collapsed, open what you need.</span>
+      </div>
+
       <!-- ── Season setup ──────────────────────────────────────── -->
-      <div class="ap-card">
+      <div class="ap-card is-collapsed" id="apSeasonCard">
         <div class="ap-card-h">
           <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-calendar-cog" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
@@ -201,7 +231,7 @@
       </div>
 
       <!-- ── Phases ────────────────────────────────────────────── -->
-      <div class="ap-card is-hidden" id="apPhasesCard" style="margin-top:16px">
+      <div class="ap-card is-hidden is-collapsed" id="apPhasesCard" style="margin-top:16px">
         <div class="ap-card-h">
           <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-layout-rows" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
@@ -227,7 +257,7 @@
       </div>
 
       <!-- ── Competitions ──────────────────────────────────────── -->
-      <div class="ap-card is-hidden" id="apCompsCard" style="margin-top:16px">
+      <div class="ap-card is-hidden is-collapsed" id="apCompsCard" style="margin-top:16px">
         <div class="ap-card-h">
           <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-trophy" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
@@ -255,7 +285,7 @@
       </div>
 
       <!-- ── Matches ───────────────────────────────────────────── -->
-      <div class="ap-card is-hidden" id="apMatchesCard" style="margin-top:16px">
+      <div class="ap-card is-hidden is-collapsed" id="apMatchesCard" style="margin-top:16px">
         <div class="ap-card-h">
           <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-ball-football" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
@@ -309,7 +339,7 @@
       </div>
 
       <!-- ── Periodization ─────────────────────────────────────── -->
-      <div class="ap-card is-hidden" id="apPeriodCard" style="margin-top:16px">
+      <div class="ap-card is-hidden is-collapsed" id="apPeriodCard" style="margin-top:16px">
         <div class="ap-card-h">
           <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-stack-2" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
@@ -336,7 +366,7 @@
       </div>
 
       <!-- ── Timeline ──────────────────────────────────────────── -->
-      <div class="ap-card is-hidden" id="apTimelineCard" style="margin-top:16px">
+      <div class="ap-card is-hidden is-collapsed" id="apTimelineCard" style="margin-top:16px">
         <div class="ap-card-h">
           <button class="ap-collapse" onclick="apToggleCard(this)" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button><div class="ic"><i class="ti ti-timeline" style="font-size:18px;color:var(--cm-fg-muted)"></i></div>
           <div>
@@ -368,6 +398,7 @@
 let _apClubId = null, _apTeamId = null;
 let _apSeasons = [];
 let _apSeasonId = null, _apSeasonStart = null, _apSeasonEnd = null, _apEditingSeason = null, _apModel = 'tactical';
+let _apView = 'setup', _apEditMode = false;
 let _apPhaseTypes = [], _apPhases = [];
 
 function apOnTeamChange(){
@@ -427,9 +458,6 @@ async function apLoadSeasons(){
   }
 
   apRenderSeasonsList();
-  // Auto-seleccionar la primera activa (o la primera)
-  const active = _apSeasons.find(s => s.status !== 'archived') || _apSeasons[0];
-  apSelectSeason(active.id);
 }
 
 function apRenderSeasonsList(){
@@ -528,7 +556,9 @@ async function apSaveSeason(){
   document.getElementById('apEnd').value = '';
   apSyncDateBtn('apStart'); apSyncDateBtn('apEnd');
   await apLoadSeasons();
-  if (data?.id) apSelectSeason(data.id);
+  if (data?.id) await apSelectSeason(data.id);
+  apSetView('setup');
+  const ph = document.getElementById('apPhasesCard'); if (ph) ph.classList.remove('is-collapsed');
 }
 
 /* ── Phase types ──────────────────────────────────────────── */
@@ -553,6 +583,73 @@ function apOnPhaseTypeChange(){
 function apDays(a, b){ return Math.max(0, (Date.parse(b) - Date.parse(a)) / 86400000); }
 function apClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 function apToggleCard(btn){ btn.closest('.ap-card').classList.toggle('is-collapsed'); }
+
+function apSetView(mode){
+  if (mode === 'big' && !_apSeasons.length) mode = 'setup';
+  _apView = mode;
+  const page = document.querySelector('.ap-page');
+  page.classList.toggle('is-big', mode === 'big');
+  page.classList.toggle('is-setup', mode === 'setup');
+  if (mode === 'big'){
+    const tl = document.getElementById('apTimelineCard');
+    if (tl){ tl.classList.remove('is-collapsed', 'is-hidden'); }
+    _apEditMode = false;
+    _apSelectedMicro = null;
+    apSyncBigBar();
+    apSyncEditMode();
+    apMicroEditorRender();
+    if (_apSeasonId) { try { apTLApplyZoom(false); } catch(_){} }
+  } else {
+    ['apSeasonCard','apPhasesCard','apCompsCard','apMatchesCard','apPeriodCard','apTimelineCard'].forEach(id => {
+      const c = document.getElementById(id); if (c) c.classList.add('is-collapsed');
+    });
+    apSyncEditMode();
+  }
+}
+
+function apSyncBigBar(){
+  const s = _apSeasons.find(x => x.id === _apSeasonId);
+  const t = document.getElementById('apBigTitle'); const sub = document.getElementById('apBigSub');
+  if (t)   t.textContent   = s ? s.name : 'Season';
+  if (sub) sub.textContent = s ? `${s.start_date} → ${s.end_date} · ${(PLAN_MODELS[s.planning_model]||PLAN_MODELS.tactical).label}` : '';
+}
+
+function apToggleEditMode(){ _apEditMode = !_apEditMode; if (!_apEditMode) _apSelectedMicro = null; apSyncEditMode(); apMicroEditorRender(); }
+
+function apSyncEditMode(){
+  const btn = document.getElementById('apBigEditBtn');
+  if (btn){
+    btn.classList.toggle('primary', _apEditMode);
+    btn.innerHTML = _apEditMode
+      ? '<i class="ti ti-check" style="font-size:14px;vertical-align:-2px"></i> Done editing'
+      : '<i class="ti ti-pencil" style="font-size:14px;vertical-align:-2px"></i> Edit microcycles';
+  }
+  const tb = document.getElementById('apMicroToolbar');
+  if (tb) tb.style.display = (_apView === 'setup' || _apEditMode) ? 'flex' : 'none';
+}
+
+function apEditThisMicro(id){ _apEditMode = true; _apSelectedMicro = id; apSyncEditMode(); apMicroEditorRender(); }
+
+function apNewSeasonFromBig(){
+  apSetView('setup');
+  const c = document.getElementById('apSeasonCard'); if (c) c.classList.remove('is-collapsed');
+  apShowForm();
+}
+
+function apDecideView(){
+  const today = new Date().toISOString().slice(0,10);
+  if (!_apSeasons.length){
+    apSetView('setup');
+    const c = document.getElementById('apSeasonCard'); if (c) c.classList.remove('is-collapsed');
+    return;
+  }
+  let target = _apSeasons.find(s => s.start_date <= today && s.end_date >= today);
+  if (!target){
+    const upcoming = _apSeasons.filter(s => s.start_date > today).sort((a,b) => a.start_date.localeCompare(b.start_date))[0];
+    target = upcoming || _apSeasons.slice().sort((a,b) => b.end_date.localeCompare(a.end_date))[0];
+  }
+  Promise.resolve(apSelectSeason(target.id)).then(() => apSetView('big'));
+}
 
 async function apLoadPhases(){
   const { data } = await window.sb.from('season_phases').select('*').eq('season_id', _apSeasonId).order('start_date');
@@ -1356,6 +1453,15 @@ const DAY_TYPES = {
   tactical:       { label:'Tactical',     bg:'#FBF0DA', tx:'#6B4A07', dot:'#C79A2E' },
   match:          { label:'Match',        bg:'#E6F1FB', tx:'#0C447C', dot:'#185FA5' }
 };
+function apMdDefaultType(label){
+  if (label === 'MD') return 'match';
+  let m = /^MD-(\d+)$/.exec(label);
+  if (m){ return ({1:'activation',2:'speed',3:'duration',4:'muscle_tension',5:'recovery'})[+m[1]] || 'off'; }
+  m = /^MD\+(\d+)$/.exec(label);
+  if (m){ return (+m[1] === 1 || +m[1] === 2) ? 'recovery' : 'off'; }
+  return 'off';
+}
+
 function apMDinfo(ds, matchDates){
   if (matchDates.includes(ds)) return { label:'MD', type:'match' };
   let next = null, prev = null;
@@ -1366,17 +1472,7 @@ function apMDinfo(ds, matchDates){
   let label = '';
   if (useNext && dNext < 99) label = 'MD-' + dNext;
   else if (dPrev < 99) label = 'MD+' + dPrev;
-  let type = 'off';
-  if (useNext){
-    if (dNext === 1) type = 'activation';
-    else if (dNext === 2) type = 'speed';
-    else if (dNext === 3) type = 'duration';
-    else if (dNext === 4) type = 'muscle_tension';
-    else if (dNext === 5) type = 'recovery';
-  } else {
-    if (dPrev === 1 || dPrev === 2) type = 'recovery';
-  }
-  return { label, type };
+  return { label, type: apMdDefaultType(label || 'off') };
 }
 
 async function apLoadTimeline(){
@@ -1422,6 +1518,21 @@ function apMicroEditorRender(){
   const mi = _apTL.micros.find(m => m.id === _apSelectedMicro);
   if (!mi){ ed.classList.add('is-hidden'); ed.innerHTML = ''; return; }
   ed.classList.remove('is-hidden');
+  // Read-only panel in the big timeline view (until "Edit microcycles" is pressed)
+  if (_apView === 'big' && !_apEditMode){
+    const rm = (_apMatches || []).find(m => m.date >= mi.start_date && m.date <= mi.end_date)
+      || (mi.match_date ? { date: mi.match_date, opponent: mi.rival, home_away: mi.home_away } : null);
+    ed.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${mi.name || 'Microcycle'}</span>
+      <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${apFmtShort(mi.start_date)} → ${apFmtShort(mi.end_date)}</span>
+      ${rm ? `<span style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${rm.home_away==='away'?'@':'vs'} ${rm.opponent||'match'} · ${apFmtShort(rm.date)}</span>` : ''}
+      <span style="margin-left:auto;display:inline-flex;gap:8px">
+        <button class="ap-btn" onclick="apOpenMicroInCalendar('${mi.id}')"><i class="ti ti-calendar-event" style="font-size:14px;vertical-align:-2px"></i> Open in Calendar</button>
+        <button class="ap-btn primary" onclick="apEditThisMicro('${mi.id}')"><i class="ti ti-pencil" style="font-size:14px;vertical-align:-2px"></i> Edit</button>
+      </span>
+    </div>`;
+    return;
+  }
   const inRangeEv = (_apMatches || []).filter(m => m.date >= mi.start_date && m.date <= mi.end_date);
   const match = mi.match_date
     ? { date: mi.match_date, opponent: mi.rival, home_away: mi.home_away }
@@ -1437,17 +1548,23 @@ function apMicroEditorRender(){
   let dayCards = '';
   const cur = new Date(mi.start_date + 'T00:00:00'), endD = new Date(mi.end_date + 'T00:00:00');
   let guard = 0;
+  const MD_CHOICES = ['MD','MD-1','MD-2','MD-3','MD-4','MD-5','MD-6','MD+1','MD+2','MD+3'];
   while (cur <= endD && guard++ < 60){
     const ds = cur.toISOString().slice(0,10);
-    const info = apMDinfo(ds, microMatchDates);
-    const type = dp[ds] || info.type;
+    const auto = apMDinfo(ds, microMatchDates);
+    const mdOv = dp['md::' + ds];
+    const curMd = (mdOv === undefined) ? '' : mdOv;
+    const mdLabel = curMd === '' ? auto.label : (curMd === 'none' ? '' : curMd);
+    const type = dp[ds] || apMdDefaultType(mdLabel || 'off');
     const dt = DAY_TYPES[type] || DAY_TYPES.off;
-    const md = info.label;
     const opts = typeOpts.replace(`value="${type}"`, `value="${type}" selected`);
+    const mdOpts = [['', auto.label ? `${auto.label} · auto` : 'Auto'], ...MD_CHOICES.map(v => [v, v]), ['none', '— none']]
+      .map(([v, l]) => `<option value="${v}"${v === curMd ? ' selected' : ''}>${l}</option>`).join('');
+    const mdEdited = curMd !== '';
     dayCards += `<div style="border:0.5px solid var(--cm-border);border-radius:8px;padding:7px 5px 6px;text-align:center;background:${dt.bg}">
       <div style="font:600 10px/1 var(--cm-font-sans);color:${dt.tx}">${DOW[cur.getDay()]}</div>
-      <div style="font:600 13px/1 var(--cm-font-mono);color:${dt.tx};margin:2px 0">${cur.getDate()}</div>
-      <div style="font:500 8px/1 var(--cm-font-mono);color:${dt.tx};opacity:.65;margin-bottom:5px;min-height:8px">${md}</div>
+      <div style="font:600 13px/1 var(--cm-font-mono);color:${dt.tx};margin:2px 0 4px">${cur.getDate()}</div>
+      <select onchange="apSetMD('${ds}', this.value)" title="Match Day — auto by default, editable" style="width:100%;font:700 8px/1 var(--cm-font-mono);border:1px ${mdEdited?'solid':'dashed'} ${mdEdited?dt.tx:'var(--cm-border)'};border-radius:4px;background:transparent;color:${dt.tx};height:18px;cursor:pointer;margin-bottom:4px;text-align:center;text-align-last:center;opacity:${mdEdited?1:.7}">${mdOpts}</select>
       <select onchange="apSetDayType('${ds}', this.value)" style="width:100%;font:500 9px/1 var(--cm-font-sans);border:1px solid var(--cm-border);border-radius:5px;background:var(--cm-surface);color:var(--cm-fg-strong);height:23px;cursor:pointer">${opts}</select>
     </div>`;
     cur.setDate(cur.getDate() + 1);
@@ -1578,6 +1695,16 @@ async function apGenerateWeeks(){
   const { error } = await window.sb.from('microcycles').insert(rows);
   if (error){ alert('Could not generate: ' + error.message); return; }
   await apLoadTimeline();
+}
+
+async function apSetMD(ds, value){
+  const mi = _apTL.micros.find(m => m.id === _apSelectedMicro); if (!mi) return;
+  const dp = Object.assign({}, mi.day_plan || {});
+  if (value === '') delete dp['md::' + ds]; else dp['md::' + ds] = value;
+  mi.day_plan = dp;
+  const { error } = await window.sb.from('microcycles').update({ day_plan: dp }).eq('id', mi.id);
+  if (error){ alert('Could not update MD: ' + error.message); return; }
+  apMicroEditorRender();
 }
 
 async function apSetDayType(ds, type){
@@ -1906,6 +2033,7 @@ function apPickDay(ds){
   await apLoadPhaseTypes();
   apWireImport();
   await apLoadSeasons();
+  apDecideView();
 })();
 </script>
 
