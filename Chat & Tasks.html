@@ -109,11 +109,26 @@
   .task-pill .m { font:500 11.5px/1.2 var(--cm-font-mono); color:#9A3412; margin-top:4px; display:flex; gap:10px; }
   .task-pill .m span { display:inline-flex; align-items:center; gap:3px; }
 
-  .chat-composer { padding:12px 24px 16px; border-top:1px solid var(--cm-border); background:var(--cm-surface); display:flex; align-items:center; gap:8px; }
+  .chat-composer { padding:12px 24px 16px; border-top:1px solid var(--cm-border); background:var(--cm-surface); display:flex; align-items:center; gap:8px; position:relative; }
   .chat-comp-tools { display:flex; gap:4px; }
   .chat-comp-tools button { width:30px; height:30px; border:0; background:transparent; color:var(--cm-fg-muted); border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
   .chat-comp-tools button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
   .chat-comp-tools button .ti { font-size:17px; }
+  /* Composer popovers (emoji + mention) */
+  .cmp-pop { position:absolute; bottom:calc(100% + 6px); left:16px; z-index:60; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:10px; box-shadow:var(--cm-shadow-pop, 0 12px 40px rgba(0,0,0,.18)); padding:8px; }
+  .cmp-pop.is-hidden { display:none; }
+  .cmp-emoji { width:296px; }
+  .cmp-emoji-grid { display:grid; grid-template-columns:repeat(8,1fr); gap:2px; }
+  .cmp-emoji-grid button { border:0; background:transparent; cursor:pointer; font-size:20px; line-height:1; padding:5px; border-radius:7px; }
+  .cmp-emoji-grid button:hover { background:var(--cm-bg-soft); }
+  .cmp-mention { width:264px; max-height:288px; overflow-y:auto; }
+  .cmp-m-item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; cursor:pointer; }
+  .cmp-m-item:hover { background:var(--cm-bg-soft); }
+  .cmp-m-item .av { width:26px; height:26px; border-radius:50%; background:var(--cm-bg-sunk); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; font:600 10.5px/1 var(--cm-font-sans); color:var(--cm-fg); flex-shrink:0; }
+  .cmp-m-item .who { flex:1; min-width:0; }
+  .cmp-m-item .who .n { font:500 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg); }
+  .cmp-m-item .who .r { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .cmp-m-empty { padding:10px; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); }
   .chat-comp-input { flex:1; min-width:0; height:38px; padding:0 12px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); font:var(--cm-body); color:var(--cm-fg); outline:none; }
   .chat-comp-input:focus { border-color:var(--cm-accent); }
   .chat-send { width:38px; height:38px; border-radius:var(--cm-r-3); border:0; background:var(--cm-accent); color:var(--cm-fg-on-accent); cursor:pointer; display:flex; align-items:center; justify-content:center; }
@@ -387,9 +402,9 @@
             <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.mp4,.mov" style="display:none" onchange="handleFileSelect(event)">
             <div class="chat-comp-tools">
               <button title="Attach file" onclick="handleAttachClick()"><i class="ti ti-paperclip"></i></button>
-              <button title="Mention"><i class="ti ti-at"></i></button>
-              <button title="Emoji"><i class="ti ti-mood-smile"></i></button>
-              <button title="Create task"><i class="ti ti-flag-2"></i></button>
+              <button title="Mention" onclick="toggleMentionPop(event)"><i class="ti ti-at"></i></button>
+              <button title="Emoji" onclick="toggleEmojiPop(event)"><i class="ti ti-mood-smile"></i></button>
+              <button title="Create task" onclick="composerCreateTask(event)"><i class="ti ti-flag-2"></i></button>
             </div>
             <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
               <div id="pendingAtt" style="display:none"></div>
@@ -397,6 +412,8 @@
               <input class="chat-comp-input" id="msgInput" placeholder="Message — Enter to send, Shift+Enter for newline">
             </div>
             <button class="chat-send" onclick="sendMessage()"><i class="ti ti-send"></i></button>
+            <div class="cmp-pop cmp-emoji is-hidden" id="emojiPop"></div>
+            <div class="cmp-pop cmp-mention is-hidden" id="mentionPop"></div>
           </div>
         </section>
 
@@ -1319,8 +1336,8 @@ async function saveDetailStatus() {
 }
 
 // ── NEW TASK ──
-function openNewTask() {
-  document.getElementById('newTaskTitle').value    = '';
+function openNewTask(prefillTitle) {
+  document.getElementById('newTaskTitle').value    = prefillTitle || '';
   document.getElementById('newTaskDesc').value     = '';
   document.getElementById('newTaskDue').value      = '';
   document.getElementById('newTaskPriority').value = 'medium';
@@ -1664,6 +1681,121 @@ async function savePinModal() {
     closePinModal();
   }
 }
+
+// ── COMPOSER POPOVERS (emoji + mention) + create task ──
+const COMPOSER_EMOJIS = ['😀','😁','😂','🤣','😊','😉','😍','😘','😎','🤔','😐','😴','😅','😬','😢','😭','😤','😡','🥳','🤩','👍','👎','👏','🙌','🙏','💪','🔥','✅','❌','⭐','✨','💯','⚽','🏆','🥅','📋','📌','📎','⏱️','📅','⚠️','❤️','🎯','🚀','👀','💬','🎉','☝️'];
+
+function _composerCloseAllPops() {
+  document.getElementById('emojiPop')?.classList.add('is-hidden');
+  document.getElementById('mentionPop')?.classList.add('is-hidden');
+}
+
+// Insert text at the caret position of #msgInput, then restore focus past it.
+function _composerInsertAtCursor(text) {
+  const inp = document.getElementById('msgInput');
+  if (!inp) return;
+  const start = inp.selectionStart ?? inp.value.length;
+  const end   = inp.selectionEnd ?? inp.value.length;
+  inp.value = inp.value.slice(0, start) + text + inp.value.slice(end);
+  const pos = start + text.length;
+  inp.focus();
+  try { inp.setSelectionRange(pos, pos); } catch (_) {}
+}
+
+function _openEmojiPop() {
+  const pop = document.getElementById('emojiPop');
+  if (!pop) return;
+  if (!pop.dataset.built) {
+    pop.innerHTML = `<div class="cmp-emoji-grid">${COMPOSER_EMOJIS.map(em => `<button type="button" data-emoji="${em}">${em}</button>`).join('')}</div>`;
+    pop.querySelectorAll('button[data-emoji]').forEach(b => {
+      b.addEventListener('click', () => { _composerInsertAtCursor(b.dataset.emoji); _composerCloseAllPops(); });
+    });
+    pop.dataset.built = '1';
+  }
+  pop.classList.remove('is-hidden');
+}
+
+function _openMentionPop() {
+  const pop = document.getElementById('mentionPop');
+  if (!pop) return;
+  pop.innerHTML = members.length
+    ? members.map((m, i) => {
+        const name = m.full_name || '?';
+        return `<div class="cmp-m-item" data-mi="${i}">
+          <div class="av">${initials(name)}</div>
+          <div class="who"><div class="n">${esc(name)}</div><div class="r">${esc(m.role || '')}</div></div>
+        </div>`;
+      }).join('')
+    : `<div class="cmp-m-empty">No members</div>`;
+  pop.querySelectorAll('.cmp-m-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const m = members[+el.dataset.mi];
+      if (m) {
+        // If the user already typed an "@partial" token before the caret, strip
+        // it first so we don't end up with "@@Name" / "@jo@Name".
+        const inp = document.getElementById('msgInput');
+        if (inp) {
+          const caret  = inp.selectionStart ?? inp.value.length;
+          const before = inp.value.slice(0, caret);
+          const tok    = before.match(/(?:^|\s)(@[^\s]*)$/);
+          if (tok) {
+            const tokenStart = caret - tok[1].length;
+            inp.value = inp.value.slice(0, tokenStart) + inp.value.slice(caret);
+            try { inp.setSelectionRange(tokenStart, tokenStart); } catch (_) {}
+          }
+        }
+        _composerInsertAtCursor('@' + (m.full_name || '') + ' ');
+      }
+      _composerCloseAllPops();
+    });
+  });
+  pop.classList.remove('is-hidden');
+}
+
+function toggleEmojiPop(e) {
+  e?.stopPropagation();
+  const wasHidden = document.getElementById('emojiPop')?.classList.contains('is-hidden');
+  _composerCloseAllPops();
+  if (wasHidden) _openEmojiPop();
+}
+
+function toggleMentionPop(e) {
+  e?.stopPropagation();
+  const wasHidden = document.getElementById('mentionPop')?.classList.contains('is-hidden');
+  _composerCloseAllPops();
+  if (wasHidden) _openMentionPop();
+}
+
+// Create task from composer text → reuse existing openNewTask() modal + insert.
+function composerCreateTask(e) {
+  e?.stopPropagation();
+  _composerCloseAllPops();
+  const title = (document.getElementById('msgInput')?.value || '').trim();
+  openNewTask(title);
+}
+
+// Typing "@" at the start or after whitespace also opens the mention popover.
+document.getElementById('msgInput')?.addEventListener('input', () => {
+  const inp = document.getElementById('msgInput');
+  const pos = inp.selectionStart ?? 0;
+  const ch  = inp.value[pos - 1];
+  const prev = pos >= 2 ? inp.value[pos - 2] : '';
+  if (ch === '@' && (pos === 1 || /\s/.test(prev))) {
+    if (document.getElementById('mentionPop')?.classList.contains('is-hidden')) {
+      _composerCloseAllPops();
+      _openMentionPop();
+    }
+  }
+});
+
+// One popover at a time; close on outside click and Esc.
+document.addEventListener('click', e => {
+  if (e.target.closest('#emojiPop, #mentionPop')) return;
+  _composerCloseAllPops();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') _composerCloseAllPops();
+});
 
 // ── KEYBOARD ──
 document.addEventListener('keydown', e => {
