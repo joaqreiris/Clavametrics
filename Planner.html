@@ -16,6 +16,7 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+<script src="assets/field-system.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
@@ -308,13 +309,21 @@
     margin:18px;
     border-radius:14px;
     overflow:hidden;
-    background-image:url('assets/field.jpg');
-    background-size:cover;
-    background-position:center;
     box-shadow:var(--cm-shadow-2);
     border:1px solid rgba(0,0,0,0.2);
     min-height:520px;
+    --pf-grass:#2f7d4c; --pf-grass-2:#2b7446; --pf-line:rgba(255,255,255,0.92);
   }
+  [data-theme="dark"] .pl-field {
+    --pf-grass:#16331f; --pf-grass-2:#132c1b; --pf-line:rgba(255,255,255,0.74);
+  }
+  /* Vector pitch — sits behind the Fabric canvas, never moves the objects */
+  .pl-pitch {
+    position:absolute; inset:0; z-index:0;
+    background:repeating-linear-gradient(90deg, var(--pf-grass) 0 9%, var(--pf-grass-2) 9% 18%);
+  }
+  .pl-pitch .pf-lines { position:absolute; inset:0; width:100%; height:100%; }
+  .pl-field .canvas-container { position:relative; z-index:1; }
   .pl-field::after {
     content:"";
     position:absolute; inset:0;
@@ -469,6 +478,32 @@
   }
   .pl-field-fab button:hover { background:rgba(0,0,0,0.75); }
   .pl-field-fab button .ti { font-size:16px; }
+
+  /* Field selector — sport + variant + rotate (top-right) */
+  .pl-field-sel {
+    position:absolute; top:14px; right:14px;
+    display:flex; align-items:center; gap:8px;
+    z-index:10;
+    background:rgba(0,0,0,0.55);
+    backdrop-filter:blur(6px);
+    padding:6px 8px; border-radius:9px;
+    font:500 12px/1 var(--cm-font-mono);
+  }
+  .pl-field-sel .pl-field-var { display:flex; gap:2px; }
+  .pl-field-sel .pl-field-var button {
+    background:rgba(0,0,0,0.35); color:#fff; border:1px solid rgba(255,255,255,0.18);
+    padding:5px 9px; font:inherit; cursor:pointer;
+    border-radius:0; margin-left:-1px; text-transform:capitalize;
+  }
+  .pl-field-sel .pl-field-var button:first-child { border-radius:6px 0 0 6px; margin-left:0; }
+  .pl-field-sel .pl-field-var button:last-child  { border-radius:0 6px 6px 0; }
+  .pl-field-sel .pl-field-var button.is-active { background:var(--cm-accent,#22c55e); color:#06210f; border-color:transparent; }
+  .pl-field-sel .pl-field-rot {
+    width:30px; height:30px; border-radius:6px;
+    background:rgba(0,0,0,0.35); color:#fff; border:1px solid rgba(255,255,255,0.18);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .pl-field-sel .pl-field-rot:hover { background:rgba(0,0,0,0.6); }
 
   /* Properties panel */
   #plPropBar {
@@ -939,8 +974,15 @@
         </div>
 
         <div class="pl-field" id="plField">
+          <div class="pl-pitch" id="plPitch"></div>
+
           <div class="pl-field-tag" id="plFieldTag">
             <span class="dot"></span><span id="plFieldLabel">No exercise selected</span>
+          </div>
+
+          <div class="pl-field-sel" id="plFieldSel">
+            <div class="pl-field-var" id="plFieldVar"></div>
+            <button class="pl-field-rot" id="plFieldRotate" title="Rotate"><i class="ti ti-rotate-2"></i></button>
           </div>
 
           <canvas id="plCanvas"></canvas>
@@ -1283,6 +1325,47 @@
     const { width, height } = fieldEl.getBoundingClientRect();
     fc.setWidth(width); fc.setHeight(height); fc.renderAll();
   });
+
+  // ── Vector pitch (field-system) ─────────────────────────────────
+  // Renders the SVG pitch into #plPitch (behind the canvas). Persisted
+  // inside objects_json.field — never touches the tactical objects.
+  let _plField = { type:'football', variant:'full', orient:'h' };
+  function plRenderField(type, variant, orient) {
+    const r = CMField.renderField(document.getElementById('plPitch'), type, variant, orient);
+    _plField = { type:r.sport, variant:r.variant, orient:r.orient };
+    plSyncFieldSelector();
+    return r;
+  }
+
+  // Sport is fixed to football for now (new-sport clubs start from scratch);
+  // the user only picks Full / Half / Blank and the orientation.
+  function plInitFieldSelector() {
+    document.getElementById('plFieldRotate')?.addEventListener('click', () => {
+      plRenderField(_plField.type, _plField.variant, _plField.orient === 'h' ? 'v' : 'h');
+      markDirty();
+    });
+  }
+  function plSyncFieldSelector() {
+    // Rebuild the variant group for the active sport
+    const varWrap = document.getElementById('plFieldVar');
+    if (varWrap) {
+      varWrap.innerHTML = '';
+      (CMField.FIELDS[_plField.type]?.variants || []).forEach(v => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = v;
+        if (v === _plField.variant) b.classList.add('is-active');
+        b.addEventListener('click', () => {
+          plRenderField(_plField.type, v, _plField.orient);
+          markDirty();
+        });
+        varWrap.appendChild(b);
+      });
+    }
+  }
+
+  plInitFieldSelector();
+  plRenderField('football', 'full', 'h');
 
   // ── Canvas state ────────────────────────────────────────────────
   let currentTool      = 'select';
@@ -2624,6 +2707,9 @@
     // Canvas
     _arrowData.clear();
     _loadingExercise = true;
+    // Restore the pitch first (loadFromJSON ignores the `field` key → objects untouched).
+    const _f = (ex.objects_json && ex.objects_json.field) || {};
+    plRenderField(_f.type, _f.variant, _f.orient);   // old/empty → football/full/h
     if (ex.objects_json) {
       fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _loadingExercise = false; _dirty = false; });
     } else {
@@ -2689,6 +2775,8 @@
     const m2   = (players > 0 && area > 0) ? Math.round(area / players) : null;
 
     const mdRaw = document.getElementById('plExMatchDay')?.value;
+    const _oj = fc.toJSON(ARROW_PROPS);
+    _oj.field = _plField;   // pitch sport/variant/orient (ignored by loadFromJSON)
     const payload = {
       name:              document.getElementById('plExName')?.value?.trim() || 'Untitled',
       players_count:     players,
@@ -2706,7 +2794,7 @@
       game_type:         currentGameTypeOn ? (currentGameType || null) : null,
       objective:         document.getElementById('plExObjective')?.value?.trim()   || null,
       description:       document.getElementById('plExDescription')?.value?.trim() || null,
-      objects_json:      fc.toJSON(ARROW_PROPS),
+      objects_json:      _oj,
       visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
     };
 
