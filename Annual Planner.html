@@ -190,6 +190,7 @@
             <div class="ap-field"><label>Start</label><input type="date" id="apStart" style="display:none"><button type="button" class="ap-datebtn" id="apStart_btn" onclick="apOpenCal('apStart', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
             <div class="ap-field"><label>End</label><input type="date" id="apEnd" style="display:none"><button type="button" class="ap-datebtn" id="apEnd_btn" onclick="apOpenCal('apEnd', this)"><i class="ti ti-calendar"></i><span class="lbl ph">Select date</span></button></div>
           </div>
+          <div class="ap-field" style="margin-bottom:14px"><label>Planning model</label><select id="apModelSel" style="height:38px;padding:0 8px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:7px;font:500 13px/1 var(--cm-font-sans)"><option value="tactical">Tactical Periodization — Frade · morphocycle</option><option value="structured">Structured Microcycle — Seirul·lo · typed micros</option><option value="atr">ATR (block) — Issurin · 4–6 wk macrocycles</option><option value="verheijen">Verheijen — football · 6-week blocks</option></select></div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button class="ap-btn" onclick="apHideForm()">Cancel</button>
             <button class="ap-btn primary" onclick="apSaveSeason()">Save season</button>
@@ -366,7 +367,7 @@
 <script>
 let _apClubId = null, _apTeamId = null;
 let _apSeasons = [];
-let _apSeasonId = null, _apSeasonStart = null, _apSeasonEnd = null, _apEditingSeason = null;
+let _apSeasonId = null, _apSeasonStart = null, _apSeasonEnd = null, _apEditingSeason = null, _apModel = 'tactical';
 let _apPhaseTypes = [], _apPhases = [];
 
 function apOnTeamChange(){
@@ -441,8 +442,9 @@ function apRenderSeasonsList(){
       <i class="ti ti-calendar-stats" style="font-size:16px;color:var(--cm-fg-muted)"></i>
       <span style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong);min-width:90px">${s.name}</span>
       <span style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${apFmtShort(s.start_date)} → ${apFmtShort(s.end_date)}</span>
+      <span class="ap-badge" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)">${(PLAN_MODELS[s.planning_model]||PLAN_MODELS.tactical).label}</span>
       <span class="ap-pill ${st}" style="margin-left:auto">${st}</span>
-      <button class="ap-iconbtn is-edit" onclick="event.stopPropagation(); apEditSeason('${s.id}')" title="Edit dates"><i class="ti ti-pencil" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn is-edit" onclick="event.stopPropagation(); apEditSeason('${s.id}')" title="Edit"><i class="ti ti-pencil" style="font-size:14px"></i></button>
     </div>`;
   }).join('');
   if (_apEditingSeason){ apSyncDateBtn('apSeasonEd_start'); apSyncDateBtn('apSeasonEd_end'); }
@@ -456,6 +458,7 @@ function apSeasonEditRow(s){
     <input id="apSeasonEd_name" value="${(s.name||'').replace(/"/g,'&quot;')}" style="${fld};min-width:120px;font:600 14px/1 var(--cm-font-sans)">
     <button type="button" class="ap-datebtn" id="apSeasonEd_start_btn" onclick="apOpenCal('apSeasonEd_start', this)" style="width:auto;min-width:140px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(s.start_date)}</span></button>
     <button type="button" class="ap-datebtn" id="apSeasonEd_end_btn" onclick="apOpenCal('apSeasonEd_end', this)" style="width:auto;min-width:140px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(s.end_date)}</span></button>
+    <select id="apSeasonEd_model" style="${fld};font:500 12px/1 var(--cm-font-sans)">${Object.keys(PLAN_MODELS).map(k=>`<option value="${k}"${k===(s.planning_model||'tactical')?' selected':''}>${PLAN_MODELS[k].label}</option>`).join('')}</select>
     <button class="ap-iconbtn is-edit" onclick="apSaveSeasonEdit('${s.id}')" title="Save" style="margin-left:auto"><i class="ti ti-check" style="font-size:14px"></i></button>
     <button class="ap-iconbtn" onclick="apCancelSeasonEdit()" title="Cancel"><i class="ti ti-x" style="font-size:14px"></i></button>
   </div>`;
@@ -468,9 +471,10 @@ async function apSaveSeasonEdit(id){
   const name  = document.getElementById('apSeasonEd_name').value.trim();
   const start = document.getElementById('apSeasonEd_start').value;
   const end   = document.getElementById('apSeasonEd_end').value;
+  const model = document.getElementById('apSeasonEd_model').value || 'tactical';
   if (!name || !start || !end){ alert('Name, start and end are required.'); return; }
   if (start > end){ alert('Start must be before end.'); return; }
-  const { error } = await window.sb.from('seasons').update({ name, start_date: start, end_date: end }).eq('id', id);
+  const { error } = await window.sb.from('seasons').update({ name, start_date: start, end_date: end, planning_model: model }).eq('id', id);
   if (error){ alert('Could not update season: ' + error.message); return; }
   _apEditingSeason = null;
   await apLoadSeasons();
@@ -482,6 +486,7 @@ async function apSelectSeason(id){
   const s = _apSeasons.find(x => x.id === id);
   if (!s) return;
   _apSeasonId = s.id; _apSeasonStart = s.start_date; _apSeasonEnd = s.end_date;
+  _apModel = s.planning_model || 'tactical';
   apRenderSeasonsList();
   document.getElementById('apPhasesCard').classList.remove('is-hidden');
   document.getElementById('apPhasesSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
@@ -491,12 +496,12 @@ async function apSelectSeason(id){
   document.getElementById('apCompsCard').classList.remove('is-hidden');
   document.getElementById('apCompsSub').textContent = `${s.name} · ${s.start_date} → ${s.end_date}`;
   document.getElementById('apMatchesCard').classList.remove('is-hidden');
-  document.getElementById('apPeriodCard').classList.remove('is-hidden');
+  document.getElementById('apPeriodCard').classList.toggle('is-hidden', !apModelCfg().usesBlocks);
   document.getElementById('apTimelineCard').classList.remove('is-hidden');
   await apLoadPhases();
   await apLoadComps();
   await apLoadMatches();
-  await apLoadPeriodization();
+  if (apModelCfg().usesBlocks) await apLoadPeriodization();
   await apLoadTimeline();
 }
 
@@ -507,12 +512,13 @@ async function apSaveSeason(){
   const name  = document.getElementById('apName').value.trim();
   const start = document.getElementById('apStart').value;
   const end   = document.getElementById('apEnd').value;
+  const model = document.getElementById('apModelSel').value || 'tactical';
   if (!name || !start || !end) { alert('Name, start and end are required.'); return; }
   if (start > end) { alert('Start date must be before end date.'); return; }
 
   const { data, error } = await window.sb.from('seasons').insert({
     club_id: _apClubId, team_id: _apTeamId,
-    name, start_date: start, end_date: end, status: 'active'
+    name, start_date: start, end_date: end, status: 'active', planning_model: model
   }).select('id').single();
   if (error) { alert('Could not save: ' + error.message); return; }
 
@@ -1325,6 +1331,20 @@ async function apDeleteMeso(id){
 let _apTL = { phases:[], matches:[], comps:[], macros:[], mesos:[], micros:[] };
 let _apTLTips = [], _apTLpop = null, _apTLwired = false;
 let _apTLZoom = 0, _apTLLevels = [], _apSelectedMicro = null;
+const PLAN_MODELS = {
+  tactical:   { label:'Tactical Periodization', sub:'Frade · morphocycle',        usesBlocks:false, usesMicroType:false },
+  structured: { label:'Structured Microcycle',  sub:'Seirul·lo · typed micros',    usesBlocks:false, usesMicroType:true  },
+  atr:        { label:'ATR (block)',            sub:'Issurin · 4–6 wk macrocycles', usesBlocks:true,  usesMicroType:false },
+  verheijen:  { label:'Verheijen',              sub:'football · 6-week blocks',     usesBlocks:true,  usesMicroType:false }
+};
+const MICRO_TYPES = {
+  adjustment:  { label:'Adjustment',  bg:'#E9F0FB', tx:'#1B3A66' },
+  load:        { label:'Load',        bg:'#FAEEDA', tx:'#854F0B' },
+  impact:      { label:'Impact',      bg:'#FAECE7', tx:'#993C1D' },
+  competitive: { label:'Competitive', bg:'#E1F5EE', tx:'#085041' }
+};
+function apModelCfg(){ return PLAN_MODELS[_apModel] || PLAN_MODELS.tactical; }
+
 const DAY_TYPES = {
   off:            { label:'Off',          bg:'#F1EFE8', tx:'#444441', dot:'#888780' },
   recovery:       { label:'Recovery',     bg:'#E9F0FB', tx:'#1B3A66', dot:'#85B7EB' },
@@ -1361,7 +1381,7 @@ function apMDinfo(ds, matchDates){
 
 async function apLoadTimeline(){
   const sStart = _apSeasonStart, sEnd = _apSeasonEnd;
-  let miq = window.sb.from('microcycles').select('id,name,start_date,end_date,color,mesocycle_id,match_date,rival,home_away,match_time,day_plan').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
+  let miq = window.sb.from('microcycles').select('id,name,start_date,end_date,color,mesocycle_id,match_date,rival,home_away,match_time,day_plan,micro_type').lte('start_date', sEnd).gte('end_date', sStart).order('start_date');
   if (_apTeamId) miq = miq.eq('team_id', _apTeamId);
   const [ma, me, mi] = await Promise.all([
     window.sb.from('macrocycles').select('name,objective,start_date,end_date,color').eq('season_id', _apSeasonId).order('start_date'),
@@ -1415,6 +1435,11 @@ function apMicroEditorRender(){
     </div>`;
     cur.setDate(cur.getDate() + 1);
   }
+  const microTypeOpts = '<option value="">— Type</option>' + Object.keys(MICRO_TYPES).map(k => `<option value="${k}"${k===(mi.micro_type||'')?' selected':''}>${MICRO_TYPES[k].label}</option>`).join('');
+  let extraField = '';
+  if (apModelCfg().usesBlocks) extraField = `<div class="ap-field"><label>Mesocycle</label><select id="apMicroEd_meso" style="${fld};font:500 12px/1 var(--cm-font-sans)">${mesoOpts}</select></div>`;
+  else if (apModelCfg().usesMicroType) extraField = `<div class="ap-field"><label>Micro type</label><select id="apMicroEd_type" style="${fld};font:500 12px/1 var(--cm-font-sans)">${microTypeOpts}</select></div>`;
+  const gridCols = extraField ? '1.1fr .95fr .95fr 54px 1.1fr auto auto' : '1.3fr .95fr .95fr 54px auto auto';
   ed.innerHTML = `
     <input type="date" id="apMicroEd_start" style="display:none" value="${mi.start_date}">
     <input type="date" id="apMicroEd_end" style="display:none" value="${mi.end_date}">
@@ -1423,12 +1448,12 @@ function apMicroEditorRender(){
       <span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${mi.name||'Microcycle'}</span>
       <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${match?`contains: ${match.home_away==='away'?'@':'vs'} ${match.opponent} · ${apFmtShort(match.date)}`:'no match this week'}</span>
     </div>
-    <div style="display:grid;grid-template-columns:1.1fr .95fr .95fr 54px 1.1fr auto auto;gap:8px;align-items:end">
+    <div style="display:grid;grid-template-columns:${gridCols};gap:8px;align-items:end">
       <div class="ap-field"><label>Name</label><input id="apMicroEd_name" value="${(mi.name||'').replace(/"/g,'&quot;')}" style="height:32px"></div>
       <div class="ap-field"><label>Start</label><button type="button" class="ap-datebtn" id="apMicroEd_start_btn" onclick="apOpenCal('apMicroEd_start', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mi.start_date)}</span></button></div>
       <div class="ap-field"><label>End</label><button type="button" class="ap-datebtn" id="apMicroEd_end_btn" onclick="apOpenCal('apMicroEd_end', this)" style="height:32px"><i class="ti ti-calendar"></i><span class="lbl">${apFmtDate(mi.end_date)}</span></button></div>
       <div class="ap-field"><label>Color</label><input type="color" id="apMicroEd_color" value="${(mi.color&&/^#/.test(mi.color))?mi.color:'#6E8AC4'}" style="height:32px;padding:2px;cursor:pointer"></div>
-      <div class="ap-field"><label>Mesocycle</label><select id="apMicroEd_meso" style="${fld};font:500 12px/1 var(--cm-font-sans)">${mesoOpts}</select></div>
+      ${extraField}
       <button class="ap-btn primary" onclick="apSaveMicro()" style="height:32px" title="Save"><i class="ti ti-check" style="font-size:14px"></i></button>
       <button class="ap-iconbtn" onclick="apDeleteMicro()" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
     </div>
@@ -1453,14 +1478,18 @@ async function apSaveMicro(){
   const start = document.getElementById('apMicroEd_start').value;
   const end   = document.getElementById('apMicroEd_end').value;
   const color = document.getElementById('apMicroEd_color').value;
-  const meso  = document.getElementById('apMicroEd_meso').value || null;
+  const mesoEl = document.getElementById('apMicroEd_meso');
+  const typeEl = document.getElementById('apMicroEd_type');
   if (!name || !start || !end){ alert('Name, start and end are required.'); return; }
   if (end < start){ alert('End must be after start.'); return; }
   const emb = apEmbedMatch(start, end);
-  const { error } = await window.sb.from('microcycles').update({
-    name, start_date: start, end_date: end, color, mesocycle_id: meso, season_id: _apSeasonId,
+  const payload = {
+    name, start_date: start, end_date: end, color, season_id: _apSeasonId,
     match_date: emb.match_date, rival: emb.rival, home_away: emb.home_away, match_time: emb.match_time
-  }).eq('id', id);
+  };
+  if (mesoEl) payload.mesocycle_id = mesoEl.value || null;
+  if (typeEl) payload.micro_type = typeEl.value || null;
+  const { error } = await window.sb.from('microcycles').update(payload).eq('id', id);
   if (error){ alert('Could not save: ' + error.message); return; }
   await apLoadTimeline();
   apMicroEditorRender();
@@ -1631,13 +1660,14 @@ function apTLRender(){
   const todayLine = todayPos != null ? `<div class="ap-tl-today" style="left:${todayPos}%"></div>` : '';
 
   document.getElementById('apTimelineSub').textContent = `${_apTL.matches.length} match${_apTL.matches.length===1?'':'es'} · ${_apTL.micros.length} microcycle${_apTL.micros.length===1?'':'s'}`;
+  const blockLanes = apModelCfg().usesBlocks ? `
+      <div class="ap-tl-lane-lbl">Macrocycles</div><div class="ap-tl-track" style="height:30px">${macros}</div>
+      <div class="ap-tl-lane-lbl">Mesocycles</div><div class="ap-tl-track" style="height:20px">${mesos}</div>` : '';
   document.getElementById('apTimelineBody').innerHTML = `
     <div class="ap-tl-axis" id="apTLAxisRow"></div>
     <div style="position:relative">
       <div id="apTLGrid" style="position:absolute;top:0;bottom:0;left:0;right:0;pointer-events:none"></div>${todayLine}
-      <div class="ap-tl-lane-lbl">Phases</div><div class="ap-tl-track" style="height:22px">${phases}</div>
-      <div class="ap-tl-lane-lbl">Macrocycles</div><div class="ap-tl-track" style="height:30px">${macros}</div>
-      <div class="ap-tl-lane-lbl">Mesocycles</div><div class="ap-tl-track" style="height:20px">${mesos}</div>
+      <div class="ap-tl-lane-lbl">Phases</div><div class="ap-tl-track" style="height:22px">${phases}</div>${blockLanes}
       <div class="ap-tl-lane-lbl">Microcycles · synced with Calendar</div><div class="ap-tl-track" style="height:22px">${micros}</div>
       <div class="ap-tl-lane-lbl">Matches · home / away</div><div class="ap-tl-track" style="height:18px">${matches}</div>
     </div>`;
