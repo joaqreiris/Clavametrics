@@ -159,6 +159,28 @@
   }
   .section-header .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
+  /* My / Team task view toggle */
+  .task-seg {
+    display: inline-flex; gap: 2px; padding: 2px;
+    background: var(--cm-bg-sunk);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-3);
+  }
+  .task-seg-btn {
+    font: 500 12px/1 var(--cm-font-sans);
+    color: var(--cm-fg-muted);
+    background: transparent; border: 0; border-radius: var(--cm-r-2);
+    padding: 5px 10px; cursor: pointer;
+    transition: background var(--cm-dur-1), color var(--cm-dur-1);
+  }
+  .task-seg-btn:hover:not(.is-active):not(:disabled) { color: var(--cm-fg-strong); }
+  .task-seg-btn.is-active {
+    background: var(--cm-surface);
+    color: var(--cm-fg-strong);
+    box-shadow: var(--cm-shadow-1);
+  }
+  .task-seg-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* Modules grid */
   .modules {
     display: grid;
@@ -400,6 +422,8 @@
     transition: border-color var(--cm-dur-1), background var(--cm-dur-1);
   }
   .task .check:hover { border-color: var(--cm-fg-muted); }
+  .task .check.is-disabled { cursor: default; opacity: 0.45; }
+  .task .check.is-disabled:hover { border-color: var(--cm-border-strong); }
   .task.is-done .check {
     background: var(--cm-accent);
     border-color: var(--cm-accent);
@@ -946,6 +970,10 @@
             <h2>Your tasks</h2>
             <span class="count">5</span>
             <div class="right">
+              <div class="task-seg" id="taskSeg" role="tablist" aria-label="Task view">
+                <button type="button" class="task-seg-btn is-active" data-view="my" role="tab" aria-selected="true">My</button>
+                <button type="button" class="task-seg-btn" data-view="team" role="tab" aria-selected="false">Team</button>
+              </div>
               <button id="btnAddTask" class="cm-btn is-ghost is-sm"><i class="ti ti-plus" style="font-size:14px"></i> Add</button>
             </div>
           </div>
@@ -1056,7 +1084,9 @@ document.querySelectorAll('.task').forEach(el => {
 
     const { error } = await window.sb.from('tasks').insert({
       club_id:          clubId,
+      team_id:          window._hubTeamId || null,
       assigned_to:      userId,
+      assigned_to_name: window._hubProfileName || null,
       created_by:       userId,
       created_by_name:  window._hubProfileName || null,
       title,
@@ -1085,7 +1115,11 @@ document.querySelectorAll('.task').forEach(el => {
         .neq('status', 'cancelled')
         .order('due_date', { ascending: true })
         .limit(10);
-      if (refreshed) renderTasks(refreshed);
+      if (refreshed) {
+        window._hubMyTasks = refreshed;
+        // Only repaint if the user is on the "My" view; the new task is theirs.
+        if ((window._hubTaskView || 'my') === 'my') renderTasks(refreshed, 'my');
+      }
     }
   });
 })();
@@ -1269,9 +1303,10 @@ function renderAvailabilityPills(records) {
     `<span class="cm-pill is-danger"><span class="cm-dot"></span>${out} out</span>`;
 }
 
-function renderTasks(tasks) {
+function renderTasks(tasks, view = 'my') {
   const container = document.querySelector('.tasks');
   if (!container) return;
+  const isTeam = view === 'team';
 
   container.querySelectorAll('.task').forEach(el => el.remove());
 
@@ -1299,7 +1334,7 @@ function renderTasks(tasks) {
     const empty = document.createElement('div');
     empty.className = 'task';
     empty.style.cssText = 'justify-content:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)';
-    empty.textContent = 'No pending tasks';
+    empty.textContent = isTeam ? 'No pending team tasks' : 'No pending tasks';
     container.appendChild(empty);
     return;
   }
@@ -1308,26 +1343,36 @@ function renderTasks(tasks) {
     const isDone = task.status === 'done';
     const color = priorityColor[task.priority] || 'var(--cm-fg-muted)';
     const label = priorityLabel[task.priority] || task.priority || '';
-    const from  = task.created_by_name ? ` · from ${task.created_by_name}` : '';
+    // My view: who created it ("from"). Team view: who it's for ("for").
+    const who = isTeam
+      ? (task.assigned_to_name ? ` · for ${task.assigned_to_name}` : '')
+      : (task.created_by_name  ? ` · from ${task.created_by_name}` : '');
     const el = document.createElement('div');
     el.className = 'task' + (isDone ? ' is-done' : '');
     el.dataset.taskId = task.id;
+    // Team tasks are view-only here: the check is shown disabled so you can't
+    // close a teammate's task from the Hub.
+    const checkHtml = isTeam
+      ? `<div class="check is-disabled" role="checkbox" aria-checked="${isDone}" aria-disabled="true"></div>`
+      : `<div class="check" role="checkbox" tabindex="0" aria-checked="${isDone}"></div>`;
     el.innerHTML = `
-      <div class="check" role="checkbox" tabindex="0" aria-checked="${isDone}"></div>
+      ${checkHtml}
       <div class="body">
         <div class="title">${task.title}</div>
-        <div class="meta"><i class="ti ti-flag-2" style="color:${color}"></i> ${label}${from}</div>
+        <div class="meta"><i class="ti ti-flag-2" style="color:${color}"></i> ${label}${who}</div>
       </div>
       <div class="when">${formatDue(task.due_date)}</div>`;
-    const check = el.querySelector('.check');
-    async function toggle() {
-      const nowDone = !el.classList.contains('is-done');
-      el.classList.toggle('is-done');
-      check.setAttribute('aria-checked', nowDone ? 'true' : 'false');
-      await window.sb.from('tasks').update({ status: nowDone ? 'done' : 'pending' }).eq('id', task.id);
+    if (!isTeam) {
+      const check = el.querySelector('.check');
+      async function toggle() {
+        const nowDone = !el.classList.contains('is-done');
+        el.classList.toggle('is-done');
+        check.setAttribute('aria-checked', nowDone ? 'true' : 'false');
+        await window.sb.from('tasks').update({ status: nowDone ? 'done' : 'pending' }).eq('id', task.id);
+      }
+      check.addEventListener('click', () => toggle());
+      check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
     }
-    check.addEventListener('click', () => toggle());
-    check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
     container.appendChild(el);
   });
 }
@@ -1345,8 +1390,25 @@ function renderTasks(tasks) {
     const _bucket = (_prof?.role || _prof?.club_role || '').toLowerCase();
     let _fullAccess = _bucket === 'admin' || _bucket === 'owner';
     if (!_fullAccess && window.isSuperAdmin) { try { _fullAccess = await window.isSuperAdmin(); } catch {} }
-    if (_fullAccess) { const _pt = await window.sb.rpc('primary_team_id'); _hubTeamId = _pt.data || null; }
+
+    // Teams this user may act on (full-access can use any team of the club).
+    let _myTeams = [];
+    if (!_fullAccess) { try { _myTeams = (await window.sb.rpc('my_team_ids')).data || []; } catch {} }
+
+    // 1. Honor the shared active team if it's valid for this user.
+    const _saved = sessionStorage.getItem('cal_active_team');
+    if (_saved && (_fullAccess || _myTeams.includes(_saved))) {
+      _hubTeamId = _saved;
+    } else {
+      // 2. Fall back to a default team.
+      if (_fullAccess) { _hubTeamId = (await window.sb.rpc('primary_team_id')).data || null; }
+      else { _hubTeamId = _myTeams[0] || null; }
+    }
+
+    // Keep it shared with Chat & Tasks / Calendar.
+    if (_hubTeamId) sessionStorage.setItem('cal_active_team', _hubTeamId);
   } catch (e) { console.warn('[Hub] team resolve:', e.message); }
+  window._hubTeamId = _hubTeamId;
   const _teamEq = _hubTeamId ? { team_id: _hubTeamId } : {};
   let _hubPlayerIds = null;
   if (_hubTeamId) {
@@ -1527,7 +1589,49 @@ function renderTasks(tasks) {
   }
 
   console.log('[Hub] tasks:', tasksRes.data, tasksRes.error);
-  if (!tasksRes.error) renderTasks(tasksRes.data ?? []);
+  if (!tasksRes.error) renderTasks(tasksRes.data ?? [], 'my');
+
+  // ── Tasks: My / Team views ──────────────────────────────────────
+  window._hubMyTasks   = tasksRes.error ? [] : (tasksRes.data ?? []);
+  window._hubTeamTasks = null;   // lazy cache (null = not fetched yet)
+  window._hubTaskView  = 'my';
+
+  const _taskSeg = document.getElementById('taskSeg');
+  const _teamBtn = _taskSeg?.querySelector('[data-view="team"]');
+  // No active team → Team view is unavailable.
+  if (!_hubTeamId && _teamBtn) { _teamBtn.disabled = true; _teamBtn.title = 'Join a team to see team tasks'; }
+
+  async function _loadTeamTasks() {
+    if (window._hubTeamTasks) return window._hubTeamTasks;   // cached
+    if (!_hubTeamId) return [];
+    const { data, error } = await window.sb.from('tasks')
+      .select('id, title, priority, status, due_date, assigned_to_name, created_by_name')
+      .eq('club_id', clubId)
+      .eq('team_id', _hubTeamId)
+      .in('status', ['pending', 'in_progress'])
+      .not('assigned_to', 'eq', userId)   // exclude mine (already under "My")
+      .not('created_by', 'eq', userId)
+      .order('due_date', { ascending: true });
+    if (error) console.warn('[Hub] team tasks:', error.message);
+    window._hubTeamTasks = error ? [] : (data ?? []);
+    return window._hubTeamTasks;
+  }
+
+  async function _setTaskView(view) {
+    if (view === 'team' && !_hubTeamId) return;   // guard
+    window._hubTaskView = view;
+    _taskSeg?.querySelectorAll('.task-seg-btn').forEach(b => {
+      const on = b.dataset.view === view;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    if (view === 'team') renderTasks(await _loadTeamTasks(), 'team');
+    else renderTasks(window._hubMyTasks, 'my');
+  }
+
+  _taskSeg?.querySelectorAll('.task-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => { if (!btn.disabled) _setTaskView(btn.dataset.view); });
+  });
 
   let acwrWarningCount = 0;
   if (!rpeRes.error && rpeRes.data?.length) {
