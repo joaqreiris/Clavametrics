@@ -135,6 +135,7 @@
       { href: 'Sessions%20Library.html',icon: 'ti-list-tree',         label: 'Exercise library', key: 'sessions-lib' },
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning',   key: 'daily-planning' },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history', key: 'sessions-history' },
+      { href: 'Video%20Room.html',      icon: 'ti-video',            label: 'Video room' },
       { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad',            key: 'squad' },
       { href: 'Lineup.html',            icon: 'ti-clipboard-check',  label: 'Lineup', count: 'XI', key: 'lineup' },
       { href: 'Availability.html',      icon: 'ti-user-check',       label: 'Availability',     key: 'availability' },

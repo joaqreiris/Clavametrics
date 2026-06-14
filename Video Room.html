@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Room — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ── Topbar (shell comes from sidebar.js) ── */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .spacer { margin-left:auto; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* ── Page ── */
+  .vr-page { padding:26px 32px 96px; max-width:1280px; margin:0 auto; width:100%; }
+  .vr-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:20px; }
+  .vr-head .ttl h1 { font:var(--cm-h1); letter-spacing:-0.01em; color:var(--cm-fg-strong); margin:0; }
+  .vr-head .ttl p  { font:var(--cm-body); color:var(--cm-fg-muted); margin:5px 0 0; }
+  .vr-head .ttl p strong { color:var(--cm-fg); font-weight:600; }
+
+  /* Storage note */
+  .vr-note { display:inline-flex; align-items:center; gap:9px; padding:8px 13px; margin-top:14px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-success-bd); }
+  .vr-note .ic { width:22px; height:22px; border-radius:6px; background:var(--cm-surface); border:1px solid var(--cm-success-bd); display:flex; align-items:center; justify-content:center; color:var(--cm-accent); flex-shrink:0; }
+  .vr-note .ic .ti { font-size:14px; }
+  .vr-note p { margin:0; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vr-note p strong { color:var(--cm-fg); font-weight:600; }
+
+  /* Filter / search bar */
+  .vr-bar { display:flex; align-items:center; gap:10px; margin-bottom:22px; flex-wrap:wrap; }
+  .vr-search { display:flex; align-items:center; gap:8px; height:38px; width:300px; padding:0 12px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); transition:border-color var(--cm-dur-1), box-shadow var(--cm-dur-1); }
+  .vr-search:focus-within { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+  .vr-search .ti { font-size:16px; color:var(--cm-fg-muted); }
+  .vr-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body); color:var(--cm-fg); }
+
+  .vr-filter-wrap { position:relative; }
+  .vr-filter { display:inline-flex; align-items:center; gap:7px; height:38px; padding:0 12px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg); font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; white-space:nowrap; transition:background var(--cm-dur-1), border-color var(--cm-dur-1); }
+  .vr-filter:hover { background:var(--cm-bg-soft); border-color:var(--cm-border-strong); }
+  .vr-filter .lead { color:var(--cm-fg-muted); }
+  .vr-filter .ti { font-size:15px; color:var(--cm-fg-muted); }
+  .vr-filter .chev { font-size:15px; color:var(--cm-fg-faint); margin-left:1px; }
+  .vr-filter.is-active { border-color:var(--cm-border-strong); background:var(--cm-bg-soft); }
+  .vr-filter.is-active .val { color:var(--cm-fg-strong); font-weight:600; }
+
+  .vr-menu { position:absolute; top:calc(100% + 6px); left:0; min-width:180px; background:var(--cm-surface); border:1px solid var(--cm-border-strong); border-radius:var(--cm-r-3); box-shadow:var(--cm-shadow-3, 0 8px 24px rgba(0,0,0,.16)); z-index:120; padding:5px; display:none; max-height:320px; overflow-y:auto; }
+  .vr-menu.is-open { display:block; }
+  .vr-menu button { display:flex; align-items:center; gap:8px; width:100%; text-align:left; border:0; background:transparent; padding:8px 10px; border-radius:var(--cm-r-2); font:500 13px/1.2 var(--cm-font-sans); color:var(--cm-fg); cursor:pointer; }
+  .vr-menu button:hover { background:var(--cm-bg-soft); }
+  .vr-menu button.is-sel { color:var(--cm-accent); font-weight:600; }
+  .vr-menu button .ti { font-size:15px; color:var(--cm-fg-muted); }
+  .vr-menu button.is-sel .ti { color:var(--cm-accent); }
+
+  .vr-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .vr-count { font:var(--cm-mono); color:var(--cm-fg-muted); }
+
+  /* ── Grid ── */
+  .vr-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; }
+  @media (max-width:1080px){ .vr-grid { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:720px){ .vr-grid { grid-template-columns:1fr; } }
+
+  .vr-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); overflow:hidden; box-shadow:var(--cm-shadow-1); cursor:pointer; transition:border-color 140ms, box-shadow 140ms, transform 140ms; display:flex; flex-direction:column; }
+  .vr-card:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); transform:translateY(-2px); }
+
+  .vr-thumb { position:relative; aspect-ratio:16/9; overflow:hidden; background:#0E1116; }
+  .vr-thumb .pitch { position:absolute; inset:0; background-size:cover; background-position:center; }
+  .vr-thumb::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, rgba(8,12,16,0.05) 0%, rgba(8,12,16,0) 32%, rgba(8,12,16,0.45) 100%); }
+  .vr-play { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0.92); z-index:3; width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,0.92); color:#0E1116; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.35); opacity:0; transition:opacity 160ms, transform 160ms; }
+  .vr-play .ti { font-size:24px; margin-left:2px; }
+  .vr-card:hover .vr-play { opacity:1; transform:translate(-50%,-50%) scale(1); }
+
+  .vr-origin { position:absolute; top:10px; left:10px; z-index:3; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px 0 8px; border-radius:999px; background:rgba(255,255,255,0.95); border:1px solid rgba(0,0,0,0.06); font:600 11px/1 var(--cm-font-sans); color:#1c2128; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+  .vr-origin .ti { font-size:14px; }
+  .vr-origin.drive .ti { color:#1FA463; }
+  .vr-origin.dropbox .ti { color:#0061FF; }
+
+  .vr-dur { position:absolute; bottom:10px; right:10px; z-index:3; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:6px; background:rgba(8,12,16,0.82); color:#fff; font:600 11.5px/1 var(--cm-font-mono); letter-spacing:0.02em; }
+  .vr-dur .ti { font-size:12px; opacity:0.85; }
+  .vr-type { position:absolute; bottom:10px; left:10px; z-index:3; display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:rgba(8,12,16,0.6); backdrop-filter:blur(2px); color:#E6E8EB; font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; }
+
+  .vr-body { padding:13px 14px 14px; display:flex; flex-direction:column; gap:10px; flex:1; }
+  .vr-card .top { display:flex; align-items:flex-start; gap:8px; }
+  .vr-card h3 { font:600 14.5px/1.32 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; letter-spacing:-0.005em; flex:1; text-wrap:pretty; word-break:break-word; }
+  .vr-card .more { width:26px; height:26px; flex-shrink:0; margin:-2px -4px 0 0; border:0; background:transparent; border-radius:var(--cm-r-2); color:var(--cm-fg-faint); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-card .more:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vr-card .more .ti { font-size:17px; }
+
+  .vr-meta { display:flex; align-items:center; gap:8px; font:var(--cm-meta); color:var(--cm-fg-muted); }
+  .vr-meta .ti { font-size:13px; }
+  .vr-meta .dotsep { width:3px; height:3px; border-radius:50%; background:var(--cm-fg-faint); flex-shrink:0; }
+
+  .vr-links { display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; padding-top:2px; }
+  .vr-chip { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px 0 7px; border-radius:var(--cm-r-2); font:500 11.5px/1 var(--cm-font-sans); white-space:nowrap; border:1px solid transparent; max-width:100%; overflow:hidden; }
+  .vr-chip span { overflow:hidden; text-overflow:ellipsis; }
+  .vr-chip .ti { font-size:13px; flex-shrink:0; }
+  .vr-chip.session { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd); }
+  .vr-chip.player  { background:var(--cm-violet-bg); color:var(--cm-violet); border-color:var(--cm-violet-bd); }
+  .vr-chip.match   { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+  .vr-chip.muted   { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); border-color:var(--cm-border); }
+  .vr-chip.unlinked { background:var(--cm-warning-bg); color:var(--cm-warning); border:1px dashed var(--cm-warning-bd); }
+
+  /* Skeleton */
+  .vr-skel { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); overflow:hidden; }
+  .vr-skel .sk-thumb { aspect-ratio:16/9; background:var(--cm-bg-soft); }
+  .vr-skel .sk-body { padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .vr-skel .sk-line { height:12px; border-radius:6px; background:var(--cm-bg-soft); }
+  .vr-skel .sk-line.w70 { width:70%; } .vr-skel .sk-line.w40 { width:40%; }
+  .vr-skel, .vr-skel .sk-line, .vr-skel .sk-thumb { animation:vrpulse 1.4s ease-in-out infinite; }
+  @keyframes vrpulse { 0%,100%{opacity:1;} 50%{opacity:0.55;} }
+
+  /* Empty state */
+  .vr-empty { grid-column:1/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:64px 24px; text-align:center; border:1px dashed var(--cm-border-strong); border-radius:var(--cm-r-5); background:var(--cm-surface); }
+  .vr-empty .ic { width:52px; height:52px; border-radius:14px; background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; }
+  .vr-empty .ic .ti { font-size:26px; }
+  .vr-empty h3 { font:600 16px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; }
+  .vr-empty p { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin:0; max-width:320px; }
+
+  /* Add-video modal (shared pattern) */
+  .vr-modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:800; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 180ms; }
+  .vr-modal-backdrop.is-open { opacity:1; pointer-events:auto; }
+  .vr-modal { background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:24px; width:min(460px,92vw); display:flex; flex-direction:column; gap:16px; box-shadow:0 8px 32px rgba(0,0,0,.18); transform:translateY(8px); transition:transform 180ms; }
+  .vr-modal-backdrop.is-open .vr-modal { transform:none; }
+  .vr-modal h3 { font:600 15px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; }
+  .vr-modal label { font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); display:flex; flex-direction:column; gap:6px; }
+  .vr-modal input { background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-2); padding:9px 11px; font:14px/1.4 var(--cm-font-sans); color:var(--cm-fg-strong); width:100%; box-sizing:border-box; }
+  .vr-modal input:focus { outline:2px solid var(--cm-accent); outline-offset:1px; }
+  .vr-prov-hint { display:inline-flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .vr-prov-hint .ti { font-size:14px; }
+  .vr-prov-hint b { color:var(--cm-fg-strong); }
+  .vr-modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
+
+  .vr-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3); padding:8px 16px; font:500 13px/1 var(--cm-font-sans); z-index:900; opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
+  .vr-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="Video Room">
+
+  <!-- Sidebar (injected by sidebar.js) -->
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Video room</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="actions">
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="vr-page">
+
+      <div class="vr-head">
+        <div class="ttl">
+          <h1>Video room</h1>
+          <p><strong id="vrTotal">—</strong> · organized and linked to your sessions, players and matches.</p>
+          <div class="vr-note">
+            <span class="ic"><i class="ti ti-cloud"></i></span>
+            <p>Videos live in <strong>your club's Google Drive &amp; Dropbox</strong> — ClavaMetrics doesn't host them, it links &amp; organizes them.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="vr-bar">
+        <label class="vr-search">
+          <i class="ti ti-search"></i>
+          <input id="vrSearch" placeholder="Search videos…" aria-label="Search videos">
+        </label>
+
+        <div class="vr-filter-wrap" data-filter="link">
+          <button class="vr-filter" type="button">
+            <i class="ti ti-link"></i><span class="lead">Link</span><span class="val">All types</span><i class="ti ti-chevron-down chev"></i>
+          </button>
+          <div class="vr-menu"></div>
+        </div>
+        <div class="vr-filter-wrap" data-filter="date">
+          <button class="vr-filter" type="button">
+            <i class="ti ti-calendar"></i><span class="val">Any time</span><i class="ti ti-chevron-down chev"></i>
+          </button>
+          <div class="vr-menu"></div>
+        </div>
+        <div class="vr-filter-wrap" data-filter="team">
+          <button class="vr-filter" type="button">
+            <i class="ti ti-users-group"></i><span class="val">All teams</span><i class="ti ti-chevron-down chev"></i>
+          </button>
+          <div class="vr-menu"></div>
+        </div>
+
+        <div class="vr-right">
+          <span class="vr-count" id="vrCount">—</span>
+          <button class="cm-btn is-primary" id="vrAddBtn"><i class="ti ti-plus" style="font-size:16px"></i>Add video</button>
+        </div>
+      </div>
+
+      <div class="vr-grid" id="vrGrid"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Add video modal -->
+<div class="vr-modal-backdrop" id="vrModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="vrModalTitle">
+  <div class="vr-modal">
+    <h3 id="vrModalTitle">Add video</h3>
+    <label>Title
+      <input type="text" id="vrTitle" placeholder="e.g. Clava FC vs. Crotenlo — Full match" maxlength="200">
+    </label>
+    <label>Video link (Google Drive / Dropbox)
+      <input type="url" id="vrUrl" placeholder="https://drive.google.com/…">
+    </label>
+    <div class="vr-prov-hint" id="vrProvHint"><i class="ti ti-world"></i>Provider: <b>—</b></div>
+    <label>Thumbnail URL <span style="color:var(--cm-fg-faint)">(optional)</span>
+      <input type="url" id="vrThumb" placeholder="https://…">
+    </label>
+    <div class="vr-modal-actions">
+      <button class="cm-btn is-ghost is-sm" id="vrCancelBtn" type="button">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="vrSaveBtn" type="button">Save video</button>
+    </div>
+  </div>
+</div>
+
+<div class="vr-toast" id="vrToast"></div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+(async () => {
+  if (!(await window.guardModule())) return;
+  await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+  window.applyClubTheme();
+
+  const { data: { user } } = await window.sb.auth.getUser();
+  const userId      = user?.id || null;
+  const profileName = window.__cm_profile?.full_name || null;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const $  = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const grid = $('#vrGrid');
+
+  function toast(msg) {
+    const t = $('#vrToast'); t.textContent = msg; t.classList.add('is-show');
+    setTimeout(() => t.classList.remove('is-show'), 2400);
+  }
+  function detectProvider(url) {
+    const u = (url || '').toLowerCase();
+    if (u.includes('drive.google.com') || u.includes('docs.google.com')) return 'google_drive';
+    if (u.includes('dropbox.com')) return 'dropbox';
+    return 'other';
+  }
+  const PROV = {
+    google_drive: { cls:'drive',   icon:'ti-brand-google-drive', label:'Drive' },
+    dropbox:      { cls:'dropbox', icon:'ti-brand-dropbox',      label:'Dropbox' },
+    other:        { cls:'',        icon:'ti-link',               label:'Link' },
+  };
+  function fmtDate(d) { try { return new Date(d).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); } catch { return ''; } }
+  function fmtDur(sec) {
+    if (sec == null || isNaN(sec)) return null;
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
+  const PITCH = [
+    'radial-gradient(120% 100% at 50% -10%, #1f6b3a 0%, #14502a 45%, #0d3a1f 100%)',
+    'radial-gradient(120% 110% at 70% 0%, #2a527d 0%, #1c3a5c 50%, #122740 100%)',
+    'radial-gradient(120% 100% at 30% 10%, #6d5224 0%, #4d3a18 50%, #34280f 100%)',
+    'radial-gradient(120% 100% at 60% -10%, #5a2440 0%, #401930 50%, #2a1020 100%)',
+    'radial-gradient(120% 100% at 40% 0%, #334155 0%, #232f3e 50%, #161e29 100%)',
+  ];
+  function pitchFor(id) { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return PITCH[h % PITCH.length]; }
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let VIDEOS = [];                                  // enriched video rows
+  const filters = { q:'', link:'all', date:'any', team:'all' };
+
+  // ── Loading skeleton ─────────────────────────────────────────────────────
+  function renderSkeleton() {
+    grid.innerHTML = Array.from({ length: 6 }).map(() => `
+      <div class="vr-skel"><div class="sk-thumb"></div>
+        <div class="sk-body"><div class="sk-line w70"></div><div class="sk-line w40"></div></div></div>`).join('');
+  }
+
+  // ── Data load ────────────────────────────────────────────────────────────
+  async function loadVideos() {
+    renderSkeleton();
+    const { data: videos, error } = await window.sb.from('videos')
+      .select('*').eq('club_id', clubId).order('created_at', { ascending: false });
+    if (error) { console.error('[VideoRoom] videos load error:', error); grid.innerHTML = `<div class="vr-empty"><h3>Couldn't load videos</h3><p>${esc(error.message)}</p></div>`; return; }
+
+    const list = videos || [];
+    const ids  = list.map(v => v.id);
+    const linksByVideo = {};
+    ids.forEach(id => { linksByVideo[id] = []; });
+
+    if (ids.length) {
+      const [vs, vp, vm] = await Promise.all([
+        window.sb.from('video_sessions').select('video_id,session_id').in('video_id', ids),
+        window.sb.from('video_players').select('video_id,player_id').in('video_id', ids),
+        window.sb.from('video_matches').select('video_id,event_id').in('video_id', ids),
+      ]);
+      const sRows = vs.data || [], pRows = vp.data || [], mRows = vm.data || [];
+
+      const sIds = [...new Set(sRows.map(r => r.session_id))];
+      const pIds = [...new Set(pRows.map(r => r.player_id))];
+      const eIds = [...new Set(mRows.map(r => r.event_id))];
+
+      const [sMeta, pMeta, eMeta] = await Promise.all([
+        sIds.length ? window.sb.from('training_sessions').select('id,title,session_date,match_day_offset').in('id', sIds) : { data: [] },
+        pIds.length ? window.sb.from('players').select('id,first_name,last_name').in('id', pIds) : { data: [] },
+        eIds.length ? window.sb.from('calendar_events').select('id,opponent,title,date').in('id', eIds) : { data: [] },
+      ]);
+      const sMap = new Map((sMeta.data || []).map(r => [r.id, r]));
+      const pMap = new Map((pMeta.data || []).map(r => [r.id, r]));
+      const eMap = new Map((eMeta.data || []).map(r => [r.id, r]));
+
+      const sessionLabel = s => {
+        if (!s) return 'Session';
+        if (s.title) return `Session · ${s.title}`;
+        if (s.match_day_offset != null) return `Session · MD${s.match_day_offset > 0 ? '+' : ''}${s.match_day_offset}`;
+        return `Session · ${s.session_date ? fmtDate(s.session_date) : ''}`.trim();
+      };
+      const playerLabel = p => `Player · ${(p && (p.last_name || p.first_name)) || '—'}`;
+      const matchLabel  = e => `Match · ${(e && (e.opponent || e.title)) || 'Match'}`;
+
+      sRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'session', icon:'ti-clipboard-list', label: sessionLabel(sMap.get(r.session_id)) }));
+      pRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'player',  icon:'ti-user',           label: playerLabel(pMap.get(r.player_id)) }));
+      mRows.forEach(r => linksByVideo[r.video_id]?.push({ type:'match',   icon:'ti-ball-football',  label: matchLabel(eMap.get(r.event_id)) }));
+    }
+
+    VIDEOS = list.map(v => ({ ...v, links: linksByVideo[v.id] || [] }));
+    $('#vrTotal').textContent = `${VIDEOS.length} video${VIDEOS.length === 1 ? '' : 's'}`;
+    render();
+  }
+
+  // ── Filtering + render ─────────────────────────────────────────────────────
+  function passesFilters(v) {
+    if (filters.q && !(v.title || '').toLowerCase().includes(filters.q)) return false;
+    if (filters.team !== 'all' && v.team_id !== filters.team) return false;
+    if (filters.link !== 'all') {
+      const types = new Set(v.links.map(l => l.type));
+      if (filters.link === 'unlinked') { if (v.links.length) return false; }
+      else if (!types.has(filters.link)) return false;
+    }
+    if (filters.date !== 'any') {
+      const days = { d7:7, d30:30, d90:90 }[filters.date];
+      if (days && new Date(v.created_at).getTime() < Date.now() - days * 86400000) return false;
+    }
+    return true;
+  }
+
+  function cardHtml(v) {
+    const prov = PROV[v.provider] || PROV.other;
+    const dur  = fmtDur(v.duration_seconds);
+    const type = v.links.some(l => l.type === 'match') ? 'Match'
+               : v.links.some(l => l.type === 'session') ? 'Training'
+               : v.links.some(l => l.type === 'player') ? 'Player' : 'Video';
+    const thumb = v.thumbnail_url
+      ? `style="background-image:url('${esc(v.thumbnail_url)}')"`
+      : `style="background-image:${pitchFor(v.id)}"`;
+
+    const shown = v.links.slice(0, 3);
+    let chips = shown.map(l => `<span class="vr-chip ${l.type}"><i class="ti ${l.icon}"></i><span>${esc(l.label)}</span></span>`).join('');
+    if (v.links.length > 3) chips += `<span class="vr-chip muted">+${v.links.length - 3} more</span>`;
+    if (!v.links.length) chips = `<span class="vr-chip unlinked"><i class="ti ti-link-off"></i><span>Unlinked</span></span>`;
+
+    return `
+      <article class="vr-card" data-url="${esc(v.url)}">
+        <div class="vr-thumb">
+          <div class="pitch" ${thumb}></div>
+          <span class="vr-origin ${prov.cls}"><i class="ti ${prov.icon}"></i>${prov.label}</span>
+          <span class="vr-type">${type}</span>
+          ${dur ? `<span class="vr-dur"><i class="ti ti-clock"></i>${dur}</span>` : ''}
+          <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+        </div>
+        <div class="vr-body">
+          <div class="top">
+            <h3>${esc(v.title || 'Untitled video')}</h3>
+            <button class="more" data-copy="${esc(v.url)}" title="Copy link"><i class="ti ti-dots"></i></button>
+          </div>
+          <div class="vr-meta">
+            <i class="ti ti-calendar-event"></i>${fmtDate(v.created_at)}
+            ${v.uploaded_by_name ? `<span class="dotsep"></span>${esc(v.uploaded_by_name)}` : ''}
+          </div>
+          <div class="vr-links">${chips}</div>
+        </div>
+      </article>`;
+  }
+
+  function render() {
+    const rows = VIDEOS.filter(passesFilters);
+    $('#vrCount').textContent = `${rows.length} of ${VIDEOS.length}`;
+    if (!VIDEOS.length) {
+      grid.innerHTML = `<div class="vr-empty"><span class="ic"><i class="ti ti-video"></i></span>
+        <h3>No videos yet</h3><p>Link your first clip from Google Drive or Dropbox to start building your library.</p>
+        <button class="cm-btn is-primary is-sm" id="vrEmptyAdd"><i class="ti ti-plus" style="font-size:15px"></i>Add video</button></div>`;
+      $('#vrEmptyAdd')?.addEventListener('click', openModal);
+      return;
+    }
+    if (!rows.length) {
+      grid.innerHTML = `<div class="vr-empty"><span class="ic"><i class="ti ti-filter-off"></i></span>
+        <h3>No matches</h3><p>No videos match the current search or filters.</p></div>`;
+      return;
+    }
+    grid.innerHTML = rows.map(cardHtml).join('');
+  }
+
+  grid.addEventListener('click', e => {
+    const copyBtn = e.target.closest('.more');
+    if (copyBtn) { e.stopPropagation(); navigator.clipboard?.writeText(copyBtn.dataset.copy).then(() => toast('Link copied')); return; }
+    const card = e.target.closest('.vr-card');
+    if (card?.dataset.url) window.open(card.dataset.url, '_blank', 'noopener');
+  });
+
+  // ── Filter dropdowns ───────────────────────────────────────────────────────
+  const LINK_OPTS = [
+    { v:'all', label:'All types', icon:'ti-link' },
+    { v:'session', label:'Session', icon:'ti-clipboard-list' },
+    { v:'player', label:'Player', icon:'ti-user' },
+    { v:'match', label:'Match', icon:'ti-ball-football' },
+    { v:'unlinked', label:'Unlinked', icon:'ti-link-off' },
+  ];
+  const DATE_OPTS = [
+    { v:'any', label:'Any time' }, { v:'d7', label:'Last 7 days' },
+    { v:'d30', label:'Last 30 days' }, { v:'d90', label:'Last 90 days' },
+  ];
+
+  function buildMenu(key, opts) {
+    const wrap = document.querySelector(`.vr-filter-wrap[data-filter="${key}"]`);
+    const menu = wrap.querySelector('.vr-menu');
+    const btn  = wrap.querySelector('.vr-filter');
+    const val  = btn.querySelector('.val');
+    menu.innerHTML = opts.map(o =>
+      `<button type="button" data-v="${esc(o.v)}" class="${o.v === filters[key] ? 'is-sel' : ''}">${o.icon ? `<i class="ti ${o.icon}"></i>` : ''}${esc(o.label)}</button>`).join('');
+    btn.onclick = e => {
+      e.stopPropagation();
+      const open = menu.classList.contains('is-open');
+      document.querySelectorAll('.vr-menu').forEach(m => m.classList.remove('is-open'));
+      if (!open) menu.classList.add('is-open');
+    };
+    menu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      filters[key] = b.dataset.v;
+      const o = opts.find(x => x.v === b.dataset.v);
+      val.textContent = o.label;
+      btn.classList.toggle('is-active', b.dataset.v !== opts[0].v);
+      menu.classList.remove('is-open');
+      menu.querySelectorAll('button').forEach(x => x.classList.toggle('is-sel', x === b));
+      render();
+    }));
+  }
+  document.addEventListener('click', () => document.querySelectorAll('.vr-menu').forEach(m => m.classList.remove('is-open')));
+
+  buildMenu('link', LINK_OPTS);
+  buildMenu('date', DATE_OPTS);
+
+  // Team filter — only the teams this user can see
+  (async () => {
+    const prof = await window.getProfile();
+    const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+    let full = bucket === 'admin' || bucket === 'owner';
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
+    let teams = await window.getTeams(clubId);
+    if (!full) { let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {} const s = new Set(mine); teams = teams.filter(t => s.has(t.id)); }
+    buildMenu('team', [{ v:'all', label:'All teams', icon:'ti-users-group' }, ...teams.map(t => ({ v:t.id, label:t.name, icon:'ti-users' }))]);
+  })();
+
+  $('#vrSearch').addEventListener('input', e => { filters.q = e.target.value.trim().toLowerCase(); render(); });
+
+  // ── Add video modal ────────────────────────────────────────────────────────
+  const backdrop = $('#vrModalBackdrop');
+  const urlInput = $('#vrUrl');
+  function openModal() {
+    $('#vrTitle').value = ''; urlInput.value = ''; $('#vrThumb').value = '';
+    $('#vrProvHint').querySelector('b').textContent = '—';
+    backdrop.classList.add('is-open'); $('#vrTitle').focus();
+  }
+  function closeModal() { backdrop.classList.remove('is-open'); }
+  $('#vrAddBtn').addEventListener('click', openModal);
+  $('#vrCancelBtn').addEventListener('click', closeModal);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  urlInput.addEventListener('input', () => {
+    const p = detectProvider(urlInput.value);
+    $('#vrProvHint').querySelector('b').textContent = urlInput.value.trim() ? PROV[p].label : '—';
+  });
+
+  $('#vrSaveBtn').addEventListener('click', async () => {
+    const title = $('#vrTitle').value.trim();
+    const url   = urlInput.value.trim();
+    if (!title) { $('#vrTitle').focus(); return; }
+    if (!url)   { urlInput.focus(); return; }
+
+    const btn = $('#vrSaveBtn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const activeTeam = sessionStorage.getItem('cal_active_team') || null;
+
+    const { error } = await window.sb.from('videos').insert({
+      club_id:          clubId,
+      team_id:          activeTeam,
+      title,
+      url,
+      provider:         detectProvider(url),
+      thumbnail_url:    $('#vrThumb').value.trim() || null,
+      uploaded_by:      userId,
+      uploaded_by_name: profileName,
+    });
+
+    btn.disabled = false; btn.textContent = 'Save video';
+    if (error) { alert('Error saving video: ' + error.message); return; }
+    closeModal(); toast('Video added');
+    await loadVideos();
+  });
+
+  // ── Go ─────────────────────────────────────────────────────────────────────
+  await loadVideos();
+})();
+</script>
+
+</body>
+</html>
