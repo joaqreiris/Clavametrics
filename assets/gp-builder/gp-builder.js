@@ -1546,12 +1546,17 @@
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
+      const _teamPids  = Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null;
+      const _chosenPid = window._gpPlayerId || window.gpState?.playerId || null;
       const ctx = {
         clubId:   _clubId || window._gpClubId || null,
-        playerId: window._gpPlayerId || window.gpState?.playerId || null,
-        mcId:     window._gpMcId     || window.gpState?.mcId     || null,
+        // Clamp al equipo: si el jugador elegido no es del equipo activo, usar el primero del equipo.
+        playerId: (_chosenPid && (!_teamPids || _teamPids.includes(_chosenPid)))
+                    ? _chosenPid
+                    : (_teamPids?.[0] || _chosenPid || null),
+        mcId:     window._gpMcId || window.gpState?.mcId || null,
+        teamPlayerIds: _teamPids,
         asOf:     new Date().toISOString().slice(0, 10),
-        teamId:   (window.sessionStorage?.getItem?.('cal_active_team')) || (window.localStorage?.getItem?.('cal_active_team')) || null,
       };
 
       const sb = window.sb;
