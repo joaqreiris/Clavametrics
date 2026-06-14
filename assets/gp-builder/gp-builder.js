@@ -1551,6 +1551,7 @@
         playerId: window._gpPlayerId || window.gpState?.playerId || null,
         mcId:     window._gpMcId     || window.gpState?.mcId     || null,
         asOf:     new Date().toISOString().slice(0, 10),
+        teamId:   (window.sessionStorage?.getItem?.('cal_active_team')) || (window.localStorage?.getItem?.('cal_active_team')) || null,
       };
 
       const sb = window.sb;
