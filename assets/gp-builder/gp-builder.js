@@ -22,7 +22,7 @@
   // The row/X dimension defaults to player_name in the resolver when none picked.
   const VIZ_TYPES = {
     kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 8,  dimMax: 0 },
-    bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 2,  dimMax: 1 },
+    bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 1 },
     line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
     scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1 },
     radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 0 },
