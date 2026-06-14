@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPE check-in preview</title>
+<!-- Same design tokens + Tabler icons + fonts as the real app -->
+<link rel="stylesheet" href="/clavametrics.css">
+<style>
+  html, body { margin:0; padding:0; background:transparent; }
+  body.cm { background:transparent; }
+  *, *::before, *::after { box-sizing:border-box; }
+
+  /* The screen fills the iframe (the marketing phone frame is the bezel) */
+  .scr {
+    width:100%; height:100vh; overflow:hidden;
+    background:linear-gradient(180deg, #FAFAF9 0%, #FFFFFF 100%);
+    color:#0A0A0A; display:flex; flex-direction:column;
+    font-family:var(--cm-font-sans, system-ui, sans-serif);
+  }
+  .ph-status { display:flex; align-items:center; justify-content:space-between; padding:12px 22px 6px; font:600 12.5px/1 var(--cm-font-sans); color:inherit; flex-shrink:0; }
+  .ph-status .icons { display:flex; gap:5px; align-items:center; font-size:12px; }
+  .ph-body-inner { flex:1; overflow-y:auto; padding-bottom:14px; }
+  .ph-body-inner::-webkit-scrollbar { width:0; }
+
+  .ph-header { padding:6px 22px 12px; display:flex; align-items:center; justify-content:space-between; }
+  .ph-header .date { font:500 12px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; color:#6B7280; }
+  .ph-header .avatar { width:32px; height:32px; border-radius:50%; background:rgba(245,158,11,0.18); color:#B45309; display:flex; align-items:center; justify-content:center; font:600 12px/1 var(--cm-font-sans); border:1px solid rgba(245,158,11,0.30); }
+
+  .ph-hero { padding:4px 22px 18px; }
+  .ph-hero .eyebrow { font:500 11px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:#D97706; margin-bottom:10px; display:inline-flex; align-items:center; gap:6px; }
+  .ph-hero .eyebrow .dot { width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; }
+  .ph-hero h1 { font:600 24px/1.15 var(--cm-font-sans); letter-spacing:-0.02em; color:#0A0A0A; margin:0 0 6px; }
+  .ph-hero p { font:400 14px/1.45 var(--cm-font-sans); color:#6B7280; margin:0; }
+
+  .session-card { margin:0 22px 20px; background:linear-gradient(135deg, rgba(245,158,11,0.10), rgba(245,158,11,0.04)); border:1px solid rgba(245,158,11,0.25); border-radius:14px; padding:14px; }
+  .session-card .row { display:flex; align-items:center; gap:10px; }
+  .session-card .ic { width:36px; height:36px; border-radius:9px; background:rgba(245,158,11,0.18); color:#B45309; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .session-card .ic .ti { font-size:18px; }
+  .session-card h3 { font:600 14px/1.2 var(--cm-font-sans); color:#0A0A0A; margin:0; }
+  .session-card .meta { font:500 11.5px/1.3 var(--cm-font-mono); color:#9A6520; margin-top:2px; }
+  .session-card .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+  .session-card .stat { background:rgba(255,255,255,0.5); border-radius:8px; padding:8px 10px; }
+  .session-card .stat-l { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:#9A6520; margin-bottom:4px; }
+  .session-card .stat-v { font:600 14px/1.2 var(--cm-font-sans); color:#0A0A0A; }
+
+  .rpe-section { padding:0 22px 16px; }
+  .rpe-q { font:600 16px/1.3 var(--cm-font-sans); color:#0A0A0A; margin-bottom:6px; }
+  .rpe-q-sub { font:500 12.5px/1.4 var(--cm-font-sans); color:#6B7280; margin-bottom:16px; }
+
+  .rpe-vscale { display:flex; flex-direction:column; gap:6px; }
+  .rpe-row { display:grid; grid-template-columns:50px 1fr; align-items:center; gap:10px; padding:6px 10px; border-radius:10px; cursor:pointer; border:1.5px solid transparent; transition:background 120ms, border-color 120ms, transform 120ms; }
+  .rpe-row:hover { background:rgba(0,0,0,0.03); }
+  .rpe-row.is-on { background:rgba(245,158,11,0.10); border-color:rgba(245,158,11,0.40); transform:scale(1.02); }
+  .rpe-num { width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; font:700 18px/1 var(--cm-font-mono); color:#fff; flex-shrink:0; }
+  .rpe-num.v0 { background:#9CA3AF; }
+  .rpe-num.v1, .rpe-num.v2 { background:#60A5FA; }
+  .rpe-num.v3, .rpe-num.v4 { background:#22C55E; }
+  .rpe-num.v5, .rpe-num.v6 { background:#FACC15; color:#0A0A0A; }
+  .rpe-num.v7, .rpe-num.v8 { background:#FB923C; }
+  .rpe-num.v9, .rpe-num.v10 { background:#EF4444; }
+  .rpe-row .lbl { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .rpe-row .lbl strong { font:600 13.5px/1.2 var(--cm-font-sans); color:#0A0A0A; }
+  .rpe-row .lbl small { font:500 11.5px/1.3 var(--cm-font-sans); color:#6B7280; }
+
+  .srpe-preview { margin:0 22px 16px; padding:12px 14px; background:rgba(0,0,0,0.04); border-radius:12px; }
+  .srpe-row { display:flex; align-items:baseline; justify-content:space-between; }
+  .srpe-row .l { font:500 11.5px/1 var(--cm-font-mono); color:#6B7280; letter-spacing:0.06em; text-transform:uppercase; }
+  .srpe-row .v { font:600 22px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:#0A0A0A; }
+  .srpe-row .v sub { font:500 12px/1 var(--cm-font-mono); color:#9CA3AF; margin-left:3px; }
+  .srpe-formula { margin-top:8px; font:500 11px/1.4 var(--cm-font-mono); color:#9CA3AF; }
+
+  .pp-chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 22px 18px; }
+  .pp-chip { appearance:none; border:1px solid rgba(0,0,0,0.12); background:transparent; padding:7px 12px; border-radius:999px; font:500 12.5px/1 var(--cm-font-sans); color:#6B7280; cursor:pointer; }
+  .pp-chip.is-on { background:rgba(220,38,38,0.10); border-color:rgba(220,38,38,0.40); color:#B91C1C; }
+
+  .ph-note { margin:0 22px 16px; width:calc(100% - 44px); padding:10px 12px; border:1px solid rgba(0,0,0,0.10); border-radius:12px; background:transparent; resize:none; min-height:56px; font:var(--cm-body-sm, 400 13px/1.5 sans-serif); color:#0A0A0A; outline:none; }
+
+  .ph-submit-wrap { padding:8px 22px 16px; position:sticky; bottom:0; background:linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.95) 30%, #FFF 100%); }
+  .ph-submit { width:100%; height:50px; border:0; border-radius:14px; background:#D97706; color:#fff; font:600 15px/1 var(--cm-font-sans); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 8px 24px rgba(217,119,6,0.30); transition:opacity 120ms; }
+  .ph-submit:disabled { opacity:0.45; cursor:not-allowed; box-shadow:none; }
+
+  /* Confirmation */
+  .ph-success { padding:20px 22px; text-align:center; }
+  .ph-success .ic-wrap { width:84px; height:84px; border-radius:50%; background:rgba(217,119,6,0.12); display:flex; align-items:center; justify-content:center; margin:24px auto 18px; }
+  .ph-success .ic-wrap .num { font:700 36px/1 var(--cm-font-sans); color:#D97706; letter-spacing:-0.02em; }
+  .ph-success h2 { font:600 22px/1.2 var(--cm-font-sans); letter-spacing:-0.02em; color:#0A0A0A; margin:0 0 6px; }
+  .ph-success p { font:var(--cm-body-sm, 400 13px/1.5 sans-serif); color:#6B7280; margin:0 0 22px; }
+  .summary-card { background:rgba(0,0,0,0.03); border-radius:14px; padding:14px; margin:0 0 14px; text-align:left; }
+  .summary-row { display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid rgba(0,0,0,0.06); }
+  .summary-row:last-child { border-bottom:0; }
+  .summary-row .ic { width:30px; height:30px; border-radius:8px; background:rgba(0,0,0,0.05); display:flex; align-items:center; justify-content:center; color:#6B7280; flex-shrink:0; }
+  .summary-row .ic .ti { font-size:15px; }
+  .summary-row .l { flex:1; font:500 13.5px/1.2 var(--cm-font-sans); color:#0A0A0A; }
+  .summary-row .v { font:600 14px/1 var(--cm-font-mono); color:#D97706; }
+  .history-card { background:rgba(0,0,0,0.03); border-radius:14px; padding:14px; margin:0 0 14px; text-align:left; }
+  .history-card .h-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
+  .history-card .h-head .t { font:600 13px/1 var(--cm-font-sans); color:#0A0A0A; }
+  .history-card .h-head .s { font:500 11.5px/1 var(--cm-font-mono); color:#6B7280; }
+  .history-bars { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; align-items:end; height:80px; margin-bottom:8px; }
+  .history-bars .bar { border-radius:5px; background:#D1D5DB; }
+  .history-bars .bar.med { background:#FACC15; }
+  .history-bars .bar.high { background:#FB923C; }
+  .history-bars .bar.peak { background:#EF4444; }
+  .history-bars .bar.today { background:#D97706; }
+  .history-labels { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; font:500 10.5px/1 var(--cm-font-mono); color:#9CA3AF; text-align:center; }
+  .history-labels .lbl.today { color:#D97706; font-weight:700; }
+  .acwr-note { background:linear-gradient(135deg, rgba(34,197,94,0.10), rgba(34,197,94,0.04)); border:1px solid rgba(34,197,94,0.25); border-radius:14px; padding:6px; display:flex; gap:10px; align-items:flex-start; text-align:left; }
+  .acwr-note .ic { width:32px; height:32px; border-radius:8px; background:rgba(34,197,94,0.20); color:#15803D; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .acwr-note .ic .ti { font-size:16px; }
+  .acwr-note .t { font:600 13px/1.2 var(--cm-font-sans); color:#0A0A0A; margin-bottom:4px; }
+  .acwr-note .d { font:500 12px/1.4 var(--cm-font-sans); color:#166534; }
+
+  .hide { display:none !important; }
+</style>
+</head>
+<body class="cm">
+  <div class="scr">
+    <div class="ph-status">
+      <span>9:24</span>
+      <span class="icons"><i class="ti ti-signal-4"></i><i class="ti ti-wifi"></i><i class="ti ti-battery-3"></i></span>
+    </div>
+
+    <!-- FORM -->
+    <div class="ph-body-inner" id="formScreen">
+      <div class="ph-header">
+        <span class="date">Sun · 8 Jun · 21:55</span>
+        <div class="avatar">MR</div>
+      </div>
+
+      <div class="ph-hero">
+        <span class="eyebrow"><span class="dot"></span>Session RPE</span>
+        <h1>How hard was the session?</h1>
+        <p>Hi Martín — just one tap before you rest.</p>
+      </div>
+
+      <div class="session-card">
+        <div class="row">
+          <div class="ic"><i class="ti ti-ball-football"></i></div>
+          <div>
+            <h3>Match · vs Crotenlo FC</h3>
+            <div class="meta">FIRST TEAM · MD</div>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="stat-l">Duration</div><div class="stat-v">90′</div></div>
+          <div class="stat"><div class="stat-l">Type</div><div class="stat-v">Match</div></div>
+          <div class="stat"><div class="stat-l">Date</div><div class="stat-v">8 Jun</div></div>
+        </div>
+      </div>
+
+      <div class="rpe-section">
+        <div class="rpe-q">Rate the overall effort</div>
+        <div class="rpe-q-sub">Tap one number from 0 (rest) to 10 (maximal effort).</div>
+        <div class="rpe-vscale" id="scale">
+          <div class="rpe-row" data-rpe="0"><div class="rpe-num v0">0</div><div class="lbl"><strong>Rest</strong><small>Nothing at all</small></div></div>
+          <div class="rpe-row" data-rpe="1"><div class="rpe-num v1">1</div><div class="lbl"><strong>Very, very easy</strong><small>Just standing</small></div></div>
+          <div class="rpe-row" data-rpe="2"><div class="rpe-num v2">2</div><div class="lbl"><strong>Easy</strong><small>Light walking</small></div></div>
+          <div class="rpe-row" data-rpe="3"><div class="rpe-num v3">3</div><div class="lbl"><strong>Moderate</strong><small>Comfortable jog</small></div></div>
+          <div class="rpe-row" data-rpe="4"><div class="rpe-num v4">4</div><div class="lbl"><strong>Somewhat hard</strong><small>Talking starts to break</small></div></div>
+          <div class="rpe-row" data-rpe="5"><div class="rpe-num v5">5</div><div class="lbl"><strong>Hard</strong><small>Steady effort</small></div></div>
+          <div class="rpe-row" data-rpe="6"><div class="rpe-num v6">6</div><div class="lbl"><strong>Hard +</strong><small>Hard to talk</small></div></div>
+          <div class="rpe-row is-on" data-rpe="7"><div class="rpe-num v7">7</div><div class="lbl"><strong>Very hard</strong><small>Sweating heavily · sustained</small></div></div>
+          <div class="rpe-row" data-rpe="8"><div class="rpe-num v8">8</div><div class="lbl"><strong>Very hard +</strong><small>Hardly any conversation</small></div></div>
+          <div class="rpe-row" data-rpe="9"><div class="rpe-num v9">9</div><div class="lbl"><strong>Extremely hard</strong><small>Almost maximal</small></div></div>
+          <div class="rpe-row" data-rpe="10"><div class="rpe-num v10">10</div><div class="lbl"><strong>Maximal</strong><small>Couldn't go harder</small></div></div>
+        </div>
+      </div>
+
+      <div class="srpe-preview">
+        <div class="srpe-row">
+          <span class="l">Session load (sRPE)</span>
+          <span class="v" id="srpeValue">630 <sub>AU</sub></span>
+        </div>
+        <div class="srpe-formula" id="srpeFormula">7 RPE × 90′ = 630 AU · auto-calculated</div>
+      </div>
+
+      <div class="rpe-section">
+        <div class="rpe-q" style="font-size:14px">Where did you feel it most?</div>
+        <div class="rpe-q-sub" style="margin-bottom:12px">Optional · tag muscle groups that stood out</div>
+      </div>
+      <div class="pp-chips">
+        <button class="pp-chip">Hamstrings</button>
+        <button class="pp-chip is-on">Quadriceps</button>
+        <button class="pp-chip is-on">Calves</button>
+        <button class="pp-chip">Glutes</button>
+        <button class="pp-chip">Lower back</button>
+        <button class="pp-chip">Hip flexors</button>
+        <button class="pp-chip">Knees</button>
+        <button class="pp-chip">Ankles</button>
+        <button class="pp-chip">General fatigue</button>
+      </div>
+
+      <div class="rpe-section">
+        <div class="rpe-q" style="font-size:14px">Anything else?</div>
+        <div class="rpe-q-sub" style="margin-bottom:10px">Optional · only Dr. Acosta and the staff see this</div>
+      </div>
+      <textarea class="ph-note" placeholder="Slight tightness on the right quad late in the game, nothing serious."></textarea>
+
+      <div class="ph-submit-wrap">
+        <button class="ph-submit" id="submitBtn" onclick="submitRPE()">
+          <span id="submitLabel">Send RPE · 7 · sRPE 630</span> <i class="ti ti-arrow-right" style="font-size:16px"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- CONFIRMATION -->
+    <div class="ph-body-inner hide" id="confScreen">
+      <div class="ph-header">
+        <span class="date">Sun · 8 Jun · 21:56</span>
+        <div class="avatar">MR</div>
+      </div>
+      <div class="ph-success">
+        <div class="ic-wrap"><span class="num" id="confRPE">7</span></div>
+        <h2 id="confTitle">Got it. sRPE 630 AU</h2>
+        <p>Thanks Martín — your staff just got it.</p>
+
+        <div class="summary-card">
+          <div class="summary-row"><div class="ic"><i class="ti ti-flame"></i></div><div class="l">RPE</div><div class="v" id="confRPEVal">7 / 10</div></div>
+          <div class="summary-row"><div class="ic"><i class="ti ti-clock"></i></div><div class="l">Duration</div><div class="v">90′</div></div>
+          <div class="summary-row"><div class="ic"><i class="ti ti-activity"></i></div><div class="l">Session load</div><div class="v" id="confLoad">630 AU</div></div>
+          <div class="summary-row"><div class="ic"><i class="ti ti-user"></i></div><div class="l">Player</div><div class="v">M. Rodríguez</div></div>
+        </div>
+
+        <div class="history-card">
+          <div class="h-head"><span class="t">M. Rodríguez</span><span class="s">sRPE · last 7</span></div>
+          <div class="history-bars" id="histBars"></div>
+          <div class="history-labels">
+            <span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span class="lbl today">Sun</span>
+          </div>
+        </div>
+
+        <div class="acwr-note">
+          <div class="ic"><i class="ti ti-info-circle"></i></div>
+          <div>
+            <div class="t">ACWR this microcycle</div>
+            <div class="d">1.12 · inside the sweet-spot. Keep tomorrow's recovery plan.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var DURATION = 90;            // mock session minutes
+  var selectedRPE = 7;         // preselected, like the real preview
+  var scale = document.getElementById('scale');
+  var srpeValue = document.getElementById('srpeValue');
+  var srpeFormula = document.getElementById('srpeFormula');
+  var submitLabel = document.getElementById('submitLabel');
+  var submitBtn = document.getElementById('submitBtn');
+
+  function recalc() {
+    var load = selectedRPE * DURATION;
+    srpeValue.innerHTML = load + ' <sub>AU</sub>';
+    srpeFormula.textContent = selectedRPE + ' RPE × ' + DURATION + '′ = ' + load + ' AU · auto-calculated';
+    submitLabel.textContent = 'Send RPE · ' + selectedRPE + ' · sRPE ' + load;
+    submitBtn.disabled = false;
+  }
+
+  scale.querySelectorAll('.rpe-row').forEach(function (r) {
+    r.addEventListener('click', function () {
+      scale.querySelectorAll('.rpe-row').forEach(function (o) { o.classList.remove('is-on'); });
+      r.classList.add('is-on');
+      selectedRPE = parseInt(r.getAttribute('data-rpe'), 10);
+      recalc();
+    });
+  });
+
+  document.querySelectorAll('.pp-chip').forEach(function (c) {
+    c.addEventListener('click', function () { c.classList.toggle('is-on'); });
+  });
+
+  // 7-day history bars (mock). Index 6 = today (filled on submit).
+  var hist = [420, 560, 240, 610, 380, 0, 0];
+  function classFor(v) {
+    if (v >= 600) return 'peak';
+    if (v >= 450) return 'high';
+    if (v >= 300) return 'med';
+    return '';
+  }
+  function renderBars(todayLoad) {
+    var data = hist.slice(); data[5] = 300; data[6] = todayLoad;
+    var max = Math.max.apply(null, data.concat([700]));
+    var bars = document.getElementById('histBars');
+    bars.innerHTML = '';
+    data.forEach(function (v, i) {
+      var d = document.createElement('div');
+      var cls = 'bar ' + (i === 6 ? 'today' : classFor(v));
+      d.className = cls.trim();
+      d.style.height = Math.max(6, Math.round((v / max) * 80)) + 'px';
+      bars.appendChild(d);
+    });
+  }
+
+  window.submitRPE = function () {
+    var load = selectedRPE * DURATION;
+    document.getElementById('confRPE').textContent = selectedRPE;
+    document.getElementById('confRPEVal').textContent = selectedRPE + ' / 10';
+    document.getElementById('confLoad').textContent = load + ' AU';
+    document.getElementById('confTitle').textContent = 'Got it. sRPE ' + load + ' AU';
+    renderBars(load);
+    document.getElementById('formScreen').classList.add('hide');
+    document.getElementById('confScreen').classList.remove('hide');
+    document.querySelector('.scr').scrollTop = 0;
+  };
+
+  recalc();
+})();
+</script>
+</body>
+</html>
