@@ -2671,9 +2671,12 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
 // Builder cards stored in dashboard_cards are appended to the same grid.
 async function _mountSavedBuilderCards(clubId) {
   if (!window.sb || !window.loadCardsForView) return;
+  if (window.__gptMountingCards) return;
+  window.__gptMountingCards = true;
   const VIEWS = ['ind', 'grp', 'mind', 'mgrp', 'mc'];
   const REPORT_TYPES = { ind:'ind', grp:'grp', mind:'mind', mgrp:'mgrp', mc:'mc' };
 
+  try {
   for (const view of VIEWS) {
     const grid = document.querySelector(`.gp-view[data-view="${view}"] .gp-grid`);
     if (!grid) continue;
@@ -2692,6 +2695,9 @@ async function _mountSavedBuilderCards(clubId) {
     for (const card of builderCards) {
       const config = card.config;
       if (!config || config.schema !== 'gp.card/v1') continue;
+
+      // Si ya hay un elemento para esta card.id en la grilla, no crear otro (evita duplicado).
+      if (grid.querySelector(`.gp-c[data-card-id="${(window.CSS?.escape?.(card.id)) || card.id}"]`)) continue;
 
       const el = document.createElement('div');
       el.className = 'gp-c';
@@ -2740,6 +2746,9 @@ async function _mountSavedBuilderCards(clubId) {
       // resolve real data (async, non-blocking)
       _resolveAndRenderSavedCard(el, config, clubId).catch(e => console.warn('resolve saved card:', e));
     }
+  }
+  } finally {
+    window.__gptMountingCards = false;
   }
 }
 
