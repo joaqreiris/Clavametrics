@@ -125,6 +125,74 @@
 
   .vd-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3); padding:8px 16px; font:500 13px/1 var(--cm-font-sans); z-index:900; opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
   .vd-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ── Link-video modal ── */
+  .vl-backdrop { position:fixed; inset:0; z-index:800; display:none; align-items:center; justify-content:center; padding:24px; background:rgba(8,12,16,0.46); backdrop-filter:blur(7px) saturate(115%); -webkit-backdrop-filter:blur(7px) saturate(115%); }
+  .vl-backdrop.is-open { display:flex; }
+  .vl-modal { width:min(580px,100%); max-height:92vh; display:flex; flex-direction:column; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-6); box-shadow:var(--cm-shadow-pop); overflow:hidden; }
+  .vl-head { display:flex; align-items:flex-start; gap:14px; padding:18px 20px 16px; border-bottom:1px solid var(--cm-border-soft); }
+  .vl-head-ic { width:38px; height:38px; flex-shrink:0; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; }
+  .vl-head-ic .ti { font-size:20px; }
+  .vl-head-txt { flex:1; min-width:0; }
+  .vl-head-txt h2 { font:600 16px/1.2 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); margin:0; }
+  .vl-video { display:flex; align-items:center; gap:8px; margin-top:6px; min-width:0; }
+  .vl-video .th { width:40px; height:26px; border-radius:5px; flex-shrink:0; background:radial-gradient(120% 100% at 30% 10%, #6d5224 0%, #4d3a18 50%, #34280f 100%); position:relative; overflow:hidden; }
+  .vl-video .th .ti { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:13px; color:rgba(255,255,255,.92); }
+  .vl-video .vt { font:600 13px/1.3 var(--cm-font-sans); color:var(--cm-fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vl-video .vm { display:inline-flex; align-items:center; gap:5px; flex-shrink:0; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .vl-video .vm .ti { font-size:13px; }
+  .vl-close { width:30px; height:30px; flex-shrink:0; border:0; background:transparent; border-radius:var(--cm-r-2); color:var(--cm-fg-faint); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background var(--cm-dur-1), color var(--cm-dur-1); }
+  .vl-close:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vl-close .ti { font-size:18px; }
+  .vl-body { padding:18px 20px 8px; overflow-y:auto; }
+  .vl-block { margin-bottom:18px; }
+  .vl-block-label { display:flex; align-items:center; gap:7px; margin-bottom:9px; }
+  .vl-block-label .ti { font-size:14px; color:var(--cm-fg-muted); }
+  .vl-block-label .lab { font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
+  .vl-block-label .multi { margin-left:auto; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-faint); }
+  .vl-combo { position:relative; }
+  .vl-search { display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); transition:border-color var(--cm-dur-1), box-shadow var(--cm-dur-1); }
+  .vl-search.is-open { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+  .vl-search .ti { font-size:16px; color:var(--cm-fg-muted); }
+  .vl-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body); color:var(--cm-fg); }
+  .vl-search input::placeholder { color:var(--cm-fg-faint); }
+  .vl-menu { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:20; background:var(--cm-surface); border:1px solid var(--cm-border-strong); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-3); padding:5px; max-height:230px; overflow-y:auto; }
+  .vl-menu[hidden] { display:none; }
+  .vl-menu-lbl { font:600 10px/1 var(--cm-font-mono); letter-spacing:0.07em; text-transform:uppercase; color:var(--cm-fg-faint); padding:9px 9px 6px; }
+  .vl-opt { display:flex; align-items:center; gap:10px; padding:8px 9px; border-radius:var(--cm-r-2); cursor:pointer; transition:background var(--cm-dur-1); }
+  .vl-opt:hover, .vl-opt.is-focus { background:var(--cm-bg-soft); }
+  .vl-opt .oic { width:26px; height:26px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center; font:600 10.5px/1 var(--cm-font-sans); }
+  .vl-opt .oic.player  { background:var(--cm-violet-bg); color:var(--cm-violet); }
+  .vl-opt .oic.session { background:var(--cm-info-bg); color:var(--cm-info); }
+  .vl-opt .oic.match   { background:var(--cm-success-bg); color:var(--cm-success); }
+  .vl-opt .oic .ti { font-size:14px; }
+  .vl-opt .obody { flex:1; min-width:0; }
+  .vl-opt .on { font:500 13px/1.25 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vl-opt .om { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
+  .vl-opt .oadd { font-size:16px; color:var(--cm-fg-faint); flex-shrink:0; }
+  .vl-opt.is-added .oadd { color:var(--cm-accent); }
+  .vl-opt.is-added { opacity:.62; }
+  .vl-chips { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+  .vl-chips:empty { display:none; }
+  .vl-chip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 6px 0 9px; border-radius:var(--cm-r-2); font:500 12.5px/1 var(--cm-font-sans); border:1px solid transparent; white-space:nowrap; max-width:100%; }
+  .vl-chip .lbl { overflow:hidden; text-overflow:ellipsis; }
+  .vl-chip .lead { font-size:14px; flex-shrink:0; }
+  .vl-chip .av { width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font:700 9px/1 var(--cm-font-sans); flex-shrink:0; }
+  .vl-chip .x { width:18px; height:18px; border:0; background:transparent; border-radius:5px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:currentColor; opacity:.6; flex-shrink:0; }
+  .vl-chip .x:hover { opacity:1; background:rgba(0,0,0,0.06); }
+  .vl-chip .x .ti { font-size:13px; }
+  .vl-chip.session { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd); }
+  .vl-chip.player  { background:var(--cm-violet-bg); color:var(--cm-violet); border-color:var(--cm-violet-bd); }
+  .vl-chip.player .av { background:color-mix(in srgb, var(--cm-violet) 18%, transparent); color:var(--cm-violet); }
+  .vl-chip.match   { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+  .vl-note { display:flex; align-items:flex-start; gap:10px; padding:11px 13px; margin:2px 0 6px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-success-bd); }
+  .vl-note .ic { width:24px; height:24px; flex-shrink:0; border-radius:7px; background:var(--cm-surface); border:1px solid var(--cm-success-bd); display:flex; align-items:center; justify-content:center; color:var(--cm-accent); }
+  .vl-note .ic .ti { font-size:14px; }
+  .vl-note p { margin:0; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vl-note p strong { color:var(--cm-fg); font-weight:600; }
+  .vl-foot { display:flex; align-items:center; gap:10px; padding:14px 20px; border-top:1px solid var(--cm-border-soft); background:var(--cm-bg-soft); }
+  .vl-foot .summary { font:var(--cm-meta); color:var(--cm-fg-muted); margin-right:auto; }
+  .vl-foot .summary b { color:var(--cm-fg-strong); font-weight:600; }
 </style>
 </head>
 <body class="cm">
@@ -157,6 +225,59 @@
 </div>
 
 <div class="vd-toast" id="vdToast"></div>
+
+<!-- Link video modal -->
+<div class="vl-backdrop" id="vlBackdrop" role="dialog" aria-modal="true" aria-labelledby="vlTitle">
+  <div class="vl-modal">
+    <header class="vl-head">
+      <div class="vl-head-ic"><i class="ti ti-link"></i></div>
+      <div class="vl-head-txt">
+        <h2 id="vlTitle">Link video</h2>
+        <div class="vl-video">
+          <span class="th"><i class="ti ti-player-play-filled"></i></span>
+          <span class="vt" id="vlVideoTitle"></span>
+          <span class="vm" id="vlVideoDur" style="display:none"><i class="ti ti-clock"></i><span></span></span>
+        </div>
+      </div>
+      <button class="vl-close" id="vlClose" aria-label="Close"><i class="ti ti-x"></i></button>
+    </header>
+    <div class="vl-body">
+      <div class="vl-block">
+        <div class="vl-block-label"><i class="ti ti-clipboard-list"></i><span class="lab">Session</span><span class="multi">single or multiple</span></div>
+        <div class="vl-combo" data-kind="session">
+          <div class="vl-search"><i class="ti ti-search"></i><input placeholder="Search a training session…" autocomplete="off"></div>
+          <div class="vl-menu" hidden></div>
+        </div>
+        <div class="vl-chips" data-chips="session"></div>
+      </div>
+      <div class="vl-block">
+        <div class="vl-block-label"><i class="ti ti-user"></i><span class="lab">Players</span><span class="multi">add one or more</span></div>
+        <div class="vl-combo" data-kind="player">
+          <div class="vl-search"><i class="ti ti-search"></i><input placeholder="Add a player…" autocomplete="off"></div>
+          <div class="vl-menu" hidden></div>
+        </div>
+        <div class="vl-chips" data-chips="player"></div>
+      </div>
+      <div class="vl-block">
+        <div class="vl-block-label"><i class="ti ti-ball-football"></i><span class="lab">Match</span><span class="multi">single</span></div>
+        <div class="vl-combo" data-kind="match">
+          <div class="vl-search"><i class="ti ti-search"></i><input placeholder="Search a match…" autocomplete="off"></div>
+          <div class="vl-menu" hidden></div>
+        </div>
+        <div class="vl-chips" data-chips="match"></div>
+      </div>
+      <div class="vl-note">
+        <span class="ic"><i class="ti ti-arrows-exchange"></i></span>
+        <p>This link works <strong>both ways</strong> — the video will also appear inside each linked session, player profile and match.</p>
+      </div>
+    </div>
+    <footer class="vl-foot">
+      <span class="summary" id="vlSummary"><b>0</b> links selected</span>
+      <button class="cm-btn is-secondary" id="vlCancel">Cancel</button>
+      <button class="cm-btn is-primary" id="vlSave"><i class="ti ti-link" style="font-size:16px"></i>Link</button>
+    </footer>
+  </div>
+</div>
 
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
@@ -270,7 +391,7 @@
         <div class="vd-panel">
           <div class="vd-panel-hd">
             <i class="ti ti-link"></i><h2>Linked to</h2>
-            <button class="add" id="vdLinkBtn" disabled title="Linking is coming soon"><i class="ti ti-plus"></i>Link</button>
+            <button class="add" id="vdLinkBtn"><i class="ti ti-plus"></i>Link</button>
           </div>
           <div class="vd-panel-bd" id="vdLinks"><div class="vd-empty-links">Loading…</div></div>
         </div>
@@ -381,6 +502,141 @@
   });
 
   await loadLinks();
+
+  // ── Link video modal ───────────────────────────────────────────────────────
+  (function setupLinkModal() {
+    const backdrop = document.getElementById('vlBackdrop');
+    const KIND_LABEL = { session:'Sessions', player:'Players', match:'Matches' };
+    const KIND_ICON  = { session:'ti-clipboard-list', match:'ti-ball-football' };
+    const LISTS = { session:null, player:null, match:null };
+    const sel = { session:new Map(), player:new Map(), match:new Map() }; // id -> { id, label, initials? }
+    let listsLoaded = false;
+
+    const combos = {};
+    backdrop.querySelectorAll('.vl-combo').forEach(c => {
+      combos[c.dataset.kind] = {
+        kind: c.dataset.kind,
+        input: c.querySelector('input'),
+        search: c.querySelector('.vl-search'),
+        menu: c.querySelector('.vl-menu'),
+        chips: backdrop.querySelector(`.vl-chips[data-chips="${c.dataset.kind}"]`),
+      };
+    });
+
+    async function ensureLists() {
+      if (listsLoaded) return;
+      const [s, p, m] = await Promise.all([
+        window.sb.from('training_sessions').select('id,title,session_date,match_day_offset').eq('club_id', clubId).order('session_date', { ascending: false }),
+        window.getActivePlayers(clubId),
+        window.sb.from('calendar_events').select('id,opponent,title,date').eq('club_id', clubId).eq('type', 'match').order('date', { ascending: false }),
+      ]);
+      const sLab = r => r.title || (r.match_day_offset != null ? `MD${r.match_day_offset > 0 ? '+' : ''}${r.match_day_offset}` : (r.session_date ? fmtDate(r.session_date) : 'Session'));
+      LISTS.session = (s.data || []).map(r => ({ id:r.id, label:sLab(r), sub:r.session_date ? fmtDate(r.session_date) : '', search:`${r.title || ''} ${sLab(r)}`.toLowerCase() }));
+      LISTS.player  = (p || []).map(r => {
+        const full = `${r.first_name || ''} ${r.last_name || ''}`.trim();
+        const label = `${r.last_name || ''}${r.last_name && r.first_name ? ', ' : ''}${r.first_name || ''}`.trim() || '—';
+        return { id:r.id, label, initials:initials(full), sub:[r.number ? `#${r.number}` : '', r.position].filter(Boolean).join(' · '), search:full.toLowerCase() };
+      });
+      LISTS.match = (m.data || []).map(r => ({ id:r.id, label:r.opponent ? `vs ${r.opponent}` : (r.title || 'Match'), sub:r.date ? fmtDate(r.date) : '', search:`${r.opponent || ''} ${r.title || ''}`.toLowerCase() }));
+      listsLoaded = true;
+    }
+
+    function updateSummary() {
+      const n = sel.session.size + sel.player.size + sel.match.size;
+      document.getElementById('vlSummary').innerHTML = `<b>${n}</b> link${n === 1 ? '' : 's'} selected`;
+    }
+
+    function renderChips(kind) {
+      combos[kind].chips.innerHTML = [...sel[kind].values()].map(it => {
+        const lead = kind === 'player' ? `<span class="av">${esc(it.initials)}</span>` : `<i class="ti ${KIND_ICON[kind]} lead"></i>`;
+        return `<span class="vl-chip ${kind}" data-id="${esc(it.id)}">${lead}<span class="lbl">${esc(it.label)}</span><button class="x" aria-label="Remove"><i class="ti ti-x"></i></button></span>`;
+      }).join('');
+    }
+
+    function renderMenu(kind, q) {
+      const { menu } = combos[kind];
+      const items = (LISTS[kind] || []).filter(it => it.search.includes(q));
+      if (!items.length) { menu.innerHTML = `<div class="vl-menu-lbl">No matches</div>`; menu.hidden = false; return; }
+      const shown = items.slice(0, 40);
+      menu.innerHTML = `<div class="vl-menu-lbl">${KIND_LABEL[kind]} · ${items.length} match${items.length === 1 ? '' : 'es'}</div>` + shown.map(it => {
+        const added = sel[kind].has(it.id);
+        const oic = kind === 'player' ? `<span class="oic player">${esc(it.initials)}</span>` : `<span class="oic ${kind}"><i class="ti ${KIND_ICON[kind]}"></i></span>`;
+        return `<div class="vl-opt ${added ? 'is-added' : ''}" data-id="${esc(it.id)}">${oic}<div class="obody"><div class="on">${esc(it.label)}</div>${it.sub ? `<div class="om">${esc(it.sub)}${added ? ' · added' : ''}</div>` : (added ? `<div class="om">added</div>` : '')}</div><i class="ti ${added ? 'ti-circle-check-filled' : 'ti-circle-plus'} oadd"></i></div>`;
+      }).join('');
+      menu.hidden = false;
+    }
+
+    function toggle(kind, itemId) {
+      const it = (LISTS[kind] || []).find(x => x.id === itemId);
+      if (!it) return;
+      if (sel[kind].has(itemId)) { sel[kind].delete(itemId); }
+      else {
+        if (kind === 'match') sel.match.clear();   // match is single
+        sel[kind].set(itemId, it);
+      }
+      renderChips(kind); updateSummary();
+    }
+
+    // Per-combo wiring
+    Object.values(combos).forEach(c => {
+      c.input.addEventListener('focus', () => { c.search.classList.add('is-open'); renderMenu(c.kind, c.input.value.trim().toLowerCase()); });
+      c.input.addEventListener('input', () => renderMenu(c.kind, c.input.value.trim().toLowerCase()));
+      c.menu.addEventListener('click', e => {
+        const opt = e.target.closest('.vl-opt'); if (!opt) return;
+        toggle(c.kind, opt.dataset.id);
+        renderMenu(c.kind, c.input.value.trim().toLowerCase()); // keep open, refresh added-state
+        c.input.focus();
+      });
+      c.chips.addEventListener('click', e => {
+        const x = e.target.closest('.x'); if (!x) return;
+        const chip = x.closest('.vl-chip');
+        sel[c.kind].delete(chip.dataset.id);
+        renderChips(c.kind); updateSummary();
+        if (!c.menu.hidden) renderMenu(c.kind, c.input.value.trim().toLowerCase());
+      });
+    });
+
+    // Close menus when clicking elsewhere inside the modal
+    backdrop.querySelector('.vl-modal').addEventListener('click', e => {
+      if (e.target.closest('.vl-combo')) return;
+      Object.values(combos).forEach(c => { c.menu.hidden = true; c.search.classList.remove('is-open'); });
+    });
+
+    function open() {
+      ['session', 'player', 'match'].forEach(k => { sel[k].clear(); combos[k].input.value = ''; combos[k].menu.hidden = true; combos[k].search.classList.remove('is-open'); renderChips(k); });
+      updateSummary();
+      document.getElementById('vlVideoTitle').textContent = v.title || 'Untitled video';
+      const d = fmtDur(v.duration_seconds), durEl = document.getElementById('vlVideoDur');
+      if (d) { durEl.style.display = ''; durEl.querySelector('span').textContent = d; } else { durEl.style.display = 'none'; }
+      backdrop.classList.add('is-open');
+      ensureLists();
+    }
+    function close() { backdrop.classList.remove('is-open'); }
+
+    document.getElementById('vdLinkBtn').addEventListener('click', open);
+    document.getElementById('vlClose').addEventListener('click', close);
+    document.getElementById('vlCancel').addEventListener('click', close);
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && backdrop.classList.contains('is-open')) close(); });
+
+    document.getElementById('vlSave').addEventListener('click', async () => {
+      const jobs = [];
+      if (sel.session.size) jobs.push(window.sb.from('video_sessions').upsert([...sel.session.keys()].map(k => ({ video_id:id, session_id:k })), { onConflict:'video_id,session_id', ignoreDuplicates:true }));
+      if (sel.player.size)  jobs.push(window.sb.from('video_players').upsert([...sel.player.keys()].map(k => ({ video_id:id, player_id:k })), { onConflict:'video_id,player_id', ignoreDuplicates:true }));
+      if (sel.match.size)   jobs.push(window.sb.from('video_matches').upsert([...sel.match.keys()].map(k => ({ video_id:id, event_id:k })), { onConflict:'video_id,event_id', ignoreDuplicates:true }));
+      if (!jobs.length) { close(); return; }
+
+      const btn = document.getElementById('vlSave');
+      btn.disabled = true; btn.textContent = 'Linking…';
+      const results = await Promise.all(jobs);
+      btn.disabled = false; btn.innerHTML = '<i class="ti ti-link" style="font-size:16px"></i>Link';
+      const err = results.find(r => r.error);
+      if (err) { alert('Error linking: ' + err.error.message); return; }
+      close();
+      await loadLinks();   // refresh "Linked to" without reload
+      toast('Links added');
+    });
+  })();
 })();
 </script>
 
