@@ -925,8 +925,7 @@
           <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
-        <a class="module is-soon" aria-disabled="true" tabindex="-1">
-          <span class="soon-tag">Soon</span>
+        <a class="module" href="Video%20Room.html">
           <div class="module-top">
             <div class="module-icon is-neutral"><i class="ti ti-video"></i></div>
             <div>
@@ -935,8 +934,10 @@
             </div>
           </div>
           <div class="module-foot">
-            <i class="ti ti-sparkles"></i> Beta in Q3
+            <!-- Source: videos count for the club → _videosCntRes -->
+            <span id="modFootVideoRoom"><i class="ti ti-video"></i> —</span>
           </div>
+          <span class="module-arrow" aria-hidden="true"><i class="ti ti-arrow-up-right"></i></span>
         </a>
 
       </div>
@@ -1724,7 +1725,7 @@ function renderTasks(tasks, view = 'my') {
   renderGreetSub(mcRes.data, todaySessionRes.data, today, _hubNextMatch);
 
   // ── Secondary queries — module footers + new KPI data ─────────────────────
-  const [_sessWeekRes, _matchRptRes, _gymNewRes, _anthropRes, _sessGpsCheckRes] = await Promise.all([
+  const [_sessWeekRes, _matchRptRes, _gymNewRes, _anthropRes, _sessGpsCheckRes, _videosCntRes] = await Promise.all([
     // Sessions this week Mon–Sun — source for sessions_week KPI + Planner footer
     window.sb.from('training_sessions')
       .select('id, session_date, session_type')
@@ -1756,6 +1757,10 @@ function renderTasks(tasks, view = 'my') {
       .eq('club_id', clubId).eq('is_historical', false)
       .gte('session_date', date7)
       .lte('session_date', today),
+    // Total videos for the club — source for Video room module footer
+    window.sb.from('videos')
+      .select('id', { count: 'exact', head: true })
+      .eq('club_id', clubId),
   ]);
 
   // ── Dynamic module footers ─────────────────────────────────────────────────
@@ -1868,6 +1873,16 @@ function renderTasks(tasks, view = 'my') {
       } else {
         el.innerHTML = `<i class="ti ti-scale"></i> No weigh-in data`;
       }
+    }
+  }
+  {
+    // Video room — total videos for the club
+    const el = document.getElementById('modFootVideoRoom');
+    if (el) {
+      const n = _videosCntRes?.count ?? 0;
+      el.innerHTML = n > 0
+        ? `<i class="ti ti-video"></i> ${n} video${n === 1 ? '' : 's'}`
+        : `<i class="ti ti-video"></i> No videos yet`;
     }
   }
 
