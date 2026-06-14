@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pricing — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#15803D">
-  <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <style>
   body.cm { background: var(--cm-bg); }
+
+  /* Brand lock — marketing is a fixed light + pitch-green surface,
+     independent of any in-app theme/accent a user persisted. */
+  body.cm {
+    --cm-accent:#15803D; --cm-accent-hover:#166534; --cm-accent-press:#14532D;
+    --cm-accent-soft:#ECFDF5; --cm-fg-on-accent:#FFFFFF; --cm-focus-ring:rgba(21,128,61,0.22);
+  }
 
   /* ─── Marketing top nav ─── */
   .mk-nav {
@@ -41,6 +42,9 @@
   .mk-links a.is-active { color: var(--cm-fg-strong); }
   .mk-cta { margin-left: auto; display:flex; align-items:center; gap: 10px; }
   .mk-cta .signin { font: 500 13.5px/1 var(--cm-font-sans); color: var(--cm-fg); text-decoration:none; padding: 8px 12px; }
+  .mk-lang { display:inline-flex; align-items:center; gap:5px; height:30px; padding:0 9px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border); background:transparent; font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); cursor:pointer; }
+  .mk-lang:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
+  .mk-lang .ti { font-size:15px; }
   .mk-cta .signin:hover { color: var(--cm-fg-strong); }
 
   /* ─── Page chrome ─── */
@@ -449,22 +453,23 @@
 <body class="cm">
 
 <nav class="mk-nav" data-screen-label="01 Pricing">
-  <div class="mk-brand">
+  <a class="mk-brand" href="Home.html" style="text-decoration:none">
     <span class="mark">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
         <path d="M5 18V10"></path><path d="M12 18V5"></path><path d="M19 18v-9"></path>
       </svg>
     </span>
     <span class="name">ClavaMetrics</span>
-  </div>
+  </a>
   <div class="mk-links">
-    <a href="#">Product</a>
-    <a href="#">Modules</a>
-    <a href="#" class="is-active">Pricing</a>
-    <a href="#">Customers</a>
+    <a href="Product.html">Product</a>
+    <a href="Home.html#how">How it works</a>
+    <a href="Pricing.html" class="is-active">Pricing</a>
+    <a href="Home.html#who">Customers</a>
     <a href="#">Docs</a>
   </div>
   <div class="mk-cta">
+    <button class="mk-lang" type="button" aria-label="Language">EN<i class="ti ti-chevron-down"></i></button>
     <a class="signin" href="Login.html">Sign in</a>
     <a class="cm-btn is-primary is-sm" href="Register.html" style="text-decoration:none">
       Start free<i class="ti ti-arrow-right" style="font-size:14px"></i>
@@ -808,23 +813,10 @@
 <div id="tweaks-root"></div>
 
 <script>
-  window.__CM_TWEAK_DEFAULTS = { theme: "light", accent: "green" };
   document.querySelectorAll('.pr-toggle button').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('.pr-toggle button').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
   }));
-</script>
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-<script type="text/babel" src="tweaks-panel.jsx"></script>
-<script type="text/babel" src="theme-tweaks.jsx"></script>
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-    });
-  }
 </script>
 </body>
 </html>
