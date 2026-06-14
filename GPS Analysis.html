@@ -759,7 +759,7 @@
           <!-- Velocity zones distribution -->
           <div class="gp-c" data-size="sm" id="card-vzones" data-card-id="vzones">
             <div class="gp-c-h">
-              <span class="ttl">Velocity zones</span>
+              <span class="ttl">Speed zones</span>
               <span class="sub">squad avg · last session</span>
               <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
@@ -1888,6 +1888,7 @@ async function applyMcDefaultLayout() {
 // On first load: stash every catalog card whose id is not in defaultsSet.
 const _IND_DEFAULTS  = new Set(['card-acwr', 'card-gen-week-kpi']);
 const _MGRP_DEFAULTS = new Set(['card-lm-gauges', 'card-gen-weekly-load']);
+const _MIND_DEFAULTS = new Set(['card-mp-td', 'card-mp-hi']);
 
 async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
@@ -3036,7 +3037,7 @@ async function _detectSmartDefault(clubId, userId) {
     await Promise.all([
       applyDefaultLayoutGeneric('ind', _IND_DEFAULTS),
       applyGrpDefaultLayout(),
-      applyLayoutToView('mind'),
+      applyDefaultLayoutGeneric('mind', _MIND_DEFAULTS),
       applyDefaultLayoutGeneric('mgrp', _MGRP_DEFAULTS),
       applyMcDefaultLayout()
     ]);
