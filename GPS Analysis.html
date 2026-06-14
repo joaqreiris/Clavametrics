@@ -932,6 +932,19 @@
             </div>
           </div>
 
+          <!-- Velocity zones (builder · gp.card/v1 · editable) -->
+          <div class="gp-c" data-size="full" id="card-mp-hi" data-card-id="mp-hi">
+            <div class="gp-c-h">
+              <span class="ttl">Velocity zones</span>
+              <span class="sub">HSR · VHSR · Sprint stacked · per match or session</span>
+              <div class="right">
+                <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button data-edit title="Edit card"><i class="ti ti-pencil"></i></button></div>
+            </div>
+            <div class="gp-c-b" style="position:relative;min-height:240px;padding:10px">
+              <canvas id="canvasMPHI"></canvas>
+            </div>
+          </div>
+
           <button class="gp-add"><div class="ic"><i class="ti ti-plus"></i></div><div>Add card</div><small>shot map · speed zones</small></button>
         </div>
       </div>
@@ -1379,14 +1392,10 @@ const GP_CARD_DEFS = {
     { name: 'Squad readiness',          id: null,                        stub: true },
   ],
   mind: [
-    { name: 'Match heatmap',              id: null, stub: true },
-    { name: 'Distance per min',           id: null, stub: true },
-    { name: 'Velocity profile',           id: null, stub: true },
-    { name: 'Sprint zonal grid',          id: null, stub: true },
-    { name: 'Halves drop-off',            id: null, stub: true },
-    { name: 'Recovery between sprints',   id: null, stub: true },
-    { name: 'TD per match',               id: null, stub: true },
-    { name: 'High intensity per match',   id: null, stub: true },
+    { name: 'Match metric',    id: 'card-mp-td', stub: false },
+    { name: 'Velocity zones',  id: 'card-mp-hi', stub: false },
+    // Próximamente — requiere eventos/granularidad de partido:
+    { name: 'Halves drop-off', id: null,         stub: true  },
   ],
   mgrp: [
     // ── Default-visible card (científica de ejemplo) ──
@@ -3336,93 +3345,6 @@ function _renderPosRadar(reports) {
   });
 }
 
-// ── Half drop-off (stub data — no per-half DB data) ───────────
-function _renderHalfDropoff() {
-  const body = document.getElementById('halfDropBody');
-  if (!body) return;
-  const metrics = [
-    { label:'Distance', h1:5.8, h2:5.2, unit:'km' },
-    { label:'HSR',      h1:320, h2:255, unit:'m'  },
-    { label:'Sprints',  h1:11,  h2:8,   unit:''   },
-    { label:'Accel',    h1:26,  h2:21,  unit:''   },
-    { label:'Load',     h1:360, h2:298, unit:'AU' },
-    { label:'Top spd',  h1:30.2,h2:29.4,unit:'km/h'},
-  ];
-  metrics.forEach(m => {
-    const pct = ((m.h2 - m.h1) / m.h1 * 100);
-    const col = pct < -10 ? 'var(--cm-danger)' : pct < -5 ? 'var(--cm-warning)' : 'var(--cm-success)';
-    const row = document.createElement('div');
-    row.style.cssText = 'display:grid;grid-template-columns:68px 1fr 1fr 48px;align-items:center;gap:8px';
-    row.innerHTML = `
-      <span style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg)">${m.label}</span>
-      <div style="text-align:right;font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${m.h1}${m.unit}</div>
-      <div style="text-align:right;font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${m.h2}${m.unit}</div>
-      <div style="text-align:right;font:600 11px/1 var(--cm-font-mono);color:${col}">${pct.toFixed(0)}%</div>`;
-    body.appendChild(row);
-  });
-  const hdr = document.createElement('div');
-  hdr.style.cssText = 'display:grid;grid-template-columns:68px 1fr 1fr 48px;gap:8px;padding-bottom:4px;border-bottom:1px solid var(--cm-border-soft);margin-bottom:2px';
-  hdr.innerHTML = `<span></span><span style="text-align:right;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">1st half</span><span style="text-align:right;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">2nd half</span><span style="text-align:right;font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Δ%</span>`;
-  body.insertBefore(hdr, body.firstChild);
-}
-
-// ── Velocity profile (stub synthetic data) ────────────────────
-function _renderVelProfile() {
-  const canvas = document.getElementById('canvasVelProfile');
-  if (!canvas) return;
-  const accent = _accentHex();
-  // synthetic per-minute speed data (90 data points)
-  const spd = Array.from({ length: 90 }, (_, i) => {
-    const base = 11 + 4 * Math.sin(i * 0.18) + 2 * Math.sin(i * 0.07);
-    const noise = (Math.random() - 0.5) * 3;
-    return +(base + noise).toFixed(1);
-  });
-  // Mark sprint minutes (speed > 20 km/h approx)
-  const sprints = spd.map((v, i) => v > 18 ? v : null);
-
-  Chart.getChart(canvas)?.destroy();
-  new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: Array.from({ length: 90 }, (_, i) => i % 15 === 0 ? `${i}′` : ''),
-      datasets: [
-        {
-          label: 'Speed (km/h)',
-          data: spd,
-          borderColor: accent,
-          backgroundColor: 'transparent',
-          borderWidth: 1.5,
-          pointRadius: 0,
-          tension: 0.3,
-        },
-        {
-          label: 'Sprint (>18 km/h)',
-          data: sprints,
-          borderColor: 'transparent',
-          backgroundColor: 'rgba(239,68,68,0.6)',
-          borderWidth: 0,
-          pointRadius: 4,
-          pointStyle: 'triangle',
-          pointBackgroundColor: '#ef4444',
-          showLine: false,
-        },
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} km/h` } },
-      },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 10 } } },
-        y: { min: 0, max: 35, grid: { color: 'rgba(128,128,128,0.12)' }, ticks: { color: 'rgba(128,128,128,0.7)', font: { size: 10 } } },
-      },
-    }
-  });
-}
-
 // ── Async rendering (needs DB fetches) ────────────────────────
 function _showCardError(cardId, err) {
   const card = document.getElementById(cardId);
@@ -3436,8 +3358,6 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   try { _renderVzones(reports);   } catch(e) { _showCardError('card-vzones', e); }
   try { _renderOutliers(reports); } catch(e) { _showCardError('card-outliers', e); }
   try { _renderPosRadar(reports); } catch(e) { _showCardError('card-pos-radar', e); }
-  try { _renderHalfDropoff();     } catch(e) { _showCardError('card-half-drop', e); }
-  try { _renderVelProfile();      } catch(e) { _showCardError('card-vel-profile', e); }
 
   // ── Historical data for ACWR / TSB / MC heatmap / Match vs Training
   // Always use a 84-day window (or full range if allTime) for these time-series charts.
@@ -9677,6 +9597,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _mpTdPopup?.remove(); _mpTdPopup = null;
       document.removeEventListener('click', _mpTdOutside);
       _mpRenderTDChart(_mpCurrentRows);
+      _mpRenderHIChart();
     });
     setTimeout(() => document.addEventListener('click', _mpTdOutside, { once: true }), 0);
   }
@@ -9800,7 +9721,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       style: { size: 'full', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false, orientation: 'vertical', stacked: false } };
   }
   function _mpHiConfig() {
-    return { schema: 'gp.card/v1', title: 'High intensity per match', viz: 'bars', scope: { level: 'squad' },
+    return { schema: 'gp.card/v1', title: 'Velocity zones', viz: 'bars', scope: { level: 'squad' },
       metrics: [{ id: 'high_speed_distance', agg: 'avg' }, { id: 'very_high_speed_distance', agg: 'avg' }, { id: 'sprint_distance', agg: 'avg' }],
       dimensions: [{ id: 'session_date' }], range: { type: 'season' }, comparison: null,
       style: { size: 'full', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false, orientation: 'horizontal', stacked: true } };
@@ -9853,8 +9774,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // se refrescan los KPIs (bespoke) y se re-renderizan TD/HI (resolver). (Una vez
   // guardadas en dashboard_cards, el filter bar también re-renderiza TD/HI por
   // data-card-id; el doble render es inocuo.)
-  document.addEventListener('gpfilter:change', () => { _mpLoad(); _mpRenderTDChart(); });
-  setTimeout(() => { _mpRenderTDChart(); }, 1000);
+  document.addEventListener('gpfilter:change', () => { _mpLoad(); _mpRenderTDChart(); _mpRenderHIChart(); });
+  setTimeout(() => { _mpRenderTDChart(); _mpRenderHIChart(); }, 1000);
 
   window._mpInit = mpInit;
 
