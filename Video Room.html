@@ -392,7 +392,7 @@
     if (!v.links.length) chips = `<span class="vr-chip unlinked"><i class="ti ti-link-off"></i><span>Unlinked</span></span>`;
 
     return `
-      <article class="vr-card" data-url="${esc(v.url)}">
+      <article class="vr-card" data-id="${esc(v.id)}">
         <div class="vr-thumb">
           <div class="pitch" ${thumb}></div>
           <span class="vr-origin ${prov.cls}"><i class="ti ${prov.icon}"></i>${prov.label}</span>
@@ -436,7 +436,7 @@
     const copyBtn = e.target.closest('.more');
     if (copyBtn) { e.stopPropagation(); navigator.clipboard?.writeText(copyBtn.dataset.copy).then(() => toast('Link copied')); return; }
     const card = e.target.closest('.vr-card');
-    if (card?.dataset.url) window.open(card.dataset.url, '_blank', 'noopener');
+    if (card?.dataset.id) window.location.href = 'Video%20Detail.html?id=' + encodeURIComponent(card.dataset.id);
   });
 
   // ── Filter dropdowns ───────────────────────────────────────────────────────

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Detail — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ── Topbar (shell comes from sidebar.js) ── */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb a { color:var(--cm-fg-muted); text-decoration:none; }
+  .hub-crumb a:hover { color:var(--cm-fg); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .spacer { margin-left:auto; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* ── Page layout: two columns ── */
+  .vd-page { padding:22px 32px 96px; max-width:1280px; margin:0 auto; width:100%; }
+  .vd-back { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px 0 8px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); text-decoration:none; font:500 13px/1 var(--cm-font-sans); margin-bottom:18px; }
+  .vd-back:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vd-back .ti { font-size:16px; }
+  .vd-grid { display:grid; grid-template-columns:1fr 340px; gap:24px; align-items:start; }
+  @media (max-width:1080px){ .vd-grid { grid-template-columns:1fr; } }
+
+  /* ── Player ── */
+  .vd-player { position:relative; aspect-ratio:16/9; border-radius:var(--cm-r-5); overflow:hidden; background:#0B0E12; border:1px solid var(--cm-border); box-shadow:var(--cm-shadow-2); }
+  .vd-player iframe, .vd-player video { position:absolute; inset:0; width:100%; height:100%; border:0; background:#000; }
+  .vd-player .pitch { position:absolute; inset:0; background-size:cover; background-position:center; }
+  .vd-player.is-fallback::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, rgba(8,12,16,0.15) 0%, rgba(8,12,16,0) 30%, rgba(8,12,16,0.6) 100%); }
+  .vd-fb-overlay { position:absolute; inset:0; z-index:3; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; text-align:center; padding:24px; }
+  .vd-fb-overlay .lock { width:46px; height:46px; border-radius:50%; background:rgba(11,14,18,0.62); backdrop-filter:blur(3px); border:1px solid rgba(255,255,255,0.16); color:#E6E8EB; display:flex; align-items:center; justify-content:center; }
+  .vd-fb-overlay .lock .ti { font-size:21px; }
+  .vd-fb-overlay h4 { margin:0; font:600 15px/1.3 var(--cm-font-sans); color:#F3F4F6; }
+  .vd-fb-overlay p { margin:0; font:var(--cm-body-sm); color:rgba(230,232,235,0.72); max-width:42ch; }
+  .vd-embedbadge { position:absolute; top:14px; left:14px; z-index:6; display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 11px; border-radius:999px; background:rgba(8,12,16,0.55); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.14); color:#E6E8EB; font:600 11px/1 var(--cm-font-sans); }
+  .vd-embedbadge .ti { font-size:14px; }
+  .vd-embedbadge .dot { width:6px; height:6px; border-radius:50%; background:#3FB97E; box-shadow:0 0 0 3px rgba(63,185,126,0.25); }
+
+  /* actions under player */
+  .vd-acts { display:flex; align-items:center; gap:9px; margin-top:14px; flex-wrap:wrap; }
+
+  /* under-player title row */
+  .vd-titlecard { margin-top:18px; padding:18px 20px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); }
+  .vd-titlecard h1 { margin:0; font:600 21px/1.25 var(--cm-font-sans); letter-spacing:-0.015em; color:var(--cm-fg-strong); }
+  .vd-titlecard .row { display:flex; align-items:center; gap:0; margin-top:12px; flex-wrap:wrap; }
+  .vd-titlecard .mi { display:inline-flex; align-items:center; gap:7px; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vd-titlecard .mi .ti { font-size:15px; color:var(--cm-fg-faint); }
+  .vd-titlecard .mi b { color:var(--cm-fg); font-weight:600; }
+  .vd-titlecard .vsep { width:1px; height:15px; background:var(--cm-border-strong); margin:0 14px; }
+  .vd-titlecard .src { display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 10px 0 8px; border-radius:999px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); font:600 11.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .vd-titlecard .src .ti { font-size:14px; }
+  .vd-titlecard .src.drive .ti { color:#1FA463; }
+  .vd-titlecard .src.dropbox .ti { color:#0061FF; }
+  .vd-titlecard .av { width:22px; height:22px; border-radius:50%; background:var(--cm-violet-bg); color:var(--cm-violet); display:inline-flex; align-items:center; justify-content:center; font:700 9px/1 var(--cm-font-sans); }
+
+  /* ── Right rail ── */
+  .vd-rail { display:flex; flex-direction:column; gap:16px; position:sticky; top:74px; }
+  .vd-panel { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); overflow:hidden; }
+  .vd-panel-hd { display:flex; align-items:center; gap:8px; padding:13px 15px; border-bottom:1px solid var(--cm-border); }
+  .vd-panel-hd .ti { font-size:16px; color:var(--cm-fg-muted); }
+  .vd-panel-hd h2 { flex:1; margin:0; font:600 13px/1 var(--cm-font-sans); letter-spacing:0.01em; color:var(--cm-fg-strong); }
+  .vd-panel-hd .add { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px 0 8px; border-radius:var(--cm-r-2); border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg); font:600 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .vd-panel-hd .add[disabled] { opacity:0.5; cursor:not-allowed; }
+  .vd-panel-hd .add .ti { font-size:14px; color:var(--cm-accent); }
+  .vd-panel-bd { padding:14px 15px; }
+
+  /* linked-to groups */
+  .vd-lgroup + .vd-lgroup { margin-top:14px; }
+  .vd-lk-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.07em; text-transform:uppercase; color:var(--cm-fg-faint); margin-bottom:8px; }
+  .vd-lchips { display:flex; flex-wrap:wrap; gap:7px; }
+  .vd-lchip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 6px 0 9px; border-radius:var(--cm-r-3); font:500 12.5px/1 var(--cm-font-sans); border:1px solid transparent; max-width:100%; }
+  .vd-lchip > span.lbl { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vd-lchip .ti.lead { font-size:14px; flex-shrink:0; }
+  .vd-lchip .x { width:18px; height:18px; border-radius:5px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.7; flex-shrink:0; border:0; background:transparent; color:inherit; }
+  .vd-lchip .x:hover { opacity:1; background:rgba(0,0,0,0.10); }
+  .vd-lchip .x .ti { font-size:13px; }
+  .vd-lchip.session { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd); }
+  .vd-lchip.player  { background:var(--cm-violet-bg); color:var(--cm-violet); border-color:var(--cm-violet-bd); }
+  .vd-lchip.match   { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+  .vd-empty-links { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+
+  /* notes */
+  .vd-notes { width:100%; min-height:96px; resize:vertical; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); padding:10px 12px; font:var(--cm-body-sm); color:var(--cm-fg); line-height:1.5; box-sizing:border-box; }
+  .vd-notes:focus { outline:none; border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); background:var(--cm-surface); }
+  .vd-notes::placeholder { color:var(--cm-fg-faint); }
+  .vd-notes-foot { display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .vd-notes-foot .saved { font:var(--cm-meta); color:var(--cm-fg-muted); }
+
+  /* details list */
+  .vd-dl { display:flex; flex-direction:column; }
+  .vd-dl .drow { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--cm-border); }
+  .vd-dl .drow:last-child { border-bottom:0; }
+  .vd-dl .dk { display:inline-flex; align-items:center; gap:8px; width:88px; flex-shrink:0; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vd-dl .dk .ti { font-size:15px; color:var(--cm-fg-faint); }
+  .vd-dl .dv { font:var(--cm-body-sm); color:var(--cm-fg-strong); font-weight:500; display:inline-flex; align-items:center; gap:7px; min-width:0; }
+  .vd-dl .dv .ti { font-size:14px; }
+  .vd-dl .dv a { color:var(--cm-accent); text-decoration:none; }
+  .vd-dl .dv a:hover { text-decoration:underline; }
+  .vd-dl .dv .truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vd-store-note { display:flex; gap:9px; padding:11px 13px; margin-top:12px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-success-bd); }
+  .vd-store-note .ti { font-size:15px; color:var(--cm-accent); flex-shrink:0; margin-top:1px; }
+  .vd-store-note p { margin:0; font:var(--cm-meta); color:var(--cm-fg-muted); line-height:1.45; }
+  .vd-store-note p b { color:var(--cm-fg); font-weight:600; }
+
+  /* states */
+  .vd-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:80px 24px; text-align:center; border:1px dashed var(--cm-border-strong); border-radius:var(--cm-r-5); background:var(--cm-surface); }
+  .vd-state .ic { width:52px; height:52px; border-radius:14px; background:var(--cm-bg-sunk); color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; }
+  .vd-state .ic .ti { font-size:26px; }
+  .vd-state h3 { font:600 16px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; }
+  .vd-state p { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin:0; max-width:340px; }
+
+  .vd-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3); padding:8px 16px; font:500 13px/1 var(--cm-font-sans); z-index:900; opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
+  .vd-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="Video Detail">
+
+  <!-- Sidebar (injected by sidebar.js) -->
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
+        <a href="Video%20Room.html">Video room</a><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Detail</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="actions">
+        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="vd-page">
+      <a class="vd-back" href="Video%20Room.html"><i class="ti ti-arrow-left"></i>Back to library</a>
+      <div id="vdRoot"></div>
+    </section>
+  </main>
+</div>
+
+<div class="vd-toast" id="vdToast"></div>
+
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script type="text/babel" src="settings-drawer.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="theme-tweaks.jsx"></script>
+
+<script>
+(async () => {
+  if (!(await window.guardModule())) return;
+  await Promise.all([window.getProfile(), window.getClub()]);
+  const clubId = await window.getClubId();
+  window.applyClubTheme();
+
+  const root = document.getElementById('vdRoot');
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  function toast(msg) { const t = document.getElementById('vdToast'); t.textContent = msg; t.classList.add('is-show'); setTimeout(() => t.classList.remove('is-show'), 2400); }
+
+  function notFound(title, sub) {
+    root.innerHTML = `<div class="vd-state"><span class="ic"><i class="ti ti-video-off"></i></span>
+      <h3>${esc(title)}</h3><p>${esc(sub)}</p>
+      <a class="cm-btn is-primary is-sm" href="Video%20Room.html"><i class="ti ti-arrow-left" style="font-size:15px"></i>Back to library</a></div>`;
+  }
+
+  const id = new URLSearchParams(location.search).get('id');
+  if (!id) { notFound('No video selected', 'Open a video from the library to see its detail.'); return; }
+
+  // RLS validates club/team access; missing or no-access → maybeSingle returns null.
+  const { data: v, error } = await window.sb.from('videos').select('*').eq('id', id).maybeSingle();
+  if (error) { console.error('[VideoDetail] load error:', error); notFound("Couldn't load video", error.message); return; }
+  if (!v) { notFound('Video not found', "This video doesn't exist or you don't have access to it."); return; }
+
+  document.title = `${v.title || 'Video'} — ClavaMetrics`;
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const PROV = {
+    google_drive: { cls:'drive',   icon:'ti-brand-google-drive', label:'Google Drive', open:'Open in Google Drive' },
+    dropbox:      { cls:'dropbox', icon:'ti-brand-dropbox',      label:'Dropbox',      open:'Open in Dropbox' },
+    other:        { cls:'',        icon:'ti-link',               label:'Link',         open:'Open link' },
+  };
+  const prov = PROV[v.provider] || PROV.other;
+
+  const fmtDate = d => { try { return new Date(d).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); } catch { return ''; } };
+  const fmtDur = sec => { if (sec == null || isNaN(sec)) return null; const m = Math.floor(sec/60), s = Math.floor(sec%60); return `${m}:${String(s).padStart(2,'0')}`; };
+  const initials = name => { const w = (name||'').trim().split(/\s+/).filter(Boolean); return w.length ? w.slice(0,2).map(x => x[0].toUpperCase()).join('') : '–'; };
+  function fileLabel() {
+    try { const seg = decodeURIComponent(new URL(v.url).pathname.split('/').filter(Boolean).pop() || ''); if (seg && /\.[a-z0-9]{2,4}$/i.test(seg)) return seg; } catch {}
+    return v.external_id || '—';
+  }
+
+  // Best-effort embeddable URL. The Open button below is always the reliable path.
+  function driveId() {
+    if (v.external_id) return v.external_id;
+    const u = v.url || '';
+    return (u.match(/\/file\/d\/([^/]+)/) || u.match(/[?&]id=([^&]+)/) || u.match(/\/d\/([^/]+)/) || [])[1] || null;
+  }
+  function embedUrl() {
+    if (v.provider === 'google_drive') { const fid = driveId(); return fid ? `https://drive.google.com/file/d/${fid}/preview` : null; }
+    if (v.provider === 'dropbox') {
+      const u = v.url || ''; if (!u) return null;
+      if (/[?&]dl=\d/.test(u)) return u.replace(/([?&])dl=\d/, '$1raw=1');
+      return u + (u.includes('?') ? '&' : '?') + 'raw=1';
+    }
+    return v.url || null;
+  }
+  const embed = embedUrl();
+  const dur = fmtDur(v.duration_seconds);
+
+  // ── Player block ─────────────────────────────────────────────────────────────
+  const playerHtml = embed
+    ? `<div class="vd-player">
+         <span class="vd-embedbadge"><span class="dot"></span><i class="ti ${prov.icon}"></i>Streaming from ${esc(prov.label)}</span>
+         <iframe src="${esc(embed)}" allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>
+       </div>`
+    : `<div class="vd-player is-fallback">
+         ${v.thumbnail_url ? `<div class="pitch" style="background-image:url('${esc(v.thumbnail_url)}')"></div>` : `<div class="pitch" style="background:radial-gradient(120% 100% at 50% -10%, #1f6b3a 0%, #14502a 45%, #0b3119 100%)"></div>`}
+         <div class="vd-fb-overlay">
+           <div class="lock"><i class="ti ti-lock"></i></div>
+           <h4>Preview not available here</h4>
+           <p>This file can't be embedded. It stays in your club's ${esc(prov.label)} — open it there to watch.</p>
+         </div>
+       </div>`;
+
+  // ── Render main + rail skeleton ──────────────────────────────────────────────
+  root.innerHTML = `
+    <div class="vd-grid">
+      <div class="vd-col-main">
+        ${playerHtml}
+        <div class="vd-acts">
+          <button class="cm-btn is-primary" id="vdOpen"><i class="ti ${prov.icon}" style="font-size:16px"></i>${esc(prov.open)}<i class="ti ti-external-link" style="font-size:15px"></i></button>
+          <button class="cm-btn" id="vdCopy"><i class="ti ti-copy" style="font-size:15px"></i>Copy link</button>
+        </div>
+        <div class="vd-titlecard">
+          <h1>${esc(v.title || 'Untitled video')}</h1>
+          <div class="row">
+            ${dur ? `<span class="mi"><i class="ti ti-clock"></i><b>${dur}</b></span><span class="vsep"></span>` : ''}
+            <span class="mi"><i class="ti ti-calendar-event"></i>${fmtDate(v.created_at)}</span>
+            ${v.uploaded_by_name ? `<span class="vsep"></span><span class="mi"><span class="av">${esc(initials(v.uploaded_by_name))}</span>Uploaded by <b>${esc(v.uploaded_by_name)}</b></span>` : ''}
+            <span class="vsep"></span>
+            <span class="src ${prov.cls}"><i class="ti ${prov.icon}"></i>${esc(prov.label)}</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="vd-rail">
+        <div class="vd-panel">
+          <div class="vd-panel-hd">
+            <i class="ti ti-link"></i><h2>Linked to</h2>
+            <button class="add" id="vdLinkBtn" disabled title="Linking is coming soon"><i class="ti ti-plus"></i>Link</button>
+          </div>
+          <div class="vd-panel-bd" id="vdLinks"><div class="vd-empty-links">Loading…</div></div>
+        </div>
+
+        <div class="vd-panel">
+          <div class="vd-panel-hd"><i class="ti ti-note"></i><h2>Notes</h2></div>
+          <div class="vd-panel-bd">
+            <textarea class="vd-notes" id="vdNotes" placeholder="Add notes for the staff…">${esc(v.notes || '')}</textarea>
+            <div class="vd-notes-foot">
+              <button class="cm-btn is-primary is-sm" id="vdSaveNotes">Save</button>
+              <span class="saved" id="vdNotesSaved"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="vd-panel">
+          <div class="vd-panel-hd"><i class="ti ti-info-circle"></i><h2>Details</h2></div>
+          <div class="vd-panel-bd">
+            <div class="vd-dl">
+              <div class="drow"><span class="dk"><i class="ti ti-cloud"></i>Source</span><span class="dv"><i class="ti ${prov.icon}" style="${v.provider==='google_drive'?'color:#1FA463':v.provider==='dropbox'?'color:#0061FF':''}"></i>${esc(prov.label)}</span></div>
+              <div class="drow"><span class="dk"><i class="ti ti-file"></i>File</span><span class="dv"><span class="truncate">${esc(fileLabel())}</span></span></div>
+              <div class="drow"><span class="dk"><i class="ti ti-calendar"></i>Date</span><span class="dv">${fmtDate(v.created_at)}</span></div>
+              <div class="drow"><span class="dk"><i class="ti ti-user-up"></i>Author</span><span class="dv">${v.uploaded_by_name ? `<span class="av" style="width:20px;height:20px;border-radius:50%;background:var(--cm-violet-bg);color:var(--cm-violet);display:inline-flex;align-items:center;justify-content:center;font:700 8.5px/1 var(--cm-font-sans)">${esc(initials(v.uploaded_by_name))}</span>${esc(v.uploaded_by_name)}` : '—'}</span></div>
+              <div class="drow"><span class="dk"><i class="ti ti-external-link"></i>Open</span><span class="dv"><a href="${esc(v.url)}" target="_blank" rel="noopener">View in ${esc(prov.label)}</a></span></div>
+            </div>
+            <div class="vd-store-note">
+              <i class="ti ti-shield-check"></i>
+              <p>The file <b>lives in your club's ${esc(prov.label)}</b>. ClavaMetrics plays/opens it and manages its context — it never stores a copy.</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>`;
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
+  document.getElementById('vdOpen').addEventListener('click', () => window.open(v.url, '_blank', 'noopener'));
+  document.getElementById('vdCopy').addEventListener('click', () => navigator.clipboard?.writeText(v.url).then(() => toast('Link copied')));
+
+  // ── Notes save ───────────────────────────────────────────────────────────────
+  document.getElementById('vdSaveNotes').addEventListener('click', async () => {
+    const btn = document.getElementById('vdSaveNotes');
+    const notes = document.getElementById('vdNotes').value;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    const { error: e } = await window.sb.from('videos')
+      .update({ notes: notes || null, updated_at: new Date().toISOString() }).eq('id', id);
+    btn.disabled = false; btn.textContent = 'Save';
+    if (e) { alert('Error saving notes: ' + e.message); return; }
+    v.notes = notes; document.getElementById('vdNotesSaved').textContent = 'Saved';
+    setTimeout(() => { const s = document.getElementById('vdNotesSaved'); if (s) s.textContent = ''; }, 2500);
+    toast('Notes saved');
+  });
+
+  // ── Linked-to ─────────────────────────────────────────────────────────────────
+  async function loadLinks() {
+    const [vs, vp, vm] = await Promise.all([
+      window.sb.from('video_sessions').select('session_id').eq('video_id', id),
+      window.sb.from('video_players').select('player_id').eq('video_id', id),
+      window.sb.from('video_matches').select('event_id').eq('video_id', id),
+    ]);
+    const sIds = (vs.data || []).map(r => r.session_id);
+    const pIds = (vp.data || []).map(r => r.player_id);
+    const eIds = (vm.data || []).map(r => r.event_id);
+
+    const [sMeta, pMeta, eMeta] = await Promise.all([
+      sIds.length ? window.sb.from('training_sessions').select('id,title,session_date,match_day_offset').in('id', sIds) : { data: [] },
+      pIds.length ? window.sb.from('players').select('id,first_name,last_name').in('id', pIds) : { data: [] },
+      eIds.length ? window.sb.from('calendar_events').select('id,opponent,title,date').in('id', eIds) : { data: [] },
+    ]);
+    const sessionLabel = s => s ? (s.title || (s.match_day_offset != null ? `MD${s.match_day_offset > 0 ? '+' : ''}${s.match_day_offset}` : (s.session_date ? fmtDate(s.session_date) : 'Session'))) : 'Session';
+    const playerLabel  = p => (p && (p.last_name || p.first_name)) || '—';
+    const matchLabel   = e => (e && (e.opponent || e.title)) || 'Match';
+
+    const groups = [
+      { type:'match',   cls:'match',   icon:'ti-ball-football',  col:'event_id',   label:'Match',
+        items:(eMeta.data||[]).map(e => ({ key:e.id, label: matchLabel(e) })) },
+      { type:'session', cls:'session', icon:'ti-clipboard-list', col:'session_id', label:'Session',
+        items:(sMeta.data||[]).map(s => ({ key:s.id, label: sessionLabel(s) })) },
+      { type:'player',  cls:'player',  icon:'ti-user',           col:'player_id',  label:'Players',
+        items:(pMeta.data||[]).map(p => ({ key:p.id, label: playerLabel(p) })) },
+    ].filter(g => g.items.length);
+
+    const box = document.getElementById('vdLinks');
+    if (!groups.length) { box.innerHTML = `<div class="vd-empty-links">No links yet. Linking videos to sessions, players or matches is coming soon.</div>`; return; }
+
+    box.innerHTML = groups.map(g => `
+      <div class="vd-lgroup" data-group="${g.type}">
+        <div class="vd-lk-label">${g.label}</div>
+        <div class="vd-lchips">${g.items.map(it => `
+          <span class="vd-lchip ${g.cls}" data-type="${g.type}" data-table="video_${g.type === 'match' ? 'matches' : g.type + 's'}" data-col="${g.col}" data-key="${esc(it.key)}">
+            <i class="ti ${g.icon} lead"></i><span class="lbl">${esc(it.label)}</span>
+            <button class="x" title="Remove link"><i class="ti ti-x"></i></button>
+          </span>`).join('')}</div>
+      </div>`).join('');
+  }
+
+  document.getElementById('vdLinks').addEventListener('click', async e => {
+    const x = e.target.closest('.x'); if (!x) return;
+    const chip = x.closest('.vd-lchip');
+    const { table, col, key } = chip.dataset;
+    x.disabled = true;
+    const { error: e2 } = await window.sb.from(table).delete().eq('video_id', id).eq(col, key);
+    if (e2) { x.disabled = false; alert('Error removing link: ' + e2.message); return; }
+    const group = chip.closest('.vd-lgroup');
+    chip.remove();
+    if (group && !group.querySelector('.vd-lchip')) group.remove();
+    if (!document.querySelector('#vdLinks .vd-lchip')) document.getElementById('vdLinks').innerHTML = `<div class="vd-empty-links">No links yet. Linking videos to sessions, players or matches is coming soon.</div>`;
+    toast('Link removed');
+  });
+
+  await loadLinks();
+})();
+</script>
+
+</body>
+</html>
