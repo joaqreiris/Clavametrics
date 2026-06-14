@@ -1542,7 +1542,7 @@
       }
       if (stale()) return;
 
-      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchRoleBaseline, enrichMcDiff, CORE_COLS, neededKeys } = await _importResolver();
+      const { applyAgg, aggregateSeries, getSessionIds, getMcSessionIds, fetchReports, fetchEavMetrics, fetchExtraMetrics, fetchRoleBaseline, enrichMcDiff, CORE_COLS, neededKeys } = await _importResolver();
       if (stale()) return;
       if (!applyAgg) return; // resolver not available
 
@@ -1594,11 +1594,8 @@
         return;
       }
 
-      // Step 3: EAV (custom metrics + base EAV metrics used by calc formulas)
-      const customKeys = neededKeys(config, catalogMap).eav;
-      const eavMap = customKeys.length
-        ? await fetchEavMetrics(rows.map(r => r.id), customKeys, _clubId, sb)
-        : new Map();
+      // Step 3: EAV (custom metrics + base EAV metrics used by calc formulas) + RPE
+      const eavMap = await fetchExtraMetrics(rows, config, catalogMap, _clubId, sb);
       if (stale()) return;
 
       // Step 4: aggregate
@@ -1689,9 +1686,7 @@
             const refRows = _fbFilterRows(await fetchReports(refSessions, config, ctx, catalogMap, sb), refFB);
             if (stale()) return;
             if (refRows.length) {
-              const refEav = customKeys.length
-                ? await fetchEavMetrics(refRows.map(r => r.id), customKeys, _clubId, sb)
-                : new Map();
+              const refEav = await fetchExtraMetrics(refRows, config, catalogMap, _clubId, sb);
               if (stale()) return;
               refSeries = aggregateSeries(refRows, refEav, config, catalogMap);
             }
