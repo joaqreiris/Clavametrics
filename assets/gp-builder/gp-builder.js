@@ -423,14 +423,6 @@
                 <span class="tx"><span class="t">Data labels</span><span class="s">Show values on chart</span></span>
                 <button class="es-sw-t" data-toggle="labels"></button>
               </div>
-              <div class="es-toggle" data-only="bars">
-                <span class="tx"><span class="t">Horizontal</span><span class="s">Barras horizontales</span></span>
-                <button class="es-sw-t" data-toggle="horizontal"></button>
-              </div>
-              <div class="es-toggle" data-only="bars">
-                <span class="tx"><span class="t">Apilado</span><span class="s">Sumar las series en una barra</span></span>
-                <button class="es-sw-t" data-toggle="stacked"></button>
-              </div>
               <div class="es-toggle" data-only="line">
                 <span class="tx"><span class="t">Points</span><span class="s">Mark each vertex (line)</span></span>
                 <button class="es-sw-t is-on" data-toggle="points"></button>
@@ -969,11 +961,19 @@
 
     // viz type buttons
     document.getElementById('gpbTypes').innerHTML = Object.entries(VIZ_TYPES).map(([id,t]) =>
-      `<button class="es-tswatch" data-type="${esc(id)}"><i class="ti ${t.icon}"></i><span>${t.name}</span></button>`
+      `<button class="es-tswatch" data-type="${esc(id)}"${id==='bars'?' style="position:relative"':''}><i class="ti ${t.icon}"></i><span>${t.name}</span>${id==='bars'?'<i class="ti ti-chevron-down" data-bars-menu title="Bar options" style="position:absolute;top:3px;right:4px;font-size:12px;opacity:.7"></i>':''}</button>`
     ).join('');
     document.getElementById('gpbTypes').querySelectorAll('[data-type]').forEach(b =>
       b.onclick = () => setType(b.dataset.type)
     );
+    // Bars caret → switch to bars (if needed) and open the orientation/stacked popover.
+    // stopPropagation so the caret click doesn't bubble to the swatch's setType.
+    const barsCaret = document.getElementById('gpbTypes').querySelector('[data-bars-menu]');
+    if (barsCaret) barsCaret.onclick = e => {
+      e.stopPropagation();
+      if (S && S.type !== 'bars') setType('bars');
+      togglePop(barsCaret, 'bars');
+    };
 
     // colors
     document.getElementById('gpbColors').innerHTML = COLORS.map(c =>
@@ -1321,7 +1321,7 @@
           <div class="s"><span class="pk ${cat.kind}"></span>${esc(cat.unit)} · ${cat.kind}</div>
         </div>
         <div style="display:flex;align-items:center;gap:4px">
-          ${S.type === 'bars' ? `<button data-line-for="${esc(m.id)}" title="Mostrar como línea (eje secundario)" style="border:1px solid var(--cm-border);background:${m.line?'var(--cm-accent)':'var(--cm-bg-soft)'};color:${m.line?'var(--cm-fg-on-accent)':'var(--cm-fg-muted)'};border-radius:5px;width:20px;height:20px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center"><i class="ti ti-chart-line" style="font-size:12px"></i></button>` : ''}
+          ${S.type === 'bars' ? `<button data-line-for="${esc(m.id)}" title="Show as line (secondary axis)" aria-label="Show as line (secondary axis)" style="display:inline-flex;align-items:center;height:22px;border:1px solid var(--cm-border);border-radius:6px;overflow:hidden;cursor:pointer;background:var(--cm-bg-soft);font:600 10px/1 var(--cm-font-sans)"><span style="display:inline-flex;align-items:center;gap:3px;height:100%;padding:0 7px;background:${m.line?'transparent':'var(--cm-accent)'};color:${m.line?'var(--cm-fg-muted)':'var(--cm-fg-on-accent)'}"><i class="ti ti-chart-bar" style="font-size:11px"></i>Bar</span><span style="display:inline-flex;align-items:center;gap:3px;height:100%;padding:0 7px;background:${m.line?'var(--cm-accent)':'transparent'};color:${m.line?'var(--cm-fg-on-accent)':'var(--cm-fg-muted)'}"><i class="ti ti-chart-line" style="font-size:11px"></i>Line</span></button>` : ''}
           <button class="es-aggchip" data-agg-for="${esc(m.id)}">
             <i class="ti ${agg.icon}"></i>${agg.short}<i class="ti ti-chevron-down" style="font-size:11px"></i>
           </button>
@@ -3876,6 +3876,22 @@
       }
       return `<div class="rb-pop-h"><div class="t">${kind==='range'?'Time range':'Comparison / baseline'}</div></div><div class="rb-pop-b">${rows}</div>${mcPicker}`;
     }
+    if (kind === 'bars') {
+      return `<div class="rb-pop-h"><div class="t">Bar options</div></div>
+        <div class="rb-pop-b" style="gap:12px;padding:11px 13px">
+          <div>
+            <div style="font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Orientation</div>
+            <div class="es-seg">
+              <button data-orient="vertical" class="${S.horizontal?'':'is-on'}"><i class="ti ti-chart-bar"></i>Vertical</button>
+              <button data-orient="horizontal" class="${S.horizontal?'is-on':''}"><i class="ti ti-chart-bar" style="transform:rotate(90deg)"></i>Horizontal</button>
+            </div>
+          </div>
+          <div class="es-toggle" style="padding:0">
+            <span class="tx"><span class="t">Stacked</span><span class="s">Sum series into one bar</span></span>
+            <button class="es-sw-t ${S.stacked?'is-on':''}" data-bars-stack></button>
+          </div>
+        </div>`;
+    }
     if (kind === 'agg') {
       const field = S.metrics.find(m => m.id === popEl.dataset.field);
       if (!field) return '';
@@ -3924,6 +3940,20 @@
       if (f) f.agg = b.dataset.agg;
       renderMetrics(); pulseNext = true; renderCard(); closePop();
     });
+    // Bar options popover — orientation segmented + stacked toggle (stays open).
+    popEl.querySelectorAll('[data-orient]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      S.horizontal = b.dataset.orient === 'horizontal';
+      popEl.querySelectorAll('[data-orient]').forEach(x => x.classList.toggle('is-on', x === b));
+      renderCard();
+    });
+    const stk = popEl.querySelector('[data-bars-stack]');
+    if (stk) stk.onclick = e => {
+      e.stopPropagation();
+      S.stacked = !S.stacked;
+      stk.classList.toggle('is-on', S.stacked);
+      renderCard();
+    };
   }
 
   // ── Fields flyout ─────────────────────────────────────────
