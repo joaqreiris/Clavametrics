@@ -2217,7 +2217,23 @@
           <span></span>
         </div>
         <div id="vbtRowsContainer" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px"></div>
-        <button type="button" class="pt-add-sprint" onclick="addVBTRow()"><i class="ti ti-plus"></i> Add load</button>`;
+        <button type="button" class="pt-add-sprint" onclick="addVBTRow()"><i class="ti ti-plus"></i> Add load</button>
+        <div class="pa-section" style="margin-top:14px">Import from encoder (CSV)</div>
+        <div id="vbtCsvDrop" style="border:1.5px dashed var(--cm-border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
+          <i class="ti ti-upload" style="font-size:18px;display:block;margin-bottom:4px"></i>
+          Drop encoder CSV here or <span style="color:var(--cm-accent);text-decoration:underline">browse</span>
+          <div style="font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:4px">load &amp; velocity columns · any VBT encoder export</div>
+        </div>
+        <input id="vbtCsvFile" type="file" accept=".csv,.tsv,text/csv" style="display:none">
+        <div id="vbtCsvMap" style="display:none;margin-top:8px">
+          <div class="ev-f2" style="margin-bottom:0">
+            <div class="ev-frow"><label class="ev-fl">Load column</label>
+              <select id="vbtCsvLoadCol" class="ev-finput" onchange="applyVBTCsvImport()"></select></div>
+            <div class="ev-frow"><label class="ev-fl">Velocity column</label>
+              <select id="vbtCsvVelCol" class="ev-finput" onchange="applyVBTCsvImport()"></select></div>
+          </div>
+          <div id="vbtCsvSummary" style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px"></div>
+        </div>`;
 
     } else if (cfg.key === 'orm') {
       specificFields = `
@@ -2365,7 +2381,7 @@
     if (cfg.key === 'fms') calcFMS();
     if (cfg.key === 'skinfold') onSkinfoldMethodChange();
     if (cfg.key === 'fvprofile') { for (let i = 0; i < 4; i++) addFVRow(); initFVCsvImport(); }
-    if (cfg.key === 'vbt') { for (let i = 0; i < 3; i++) addVBTRow(); }
+    if (cfg.key === 'vbt') { for (let i = 0; i < 3; i++) addVBTRow(); initVBTCsvImport(); }
   }
 
   async function onPaPlayerChange() {
@@ -3200,6 +3216,80 @@
       last.querySelector('.fv-vmp').value  = +p.v.toFixed(3);
     });
     calcFVProfile();
+    if (summary) summary.textContent = `Imported ${pairs.length} load${pairs.length > 1 ? 's' : ''} (${skipped} row${skipped === 1 ? '' : 's'} skipped)`;
+  }
+
+  // ─── Encoder CSV import (inside VBT load-velocity test) ───
+  let _vbtCsvData = null;
+
+  function initVBTCsvImport() {
+    _vbtCsvData = null;
+    const dz = document.getElementById('vbtCsvDrop');
+    const fi = document.getElementById('vbtCsvFile');
+    if (!dz || !fi) return;
+    dz.addEventListener('click', () => fi.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; const f = e.dataTransfer.files[0]; if (f) parseVBTCsvFile(f); });
+    fi.addEventListener('change', e => { if (e.target.files[0]) parseVBTCsvFile(e.target.files[0]); });
+  }
+
+  function parseVBTCsvFile(file) {
+    if (!window.Papa) { alert('PapaParse not loaded'); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete(res) {
+        if (!res.data.length) { alert('Empty file.'); return; }
+        _vbtCsvData = res.data;
+        const headers = res.meta.fields || [];
+        const loadGuess = detectFVColumn(headers, ['load', 'carga', 'weight', 'mass', 'peso', 'kg']);
+        const velGuess  = detectFVColumn(headers, ['mean velocity', 'velocity', 'velocidad', 'vmean', 'vmp', 'm s', 'vel'], loadGuess);
+        const opts = headers.map(h => `<option value="${h.replace(/"/g, '&quot;')}">${h}</option>`).join('');
+        const loadSel = document.getElementById('vbtCsvLoadCol');
+        const velSel  = document.getElementById('vbtCsvVelCol');
+        loadSel.innerHTML = opts; velSel.innerHTML = opts;
+        loadSel.value = loadGuess || headers[0] || '';
+        velSel.value  = velGuess || headers[1] || headers[0] || '';
+        document.getElementById('vbtCsvMap').style.display = '';
+        applyVBTCsvImport();
+      },
+      error(err) { alert('Parse error: ' + err.message); }
+    });
+  }
+
+  function applyVBTCsvImport() {
+    if (!_vbtCsvData) return;
+    const loadCol = document.getElementById('vbtCsvLoadCol')?.value;
+    const velCol  = document.getElementById('vbtCsvVelCol')?.value;
+    const summary = document.getElementById('vbtCsvSummary');
+    if (!loadCol || !velCol) return;
+
+    // Best attempt per load: keep the highest velocity for each load
+    const best = new Map();
+    let skipped = 0;
+    for (const row of _vbtCsvData) {
+      const kg = parseFloat(row[loadCol]);
+      const v  = parseFloat(row[velCol]);
+      if (!isFinite(kg) || !isFinite(v) || kg <= 0 || v <= 0) { skipped++; continue; }
+      const prev = best.get(kg);
+      if (prev === undefined || v > prev) best.set(kg, v);
+    }
+    const pairs = [...best.entries()].map(([kg, v]) => ({ kg, v })).sort((a, b) => a.kg - b.kg);
+    if (!pairs.length) {
+      if (summary) summary.textContent = 'No valid load/velocity pairs found — check the column mapping.';
+      return;
+    }
+
+    const c = document.getElementById('vbtRowsContainer');
+    if (!c) return;
+    c.innerHTML = '';
+    pairs.forEach(p => {
+      addVBTRow();
+      const last = c.lastElementChild;
+      last.querySelector('.vbt-load').value = p.kg;
+      last.querySelector('.vbt-vmp').value  = +p.v.toFixed(3);
+    });
+    calcVBT();
     if (summary) summary.textContent = `Imported ${pairs.length} load${pairs.length > 1 ? 's' : ''} (${skipped} row${skipped === 1 ? '' : 's'} skipped)`;
   }
 
