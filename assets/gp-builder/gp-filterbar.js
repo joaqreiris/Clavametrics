@@ -17,11 +17,11 @@
 
   // ── Config de los desplegables (orden de la referencia) ─────────────────
   const DROPS = [
-    { key: 'md_code',    icon: 'ti-calendar-event', placeholder: 'Todos los MD',          multi: true },
-    { key: 'date',       icon: 'ti-calendar-range', placeholder: 'Cualquier fecha',       date: true  },
-    { key: 'player',     icon: 'ti-user',           placeholder: 'Todos los jugadores',   multi: true },
-    { key: 'position',   icon: 'ti-shirt-sport',    placeholder: 'Todas las posiciones',  multi: true },
-    { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'Todos los microciclos', multi: true },
+    { key: 'md_code',    icon: 'ti-calendar-event', placeholder: 'All MD',          multi: true },
+    { key: 'date',       icon: 'ti-calendar-range', placeholder: 'Any date',        date: true  },
+    { key: 'player',     icon: 'ti-user',           placeholder: 'All players',     multi: true },
+    { key: 'position',   icon: 'ti-shirt-sport',    placeholder: 'All positions',   multi: true },
+    { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'All microcycles', multi: true },
   ];
 
   // English labels for the Add-filter menu (placeholders quedan en su idioma actual).
@@ -31,10 +31,10 @@
   };
 
   const DATE_PRESETS = [
-    { id: '7',     label: 'Últimos 7 días',  days: 7   },
-    { id: '30',    label: 'Últimos 30 días', days: 30  },
-    { id: '90',    label: 'Últimos 90 días', days: 90  },
-    { id: 'season',label: 'Temporada',       days: 365 },
+    { id: '7',     label: 'Last 7 days',  days: 7   },
+    { id: '30',    label: 'Last 30 days', days: 30  },
+    { id: '90',    label: 'Last 90 days', days: 90  },
+    { id: 'season',label: 'Season',       days: 365 },
   ];
 
   // ── Estado (en memoria) ─────────────────────────────────────────────────
@@ -251,7 +251,7 @@
         `<i class="ti ${cfg.icon}"></i>` +
         `<span class="fb-trigger-label">${cfg.placeholder}</span>` +
         `<span class="fb-count"></span>` +
-        `<span class="fb-clear" role="button" title="Limpiar"><i class="ti ti-x"></i></span>` +
+        `<span class="fb-clear" role="button" title="Clear"><i class="ti ti-x"></i></span>` +
         `<i class="ti ti-chevron-down fb-caret"></i>`;
       drop.appendChild(trig);
       drop.appendChild(cfg.date ? buildDatePanel() : buildMultiPanel(cfg));
@@ -303,8 +303,8 @@
     applyFilterOrder();
 
     const right = el('div', 'gp-fbar-right');
-    const global = el('span', 'fb-global', `<i class="ti ti-filter"></i><span class="fb-global-txt">Sin filtros</span>`);
-    const clearAll = el('button', 'fb-clear-all', `<i class="ti ti-x"></i>Limpiar`);
+    const global = el('span', 'fb-global', `<i class="ti ti-filter"></i><span class="fb-global-txt">No filters</span>`);
+    const clearAll = el('button', 'fb-clear-all', `<i class="ti ti-x"></i>Clear`);
     clearAll.type = 'button';
     clearAll.addEventListener('click', clearAll_);
     right.appendChild(global);
@@ -320,10 +320,10 @@
     // al instante. El panel queda abierto para seguir tildando varias opciones.
     const panel = el('div', 'fb-panel');
     panel.innerHTML =
-      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="Buscar…"></div>` +
+      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="Search…"></div>` +
       `<div class="fb-actions-top">` +
-        `<button class="fb-link" type="button" data-act="all">Seleccionar todo</button>` +
-        `<button class="fb-link" type="button" data-act="none">Limpiar</button>` +
+        `<button class="fb-link" type="button" data-act="all">Select all</button>` +
+        `<button class="fb-link" type="button" data-act="none">Clear</button>` +
       `</div>` +
       `<div class="fb-list"><div class="fb-empty">Loading…</div></div>`;
 
@@ -340,17 +340,17 @@
       `<div class="fb-presets">` +
         DATE_PRESETS.map(p => `<button class="fb-preset" type="button" data-preset="${p.id}">${p.label}</button>`).join('') +
       `</div>` +
-      `<div class="fb-date-h">Rango</div>` +
+      `<div class="fb-date-h">Range</div>` +
       `<div class="fb-range">` +
-        `<label>Desde<input type="date" class="fb-date-from"></label>` +
-        `<label>Hasta<input type="date" class="fb-date-to"></label>` +
+        `<label>From<input type="date" class="fb-date-from"></label>` +
+        `<label>To<input type="date" class="fb-date-to"></label>` +
       `</div>` +
-      `<div class="fb-date-h">Un día</div>` +
+      `<div class="fb-date-h">Single day</div>` +
       `<div class="fb-range">` +
-        `<label>Fecha<input type="date" class="fb-date-single"></label>` +
+        `<label>Date<input type="date" class="fb-date-single"></label>` +
       `</div>` +
       `<div class="fb-foot">` +
-        `<button class="fb-link" type="button" data-act="none">Limpiar</button>` +
+        `<button class="fb-link" type="button" data-act="none">Clear</button>` +
       `</div>`;
 
     panel.addEventListener('click', e => e.stopPropagation());
@@ -387,7 +387,7 @@
     const list = root.querySelector(`.fb-drop[data-key="${key}"] .fb-list`);
     if (!list) return;
     const opts = options[key] || [];
-    if (!opts.length) { list.innerHTML = `<div class="fb-empty">Sin datos del club todavía.</div>`; return; }
+    if (!opts.length) { list.innerHTML = `<div class="fb-empty">No club data yet.</div>`; return; }
     const draft = drafts[key] || new Set();
     const valid = _validCache && _validCache[key];   // Set de valores posibles según los OTROS filtros
     // Mostrar SOLO lo elegible: las opciones imposibles no se renderizan (las ya elegidas
@@ -484,10 +484,10 @@
       return p ? p.label : state.date.preset;
     }
     const f = state.date.from, t = state.date.to;
-    if (f && t && f === t) return `Día: ${f}`;     // fecha individual
+    if (f && t && f === t) return `Day: ${f}`;     // fecha individual
     if (f && t) return `${f} → ${t}`;
-    if (f) return `Desde ${f}`;
-    if (t) return `Hasta ${t}`;
+    if (f) return `From ${f}`;
+    if (t) return `To ${t}`;
     return '';
   }
 
@@ -495,7 +495,7 @@
     const n = activeCount();
     const g = root.querySelector('.fb-global');
     g.querySelector('.fb-global-txt').textContent =
-      n === 0 ? 'Sin filtros' : (n === 1 ? '1 filtro activo' : `${n} filtros activos`);
+      n === 0 ? 'No filters' : (n === 1 ? '1 active filter' : `${n} active filters`);
     g.classList.toggle('is-on', n > 0);
     root.querySelector('.fb-clear-all').disabled = n === 0;
   }
