@@ -2318,6 +2318,22 @@
 
     } else if (cfg.key === 'fvprofile') {
       specificFields = `
+        <div class="pa-section" style="margin-top:14px">Import from encoder (CSV)</div>
+        <div id="fvCsvDrop" style="border:1.5px dashed var(--cm-border);border-radius:8px;padding:14px;text-align:center;cursor:pointer;color:var(--cm-fg-muted);font:500 12px/1.4 var(--cm-font-sans)">
+          <i class="ti ti-upload" style="font-size:18px;display:block;margin-bottom:4px"></i>
+          Drop encoder CSV here or <span style="color:var(--cm-accent);text-decoration:underline">browse</span>
+          <div style="font:400 10.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:4px">load &amp; velocity columns · Vitruve · VALD · ADR · Coubber</div>
+        </div>
+        <input id="fvCsvFile" type="file" accept=".csv,.tsv,text/csv" style="display:none">
+        <div id="fvCsvMap" style="display:none;margin-top:8px">
+          <div class="ev-f2" style="margin-bottom:0">
+            <div class="ev-frow"><label class="ev-fl">Load column</label>
+              <select id="fvCsvLoadCol" class="ev-finput" onchange="applyFVCsvImport()"></select></div>
+            <div class="ev-frow"><label class="ev-fl">Velocity column</label>
+              <select id="fvCsvVelCol" class="ev-finput" onchange="applyFVCsvImport()"></select></div>
+          </div>
+          <div id="fvCsvSummary" style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:6px"></div>
+        </div>
         <div class="pa-section" style="margin-top:14px">Pares Carga / VMP</div>
         <div style="display:grid;grid-template-columns:70px 1fr 1fr 36px;gap:6px;margin-bottom:6px;padding:0 4px">
           <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Set</span>
@@ -2342,7 +2358,7 @@
     // Post-render init
     if (cfg.key === 'fms') calcFMS();
     if (cfg.key === 'skinfold') onSkinfoldMethodChange();
-    if (cfg.key === 'fvprofile') { for (let i = 0; i < 4; i++) addFVRow(); }
+    if (cfg.key === 'fvprofile') { for (let i = 0; i < 4; i++) addFVRow(); initFVCsvImport(); }
   }
 
   async function onPaPlayerChange() {
@@ -2980,6 +2996,90 @@
       <div style="position:relative"><input type="number" class="fv-vmp ev-finput" step="0.01" min="0.05" max="3.5" placeholder="VMP" oninput="calcFVProfile()" style="padding-right:38px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">m/s</span></div>
       <button type="button" style="width:28px;height:28px;border:0;background:transparent;color:var(--cm-fg-faint);cursor:pointer;border-radius:5px" onclick="this.closest('.fv-row').remove();calcFVProfile()"><i class="ti ti-trash" style="font-size:13px"></i></button>`;
     c.appendChild(row);
+  }
+
+  // ─── Encoder CSV import (inside F-V Profile test) ───
+  let _fvCsvData = null;
+
+  function initFVCsvImport() {
+    _fvCsvData = null;
+    const dz = document.getElementById('fvCsvDrop');
+    const fi = document.getElementById('fvCsvFile');
+    if (!dz || !fi) return;
+    dz.addEventListener('click', () => fi.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; const f = e.dataTransfer.files[0]; if (f) parseFVCsvFile(f); });
+    fi.addEventListener('change', e => { if (e.target.files[0]) parseFVCsvFile(e.target.files[0]); });
+  }
+
+  // Match the first header whose normalized name contains one of the keywords (keyword order = priority)
+  function detectFVColumn(headers, keywords, exclude) {
+    const norm = s => String(s).toLowerCase().replace(/[._\-\/\s]+/g, ' ').trim();
+    for (const kw of keywords) {
+      const hit = headers.find(h => h !== exclude && norm(h).includes(kw));
+      if (hit) return hit;
+    }
+    return '';
+  }
+
+  function parseFVCsvFile(file) {
+    if (!window.Papa) { alert('PapaParse not loaded'); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete(res) {
+        if (!res.data.length) { alert('Empty file.'); return; }
+        _fvCsvData = res.data;
+        const headers = res.meta.fields || [];
+        const loadGuess = detectFVColumn(headers, ['load', 'carga', 'weight', 'mass', 'peso', 'kg']);
+        const velGuess  = detectFVColumn(headers, ['mean velocity', 'velocity', 'velocidad', 'vmean', 'vmp', 'm s', 'vel'], loadGuess);
+        const opts = headers.map(h => `<option value="${h.replace(/"/g, '&quot;')}">${h}</option>`).join('');
+        const loadSel = document.getElementById('fvCsvLoadCol');
+        const velSel  = document.getElementById('fvCsvVelCol');
+        loadSel.innerHTML = opts; velSel.innerHTML = opts;
+        loadSel.value = loadGuess || headers[0] || '';
+        velSel.value  = velGuess || headers[1] || headers[0] || '';
+        document.getElementById('fvCsvMap').style.display = '';
+        applyFVCsvImport();
+      },
+      error(err) { alert('Parse error: ' + err.message); }
+    });
+  }
+
+  function applyFVCsvImport() {
+    if (!_fvCsvData) return;
+    const loadCol = document.getElementById('fvCsvLoadCol')?.value;
+    const velCol  = document.getElementById('fvCsvVelCol')?.value;
+    const summary = document.getElementById('fvCsvSummary');
+    if (!loadCol || !velCol) return;
+
+    // Best attempt per load: keep the highest velocity for each load (Coubber-style)
+    const best = new Map();
+    let skipped = 0;
+    for (const row of _fvCsvData) {
+      const kg = parseFloat(row[loadCol]);
+      const v  = parseFloat(row[velCol]);
+      if (!isFinite(kg) || !isFinite(v) || kg <= 0 || v <= 0) { skipped++; continue; }
+      const prev = best.get(kg);
+      if (prev === undefined || v > prev) best.set(kg, v);
+    }
+    const pairs = [...best.entries()].map(([kg, v]) => ({ kg, v })).sort((a, b) => a.kg - b.kg);
+    if (!pairs.length) {
+      if (summary) summary.textContent = 'No valid load/velocity pairs found — check the column mapping.';
+      return;
+    }
+
+    const c = document.getElementById('fvRowsContainer');
+    if (!c) return;
+    c.innerHTML = '';
+    pairs.forEach(p => {
+      addFVRow();
+      const last = c.lastElementChild;
+      last.querySelector('.fv-load').value = p.kg;
+      last.querySelector('.fv-vmp').value  = +p.v.toFixed(3);
+    });
+    calcFVProfile();
+    if (summary) summary.textContent = `Imported ${pairs.length} load${pairs.length > 1 ? 's' : ''} (${skipped} row${skipped === 1 ? '' : 's'} skipped)`;
   }
 
   // ─── Calc: VBT F-V Profile (Samozino & Morin 2012–2016) ───
