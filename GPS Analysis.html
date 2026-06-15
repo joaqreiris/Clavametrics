@@ -3718,10 +3718,11 @@ async function _fetchReports(state) {
   const CHUNK = 400;
   let allReports = [];
   for (let i = 0; i < sessionIds.length; i += CHUNK) {
-    const { data: chunk } = await window.sb.from('gps_reports')
+    let _frQ = window.sb.from('gps_reports')
       .select('player_id,session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,accelerations,decelerations,max_speed,avg_speed,player_load,hmld,time_played,distance_per_minute,players(first_name,last_name,number,position)')
-      .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId)
-      .order('total_distance', { ascending: false });
+      .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId);
+    if (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) _frQ = _frQ.in('player_id', window._gpPlayerIds);
+    const { data: chunk } = await _frQ.order('total_distance', { ascending: false });
     if (chunk?.length) allReports = allReports.concat(chunk);
   }
 
@@ -11486,10 +11487,12 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = window._gpClubId || await window.getClubId?.();
       if (!clubId) return;
 
+      let _olReportsQ = window.sb.from('gps_reports')
+        .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
+        .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId);
+      if (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) _olReportsQ = _olReportsQ.in('player_id', window._gpPlayerIds);
       const [{ data: reports }, { data: players }] = await Promise.all([
-        window.sb.from('gps_reports')
-          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
-          .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId),
+        _olReportsQ,
         (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive')),
       ]);
 
