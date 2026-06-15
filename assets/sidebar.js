@@ -3,12 +3,16 @@
 // Usage: <div id="hub-side-root"></div> inside .hub-shell
 
 (function () {
+  // Desktop collapse state — applied to <html> synchronously (script runs in <head>,
+  // before .hub-shell exists / first paint) so there's no expanded→collapsed flash.
+  try { if (localStorage.getItem('cm_sidebar_collapsed') === '1') document.documentElement.classList.add('cm-rail'); } catch (_) {}
+
   // ── CSS ──────────────────────────────────────────────────────
   if (!document.getElementById('cm-sidebar-css')) {
     const s = document.createElement('style');
     s.id = 'cm-sidebar-css';
     s.textContent = `
-.hub-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.hub-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh;transition:grid-template-columns .2s ease}
 .hub-side{background:var(--cm-side-bg);color:var(--cm-side-fg);border-right:1px solid var(--cm-side-border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
 @media(max-width:768px){
   .hub-shell{grid-template-columns:1fr}
@@ -118,6 +122,28 @@
 .cm-cp-foot{padding:10px 14px;border-top:1px solid var(--cm-border,#e5e7eb);display:flex;justify-content:center;flex-shrink:0}
 .cm-cp-foot a{font:600 12px/1 var(--cm-font-sans,sans-serif);color:var(--cm-accent,#6366f1);text-decoration:none;padding:6px 12px;border-radius:6px}
 .cm-cp-foot a:hover{background:var(--cm-bg-soft,#f4f4f5)}
+/* Desktop collapse toggle button (in .hub-brand) */
+.hub-brand .cm-collapse-btn{width:24px;height:24px;border-radius:6px;border:1px solid var(--cm-side-border);background:transparent;color:var(--cm-side-fg-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+.hub-brand .cm-collapse-btn:hover{background:var(--cm-side-item-active-bg);color:var(--cm-side-fg)}
+.hub-brand .cm-collapse-btn .ti{font-size:16px}
+@media(max-width:768px){.hub-brand .cm-collapse-btn{display:none}}
+/* Collapsed icon rail — desktop only; mobile off-canvas is untouched */
+@media(min-width:769px){
+  html.cm-rail .hub-shell{grid-template-columns:64px 1fr}
+  html.cm-rail .hub-brand{flex-direction:column;gap:10px;padding:14px 0}
+  html.cm-rail .hub-brand .body,
+  html.cm-rail .hub-brand .switch,
+  html.cm-rail .hub-nav-label,
+  html.cm-rail .hub-nav-txt,
+  html.cm-rail .hub-nav-item .count,
+  html.cm-rail .hub-user .who,
+  html.cm-rail .hub-logout-btn span{display:none}
+  html.cm-rail .hub-nav{padding:8px 8px}
+  html.cm-rail .hub-nav-item{justify-content:center;padding:8px 0;gap:0}
+  html.cm-rail .hub-nav-item .ti{font-size:18px}
+  html.cm-rail .hub-user{justify-content:center;padding:8px 0;gap:0}
+  html.cm-rail .hub-logout-btn{justify-content:center;padding:7px 0;gap:0}
+}
     `;
     document.head.appendChild(s);
   }
@@ -185,7 +211,7 @@
           const extra  = item.extra ? ` ${item.extra}` : '';
           const adm    = item.adminOnly ? ' data-admin-only' : '';
           const mod    = item.key ? ` data-mod="${item.key}"` : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}${mod}><i class="ti ${item.icon}"></i><span>${item.label}</span></a>`;
+          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}${mod} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt">${item.label}</span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -208,6 +234,7 @@
           </div>
         </div>
         <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
+        <button class="cm-collapse-btn" id="cmCollapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar"><i class="ti ti-layout-sidebar-left-collapse"></i></button>
       </div>
       <nav class="hub-nav">${renderNav()}</nav>
       <div class="hub-side-foot">
@@ -295,6 +322,22 @@
 
     document.getElementById('sideLogoutBtn')?.addEventListener('click', () => {
       if (typeof window.logout === 'function') window.logout();
+    });
+
+    // Desktop collapse/expand (icon rail) — state on <html>, persisted in localStorage
+    const collapseBtn = document.getElementById('cmCollapseBtn');
+    function _syncCollapseBtn() {
+      if (!collapseBtn) return;
+      const on = document.documentElement.classList.contains('cm-rail');
+      collapseBtn.innerHTML = `<i class="ti ti-layout-sidebar-left-${on ? 'expand' : 'collapse'}"></i>`;
+      collapseBtn.title = on ? 'Expand sidebar' : 'Collapse sidebar';
+      collapseBtn.setAttribute('aria-label', collapseBtn.title);
+    }
+    _syncCollapseBtn();
+    collapseBtn?.addEventListener('click', () => {
+      const on = document.documentElement.classList.toggle('cm-rail');
+      try { localStorage.setItem('cm_sidebar_collapsed', on ? '1' : '0'); } catch (_) {}
+      _syncCollapseBtn();
     });
   }
 
