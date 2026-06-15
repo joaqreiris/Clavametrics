@@ -2128,6 +2128,9 @@
   };
 
   const VBT_EVAL_TYPES = { 'Back Squat':'VBT · back squat', 'Bench Press':'VBT · bench press', 'Hip Thrust':'VBT · hip thrust', 'Deadlift':'VBT · deadlift', 'Military Press':'VBT · military press', 'Bench Pull':'VBT · bench pull' };
+  // Minimum velocity threshold (MVT / V1RM, m/s) per exercise — load at this velocity ≈ 1RM.
+  // Exercises absent here fall back to V0 (x-intercept, load at v=0) as a generic estimate.
+  const VBT_V1RM = { 'Back Squat':0.30, 'Bench Press':0.17, 'Hip Thrust':0.25, 'Deadlift':0.20, 'Military Press':0.19, 'Bench Pull':0.50 };
 
   let _paCurrent = null;
   let _paPlayerData = null;
@@ -2206,12 +2209,15 @@
             <option value="Romanian Deadlift">Romanian Deadlift</option>
             <option value="Pull-up">Pull-up</option>
           </select></div>
-        <div class="ev-f2">
-          <div class="ev-frow"><label class="ev-fl">Mean velocity <span style="color:var(--cm-danger)">*</span></label>
-            <div class="pt-field"><div class="input-wrap"><input id="paVel" type="number" step="0.01" min="0.05" max="3.5" class="ev-finput" placeholder="e.g. 0.78" oninput="calcVBT()"><span class="unit">m/s</span></div></div></div>
-          <div class="ev-frow"><label class="ev-fl">Load used</label>
-            <div class="pt-field"><div class="input-wrap"><input id="paVBTkg" type="number" step="0.5" min="5" max="400" class="ev-finput" placeholder="kg" oninput="calcVBT()"><span class="unit">kg</span></div></div></div>
-        </div>`;
+        <div class="pa-section" style="margin-top:14px">Load / velocity profile <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(min 2 loads · 2-point method)</span></div>
+        <div style="display:grid;grid-template-columns:70px 1fr 1fr 36px;gap:6px;margin-bottom:6px;padding:0 4px">
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Set</span>
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Load (kg)</span>
+          <span style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Best VMP (m/s)</span>
+          <span></span>
+        </div>
+        <div id="vbtRowsContainer" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px"></div>
+        <button type="button" class="pt-add-sprint" onclick="addVBTRow()"><i class="ti ti-plus"></i> Add load</button>`;
 
     } else if (cfg.key === 'orm') {
       specificFields = `
@@ -2359,6 +2365,7 @@
     if (cfg.key === 'fms') calcFMS();
     if (cfg.key === 'skinfold') onSkinfoldMethodChange();
     if (cfg.key === 'fvprofile') { for (let i = 0; i < 4; i++) addFVRow(); initFVCsvImport(); }
+    if (cfg.key === 'vbt') { for (let i = 0; i < 3; i++) addVBTRow(); }
   }
 
   async function onPaPlayerChange() {
@@ -2393,7 +2400,11 @@
       }
     }
     // Load previous test history for this player
-    const testType = _paCurrent?.label;
+    let testType = _paCurrent?.label;
+    if (cfg?.key === 'vbt') {
+      const ex = document.getElementById('paExercise')?.value || 'Back Squat';
+      testType = VBT_EVAL_TYPES[ex] || `VBT · ${ex.toLowerCase()}`;
+    }
     if (testType) loadPaHistory(pid, testType);
   }
 
@@ -2572,75 +2583,126 @@
   }
 
   // ─── Calc: VBT (González-Badillo) ───
+  // Linear fit of velocity vs load over the .vbt-row inputs → { pairs, a, b, R2, method } or null
+  function vbtFit() {
+    const pairs=[...document.querySelectorAll('.vbt-row')].reduce((acc,r)=>{
+      const kg=parseFloat(r.querySelector('.vbt-load')?.value);
+      const v=parseFloat(r.querySelector('.vbt-vmp')?.value);
+      if (!isNaN(kg)&&!isNaN(v)&&kg>0&&v>0) acc.push({kg,v});
+      return acc;
+    },[]);
+    if (pairs.length<2) return { pairs, error:'few' };
+    const n=pairs.length;
+    const sx=pairs.reduce((s,p)=>s+p.kg,0), sy=pairs.reduce((s,p)=>s+p.v,0);
+    const sxy=pairs.reduce((s,p)=>s+p.kg*p.v,0), sx2=pairs.reduce((s,p)=>s+p.kg*p.kg,0);
+    const denom=n*sx2-sx*sx;
+    if (denom===0) return { pairs, error:'sameload' };
+    const b=(n*sxy-sx*sy)/denom;          // slope (m/s per kg, negative on a valid profile)
+    const a=(sy-b*sx)/n;                   // intercept = velocity at load 0
+    const method=n===2?'2-point':'multi-point';
+    const ymean=sy/n;
+    const SStot=pairs.reduce((s,p)=>s+(p.v-ymean)**2,0);
+    const SSres=pairs.reduce((s,p)=>s+(p.v-(a+b*p.kg))**2,0);
+    const R2=n===2?1:(SStot>0?+(1-SSres/SStot).toFixed(3):0);   // 2 points → exact line
+    return { pairs, a, b, method, R2, n };
+  }
+
   function calcVBT() {
-    const vel      = parseFloat(document.getElementById('paVel')?.value);
-    const loadKg   = parseFloat(document.getElementById('paVBTkg')?.value);
     const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
     const resEl    = document.getElementById('paResults');
     const zoneEl   = document.getElementById('paZones');
-
-    if (!vel || vel <= 0) {
-      resEl.innerHTML = '';
-      zoneEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter velocity to see analysis</div>';
+    if (!resEl || !zoneEl) return;
+    const fit = vbtFit();
+    if (fit.error==='few') {
+      resEl.innerHTML='';
+      zoneEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter at least 2 loads to build the load-velocity profile (current: ${fit.pairs.length})</div>`;
       return;
     }
+    if (fit.error==='sameload') {
+      resEl.innerHTML='';
+      zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loads must differ to fit a load-velocity line.</div>';
+      return;
+    }
+    const { pairs, a, b, method, R2 } = fit;
+    const hasThreshold = VBT_V1RM[exercise] !== undefined;
+    const v1rm = hasThreshold ? VBT_V1RM[exercise] : 0;   // fallback: V0 (x-intercept, load at v=0)
+    const validSlope = b < 0;
+    const est1RM = validSlope ? +(((v1rm - a) / b)).toFixed(1) : null;
+    const eqStr = `v = ${a.toFixed(3)} ${b < 0 ? '−' : '+'} ${Math.abs(b).toFixed(4)}·Load`;
 
-    let zone, zonePct, zoneColor;
-    if      (vel <= 0.35) { zone='Maximum strength'; zonePct='90–100% 1RM'; zoneColor='#B91C1C'; }
-    else if (vel <= 0.50) { zone='Strength';          zonePct='80–90% 1RM';  zoneColor='#B45309'; }
-    else if (vel <= 0.75) { zone='Strength-power';    zonePct='65–80% 1RM';  zoneColor='#CA8A04'; }
-    else if (vel <= 1.00) { zone='Power';              zonePct='50–65% 1RM';  zoneColor='#15803D'; }
-    else if (vel <= 1.30) { zone='Power-velocity';     zonePct='35–50% 1RM';  zoneColor='#1D4ED8'; }
-    else                  { zone='Velocity';           zonePct='< 35% 1RM';   zoneColor='#7C3AED'; }
+    // ── SVG chart: X = Load (kg), Y = Velocity (m/s) ──
+    const W=460,H=240,pl=55,pr=15,pt=24,pb=38;
+    const gW=W-pl-pr, gH=H-pt-pb;
+    const dataMaxX=Math.max(...pairs.map(p=>p.kg));
+    const dataMaxY=Math.max(...pairs.map(p=>p.v));
+    const maxX_ax=Math.max(est1RM&&est1RM>0?est1RM:0, dataMaxX)*1.1;
+    const maxY_ax=Math.max(a>0?a:0, dataMaxY)*1.1;
+    const toX=L=>pl+(L/maxX_ax)*gW, toY=v=>pt+gH-(v/maxY_ax)*gH;
+    let gridSvg='';
+    for (let i=0;i<=4;i++){ const L=maxX_ax*i/4, x=toX(L);
+      gridSvg+=`<line x1="${x.toFixed(0)}" y1="${pt}" x2="${x.toFixed(0)}" y2="${pt+gH}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg+=`<text x="${x.toFixed(0)}" y="${(pt+gH+14)}" text-anchor="middle" font-size="10" fill="var(--cm-fg-muted)">${Math.round(L)}</text>`; }
+    for (let i=0;i<=4;i++){ const v=maxY_ax*i/4, y=toY(v);
+      gridSvg+=`<line x1="${pl}" y1="${y.toFixed(0)}" x2="${pl+gW}" y2="${y.toFixed(0)}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg+=`<text x="${pl-6}" y="${(y+4).toFixed(0)}" text-anchor="end" font-size="10" fill="var(--cm-fg-muted)">${v.toFixed(2)}</text>`; }
+    // Regression line from load 0 (v=a) to where velocity hits 0 (or the axis edge)
+    const lEnd=validSlope?Math.min(maxX_ax,-a/b):maxX_ax;
+    const x0=toX(0), y0=toY(Math.min(a,maxY_ax)), x1=toX(lEnd), y1=toY(Math.max(0,a+b*lEnd));
+    const dots=pairs.map(p=>`<circle cx="${toX(p.kg).toFixed(1)}" cy="${toY(p.v).toFixed(1)}" r="4.5" fill="var(--cm-accent)" stroke="var(--cm-surface)" stroke-width="2"><title>${p.kg}kg · ${p.v}m/s</title></circle>`).join('');
+    const markE1=(est1RM&&est1RM>0&&est1RM<=maxX_ax)?toX(est1RM):null;
+    const markV1=toY(Math.min(v1rm,maxY_ax));
+    const chart=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;border-radius:8px;margin-bottom:12px">
+      <rect width="${W}" height="${H}" fill="var(--cm-bg-soft)" rx="8"/>
+      <g>${gridSvg}</g>
+      ${markE1!==null?`<line x1="${pl}" y1="${markV1.toFixed(1)}" x2="${markE1.toFixed(1)}" y2="${markV1.toFixed(1)}" stroke="var(--cm-warning)" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>`:''}
+      ${markE1!==null?`<line x1="${markE1.toFixed(1)}" y1="${pt}" x2="${markE1.toFixed(1)}" y2="${(pt+gH)}" stroke="var(--cm-warning)" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>`:''}
+      <line x1="${x0.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${x1.toFixed(1)}" y2="${y1.toFixed(1)}" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round"/>
+      ${dots}
+      ${markE1!==null?`<circle cx="${markE1.toFixed(1)}" cy="${markV1.toFixed(1)}" r="5" fill="var(--cm-warning)"/>`:''}
+      ${markE1!==null?`<text x="${(markE1-4).toFixed(1)}" y="${(pt+gH-6)}" text-anchor="end" font-size="10" fill="var(--cm-warning)">1RM=${est1RM}kg</text>`:''}
+      <text x="${(pl+gW-2)}" y="${(pt+14)}" text-anchor="end" font-size="11" font-weight="600" fill="${R2>=0.95?'var(--cm-success)':'var(--cm-danger)'}">R² = ${R2}</text>
+      <text x="${(pl+gW/2).toFixed(0)}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Load (kg)</text>
+      <text transform="translate(13 ${(pt+gH/2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Velocity (m/s)</text>
+    </svg>`;
 
-    const est1RMpct = Math.max(5, Math.min(100, 128.7 - 65.4 * vel));
-    const est1RM = (loadKg && est1RMpct > 0) ? +(loadKg / (est1RMpct / 100)).toFixed(1) : null;
-
-    resEl.innerHTML = `
-      <div class="pa-result-hero">
-        <div class="pa-hero-row">
-          <div><div class="pa-hero-label">Velocity</div><div class="pa-hero-val">${vel}<small>m/s</small></div></div>
-          ${est1RM ? `<div><div class="pa-hero-label">Est. 1RM</div><div class="pa-hero-val">${est1RM}<small>kg</small></div></div>` : ''}
-        </div>
-        <div style="margin-top:8px">
-          <span style="display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:5px;background:${zoneColor}20;color:${zoneColor};font:700 11px/1 var(--cm-font-mono);border:1px solid ${zoneColor}40">${zone} · ${zonePct}</span>
-          ${est1RMpct ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">≈ ${Math.round(est1RMpct)}% 1RM</span>` : ''}
-        </div>
-      </div>`;
-
-    const allZones = [
-      { name:'Maximum strength', lo:0.15, hi:0.35, pct:'90–100%', obj:'Max force' },
-      { name:'Strength',         lo:0.35, hi:0.50, pct:'80–90%',  obj:'Force capacity' },
-      { name:'Strength-power',   lo:0.50, hi:0.75, pct:'65–80%',  obj:'Rate of force dev.' },
-      { name:'Power',            lo:0.75, hi:1.00, pct:'50–65%',  obj:'Peak power' },
-      { name:'Power-velocity',   lo:1.00, hi:1.30, pct:'35–50%',  obj:'Stretch-shortening' },
-      { name:'Velocity',         lo:1.30, hi:3.50, pct:'< 35%',   obj:'Max velocity' },
+    const kpis=[
+      ['Est. 1RM', est1RM&&est1RM>0?est1RM:'—', est1RM&&est1RM>0?'kg':'', `at V1RM ${v1rm} m/s`],
+      ['V1RM', v1rm, 'm/s', hasThreshold?exercise:'generic (V0)'],
+      ['Slope', b.toFixed(4), '(m/s)/kg', 'load sensitivity'],
+      ['R²', R2, '', method],
     ];
-    const lossRows = [
-      { goal:'Max strength', thr:'≤ 20%' },
-      { goal:'Hypertrophy',  thr:'25–30%' },
-      { goal:'Power',        thr:'≤ 15%' },
-    ].map(l => `<tr><td>${l.goal}</td><td class="r">${l.thr}</td></tr>`).join('');
-
-    const zoneRows = allZones.map(z => {
-      const active = vel >= z.lo && vel < z.hi;
-      const hiStr  = z.hi === 3.50 ? `> ${z.lo}` : `${z.lo}–${z.hi}`;
-      return `<tr${active ? ' class="pa-zone-active"' : ''}><td><div class="pa-zone-name">${z.name}${active ? ' ◀' : ''}</div><div class="pa-zone-pct">${z.obj}</div></td><td>${hiStr} m/s</td><td class="r">${z.pct}</td></tr>`;
-    }).join('');
-
-    zoneEl.innerHTML = `
-      <div class="pa-section" style="margin-top:0">Velocity zones · ${exercise}</div>
-      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
-        <table class="pa-zone-table"><thead><tr><th>Zone</th><th>Velocity</th><th class="r">% 1RM</th></tr></thead>
-        <tbody>${zoneRows}</tbody></table>
+    const notice = !hasThreshold
+      ? `<div style="margin-top:8px;padding:8px;background:rgba(180,83,9,0.12);border-radius:6px;border:1px solid rgba(180,83,9,0.3);font:500 12px/1.4 var(--cm-font-sans);color:#B45309">⚠ No velocity threshold for "${exercise}" — generic estimate using V0 (load at v=0).</div>`
+      : !validSlope
+        ? `<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">⚠ Velocity does not decrease with load (slope ≥ 0) — cannot estimate 1RM. Check inputs.</div>`
+        : R2<0.95
+          ? `<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">⚠ Low profile quality (R²=${R2}) — review measurements.</div>`
+          : '';
+    resEl.innerHTML=`<div class="pa-result-hero">
+      ${chart}
+      <div style="margin-bottom:8px"><span style="display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:5px;background:var(--cm-accent-soft);color:var(--cm-accent);font:700 11px/1 var(--cm-font-mono);border:1px solid var(--cm-accent)">${method}</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">${eqStr}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
+        ${kpis.map(([l,v,u,d])=>`<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
       </div>
-      <div class="pa-section">Velocity loss thresholds</div>
+      ${notice}
+    </div>`;
+
+    const tableRows=pairs.map(p=>{ const vp=+(a+b*p.kg).toFixed(3); const err=+Math.abs(p.v-vp).toFixed(3);
+      return `<tr><td>${p.kg} kg</td><td class="r">${p.v} m/s</td><td class="r">${vp} m/s</td><td class="r" style="color:${err>0.05?'var(--cm-warning)':'var(--cm-fg-muted)'}">${err}</td></tr>`; }).join('');
+    zoneEl.innerHTML=`
+      <div class="pa-section" style="margin-top:0">Data · ${pairs.length} loads · ${exercise}</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
-        <table class="pa-zone-table"><thead><tr><th>Goal</th><th class="r">Max loss</th></tr></thead>
-        <tbody>${lossRows}</tbody></table>
+        <table class="pa-zone-table"><thead><tr><th>Load</th><th class="r">VMP</th><th class="r">VMP pred.</th><th class="r">Error</th></tr></thead>
+        <tbody>${tableRows}</tbody></table>
+      </div>
+      <div class="pa-section">Formula · load-velocity profile</div>
+      <div class="pt-formula" style="font-size:11px">
+        VMP = a + b·Load &nbsp;·&nbsp; ${method === '2-point' ? 'exact line through 2 loads' : 'least-squares fit'}<br>
+        1RM = (V1RM − a) / b &nbsp;·&nbsp; V1RM = ${v1rm} m/s${hasThreshold ? '' : ' (V0 fallback)'}<br>
+        <span class="cit">González-Badillo &amp; Sánchez-Medina (2010) · García-Ramos et al. (2018) two-point method · MVT thresholds Sánchez-Medina et al.</span>
       </div>`;
 
-    document.getElementById('paFootInfo').textContent = `${exercise} · ${vel} m/s · ${zone} · ${zonePct}${est1RM ? ` · Est. 1RM ${est1RM} kg` : ''}`;
+    document.getElementById('paFootInfo').textContent=`${exercise} · ${method} · ${eqStr} · R²=${R2}${est1RM&&est1RM>0?` · Est. 1RM ${est1RM} kg @ V1RM ${v1rm}`:''}`;
   }
 
   function onVBTExerciseChange() {
@@ -2995,6 +3057,19 @@
       <div style="position:relative"><input type="number" class="fv-load ev-finput" step="0.5" min="1" max="500" placeholder="kg" oninput="calcFVProfile()" style="padding-right:32px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">kg</span></div>
       <div style="position:relative"><input type="number" class="fv-vmp ev-finput" step="0.01" min="0.05" max="3.5" placeholder="VMP" oninput="calcFVProfile()" style="padding-right:38px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">m/s</span></div>
       <button type="button" style="width:28px;height:28px;border:0;background:transparent;color:var(--cm-fg-faint);cursor:pointer;border-radius:5px" onclick="this.closest('.fv-row').remove();calcFVProfile()"><i class="ti ti-trash" style="font-size:13px"></i></button>`;
+    c.appendChild(row);
+  }
+
+  // ─── VBT load-velocity profile helpers ───
+  function addVBTRow() {
+    const c=document.getElementById('vbtRowsContainer'); if (!c) return;
+    const idx=c.children.length+1;
+    const row=document.createElement('div');
+    row.className='vbt-row'; row.style.cssText='display:grid;grid-template-columns:70px 1fr 1fr 36px;gap:6px;align-items:center';
+    row.innerHTML=`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-align:center">Set ${idx}</span>
+      <div style="position:relative"><input type="number" class="vbt-load ev-finput" step="0.5" min="1" max="500" placeholder="kg" oninput="calcVBT()" style="padding-right:32px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">kg</span></div>
+      <div style="position:relative"><input type="number" class="vbt-vmp ev-finput" step="0.01" min="0.05" max="3.5" placeholder="VMP" oninput="calcVBT()" style="padding-right:38px"><span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">m/s</span></div>
+      <button type="button" style="width:28px;height:28px;border:0;background:transparent;color:var(--cm-fg-faint);cursor:pointer;border-radius:5px" onclick="this.closest('.vbt-row').remove();calcVBT()"><i class="ti ti-trash" style="font-size:13px"></i></button>`;
     c.appendChild(row);
   }
 
@@ -3405,22 +3480,21 @@
       computed = { inputs: { timeSec: totalSec }, vo2max: vo2maxVal, vAvgKmh: +(vAvg_ms*3.6).toFixed(2), pace: `${pm}:${String(ps).padStart(2,'0')}` };
 
     } else if (cfg.key === 'vbt') {
-      value = parseFloat(document.getElementById('paVel')?.value);
-      if (!value) { alert('Please enter velocity.'); return; }
-      unit = 'm/s';
       const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+      const fit = vbtFit();
+      if (fit.error === 'few') { alert('Minimum 2 loads required for the load-velocity profile.'); return; }
+      if (fit.error === 'sameload') { alert('Loads must differ to fit the profile.'); return; }
+      const { pairs, a, b, method, R2 } = fit;
+      if (b >= 0) { if (!confirm('Velocity does not decrease with load (slope ≥ 0). Save anyway?')) return; }
+      const hasThreshold = VBT_V1RM[exercise] !== undefined;
+      const v1rm = hasThreshold ? VBT_V1RM[exercise] : 0;   // fallback: V0 (x-intercept)
+      const est1RM = b < 0 ? +(((v1rm - a) / b)).toFixed(1) : null;
+      if (est1RM === null || !isFinite(est1RM) || est1RM <= 0) { alert('Cannot estimate 1RM from this profile — check the loads/velocities.'); return; }
+      if (R2 < 0.70 && method === 'multi-point' && !confirm(`Low R² (${R2}). Save anyway?`)) return;
+      value    = est1RM;
+      unit     = 'kg';
       evalType = VBT_EVAL_TYPES[exercise] || `VBT · ${exercise.toLowerCase()}`;
-      const loadKg = parseFloat(document.getElementById('paVBTkg')?.value);
-      const pct    = Math.max(5, Math.min(100, 128.7 - 65.4 * value));
-      const est1RM = loadKg ? +(loadKg / (pct / 100)).toFixed(1) : null;
-      let zone;
-      if      (value <= 0.35) zone = 'Maximum strength';
-      else if (value <= 0.50) zone = 'Strength';
-      else if (value <= 0.75) zone = 'Strength-power';
-      else if (value <= 1.00) zone = 'Power';
-      else if (value <= 1.30) zone = 'Power-velocity';
-      else                    zone = 'Velocity';
-      computed = { inputs: { velocity: value, loadKg: isNaN(loadKg) ? null : loadKg, exercise }, zone, est1RMpct: Math.round(pct), est1RM };
+      computed = { inputs: pairs.map(p => ({ kg: p.kg, vmp: p.v })), slope: +b.toFixed(5), intercept: +a.toFixed(4), R2, v1rm_used: v1rm, est1RM, method, exercise };
 
     } else if (cfg.key === 'orm') {
       const kg   = parseFloat(document.getElementById('pa1RMkg')?.value);
