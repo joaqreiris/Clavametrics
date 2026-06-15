@@ -843,7 +843,7 @@
             <h4><span class="ic str"><i class="ti ti-barbell"></i></span>Strength / VBT<span class="ct">5 tests</span><button class="toggle-btn" onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><i class="ti ti-chevron-down"></i></button></h4>
             <div class="pt-buttons">
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-barbell"></i></div><div class="b-l">VBT · Load-Velocity</div><div class="b-s">Barbell · velocity → %1RM · per exercise</div><div class="b-last">—</div></button>
-              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-weight"></i></div><div class="b-l">1RM bench</div><div class="b-s">Direct · Brzycki</div><div class="b-last">92 kg <span class="up">+4</span></div></button>
+              <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-weight"></i></div><div class="b-l">1RM</div><div class="b-s">%1RM Estimation · Epley + Brzycki</div><div class="b-last">—</div></button>
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-chart-line"></i></div><div class="b-l">F-V Profile · jumps</div><div class="b-s">Samozino · loaded jumps · F₀ V₀ Pmax · FVimb</div><div class="b-last">—</div></button>
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-stretching-2"></i></div><div class="b-l">Nordic hamstring</div><div class="b-s">Reps · Bahr</div><div class="b-last">8 reps <span class="flat">±0</span></div></button>
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-scale-outline"></i></div><div class="b-l">Isokinetic H:Q</div><div class="b-s">Knee balance</div><div class="b-last">0.54 <span class="down">−0.06</span></div></button>
@@ -2119,7 +2119,7 @@
     '30-15 IFT':        { key:'ift',       label:'30-15 IFT',               sub:'Buchheit 2008 · VIFT → VO₂max + 6 training zones' },
     '1,600 m TT':       { key:'tt1600',    label:'1,600 m Time Trial',       sub:'Cooper adapted · VO₂max + pace-based running zones' },
     'VBT · Load-Velocity': { key:'vbt',    label:'VBT · Load-Velocity',      sub:'González-Badillo · velocity zone + 1RM estimation · per exercise', exercise:'Back Squat' },
-    '1RM bench':        { key:'orm',       label:'%1RM Estimation',          sub:'Epley + Brzycki averaged · full load prescription table', exercise:'Bench Press' },
+    '1RM':              { key:'orm',       label:'%1RM Estimation',          sub:'Epley + Brzycki averaged · full load prescription table', exercise:'Bench Press' },
     'FMS':              { key:'fms',       label:'FMS — Functional Movement Screen', sub:'Cook (2010) · 7 tests · score /21 · riesgo lesión · Kiesel et al. 2007' },
     'Ankle dorsiflexion':{ key:'ankle',    label:'Ankle Dorsiflexion',       sub:'Weight-bearing lunge test · L/R · Searle et al.' },
     'Hip ER/IR':        { key:'hiprot',    label:'Hip ER/IR — Rotación de cadera', sub:'Lerebours et al. (2016) · IR/ER bilateral · alertas BIBE/FAI' },
@@ -2221,10 +2221,14 @@
             <option value="Squat">Squat</option>
             <option value="Bench Press"${cfg.exercise==='Bench Press'?' selected':''}>Bench Press</option>
             <option value="Hip Thrust">Hip Thrust</option>
+            <option value="Deadlift">Deadlift</option>
+            <option value="Military Press">Military Press</option>
             <option value="Romanian Deadlift">Romanian Deadlift</option>
             <option value="Pull-up">Pull-up</option>
             <option value="Nordic Curl">Nordic Curl</option>
-          </select></div>
+            <option value="__custom__">Other (custom)…</option>
+          </select>
+          <input id="pa1RMCustom" type="text" class="ev-finput" placeholder="Custom exercise name" oninput="on1RMExerciseChange()" style="display:none;margin-top:8px"></div>
         <div class="ev-f2">
           <div class="ev-frow"><label class="ev-fl">Weight lifted <span style="color:var(--cm-danger)">*</span></label>
             <div class="pt-field"><div class="input-wrap"><input id="pa1RMkg" type="number" step="0.5" min="5" max="400" class="ev-finput" placeholder="kg" oninput="calc1RM_modal()"><span class="unit">kg</span></div></div></div>
@@ -2632,10 +2636,17 @@
   }
 
   // ─── Calc: %1RM (Epley + Brzycki) ───
+  // Resolve the effective 1RM exercise name (handles the "Other (custom)…" option)
+  function get1RMExercise() {
+    const sel = document.getElementById('pa1RMExercise')?.value || 'Squat';
+    if (sel === '__custom__') return document.getElementById('pa1RMCustom')?.value?.trim() || 'Custom';
+    return sel;
+  }
+
   function calc1RM_modal() {
     const kg       = parseFloat(document.getElementById('pa1RMkg')?.value);
     const reps     = parseInt(document.getElementById('pa1RMreps')?.value);
-    const exercise = document.getElementById('pa1RMExercise')?.value || 'Squat';
+    const exercise = get1RMExercise();
     const resEl    = document.getElementById('paResults');
     const zoneEl   = document.getElementById('paZones');
 
@@ -2696,9 +2707,11 @@
   }
 
   function on1RMExerciseChange() {
+    const customEl = document.getElementById('pa1RMCustom');
+    if (customEl) customEl.style.display = document.getElementById('pa1RMExercise')?.value === '__custom__' ? '' : 'none';
     calc1RM_modal();
     const pid      = document.getElementById('paPlayer')?.value;
-    const exercise = document.getElementById('pa1RMExercise')?.value || 'Squat';
+    const exercise = get1RMExercise();
     if (pid) loadPaHistory(pid, `1RM · ${exercise}`);
   }
 
@@ -3304,7 +3317,7 @@
       const kg   = parseFloat(document.getElementById('pa1RMkg')?.value);
       const reps = parseInt(document.getElementById('pa1RMreps')?.value);
       if (!kg || !reps) { alert('Please enter weight and reps.'); return; }
-      const exercise = document.getElementById('pa1RMExercise')?.value || 'Squat';
+      const exercise = get1RMExercise();
       const epley    = +(kg * (1 + reps/30)).toFixed(1);
       const brzycki  = reps < 37 ? +(kg * 36 / (37 - reps)).toFixed(1) : epley;
       value    = +((epley + brzycki) / 2).toFixed(1);
