@@ -333,13 +333,24 @@
     return v.external_id || '—';
   }
 
+  const isFolder = v.kind === 'folder';
+
   // Best-effort embeddable URL. The Open button below is always the reliable path.
   function driveId() {
     if (v.external_id) return v.external_id;
     const u = v.url || '';
     return (u.match(/\/file\/d\/([^/]+)/) || u.match(/[?&]id=([^&]+)/) || u.match(/\/d\/([^/]+)/) || [])[1] || null;
   }
+  function driveFolderId() {
+    const m = (v.url || '').match(/\/folders\/([^/?#]+)/);
+    return m ? m[1] : null;
+  }
   function embedUrl() {
+    if (isFolder) {
+      // Drive folders embed as a navigable grid; Dropbox folders have no reliable embed.
+      if (v.provider === 'google_drive') { const fid = driveFolderId(); return fid ? `https://drive.google.com/embeddedfolderview?id=${fid}#grid` : null; }
+      return null;
+    }
     if (v.provider === 'google_drive') { const fid = driveId(); return fid ? `https://drive.google.com/file/d/${fid}/preview` : null; }
     if (v.provider === 'dropbox') {
       const u = v.url || ''; if (!u) return null;
@@ -349,20 +360,22 @@
     return v.url || null;
   }
   const embed = embedUrl();
-  const dur = fmtDur(v.duration_seconds);
+  const dur = isFolder ? null : fmtDur(v.duration_seconds);
+  const openLabel = isFolder ? `Open folder in ${prov.label}` : prov.open;
+  const embedBadge = isFolder ? `Browsing ${prov.label} folder` : `Streaming from ${prov.label}`;
 
   // ── Player block ─────────────────────────────────────────────────────────────
   const playerHtml = embed
     ? `<div class="vd-player">
-         <span class="vd-embedbadge"><span class="dot"></span><i class="ti ${prov.icon}"></i>Streaming from ${esc(prov.label)}</span>
+         <span class="vd-embedbadge"><span class="dot"></span><i class="ti ${prov.icon}"></i>${esc(embedBadge)}</span>
          <iframe src="${esc(embed)}" allow="autoplay; fullscreen" allowfullscreen referrerpolicy="no-referrer"></iframe>
        </div>`
     : `<div class="vd-player is-fallback">
          ${v.thumbnail_url ? `<div class="pitch" style="background-image:url('${esc(v.thumbnail_url)}')"></div>` : `<div class="pitch" style="background:radial-gradient(120% 100% at 50% -10%, #1f6b3a 0%, #14502a 45%, #0b3119 100%)"></div>`}
          <div class="vd-fb-overlay">
-           <div class="lock"><i class="ti ti-lock"></i></div>
-           <h4>Preview not available here</h4>
-           <p>This file can't be embedded. It stays in your club's ${esc(prov.label)} — open it there to watch.</p>
+           <div class="lock"><i class="ti ${isFolder ? 'ti-folder' : 'ti-lock'}"></i></div>
+           <h4>${isFolder ? 'Folder preview not available here' : 'Preview not available here'}</h4>
+           <p>${isFolder ? `This ${esc(prov.label)} folder can't be browsed here. It stays in your club's ${esc(prov.label)} — open it there to browse.` : `This file can't be embedded. It stays in your club's ${esc(prov.label)} — open it there to watch.`}</p>
          </div>
        </div>`;
 
@@ -372,7 +385,7 @@
       <div class="vd-col-main">
         ${playerHtml}
         <div class="vd-acts">
-          <button class="cm-btn is-primary" id="vdOpen"><i class="ti ${prov.icon}" style="font-size:16px"></i>${esc(prov.open)}<i class="ti ti-external-link" style="font-size:15px"></i></button>
+          <button class="cm-btn is-primary" id="vdOpen"><i class="ti ${prov.icon}" style="font-size:16px"></i>${esc(openLabel)}<i class="ti ti-external-link" style="font-size:15px"></i></button>
           <button class="cm-btn" id="vdCopy"><i class="ti ti-copy" style="font-size:15px"></i>Copy link</button>
         </div>
         <div class="vd-titlecard">
@@ -412,14 +425,14 @@
           <div class="vd-panel-bd">
             <div class="vd-dl">
               <div class="drow"><span class="dk"><i class="ti ti-cloud"></i>Source</span><span class="dv"><i class="ti ${prov.icon}" style="${v.provider==='google_drive'?'color:#1FA463':v.provider==='dropbox'?'color:#0061FF':''}"></i>${esc(prov.label)}</span></div>
-              <div class="drow"><span class="dk"><i class="ti ti-file"></i>File</span><span class="dv"><span class="truncate">${esc(fileLabel())}</span></span></div>
+              <div class="drow"><span class="dk"><i class="ti ${isFolder ? 'ti-folder' : 'ti-file'}"></i>${isFolder ? 'Folder' : 'File'}</span><span class="dv"><span class="truncate">${esc(fileLabel())}</span></span></div>
               <div class="drow"><span class="dk"><i class="ti ti-calendar"></i>Date</span><span class="dv">${fmtDate(v.created_at)}</span></div>
               <div class="drow"><span class="dk"><i class="ti ti-user-up"></i>Author</span><span class="dv">${v.uploaded_by_name ? `<span class="av" style="width:20px;height:20px;border-radius:50%;background:var(--cm-violet-bg);color:var(--cm-violet);display:inline-flex;align-items:center;justify-content:center;font:700 8.5px/1 var(--cm-font-sans)">${esc(initials(v.uploaded_by_name))}</span>${esc(v.uploaded_by_name)}` : '—'}</span></div>
               <div class="drow"><span class="dk"><i class="ti ti-external-link"></i>Open</span><span class="dv"><a href="${esc(v.url)}" target="_blank" rel="noopener">View in ${esc(prov.label)}</a></span></div>
             </div>
             <div class="vd-store-note">
               <i class="ti ti-shield-check"></i>
-              <p>The file <b>lives in your club's ${esc(prov.label)}</b>. ClavaMetrics plays/opens it and manages its context — it never stores a copy.</p>
+              <p>The ${isFolder ? 'folder' : 'file'} <b>lives in your club's ${esc(prov.label)}</b>. ClavaMetrics ${isFolder ? 'browses & opens' : 'plays/opens'} it and manages its context — it never stores a copy.</p>
             </div>
           </div>
         </div>

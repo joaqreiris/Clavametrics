@@ -140,6 +140,11 @@
   .vr-prov-hint { display:inline-flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
   .vr-prov-hint .ti { font-size:14px; }
   .vr-prov-hint b { color:var(--cm-fg-strong); }
+  .vr-prov-hint .sep { color:var(--cm-fg-faint); margin:0 2px; }
+  .vr-kind-toggle { display:inline-flex; gap:3px; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); align-self:flex-start; }
+  .vr-kind-toggle button { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border:0; background:transparent; border-radius:var(--cm-r-2); font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; }
+  .vr-kind-toggle button .ti { font-size:15px; }
+  .vr-kind-toggle button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
   .vr-modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
 
   .vr-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--cm-fg-strong); color:var(--cm-bg); border-radius:var(--cm-r-3); padding:8px 16px; font:500 13px/1 var(--cm-font-sans); z-index:900; opacity:0; pointer-events:none; transition:opacity 200ms, transform 200ms; }
@@ -224,10 +229,14 @@
     <label>Title
       <input type="text" id="vrTitle" placeholder="e.g. Clava FC vs. Crotenlo — Full match" maxlength="200">
     </label>
-    <label>Video link (Google Drive / Dropbox)
+    <label>Video or folder link (Google Drive / Dropbox)
       <input type="url" id="vrUrl" placeholder="https://drive.google.com/…">
     </label>
-    <div class="vr-prov-hint" id="vrProvHint"><i class="ti ti-world"></i>Provider: <b>—</b></div>
+    <div class="vr-prov-hint" id="vrProvHint"><i class="ti ti-world"></i>Provider: <b>—</b><span class="sep">·</span>Type: <b id="vrKindLabel">—</b></div>
+    <div class="vr-kind-toggle" id="vrKindToggle" role="group" aria-label="Item type">
+      <button type="button" data-kind="video" class="is-on"><i class="ti ti-player-play"></i>Video</button>
+      <button type="button" data-kind="folder"><i class="ti ti-folder"></i>Folder</button>
+    </div>
     <label>Thumbnail URL <span style="color:var(--cm-fg-faint)">(optional)</span>
       <input type="url" id="vrThumb" placeholder="https://…">
     </label>
@@ -276,6 +285,12 @@
     if (u.includes('drive.google.com') || u.includes('docs.google.com')) return 'google_drive';
     if (u.includes('dropbox.com')) return 'dropbox';
     return 'other';
+  }
+  function detectKind(url) {
+    const u = (url || '').toLowerCase();
+    if (u.includes('drive.google.com') || u.includes('docs.google.com')) return u.includes('/folders/') ? 'folder' : 'video';
+    if (u.includes('dropbox.com')) return (u.includes('/scl/fo/') || u.includes('/sh/')) ? 'folder' : 'video';
+    return 'video';
   }
   const PROV = {
     google_drive: { cls:'drive',   icon:'ti-brand-google-drive', label:'Drive' },
@@ -378,8 +393,10 @@
 
   function cardHtml(v) {
     const prov = PROV[v.provider] || PROV.other;
-    const dur  = fmtDur(v.duration_seconds);
-    const type = v.links.some(l => l.type === 'match') ? 'Match'
+    const isFolder = v.kind === 'folder';
+    const dur  = isFolder ? null : fmtDur(v.duration_seconds);   // folders have no duration
+    const type = isFolder ? 'Folder'
+               : v.links.some(l => l.type === 'match') ? 'Match'
                : v.links.some(l => l.type === 'session') ? 'Training'
                : v.links.some(l => l.type === 'player') ? 'Player' : 'Video';
     const thumb = v.thumbnail_url
@@ -398,11 +415,11 @@
           <span class="vr-origin ${prov.cls}"><i class="ti ${prov.icon}"></i>${prov.label}</span>
           <span class="vr-type">${type}</span>
           ${dur ? `<span class="vr-dur"><i class="ti ti-clock"></i>${dur}</span>` : ''}
-          <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+          <div class="vr-play"${isFolder ? ' style="opacity:1;transform:translate(-50%,-50%) scale(1)"' : ''}><i class="ti ${isFolder ? 'ti-folder' : 'ti-player-play-filled'}"></i></div>
         </div>
         <div class="vr-body">
           <div class="top">
-            <h3>${esc(v.title || 'Untitled video')}</h3>
+            <h3>${esc(v.title || (isFolder ? 'Untitled folder' : 'Untitled video'))}</h3>
             <button class="more" data-copy="${esc(v.url)}" title="Copy link"><i class="ti ti-dots"></i></button>
           </div>
           <div class="vr-meta">
@@ -496,9 +513,21 @@
   // ── Add video modal ────────────────────────────────────────────────────────
   const backdrop = $('#vrModalBackdrop');
   const urlInput = $('#vrUrl');
+  let kindManual = null;   // null = auto-detect from url; set when the user overrides via the toggle
+  function effectiveKind() { return kindManual ?? detectKind(urlInput.value); }
+  function updateAddHint() {
+    const url = urlInput.value.trim();
+    $('#vrProvHint').querySelector('b').textContent = url ? PROV[detectProvider(url)].label : '—';
+    const k = (url || kindManual) ? effectiveKind() : null;
+    $('#vrKindLabel').textContent = k ? (k === 'folder' ? 'Folder' : 'Video') : '—';
+    document.querySelectorAll('#vrKindToggle button').forEach(b => b.classList.toggle('is-on', b.dataset.kind === (k || 'video')));
+  }
   function openModal() {
     $('#vrTitle').value = ''; urlInput.value = ''; $('#vrThumb').value = '';
+    kindManual = null;
     $('#vrProvHint').querySelector('b').textContent = '—';
+    $('#vrKindLabel').textContent = '—';
+    document.querySelectorAll('#vrKindToggle button').forEach(b => b.classList.toggle('is-on', b.dataset.kind === 'video'));
     backdrop.classList.add('is-open'); $('#vrTitle').focus();
   }
   function closeModal() { backdrop.classList.remove('is-open'); }
@@ -506,10 +535,8 @@
   $('#vrCancelBtn').addEventListener('click', closeModal);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
-  urlInput.addEventListener('input', () => {
-    const p = detectProvider(urlInput.value);
-    $('#vrProvHint').querySelector('b').textContent = urlInput.value.trim() ? PROV[p].label : '—';
-  });
+  urlInput.addEventListener('input', updateAddHint);
+  document.querySelectorAll('#vrKindToggle button').forEach(b => b.addEventListener('click', () => { kindManual = b.dataset.kind; updateAddHint(); }));
 
   $('#vrSaveBtn').addEventListener('click', async () => {
     const title = $('#vrTitle').value.trim();
@@ -527,6 +554,7 @@
       title,
       url,
       provider:         detectProvider(url),
+      kind:             effectiveKind() || 'video',
       thumbnail_url:    $('#vrThumb').value.trim() || null,
       uploaded_by:      userId,
       uploaded_by_name: profileName,
