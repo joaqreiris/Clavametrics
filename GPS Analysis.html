@@ -681,6 +681,7 @@
               <div class="right">
                 <div class="size-toggle"><button class="is-on">S</button><button>M</button><button>L</button></div>
                 <button data-edit title="Editar card"><i class="ti ti-pencil"></i></button>
+                <button data-del title="Remove card"><i class="ti ti-x"></i></button>
               </div>
             </div>
             <div class="gp-c-b" style="min-height:120px;align-items:center;justify-content:center">
@@ -785,6 +786,7 @@
               <div class="right">
                 <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
                 <button data-edit title="Editar card"><i class="ti ti-pencil"></i></button>
+                <button data-del title="Remove card"><i class="ti ti-x"></i></button>
               </div>
             </div>
             <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
@@ -911,6 +913,7 @@
               <div class="right">
                 <div class="size-toggle"><button class="is-on">S</button><button>M</button><button>L</button></div>
                 <button data-edit title="Editar card"><i class="ti ti-pencil"></i></button>
+                <button data-del title="Remove card"><i class="ti ti-x"></i></button>
               </div>
             </div>
             <div class="gp-c-b" style="min-height:120px;align-items:center;justify-content:center">
@@ -1009,6 +1012,7 @@
               <div class="right">
                 <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
                 <button data-edit title="Editar card"><i class="ti ti-pencil"></i></button>
+                <button data-del title="Remove card"><i class="ti ti-x"></i></button>
               </div>
             </div>
             <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
@@ -2970,6 +2974,15 @@ function _renderGenericExampleCards() {
     if (pen && !pen.__genBound) {
       pen.__genBound = true;
       pen.addEventListener('click', () => window.GpBuilder.openForEdit?.(el));
+    }
+    const del = el.querySelector('[data-del]');
+    if (del && !del.__genBound) {
+      del.__genBound = true;
+      del.addEventListener('click', () => {
+        el.remove();
+        const view = document.querySelector('.gp-view.is-on')?.dataset.view;
+        if (view) saveLayout(view).catch(e => console.warn('saveLayout on example card delete:', e));
+      });
     }
     window.GpBuilder.resolveAndRenderCard(el, el.__config);
   }
