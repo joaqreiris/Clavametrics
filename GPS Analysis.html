@@ -3413,10 +3413,10 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // `acwrDaily` drives the ACWR chart when a different base metric is chosen.
   const acwrMetric = document.getElementById('card-acwr')?.dataset.metricKey || 'player_load';
   const _acwrCols  = acwrMetric !== 'player_load' ? `,${acwrMetric}` : '';
-  const { data: histLoads } = await window.sb.from('gps_reports')
+  const { data: histLoads } = await _scopeTeam(window.sb.from('gps_reports')
     .select(`session_id,player_load${_acwrCols}`)
     .in('session_id', hids.slice(0, 400))
-    .eq('club_id', clubId);
+    .eq('club_id', clubId));
 
   // Build session → avg load map
   const loadBySession = {};
@@ -3683,6 +3683,13 @@ if (window._gpReports && window._gpClubId) {
 // microcycle / player / baseline pills change
 // ══════════════════════════════════════════════════════════════
 
+// Limita una query de gps_reports al equipo activo (window._gpPlayerIds). No-op si no hay equipo.
+function _scopeTeam(q) {
+  return (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length)
+    ? q.in('player_id', window._gpPlayerIds) : q;
+}
+window._scopeTeam = _scopeTeam;
+
 async function _fetchReports(state) {
   const clubId = window._gpClubId;
   if (!clubId) return [];
@@ -3718,11 +3725,10 @@ async function _fetchReports(state) {
   const CHUNK = 400;
   let allReports = [];
   for (let i = 0; i < sessionIds.length; i += CHUNK) {
-    let _frQ = window.sb.from('gps_reports')
+    const { data: chunk } = await _scopeTeam(window.sb.from('gps_reports')
       .select('player_id,session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,accelerations,decelerations,max_speed,avg_speed,player_load,hmld,time_played,distance_per_minute,players(first_name,last_name,number,position)')
-      .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId);
-    if (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) _frQ = _frQ.in('player_id', window._gpPlayerIds);
-    const { data: chunk } = await _frQ.order('total_distance', { ascending: false });
+      .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId))
+      .order('total_distance', { ascending: false });
     if (chunk?.length) allReports = allReports.concat(chunk);
   }
 
@@ -8711,10 +8717,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         currentSessId, ...refSessIds, ...trendSessIds,
         ...shapeCurrSessIds, ...shapeRefAllSessIds,
       ])];
-      const { data: reports } = await window.sb
+      const { data: reports } = await _scopeTeam(window.sb
         .from('gps_reports')
         .select(`player_id,session_id,${MC_METRICS.map(m => m.key).join(',')}`)
-        .eq('club_id', clubId).in('session_id', allSessIds);
+        .eq('club_id', clubId).in('session_id', allSessIds));
 
       const allReports = reports || [];
 
@@ -9691,10 +9697,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (!matchSessions.length) { _mpCurrentRows = []; kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">No hay partidos para los filtros activos.</div>'; return; }
 
       const sessIds = matchSessions.map(s => s.id);
-      const { data: reports } = await window.sb
+      const { data: reports } = await _scopeTeam(window.sb
         .from('gps_reports')
         .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played,players!inner(position)')
-        .eq('club_id', clubId).in('session_id', sessIds);
+        .eq('club_id', clubId).in('session_id', sessIds));
 
       let rows = reports || [];
       if (FB?.playerIds?.length) { const p = new Set(FB.playerIds);  rows = rows.filter(r => p.has(r.player_id)); }
@@ -10432,11 +10438,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     try {
       const clubId = await window.getClubId?.();
       _scCurrentClubId = clubId;
-      const { data: reports } = await window.sb
+      const { data: reports } = await _scopeTeam(window.sb
         .from('gps_reports')
         .select('id, player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
         .eq('session_id', sessionId)
-        .eq('club_id', clubId);
+        .eq('club_id', clubId));
 
       const { data: players } = await window.sb
         .from('players')
@@ -11221,11 +11227,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       // Batch-fetch reports for current + all equivalents
       const allIds = [sessionId, ...equivalents.map(s => s.id)];
-      const { data: reports, error: rErr } = await window.sb
+      const { data: reports, error: rErr } = await _scopeTeam(window.sb
         .from('gps_reports')
         .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
         .in('session_id', allIds)
-        .eq('club_id', clubId);
+        .eq('club_id', clubId));
       if (rErr) throw rErr;
 
       // Squad avg of current session per metric
@@ -11487,12 +11493,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const clubId = window._gpClubId || await window.getClubId?.();
       if (!clubId) return;
 
-      let _olReportsQ = window.sb.from('gps_reports')
-        .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
-        .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId);
-      if (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) _olReportsQ = _olReportsQ.in('player_id', window._gpPlayerIds);
       const [{ data: reports }, { data: players }] = await Promise.all([
-        _olReportsQ,
+        _scopeTeam(window.sb.from('gps_reports')
+          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
+          .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId)),
         (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive')),
       ]);
 
@@ -11741,11 +11745,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       await _vsEnsureSessions(clubId);
 
-      const { data: reports, error } = await window.sb
+      const { data: reports, error } = await _scopeTeam(window.sb
         .from('gps_reports')
         .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
         .in('session_id', [sessionId, refId])
-        .eq('club_id', clubId);
+        .eq('club_id', clubId));
       if (error) throw error;
 
       const curRpts  = (reports || []).filter(r => r.session_id === sessionId);
