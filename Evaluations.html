@@ -2678,6 +2678,40 @@
         : R2<0.95
           ? `<div style="margin-top:8px;padding:8px;background:rgba(220,38,38,0.1);border-radius:6px;border:1px solid rgba(220,38,38,0.25);font:500 12px/1.4 var(--cm-font-sans);color:#B91C1C">⚠ Low profile quality (R²=${R2}) — review measurements.</div>`
           : '';
+
+    // ── Load prescription by velocity zone (Load = (Vtarget − a)/b; %1RM = Load/1RM) ──
+    const VBT_ZONES=[
+      { name:'Maximum strength', range:'≤ 0.35 m/s', vt:0.28 },
+      { name:'Strength',         range:'0.35–0.50',  vt:0.43 },
+      { name:'Strength-power',   range:'0.50–0.75',  vt:0.63 },
+      { name:'Power',            range:'0.75–1.00',  vt:0.88 },
+      { name:'Speed',            range:'> 1.00',     vt:1.15 },
+    ];
+    let rxRows='';
+    if (validSlope && est1RM>0) {
+      rxRows = VBT_ZONES.map(z=>{
+        const load=(z.vt-a)/b, pct=load/est1RM*100;
+        if (!(load>0 && load<=est1RM+0.01)) return null;   // keep only loads in range (0 < load ≤ 1RM)
+        return `<tr><td><div class="pa-zone-name">${z.name}</div><div class="pa-zone-pct">${z.range}</div></td><td class="r">${z.vt.toFixed(2)} m/s</td><td class="r">${load.toFixed(1)} kg</td><td class="r">${Math.round(pct)}%</td></tr>`;
+      }).filter(Boolean).join('');
+    }
+    const rxTable = rxRows ? `
+      <div class="pa-section" style="margin-top:0">Load prescription by velocity zone</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Zone</th><th class="r">Target vel.</th><th class="r">Load</th><th class="r">%1RM</th></tr></thead>
+        <tbody>${rxRows}</tbody></table>
+      </div>` : '';
+
+    // ── Interpretation (green if R²≥0.95, amber otherwise) ──
+    let interp='';
+    if (validSlope && est1RM>0) {
+      const good=R2>=0.95, col=good?'#15803D':'#B45309';
+      const bg=good?'rgba(21,128,61,0.10)':'rgba(180,83,9,0.12)', bd=good?'rgba(21,128,61,0.3)':'rgba(180,83,9,0.3)';
+      const powerLoad=(0.88-a)/b;
+      const powerTxt=(powerLoad>0 && powerLoad<=est1RM)?` Train power around ${powerLoad.toFixed(1)} kg (~0.88 m/s).`:'';
+      interp=`<div style="margin-top:8px;padding:8px;background:${bg};border-radius:6px;border:1px solid ${bd};font:500 12px/1.4 var(--cm-font-sans);color:${col}">${good?'🟢':'🟡'} ${good?'Good':'Moderate'} profile (${method} · R²=${R2}). At V1RM ${v1rm} m/s the athlete completes ${est1RM} kg.${powerTxt}</div>`;
+    }
+
     resEl.innerHTML=`<div class="pa-result-hero">
       ${chart}
       <div style="margin-bottom:8px"><span style="display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:5px;background:var(--cm-accent-soft);color:var(--cm-accent);font:700 11px/1 var(--cm-font-mono);border:1px solid var(--cm-accent)">${method}</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">${eqStr}</span></div>
@@ -2685,12 +2719,14 @@
         ${kpis.map(([l,v,u,d])=>`<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
       </div>
       ${notice}
+      ${interp}
     </div>`;
 
     const tableRows=pairs.map(p=>{ const vp=+(a+b*p.kg).toFixed(3); const err=+Math.abs(p.v-vp).toFixed(3);
       return `<tr><td>${p.kg} kg</td><td class="r">${p.v} m/s</td><td class="r">${vp} m/s</td><td class="r" style="color:${err>0.05?'var(--cm-warning)':'var(--cm-fg-muted)'}">${err}</td></tr>`; }).join('');
     zoneEl.innerHTML=`
-      <div class="pa-section" style="margin-top:0">Data · ${pairs.length} loads · ${exercise}</div>
+      ${rxTable}
+      <div class="pa-section"${rxTable?'':' style="margin-top:0"'}>Data · ${pairs.length} loads · ${exercise}</div>
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
         <table class="pa-zone-table"><thead><tr><th>Load</th><th class="r">VMP</th><th class="r">VMP pred.</th><th class="r">Error</th></tr></thead>
         <tbody>${tableRows}</tbody></table>
