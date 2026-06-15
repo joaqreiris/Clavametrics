@@ -2725,18 +2725,20 @@
       interp=`<div style="margin-top:8px;padding:8px;background:${bg};border-radius:6px;border:1px solid ${bd};font:500 12px/1.4 var(--cm-font-sans);color:${col}">${good?'🟢':'🟡'} ${good?'Good':'Moderate'} profile (${method} · R²=${R2}). At V1RM ${v1rm} m/s the athlete completes ${est1RM} kg.${powerTxt}</div>`;
     }
 
-    resEl.innerHTML=`<div class="pa-result-hero">
-      ${chart}
+    // ── Summary: method badge + equation + KPIs ──
+    const summary=`
       <div style="margin-bottom:8px"><span style="display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:5px;background:var(--cm-accent-soft);color:var(--cm-accent);font:700 11px/1 var(--cm-font-mono);border:1px solid var(--cm-accent)">${method}</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">${eqStr}</span></div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">
         ${kpis.map(([l,v,u,d])=>`<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
       </div>
       ${notice}
-      ${interp}
-    </div>`;
+      ${interp}`;
 
+    // Whole analysis lives in the right column (#paZones); left column shows only the form
+    resEl.innerHTML='';
     const maxErr=Math.max(...pairs.map(p=>Math.abs(p.v-(a+b*p.kg))));
     zoneEl.innerHTML=`
+      <div class="pa-result-hero">${chart}${summary}</div>
       ${rxBlock}
       <div class="pa-section"${rxBlock?'':' style="margin-top:0"'}>Formula · load-velocity profile</div>
       <div class="pt-formula" style="font-size:11px">
