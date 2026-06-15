@@ -3355,7 +3355,12 @@
     const head = `<tr>${dimHead}${metHead}</tr>`;
 
     const rows = orderedRows.map(p => {
-      const dimCells = (p.dims || [p.x]).map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join('');
+      // Alinear las celdas de dimensión al header (dimCols = config.dimensions): si la serie
+      // viene de otro render con distinto nº de dimensiones, recortar/rellenar para que
+      // header y body nunca se desincronicen.
+      const _dv = (p.dims || [p.x]).slice(0, dimCols.length);
+      while (_dv.length < dimCols.length) _dv.push('—');
+      const dimCells = _dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join('');
       const valCells = cols.map(c => {
         const pt = c.s.points.find(q => q.x === p.x);
         return `<td class="tf">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;
@@ -3653,7 +3658,7 @@
           ${dimCols.map((n, i) => `<th class="${i === 0 ? 'pc' : 'dc'}">${esc(n)}</th>`).join('')}
           ${series.map(s => `<th>${esc(s.name.split(' ')[0])}</th>`).join('')}
         </tr></thead><tbody>${rowPts.map(p => `<tr>
-          ${(p.dims || [p.x]).map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join('')}
+          ${(() => { const dv = (p.dims || [p.x]).slice(0, dimCols.length); while (dv.length < dimCols.length) dv.push('—'); return dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join(''); })()}
           ${series.map(s => { const pt = s.points.find(q => q.x === p.x); return `<td>${pt ? fmtY(pt.y) : '—'}</td>`; }).join('')}
         </tr>`).join('')}</tbody></table></div>`;
       }
