@@ -2841,8 +2841,12 @@ window.refreshDashboard = async function (opts = {}) {
   }
   window._gpReports = reports;
 
-  // Z-score table (Group view)
-  const tbody = document.querySelector('.gp-zt tbody');
+  // Z-score table (Group view) — SOLO la tabla estática legacy, NUNCA una card del builder.
+  // Antes: document.querySelector('.gp-zt tbody') agarraba la primera .gp-zt del DOM (hoy
+  // una card del builder) y le pisaba el tbody con esta estructura vieja de 7 columnas,
+  // desincronizando header/body. Excluir las cards del builder lo evita.
+  const _legacyZTable = [...document.querySelectorAll('.gp-zt')].find(t => !t.closest('.gp-c[data-card-id]'));
+  const tbody = _legacyZTable ? _legacyZTable.querySelector('tbody') : null;
   if (tbody) {
     tbody.innerHTML = reports.map(r => {
       const p = r.players;
