@@ -199,6 +199,7 @@
       DROPS.forEach(d => updateTrigger(d.key));
       DROPS.forEach(d => root.querySelector(`.fb-drop[data-key="${d.key}"]`)?.classList.toggle('fb-hidden', !isFilterVisible(d.key)));
       refreshAddMenu();
+      applyFilterOrder();
       updateGlobal();
     }
   }
@@ -227,6 +228,22 @@
     DROPS.forEach(cfg => {
       const drop = el('div', 'fb-drop');
       drop.dataset.key = cfg.key;
+
+      // handle de arrastre: el drag se inicia SOLO desde el grip (no rompe el click del trigger)
+      const grip = el('span', 'fb-grip', `<i class="ti ti-grip-vertical"></i>`);
+      grip.title = 'Drag to reorder';
+      grip.addEventListener('mousedown', () => { drop.draggable = true; });
+      drop.prepend(grip);
+      drop.addEventListener('dragstart', e => {
+        drop.classList.add('fb-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', cfg.key);
+      });
+      drop.addEventListener('dragend', () => {
+        drop.classList.remove('fb-dragging');
+        drop.draggable = false;
+        commitOrderFromDOM();
+      });
 
       const trig = el('button', 'fb-trigger');
       trig.type = 'button';
@@ -272,6 +289,18 @@
     addWrap.appendChild(addBtn);
     addWrap.appendChild(addMenu);
     drops.appendChild(addWrap);
+
+    // reordenar por drag: mover el drop arrastrado según la posición horizontal del cursor
+    drops.addEventListener('dragover', e => {
+      const dragging = drops.querySelector('.fb-dragging'); if (!dragging) return;
+      e.preventDefault();
+      const aw = drops.querySelector('.fb-addwrap');
+      const after = getDragAfterElement(drops, e.clientX);
+      if (after == null) { if (aw) drops.insertBefore(dragging, aw); else drops.appendChild(dragging); }
+      else drops.insertBefore(dragging, after);
+    });
+
+    applyFilterOrder();
 
     const right = el('div', 'gp-fbar-right');
     const global = el('span', 'fb-global', `<i class="ti ti-filter"></i><span class="fb-global-txt">Sin filtros</span>`);
@@ -522,19 +551,49 @@
     openKey = null;
   }
 
-  // ── Visibilidad de filtros (agregar / quitar de la barra) ───────────────
+  // ── Visibilidad + orden de filtros ──────────────────────────────────────
+  // Reordena los .fb-drop del DOM para reflejar state.visibleFilters (visibles primero
+  // en su orden), luego los ocultos, y deja el "+ Add filter" siempre al final.
+  function applyFilterOrder() {
+    const drops = root?.querySelector('.gp-fbar-drops'); if (!drops) return;
+    const addWrap = drops.querySelector('.fb-addwrap');
+    state.visibleFilters.forEach(key => {
+      const d = drops.querySelector(`.fb-drop[data-key="${key}"]`); if (d) drops.appendChild(d);
+    });
+    DROPS.forEach(cfg => { if (!isFilterVisible(cfg.key)) { const d = drops.querySelector(`.fb-drop[data-key="${cfg.key}"]`); if (d) drops.appendChild(d); } });
+    if (addWrap) drops.appendChild(addWrap);
+  }
+  function getDragAfterElement(container, x) {
+    const els = [...container.querySelectorAll('.fb-drop:not(.fb-dragging):not(.fb-hidden)')];
+    return els.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = x - box.left - box.width / 2;
+      if (offset < 0 && offset > closest.offset) return { offset, element: child };
+      return closest;
+    }, { offset: -Infinity, element: null }).element;
+  }
+  function commitOrderFromDOM() {
+    const drops = root.querySelector('.gp-fbar-drops');
+    // SOLO las keys visibles, en el nuevo orden del DOM (los ocultos no van en visibleFilters)
+    const visibleOrder = [...drops.querySelectorAll('.fb-drop:not(.fb-hidden)')].map(d => d.dataset.key);
+    state.visibleFilters = visibleOrder.filter(k => DROPS.some(d => d.key === k));
+    persist();
+  }
+
   function removeFilter(key) {
     state.visibleFilters = state.visibleFilters.filter(k => k !== key);
     root?.querySelector(`.fb-drop[data-key="${key}"]`)?.classList.add('fb-hidden');
     closePanel();
     persist();
     refreshAddMenu();
+    applyFilterOrder();
   }
   function addFilter(key) {
     if (!state.visibleFilters.includes(key)) state.visibleFilters.push(key);
     root?.querySelector(`.fb-drop[data-key="${key}"]`)?.classList.remove('fb-hidden');
     persist();
     refreshAddMenu();
+    applyFilterOrder();
   }
   function refreshAddMenu() {
     const menu = root?.querySelector('.fb-addmenu');
