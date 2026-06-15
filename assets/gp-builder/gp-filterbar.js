@@ -24,6 +24,12 @@
     { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'Todos los microciclos', multi: true },
   ];
 
+  // English labels for the Add-filter menu (placeholders quedan en su idioma actual).
+  const FILTER_LABELS = {
+    md_code: 'Matchday', date: 'Date', player: 'Players',
+    position: 'Positions', microcycle: 'Microcycle',
+  };
+
   const DATE_PRESETS = [
     { id: '7',     label: 'Últimos 7 días',  days: 7   },
     { id: '30',    label: 'Últimos 30 días', days: 30  },
@@ -38,7 +44,9 @@
     position:   [],                            // posiciones
     microcycle: [],                            // ids de microciclo
     date:       { preset: null, from: null, to: null },
+    visibleFilters: DROPS.map(d => d.key),     // qué filtros se muestran en la barra
   };
+  function isFilterVisible(key) { return state.visibleFilters.includes(key); }
   // opciones reales por desplegable: [{ value, label }]
   const options = { md_code: [], player: [], position: [], microcycle: [] };
 
@@ -159,12 +167,14 @@
       localStorage.setItem(storeKey(), JSON.stringify({
         md_code: state.md_code, player: state.player, position: state.position,
         microcycle: state.microcycle, date: state.date,
+        visibleFilters: state.visibleFilters,
       }));
     } catch (e) { /* storage no disponible */ }
   }
   function resetStateSilent() {
     state.md_code = []; state.player = []; state.position = []; state.microcycle = [];
     state.date = { preset: null, from: null, to: null };
+    state.visibleFilters = DROPS.map(d => d.key);
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
   function restore() {
@@ -180,9 +190,17 @@
         state.date     = (s.date && typeof s.date === 'object')
           ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null }
           : { preset: null, from: null, to: null };
+        state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length)
+          ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
+          : DROPS.map(d => d.key);
       }
     } catch (e) { /* ignore */ }
-    if (root) { DROPS.forEach(d => updateTrigger(d.key)); updateGlobal(); }
+    if (root) {
+      DROPS.forEach(d => updateTrigger(d.key));
+      DROPS.forEach(d => root.querySelector(`.fb-drop[data-key="${d.key}"]`)?.classList.toggle('fb-hidden', !isFilterVisible(d.key)));
+      refreshAddMenu();
+      updateGlobal();
+    }
   }
   /** Al cambiar de dashboard: cierra panel, carga sus filtros y re-renderiza. */
   function onDashChange() {
@@ -220,6 +238,15 @@
         `<i class="ti ti-chevron-down fb-caret"></i>`;
       drop.appendChild(trig);
       drop.appendChild(cfg.date ? buildDatePanel() : buildMultiPanel(cfg));
+
+      // botón de QUITAR el filtro de la barra (distinto de la ✕ de limpiar selección)
+      const remove = el('span', 'fb-remove', `<i class="ti ti-x"></i>`);
+      remove.setAttribute('role', 'button');
+      remove.title = 'Remove filter';
+      remove.addEventListener('click', (e) => { e.stopPropagation(); removeFilter(cfg.key); });
+      drop.appendChild(remove);
+
+      if (!isFilterVisible(cfg.key)) drop.classList.add('fb-hidden');
       drops.appendChild(drop);
 
       // toggle abrir/cerrar (no si tocan la ✕)
@@ -228,6 +255,23 @@
         togglePanel(cfg.key);
       });
     });
+
+    // "+ Add filter": muestra los filtros ocultos para volver a agregarlos.
+    const addWrap = el('div', 'fb-addwrap');
+    const addBtn = el('button', 'fb-addfilter', `<i class="ti ti-plus"></i><span>Add filter</span>`);
+    addBtn.type = 'button';
+    const addMenu = el('div', 'fb-addmenu');
+    addBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = !addMenu.classList.contains('is-open');
+      closePanel();
+      addMenu.classList.toggle('is-open', willOpen);
+      if (willOpen) refreshAddMenu();
+    });
+    addMenu.addEventListener('click', e => e.stopPropagation());
+    addWrap.appendChild(addBtn);
+    addWrap.appendChild(addMenu);
+    drops.appendChild(addWrap);
 
     const right = el('div', 'gp-fbar-right');
     const global = el('span', 'fb-global', `<i class="ti ti-filter"></i><span class="fb-global-txt">Sin filtros</span>`);
@@ -467,6 +511,7 @@
     if (focusable) setTimeout(() => focusable.focus(), 0);
   }
   function closePanel() {
+    root?.querySelector('.fb-addmenu.is-open')?.classList.remove('is-open');
     if (!openKey) return;
     const drop = root.querySelector(`.fb-drop[data-key="${openKey}"]`);
     if (drop) {
@@ -476,6 +521,39 @@
     }
     openKey = null;
   }
+
+  // ── Visibilidad de filtros (agregar / quitar de la barra) ───────────────
+  function removeFilter(key) {
+    state.visibleFilters = state.visibleFilters.filter(k => k !== key);
+    root?.querySelector(`.fb-drop[data-key="${key}"]`)?.classList.add('fb-hidden');
+    closePanel();
+    persist();
+    refreshAddMenu();
+  }
+  function addFilter(key) {
+    if (!state.visibleFilters.includes(key)) state.visibleFilters.push(key);
+    root?.querySelector(`.fb-drop[data-key="${key}"]`)?.classList.remove('fb-hidden');
+    persist();
+    refreshAddMenu();
+  }
+  function refreshAddMenu() {
+    const menu = root?.querySelector('.fb-addmenu');
+    if (!menu) return;
+    const hidden = DROPS.filter(d => !isFilterVisible(d.key));
+    if (!hidden.length) {
+      menu.innerHTML = `<div class="fb-addempty">All filters added</div>`;
+      return;
+    }
+    menu.innerHTML = hidden.map(d =>
+      `<button class="fb-additem" type="button" data-key="${d.key}"><i class="ti ${d.icon}"></i><span>${FILTER_LABELS[d.key] || d.key}</span></button>`
+    ).join('');
+    menu.querySelectorAll('.fb-additem').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      addFilter(b.dataset.key);
+      menu.classList.remove('is-open');
+    }));
+  }
+
   function renderListOrDate(key) {
     if (key === 'date') syncDatePanel();
     else renderList(key);
