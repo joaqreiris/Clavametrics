@@ -3302,7 +3302,7 @@ function _renderPosRadar(reports) {
   if (!canvas || !window.gpScience) return;
 
   const POS = ['GK','CB','FB','MF','WG','ST'];
-  const _pdefs  = _getChartMetrics();
+  const _pdefs  = _getChartMetrics().filter(d => window.gpScience.baselineByRole('MF', d.key) != null);
   const METRICS = _pdefs.map(d => d.key);
   const LABELS  = _pdefs.map(d => d.label);
 
@@ -3331,7 +3331,7 @@ function _renderPosRadar(reports) {
     const vals = METRICS.map((m, mi) => {
       const avg = grp.reduce((s, r) => s + (+(r[m]||0)), 0) / grp.length;
       const baseline = window.gpScience.baselineByRole(pos, m) || 1;
-      return +(avg / baseline * 100).toFixed(1); // % of baseline
+      return Math.min(+(avg / baseline * 100).toFixed(1), 150); // % of baseline, capped at axis max
     });
     datasets.push({
       label: pos,
