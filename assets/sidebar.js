@@ -129,7 +129,6 @@
   html.cm-rail .hub-shell{grid-template-columns:64px 1fr}
   html.cm-rail .hub-brand{flex-direction:column;gap:10px;padding:14px 0}
   html.cm-rail .hub-brand .body,
-  html.cm-rail .hub-brand .switch,
   html.cm-rail .hub-nav-label,
   html.cm-rail .hub-nav-txt,
   html.cm-rail .hub-nav-item .count,
