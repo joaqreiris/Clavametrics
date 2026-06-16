@@ -31,7 +31,7 @@
   const CTX_USABLE = { ip: 'individual', rehab: 'rehab', prev: 'preventive' };
 
   function recomputeFilterOpts() {
-    REGIONS = ['All', ...[...new Set(LIB.map(e => e.region).filter(Boolean))].sort()];
+    REGIONS = ['All', ...[...new Set(LIB.map(e => e.type).filter(Boolean))].sort()];  // ahora = categorías (ex.type)
     EQUIPS  = ['Any', ...[...new Set(LIB.map(e => e.equip).filter(Boolean))].sort()];
   }
 
@@ -229,9 +229,9 @@
   function renderStep2() {
     // filters
     const regionChips = REGIONS.map(r => h('button', {
-      class: 'bd-filter-chip' + (state.region === r ? ' is-on' : ''),
+      class: 'bd-filter-chip' + (state.region === r ? ' is-on' : ''),   // state.region = categoría seleccionada
       onclick: () => { state.region = r; renderBody(); renderFooter(); }
-    }, r));
+    }, r === 'All' ? 'All' : (r.charAt(0).toUpperCase() + r.slice(1))));
     const equipChips = EQUIPS.map(eq => h('button', {
       class: 'bd-filter-chip' + (state.equip === eq ? ' is-on' : ''),
       onclick: () => { state.equip = eq; renderBody(); renderFooter(); }
@@ -244,7 +244,7 @@
       })
     );
     const filters = h('div', { class: 'bd-filters' },
-      h('div', null, h('div', { class: 'group-l' }, 'Region'), h('div', { class: 'chips' }, ...regionChips)),
+      h('div', null, h('div', { class: 'group-l' }, 'Category'), h('div', { class: 'chips' }, ...regionChips)),
       h('div', null, h('div', { class: 'group-l' }, 'Equipment'), h('div', { class: 'chips' }, ...equipChips)),
       h('div', null, h('div', { class: 'group-l' }, 'Source'), customTog)
     );
@@ -258,10 +258,10 @@
         h('div', null, 'Loading exercise library…'));
     } else {
       const filtered = LIB.filter(ex => {
-        if (state.region !== 'All' && ex.region !== state.region) return false;
+        if (state.region !== 'All' && ex.type !== state.region) return false;  // filtra por categoría
         if (state.equip !== 'Any' && ex.equip !== state.equip) return false;
         if (state.customOnly && !ex.custom) return false;
-        if (state.query && !ex.name.toLowerCase().includes(state.query.toLowerCase())) return false;
+        if (state.query && !((ex.name + ' ' + ex.region + ' ' + ex.type).toLowerCase().includes(state.query.toLowerCase()))) return false;
         return true;
       });
 
