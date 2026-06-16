@@ -1749,10 +1749,10 @@
       <div id="vbtProfiles" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
 
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="cm-btn is-primary" disabled style="flex:1;opacity:.55;cursor:not-allowed"><i class="ti ti-database-import" style="font-size:14px"></i>Save profiles</button>
+        <button class="cm-btn is-primary" id="vbtSaveBtn" onclick="saveVbtBulk()" style="flex:1"><i class="ti ti-database-import" style="font-size:14px"></i>Save profiles</button>
         <button class="cm-btn is-outline" onclick="resetVbtBulk()">Reset</button>
       </div>
-      <div style="font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:8px;text-align:center">Save — next step</div>
+      <div id="vbtSaveResult" style="font:500 11.5px/1.5 var(--cm-font-sans);margin-top:10px;text-align:center"></div>
     </div>
   </div>
 </aside>
@@ -5173,6 +5173,7 @@
         await loadVbtSavedMappings();
         document.getElementById('vbtDropZone').style.display = 'none';
         document.getElementById('vbtResultArea').style.display = '';
+        document.getElementById('vbtSaveResult').textContent = '';
         populateVbtMapSelects();
         renderVbtAll();
       },
@@ -5225,10 +5226,11 @@
   }
   window.assignVbtPlayer = assignVbtPlayer;
 
-  // Group rows by (player + exercise), pick best VMP per load, fit a profile per group.
+  // Group rows by (player + exercise), pick best VMP per load, track the latest date per group.
   function buildVbtGroups() {
     const { rows, map } = _vbt;
-    const groups = new Map();         // key → { playerId, name, exercise, loadBest:Map<load,vmp> }
+    const today = new Date().toISOString().slice(0, 10);
+    const groups = new Map();         // key → { playerId, name, exercise, loadBest:Map<load,vmp>, testDate }
     const unmatchedNames = new Map(); // normName → rawName
     let matchedRows = 0;
     rows.forEach(r => {
@@ -5246,22 +5248,30 @@
       if (!exercise || !isFinite(load) || !isFinite(vmp) || load <= 0 || vmp <= 0) return;
       const key = pid + '||' + exercise.toLowerCase();
       let g = groups.get(key);
-      if (!g) { g = { playerId: pid, name: ftPlayerName(pid), exercise, loadBest: new Map() }; groups.set(key, g); }
+      if (!g) { g = { playerId: pid, name: ftPlayerName(pid), exercise, loadBest: new Map(), testDate: '' }; groups.set(key, g); }
       const prev = g.loadBest.get(load);
       if (prev == null || vmp > prev) g.loadBest.set(load, vmp);   // best (max) VMP per load
+      const d = map.date ? parseForceDate(r[map.date]).date : today;
+      if (d > g.testDate) g.testDate = d;                          // latest date among the group's rows
     });
     return { groups: [...groups.values()], unmatchedNames, matchedRows };
   }
 
-  function renderVbtAll() {
+  // Build the full profile list (display + save share this so they never diverge).
+  function computeVbtProfiles() {
+    const today = new Date().toISOString().slice(0, 10);
     const { groups, unmatchedNames } = buildVbtGroups();
-
-    // Profiles
     const profiles = groups.map(g => {
       const pairs = [...g.loadBest.entries()].map(([load, vmp]) => ({ load, vmp }));
-      const fit = fitVBTProfile(pairs, vbtCanonExercise(g.exercise));
-      return { name: g.name, playerId: g.playerId, exercise: g.exercise, nLoads: pairs.length, fit };
+      const canon = vbtCanonExercise(g.exercise);
+      const fit = fitVBTProfile(pairs, canon);
+      return { name: g.name, playerId: g.playerId, exercise: g.exercise, canon, nLoads: pairs.length, fit, testDate: g.testDate || today };
     }).sort((a, b) => a.name.localeCompare(b.name) || a.exercise.localeCompare(b.exercise));
+    return { profiles, unmatchedNames };
+  }
+
+  function renderVbtAll() {
+    const { profiles, unmatchedNames } = computeVbtProfiles();
 
     const valid = profiles.filter(p => !p.fit.error && p.fit.est1RM != null);
     const players = new Set(profiles.map(p => p.playerId)).size;
@@ -5315,10 +5325,106 @@
   function resetVbtBulk() {
     _vbt = null;
     const fi = document.getElementById('vbtFileInput'); if (fi) fi.value = '';
+    const r = document.getElementById('vbtSaveResult'); if (r) r.textContent = '';
     document.getElementById('vbtResultArea').style.display = 'none';
     document.getElementById('vbtDropZone').style.display = '';
   }
   window.resetVbtBulk = resetVbtBulk;
+
+  // Batch-save VBT profiles to evaluations — same shape as the manual VBT save; dedup by (player, type, date).
+  async function saveVbtBulk() {
+    if (!_vbt || !clubId) return;
+    const btn = document.getElementById('vbtSaveBtn');
+    const resEl = document.getElementById('vbtSaveResult');
+    const { profiles, unmatchedNames } = computeVbtProfiles();
+
+    // Only matched players with a valid ≥2-load profile are saveable.
+    const saveable = profiles.filter(p => !p.fit.error && p.fit.est1RM != null && isFinite(p.fit.est1RM) && p.fit.est1RM > 0);
+    const tooFewLoads = profiles.length - saveable.length;
+    const unmatched = unmatchedNames.size;
+
+    if (!saveable.length) {
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = 'Nothing to save — no profile has a matched player with ≥2 loads.';
+      return;
+    }
+
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>Saving…';
+    resEl.style.color = 'var(--cm-fg-muted)';
+    resEl.textContent = 'Saving…';
+
+    // Build evaluation records (identical structure to the manual VBT save), collapsing in-file dups by natural key.
+    const natOf = (pid, type, date) => `${pid}|${type}|${date}`;
+    const planMap = new Map();
+    saveable.forEach(p => {
+      const f = p.fit;
+      const evalType = VBT_EVAL_TYPES[p.canon] || `VBT · ${p.canon.toLowerCase()}`;
+      const computed = {
+        inputs: f.pairs.map(x => ({ kg: x.load, vmp: x.vmp })),
+        slope: +f.b.toFixed(5), intercept: +f.a.toFixed(4), R2: f.R2,
+        v1rm_used: f.v1rm, est1RM: f.est1RM, method: f.method, exercise: p.canon,
+      };
+      const rec = {
+        player_id: p.playerId, club_id: clubId, evaluation_type: evalType,
+        value: f.est1RM, unit: 'kg', test_date: p.testDate, notes: JSON.stringify(computed),
+      };
+      planMap.set(natOf(p.playerId, evalType, p.testDate), rec);   // last wins
+    });
+    const plan = [...planMap.values()];
+
+    let savedCount = 0;
+    try {
+      // ── 1) Pre-fetch existing evaluations for these players + types (1 query) ──
+      const pids = [...new Set(plan.map(r => r.player_id))];
+      const types = [...new Set(plan.map(r => r.evaluation_type))];
+      const { data: existing, error: exErr } = await window.sb.from('evaluations')
+        .select('id, player_id, evaluation_type, test_date')
+        .eq('club_id', clubId).in('player_id', pids).in('evaluation_type', types);
+      if (exErr) throw exErr;
+
+      // ── 2) Delete the colliding ones (1 query), then insert the whole plan (1 query) — replace, no dup ──
+      const planKeys = new Set(plan.map(r => natOf(r.player_id, r.evaluation_type, r.test_date)));
+      const collideIds = (existing || [])
+        .filter(e => planKeys.has(natOf(e.player_id, e.evaluation_type, String(e.test_date).slice(0, 10))))
+        .map(e => e.id);
+      if (collideIds.length) {
+        const { error: delErr } = await window.sb.from('evaluations').delete().in('id', collideIds);
+        if (delErr) throw delErr;
+      }
+      const { error: insErr } = await window.sb.from('evaluations').insert(plan);
+      if (insErr) throw insErr;
+      savedCount = plan.length;
+
+      // ── 3) Persist column-mapping memory once (non-fatal) ──
+      const mapRows = Object.entries(_vbt.map)
+        .filter(([role, col]) => col)
+        .map(([role, col]) => ({ club_id: clubId, source_label: _vbt.sourceLabel, source_column_name: col, target_metric_key: role }));
+      if (mapRows.length) {
+        try { await window.sb.from('force_column_mappings').upsert(mapRows, { onConflict: 'club_id,source_label,source_column_name' }); } catch (e) {}
+      }
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = btnHtml;
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = 'Save failed: ' + (e.message || e);
+      return;
+    }
+
+    const skipped = unmatched + tooFewLoads;
+    const skipDetail = skipped ? ` (${unmatched} unmatched, ${tooFewLoads} need ≥2 loads)` : '';
+    btn.disabled = false; btn.innerHTML = btnHtml;
+    resEl.style.color = 'var(--cm-success)';
+    resEl.textContent = `Saved ${savedCount} profiles · ${skipped} skipped${skipDetail}`;
+    _squadLoaded = false; _historyLoaded = false;
+    if (typeof loadKPIs === 'function') loadKPIs();
+    setTimeout(() => {
+      document.getElementById('vbtBulkDrawer').classList.remove('is-open');
+      document.getElementById('vbtBulkOverlay').classList.remove('is-open');
+      resetVbtBulk();
+    }, 2200);
+  }
+  window.saveVbtBulk = saveVbtBulk;
 
   function openVbtBulkDrawer() {
     document.getElementById('vbtBulkDrawer').classList.add('is-open');
