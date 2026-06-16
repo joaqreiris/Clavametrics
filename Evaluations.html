@@ -1402,10 +1402,10 @@
       <div id="ftPreviewTable" style="overflow-x:auto;max-height:280px;overflow-y:auto;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;margin-bottom:14px"></div>
 
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="cm-btn is-primary" disabled style="flex:1;opacity:.55;cursor:not-allowed"><i class="ti ti-database-import" style="font-size:14px"></i>Import to database</button>
+        <button class="cm-btn is-primary" id="ftSaveBtn" onclick="saveForceImport()" style="flex:1"><i class="ti ti-database-import" style="font-size:14px"></i>Import to database</button>
         <button class="cm-btn is-outline" onclick="resetForceImport()">Reset</button>
       </div>
-      <div style="font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:8px;text-align:center">Save — next step</div>
+      <div id="ftSaveResult" style="font:500 11.5px/1.5 var(--cm-font-sans);margin-top:10px;text-align:center"></div>
     </div>
   </div>
 </aside>
@@ -3920,6 +3920,7 @@
         autoMapForceColumns();
         document.getElementById('ftDropZone').style.display = 'none';
         document.getElementById('ftResultArea').style.display = '';
+        document.getElementById('ftSaveResult').textContent = '';
         renderForceClassification();
         renderForceMatch();
         renderForceMapping();
@@ -4059,6 +4060,125 @@
   }
   window.createForceMetric = createForceMetric;
 
+  // Parse a test date → 'yyyy-mm-dd'. VALD exports DD/MM/YYYY; fall back to Date(); else today (warn).
+  function parseForceDate(raw) {
+    const today = new Date().toISOString().slice(0, 10);
+    const s = String(raw ?? '').trim();
+    if (!s) return { date: today, warn: true };
+    let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);   // DD/MM/YYYY (day-first)
+    if (m) {
+      let [, d, mo, y] = m;
+      if (y.length === 2) y = '20' + y;
+      const iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      if (!isNaN(new Date(iso).getTime())) return { date: iso, warn: false };
+    }
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);                          // ISO yyyy-mm-dd...
+    if (m) return { date: `${m[1]}-${m[2]}-${m[3]}`, warn: false };
+    const t = new Date(s);                                            // fallback
+    if (!isNaN(t.getTime())) return { date: t.toISOString().slice(0, 10), warn: false };
+    return { date: today, warn: true };
+  }
+
+  // Save matched rows to force_tests + force_test_metrics; persist mapping memory; skip unmatched; no dups.
+  async function saveForceImport() {
+    if (!_ftState || !clubId) return;
+    const btn = document.getElementById('ftSaveBtn');
+    const resEl = document.getElementById('ftSaveResult');
+    const { rows, fields, metrics, colMap, defs, sourceLabel } = _ftState;
+
+    let uid = null, uname = null;
+    try { const { data: { user } } = await window.sb.auth.getUser(); uid = user?.id || null; } catch (e) {}
+    try { const prof = await window.getProfile(); uname = prof?.full_name || null; } catch (e) {}
+
+    const unitFor = key => { const d = defs.find(x => x.key === key); return d?.unit || null; };
+    const mappedCols = metrics.filter(c => colMap[c] && colMap[c] !== '__none__');
+
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>Saving…';
+    resEl.style.color = 'var(--cm-fg-muted)';
+    resEl.textContent = 'Saving…';
+
+    let testsCount = 0, metricsCount = 0, skipped = 0, dateWarns = 0;
+    try {
+      for (const row of rows) {
+        const m = matchForceRow(row);
+        if (!m.playerId) { skipped++; continue; }
+        const { date, warn } = parseForceDate(fields.date ? row[fields.date] : '');
+        if (warn) dateWarns++;
+        const testType = (fields.testType ? String(row[fields.testType] || '').trim() : '') || 'Unknown';
+        const testTime = fields.time ? (String(row[fields.time] || '').trim() || null) : null;
+        const rec = {
+          club_id: clubId, team_id: _evTeamId || null, player_id: m.playerId,
+          test_type: testType, test_date: date, test_time: testTime,
+          bodyweight_kg: fields.bw ? (parseFloat(row[fields.bw]) || null) : null,
+          reps: fields.reps ? (parseInt(row[fields.reps], 10) || null) : null,
+          tags: fields.tags ? (String(row[fields.tags] || '').trim() || null) : null,
+          source: sourceLabel,
+          external_id: fields.externalId ? (String(row[fields.externalId] || '').trim() || null) : null,
+          uploaded_by: uid, uploaded_by_name: uname,
+        };
+
+        // Anti-duplicate on (club_id, player_id, test_type, test_date, test_time)
+        let dupQ = window.sb.from('force_tests').select('id')
+          .eq('club_id', clubId).eq('player_id', m.playerId)
+          .eq('test_type', testType).eq('test_date', date);
+        dupQ = testTime == null ? dupQ.is('test_time', null) : dupQ.eq('test_time', testTime);
+        const { data: existing, error: dupErr } = await dupQ.limit(1);
+        if (dupErr) throw dupErr;
+
+        let testId;
+        if (existing && existing.length) {                          // reuse + regrabar limpio
+          testId = existing[0].id;
+          const { error: updErr } = await window.sb.from('force_tests').update(rec).eq('id', testId);
+          if (updErr) throw updErr;
+          const { error: delErr } = await window.sb.from('force_test_metrics').delete().eq('test_id', testId);
+          if (delErr) throw delErr;
+        } else {
+          const { data: ins, error: insErr } = await window.sb.from('force_tests').insert(rec).select('id').single();
+          if (insErr) throw insErr;
+          testId = ins.id;
+        }
+        testsCount++;
+
+        const metricRows = [];
+        for (const col of mappedCols) {
+          const { value, side } = parseForceValue(row[col]);
+          if (value == null) continue;
+          metricRows.push({ test_id: testId, club_id: clubId, metric_key: colMap[col], value, side, unit: unitFor(colMap[col]) });
+        }
+        if (metricRows.length) {
+          const { error: mErr } = await window.sb.from('force_test_metrics').insert(metricRows);
+          if (mErr) throw mErr;
+          metricsCount += metricRows.length;
+        }
+      }
+
+      // Persist column-mapping memory (non-fatal if it fails)
+      if (mappedCols.length) {
+        const mapRows = mappedCols.map(col => ({ club_id: clubId, source_label: sourceLabel, source_column_name: col, target_metric_key: colMap[col] }));
+        try { await window.sb.from('force_column_mappings').upsert(mapRows, { onConflict: 'club_id,source_label,source_column_name' }); } catch (e) {}
+      }
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = btnHtml;
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = 'Import failed: ' + (e.message || e) + (testsCount ? ` — ${testsCount} tests saved before the error` : '');
+      return;
+    }
+
+    const parts = [`Imported ${testsCount} tests`, `${metricsCount} metric values`, `${skipped} rows skipped (unmatched)`];
+    if (dateWarns) parts.push(`${dateWarns} dates defaulted to today`);
+    btn.disabled = false; btn.innerHTML = btnHtml;
+    resEl.style.color = 'var(--cm-success)';
+    resEl.textContent = parts.join(' · ');
+    setTimeout(() => {
+      document.getElementById('ftImpDrawer').classList.remove('is-open');
+      document.getElementById('ftImpOverlay').classList.remove('is-open');
+      resetForceImport();
+    }, 2000);
+  }
+  window.saveForceImport = saveForceImport;
+
   function renderForceClassification() {
     const { fields, metrics } = _ftState;
     const fieldsEl = document.getElementById('ftDetectedFields');
@@ -4153,6 +4273,7 @@
     _ftState = null;
     const fi = document.getElementById('ftFileInput'); if (fi) fi.value = '';
     document.getElementById('ftCreateForm').style.display = 'none';
+    const rEl = document.getElementById('ftSaveResult'); if (rEl) rEl.textContent = '';
     document.getElementById('ftResultArea').style.display = 'none';
     document.getElementById('ftDropZone').style.display = '';
   }
