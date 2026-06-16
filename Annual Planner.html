@@ -1756,12 +1756,21 @@ function apMonSun(dateStr){
   return { start: mon.toISOString().slice(0,10), end: sun.toISOString().slice(0,10) };
 }
 
+// Devuelve los microciclos existentes cuyo rango pisa [start,end] (ISO yyyy-mm-dd, inclusive). excludeId saltea uno (para ediciones).
+function apMicroOverlaps(start, end, excludeId){
+  return ((_apTL && _apTL.micros) || []).filter(m =>
+    m.id !== excludeId && m.start_date && m.end_date &&
+    start <= m.end_date && end >= m.start_date
+  );
+}
+
 async function apAddMicro(){
   let base = new Date().toISOString().slice(0,10);
   if (base < _apSeasonStart || base > _apSeasonEnd) base = _apSeasonStart;
   const wk = apMonSun(base);
   const start = wk.start < _apSeasonStart ? _apSeasonStart : wk.start;
   const end   = wk.end   > _apSeasonEnd   ? _apSeasonEnd   : wk.end;
+  const _overlap = apMicroOverlaps(start, end, null);
   const emb = apEmbedMatch(start, end) || {};
   const { data, error } = await window.sb.from('microcycles').insert({
     id: crypto.randomUUID(), club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
@@ -1774,17 +1783,18 @@ async function apAddMicro(){
   apTLRender();
   apMicroEditorRender();
   document.getElementById('apMicroEditor').scrollIntoView({ behavior:'smooth', block:'nearest' });
+  if (_overlap.length) alert(`Heads up: this microcycle overlaps ${_overlap.length} existing one${_overlap.length>1?'s':''} (${_overlap.map(m=>m.name||'untitled').join(', ')}). It was created anyway — adjust the dates if needed.`);
 }
 
 async function apGenerateWeeks(){
   const matches = (_apTL.matches || []).slice().sort((a,b) => a.date.localeCompare(b.date));
   if (!matches.length){ alert('No matches yet — import or add matches first.'); return; }
   const existing = _apTL.micros.map(m => ({ s:m.start_date, e:m.end_date }));
-  const weeks = [], seen = new Set();
+  const weeks = [], seen = new Set(); let skipped = 0;
   for (const m of matches){
     const wk = apMonSun(m.date);
     if (seen.has(wk.start)) continue; seen.add(wk.start);
-    if (existing.some(x => x.s <= wk.end && x.e >= wk.start)) continue;
+    if (existing.some(x => x.s <= wk.end && x.e >= wk.start)) { skipped++; continue; }
     weeks.push(wk);
   }
   if (!weeks.length){ alert('Every match week already has a microcycle.'); return; }
@@ -1800,6 +1810,7 @@ async function apGenerateWeeks(){
   const { error } = await window.sb.from('microcycles').insert(rows);
   if (error){ alert('Could not generate: ' + error.message); return; }
   await apLoadTimeline();
+  if (skipped) alert(`Note: ${skipped} match week${skipped>1?'s':''} ${skipped>1?'were':'was'} skipped because ${skipped>1?'they':'it'} overlap existing microcycles.`);
 }
 
 async function apSetMD(ds, value){
