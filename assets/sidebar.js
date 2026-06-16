@@ -153,7 +153,7 @@
       { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks' },
     ]},
     { label: 'Technical', items: [
-      { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Planner',          key: 'planner' },
+      { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Drill Designer',   key: 'planner' },
       { href: 'Sessions%20Library.html',icon: 'ti-list-tree',         label: 'Exercise library', key: 'sessions-lib' },
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning',   key: 'daily-planning' },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history', key: 'sessions-history' },
