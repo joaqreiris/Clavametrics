@@ -137,7 +137,7 @@
 
   // ─── Data: preventive exercise library — loaded from gym_exercises ───
   let LIBRARY = [];          // mapped rows: { id, name, region, category, complexity, equipment, custom }
-  let libRegion = 'All';     // active region chip
+  let libCat = 'All';        // active category chip
   let libQuery  = '';        // search box
   let libLoaded = false;
 
@@ -196,12 +196,12 @@
   function renderLibChips() {
     const root = $('#lib-filters');
     if (!root) return;
-    const regions = [...new Set(LIBRARY.map(e => e.region).filter(Boolean))].sort();
-    root.innerHTML = ['All', ...regions].map(r =>
-      `<button class="rp-lib-chip${libRegion === r ? ' is-on' : ''}" data-region="${r}">${r}</button>`
+    const cats = [...new Set(LIBRARY.map(e => e.category).filter(Boolean))].sort();
+    root.innerHTML = ['All', ...cats].map(c =>
+      `<button class="rp-lib-chip${libCat === c ? ' is-on' : ''}" data-cat="${c}">${c === 'All' ? 'All' : (TYPE_LABEL[c] || cap(c))}</button>`
     ).join('');
     $$('#lib-filters .rp-lib-chip').forEach(b => b.addEventListener('click', () => {
-      libRegion = b.dataset.region;
+      libCat = b.dataset.cat;
       renderLibChips();
       renderLibrary();
     }));
@@ -214,8 +214,8 @@
     root.innerHTML = '';
     const q = libQuery.trim().toLowerCase();
     const rows = LIBRARY.filter(ex => {
-      if (libRegion !== 'All' && ex.region !== libRegion) return false;
-      if (q && !ex.name.toLowerCase().includes(q)) return false;
+      if (libCat !== 'All' && ex.category !== libCat) return false;
+      if (q && !(ex.name + ' ' + ex.region + ' ' + ex.category).toLowerCase().includes(q)) return false;
       return true;
     });
 
