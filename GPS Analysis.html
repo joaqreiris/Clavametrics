@@ -2336,11 +2336,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   // ── Player pill ────────────────────────────────────────────
   if (pill.id === 'playerPill') {
     const clubId = await window.getClubId();
-    let _plQ2327 = window.sb.from('players')
-      .select('id,first_name,last_name,position,number')
-      .eq('club_id', clubId).neq('status', 'inactive');
-    if (window._gpTeamId) _plQ2327 = _plQ2327.eq('team_id', window._gpTeamId);
-    const { data: players } = await _plQ2327.order('last_name');
+    const { data: players } = await _gpRoster(clubId, window._gpTeamId);
     if (!players?.length) { showToast('No players found'); return; }
     // Inject "All players" option into search popover via wrapper
     closePop();
@@ -2780,6 +2776,26 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
     body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-alert-triangle"></i></div><div class="t">Could not load</div></div>';
   }
 }
+
+// ── Roster cache por (club, team) ─────────────────────────────
+// Devuelve { data, error } como Supabase (drop-in). Vive por carga;
+// cambiar de equipo hace location.reload() → sin datos viejos.
+window._gpRosterCache = window._gpRosterCache || new Map();
+function _gpRoster(clubId, teamId) {
+  const key = `${clubId}|${teamId || '_all'}`;
+  if (window._gpRosterCache.has(key)) return window._gpRosterCache.get(key);
+  let q = window.sb.from('players')
+    .select('id,first_name,last_name,number,position')
+    .eq('club_id', clubId).neq('status', 'inactive');
+  if (teamId) q = q.eq('team_id', teamId);
+  const p = q.order('last_name').then(res => {
+    if (res.error) window._gpRosterCache.delete(key); // permití reintento si falló
+    return res;
+  });
+  window._gpRosterCache.set(key, p);
+  return p;
+}
+window._gpRoster = _gpRoster;
 
 // ── refreshDashboard — reusable after import ──────────────────
 // opts.sessionId: if provided, update date range to cover that session
@@ -7669,7 +7685,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (!clubId || !window.sb) return;
 
       const [{ data: players }, { data: mcs }] = await Promise.all([
-        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').eq('team_id', window._gpTeamId).order('last_name') : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('last_name')),
+        _gpRoster(clubId, window._gpTeamId),
         window.sb.from('microcycles').select('id,name,start_date,end_date,match_date,rival')
           .eq('club_id', clubId).order('start_date', { ascending: false }).limit(50),
       ]);
@@ -8611,7 +8627,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           .select('id,session_date,session_type,title,match_day_offset,session_attributes,microcycle_id')
           .eq('club_id', clubId).neq('session_type', 'rehab')
           .order('session_date', { ascending: true }),
-        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive')),
+        _gpRoster(clubId, window._gpTeamId),
         window.sb.from('microcycles').select('id,name,start_date,match_date,rival')
           .eq('club_id', clubId).order('start_date', { ascending: true }),
       ]);
@@ -9889,7 +9905,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const [teamAcwr, playerAcwr, players] = await Promise.all([
         window.gpsACWR.calculateTeamACWR({ clubId, refDate }),
         window.gpsACWR.calculatePlayerACWR({ clubId, refDate }),
-        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive')),
+        _gpRoster(clubId, window._gpTeamId),
       ]);
 
       _playerMap = Object.fromEntries((players.data || []).map(p => [p.id, p]));
@@ -10439,11 +10455,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         .eq('session_id', sessionId)
         .eq('club_id', clubId));
 
-      const { data: players } = await window.sb
-        .from('players')
-        .select('id, first_name, last_name, number, position')
-        .eq('club_id', clubId)
-        .neq('status', 'inactive');
+      const { data: players } = await _gpRoster(clubId, window._gpTeamId);
 
       const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
       _lastReports = (reports || []).map(r => ({ ...r, player: playerMap[r.player_id] || {} }));
@@ -11492,7 +11504,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         _scopeTeam(window.sb.from('gps_reports')
           .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
           .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId)),
-        (window._gpTeamId ? window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive').eq('team_id', window._gpTeamId) : window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status', 'inactive')),
+        _gpRoster(clubId, window._gpTeamId),
       ]);
 
       const playerMap = Object.fromEntries((players || []).map(p => [p.id, p]));
