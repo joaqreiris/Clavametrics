@@ -1578,7 +1578,7 @@ function _acEsc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'
 function _acHeader(dashName) {
   return `<div class="ac-head"><span class="ic"><i class="ti ti-chart-histogram"></i></span>
     <span class="tt"><h2>Add chart</h2>
-      <span class="sub"><i class="ti ti-layout-dashboard"></i>al dashboard · <b>${_acEsc(dashName)}</b></span></span>
+      <span class="sub"><i class="ti ti-layout-dashboard"></i>on dashboard · <b>${_acEsc(dashName)}</b></span></span>
     <button class="ac-x" type="button"><i class="ti ti-x"></i></button></div>`;
 }
 function _acPaths(active) {
@@ -1587,7 +1587,7 @@ function _acPaths(active) {
       <span class="pbody"><span class="nm">${nm}${badge?`<span class="badge">${badge}</span>`:''}</span><span class="ds">${ds}</span></span>
       <span class="tick"><i class="ti ti-check"></i></span></button>`;
   return `<div class="ac-paths">
-    ${card('ti-flask','Plantilla basada en evidencia','Cards listas, validadas científicamente.','recomendado',active==='tpl','tpl')}
+    ${card('ti-flask','Evidence-based template','Ready cards, scientifically validated.','recommended',active==='tpl','tpl')}
     ${card('ti-adjustments-alt','Build custom','Pick metrics, type and aggregation · opens the Chart builder.','',active==='custom','custom')}</div>`;
 }
 function _acTplCard(t) {
@@ -1595,13 +1595,13 @@ function _acTplCard(t) {
     <div class="ac-tpl-top">
       <span class="spark" style="background:color-mix(in srgb, ${t.color} 14%, var(--cm-surface)); color:${t.color}"><i class="ti ${t.icon}"></i></span>
       <span class="nm">${_acEsc(t.nm)}</span>
-      <button class="ac-help" type="button" title="Ver referencia científica"><i class="ti ti-help"></i></button>
+      <button class="ac-help" type="button" title="View scientific reference"><i class="ti ti-help"></i></button>
     </div>
     <div class="ds">${_acEsc(t.ds)}</div>
     <div class="ac-tpl-tags"><span class="ac-cite"><i class="ti ti-quote"></i>${_acEsc(t.cite)}</span>
       <span class="ac-info"><i class="ti ti-info-circle"></i>${_acEsc(t.info)}</span></div>
     <div class="ac-tpl-foot"><span class="type"><i class="ti ti-chart-histogram"></i>${_acEsc(t.type)}</span>
-      <button class="ac-add" type="button"><i class="ti ti-plus"></i>Agregar</button></div>
+      <button class="ac-add" type="button"><i class="ti ti-plus"></i>Add</button></div>
     <div class="ac-refpop" hidden>
       <div class="ac-refpop-h"><span class="ic"><i class="ti ti-book"></i></span>
         <span class="m"><span class="t">${_acEsc(t.ref.title)}</span><span class="a">${_acEsc(t.ref.author)}</span></span></div>
@@ -1615,16 +1615,16 @@ function _acPanel(active, dashName) {
       <div class="ac-custom"><span class="ic"><i class="ti ti-adjustments-alt"></i></span>
         <span class="t">Build custom</span>
         <span class="d">Pick the metrics, chart type and aggregation. The Chart builder opens with a blank canvas.</span>
-        <button class="go ac-open-builder" type="button"><i class="ti ti-arrow-right"></i>Abrir Chart builder</button></div>
-      <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>¿No sabés por dónde empezar? Probá una plantilla basada en evidencia.</span>
-        <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancelar</button></span></div></div>`;
+        <button class="go ac-open-builder" type="button"><i class="ti ti-arrow-right"></i>Open Chart builder</button></div>
+      <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>Not sure where to start? Try an evidence-based template.</span>
+        <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancel</button></span></div></div>`;
   }
   return `<div class="ac-panel">${_acHeader(dashName)}${_acPaths('tpl')}
-    <div class="ac-gallery"><div class="ac-gallery-h"><span class="t">Plantillas</span><span class="n">${AC_TPLS.length}</span>
-      <span class="all"><i class="ti ti-circle-check"></i>Todas se pueden agregar a cualquier dashboard</span></div>
+    <div class="ac-gallery"><div class="ac-gallery-h"><span class="t">Templates</span><span class="n">${AC_TPLS.length}</span>
+      <span class="all"><i class="ti ti-circle-check"></i>All can be added to any dashboard</span></div>
       <div class="ac-grid">${AC_TPLS.map(_acTplCard).join('')}</div></div>
-    <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>Las plantillas traen métricas, tipo y umbrales ya configurados.</span>
-      <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancelar</button></span></div></div>`;
+    <div class="ac-foot"><span class="hint"><i class="ti ti-bulb"></i>Templates come with metrics, type and thresholds preconfigured.</span>
+      <span class="btns"><button class="ac-btn-ghost ac-cancel" type="button">Cancel</button></span></div></div>`;
 }
 
 let _acOverlay = null;
