@@ -1,26 +1,30 @@
 -- ============================================================================
 -- 051_programme_phases.sql
 -- Fases de programa para planes preventivos del Rehab Planner.
--- Organizadas por semanas. Scoped por club_id (mismo patrón club-scoped que
--- videos/tasks: FK a clubs, RLS vía profiles). Idempotente.
+-- Organizadas por semanas, colgadas de un plan (rehab_plans). Scoped por club_id
+-- (mismo patrón club-scoped que videos/tasks: FK a clubs, RLS vía profiles).
+-- Idempotente.
 --
 -- CÓMO CORRER: en el SQL Editor, primero DEV. Validá, y después PROD.
 -- ============================================================================
 
 create table if not exists public.programme_phases (
-  id            uuid primary key default gen_random_uuid(),
-  club_id       uuid not null references public.clubs(id) on delete cascade,
-  name          text not null,
-  description   text,
-  start_week    integer not null default 1,        -- semana de inicio (1-based)
-  duration_weeks integer not null default 1,        -- cuántas semanas dura la fase
-  display_order integer not null default 0,         -- orden de la fase en el programa
-  color         text,                               -- color opcional para la phasebar
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  id          uuid primary key default gen_random_uuid(),
+  club_id     uuid not null references public.clubs(id) on delete cascade,
+  plan_id     uuid not null references public.rehab_plans(id) on delete cascade,
+  name        text not null,
+  week_start  integer not null default 1,          -- semana de inicio (1-based)
+  week_end    integer not null default 1,          -- semana de fin (inclusive)
+  color       text,                                -- color opcional para la phasebar
+  objective   text,                                -- objetivo de la fase (tooltip)
+  load_level  text,                                -- carga (low/moderate/high…) (tooltip)
+  phase_order integer not null default 0,          -- orden de la fase en el programa
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
 );
 
 create index if not exists idx_programme_phases_club on public.programme_phases(club_id);
+create index if not exists idx_programme_phases_plan on public.programme_phases(plan_id);
 
 alter table public.programme_phases enable row level security;
 

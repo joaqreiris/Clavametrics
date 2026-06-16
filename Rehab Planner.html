@@ -965,9 +965,42 @@ function rpBuildPhasebar(phases, currentDay) {
 }
 
 function rpBuildTrainbar(plan) {
+  return _rpBuildTrainbarAsync(plan);
+}
+async function _rpBuildTrainbarAsync(plan) {
   const sumEl = document.querySelector('.rp-trainbar-h .summary');
   if (sumEl) sumEl.innerHTML =
     `${plan.programme_total_weeks||'—'}-week block · <strong>Week ${plan.programme_week||'—'} of ${plan.programme_total_weeks||'—'}</strong> · risk flag: <strong>${plan.risk_metric||plan.diagnosis||'—'}</strong>`;
+
+  const track = document.querySelector('.rp-train-track');
+  if (!track) return;
+  // expuesto para que el editor (Paso 3) re-dibuje al guardar
+  window._rpRefreshTrainbar = () => _rpBuildTrainbarAsync(plan);
+
+  const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const ucfirst = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : '';
+
+  const { data: phases } = await window.sb
+    .from('programme_phases')
+    .select('id,name,week_start,week_end,color,objective,load_level,phase_order')
+    .eq('plan_id', plan.id)
+    .order('phase_order');
+
+  if (!phases || !phases.length) {
+    track.innerHTML = `<div style="padding:8px 4px;font:var(--cm-body-sm);color:var(--cm-fg-muted)">No phases yet — use “Edit phases” to add them.</div>`;
+    return;
+  }
+
+  const cur = Number(plan.programme_week) || 0;
+  track.innerHTML = phases.map(ph => {
+    const status  = (ph.week_end < cur) ? 'is-done'
+                  : (cur >= ph.week_start && cur <= ph.week_end) ? 'is-current' : '';
+    const wk      = ph.week_start === ph.week_end ? `W${ph.week_start}` : `W${ph.week_start}–${ph.week_end}`;
+    const nowTag  = status === 'is-current' ? ' · NOW' : '';
+    const dotSty  = ph.color ? ` style="background:${esc(ph.color)}"` : '';
+    const tip     = [ph.objective, ph.load_level ? `Load: ${ucfirst(ph.load_level)}` : ''].filter(Boolean).join(' · ');
+    return `<div class="rp-train-seg ${status}"${tip ? ` title="${esc(tip)}"` : ''}><span class="dot"${dotSty}></span>${esc(ph.name)}<span class="wk">${wk}${nowTag}</span></div>`;
+  }).join('');
 }
 
 function rpBuildGate(phases, injuryId, refresh) {
