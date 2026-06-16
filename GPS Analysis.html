@@ -206,6 +206,11 @@
      wide content scrolls inside its own wrapper (e.g. .gp-zwrap) instead. */
   .gp-c-b > * { min-width:0; max-width:100%; }
   .gp-c-b canvas { max-width:100%; }
+  .gp-skel { height:160px; margin:14px; border-radius:8px;
+    background:linear-gradient(90deg, var(--cm-bg-soft) 25%, var(--cm-border-soft) 37%, var(--cm-bg-soft) 63%);
+    background-size:400% 100%; animation:gp-shimmer 1.4s ease infinite; }
+  @keyframes gp-shimmer { 0% { background-position:100% 0 } 100% { background-position:-100% 0 } }
+  @media (prefers-reduced-motion: reduce) { .gp-skel { animation:none } }
   .gp-c-picks { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
   .gp-c-pick { display:inline-flex; align-items:center; gap:4px; height:22px; padding:0 8px; border-radius:5px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg); font:500 11px/1 var(--cm-font-sans); cursor:pointer; }
   .gp-c-pick:hover { border-color:var(--cm-border-strong); }
@@ -3082,9 +3087,22 @@ async function _detectSmartDefault(clubId, userId) {
   } catch (e) {
     console.warn('applyLayout:', e);
   } finally {
+    // Skeletons en bodies vacíos → el grid aparece con shimmer en vez de blanco
+    document.querySelectorAll('.gp-c-b').forEach(b => {
+      if (b.children.length || b.textContent.trim()) return;
+      const skel = document.createElement('div');
+      skel.className = 'gp-skel';
+      b.appendChild(skel);
+      const obs = new MutationObserver(() => {
+        if ([...b.children].some(c => c !== skel)) { skel.remove(); obs.disconnect(); }
+      });
+      obs.observe(b, { childList: true });
+    });
     document.querySelectorAll('.gp-grid').forEach(g => g.classList.add('layout-ready'));
   }
   await window.refreshDashboard();
+  // Backstop: saca cualquier skeleton huérfano (card que nunca renderizó)
+  setTimeout(() => document.querySelectorAll('.gp-skel').forEach(s => s.remove()), 8000);
   // GpBuilder puede cargar después del primer refresh → reintento para las cards de ejemplo.
   setTimeout(() => _renderGenericExampleCards(), 1200);
 })();
