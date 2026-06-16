@@ -41,9 +41,6 @@
 .cm-team-chip select{flex:1;min-width:0;appearance:none;-webkit-appearance:none;background:transparent;border:none;outline:none;color:var(--cm-side-fg);font:600 12px/1 var(--cm-font-sans);cursor:pointer;padding:0;text-overflow:ellipsis}
 .cm-team-chip select option{background:var(--cm-side-bg);color:var(--cm-side-fg)}
 .cm-team-chip-caret{font-size:12px;color:var(--cm-side-fg-muted);flex-shrink:0;pointer-events:none}
-.hub-brand .switch{width:24px;height:24px;border-radius:6px;border:1px solid var(--cm-side-border);background:transparent;color:var(--cm-side-fg-muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
-.hub-brand .switch:hover{background:var(--cm-side-item-active-bg);color:var(--cm-side-fg)}
-.hub-brand .switch .ti{font-size:14px}
 .hub-nav{padding:8px 10px;flex:1}
 .hub-nav-group+.hub-nav-group{margin-top:6px}
 .hub-nav-label{font:500 10.5px/1 var(--cm-font-sans);letter-spacing:0.08em;text-transform:uppercase;color:var(--cm-side-fg-muted);padding:10px 10px 6px}
@@ -233,7 +230,6 @@
             <i class="ti ti-chevron-down cm-team-chip-caret"></i>
           </div>
         </div>
-        <button class="switch" title="Switch club"><i class="ti ti-selector"></i></button>
         <button class="cm-collapse-btn" id="cmCollapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar"><i class="ti ti-layout-sidebar-left-collapse"></i></button>
       </div>
       <nav class="hub-nav">${renderNav()}</nav>
