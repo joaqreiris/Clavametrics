@@ -201,7 +201,7 @@
           <span class="l">Programme</span>
           <span class="summary">8-week block · <strong>Week 4 of 8</strong> · risk flag: <strong>hamstring (history)</strong></span>
           <div class="right">
-            <button class="cm-btn is-ghost" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> Edit phases</button>
+            <button class="cm-btn is-ghost" id="btn-edit-phases" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> Edit phases</button>
           </div>
         </div>
         <div class="rp-train-track">
@@ -578,7 +578,10 @@
   }
 
   // ── Trainbar (preventive) ──
-  if (plan.kind === 'preventive') rpBuildTrainbar(plan);
+  if (plan.kind === 'preventive') {
+    rpBuildTrainbar(plan);
+    document.getElementById('btn-edit-phases')?.addEventListener('click', () => openPhaseEditor(plan));
+  }
 
   // ── Week navigation ──
   let currentWeekStart = rpMonday(TODAY);
@@ -1001,6 +1004,143 @@ async function _rpBuildTrainbarAsync(plan) {
     const tip     = [ph.objective, ph.load_level ? `Load: ${ucfirst(ph.load_level)}` : ''].filter(Boolean).join(' · ');
     return `<div class="rp-train-seg ${status}"${tip ? ` title="${esc(tip)}"` : ''}><span class="dot"${dotSty}></span>${esc(ph.name)}<span class="wk">${wk}${nowTag}</span></div>`;
   }).join('');
+}
+
+const PE_PRESETS = [
+  { name:'Foundation',  week_start:1, week_end:2, color:'#94A3B8', load_level:'low',    objective:'' },
+  { name:'Improvement', week_start:3, week_end:5, color:'#06B6D4', load_level:'medium', objective:'' },
+  { name:'Strength',    week_start:6, week_end:7, color:'#DC2626', load_level:'high',   objective:'' },
+  { name:'Taper',       week_start:8, week_end:8, color:'#64748B', load_level:'low',    objective:'' },
+];
+let _peState = [];
+const peEsc = s => String(s==null?'':s).replace(/"/g,'&quot;');
+let _peBuilt = false;
+function peBuild() {
+  if (_peBuilt) return; _peBuilt = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    .pe-ov{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(2px);z-index:9000;display:none;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow:auto}
+    .pe-ov.on{display:flex}
+    .pe-modal{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:12px;width:640px;max-width:100%;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+    .pe-h{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border-soft)}
+    .pe-h h3{font:600 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);margin:0}
+    .pe-h .x{margin-left:auto;width:28px;height:28px;border-radius:7px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer}
+    .pe-b{padding:14px 18px;display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow:auto}
+    .pe-row{border:1px solid var(--cm-border-soft);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--cm-bg-soft)}
+    .pe-row .l1{display:flex;align-items:center;gap:8px}
+    .pe-row input,.pe-row select{height:32px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-surface);color:var(--cm-fg-strong);font:500 13px/1 var(--cm-font-sans);padding:0 8px;min-width:0}
+    .pe-row .nm{flex:1}
+    .pe-row .wk{width:54px;text-align:center}
+    .pe-row .ld{width:104px}
+    .pe-row .co{width:40px;padding:2px;cursor:pointer}
+    .pe-row .ob{width:100%}
+    .pe-row .ic{width:28px;height:28px;border-radius:6px;border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);cursor:pointer;flex-shrink:0}
+    .pe-row .ic:hover{border-color:var(--cm-border-strong);color:var(--cm-fg)}
+    .pe-sep{color:var(--cm-fg-faint);font:500 12px/1 var(--cm-font-mono)}
+    .pe-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .pe-empty{padding:14px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)}
+    .pe-f{display:flex;align-items:center;gap:10px;padding:14px 18px;border-top:1px solid var(--cm-border-soft)}
+  `;
+  document.head.appendChild(style);
+  const ov = document.createElement('div');
+  ov.className = 'pe-ov'; ov.id = 'pe-ov';
+  ov.innerHTML = `
+    <div class="pe-modal" role="dialog" aria-modal="true">
+      <div class="pe-h"><i class="ti ti-stack-2" style="color:var(--cm-accent);font-size:18px"></i>
+        <h3>Edit programme phases</h3>
+        <button class="x" id="pe-close"><i class="ti ti-x"></i></button></div>
+      <div class="pe-b"><div id="pe-rows"></div>
+        <div class="pe-actions">
+          <button class="cm-btn is-outline is-sm" id="pe-add"><i class="ti ti-plus"></i> Add phase</button>
+          <button class="cm-btn is-ghost is-sm" id="pe-quick"><i class="ti ti-wand"></i> Quick start (4 phases)</button>
+        </div>
+      </div>
+      <div class="pe-f">
+        <button class="cm-btn is-outline is-sm" id="pe-cancel">Cancel</button>
+        <button class="cm-btn is-primary is-sm" id="pe-save" style="margin-left:auto"><i class="ti ti-check"></i> Save phases</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#pe-close').onclick = ov.querySelector('#pe-cancel').onclick = () => ov.classList.remove('on');
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('on'); });
+}
+function peRender() {
+  const root = document.getElementById('pe-rows');
+  if (!_peState.length) { root.innerHTML = `<div class="pe-empty">No phases yet. Add one, or use Quick start.</div>`; return; }
+  root.innerHTML = '';
+  _peState.forEach((p, i) => {
+    const row = document.createElement('div'); row.className = 'pe-row';
+    row.innerHTML = `
+      <div class="l1">
+        <input class="nm" placeholder="Phase name" value="${peEsc(p.name)}">
+        <button class="ic" data-act="up" title="Move up"${i===0?' disabled style="opacity:.4"':''}><i class="ti ti-chevron-up"></i></button>
+        <button class="ic" data-act="down" title="Move down"${i===_peState.length-1?' disabled style="opacity:.4"':''}><i class="ti ti-chevron-down"></i></button>
+        <button class="ic" data-act="del" title="Remove"><i class="ti ti-trash"></i></button>
+      </div>
+      <div class="l1">
+        <span class="pe-sep">Weeks</span>
+        <input class="wk" type="number" min="1" data-f="week_start" value="${p.week_start??''}">
+        <span class="pe-sep">–</span>
+        <input class="wk" type="number" min="1" data-f="week_end" value="${p.week_end??''}">
+        <select class="ld" data-f="load_level">
+          <option value="">Load —</option>
+          <option value="low"${p.load_level==='low'?' selected':''}>Low</option>
+          <option value="medium"${p.load_level==='medium'?' selected':''}>Medium</option>
+          <option value="high"${p.load_level==='high'?' selected':''}>High</option>
+        </select>
+        <input class="co" type="color" data-f="color" value="${p.color||'#6E8AC4'}" title="Color">
+      </div>
+      <input class="ob" data-f="objective" placeholder="Objective (optional)" value="${peEsc(p.objective)}">`;
+    row.querySelector('.nm').addEventListener('input', e => _peState[i].name = e.target.value);
+    row.querySelectorAll('[data-f]').forEach(el => el.addEventListener('input', e => {
+      const f = e.target.dataset.f;
+      _peState[i][f] = (f==='week_start'||f==='week_end') ? (e.target.value===''?null:Number(e.target.value)) : e.target.value;
+    }));
+    row.querySelector('[data-act="del"]').addEventListener('click', () => { _peState.splice(i,1); peRender(); });
+    row.querySelector('[data-act="up"]').addEventListener('click', () => { if(i>0){ [_peState[i-1],_peState[i]]=[_peState[i],_peState[i-1]]; peRender(); } });
+    row.querySelector('[data-act="down"]').addEventListener('click', () => { if(i<_peState.length-1){ [_peState[i+1],_peState[i]]=[_peState[i],_peState[i+1]]; peRender(); } });
+    root.appendChild(row);
+  });
+}
+async function openPhaseEditor(plan) {
+  peBuild();
+  const ov = document.getElementById('pe-ov');
+  const { data } = await window.sb.from('programme_phases')
+    .select('name,week_start,week_end,color,objective,load_level,phase_order')
+    .eq('plan_id', plan.id).order('phase_order');
+  _peState = (data||[]).map(p => ({...p}));
+  peRender();
+  document.getElementById('pe-add').onclick = () => { _peState.push({name:'',week_start:null,week_end:null,color:'#6E8AC4',objective:'',load_level:''}); peRender(); };
+  document.getElementById('pe-quick').onclick = () => { _peState = PE_PRESETS.map(p=>({...p})); peRender(); };
+  document.getElementById('pe-save').onclick = async () => {
+    const rows = _peState.filter(p => (p.name||'').trim());
+    for (const p of rows) {
+      if (p.week_start==null || p.week_end==null) { alert('Each phase needs a start and end week.'); return; }
+      if (Number(p.week_start) > Number(p.week_end)) { alert(`"${p.name}": start week must be ≤ end week.`); return; }
+    }
+    const saveBtn = document.getElementById('pe-save');
+    saveBtn.disabled = true; saveBtn.innerHTML = '<i class="ti ti-loader-2"></i> Saving…';
+    try {
+      const clubId = await window.getClubId();
+      await window.sb.from('programme_phases').delete().eq('plan_id', plan.id);
+      if (rows.length) {
+        const payload = rows.map((p, idx) => ({
+          plan_id: plan.id, club_id: clubId, phase_order: idx,
+          name: p.name.trim(), week_start: Number(p.week_start), week_end: Number(p.week_end),
+          color: p.color || null, objective: (p.objective||'').trim() || null, load_level: p.load_level || null
+        }));
+        const { error } = await window.sb.from('programme_phases').insert(payload);
+        if (error) throw error;
+      }
+      ov.classList.remove('on');
+      if (window._rpRefreshTrainbar) window._rpRefreshTrainbar();
+    } catch (err) {
+      alert('Could not save phases: ' + (err.message || err));
+    } finally {
+      saveBtn.disabled = false; saveBtn.innerHTML = '<i class="ti ti-check"></i> Save phases';
+    }
+  };
+  ov.classList.add('on');
 }
 
 function rpBuildGate(phases, injuryId, refresh) {
