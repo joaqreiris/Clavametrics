@@ -1722,6 +1722,7 @@ async function apSaveMicro(){
   const typeEl = document.getElementById('apMicroEd_type');
   if (!name || !start || !end){ alert('Name, start and end are required.'); return; }
   if (end < start){ alert('End must be after start.'); return; }
+  const _overlap = apMicroOverlaps(start, end, id);
   const emb = apEmbedMatch(start, end);
   const payload = {
     name, start_date: start, end_date: end, color, season_id: _apSeasonId
@@ -1733,6 +1734,7 @@ async function apSaveMicro(){
   if (error){ alert('Could not save: ' + error.message); return; }
   await apLoadTimeline();
   apMicroEditorRender();
+  if (_overlap.length) alert(`Heads up: these dates overlap ${_overlap.length} other microcycle${_overlap.length>1?'s':''} (${_overlap.map(m=>m.name||'untitled').join(', ')}).`);
 }
 
 function apOpenMicroInCalendar(id){
