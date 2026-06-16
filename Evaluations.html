@@ -784,6 +784,7 @@
         <button class="ev-tab" data-view="trends"><i class="ti ti-trending-up"></i>Trends</button>
         <button class="ev-tab" data-view="templates"><i class="ti ti-template"></i>Templates</button>
         <button class="ev-tab" data-view="history"><i class="ti ti-history"></i>Round history</button>
+        <button class="ev-tab" data-view="force"><i class="ti ti-activity"></i>Force tests</button>
       </div>
 
       <!-- ============== PHYSICAL TESTS VIEW ============== -->
@@ -1244,6 +1245,23 @@
         </div>
       </div>
 
+      <!-- ============== FORCE TESTS VIEW ============== -->
+      <div id="forceView" style="display:none;padding:20px">
+        <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:18px">
+          <div style="flex:1">
+            <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Force tests</div>
+            <div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">Import results from force-plate platforms (VALD ForceDecks and others). CSV upload reads, classifies and previews — nothing is saved yet.</div>
+          </div>
+          <button class="pt-imp-btn" id="ftImpOpen"><i class="ti ti-cloud-upload"></i>Import CSV</button>
+        </div>
+        <div style="border:1.5px dashed var(--cm-border); border-radius:12px; padding:40px 24px; text-align:center; background:var(--cm-bg-soft)">
+          <div style="width:44px;height:44px;border-radius:11px;background:var(--cm-surface);border:1px solid var(--cm-border);display:inline-flex;align-items:center;justify-content:center;color:var(--cm-fg-muted);margin-bottom:12px"><i class="ti ti-activity" style="font-size:22px"></i></div>
+          <div style="font:600 14px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No force tests yet</div>
+          <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:5px;max-width:420px;margin-left:auto;margin-right:auto">Import a CSV exported from your force platform. Identity columns (name, test type, date…) are detected automatically and the rest are treated as metric columns.</div>
+          <button class="cm-btn is-primary" id="ftImpOpen2" style="margin-top:14px"><i class="ti ti-upload" style="font-size:14px"></i>Import CSV</button>
+        </div>
+      </div>
+
     </section>
   </main>
 </div>
@@ -1317,6 +1335,58 @@
     </div>
   </div>
 </aside>
+
+<!-- Force tests · Import drawer (read + classify + preview only — no save yet) -->
+<div class="pt-imp-overlay" id="ftImpOverlay"></div>
+<aside class="pt-imp-drawer" id="ftImpDrawer">
+  <header class="pt-imp-h">
+    <i class="ti ti-activity" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3>Import force tests</h3><div class="sub">CSV from VALD ForceDecks &amp; other platforms</div></div>
+    <button class="pt-imp-x" id="ftImpClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="pt-imp-body">
+    <div class="pt-drop" id="ftDropZone" onclick="document.getElementById('ftFileInput').click()">
+      <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop CSV here or click to browse</h4><p>Identity columns (Name, Test Type, Date…) are detected automatically. Every other column is treated as a metric.</p></div></div>
+      <div class="formats"><span class="fmt">.csv</span><span class="fmt">VALD ForceDecks</span><span class="fmt">Generic</span></div>
+      <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
+        <button class="cm-btn is-outline is-sm" onclick="document.getElementById('ftFileInput').click()"><i class="ti ti-upload" style="font-size:14px"></i>Browse files</button>
+      </div>
+    </div>
+    <input type="file" id="ftFileInput" accept=".csv,.tsv,.txt" style="display:none">
+
+    <!-- Classification + match + preview -->
+    <div id="ftResultArea" style="display:none">
+      <!-- Detected fields vs metric columns -->
+      <div class="pt-imp-section-l">Column classification</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:10px 12px">
+          <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Detected fields</div>
+          <div id="ftDetectedFields" style="display:flex;flex-direction:column;gap:5px"></div>
+        </div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:10px 12px">
+          <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Metric columns <span id="ftMetricCount" style="font-family:var(--cm-font-mono);color:var(--cm-fg-faint)"></span></div>
+          <div id="ftMetricCols" style="display:flex;flex-wrap:wrap;gap:4px;max-height:140px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- Match summary -->
+      <div class="pt-imp-section-l">Player match</div>
+      <div id="ftMatchSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="ftUnmatched" style="margin-bottom:14px"></div>
+
+      <!-- Preview -->
+      <div class="pt-imp-section-l">Preview <span id="ftPreviewCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:none;letter-spacing:0"></span></div>
+      <div id="ftPreviewTable" style="overflow-x:auto;max-height:280px;overflow-y:auto;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;margin-bottom:14px"></div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="cm-btn is-primary" disabled style="flex:1;opacity:.55;cursor:not-allowed"><i class="ti ti-arrow-right" style="font-size:14px"></i>Continue</button>
+        <button class="cm-btn is-outline" onclick="resetForceImport()">Reset</button>
+      </div>
+      <div style="font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:8px;text-align:center">Mapping &amp; save — next step</div>
+    </div>
+  </div>
+</aside>
+
 <!-- ========== MODAL: Test results ========== -->
 <div class="ev-overlay" id="testOvl" onclick="if(event.target===this)closeTestModal()">
   <div class="ev-modal">
@@ -2027,14 +2097,14 @@
   // ── Switch to templates tab ──
   function switchToTemplates() {
     document.querySelectorAll('#evTabs .ev-tab').forEach(t => t.classList.toggle('is-on', t.dataset.view==='templates'));
-    Object.entries({phys:'.pt-wrap',subj:'#subjView',trends:'#trendsView',squad:'#squadView',history:'#historyView',templates:'#templatesView'}).forEach(([k,sel]) => {
+    Object.entries({phys:'.pt-wrap',subj:'#subjView',trends:'#trendsView',squad:'#squadView',history:'#historyView',templates:'#templatesView',force:'#forceView'}).forEach(([k,sel]) => {
       const el = document.querySelector(sel); if (el) el.style.display = k==='templates' ? '' : 'none';
     });
     renderTemplates();
   }
 
   // ── Tab switcher ──
-  const VIEWS = { phys:'.pt-wrap', subj:'#subjView', trends:'#trendsView', squad:'#squadView', history:'#historyView', templates:'#templatesView' };
+  const VIEWS = { phys:'.pt-wrap', subj:'#subjView', trends:'#trendsView', squad:'#squadView', history:'#historyView', templates:'#templatesView', force:'#forceView' };
   document.querySelectorAll('#evTabs .ev-tab').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('#evTabs .ev-tab').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
@@ -3737,6 +3807,200 @@
     if (_indPid === pid) loadIndividualProfile(pid);
     if (_currentTestType === evalType && document.getElementById('testOvl').classList.contains('is-open')) loadTestResults();
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Force tests · CSV import (read + classify + preview only — no save yet)
+  // ═══════════════════════════════════════════════════════════════════
+  const _ftNorm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[._\-\/]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Identity/fixed columns, by priority of role. First header that matches a role wins.
+  const _FT_IDENTITY = [
+    { role: 'externalId', label: 'External ID', match: h => /\b(external\s*id|externalid|profile\s*id|athlete\s*id|athleteid)\b/.test(h) },
+    { role: 'name',       label: 'Name',        match: h => /\b(name|player|athlete|jugador)\b/.test(h) },
+    { role: 'testType',   label: 'Test Type',   match: h => /\b(test\s*type|testtype|test|movement|exercise|type)\b/.test(h) },
+    { role: 'date',       label: 'Date',        match: h => /\b(date|recorded|fecha)\b/.test(h) && !/time/.test(h) },
+    { role: 'time',       label: 'Time',        match: h => /\b(time|hora)\b/.test(h) },
+    { role: 'bw',         label: 'Bodyweight',  match: h => /\b(bw|bodyweight|body\s*weight|body\s*mass|weight|mass|peso)\b/.test(h) },
+    { role: 'reps',       label: 'Reps',        match: h => /\b(reps?|repetitions?)\b/.test(h) },
+    { role: 'tags',       label: 'Tags',        match: h => /\b(tags?|notes?|comments?|label)\b/.test(h) },
+  ];
+
+  let _ftState = null; // { rows, headers, fields:{role->header}, metrics:[], roster:[], byId:Map, byName:Map, manual:Map<normName,playerId> }
+
+  function classifyForceColumns(headers) {
+    const fields = {};   // role -> header
+    const used = new Set();
+    for (const def of _FT_IDENTITY) {
+      const hit = headers.find(h => !used.has(h) && def.match(_ftNorm(h)));
+      if (hit) { fields[def.role] = hit; used.add(hit); }
+    }
+    const metrics = headers.filter(h => !used.has(h));
+    return { fields, metrics };
+  }
+
+  async function loadForceRoster() {
+    if (!clubId) return [];
+    // external_force_id may not exist yet (migration 051) — fall back to name-only roster.
+    let q = window.sb.from('players').select('id, first_name, last_name, external_force_id').eq('club_id', clubId);
+    if (_evTeamId) q = q.eq('team_id', _evTeamId);
+    let res = await q;
+    if (res.error) {
+      let q2 = window.sb.from('players').select('id, first_name, last_name').eq('club_id', clubId);
+      if (_evTeamId) q2 = q2.eq('team_id', _evTeamId);
+      res = await q2;
+    }
+    return res.data || [];
+  }
+
+  // Resolve a row to a player id: (1) external_force_id, (2) name (incl. swapped "Last First"), (3) manual map.
+  function matchForceRow(row) {
+    const { fields, byId, byName, manual } = _ftState;
+    const ext = fields.externalId ? String(row[fields.externalId] ?? '').trim() : '';
+    if (ext && byId.has(ext)) return { playerId: byId.get(ext), how: 'id' };
+    const rawName = fields.name ? String(row[fields.name] ?? '').trim() : '';
+    const nn = _ftNorm(rawName);
+    if (nn) {
+      if (byName.has(nn)) return { playerId: byName.get(nn), how: 'name' };
+      const parts = nn.split(' ');
+      if (parts.length === 2) {
+        const swapped = parts[1] + ' ' + parts[0];
+        if (byName.has(swapped)) return { playerId: byName.get(swapped), how: 'name' };
+      }
+      if (manual.has(nn)) return { playerId: manual.get(nn), how: 'manual' };
+    }
+    return { playerId: null, how: null };
+  }
+
+  function playerName(id) {
+    const p = (_ftState.roster.find(x => x.id === id)) || allPlayers.find(x => x.id === id);
+    return p ? `${p.first_name} ${p.last_name}` : '—';
+  }
+
+  function parseForceCsv(file) {
+    if (!window.Papa) { alert('PapaParse not loaded'); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      async complete(res) {
+        if (!res.data.length) { alert('Empty file.'); return; }
+        const headers = res.meta.fields || [];
+        const { fields, metrics } = classifyForceColumns(headers);
+        const roster = await loadForceRoster();
+        const byId = new Map(), byName = new Map();
+        roster.forEach(p => {
+          if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
+          byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
+        });
+        _ftState = { rows: res.data, headers, fields, metrics, roster, byId, byName, manual: new Map() };
+        document.getElementById('ftDropZone').style.display = 'none';
+        document.getElementById('ftResultArea').style.display = '';
+        renderForceClassification();
+        renderForceMatch();
+        renderForcePreview();
+      },
+      error(err) { alert('Parse error: ' + err.message); }
+    });
+  }
+
+  function renderForceClassification() {
+    const { fields, metrics } = _ftState;
+    const fieldsEl = document.getElementById('ftDetectedFields');
+    const rows = _FT_IDENTITY.filter(d => fields[d.role]).map(d =>
+      `<div style="display:flex;justify-content:space-between;gap:8px;font:500 12px/1.3 var(--cm-font-sans)"><span style="color:var(--cm-fg-muted)">${d.label}</span><span style="color:var(--cm-fg-strong);font-family:var(--cm-font-mono);font-size:11.5px;text-align:right">${fields[d.role]}</span></div>`
+    ).join('');
+    fieldsEl.innerHTML = rows || '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">None detected</div>';
+    document.getElementById('ftMetricCount').textContent = `(${metrics.length})`;
+    document.getElementById('ftMetricCols').innerHTML = metrics.length
+      ? metrics.map(m => `<span class="fmt" title="${m}">${m}</span>`).join('')
+      : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">None</div>';
+  }
+
+  function renderForceMatch() {
+    const { rows } = _ftState;
+    let matched = 0; const unmatchedNames = new Map(); // normName -> rawName
+    rows.forEach(r => {
+      const m = matchForceRow(r);
+      if (m.playerId) matched++;
+      else {
+        const raw = _ftState.fields.name ? String(r[_ftState.fields.name] ?? '').trim() : '';
+        const nn = _ftNorm(raw);
+        if (nn && !unmatchedNames.has(nn)) unmatchedNames.set(nn, raw || '(blank)');
+      }
+    });
+    const unmatched = rows.length - matched;
+    const pill = (txt, tone) => `<span class="pt-provider-status ${tone}" style="margin-top:0"><span class="d"></span>${txt}</span>`;
+    document.getElementById('ftMatchSummary').innerHTML =
+      pill(`${rows.length} tests`, 'av') + pill(`${matched} players matched`, 'ok') + pill(`${unmatched} unmatched`, unmatched ? 'av' : 'ok');
+
+    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const un = [...unmatchedNames.entries()];
+    document.getElementById('ftUnmatched').innerHTML = un.length
+      ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched rows to a player (kept in memory for the next step):</div>` +
+        un.map(([nn, raw]) =>
+          `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${raw}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignForcePlayer('${nn.replace(/'/g, "\\'")}', this.value)">
+               <option value="">— assign player —</option>${opts}
+             </select>
+           </div>`
+        ).join('')
+      : '<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-success)">All rows matched a player.</div>';
+  }
+
+  function assignForcePlayer(nn, playerId) {
+    if (!_ftState) return;
+    if (playerId) _ftState.manual.set(nn, playerId); else _ftState.manual.delete(nn);
+    renderForceMatch();
+    renderForcePreview();
+  }
+  window.assignForcePlayer = assignForcePlayer;
+
+  function renderForcePreview() {
+    const { rows, fields, metrics } = _ftState;
+    const sampleMetrics = metrics.slice(0, 3);
+    const MAX = 10;
+    const head = ['Player', 'Test Type', 'Date', ...sampleMetrics];
+    const th = head.map(h => `<th style="padding:7px 10px;text-align:left;font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);white-space:nowrap">${h}</th>`).join('');
+    const trs = rows.slice(0, MAX).map(r => {
+      const m = matchForceRow(r);
+      const rawName = fields.name ? String(r[fields.name] ?? '').trim() : '';
+      const cellName = m.playerId
+        ? `<span style="color:var(--cm-fg-strong)">${playerName(m.playerId)}</span>`
+        : `<span style="color:var(--cm-warning)" title="Unmatched">${rawName || '—'}</span>`;
+      const tt = fields.testType ? (r[fields.testType] || '—') : '—';
+      const dt = fields.date ? (r[fields.date] || '—') : '—';
+      const metricCells = sampleMetrics.map(mc => `<td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${r[mc] ?? '—'}</td>`).join('');
+      return `<tr><td style="padding:7px 10px;font:500 12.5px/1 var(--cm-font-sans)">${cellName}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${tt}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${dt}</td>${metricCells}</tr>`;
+    }).join('');
+    document.getElementById('ftPreviewCount').textContent = `(${rows.length} rows · ${metrics.length} metrics)`;
+    document.getElementById('ftPreviewTable').innerHTML =
+      `<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cm-bg-soft)">${th}</tr></thead><tbody>${trs}</tbody></table>` +
+      (rows.length > MAX ? `<div style="padding:7px 10px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">…and ${rows.length - MAX} more</div>` : '');
+  }
+
+  function resetForceImport() {
+    _ftState = null;
+    const fi = document.getElementById('ftFileInput'); if (fi) fi.value = '';
+    document.getElementById('ftResultArea').style.display = 'none';
+    document.getElementById('ftDropZone').style.display = '';
+  }
+  window.resetForceImport = resetForceImport;
+
+  // ── Force import drawer wiring ──
+  (function initForceImportDrawer() {
+    const drawer = document.getElementById('ftImpDrawer');
+    const overlay = document.getElementById('ftImpOverlay');
+    const open = () => { drawer.classList.add('is-open'); overlay.classList.add('is-open'); };
+    const close = () => { drawer.classList.remove('is-open'); overlay.classList.remove('is-open'); };
+    document.getElementById('ftImpOpen')?.addEventListener('click', open);
+    document.getElementById('ftImpOpen2')?.addEventListener('click', open);
+    document.getElementById('ftImpClose')?.addEventListener('click', close);
+    overlay?.addEventListener('click', close);
+    document.getElementById('ftFileInput')?.addEventListener('change', e => { if (e.target.files[0]) parseForceCsv(e.target.files[0]); });
+    const dz = document.getElementById('ftDropZone');
+    dz?.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz?.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz?.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseForceCsv(e.dataTransfer.files[0]); });
+  })();
 
   boot();
 
