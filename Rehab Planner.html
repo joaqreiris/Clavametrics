@@ -161,7 +161,7 @@
           <span class="l">Rehab timeline</span>
           <span class="summary">42 days planned · <strong>Day 24</strong> · 3 of 5 phases cleared · next gate in <strong>4 days</strong></span>
           <div class="right">
-            <button class="cm-btn is-ghost" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> Adjust phases</button>
+            <button class="cm-btn is-ghost" id="btn-adjust-phases" style="height:28px;padding:0 10px;font-size:12px"><i class="ti ti-pencil"></i> Adjust phases</button>
           </div>
         </div>
         <div class="rp-phase-track">
@@ -572,6 +572,7 @@
     };
     window._rpRefreshPhases = fetchAndBuildPhases;
     await fetchAndBuildPhases();
+    document.getElementById('btn-adjust-phases')?.addEventListener('click', () => { location.href = 'Injuries.html?injury=' + inj.id; });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') fetchAndBuildPhases();
     });
