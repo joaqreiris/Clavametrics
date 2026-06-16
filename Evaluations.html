@@ -962,6 +962,7 @@
             <h4 onclick="this.closest('.pt-cat-group').classList.toggle('is-collapsed')"><span class="ic str"><i class="ti ti-barbell"></i></span>Strength / VBT<span class="ct">5 tests</span><button class="toggle-btn" tabindex="-1" aria-hidden="true"><i class="ti ti-chevron-down"></i></button></h4>
             <div class="pt-buttons">
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-barbell"></i></div><div class="b-l">VBT · Load-Velocity</div><div class="b-s">Barbell · velocity → %1RM · per exercise</div><div class="b-last">—</div></button>
+              <button class="pt-btn pt-btn-vbtimport" onclick="openVbtBulkDrawer()"><div class="b-ic" style="background:var(--cm-accent-soft);color:var(--cm-accent)"><i class="ti ti-file-upload"></i></div><div class="b-l">Import VBT session (CSV)</div><div class="b-s">Bulk · any encoder · multi-player × multi-lift</div><div class="b-last" style="color:var(--cm-fg-faint)">Load-velocity from CSV</div></button>
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-weight"></i></div><div class="b-l">1RM</div><div class="b-s">%1RM Estimation · Epley + Brzycki</div><div class="b-last">—</div></button>
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-chart-line"></i></div><div class="b-l">F-V Profile · jumps</div><div class="b-s">Samozino · loaded jumps · F₀ V₀ Pmax · FVimb</div><div class="b-last">—</div></button>
               <button class="pt-btn"><div class="b-ic" style="background:rgba(220,38,38,0.10);color:#B91C1C"><i class="ti ti-stretching-2"></i></div><div class="b-l">Nordic hamstring</div><div class="b-s">Reps · Bahr</div><div class="b-last">8 reps <span class="flat">±0</span></div></button>
@@ -1709,6 +1710,53 @@
   </div>
 </aside>
 
+<!-- VBT bulk · Import drawer (read + map + group + calc + preview only — no save yet) -->
+<div class="pt-imp-overlay" id="vbtBulkOverlay"></div>
+<aside class="pt-imp-drawer" id="vbtBulkDrawer">
+  <header class="pt-imp-h">
+    <i class="ti ti-barbell" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3>Import VBT session</h3><div class="sub">Load-velocity CSV from any encoder · multi-player × multi-lift</div></div>
+    <button class="pt-imp-x" id="vbtBulkClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="pt-imp-body">
+    <div class="pt-drop" id="vbtDropZone" onclick="document.getElementById('vbtFileInput').click()">
+      <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop CSV here or click to browse</h4><p>One row per rep/set. Columns (player, exercise, load, velocity) are detected and editable below.</p></div></div>
+      <div class="formats"><span class="fmt">.csv</span><span class="fmt">Any encoder</span><span class="fmt">Load-velocity</span></div>
+      <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
+        <button class="cm-btn is-outline is-sm" onclick="document.getElementById('vbtFileInput').click()"><i class="ti ti-upload" style="font-size:14px"></i>Browse files</button>
+      </div>
+    </div>
+    <input type="file" id="vbtFileInput" accept=".csv,.tsv,.txt" style="display:none">
+
+    <div id="vbtResultArea" style="display:none">
+      <!-- Column mapping -->
+      <div class="pt-imp-section-l">Column mapping</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+        <div class="ev-frow"><label class="ev-fl">Player</label><select id="vbtColPlayer" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Exercise</label><select id="vbtColExercise" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Load (kg)</label><select id="vbtColLoad" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Velocity (m/s)</label><select id="vbtColVelocity" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Date <span style="color:var(--cm-fg-faint)">(optional)</span></label><select id="vbtColDate" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+      </div>
+
+      <!-- Player match -->
+      <div class="pt-imp-section-l">Player match</div>
+      <div id="vbtMatchSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="vbtUnmatched" style="margin-bottom:14px"></div>
+
+      <!-- Detected profiles -->
+      <div class="pt-imp-section-l">Detected profiles <span id="vbtProfCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:none;letter-spacing:0"></span></div>
+      <div id="vbtProfiles" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="cm-btn is-primary" disabled style="flex:1;opacity:.55;cursor:not-allowed"><i class="ti ti-database-import" style="font-size:14px"></i>Save profiles</button>
+        <button class="cm-btn is-outline" onclick="resetVbtBulk()">Reset</button>
+      </div>
+      <div style="font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint);margin-top:8px;text-align:center">Save — next step</div>
+    </div>
+  </div>
+</aside>
+
 <!-- ========== MODAL: Test results ========== -->
 <div class="ev-overlay" id="testOvl" onclick="if(event.target===this)closeTestModal()">
   <div class="ev-modal">
@@ -2452,7 +2500,7 @@
   }));
 
   // ── Catalog test buttons ──
-  document.querySelectorAll('.pt-btn:not(.pt-btn-add)').forEach(btn => {
+  document.querySelectorAll('.pt-btn:not(.pt-btn-add):not(.pt-btn-vbtimport)').forEach(btn => {
     const label = btn.querySelector('.b-l')?.textContent?.trim();
     if (label) btn.addEventListener('click', () => isPhysAnalysisTest(label) ? openPhysAnalysis(label) : openTestModal(label));
   });
@@ -2991,28 +3039,41 @@
   }
 
   // ─── Calc: VBT (González-Badillo) ───
-  // Linear fit of velocity vs load over the .vbt-row inputs → { pairs, a, b, R2, method } or null
+  // PURE load–velocity fit. pairs=[{load, vmp}] → { a, b, R2, r2, method, v1rm, est1RM, hasThreshold } or { error }.
+  // Single source of truth for VBT math, reused by the manual form and the bulk importer.
+  function fitVBTProfile(pairs, exercise) {
+    const pts = (pairs || []).filter(p => p && isFinite(p.load) && isFinite(p.vmp) && p.load > 0 && p.vmp > 0);
+    if (pts.length < 2) return { pairs: pts, error: 'few', n: pts.length };
+    const n = pts.length;
+    const sx = pts.reduce((s, p) => s + p.load, 0), sy = pts.reduce((s, p) => s + p.vmp, 0);
+    const sxy = pts.reduce((s, p) => s + p.load * p.vmp, 0), sx2 = pts.reduce((s, p) => s + p.load * p.load, 0);
+    const denom = n * sx2 - sx * sx;
+    if (denom === 0) return { pairs: pts, error: 'sameload', n };
+    const b = (n * sxy - sx * sy) / denom;     // slope (m/s per kg, negative on a valid profile)
+    const a = (sy - b * sx) / n;               // intercept = velocity at load 0
+    const method = n === 2 ? '2-point' : 'multi-point';
+    const ymean = sy / n;
+    const SStot = pts.reduce((s, p) => s + (p.vmp - ymean) ** 2, 0);
+    const SSres = pts.reduce((s, p) => s + (p.vmp - (a + b * p.load)) ** 2, 0);
+    const R2 = n === 2 ? 1 : (SStot > 0 ? +(1 - SSres / SStot).toFixed(3) : 0);   // 2 points → exact line
+    const hasThreshold = VBT_V1RM[exercise] !== undefined;
+    const v1rm = hasThreshold ? VBT_V1RM[exercise] : 0;   // fallback: V0 (x-intercept, load at v=0)
+    const est1RM = b < 0 ? +(((v1rm - a) / b)).toFixed(1) : null;
+    return { pairs: pts, a, b, method, R2, r2: R2, n, v1rm, est1RM, hasThreshold };
+  }
+
+  // DOM wrapper: reads the .vbt-row inputs and delegates to fitVBTProfile. Keeps {kg,v} pairs for the chart.
   function vbtFit() {
-    const pairs=[...document.querySelectorAll('.vbt-row')].reduce((acc,r)=>{
-      const kg=parseFloat(r.querySelector('.vbt-load')?.value);
-      const v=parseFloat(r.querySelector('.vbt-vmp')?.value);
-      if (!isNaN(kg)&&!isNaN(v)&&kg>0&&v>0) acc.push({kg,v});
+    const domPairs = [...document.querySelectorAll('.vbt-row')].reduce((acc, r) => {
+      const kg = parseFloat(r.querySelector('.vbt-load')?.value);
+      const v = parseFloat(r.querySelector('.vbt-vmp')?.value);
+      if (!isNaN(kg) && !isNaN(v) && kg > 0 && v > 0) acc.push({ kg, v });
       return acc;
-    },[]);
-    if (pairs.length<2) return { pairs, error:'few' };
-    const n=pairs.length;
-    const sx=pairs.reduce((s,p)=>s+p.kg,0), sy=pairs.reduce((s,p)=>s+p.v,0);
-    const sxy=pairs.reduce((s,p)=>s+p.kg*p.v,0), sx2=pairs.reduce((s,p)=>s+p.kg*p.kg,0);
-    const denom=n*sx2-sx*sx;
-    if (denom===0) return { pairs, error:'sameload' };
-    const b=(n*sxy-sx*sy)/denom;          // slope (m/s per kg, negative on a valid profile)
-    const a=(sy-b*sx)/n;                   // intercept = velocity at load 0
-    const method=n===2?'2-point':'multi-point';
-    const ymean=sy/n;
-    const SStot=pairs.reduce((s,p)=>s+(p.v-ymean)**2,0);
-    const SSres=pairs.reduce((s,p)=>s+(p.v-(a+b*p.kg))**2,0);
-    const R2=n===2?1:(SStot>0?+(1-SSres/SStot).toFixed(3):0);   // 2 points → exact line
-    return { pairs, a, b, method, R2, n };
+    }, []);
+    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+    const profile = fitVBTProfile(domPairs.map(p => ({ load: p.kg, vmp: p.v })), exercise);
+    if (profile.error) return { pairs: domPairs, error: profile.error };
+    return { ...profile, pairs: domPairs };   // override with {kg,v} pairs used by the SVG below
   }
 
   function calcVBT() {
@@ -3031,11 +3092,8 @@
       zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loads must differ to fit a load-velocity line.</div>';
       return;
     }
-    const { pairs, a, b, method, R2 } = fit;
-    const hasThreshold = VBT_V1RM[exercise] !== undefined;
-    const v1rm = hasThreshold ? VBT_V1RM[exercise] : 0;   // fallback: V0 (x-intercept, load at v=0)
+    const { pairs, a, b, method, R2, v1rm, est1RM, hasThreshold } = fit;
     const validSlope = b < 0;
-    const est1RM = validSlope ? +(((v1rm - a) / b)).toFixed(1) : null;
     const eqStr = `v = ${a.toFixed(3)} ${b < 0 ? '−' : '+'} ${Math.abs(b).toFixed(4)}·Load`;
 
     // ── Velocity zones (shared palette: warm = force → cool = speed) ──
@@ -4399,13 +4457,18 @@
     resEl.style.color = 'var(--cm-fg-muted)';
     resEl.textContent = 'Saving…';
 
+    // Natural key for a test, normalized so re-imports match the DB (date → yyyy-mm-dd, time → HH:MM).
+    const normTime = t => (t == null ? '' : String(t).trim().slice(0, 5));
+    const natOf = (pid, type, date, time) => `${pid}|${type}|${String(date).slice(0, 10)}|${normTime(time)}`;
+
     let testsCount = 0, metricsCount = 0, skipped = 0, dateWarns = 0;
     try {
+      // ── 1) Build the plan in memory (collapse in-file duplicates by natural key; last wins) ──
+      const planMap = new Map();
       for (const row of rows) {
         const m = matchForceRow(row);
         if (!m.playerId) { skipped++; continue; }
         const { date, warn } = parseForceDate(fields.date ? row[fields.date] : '');
-        if (warn) dateWarns++;
         const testType = (fields.testType ? String(row[fields.testType] || '').trim() : '') || 'Unknown';
         const testTime = fields.time ? (String(row[fields.time] || '').trim() || null) : null;
         const rec = {
@@ -4418,43 +4481,61 @@
           external_id: fields.externalId ? (String(row[fields.externalId] || '').trim() || null) : null,
           uploaded_by: uid, uploaded_by_name: uname,
         };
-
-        // Anti-duplicate on (club_id, player_id, test_type, test_date, test_time)
-        let dupQ = window.sb.from('force_tests').select('id')
-          .eq('club_id', clubId).eq('player_id', m.playerId)
-          .eq('test_type', testType).eq('test_date', date);
-        dupQ = testTime == null ? dupQ.is('test_time', null) : dupQ.eq('test_time', testTime);
-        const { data: existing, error: dupErr } = await dupQ.limit(1);
-        if (dupErr) throw dupErr;
-
-        let testId;
-        if (existing && existing.length) {                          // reuse + regrabar limpio
-          testId = existing[0].id;
-          const { error: updErr } = await window.sb.from('force_tests').update(rec).eq('id', testId);
-          if (updErr) throw updErr;
-          const { error: delErr } = await window.sb.from('force_test_metrics').delete().eq('test_id', testId);
-          if (delErr) throw delErr;
-        } else {
-          const { data: ins, error: insErr } = await window.sb.from('force_tests').insert(rec).select('id').single();
-          if (insErr) throw insErr;
-          testId = ins.id;
-        }
-        testsCount++;
-
-        const metricRows = [];
+        const metricsRaw = [];
         for (const col of mappedCols) {
           const { value, side } = parseForceValue(row[col]);
           if (value == null) continue;
-          metricRows.push({ test_id: testId, club_id: clubId, metric_key: colMap[col], value, side, unit: unitFor(colMap[col]) });
+          metricsRaw.push({ metric_key: colMap[col], value, side, unit: unitFor(colMap[col]) });
         }
-        if (metricRows.length) {
-          const { error: mErr } = await window.sb.from('force_test_metrics').insert(metricRows);
+        planMap.set(natOf(m.playerId, testType, date, testTime), { rec, metricsRaw, warn });
+      }
+      const plan = [...planMap.entries()].map(([natKey, p]) => ({ natKey, ...p }));
+      dateWarns = plan.filter(p => p.warn).length;
+
+      if (plan.length) {
+        // ── 2) Pre-fetch existing tests for the players in the plan (1 query) ──
+        const pids = [...new Set(plan.map(p => p.rec.player_id))];
+        let exQ = window.sb.from('force_tests').select('id, player_id, test_type, test_date, test_time')
+          .eq('club_id', clubId).in('player_id', pids);
+        if (_evTeamId) exQ = exQ.eq('team_id', _evTeamId);
+        const { data: existing, error: exErr } = await exQ;
+        if (exErr) throw exErr;
+
+        // ── 3) Delete the ones that collide with the plan (metrics cascade) (1 query) ──
+        const planKeys = new Set(plan.map(p => p.natKey));
+        const existingIds = (existing || [])
+          .filter(e => planKeys.has(natOf(e.player_id, e.test_type, e.test_date, e.test_time)))
+          .map(e => e.id);
+        if (existingIds.length) {
+          const { error: delErr } = await window.sb.from('force_tests').delete().in('id', existingIds);
+          if (delErr) throw delErr;
+        }
+
+        // ── 4) Insert all tests in one shot, correlate returned ids by natural key ──
+        const { data: insTests, error: insErr } = await window.sb.from('force_tests')
+          .insert(plan.map(p => p.rec))
+          .select('id, player_id, test_type, test_date, test_time');
+        if (insErr) throw insErr;
+        const idByKey = new Map();
+        (insTests || []).forEach(t => idByKey.set(natOf(t.player_id, t.test_type, t.test_date, t.test_time), t.id));
+        testsCount = (insTests || []).length;
+
+        // ── 5) Gather every metric row and insert in chunks (1 query, or a few if huge) ──
+        const allMetricRows = [];
+        plan.forEach(p => {
+          const tid = idByKey.get(p.natKey);
+          if (!tid) return;
+          p.metricsRaw.forEach(mr => allMetricRows.push({ test_id: tid, club_id: clubId, metric_key: mr.metric_key, value: mr.value, side: mr.side, unit: mr.unit }));
+        });
+        const CHUNK = 500;
+        for (let i = 0; i < allMetricRows.length; i += CHUNK) {
+          const { error: mErr } = await window.sb.from('force_test_metrics').insert(allMetricRows.slice(i, i + CHUNK));
           if (mErr) throw mErr;
-          metricsCount += metricRows.length;
         }
+        metricsCount = allMetricRows.length;
       }
 
-      // Persist column-mapping memory (non-fatal if it fails)
+      // ── 6) Persist column-mapping memory once (non-fatal if it fails) ──
       if (mappedCols.length) {
         const mapRows = mappedCols.map(col => ({ club_id: clubId, source_label: sourceLabel, source_column_name: col, target_metric_key: colMap[col] }));
         try { await window.sb.from('force_column_mappings').upsert(mapRows, { onConflict: 'club_id,source_label,source_column_name' }); } catch (e) {}
@@ -5025,6 +5106,237 @@
     dz?.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
     dz?.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
     dz?.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseForceCsv(e.dataTransfer.files[0]); });
+  })();
+
+  // ═══════════════════════════════════════════════════════════════════
+  // VBT bulk importer — read + map + group + fit + preview (no save yet)
+  // ═══════════════════════════════════════════════════════════════════
+  let _vbt = null; // { rows, headers, map:{player,exercise,load,velocity,date}, roster, byId, byName, manual:Map, sourceLabel }
+
+  const _VBT_ROLE_PATTERNS = {
+    player:   /\b(athlete|player|name|jugador|lifter)\b/,
+    exercise: /\b(exercise|lift|movement|ejercicio|drill)\b/,
+    load:     /\b(load|kg|weight|carga|mass|resistance)\b/,
+    velocity: /\b(velocity|vmp|mean velocity|mean propulsive|vel|m s|speed)\b/,
+    date:     /\b(date|fecha|timestamp)\b/,
+  };
+
+  // Map a raw exercise string to a canonical VBT_V1RM key (so the 1RM threshold applies); else keep raw.
+  function vbtCanonExercise(raw) {
+    const nn = _ftNorm(raw);
+    if (!nn) return raw;
+    for (const key of Object.keys(VBT_V1RM)) {
+      const kn = _ftNorm(key);
+      if (nn === kn || nn.includes(kn) || kn.includes(nn)) return key;
+    }
+    return raw;
+  }
+
+  function classifyVbtColumns(headers) {
+    const map = { player: '', exercise: '', load: '', velocity: '', date: '' };
+    const used = new Set();
+    // Priority order avoids e.g. a velocity column being grabbed as load.
+    ['player', 'exercise', 'velocity', 'load', 'date'].forEach(role => {
+      const hit = headers.find(h => !used.has(h) && _VBT_ROLE_PATTERNS[role].test(_ftNorm(h)));
+      if (hit) { map[role] = hit; used.add(hit); }
+    });
+    return map;
+  }
+
+  function vbtMatchPlayer(rawName, externalVal) {
+    const ext = String(externalVal ?? '').trim();
+    if (ext && _vbt.byId.has(ext)) return _vbt.byId.get(ext);
+    const nn = _ftNorm(rawName);
+    if (!nn) return null;
+    if (_vbt.byName.has(nn)) return _vbt.byName.get(nn);
+    const parts = nn.split(' ');
+    if (parts.length === 2 && _vbt.byName.has(parts[1] + ' ' + parts[0])) return _vbt.byName.get(parts[1] + ' ' + parts[0]);
+    if (_vbt.manual.has(nn)) return _vbt.manual.get(nn);
+    return null;
+  }
+
+  function parseVbtCsv(file) {
+    if (!window.Papa) { alert('PapaParse not loaded'); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      async complete(res) {
+        if (!res.data.length) { alert('Empty file.'); return; }
+        const headers = res.meta.fields || [];
+        const map = classifyVbtColumns(headers);
+        const roster = await loadForceRoster();
+        const byId = new Map(), byName = new Map();
+        roster.forEach(p => {
+          if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
+          byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
+        });
+        _vbt = { rows: res.data, headers, map, roster, byId, byName, manual: new Map(), sourceLabel: 'vbt' };
+        await loadVbtSavedMappings();
+        document.getElementById('vbtDropZone').style.display = 'none';
+        document.getElementById('vbtResultArea').style.display = '';
+        populateVbtMapSelects();
+        renderVbtAll();
+      },
+      error(err) { alert('Parse error: ' + err.message); }
+    });
+  }
+
+  // Saved role mappings live in force_column_mappings under a 'vbt' source_label (target_metric_key holds the role).
+  async function loadVbtSavedMappings() {
+    if (!clubId) return;
+    try {
+      const { data } = await window.sb.from('force_column_mappings').select('source_column_name, target_metric_key')
+        .eq('club_id', clubId).eq('source_label', _vbt.sourceLabel);
+      (data || []).forEach(r => {
+        const role = r.target_metric_key, col = r.source_column_name;
+        if (role && _vbt.map[role] !== undefined && _vbt.headers.includes(col)) _vbt.map[role] = col;
+      });
+    } catch (e) {}
+  }
+
+  function populateVbtMapSelects() {
+    const opts = noneFirst => `<option value="">${noneFirst}</option>` + _vbt.headers.map(h => `<option value="${h}">${h}</option>`).join('');
+    const setSel = (id, role, noneLabel) => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = opts(noneLabel);
+      sel.value = _vbt.map[role] || '';
+    };
+    setSel('vbtColPlayer', 'player', '— select —');
+    setSel('vbtColExercise', 'exercise', '— select —');
+    setSel('vbtColLoad', 'load', '— select —');
+    setSel('vbtColVelocity', 'velocity', '— select —');
+    setSel('vbtColDate', 'date', '— none —');
+  }
+
+  function onVbtMapChange() {
+    if (!_vbt) return;
+    _vbt.map.player = document.getElementById('vbtColPlayer').value;
+    _vbt.map.exercise = document.getElementById('vbtColExercise').value;
+    _vbt.map.load = document.getElementById('vbtColLoad').value;
+    _vbt.map.velocity = document.getElementById('vbtColVelocity').value;
+    _vbt.map.date = document.getElementById('vbtColDate').value;
+    renderVbtAll();
+  }
+  window.onVbtMapChange = onVbtMapChange;
+
+  function assignVbtPlayer(nn, playerId) {
+    if (!_vbt) return;
+    if (playerId) _vbt.manual.set(nn, playerId); else _vbt.manual.delete(nn);
+    renderVbtAll();
+  }
+  window.assignVbtPlayer = assignVbtPlayer;
+
+  // Group rows by (player + exercise), pick best VMP per load, fit a profile per group.
+  function buildVbtGroups() {
+    const { rows, map } = _vbt;
+    const groups = new Map();         // key → { playerId, name, exercise, loadBest:Map<load,vmp> }
+    const unmatchedNames = new Map(); // normName → rawName
+    let matchedRows = 0;
+    rows.forEach(r => {
+      const rawName = map.player ? String(r[map.player] ?? '').trim() : '';
+      const exercise = map.exercise ? String(r[map.exercise] ?? '').trim() : '';
+      const load = map.load ? parseFloat(r[map.load]) : NaN;
+      const vmp = map.velocity ? parseFloat(r[map.velocity]) : NaN;
+      const pid = vbtMatchPlayer(rawName);
+      if (!pid) {
+        const nn = _ftNorm(rawName);
+        if (nn && !unmatchedNames.has(nn)) unmatchedNames.set(nn, rawName || '(blank)');
+        return;
+      }
+      matchedRows++;
+      if (!exercise || !isFinite(load) || !isFinite(vmp) || load <= 0 || vmp <= 0) return;
+      const key = pid + '||' + exercise.toLowerCase();
+      let g = groups.get(key);
+      if (!g) { g = { playerId: pid, name: ftPlayerName(pid), exercise, loadBest: new Map() }; groups.set(key, g); }
+      const prev = g.loadBest.get(load);
+      if (prev == null || vmp > prev) g.loadBest.set(load, vmp);   // best (max) VMP per load
+    });
+    return { groups: [...groups.values()], unmatchedNames, matchedRows };
+  }
+
+  function renderVbtAll() {
+    const { groups, unmatchedNames } = buildVbtGroups();
+
+    // Profiles
+    const profiles = groups.map(g => {
+      const pairs = [...g.loadBest.entries()].map(([load, vmp]) => ({ load, vmp }));
+      const fit = fitVBTProfile(pairs, vbtCanonExercise(g.exercise));
+      return { name: g.name, playerId: g.playerId, exercise: g.exercise, nLoads: pairs.length, fit };
+    }).sort((a, b) => a.name.localeCompare(b.name) || a.exercise.localeCompare(b.exercise));
+
+    const valid = profiles.filter(p => !p.fit.error && p.fit.est1RM != null);
+    const players = new Set(profiles.map(p => p.playerId)).size;
+    const unmatched = unmatchedNames.size;
+
+    // Match summary
+    const pill = (txt, tone) => `<span class="pt-provider-status ${tone}" style="margin-top:0"><span class="d"></span>${txt}</span>`;
+    document.getElementById('vbtMatchSummary').innerHTML =
+      pill(`${profiles.length} profiles`, 'av') + pill(`${players} players`, 'ok') + pill(`${unmatched} unmatched (skipped)`, unmatched ? 'av' : 'ok');
+
+    // Unmatched assign
+    const opts = allPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const un = [...unmatchedNames.entries()];
+    document.getElementById('vbtUnmatched').innerHTML = un.length
+      ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched players (kept in memory):</div>` +
+        un.map(([nn, raw]) =>
+          `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${raw}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignVbtPlayer('${nn.replace(/'/g, "\\'")}', this.value)">
+               <option value="">— assign player —</option>${opts}
+             </select>
+           </div>`).join('')
+      : (un.length === 0 && _vbt.map.player ? '<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-success)">All players matched.</div>' : '');
+
+    // Profiles list
+    document.getElementById('vbtProfCount').textContent = `(${valid.length} ready · ${profiles.length} total)`;
+    const list = document.getElementById('vbtProfiles');
+    if (!profiles.length) {
+      list.innerHTML = '<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint)">No profiles yet — check the Player / Exercise / Load / Velocity mapping.</div>';
+      return;
+    }
+    list.innerHTML = profiles.map(p => {
+      const needsLoads = p.fit.error === 'few' || p.nLoads < 2;
+      const flag = needsLoads
+        ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>needs ≥2 loads</span>'
+        : p.fit.error === 'sameload'
+          ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>loads must differ</span>'
+          : p.fit.est1RM == null
+            ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>invalid slope</span>'
+            : `<span style="font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${p.fit.est1RM} kg</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">R² ${(+p.fit.R2).toFixed(2)}</span>`;
+      return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:9px 12px">
+        <div style="min-width:0">
+          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+          <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${p.exercise} · ${p.nLoads} load${p.nLoads === 1 ? '' : 's'}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">${flag}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function resetVbtBulk() {
+    _vbt = null;
+    const fi = document.getElementById('vbtFileInput'); if (fi) fi.value = '';
+    document.getElementById('vbtResultArea').style.display = 'none';
+    document.getElementById('vbtDropZone').style.display = '';
+  }
+  window.resetVbtBulk = resetVbtBulk;
+
+  function openVbtBulkDrawer() {
+    document.getElementById('vbtBulkDrawer').classList.add('is-open');
+    document.getElementById('vbtBulkOverlay').classList.add('is-open');
+  }
+  window.openVbtBulkDrawer = openVbtBulkDrawer;
+
+  (function initVbtBulkDrawer() {
+    const drawer = document.getElementById('vbtBulkDrawer');
+    const overlay = document.getElementById('vbtBulkOverlay');
+    const close = () => { drawer.classList.remove('is-open'); overlay.classList.remove('is-open'); };
+    document.getElementById('vbtBulkClose')?.addEventListener('click', close);
+    overlay?.addEventListener('click', close);
+    document.getElementById('vbtFileInput')?.addEventListener('change', e => { if (e.target.files[0]) parseVbtCsv(e.target.files[0]); });
+    const dz = document.getElementById('vbtDropZone');
+    dz?.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz?.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz?.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseVbtCsv(e.dataTransfer.files[0]); });
   })();
 
   boot();
