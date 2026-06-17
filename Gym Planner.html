@@ -940,6 +940,65 @@ function gpRenderSquadList() {
 function gpSquadApply() { if (_gpSquadSel) { _gpRoster = new Set(_gpSquadSel); gpRenderRoster(); gpScheduleSave(); } gpCloseSquad(); }
 
 // ── Load groups (subgrupos por nivel según tests) ──
+// ── Jenks natural breaks + auto-k (GVF) ──
+function gpJenksMatrices(data, nClasses) {
+  const lcl = [], vc = [];
+  for (let i = 0; i <= data.length; i++) { lcl.push(new Array(nClasses+1).fill(0)); vc.push(new Array(nClasses+1).fill(0)); }
+  for (let i = 1; i <= nClasses; i++) { lcl[1][i] = 1; vc[1][i] = 0; for (let j = 2; j <= data.length; j++) vc[j][i] = Infinity; }
+  for (let l = 2; l <= data.length; l++) {
+    let sum = 0, sumSq = 0, w = 0, variance = 0;
+    for (let m = 1; m <= l; m++) {
+      const low = l - m + 1, val = data[low - 1];
+      w++; sum += val; sumSq += val * val; variance = sumSq - (sum * sum) / w;
+      const i4 = low - 1;
+      if (i4 !== 0) for (let j = 2; j <= nClasses; j++) {
+        if (vc[l][j] >= variance + vc[i4][j-1]) { lcl[l][j] = low; vc[l][j] = variance + vc[i4][j-1]; }
+      }
+    }
+    lcl[l][1] = 1; vc[l][1] = variance;
+  }
+  return lcl;
+}
+function gpJenksGroups(entries, k) {
+  const sorted = entries.slice().sort((a,b)=>a.value-b.value);
+  if (k <= 1) return [sorted];
+  const data = sorted.map(e=>e.value);
+  if (new Set(data).size < k) return gpGroupEqual(entries, k);   // perfiles idénticos → reparte igual
+  const lcl = gpJenksMatrices(data, k);
+  const bounds = new Array(k+1); bounds[k] = data.length; bounds[0] = 0;
+  let kk = data.length, cn = k, ok = true;
+  while (cn > 1) {
+    const lc = lcl[kk] && lcl[kk][cn];
+    if (!lc || lc < 1) { ok = false; break; }
+    bounds[cn-1] = lc - 1; kk = lc - 1; cn--;
+  }
+  if (!ok) return gpGroupEqual(entries, k);
+  const groups = [];
+  for (let i=0;i<k;i++) groups.push(sorted.slice(bounds[i], bounds[i+1]));
+  const ne = groups.filter(g=>g.length);
+  return ne.length === k ? ne : gpGroupEqual(entries, k);
+}
+function gpGVF(data, groupsOfVals) {
+  const mean = data.reduce((a,b)=>a+b,0)/data.length;
+  const sdam = data.reduce((s,x)=>s+(x-mean)**2,0);
+  if (sdam === 0) return 1;
+  const sdcm = groupsOfVals.reduce((s,g)=>{ if(!g.length) return s; const m=g.reduce((a,b)=>a+b,0)/g.length; return s+g.reduce((ss,x)=>ss+(x-m)**2,0); },0);
+  return (sdam - sdcm) / sdam;
+}
+function gpAutoKJenks(entries) {
+  const data = entries.map(e=>e.value).sort((a,b)=>a-b);
+  const distinct = new Set(data).size;
+  const maxK = Math.min(4, distinct, entries.length);
+  if (maxK <= 2) return Math.max(1, maxK);
+  let chosen = 2, chosenGvf = -1;
+  for (let k=2;k<=maxK;k++){
+    const groups = gpJenksGroups(entries, k).map(g=>g.map(e=>e.value));
+    const gvf = gpGVF(data, groups);
+    if (gvf >= 0.85) return k;                          // primer k con buen ajuste
+    if (gvf - chosenGvf >= 0.10) { chosen = k; chosenGvf = gvf; }  // mejora significativa
+  }
+  return chosen;
+}
 function gpGroupEqual(entries, k) {            // PASO 1: equilibrado por nivel
   const sorted = entries.slice().sort((a,b)=>a.value-b.value);
   const n = sorted.length, groups = Array.from({length:k},()=>[]);
@@ -1037,8 +1096,9 @@ function gpRenderGroups() {
   const entries = Object.entries(latest).map(([pid,value]) => ({ pid, value }));
   const noData = [...rosterIds].filter(id => !(id in latest));
   if (!entries.length) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in the roster have this test yet.</div>`; return; }
-  const k = _gpGrpK === 'auto' ? gpAutoK(entries) : Math.min(parseInt(_gpGrpK), entries.length);
-  const groups = gpGroupEqual(entries, k);
+  let k = _gpGrpK === 'auto' ? gpAutoKJenks(entries) : parseInt(_gpGrpK);
+  k = Math.max(1, Math.min(k, entries.length));
+  const groups = gpJenksGroups(entries, k);
   const COLORS = ['#3b82f6','#10b981','#f59e0b','#a855f7','#ef4444'];
   const isRM = _gpGrpMode === 'rm';
   const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
