@@ -104,6 +104,14 @@
 
   .ev-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:18px; box-shadow:var(--cm-shadow-1); }
 
+  /* Form inputs (ported from Evaluations.html style block) */
+  .ev-frow { display:flex;flex-direction:column;gap:4px;margin-bottom:10px; }
+  .ev-fl { font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted); }
+  .ev-finput { width:100%;height:36px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none; }
+  .ev-finput:focus { border-color:var(--cm-accent); }
+  textarea.ev-finput { height:auto;padding:8px 10px; }
+  .ev-f2 { display:grid;grid-template-columns:1fr 1fr;gap:12px; }
+
   /* ===== Force tests — team + individual (ported from Evaluations.html) ===== */
   .ft-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
   .ft-controls { display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; padding:16px 18px; }
@@ -548,8 +556,62 @@
               <button class="is-on" data-mini-btn="manual">Manual / Bulk</button>
               <button data-mini-btn="csv">Import CSV</button>
             </div>
-            <div data-mini-pane="uploadMode:manual" class="ev-card" style="display:block">
-              <div class="ev-placeholder"><i class="ti ti-keyboard"></i><h3>Manual / bulk entry</h3><p>Manual entry form &amp; bulk grid for this test will live here. No logic wired yet.</p></div>
+            <div data-mini-pane="uploadMode:manual" style="display:block">
+
+              <!-- Placeholder for tests with a calculator (VBT, F-V, IFT, FMS…) or force_tests -->
+              <div id="evUploadPlaceholder" class="ev-card" style="display:none">
+                <div class="ev-placeholder"><i class="ti ti-calculator"></i><h3>Guided entry</h3><p id="evUploadPlaceholderTxt">This test uses a dedicated calculator or device import — wired in a later step.</p></div>
+              </div>
+
+              <!-- Real manual + bulk entry for single-value evaluations tests -->
+              <div id="evUploadReal" style="display:none">
+                <div class="ev-mini-seg" data-mini="entryMode">
+                  <button class="is-on" data-mini-btn="single">Single entry</button>
+                  <button data-mini-btn="bulk">Bulk (team)</button>
+                </div>
+
+                <!-- SINGLE -->
+                <div data-mini-pane="entryMode:single" class="ev-card" style="display:block">
+                  <form id="evManualForm">
+                    <div class="ev-frow"><label class="ev-fl">Player</label>
+                      <select id="evManualPlayer" class="ev-finput" required><option value="">Select player…</option></select></div>
+                    <div class="ev-f2">
+                      <div class="ev-frow"><label class="ev-fl">Value</label><input id="evManualValue" type="number" step="any" class="ev-finput" required></div>
+                      <div class="ev-frow"><label class="ev-fl">Unit</label><input id="evManualUnit" class="ev-finput" placeholder="cm, s, kg…"></div>
+                    </div>
+                    <div class="ev-frow"><label class="ev-fl">Date</label><input id="evManualDate" type="date" class="ev-finput" required></div>
+                    <div class="ev-frow"><label class="ev-fl">Notes</label><textarea id="evManualNotes" class="ev-finput" rows="2"></textarea></div>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:4px">
+                      <button type="submit" class="cm-btn is-primary is-sm"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save result</button>
+                      <span id="evManualMsg" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></span>
+                    </div>
+                  </form>
+                </div>
+
+                <!-- BULK -->
+                <div data-mini-pane="entryMode:bulk" class="ev-card" style="display:none">
+                  <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+                    <div class="ev-frow" style="flex:0 0 170px;margin-bottom:0"><label class="ev-fl">Date</label><input id="evBulkDate" type="date" class="ev-finput"></div>
+                    <div class="ev-frow" style="flex:0 0 130px;margin-bottom:0"><label class="ev-fl">Unit</label><input id="evBulkUnit" class="ev-finput" placeholder="cm, s…"></div>
+                    <div class="ev-spacer" style="flex:1"></div>
+                    <button id="evBulkSave" class="cm-btn is-primary is-sm"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save all</button>
+                  </div>
+                  <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px">Enter one result per player. Rows left blank are skipped.</div>
+                  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);overflow:hidden">
+                    <table style="width:100%;border-collapse:collapse">
+                      <thead>
+                        <tr style="background:var(--cm-bg-soft)">
+                          <th style="text-align:left;padding:10px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);width:42%">Player</th>
+                          <th style="text-align:left;padding:10px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);width:24%">Value</th>
+                          <th style="text-align:left;padding:10px 14px;font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">Note</th>
+                        </tr>
+                      </thead>
+                      <tbody id="evBulkBody"></tbody>
+                    </table>
+                  </div>
+                  <div id="evBulkMsg" style="margin-top:10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></div>
+                </div>
+              </div>
             </div>
             <div data-mini-pane="uploadMode:csv" class="ev-card" style="display:none">
               <div class="ev-placeholder"><i class="ti ti-file-import"></i><h3>Import CSV</h3><p>CSV import &amp; column mapping (PapaParse) will live here. No parsing wired yet.</p></div>
@@ -852,6 +914,14 @@
     } else {
       openEvalTest(t);
     }
+
+    // ── Upload pane dispatch: manual+bulk only for single-value evaluations tests ──
+    var isSingleEval = !isForce && !EV_CALC[t.key];
+    document.getElementById('evUploadReal').style.display        = isSingleEval ? '' : 'none';
+    document.getElementById('evUploadPlaceholder').style.display = isSingleEval ? 'none' : '';
+    activateMini('uploadMode', 'manual');
+    if (isSingleEval){ activateMini('entryMode', 'single'); setupEvalUpload(t); }
+
     window.scrollTo(0,0);
   }
 
@@ -1323,6 +1393,12 @@
   // ════════════════════════════════════════════════════════════════════
   var _ev = { test: null, types: [], variant: null, order: 'desc', rows: [], player: null };
 
+  // tests that have their OWN calculator (wired in later steps) — no plain manual/bulk here
+  var EV_CALC = { ift:1, tt1600:1, vbt:1, orm:1, fvprofile:1, fms:1, ankle:1, hiprot:1, bodycomp:1 };
+  // default unit prefill per single-value test
+  var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'' };
+  function evToday(){ return new Date().toISOString().slice(0,10); }
+
   // direction: time/agility tests (unit s/ms, or sprint/505/agility) → lower is better
   var EV_LOWER_BETTER = { sprint:1, cod505:1, illinois:1, rsa:1, tt1600:1 };
   function evBetterHigh(test, unit){
@@ -1544,6 +1620,93 @@
   }); });
   document.getElementById('ev-player').addEventListener('change', function(e){ _ev.player = e.target.value; renderEvalIndiv(); });
   document.getElementById('evBackTeam').addEventListener('click', function(){ activateViewMode('team'); });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  EVALUATIONS · Upload results — manual + bulk entry (single value)
+  //  Ported from saveEval / saveBulkEntry. evaluation_type = opened test.
+  // ════════════════════════════════════════════════════════════════════
+  function setupEvalUpload(t){
+    // single form
+    var psel = document.getElementById('evManualPlayer');
+    psel.innerHTML = '<option value="">Select player…</option>' + _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name+' '+p.last_name)+'</option>'; }).join('');
+    document.getElementById('evManualValue').value = '';
+    document.getElementById('evManualUnit').value  = EV_DEFAULT_UNIT[t.key] || '';
+    document.getElementById('evManualDate').value  = evToday();
+    document.getElementById('evManualNotes').value = '';
+    document.getElementById('evManualMsg').style.display = 'none';
+    // bulk
+    document.getElementById('evBulkUnit').value = EV_DEFAULT_UNIT[t.key] || '';
+    document.getElementById('evBulkDate').value = evToday();
+    document.getElementById('evBulkMsg').style.display = 'none';
+    renderBulkRoster();
+  }
+
+  function renderBulkRoster(){
+    var tb = document.getElementById('evBulkBody');
+    var cell = 'padding:6px 14px;border-bottom:1px solid var(--cm-border-soft)';
+    tb.innerHTML = _ftPlayers.map(function(p){
+      return '<tr data-pid="'+p.id+'">'
+        + '<td style="padding:8px 14px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong)">'+esc(p.first_name+' '+p.last_name)+'</td>'
+        + '<td style="'+cell+'"><input type="number" step="any" class="ev-finput ev-bulk-val" style="height:32px"></td>'
+        + '<td style="'+cell+'"><input class="ev-finput ev-bulk-note" style="height:32px"></td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="3" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in this team.</td></tr>';
+  }
+
+  async function saveEvalManual(e){
+    e.preventDefault();
+    if (!_openTest || !_clubId) return;
+    var playerId = document.getElementById('evManualPlayer').value;
+    var value = parseFloat(document.getElementById('evManualValue').value);
+    var unit = document.getElementById('evManualUnit').value.trim();
+    var testDate = document.getElementById('evManualDate').value;
+    var notes = document.getElementById('evManualNotes').value.trim();
+    if (!playerId || isNaN(value) || !testDate) return;
+    var payload = { player_id: playerId, club_id: _clubId, evaluation_type: _openTest.label, value: value, unit: unit || null, test_date: testDate, notes: notes || null };
+    var res = await window.sb.from('evaluations').insert(payload);
+    if (res.error){ alert('Error: ' + res.error.message); return; }
+    var msg = document.getElementById('evManualMsg'); msg.textContent = '✓ Saved'; msg.style.display = '';
+    setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+    document.getElementById('evManualValue').value = ''; document.getElementById('evManualNotes').value = '';
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  async function saveBulkEntry(){
+    if (!_openTest || !_clubId) return;
+    var testDate = document.getElementById('evBulkDate').value;
+    var unit = document.getElementById('evBulkUnit').value.trim();
+    if (!testDate){ alert('Enter a date.'); return; }
+    var records = [];
+    document.querySelectorAll('#evBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var valEl = tr.querySelector('.ev-bulk-val'); if (!valEl) return;
+      var val = parseFloat(valEl.value);
+      var noteEl = tr.querySelector('.ev-bulk-note');
+      var note = (noteEl && noteEl.value || '').trim();
+      if (isNaN(val)) return;
+      records.push({ player_id: pid, club_id: _clubId, evaluation_type: _openTest.label, value: val, unit: unit || null, test_date: testDate, notes: note || null });
+    });
+    if (!records.length){ alert('No valid rows to save.'); return; }
+    var res = await window.sb.from('evaluations').insert(records);
+    if (res.error){ alert('Error: ' + res.error.message); return; }
+    var msg = document.getElementById('evBulkMsg'); msg.textContent = '✓ ' + records.length + ' record' + (records.length > 1 ? 's' : '') + ' saved'; msg.style.display = '';
+    setTimeout(function(){ msg.style.display = 'none'; }, 3000);
+    renderBulkRoster();
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  // reload evaluations data + re-render View results after a save
+  async function reloadEvalViews(){
+    if (!_openTest || !_openTest.src || _openTest.src.from !== 'evaluations') return;
+    await loadEvalData(_openTest);
+    renderEvalTeam();
+    renderEvalIndiv();
+  }
+
+  document.getElementById('evManualForm').addEventListener('submit', saveEvalManual);
+  document.getElementById('evBulkSave').addEventListener('click', saveBulkEntry);
 
   // ── boot ──
   renderCatalog();
