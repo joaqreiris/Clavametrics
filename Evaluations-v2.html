@@ -103,6 +103,122 @@
   .ev-placeholder p { font:500 12.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); max-width:420px; margin:0 auto; }
 
   .ev-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:18px; box-shadow:var(--cm-shadow-1); }
+
+  /* ===== Force tests — team + individual (ported from Evaluations.html) ===== */
+  .ft-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); }
+  .ft-controls { display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; padding:16px 18px; }
+  .ft-control { display:flex; flex-direction:column; gap:6px; min-width:0; }
+  .ft-control > label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); padding-left:2px; }
+  .ft-control select { height:36px; min-width:188px; cursor:pointer; }
+  .ft-control.is-metric select { min-width:168px; }
+  .ft-spacer { flex:1 1 24px; }
+  .ft-seg { display:inline-flex; gap:2px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); padding:3px; height:36px; }
+  .ft-seg button { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; border:0; background:transparent; cursor:pointer; padding:0 12px; border-radius:5px; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); transition:background 140ms ease, color 140ms ease, box-shadow 140ms ease; }
+  .ft-seg button .ti { font-size:15px; }
+  .ft-seg button:hover { color:var(--cm-fg); }
+  .ft-seg button.is-active { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+
+  .ft-summary { display:flex; align-items:stretch; gap:0; padding:22px 24px; flex-wrap:wrap; }
+  .ft-avg { display:flex; flex-direction:column; gap:8px; padding-right:36px; }
+  .ft-avg .lab { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .ft-avg .big { display:flex; align-items:baseline; gap:10px; }
+  .ft-avg .num { font:600 52px/0.95 var(--cm-font-mono); letter-spacing:-0.02em; color:var(--cm-fg-strong); font-feature-settings:"tnum"; }
+  .ft-avg .unit { font:500 17px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ft-avg .sub { font:500 12px/1.4 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ft-avg .sub b { color:var(--cm-fg); font-weight:600; }
+  .ft-stats { display:flex; gap:0; margin-left:auto; align-items:center; }
+  .ft-stat { display:flex; flex-direction:column; gap:7px; padding:0 26px; border-left:1px solid var(--cm-border); }
+  .ft-stat .k { display:flex; align-items:center; gap:6px; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-faint); text-transform:uppercase; letter-spacing:0.06em; }
+  .ft-stat .v { font:600 18px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-feature-settings:"tnum"; }
+  .ft-stat .v small { font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-left:4px; }
+  .ft-stat .n { font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ft-stat .v.is-bad { color:var(--cm-danger); }
+
+  .ft-chart-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px 0; }
+  .ft-chart-title { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.005em; }
+  .ft-legend { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .ft-legend .it { display:flex; align-items:center; gap:6px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ft-legend .sw { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+  .ft-legend .sw.ok { background:#475569; }
+  .ft-legend .sw.warn { background:var(--cm-warning); }
+  .ft-legend .sw.bad { background:var(--cm-danger); }
+  .ft-legend .sw.avgl { width:16px; height:0; border-top:2px dashed var(--cm-fg-faint); border-radius:0; }
+
+  .ft-plotwrap { padding:18px 20px 6px; }
+  .ft-plot { position:relative; height:296px; display:flex; align-items:flex-end; gap:0; }
+  .ft-col { flex:1 1 0; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; position:relative; }
+  .ft-val { font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-bottom:6px; font-feature-settings:"tnum"; white-space:nowrap; transition:color 140ms ease; }
+  .ft-bar { width:68%; max-width:30px; min-width:8px; background:#475569; border-radius:5px 5px 2px 2px; transition:height 280ms ease, background 140ms ease; }
+  .ft-col.warn .ft-bar { background:var(--cm-warning); }
+  .ft-col.bad .ft-bar { background:var(--cm-danger); }
+  .ft-col.warn .ft-val { color:var(--cm-warning); }
+  .ft-col.bad .ft-val { color:var(--cm-danger); }
+  .ft-avgline { position:absolute; left:-4px; right:-4px; border-top:1.5px dashed var(--cm-fg-muted); z-index:4; pointer-events:none; }
+  .ft-avgline .tag { position:absolute; top:50%; transform:translateY(-50%); background:var(--cm-fg-strong); color:#fff; font:600 10.5px/1 var(--cm-font-mono); font-feature-settings:"tnum"; padding:4px 7px; border-radius:5px; white-space:nowrap; }
+  .ft-avgline.tag-right .tag { right:0; }
+  .ft-avgline.tag-left .tag { left:0; }
+  .ft-names { display:flex; gap:0; margin-top:8px; padding-top:12px; border-top:1px solid var(--cm-border); height:78px; }
+  .ft-nm { flex:1 1 0; min-width:0; position:relative; }
+  .ft-nm span { position:absolute; left:50%; top:2px; transform-origin:left center; transform:rotate(40deg); white-space:nowrap; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ft-nm.warn span { color:var(--cm-warning); font-weight:600; }
+  .ft-nm.bad span { color:var(--cm-danger); font-weight:600; }
+  @media (max-width:1080px) {
+    .ft-summary { flex-direction:column; gap:22px; }
+    .ft-stats { margin-left:0; }
+    .ft-stat:first-child { border-left:0; padding-left:0; }
+  }
+
+  /* Force tests — individual profile */
+  .ft-back { display:inline-flex; align-items:center; gap:6px; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; padding:5px 9px 5px 6px; border-radius:5px; margin-bottom:14px; transition:background 140ms, color 140ms; }
+  .ft-back:hover { background:var(--cm-accent-soft); color:var(--cm-fg); }
+  .ft-back .ti { font-size:15px; }
+  .ft-control.is-player select { min-width:200px; }
+
+  .ft-cards { display:grid; grid-template-columns:1.3fr 1fr 1fr 1fr; gap:12px; }
+  .ft-sc { padding:16px 18px 17px; display:flex; flex-direction:column; gap:10px; }
+  .ft-sc .lab { display:flex; align-items:center; gap:6px; font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .ft-sc .lab .ti { font-size:13px; }
+  .ft-sc .big { display:flex; align-items:baseline; gap:7px; }
+  .ft-sc .num { font:600 32px/1 var(--cm-font-mono); letter-spacing:-0.02em; color:var(--cm-fg-strong); font-feature-settings:"tnum"; }
+  .ft-sc .unit { font:500 14px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ft-sc .sub { font:500 12px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .ft-sc .sub b { color:var(--cm-fg); font-weight:600; }
+  .ft-delta { display:inline-flex; align-items:center; gap:3px; font:600 12px/1 var(--cm-font-mono); }
+  .ft-delta.good { color:var(--cm-success); }
+  .ft-delta.bad { color:var(--cm-danger); }
+  .ft-delta .ti { font-size:13px; }
+  .ft-asym-bars { display:flex; flex-direction:column; gap:5px; margin-top:8px; }
+  .ft-ab-row { display:flex; align-items:center; gap:8px; }
+  .ft-ab-row .side { width:10px; font:600 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .ft-ab-track { flex:1; height:7px; background:var(--cm-bg-sunk); border-radius:999px; overflow:hidden; }
+  .ft-ab-fill { height:100%; border-radius:999px; background:#475569; }
+  .ft-ab-fill.weak { background:var(--cm-border-strong); }
+  .ft-asym-pill { display:inline-flex; align-items:center; gap:5px; font:600 12px/1 var(--cm-font-mono); }
+  .ft-asym-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+
+  .ft-chartwrap { padding:14px 16px 8px; }
+  .ft-chartwrap svg { display:block; width:100%; height:auto; }
+
+  .ft-table-head { padding:16px 20px 12px; display:flex; align-items:center; justify-content:space-between; }
+  .ft-table-head h2 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.005em; }
+  .ft-table-head .count { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  .ft-table { width:100%; border-collapse:collapse; }
+  .ft-table thead th { text-align:left; font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); padding:9px 20px; background:var(--cm-bg-sunk); border-top:1px solid var(--cm-border); border-bottom:1px solid var(--cm-border); }
+  .ft-table th.num, .ft-table td.num { text-align:right; }
+  .ft-table tbody td { padding:12px 20px; border-bottom:1px solid var(--cm-border-soft); font:var(--cm-body-sm); color:var(--cm-fg); }
+  .ft-table tbody tr:last-child td { border-bottom:0; }
+  .ft-table tbody tr:hover { background:var(--cm-bg-soft); }
+  .ft-table tbody tr.is-latest { background:var(--cm-accent-soft); }
+  .ft-table tbody tr.is-latest:hover { background:var(--cm-accent-soft); }
+  .ft-table .c-date { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg); white-space:nowrap; }
+  .ft-table .c-val { font:600 13.5px/1 var(--cm-font-mono); color:var(--cm-fg-strong); font-feature-settings:"tnum"; }
+  .ft-table .c-asym { font:500 13px/1 var(--cm-font-mono); }
+  .ft-vsavg { font:600 12px/1 var(--cm-font-mono); }
+  .ft-vsavg.good { color:var(--cm-success); }
+  .ft-vsavg.bad { color:var(--cm-danger); }
+  .ft-tag { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:4px; font:600 9.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; background:var(--cm-accent); color:#fff; margin-left:8px; }
+  .ft-pill-sm { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:5px; font:600 10.5px/1 var(--cm-font-mono); background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); color:var(--cm-fg-muted); }
+  @media (max-width:1080px) { .ft-cards { grid-template-columns:1fr 1fr; } }
 </style>
 </head>
 <body class="cm">
@@ -200,12 +316,201 @@
               <button class="is-on" data-mini-btn="team">Team</button>
               <button data-mini-btn="individual">Individual</button>
             </div>
-            <div data-mini-pane="viewMode:team" class="ev-card" style="display:block">
-              <div class="ev-placeholder"><i class="ti ti-users-group"></i><h3>Team results</h3><p>Team-level results table / chart for this test will live here. No data wired yet.</p></div>
-            </div>
-            <div data-mini-pane="viewMode:individual" class="ev-card" style="display:none">
-              <div class="ev-placeholder"><i class="ti ti-user"></i><h3>Individual results</h3><p>Per-player history &amp; trend for this test will live here. No data wired yet.</p></div>
-            </div>
+
+            <!-- ── TEAM mini-pane ── -->
+            <div data-mini-pane="viewMode:team" style="display:block">
+
+              <!-- Evaluations source → placeholder (wired in the next step) -->
+              <div id="ftEvalTeamPlaceholder" class="ev-card" style="display:none">
+                <div class="ev-placeholder"><i class="ti ti-users-group"></i><h3>Team results</h3><p>Team-level results for this test will live here. (This test reads from <b>evaluations</b> — wired in the next step.)</p></div>
+              </div>
+
+              <!-- force_tests source → ported team view -->
+              <div id="ftForceTeam" style="display:none">
+                <!-- Empty state (no force tests for the team at all) -->
+                <div id="ftEmpty" style="display:none;border:1.5px dashed var(--cm-border); border-radius:12px; padding:40px 24px; text-align:center; background:var(--cm-bg-soft)">
+                  <div style="width:44px;height:44px;border-radius:11px;background:var(--cm-surface);border:1px solid var(--cm-border);display:inline-flex;align-items:center;justify-content:center;color:var(--cm-fg-muted);margin-bottom:12px"><i class="ti ti-activity" style="font-size:22px"></i></div>
+                  <div style="font:600 14px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No force tests yet</div>
+                  <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:5px;max-width:420px;margin-left:auto;margin-right:auto">Import a CSV exported from your force platform from the Upload tab. Results show up here automatically.</div>
+                </div>
+
+                <!-- TEAM VIEW (test is fixed from the catalog — no test selector) -->
+                <div id="ftTeamView" style="display:none">
+                  <!-- Controls: metric + order only -->
+                  <div class="ft-card ft-controls" style="margin-bottom:14px">
+                    <div class="ft-control is-metric">
+                      <label for="ft-metric">Metric</label>
+                      <select id="ft-metric" class="ev-finput"></select>
+                    </div>
+                    <div class="ft-spacer"></div>
+                    <div class="ft-control is-order">
+                      <label>Order</label>
+                      <div class="ft-seg" id="ft-order">
+                        <button data-order="desc" class="is-active"><i class="ti ti-sort-descending-2"></i>High → Low</button>
+                        <button data-order="asc"><i class="ti ti-sort-ascending-2"></i>Low → High</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Summary -->
+                  <div class="ft-card ft-summary" style="margin-bottom:14px">
+                    <div class="ft-avg">
+                      <span class="lab" id="ft-avg-lab">group average</span>
+                      <div class="big">
+                        <span class="num" id="ft-avg-num">—</span>
+                        <span class="unit" id="ft-avg-unit"></span>
+                      </div>
+                      <span class="sub" id="ft-avg-sub"></span>
+                    </div>
+                    <div class="ft-stats">
+                      <div class="ft-stat">
+                        <div class="k"><i class="ti ti-arrow-up-right" style="font-size:13px"></i>Top</div>
+                        <div class="v" id="ft-top-v">—</div>
+                        <div class="n" id="ft-top-n"></div>
+                      </div>
+                      <div class="ft-stat">
+                        <div class="k"><i class="ti ti-arrow-down-right" style="font-size:13px"></i>Lowest</div>
+                        <div class="v" id="ft-low-v">—</div>
+                        <div class="n" id="ft-low-n"></div>
+                      </div>
+                      <div class="ft-stat">
+                        <div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>Below avg</div>
+                        <div class="v is-bad" id="ft-below-v">—</div>
+                        <div class="n" id="ft-below-n"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Chart -->
+                  <div class="ft-card" id="ftChartCard">
+                    <div class="ft-chart-head">
+                      <div class="ft-chart-title" id="ft-chart-title">By player</div>
+                      <div class="ft-legend">
+                        <span class="it"><span class="sw avgl"></span>Group avg</span>
+                        <span class="it"><span class="sw ok"></span>At / above</span>
+                        <span class="it"><span class="sw warn"></span>Below</span>
+                        <span class="it"><span class="sw bad"></span>Well below</span>
+                      </div>
+                    </div>
+                    <div class="ft-plotwrap">
+                      <div class="ft-plot" id="ft-plot"></div>
+                      <div class="ft-names" id="ft-names"></div>
+                    </div>
+                  </div>
+
+                  <!-- No-data state for the selected metric -->
+                  <div id="ftTeamNoData" style="display:none;border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">
+                    <div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No values for this metric</div>
+                    <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">No player has a recorded value for this test &amp; metric yet.</div>
+                  </div>
+                </div>
+              </div><!-- /#ftForceTeam -->
+            </div><!-- /viewMode:team -->
+
+            <!-- ── INDIVIDUAL mini-pane ── -->
+            <div data-mini-pane="viewMode:individual" style="display:none">
+
+              <!-- Evaluations source → placeholder -->
+              <div id="ftEvalIndivPlaceholder" class="ev-card" style="display:none">
+                <div class="ev-placeholder"><i class="ti ti-user"></i><h3>Individual results</h3><p>Per-player history &amp; trend for this test will live here. (This test reads from <b>evaluations</b> — wired in the next step.)</p></div>
+              </div>
+
+              <!-- force_tests source → ported individual view (test is fixed — no test selector) -->
+              <div id="ftForceIndiv" style="display:none">
+                <a class="ft-back" id="ftBackTeam"><i class="ti ti-arrow-left"></i>Back to team view</a>
+
+                <!-- Player header + controls (player + metric; test is fixed) -->
+                <div class="ft-card ft-controls" style="margin-bottom:14px">
+                  <div class="ft-control is-player">
+                    <label for="ft-player">Player</label>
+                    <select id="ft-player" class="ev-finput"></select>
+                  </div>
+                  <div class="ft-control is-metric">
+                    <label for="fti-metric">Metric</label>
+                    <select id="fti-metric" class="ev-finput"></select>
+                  </div>
+                </div>
+
+                <!-- No-data state -->
+                <div id="ftIndivNoData" style="display:none;border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">
+                  <div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No force tests for this player</div>
+                  <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">Pick another player, or import results for this one.</div>
+                </div>
+
+                <div id="ftIndivBody">
+                  <!-- Summary cards -->
+                  <div class="ft-cards" style="margin-bottom:14px">
+                    <div class="ft-card ft-sc">
+                      <div class="lab"><i class="ti ti-bolt"></i><span id="sc-latest-lab">Latest</span></div>
+                      <div class="big"><span class="num" id="sc-latest-num">—</span><span class="unit" id="sc-latest-unit"></span></div>
+                      <div class="sub">
+                        <span class="ft-delta" id="sc-latest-delta"></span>
+                        <span style="color:var(--cm-fg-faint)"> vs personal avg</span>
+                      </div>
+                    </div>
+
+                    <div class="ft-card ft-sc">
+                      <div class="lab"><i class="ti ti-chart-line"></i>Personal avg</div>
+                      <div class="big"><span class="num" id="sc-avg-num">—</span><span class="unit" id="sc-avg-unit"></span></div>
+                      <div class="sub" id="sc-avg-sub"></div>
+                    </div>
+
+                    <div class="ft-card ft-sc">
+                      <div class="lab"><i class="ti ti-arrows-horizontal"></i>Asymmetry</div>
+                      <div id="sc-asym-wrap">
+                        <div class="big">
+                          <span class="ft-asym-pill"><span class="ft-asym-dot" id="sc-asym-dot"></span><span class="num" style="font-size:32px" id="sc-asym-num">—</span></span>
+                          <span class="unit" id="sc-asym-side"></span>
+                        </div>
+                        <div class="ft-asym-bars" id="sc-asym-bars">
+                          <div class="ft-ab-row"><span class="side">L</span><div class="ft-ab-track"><div class="ft-ab-fill" id="ab-l"></div></div></div>
+                          <div class="ft-ab-row"><span class="side">R</span><div class="ft-ab-track"><div class="ft-ab-fill" id="ab-r"></div></div></div>
+                        </div>
+                      </div>
+                      <div class="sub" id="sc-asym-empty" style="display:none;color:var(--cm-fg-faint)">No L/R data for this metric.</div>
+                    </div>
+
+                    <div class="ft-card ft-sc">
+                      <div class="lab"><i class="ti ti-calendar-event"></i>Last test</div>
+                      <div class="big"><span class="num" id="sc-last-num" style="font-size:26px">—</span><span class="unit" id="sc-last-unit"></span></div>
+                      <div class="sub" id="sc-last-sub"></div>
+                    </div>
+                  </div>
+
+                  <!-- Chart -->
+                  <div class="ft-card" style="margin-bottom:14px">
+                    <div class="ft-chart-head">
+                      <div class="ft-chart-title" id="fti-chart-title">Over time</div>
+                      <div class="ft-legend">
+                        <span class="it"><span class="sw" style="width:12px;height:3px;border-radius:2px;background:#475569"></span><span id="lg-metric">Metric</span></span>
+                        <span class="it"><span class="sw avgl"></span>Personal avg</span>
+                      </div>
+                    </div>
+                    <div class="ft-chartwrap" id="fti-chart"></div>
+                  </div>
+
+                  <!-- Table -->
+                  <div class="ft-card">
+                    <div class="ft-table-head">
+                      <h2>Recent tests</h2>
+                      <span class="count" id="fti-table-count"></span>
+                    </div>
+                    <table class="ft-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Test</th>
+                          <th class="num" id="th-metric">Value</th>
+                          <th class="num">vs avg</th>
+                          <th class="num">Asymmetry</th>
+                        </tr>
+                      </thead>
+                      <tbody id="fti-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div><!-- /#ftForceIndiv -->
+            </div><!-- /viewMode:individual -->
           </div>
 
           <!-- PANE: Upload results (Manual/Bulk · Import CSV) -->
@@ -375,7 +680,7 @@
   // ════════════════════════════════════════════════════════════════════
   //  DATA STATUS  — one query per source, aggregated, then matched to cards.
   // ════════════════════════════════════════════════════════════════════
-  var _clubId = null, _teamId = null, _teamPlayerIds = null;
+  var _clubId = null, _teamId = null, _teamPlayerIds = null, _ftPlayers = [];
 
   async function loadTeamScope(){
     try {
@@ -394,9 +699,10 @@
       var saved = sessionStorage.getItem('cal_active_team');
       _teamId = (saved && teams.some(function(t){ return t.id===saved; })) ? saved : teams[0].id;
       sel.innerHTML = teams.map(function(t){ return '<option value="'+t.id+'"'+(t.id===_teamId?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
-      // resolve player ids for the active team (evaluations are scoped via player, not team_id)
-      var pr = await window.sb.from('players').select('id').eq('club_id', _clubId).eq('team_id', _teamId);
-      _teamPlayerIds = (pr.data || []).map(function(r){ return r.id; });
+      // resolve players for the active team (evaluations are scoped via player, not team_id)
+      var pr = await window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId).eq('team_id', _teamId);
+      _ftPlayers = pr.data || [];
+      _teamPlayerIds = _ftPlayers.map(function(r){ return r.id; });
     } catch(e){ console.warn('[ev2] team scope failed', e); }
   }
 
@@ -488,6 +794,36 @@
     show(document, 'data-branch', v);
   });
 
+  // currently-open test (null in catalog)
+  var _openTest = null;
+
+  // open a test from the catalog → detail view, in force or evaluations mode
+  function openTestDetail(t){
+    _openTest = t;
+    document.getElementById('evTestName').textContent = t.label;
+    document.getElementById('evTestSub').textContent  = t._cat.name + ' · ' + t.sub;
+    catalog.classList.remove('is-on');
+    detail.classList.add('is-on');
+
+    // reset detail sub-nav → View results, and viewMode → Team
+    setPane('view');
+    activateViewMode('team');
+
+    var isForce = t.src && t.src.from === 'force_tests';
+    document.getElementById('ftForceTeam').style.display          = isForce ? '' : 'none';
+    document.getElementById('ftEvalTeamPlaceholder').style.display = isForce ? 'none' : '';
+    document.getElementById('ftForceIndiv').style.display          = isForce ? '' : 'none';
+    document.getElementById('ftEvalIndivPlaceholder').style.display= isForce ? 'none' : '';
+
+    if (isForce){
+      // fix the test_type to the opened test (no test selector)
+      _ftTeam.test = t.src.testType; _ftTeam.metric = null;
+      _ftIndiv.test = t.src.testType; _ftIndiv.metric = null; _ftIndiv.player = null;
+      loadForceView();
+    }
+    window.scrollTo(0,0);
+  }
+
   // catalog category collapse/expand + open a test (event delegation, works for rendered cards)
   document.getElementById('catalogCats').addEventListener('click', function(e){
     var head = e.target.closest('[data-cat-toggle]');
@@ -495,12 +831,7 @@
     var card = e.target.closest('[data-open-test]');
     if (card){
       var t = TEST_BY_KEY[card.getAttribute('data-open-test')];
-      if (!t) return;
-      document.getElementById('evTestName').textContent = t.label;
-      document.getElementById('evTestSub').textContent  = t._cat.name + ' · ' + t.sub + ' · detail view (skeleton)';
-      catalog.classList.remove('is-on');
-      detail.classList.add('is-on');
-      window.scrollTo(0,0);
+      if (t) openTestDetail(t);
     }
   });
 
@@ -512,25 +843,447 @@
 
   // detail sub-nav: View results / Upload results
   var subnav = document.getElementById('evDetailSubnav');
+  function setPane(v){
+    subnav.querySelectorAll('[data-pane-btn]').forEach(function(b){ b.classList.toggle('is-on', b.getAttribute('data-pane-btn')===v); });
+    show(detail, 'data-pane', v);
+  }
   subnav.addEventListener('click', function(e){
     var btn = e.target.closest('[data-pane-btn]'); if(!btn) return;
-    var v = btn.getAttribute('data-pane-btn');
-    subnav.querySelectorAll('[data-pane-btn]').forEach(function(b){ b.classList.toggle('is-on', b===btn); });
-    show(detail, 'data-pane', v);
+    setPane(btn.getAttribute('data-pane-btn'));
   });
+
+  // mini-segment activation (group:value) — toggles buttons + panes, fires hooks
+  function activateMini(group, v){
+    var segEl = detail.querySelector('[data-mini="'+group+'"]');
+    if (segEl) segEl.querySelectorAll('[data-mini-btn]').forEach(function(b){ b.classList.toggle('is-on', b.getAttribute('data-mini-btn')===v); });
+    detail.querySelectorAll('[data-mini-pane^="'+group+':"]').forEach(function(p){
+      p.style.display = (p.getAttribute('data-mini-pane') === group+':'+v) ? 'block' : 'none';
+    });
+    if (group === 'viewMode') onViewModeChange(v);
+  }
+  function activateViewMode(v){ activateMini('viewMode', v); }
+
+  // when switching Team/Individual on a force test, lazy-load the individual view
+  function onViewModeChange(v){
+    if (_openTest && _openTest.src && _openTest.src.from === 'force_tests' && v === 'individual'){
+      loadForceIndiv();
+    }
+  }
 
   // mini-segments (Team/Individual · Manual/CSV)
   document.querySelectorAll('[data-mini]').forEach(function(segEl){
     var group = segEl.getAttribute('data-mini');
     segEl.addEventListener('click', function(e){
       var btn = e.target.closest('[data-mini-btn]'); if(!btn) return;
-      var v = btn.getAttribute('data-mini-btn');
-      segEl.querySelectorAll('[data-mini-btn]').forEach(function(b){ b.classList.toggle('is-on', b===btn); });
-      detail.querySelectorAll('[data-mini-pane^="'+group+':"]').forEach(function(p){
-        p.style.display = (p.getAttribute('data-mini-pane') === group+':'+v) ? 'block' : 'none';
-      });
+      activateMini(group, btn.getAttribute('data-mini-btn'));
     });
   });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  FORCE TESTS · View results (ported from Evaluations.html, adapted:
+  //  test_type is FIXED to the opened catalog test → no test selector;
+  //  scope uses _clubId / _teamId / _ftPlayers from this module).
+  // ════════════════════════════════════════════════════════════════════
+  var _ftTeam  = { tests: [], defs: {}, test: null, metric: null, order: 'desc' };
+  var _ftIndiv = { player: null, tests: [], test: null, metric: null };
+  var FT_MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function ftPlayerName(id) { var p = _ftPlayers.find(function(x){ return x.id === id; }); return p ? (p.first_name + ' ' + p.last_name) : '—'; }
+  function ftDec(unit) { if (unit === 'W' || unit === 'N' || unit === 'ms' || unit === 'N/s') return 0; if (!unit) return 2; return 1; }
+  function ftFmt(v, dec) { return dec === 0 ? Math.round(v).toLocaleString('en-US') : v.toFixed(dec); }
+  function ftMetricLabel(key) { var d = _ftTeam.defs[key]; return d ? (d.label || key) : key; }
+  function ftMetricUnit(key) { var d = _ftTeam.defs[key]; return d ? (d.unit || '') : ''; }
+  function ftBetterHigh(key) { var cat = ((_ftTeam.defs[key] && _ftTeam.defs[key].category) || '').toLowerCase(); return !(cat === 'time' || cat === 'asymmetry'); }
+  function ftClassify(value, avg, betterHigh) {
+    if (!avg) return '';
+    var dev = (value - avg) / avg;
+    var worse = betterHigh ? -dev : dev;
+    if (worse <= 0) return '';
+    return worse < 0.08 ? 'warn' : 'bad';
+  }
+  // Per-test value for the selected metric: bilateral (side null) preferred, else mean of L/R.
+  function ftTestValue(rows) {
+    if (!rows || !rows.length) return null;
+    var bil = rows.find(function(r){ return (r.side == null || r.side === '') && r.value != null; });
+    if (bil) return Number(bil.value);
+    var sided = rows.filter(function(r){ return r.value != null; }).map(function(r){ return Number(r.value); });
+    if (!sided.length) return null;
+    return sided.reduce(function(a, b){ return a + b; }, 0) / sided.length;
+  }
+  async function ftEnsureDefs(force) {
+    if (!force && Object.keys(_ftTeam.defs).length) return;
+    try {
+      var res = await window.sb.from('force_metric_definitions').select('key, label, unit, category').or('club_id.is.null,club_id.eq.' + _clubId);
+      _ftTeam.defs = {}; (res.data || []).forEach(function(d){ _ftTeam.defs[d.key] = d; });
+    } catch (e) {}
+  }
+
+  // ── Team view (test fixed) ──
+  async function loadForceView() {
+    if (!_clubId) return;
+    var empty = document.getElementById('ftEmpty');
+    var teamView = document.getElementById('ftTeamView');
+    var q = window.sb.from('force_tests').select('id, player_id, test_type, test_date').eq('club_id', _clubId);
+    if (_teamId) q = q.eq('team_id', _teamId);
+    var tests = [];
+    try { var r = await q; tests = r.data || []; } catch (e) { tests = []; }
+    _ftTeam.tests = tests;
+
+    var hasType = tests.some(function(t){ return t.test_type === _ftTeam.test; });
+    if (!tests.length || !hasType) {
+      // no force data for this test → show the empty state, hide the chart
+      empty.style.display = ''; teamView.style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none'; teamView.style.display = '';
+    await ftEnsureDefs(true);
+    await loadForceMetricsForTest();
+  }
+
+  async function loadForceMetricsForTest() {
+    var ids = _ftTeam.tests.filter(function(t){ return t.test_type === _ftTeam.test; }).map(function(t){ return t.id; });
+    var keys = [];
+    if (ids.length) {
+      try {
+        var r = await window.sb.from('force_test_metrics').select('metric_key').in('test_id', ids);
+        keys = Array.from(new Set((r.data || []).map(function(x){ return x.metric_key; })));
+      } catch (e) { keys = []; }
+    }
+    keys.sort(function(a, b){ return ftMetricLabel(a).localeCompare(ftMetricLabel(b)); });
+    var sel = document.getElementById('ft-metric');
+    sel.innerHTML = keys.map(function(k){ return '<option value="'+k+'">'+esc(ftMetricLabel(k))+'</option>'; }).join('');
+    if (keys.indexOf(_ftTeam.metric) === -1) _ftTeam.metric = keys[0] || null;
+    sel.value = _ftTeam.metric || '';
+    await renderForceTeam();
+  }
+
+  async function renderForceTeam() {
+    var chartCard = document.getElementById('ftChartCard');
+    var noData = document.getElementById('ftTeamNoData');
+    if (!_ftTeam.test || !_ftTeam.metric) { chartCard.style.display = 'none'; noData.style.display = ''; return; }
+
+    var typeTests = _ftTeam.tests.filter(function(t){ return t.test_type === _ftTeam.test; });
+    var ids = typeTests.map(function(t){ return t.id; });
+    var mrows = [];
+    try {
+      var r = await window.sb.from('force_test_metrics').select('test_id, value, side').eq('metric_key', _ftTeam.metric).in('test_id', ids);
+      mrows = r.data || [];
+    } catch (e) { mrows = []; }
+    var byTest = {};
+    mrows.forEach(function(r2){ (byTest[r2.test_id] = byTest[r2.test_id] || []).push(r2); });
+
+    // Per player: value from their most-recent test (max test_date) that has a value.
+    var perPlayer = {};
+    typeTests.forEach(function(t){
+      var v = ftTestValue(byTest[t.id]);
+      if (v == null || isNaN(v)) return;
+      var prev = perPlayer[t.player_id];
+      if (!prev || t.test_date > prev.date) perPlayer[t.player_id] = { date: t.test_date, value: v };
+    });
+
+    var rows = Object.keys(perPlayer).map(function(pid){ return { pid: pid, name: ftPlayerName(pid), value: perPlayer[pid].value }; });
+
+    if (!rows.length) { chartCard.style.display = 'none'; noData.style.display = ''; clearForceSummary(); return; }
+    chartCard.style.display = ''; noData.style.display = 'none';
+
+    var unit = ftMetricUnit(_ftTeam.metric);
+    var dec = ftDec(unit);
+    var betterHigh = ftBetterHigh(_ftTeam.metric);
+    var label = ftMetricLabel(_ftTeam.metric);
+
+    var values = rows.map(function(r2){ return r2.value; });
+    var avg = values.reduce(function(a, b){ return a + b; }, 0) / values.length;
+    var maxV = Math.max.apply(null, values), minV = Math.min.apply(null, values);
+    var scaleMax = maxV > 0 ? maxV * 1.12 : 1;
+
+    rows.sort(function(a, b){ return _ftTeam.order === 'desc' ? b.value - a.value : a.value - b.value; });
+
+    var best = betterHigh ? rows.reduce(function(a, b){ return b.value > a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value < a.value ? b : a; });
+    var worst = betterHigh ? rows.reduce(function(a, b){ return b.value < a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value > a.value ? b : a; });
+    var belowCount = rows.filter(function(r2){ return ftClassify(r2.value, avg, betterHigh) !== ''; }).length;
+
+    // ── Summary ──
+    var unitSuffix = unit ? ('<small>' + unit + '</small>') : '';
+    document.getElementById('ft-avg-lab').textContent = label + ' · group average';
+    document.getElementById('ft-avg-num').textContent = ftFmt(avg, dec);
+    document.getElementById('ft-avg-unit').textContent = unit;
+    document.getElementById('ft-avg-sub').innerHTML = 'Range <b>' + ftFmt(minV, dec) + ' – ' + ftFmt(maxV, dec) + '</b> · n = ' + rows.length;
+    document.getElementById('ft-top-v').innerHTML = ftFmt(best.value, dec) + unitSuffix;
+    document.getElementById('ft-top-n').textContent = best.name;
+    document.getElementById('ft-low-v').innerHTML = ftFmt(worst.value, dec) + unitSuffix;
+    document.getElementById('ft-low-n').textContent = worst.name;
+    document.getElementById('ft-below-v').textContent = belowCount;
+    document.getElementById('ft-below-n').textContent = 'of ' + rows.length + ' players';
+    document.getElementById('ft-chart-title').textContent = label + ' by player · ' + _ftTeam.test + (betterHigh ? '' : ' · lower is better');
+
+    // ── Bars + names ──
+    var plot = document.getElementById('ft-plot');
+    var names = document.getElementById('ft-names');
+    plot.innerHTML = ''; names.innerHTML = '';
+    rows.forEach(function(r2){
+      var cls = ftClassify(r2.value, avg, betterHigh);
+      var hPct = Math.max(0, (r2.value / scaleMax) * 100);
+      var col = document.createElement('div');
+      col.className = 'ft-col' + (cls ? ' ' + cls : '');
+      col.style.cursor = 'pointer';
+      col.title = r2.name + ' — open profile';
+      col.innerHTML = '<span class="ft-val">' + ftFmt(r2.value, dec) + '</span><span class="ft-bar" style="height:' + hPct.toFixed(1) + '%"></span>';
+      col.addEventListener('click', function(){ openForcePlayer(r2.pid); });
+      plot.appendChild(col);
+      var nm = document.createElement('div');
+      nm.className = 'ft-nm' + (cls ? ' ' + cls : '');
+      nm.style.cursor = 'pointer';
+      nm.innerHTML = '<span>' + esc(r2.name) + '</span>';
+      nm.title = r2.name + ' — open profile';
+      nm.addEventListener('click', function(){ openForcePlayer(r2.pid); });
+      names.appendChild(nm);
+    });
+
+    // ── Average line ──
+    var line = document.createElement('div');
+    line.className = 'ft-avgline ' + (_ftTeam.order === 'asc' ? 'tag-left' : 'tag-right');
+    line.style.top = (100 - (avg / scaleMax) * 100).toFixed(1) + '%';
+    line.innerHTML = '<span class="tag">avg ' + ftFmt(avg, dec) + (unit ? ' ' + unit : '') + '</span>';
+    plot.appendChild(line);
+  }
+
+  function clearForceSummary() {
+    ['ft-avg-num','ft-top-v','ft-low-v','ft-below-v'].forEach(function(id){ var e = document.getElementById(id); if (e) e.textContent = '—'; });
+    ['ft-avg-sub','ft-top-n','ft-low-n','ft-below-n','ft-avg-unit'].forEach(function(id){ var e = document.getElementById(id); if (e) e.textContent = ''; });
+  }
+
+  // jump to a player's profile from a clicked team-view bar
+  function openForcePlayer(pid) {
+    _ftIndiv.player = pid;
+    activateViewMode('individual');
+  }
+
+  // team-view controls (metric + order)
+  document.getElementById('ft-metric').addEventListener('change', async function(e){ _ftTeam.metric = e.target.value; await renderForceTeam(); });
+  document.querySelectorAll('#ft-order button').forEach(function(btn){ btn.addEventListener('click', function(){
+    document.querySelectorAll('#ft-order button').forEach(function(b){ b.classList.remove('is-active'); });
+    btn.classList.add('is-active');
+    _ftTeam.order = btn.getAttribute('data-order');
+    renderForceTeam();
+  }); });
+
+  // ── Individual profile (test fixed) ──
+  function ftDateOnly(iso){ return String(iso || '').slice(0, 10); }
+  function ftDateShort(iso){ var d = new Date(ftDateOnly(iso) + 'T00:00:00'); return isNaN(d) ? iso : (d.getDate() + ' ' + FT_MON[d.getMonth()]); }
+  function ftDateFull(iso){ var d = new Date(ftDateOnly(iso) + 'T00:00:00'); return isNaN(d) ? iso : (d.getDate() + ' ' + FT_MON[d.getMonth()] + ' ' + d.getFullYear()); }
+  function ftDaysAgo(iso){ var d = new Date(ftDateOnly(iso) + 'T00:00:00'); return Math.round((Date.now() - d.getTime()) / 86400000); }
+  function ftPctDelta(d){ var r = Math.abs(d) < 0.05 ? 0 : d; return (r > 0 ? '+' : '') + r.toFixed(1) + '%'; }
+  function ftAsymColor(a){ return a <= 5 ? 'var(--cm-success)' : a <= 10 ? 'var(--cm-warning)' : 'var(--cm-danger)'; }
+
+  // Asymmetry for a test: prefer L/R of selected metric, else a dedicated asymmetry metric.
+  function ftAsymForTest(metricRows, selectedKey) {
+    var sel = metricRows.filter(function(r){ return r.metric_key === selectedKey && r.value != null; });
+    var L = sel.find(function(r){ return String(r.side || '').toUpperCase() === 'L'; });
+    var R = sel.find(function(r){ return String(r.side || '').toUpperCase() === 'R'; });
+    if (L && R) {
+      var lv = Number(L.value), rv = Number(R.value);
+      var hi = Math.max(lv, rv), lo = Math.min(lv, rv);
+      var pct = hi > 0 ? (hi - lo) / hi * 100 : 0;
+      return { pct: pct, side: lv >= rv ? 'L' : 'R', hasLR: true, L: lv, R: rv };
+    }
+    var asy = metricRows.find(function(r){
+      var cat = ((_ftTeam.defs[r.metric_key] && _ftTeam.defs[r.metric_key].category) || '').toLowerCase();
+      return (cat === 'asymmetry' || /asym/i.test(r.metric_key)) && r.value != null;
+    });
+    if (asy) return { pct: Math.abs(Number(asy.value)), side: String(asy.side || '').toUpperCase() || null, hasLR: false };
+    return null;
+  }
+
+  async function loadForceIndiv() {
+    await ftEnsureDefs();
+    var psel = document.getElementById('ft-player');
+    psel.innerHTML = _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name + ' ' + p.last_name)+'</option>'; }).join('');
+    if (!_ftIndiv.player || !_ftPlayers.some(function(p){ return p.id === _ftIndiv.player; })) _ftIndiv.player = (_ftPlayers[0] && _ftPlayers[0].id) || null;
+    psel.value = _ftIndiv.player || '';
+    await loadForceIndivTests();
+  }
+
+  async function loadForceIndivTests() {
+    var body = document.getElementById('ftIndivBody');
+    var noData = document.getElementById('ftIndivNoData');
+    if (!_ftIndiv.player || !_clubId) { body.style.display = 'none'; noData.style.display = ''; return; }
+    var tests = [];
+    try {
+      var r = await window.sb.from('force_tests').select('id, test_type, test_date, test_time').eq('club_id', _clubId).eq('player_id', _ftIndiv.player);
+      tests = r.data || [];
+    } catch (e) { tests = []; }
+    _ftIndiv.tests = tests;
+    // test is FIXED to the opened catalog test (no selector)
+    _ftIndiv.test = _ftTeam.test;
+    var hasType = tests.some(function(t){ return t.test_type === _ftIndiv.test; });
+    if (!hasType) { body.style.display = 'none'; noData.style.display = ''; return; }
+    body.style.display = ''; noData.style.display = 'none';
+    await loadForceIndivMetrics();
+  }
+
+  async function loadForceIndivMetrics() {
+    var ids = _ftIndiv.tests.filter(function(t){ return t.test_type === _ftIndiv.test; }).map(function(t){ return t.id; });
+    var keys = [];
+    if (ids.length) {
+      try {
+        var r = await window.sb.from('force_test_metrics').select('metric_key').in('test_id', ids);
+        keys = Array.from(new Set((r.data || []).map(function(x){ return x.metric_key; })));
+      } catch (e) { keys = []; }
+    }
+    keys.sort(function(a, b){ return ftMetricLabel(a).localeCompare(ftMetricLabel(b)); });
+    var sel = document.getElementById('fti-metric');
+    sel.innerHTML = keys.map(function(k){ return '<option value="'+k+'">'+esc(ftMetricLabel(k))+'</option>'; }).join('');
+    if (keys.indexOf(_ftIndiv.metric) === -1) _ftIndiv.metric = keys[0] || null;
+    sel.value = _ftIndiv.metric || '';
+    await renderForceIndiv();
+  }
+
+  async function renderForceIndiv() {
+    var noData = document.getElementById('ftIndivNoData');
+    var body = document.getElementById('ftIndivBody');
+    if (!_ftIndiv.test || !_ftIndiv.metric) { body.style.display = 'none'; noData.style.display = ''; return; }
+
+    var typeTests = _ftIndiv.tests.filter(function(t){ return t.test_type === _ftIndiv.test; })
+      .slice().sort(function(a, b){ return ftDateOnly(a.test_date) < ftDateOnly(b.test_date) ? -1 : 1; });
+    var ids = typeTests.map(function(t){ return t.id; });
+    var mrows = [];
+    try {
+      var r = await window.sb.from('force_test_metrics').select('test_id, metric_key, value, side').in('test_id', ids);
+      mrows = r.data || [];
+    } catch (e) { mrows = []; }
+    var byTest = {};
+    mrows.forEach(function(r2){ (byTest[r2.test_id] = byTest[r2.test_id] || []).push(r2); });
+
+    var rows = [];
+    typeTests.forEach(function(t){
+      var group = byTest[t.id] || [];
+      var v = ftTestValue(group.filter(function(x){ return x.metric_key === _ftIndiv.metric; }));
+      if (v == null || isNaN(v)) return;
+      rows.push({ iso: ftDateOnly(t.test_date), value: v, asym: ftAsymForTest(group, _ftIndiv.metric), test: t.test_type });
+    });
+
+    if (!rows.length) { body.style.display = 'none'; noData.style.display = ''; return; }
+    body.style.display = ''; noData.style.display = 'none';
+
+    var unit = ftMetricUnit(_ftIndiv.metric);
+    var dec = ftDec(unit);
+    var betterHigh = ftBetterHigh(_ftIndiv.metric);
+    var label = ftMetricLabel(_ftIndiv.metric);
+    var meta = { dec: dec, unit: unit };
+
+    var vals = rows.map(function(r2){ return r2.value; });
+    var avg = vals.reduce(function(a, b){ return a + b; }, 0) / vals.length;
+    var latest = rows[rows.length - 1];
+    var rawDelta = avg ? (latest.value - avg) / avg * 100 : 0;
+    var good = betterHigh ? rawDelta >= 0 : rawDelta <= 0;
+
+    // ── Card: latest ──
+    document.getElementById('sc-latest-lab').textContent = 'Latest · ' + label.toLowerCase();
+    document.getElementById('sc-latest-num').textContent = ftFmt(latest.value, dec);
+    document.getElementById('sc-latest-unit').textContent = unit;
+    var dEl = document.getElementById('sc-latest-delta');
+    dEl.className = 'ft-delta ' + (good ? 'good' : 'bad');
+    dEl.innerHTML = '<i class="ti ti-trending-' + (rawDelta >= 0 ? 'up' : 'down') + '"></i>' + ftPctDelta(rawDelta);
+
+    // ── Card: personal avg ──
+    document.getElementById('sc-avg-num').textContent = ftFmt(avg, dec);
+    document.getElementById('sc-avg-unit').textContent = unit;
+    document.getElementById('sc-avg-sub').innerHTML = '<b>' + rows.length + ' test' + (rows.length === 1 ? '' : 's') + '</b> · all time';
+
+    // ── Card: asymmetry (latest test) ──
+    var wrap = document.getElementById('sc-asym-wrap');
+    var emptyA = document.getElementById('sc-asym-empty');
+    var a = latest.asym;
+    if (a && a.pct != null && !isNaN(a.pct)) {
+      wrap.style.display = ''; emptyA.style.display = 'none';
+      var apct = a.pct;
+      document.getElementById('sc-asym-num').textContent = apct.toFixed(apct < 10 ? 1 : 0) + '%';
+      document.getElementById('sc-asym-side').textContent = a.side === 'R' ? 'Right strong' : a.side === 'L' ? 'Left strong' : '';
+      document.getElementById('sc-asym-dot').style.background = ftAsymColor(apct);
+      var lW, rW;
+      if (a.hasLR) { var mx = Math.max(a.L, a.R) || 1; lW = a.L / mx * 100; rW = a.R / mx * 100; }
+      else { lW = a.side === 'R' ? (100 - apct) : 100; rW = a.side === 'R' ? 100 : (100 - apct); }
+      var abl = document.getElementById('ab-l'), abr = document.getElementById('ab-r');
+      abl.style.width = lW + '%'; abr.style.width = rW + '%';
+      abl.className = 'ft-ab-fill' + (a.side === 'R' ? ' weak' : '');
+      abr.className = 'ft-ab-fill' + (a.side === 'L' ? ' weak' : '');
+    } else {
+      wrap.style.display = 'none'; emptyA.style.display = '';
+    }
+
+    // ── Card: last test ──
+    var dAgo = ftDaysAgo(latest.iso);
+    document.getElementById('sc-last-num').textContent = dAgo;
+    document.getElementById('sc-last-unit').textContent = dAgo === 1 ? 'day ago' : 'days ago';
+    document.getElementById('sc-last-sub').innerHTML = '<b>' + esc(latest.test) + '</b> · ' + ftDateFull(latest.iso);
+
+    // ── Chart ──
+    document.getElementById('fti-chart-title').textContent = label + ' over time · ' + _ftIndiv.test + (betterHigh ? '' : ' · lower is better');
+    document.getElementById('lg-metric').textContent = label;
+    document.getElementById('fti-chart').innerHTML = buildForceChart(rows.map(function(r2){ return { value: r2.value, label: ftDateShort(r2.iso) }; }), avg, meta);
+
+    // ── Table (most recent first) ──
+    document.getElementById('th-metric').textContent = label + (unit ? (' (' + unit + ')') : '');
+    document.getElementById('fti-table-count').textContent = rows.length + ' session' + (rows.length === 1 ? '' : 's');
+    var tb = document.getElementById('fti-tbody');
+    tb.innerHTML = '';
+    rows.slice().reverse().slice(0, 10).forEach(function(r2, idx){
+      var dlt = avg ? (r2.value - avg) / avg * 100 : 0;
+      var rGood = betterHigh ? dlt >= 0 : dlt <= 0;
+      var asymCell = r2.asym && r2.asym.pct != null
+        ? '<span class="ft-asym-dot" style="background:' + ftAsymColor(r2.asym.pct) + '"></span>' + r2.asym.pct.toFixed(r2.asym.pct < 10 ? 1 : 0) + '%' + (r2.asym.side ? ' ' + r2.asym.side : '')
+        : '<span style="color:var(--cm-fg-faint)">—</span>';
+      var tr = document.createElement('tr');
+      if (idx === 0) tr.className = 'is-latest';
+      tr.innerHTML =
+        '<td class="c-date">' + ftDateFull(r2.iso) + (idx === 0 ? '<span class="ft-tag">Latest</span>' : '') + '</td>' +
+        '<td><span class="ft-pill-sm">' + esc(r2.test) + '</span></td>' +
+        '<td class="num c-val">' + ftFmt(r2.value, dec) + '</td>' +
+        '<td class="num"><span class="ft-vsavg ' + (rGood ? 'good' : 'bad') + '">' + ftPctDelta(dlt) + '</span></td>' +
+        '<td class="num c-asym">' + asymCell + '</td>';
+      tb.appendChild(tr);
+    });
+  }
+
+  // SVG line chart with a dotted personal-average line (ported verbatim).
+  function buildForceChart(points, avg, meta) {
+    var W = 960, H = 320, L = 56, R = 22, T = 24, B = 48;
+    var pw = W - L - R, ph = H - T - B;
+    var vals = points.map(function(p){ return p.value; });
+    var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+    var range = hi - lo || (Math.abs(hi) * 0.1 || 1);
+    lo -= range * 0.22; hi += range * 0.22;
+    var x = function(i){ return L + pw * (points.length > 1 ? i / (points.length - 1) : 0.5); };
+    var y = function(v){ return T + ph * (1 - (v - lo) / (hi - lo || 1)); };
+
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img">';
+    for (var i = 0; i <= 3; i++) {
+      var gv = lo + (hi - lo) * (i / 3), gy = y(gv);
+      svg += '<line x1="' + L + '" y1="' + gy.toFixed(1) + '" x2="' + (W - R) + '" y2="' + gy.toFixed(1) + '" stroke="var(--cm-border-soft)" stroke-width="1"/>';
+      svg += '<text x="' + (L - 10) + '" y="' + (gy + 3.5).toFixed(1) + '" text-anchor="end" font-family="var(--cm-font-mono)" font-size="11" fill="var(--cm-fg-faint)">' + ftFmt(gv, meta.dec) + '</text>';
+    }
+    var pts = points.map(function(p, i2){ return x(i2).toFixed(1) + ',' + y(p.value).toFixed(1); });
+    var area = 'M' + x(0).toFixed(1) + ',' + (T + ph).toFixed(1) + ' L' + pts.join(' L') + ' L' + x(points.length - 1).toFixed(1) + ',' + (T + ph).toFixed(1) + ' Z';
+    svg += '<path d="' + area + '" fill="rgba(71,85,105,0.07)"/>';
+    svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#475569" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>';
+    var ay = y(avg);
+    svg += '<line x1="' + L + '" y1="' + ay.toFixed(1) + '" x2="' + (W - R) + '" y2="' + ay.toFixed(1) + '" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3 4"/>';
+    svg += '<text x="' + (L + 6) + '" y="' + (ay - 7).toFixed(1) + '" font-family="var(--cm-font-mono)" font-size="11" font-weight="600" fill="var(--cm-fg-muted)">avg ' + ftFmt(avg, meta.dec) + (meta.unit ? ' ' + meta.unit : '') + '</text>';
+    points.forEach(function(p, i2){
+      var last = i2 === points.length - 1;
+      svg += '<circle cx="' + x(i2).toFixed(1) + '" cy="' + y(p.value).toFixed(1) + '" r="' + (last ? 5.5 : 3.8) + '" fill="' + (last ? 'var(--cm-fg-strong)' : 'var(--cm-surface)') + '" stroke="var(--cm-fg-strong)" stroke-width="' + (last ? 0 : 2) + '"/>';
+      svg += '<text x="' + x(i2).toFixed(1) + '" y="' + (H - 18).toFixed(1) + '" text-anchor="middle" font-family="var(--cm-font-mono)" font-size="11" fill="var(--cm-fg-faint)">' + esc(p.label) + '</text>';
+    });
+    var lastP = points[points.length - 1];
+    svg += '<text x="' + (x(points.length - 1) - 6).toFixed(1) + '" y="' + (y(lastP.value) - 12).toFixed(1) + '" text-anchor="end" font-family="var(--cm-font-mono)" font-size="12.5" font-weight="600" fill="var(--cm-fg-strong)">' + ftFmt(lastP.value, meta.dec) + (meta.unit ? ' ' + meta.unit : '') + '</text>';
+    svg += '</svg>';
+    return svg;
+  }
+
+  // individual-profile controls (player + metric; test is fixed)
+  document.getElementById('ftBackTeam').addEventListener('click', function(){ activateViewMode('team'); });
+  document.getElementById('ft-player').addEventListener('change', async function(e){ _ftIndiv.player = e.target.value; await loadForceIndivTests(); });
+  document.getElementById('fti-metric').addEventListener('change', async function(e){ _ftIndiv.metric = e.target.value; await renderForceIndiv(); });
 
   // ── boot ──
   renderCatalog();
