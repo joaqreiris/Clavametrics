@@ -752,6 +752,19 @@ async function gpLoadDay(dateStr) {
       ? _gpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${m.name}${m.rival ? ` · vs ${m.rival}` : ''}</option>`).join('')
       : '<option value="">— No microcycles —</option>';
   }
+
+  const mdSel = document.getElementById('gpMatchDay');
+  if (mdSel) {
+    let mdLabel = '';
+    if (mc?.match_date) {
+      const diff = Math.round((new Date(mc.match_date + 'T00:00:00') - new Date(dateStr + 'T00:00:00')) / 86400000);
+      if (diff === 0) mdLabel = 'MD';
+      else if (diff > 0 && diff <= 5) mdLabel = 'MD−' + diff;
+      else if (diff < 0 && diff >= -2) mdLabel = 'MD+' + (-diff);
+    }
+    mdSel.value = [...mdSel.options].some(o => o.value === mdLabel) ? mdLabel : '';
+  }
+
   const mcLabel = mc ? mc.name : '';
   document.getElementById('gpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : ''}`;
 
@@ -874,7 +887,7 @@ async function gpExportPDF() {
 
   const [playersRes, mcRes] = await Promise.all([
     window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).neq('status','inactive').order('number'),
-    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away').eq('club_id', clubId).eq('team_id', _gpTeamId).order('start_date')
+    window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,match_date').eq('club_id', clubId).eq('team_id', _gpTeamId).order('start_date')
   ]);
   _gpPlayers     = playersRes.data || [];
   _gpMicrocycles = mcRes.data || [];
