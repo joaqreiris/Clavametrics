@@ -536,7 +536,7 @@ function gpApplyContent(content) {
 }
 
 // ── Exercise library picker ──
-let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false;
+let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false, _gpLibCat = 'strength', _gpLibMuscle = '';
 async function gpEnsureLib() {
   if (_gpLib) return _gpLib;
   const { data } = await window.sb.from('gym_exercises')
@@ -559,16 +559,40 @@ function gpBuildLibModal() {
         <input id="gpLibSearch" type="text" placeholder="Search exercises…" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:200px">
         <button onclick="gpCloseLib()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
+      <style>
+        .gp-lib-chiprow{display:flex;flex-wrap:wrap;gap:5px;padding:0 18px 8px}
+        .gp-lib-chip{height:24px;padding:0 10px;border-radius:12px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 11px/1 var(--cm-font-sans);cursor:pointer}
+        .gp-lib-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-accent);border-color:var(--cm-accent)}
+      </style>
+      <div id="gpLibChips" style="padding-top:8px;border-bottom:1px solid var(--cm-border-soft)"></div>
       <div id="gpLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
       <div id="gpLibFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
     </div>`;
   document.body.appendChild(ov);
   ov.querySelector('#gpLibSearch').addEventListener('input', gpRenderLibList);
 }
+function gpRenderLibChips() {
+  const wrap = document.getElementById('gpLibChips'); if (!wrap) return;
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+  const cats = [...new Set((_gpLib||[]).map(e => e.category).filter(Boolean))].sort();
+  const muscles = [...new Set((_gpLib||[]).filter(e => !_gpLibCat || e.category === _gpLibCat).map(e => e.muscle_group).filter(Boolean))].sort();
+  const chip = (label, val, on, kind) => `<button class="gp-lib-chip${on?' is-on':''}" data-kind="${kind}" data-val="${(val||'').replace(/"/g,'&quot;')}">${label}</button>`;
+  let html = `<div class="gp-lib-chiprow">${chip('All', '', _gpLibCat==='', 'cat')}${cats.map(c => chip(cap(c), c, _gpLibCat===c, 'cat')).join('')}</div>`;
+  if (muscles.length) html += `<div class="gp-lib-chiprow">${chip('All muscles', '', _gpLibMuscle==='', 'muscle')}${muscles.map(m => chip(cap(m), m, _gpLibMuscle===m, 'muscle')).join('')}</div>`;
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.gp-lib-chip').forEach(b => b.onclick = () => {
+    if (b.dataset.kind === 'cat') { _gpLibCat = b.dataset.val; _gpLibMuscle = ''; }
+    else { _gpLibMuscle = b.dataset.val; }
+    gpRenderLibChips(); gpRenderLibList();
+  });
+}
 function gpRenderLibList() {
   const list = document.getElementById('gpLibList'), foot = document.getElementById('gpLibFoot');
   const q = (document.getElementById('gpLibSearch').value || '').toLowerCase().trim();
-  const items = (_gpLib || []).filter(e => !q || (`${e.name} ${e.muscle_group||''} ${e.category||''}`).toLowerCase().includes(q));
+  const items = (_gpLib || []).filter(e =>
+    (!_gpLibCat || e.category === _gpLibCat) &&
+    (!_gpLibMuscle || e.muscle_group === _gpLibMuscle) &&
+    (!q || (`${e.name} ${e.muscle_group||''} ${e.category||''}`).toLowerCase().includes(q)));
   if (!items.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises found.</div>`; foot.textContent = '0 exercises'; return; }
   list.innerHTML = items.map(e => {
     const meta = [e.muscle_group, e.category, e.complexity].filter(Boolean).join(' · ');
@@ -590,7 +614,10 @@ async function gpOpenLib(ctx) {
   const s = document.getElementById('gpLibSearch'); s.value = ''; s.focus();
   document.getElementById('gpLibFoot').textContent = 'Loading…';
   document.getElementById('gpLibList').innerHTML = '';
-  await gpEnsureLib(); gpRenderLibList();
+  _gpLibCat = 'strength'; _gpLibMuscle = '';
+  await gpEnsureLib();
+  if (!(_gpLib||[]).some(e => e.category === 'strength')) _gpLibCat = '';
+  gpRenderLibChips(); gpRenderLibList();
 }
 function gpCloseLib() { const ov = document.getElementById('gpLibOv'); if (ov) ov.style.display = 'none'; }
 function gpPickLib(name) {
