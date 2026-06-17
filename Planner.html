@@ -2010,21 +2010,28 @@
       return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='c') {
-      const active=fc.getActiveObject(); if (active) active.clone(c=>{_clipboard=c;}); return;
+      const active=fc.getActiveObject(); if (active) active.clone(c=>{_clipboard=c;}, ['_type','_team']); return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='x') {
       const active=fc.getActiveObject(); if (!active) return;
-      active.clone(c=>{_clipboard=c;});
+      active.clone(c=>{_clipboard=c;}, ['_type','_team']);
       fc.remove(active); fc.discardActiveObject(); fc.renderAll(); return;
     }
     if ((e.ctrlKey||e.metaKey)&&e.key==='v') {
       if (!_clipboard) return;
       _clipboard.clone(cloned=>{
         fc.discardActiveObject();
-        cloned.set({ left:(_clipboard.left||0)+20, top:(_clipboard.top||0)+20, evented:true });
-        if (cloned._objects) cloned._objects.forEach(o=>fc.add(o)); else fc.add(cloned);
-        _clipboard=cloned; fc.setActiveObject(cloned); fc.requestRenderAll();
-      });
+        cloned.set({ left:(cloned.left||0)+20, top:(cloned.top||0)+20, evented:true });
+        if (cloned.type==='activeSelection') {
+          cloned.canvas = fc;
+          cloned.forEachObject(o=>fc.add(o));
+          cloned.setCoords();
+        } else {
+          fc.add(cloned);
+        }
+        _clipboard.left=(_clipboard.left||0)+20; _clipboard.top=(_clipboard.top||0)+20;
+        fc.setActiveObject(cloned); fc.requestRenderAll();
+      }, ['_type','_team']);
     }
   });
 
