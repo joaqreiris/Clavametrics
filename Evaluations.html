@@ -388,6 +388,52 @@
   .pa-foot { padding:12px 18px; border-top:1px solid var(--cm-border); display:flex; gap:8px; align-items:center; background:var(--cm-bg-soft); flex-shrink:0; }
   .pa-foot .info { flex:1; font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
+  /* ===== Field assessment — subjective (ported from old: ev-overall + ev-range) ===== */
+  .ev-overall {
+    display:grid; grid-template-columns:auto 1fr auto; gap:24px;
+    align-items:center;
+    padding:20px 24px;
+    border-bottom:1px solid var(--cm-border-soft);
+  }
+  .ev-overall-score {
+    width:100px; height:100px; border-radius:50%;
+    background:conic-gradient(var(--cm-success) 0% 78%, var(--cm-bg-sunk) 78% 100%);
+    display:flex; align-items:center; justify-content:center;
+    position:relative;
+    flex-shrink:0;
+  }
+  .ev-overall-score::before { content:""; position:absolute; inset:9px; background:var(--cm-surface); border-radius:50%; }
+  .ev-overall-score .inner { position:relative; z-index:1; text-align:center; }
+  .ev-overall-score .v { font:700 28px/1 var(--cm-font-sans); letter-spacing:-0.03em; color:var(--cm-fg-strong); }
+  .ev-overall-score .s { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-top:4px; }
+  .ev-overall-body h3 { font:600 15px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:6px; }
+  .ev-overall-body p { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .ev-overall-body .tags { display:flex; gap:5px; margin-top:8px; flex-wrap:wrap; }
+  .ev-overall-body .tag { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:4px; font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; }
+  .ev-overall-body .tag.good { background:var(--cm-success-bg); color:var(--cm-success); }
+  .ev-overall-body .tag.warn { background:var(--cm-warning-bg); color:var(--cm-warning); }
+  .ev-overall-body .tag.info { background:var(--cm-info-bg); color:var(--cm-info); }
+
+  .ev-range { width:100%;height:4px;accent-color:var(--cm-accent);cursor:pointer; }
+  .ev-range-row { display:flex;align-items:center;gap:8px; }
+  .ev-range-val { font:700 16px/1 var(--cm-font-mono);color:var(--cm-fg-strong);min-width:22px;text-align:right; }
+
+  /* Field team grid */
+  .fa-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+  .fa-card { display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); cursor:pointer; transition:border-color .12s ease, background .12s ease; }
+  .fa-card:hover { border-color:var(--cm-accent); background:var(--cm-surface); }
+  .fa-card.is-on { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .fa-ring { width:44px; height:44px; border-radius:50%; position:relative; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .fa-ring::before { content:""; position:absolute; inset:5px; background:var(--cm-surface); border-radius:50%; }
+  .fa-ring .v { position:relative; z-index:1; font:700 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+  .fa-card .nm { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fa-card .sub { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .fa-hist-row { display:grid; grid-template-columns:96px 1fr auto; gap:12px; align-items:center; padding:10px 4px; border-bottom:1px solid var(--cm-border-soft); }
+  .fa-hist-row:last-child { border-bottom:0; }
+  .fa-hist-row .d { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .fa-hist-row .dims { font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
+  .fa-hist-row .ov { font:700 15px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+
   /* ===== CSV import drawers (force + VBT bulk) — ported verbatim ===== */
   .pt-imp-btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-border-strong); color:var(--cm-fg-strong); font:600 12.5px/1 var(--cm-font-sans); cursor:pointer; }
   .pt-imp-btn:hover { background:color-mix(in srgb, var(--cm-accent) 18%, transparent); }
@@ -853,11 +899,67 @@
       <!-- BRANCH: FIELD ASSESSMENT                                     -->
       <!-- ============================================================ -->
       <div data-branch="field" id="fieldView">
-        <div class="ev-card">
-          <div class="ev-placeholder">
-            <i class="ti ti-clipboard-list"></i>
-            <h3>Field assessment</h3>
-            <p>Player grid with overall assessment score (subjective / technical field evaluation) will live here. No logic wired yet.</p>
+
+        <!-- Team grid: players with their overall subjective score -->
+        <div class="ev-card" style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <h3 style="font:600 13px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-strong)">Team · field assessment</h3>
+            <span id="faGridCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)"></span>
+            <button class="cm-btn is-outline is-sm" id="faNewBtn" style="margin-left:auto"><i class="ti ti-plus" style="font-size:14px"></i>New evaluation</button>
+          </div>
+          <div class="fa-grid" id="faGrid"></div>
+        </div>
+
+        <!-- Selected player: overall ring + form + history -->
+        <div id="fieldDetail" style="display:none">
+          <div class="ev-card" style="padding:0;margin-bottom:14px">
+            <div class="ev-overall">
+              <div class="ev-overall-score" id="faRing">
+                <div class="inner"><div class="v" id="faRingVal">—</div><div class="s">overall</div></div>
+              </div>
+              <div class="ev-overall-body">
+                <h3 id="faPlayerName">Select a player</h3>
+                <p id="faPlayerMeta">Latest field evaluation across Technical · Tactical · Physical · Mental.</p>
+                <div class="tags" id="faTags"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Subjective evaluation form (ported verbatim from Evaluations-old #subjForm) -->
+          <div class="ev-card" style="margin-bottom:14px">
+            <div style="font:600 12px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:12px">New / edit evaluation</div>
+            <form id="subjForm" onsubmit="saveSubjEval(event)">
+              <div class="ev-f2">
+                <div class="ev-frow"><label class="ev-fl">Player</label>
+                  <select id="subjPlayer" class="ev-finput" required><option value="">Select player…</option></select></div>
+                <div class="ev-frow"><label class="ev-fl">Date</label><input id="subjDate" type="date" class="ev-finput" required></div>
+              </div>
+              <div style="margin:4px 0 10px;font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Scores (1–10)</div>
+              <div class="ev-f2">
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-ball-football"></i> Technical</label>
+                  <div class="ev-range-row"><input id="subjTech" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-tournament"></i> Tactical</label>
+                  <div class="ev-range-row"><input id="subjTact" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-run"></i> Physical</label>
+                  <div class="ev-range-row"><input id="subjPhys" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-brain"></i> Mental</label>
+                  <div class="ev-range-row"><input id="subjMent" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+              </div>
+              <div class="ev-frow"><label class="ev-fl">Notes</label><textarea id="subjNotes" class="ev-finput" rows="2"></textarea></div>
+              <div style="display:flex;gap:8px;margin-top:4px">
+                <button type="submit" class="cm-btn is-primary is-sm">Save evaluation</button>
+                <span id="subjSaveMsg" style="align-self:center;font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></span>
+              </div>
+            </form>
+          </div>
+
+          <!-- History for the selected player -->
+          <div class="ev-card">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <h3 style="font:600 13px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-strong)">History</h3>
+              <span id="faHistCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)"></span>
+            </div>
+            <div id="faHistory"></div>
           </div>
         </div>
       </div><!-- /branch:field -->
@@ -1261,6 +1363,7 @@
     var v = btn.getAttribute('data-branch-btn');
     seg.querySelectorAll('[data-branch-btn]').forEach(function(b){ b.classList.toggle('is-on', b===btn); });
     show(document, 'data-branch', v);
+    if (v === 'field' && typeof loadFieldView === 'function') loadFieldView();
   });
 
   // currently-open test (null in catalog)
@@ -4425,6 +4528,172 @@
   Object.assign(window, { saveForceImport, resetForceImport, cancelCreateForceMetric, createForceMetric,
     onForceColMapChange, openCreateForceMetric, assignForcePlayer,
     openVbtBulkDrawer, saveVbtBulk, resetVbtBulk, onVbtMapChange, assignVbtPlayer });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  FIELD ASSESSMENT (subjective) — ported from Evaluations-old.html.
+  //  saveSubjEval copied verbatim (scope glue: clubId->_clubId; refresh ->
+  //  reloadFieldView). Team grid + overall ring + per-player history are glue.
+  // ════════════════════════════════════════════════════════════════════
+  var _field = { rows: [], player: null, loaded: false };
+  var SUBJ_DIMS = ['Technical','Tactical','Physical','Mental'];
+  function faColor(v){ return v>=7 ? 'var(--cm-success)' : v>=5 ? 'var(--cm-warning)' : 'var(--cm-danger)'; }
+
+  async function loadFieldData(){
+    _field.rows = [];
+    if (!_clubId) return;
+    try {
+      var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, notes').eq('club_id', _clubId).in('evaluation_type', SUBJ_DIMS);
+      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
+      var res = await q;
+      _field.rows = res.data || [];
+    } catch(e){ console.warn('[ev2] field data failed', e); }
+    _field.loaded = true;
+  }
+
+  // group a player's rows by date → { date: {Technical:n,...} }
+  function faByDate(pid){
+    var byDate = {};
+    _field.rows.filter(function(r){ return r.player_id===pid && r.value!=null; }).forEach(function(r){
+      var d = String(r.test_date).slice(0,10); (byDate[d] = byDate[d] || {})[r.evaluation_type] = Number(r.value);
+    });
+    return byDate;
+  }
+  // latest overall = avg of the 4 dims at the player's most recent subjective date
+  function fieldOverall(pid){
+    var byDate = faByDate(pid);
+    var dates = Object.keys(byDate).sort();
+    if (!dates.length) return null;
+    var last = dates[dates.length-1], dims = byDate[last];
+    var vals = SUBJ_DIMS.map(function(k){ return dims[k]; }).filter(function(v){ return v!=null && !isNaN(v); });
+    if (!vals.length) return null;
+    return { overall: +(vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(1), date: last, dims: dims };
+  }
+
+  function faPopulatePlayerSelect(){
+    var sel = document.getElementById('subjPlayer');
+    sel.innerHTML = '<option value="">Select player…</option>' + _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name+' '+p.last_name)+'</option>'; }).join('');
+  }
+
+  function renderFieldGrid(){
+    var grid = document.getElementById('faGrid');
+    document.getElementById('faGridCount').textContent = _ftPlayers.length + ' players';
+    grid.innerHTML = _ftPlayers.map(function(p){
+      var o = fieldOverall(p.id);
+      var ovTxt = o ? o.overall.toFixed(1) : '—';
+      var col = o ? faColor(o.overall) : 'var(--cm-border)';
+      var pct = o ? (o.overall/10*100) : 0;
+      return '<button class="fa-card'+(p.id===_field.player?' is-on':'')+'" data-fa-pid="'+p.id+'">'
+        + '<div class="fa-ring" style="background:conic-gradient('+col+' 0% '+pct+'%, var(--cm-bg-sunk) '+pct+'% 100%)"><span class="v">'+ovTxt+'</span></div>'
+        + '<div style="min-width:0"><div class="nm">'+esc(p.first_name+' '+p.last_name)+'</div><div class="sub">'+(o?('last '+fmtDate(o.date)):'no data yet')+'</div></div>'
+        + '</button>';
+    }).join('') || '<div style="padding:16px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in this team.</div>';
+  }
+
+  var FA_ID2DIM = { subjTech:'Technical', subjTact:'Tactical', subjPhys:'Physical', subjMent:'Mental' };
+  function openFieldPlayer(pid){
+    _field.player = pid;
+    document.getElementById('fieldDetail').style.display = '';
+    document.querySelectorAll('#faGrid [data-fa-pid]').forEach(function(b){ b.classList.toggle('is-on', b.getAttribute('data-fa-pid')===pid); });
+    var p = _ftPlayers.find(function(x){ return x.id===pid; });
+    document.getElementById('faPlayerName').textContent = p ? (p.first_name+' '+p.last_name) : 'Player';
+    var o = fieldOverall(pid);
+    var pct = o ? (o.overall/10*100) : 0;
+    var col = o ? faColor(o.overall) : 'var(--cm-bg-sunk)';
+    document.getElementById('faRing').style.background = 'conic-gradient('+col+' 0% '+pct+'%, var(--cm-bg-sunk) '+pct+'% 100%)';
+    document.getElementById('faRingVal').textContent = o ? o.overall.toFixed(1) : '—';
+    document.getElementById('faPlayerMeta').textContent = o ? ('Latest '+fmtDate(o.date)+' · across Technical · Tactical · Physical · Mental.') : 'No field evaluations yet. Add the first one below.';
+    var tags = document.getElementById('faTags');
+    tags.innerHTML = o ? SUBJ_DIMS.map(function(k){ var v=o.dims[k]; if(v==null) return ''; var cls=v>=7?'good':v>=5?'info':'warn'; return '<span class="tag '+cls+'">'+k+' '+v+'</span>'; }).join('') : '';
+    // preset the form to this player's latest (editable)
+    document.getElementById('subjPlayer').value = pid;
+    document.getElementById('subjDate').value = evToday();
+    ['subjTech','subjTact','subjPhys','subjMent'].forEach(function(id){
+      var el = document.getElementById(id);
+      var v = (o && o.dims && o.dims[FA_ID2DIM[id]] != null) ? o.dims[FA_ID2DIM[id]] : 5;
+      el.value = v; el.nextElementSibling.textContent = v;
+    });
+    document.getElementById('subjNotes').value = '';
+    renderFieldHistory(pid);
+  }
+
+  function renderFieldHistory(pid){
+    var byDate = faByDate(pid);
+    var dates = Object.keys(byDate).sort().reverse();
+    document.getElementById('faHistCount').textContent = dates.length + ' session' + (dates.length===1?'':'s');
+    var host = document.getElementById('faHistory');
+    if (!dates.length){ host.innerHTML = '<div style="padding:14px;color:var(--cm-fg-faint);font:var(--cm-body-sm)">No evaluations yet.</div>'; return; }
+    host.innerHTML = dates.map(function(d){
+      var dims = byDate[d];
+      var vals = SUBJ_DIMS.map(function(k){ return dims[k]; }).filter(function(v){ return v!=null; });
+      var ov = vals.length ? (vals.reduce(function(a,b){return a+b;},0)/vals.length).toFixed(1) : '—';
+      var dimsTxt = SUBJ_DIMS.map(function(k){ return dims[k]!=null ? (k.slice(0,3)+' '+dims[k]) : null; }).filter(Boolean).join(' · ');
+      return '<div class="fa-hist-row"><span class="d">'+fmtDate(d)+'</span><span class="dims">'+esc(dimsTxt)+'</span><span class="ov" style="color:'+(vals.length?faColor(+ov):'var(--cm-fg-faint)')+'">'+ov+'</span></div>';
+    }).join('');
+  }
+
+  async function loadFieldView(){
+    faPopulatePlayerSelect();
+    await loadFieldData();
+    renderFieldGrid();
+    if (_field.player) openFieldPlayer(_field.player);
+  }
+  async function reloadFieldView(pid){
+    await loadFieldData();
+    renderFieldGrid();
+    if (pid) openFieldPlayer(pid);
+    else if (_field.player) openFieldPlayer(_field.player);
+  }
+
+  // saveSubjEval — ported verbatim (clubId->_clubId; refresh -> reloadFieldView)
+  async function saveSubjEval(e) {
+    e.preventDefault();
+    const playerId = document.getElementById('subjPlayer').value;
+    const date = document.getElementById('subjDate').value;
+    const tech = +document.getElementById('subjTech').value;
+    const tact = +document.getElementById('subjTact').value;
+    const phys = +document.getElementById('subjPhys').value;
+    const ment = +document.getElementById('subjMent').value;
+    const notes = document.getElementById('subjNotes').value.trim();
+    if (!playerId || !date) return;
+    const tag = `Technical:${tech} Tactical:${tact} Physical:${phys} Mental:${ment}${notes?' | '+notes:''}`;
+    const rows = [
+      { player_id:playerId, club_id:_clubId, evaluation_type:'Technical',  value:tech, unit:'/10', test_date:date, notes:tag },
+      { player_id:playerId, club_id:_clubId, evaluation_type:'Tactical',   value:tact, unit:'/10', test_date:date, notes:tag },
+      { player_id:playerId, club_id:_clubId, evaluation_type:'Physical',   value:phys, unit:'/10', test_date:date, notes:tag },
+      { player_id:playerId, club_id:_clubId, evaluation_type:'Mental',     value:ment, unit:'/10', test_date:date, notes:tag },
+    ];
+    const { error } = await window.sb.from('evaluations').insert(rows);
+    if (error) { alert('Error: ' + error.message); return; }
+    var msg = document.getElementById('subjSaveMsg'); msg.textContent = '✓ Saved'; msg.style.display = ''; setTimeout(function(){ msg.style.display='none'; }, 3000);
+    await reloadFieldView(playerId);
+    if (typeof loadStatuses === 'function') loadStatuses();
+  }
+  window.saveSubjEval = saveSubjEval;
+
+  // field interactions
+  document.getElementById('faGrid').addEventListener('click', function(e){
+    var card = e.target.closest('[data-fa-pid]'); if(!card) return;
+    openFieldPlayer(card.getAttribute('data-fa-pid'));
+    window.scrollTo(0, 0);
+  });
+  document.getElementById('faNewBtn').addEventListener('click', function(){
+    _field.player = null;
+    document.getElementById('fieldDetail').style.display = '';
+    document.querySelectorAll('#faGrid [data-fa-pid]').forEach(function(b){ b.classList.remove('is-on'); });
+    faPopulatePlayerSelect();
+    document.getElementById('subjPlayer').value = '';
+    document.getElementById('subjDate').value = evToday();
+    ['subjTech','subjTact','subjPhys','subjMent'].forEach(function(id){ var el=document.getElementById(id); el.value=5; el.nextElementSibling.textContent='5'; });
+    document.getElementById('subjNotes').value = '';
+    document.getElementById('faPlayerName').textContent = 'New evaluation';
+    document.getElementById('faPlayerMeta').textContent = 'Pick a player, score the four dimensions and save.';
+    document.getElementById('faRing').style.background = 'conic-gradient(var(--cm-bg-sunk) 0% 100%)';
+    document.getElementById('faRingVal').textContent = '—';
+    document.getElementById('faTags').innerHTML = '';
+    document.getElementById('faHistory').innerHTML = '';
+    document.getElementById('faHistCount').textContent = '';
+  });
 
   // ── boot ──
   renderCatalog();
