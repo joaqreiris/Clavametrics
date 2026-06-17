@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evaluations v2 — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#15803D">
+  <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ── Topbar ── */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:var(--cm-bg); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* ── Page ── */
+  .ev-page { padding:24px 28px 64px; max-width:1600px; width:100%; }
+  .ev-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:18px; flex-wrap:wrap; }
+  .ev-head h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ev-head .ctx { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+  .ev-head .ctx strong { color:var(--cm-fg); font-weight:600; }
+  .ev-head .meta { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+  /* ── KPIs ── */
+  .ev-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  @media (max-width:900px){ .ev-kpis { grid-template-columns:repeat(2,1fr); } }
+  .ev-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 16px 16px; box-shadow:var(--cm-shadow-1); }
+  .ev-kpi-l { display:flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  .ev-kpi-l .ti { font-size:14px; }
+  .ev-kpi-v { font:600 28px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .ev-kpi-v sub { font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .ev-kpi-t { margin-top:10px; font:500 12px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+
+  /* ── Top-level segment (Measured / Field assessment) ── */
+  .ev-branch-seg { display:inline-flex; gap:4px; padding:4px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:10px; margin-bottom:20px; }
+  .ev-branch-seg button { padding:0 18px; height:38px; border:0; background:transparent; color:var(--cm-fg-muted); font:600 13px/1 var(--cm-font-sans); cursor:pointer; border-radius:7px; display:inline-flex; align-items:center; gap:8px; }
+  .ev-branch-seg button .ti { font-size:16px; }
+  .ev-branch-seg button:hover { color:var(--cm-fg); }
+  .ev-branch-seg button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+
+  /* ── generic show/hide ── */
+  [data-branch], [data-screen], [data-pane] { display:none; }
+  [data-branch].is-on, [data-screen].is-on, [data-pane].is-on { display:block; }
+
+  /* ── Catalog: collapsible categories ── */
+  .ev-cat { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); margin-bottom:12px; box-shadow:var(--cm-shadow-1); overflow:hidden; }
+  .ev-cat-h { display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; user-select:none; }
+  .ev-cat-h:hover { background:var(--cm-bg-soft); }
+  .ev-cat-h .ic { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .ev-cat-h .ic .ti { font-size:17px; }
+  .ev-cat-h h4 { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ev-cat-h .ct { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); padding:3px 7px; background:var(--cm-bg-soft); border-radius:4px; }
+  .ev-cat-h .chev { margin-left:auto; color:var(--cm-fg-muted); transition:transform .15s ease; }
+  .ev-cat-h .chev .ti { font-size:18px; }
+  .ev-cat.is-collapsed .chev { transform:rotate(-90deg); }
+  .ev-cat.is-collapsed .ev-cat-body { display:none; }
+  .ev-cat-body { padding:4px 14px 16px; display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; }
+
+  /* ── Test "door" cards ── */
+  .ev-test-card { text-align:left; display:flex; flex-direction:column; gap:8px; padding:14px; background:var(--cm-bg-soft); border:1px solid var(--cm-border-soft); border-radius:var(--cm-r-3); cursor:pointer; transition:border-color .12s ease, background .12s ease; }
+  .ev-test-card:hover { border-color:var(--cm-accent); background:var(--cm-surface); }
+  .ev-test-card .b-ic { width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+  .ev-test-card .b-ic .ti { font-size:18px; }
+  .ev-test-card .b-l { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ev-test-card .b-s { font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .ev-test-card .b-status { margin-top:2px; font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); display:inline-flex; align-items:center; gap:5px; }
+  .ev-test-card .b-status .dot { width:6px; height:6px; border-radius:50%; background:var(--cm-border); }
+
+  /* ── Test detail ── */
+  .ev-d-head { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .ev-d-head .back { display:inline-flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; background:none; border:0; padding:0; }
+  .ev-d-head .back:hover { color:var(--cm-fg); }
+  .ev-d-title { display:flex; align-items:center; gap:12px; }
+  .ev-d-title .b-ic { width:40px; height:40px; border-radius:10px; background:var(--cm-accent-soft); color:var(--cm-accent); display:flex; align-items:center; justify-content:center; }
+  .ev-d-title .b-ic .ti { font-size:20px; }
+  .ev-d-title h2 { font:600 20px/1.1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .ev-d-title .sub { font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:3px; }
+
+  /* sub-navigation tabs (View results / Upload results) */
+  .ev-subnav { display:flex; gap:0; border-bottom:1px solid var(--cm-border); margin-bottom:18px; }
+  .ev-subnav button { padding:0 16px; height:42px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13px/1 var(--cm-font-sans); cursor:pointer; display:inline-flex; align-items:center; gap:7px; border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .ev-subnav button .ti { font-size:15px; }
+  .ev-subnav button:hover { color:var(--cm-fg); }
+  .ev-subnav button.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); font-weight:600; }
+
+  /* mini-segment inside a pane (Team/Individual · Manual/CSV) */
+  .ev-mini-seg { display:inline-flex; gap:4px; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:8px; margin-bottom:16px; }
+  .ev-mini-seg button { padding:0 14px; height:32px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 12px/1 var(--cm-font-sans); cursor:pointer; border-radius:6px; }
+  .ev-mini-seg button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+
+  /* placeholder panels */
+  .ev-placeholder { background:var(--cm-surface); border:1px dashed var(--cm-border); border-radius:var(--cm-r-4); padding:48px 24px; text-align:center; color:var(--cm-fg-muted); }
+  .ev-placeholder .ti { font-size:32px; color:var(--cm-fg-faint); margin-bottom:10px; display:block; }
+  .ev-placeholder h3 { font:600 15px/1.2 var(--cm-font-sans); color:var(--cm-fg); margin-bottom:6px; }
+  .ev-placeholder p { font:500 12.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); max-width:420px; margin:0 auto; }
+
+  .ev-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:18px; box-shadow:var(--cm-shadow-1); }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="17 Evaluations v2">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="evTeamSelect" onchange="evOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+      </div>
+      <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Evaluations</span></div>
+      <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
+      <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
+    </div>
+
+    <section class="ev-page">
+
+      <!-- ============== HEADER + KPIs ============== -->
+      <header class="ev-head">
+        <div>
+          <h1>Player evaluations</h1>
+          <div class="ctx"><strong>— players</strong> · measured &amp; field assessment · <span>v2 skeleton</span></div>
+        </div>
+        <div class="meta">
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export report</button>
+          <button class="cm-btn is-primary is-sm"><i class="ti ti-plus" style="font-size:14px"></i>New evaluation</button>
+        </div>
+      </header>
+
+      <div class="ev-kpis">
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-clipboard-check"></i>Tests measured</div>
+          <div class="ev-kpi-v">— <sub>/ —</sub></div>
+          <div class="ev-kpi-t">placeholder</div>
+        </div>
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-star"></i>Squad average</div>
+          <div class="ev-kpi-v">— <sub>/ 10</sub></div>
+          <div class="ev-kpi-t">placeholder</div>
+        </div>
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-arrow-up-right"></i>Top growers</div>
+          <div class="ev-kpi-v">—</div>
+          <div class="ev-kpi-t">placeholder</div>
+        </div>
+        <div class="ev-kpi">
+          <div class="ev-kpi-l"><i class="ti ti-trending-down"></i>Needs attention</div>
+          <div class="ev-kpi-v">—</div>
+          <div class="ev-kpi-t">placeholder</div>
+        </div>
+      </div>
+
+      <!-- ============== TOP-LEVEL BRANCH SEGMENT ============== -->
+      <div class="ev-branch-seg" id="evBranchSeg">
+        <button class="is-on" data-branch-btn="measured"><i class="ti ti-ruler-measure"></i>Measured</button>
+        <button data-branch-btn="field"><i class="ti ti-clipboard-list"></i>Field assessment</button>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- BRANCH: MEASURED                                             -->
+      <!-- ============================================================ -->
+      <div data-branch="measured" class="is-on">
+
+        <!-- ───────── CATALOG VIEW ───────── -->
+        <!-- Categories + cards are rendered from the CATALOG registry in JS (see bottom script). -->
+        <div id="catalogView" data-screen="catalog" class="is-on">
+          <div id="catalogCats"></div>
+        </div><!-- /#catalogView -->
+
+        <!-- ───────── TEST DETAIL VIEW ───────── -->
+        <div id="testDetailView" data-screen="testDetail">
+          <div class="ev-d-head">
+            <button class="back" id="evBackToCatalog"><i class="ti ti-arrow-left" style="font-size:15px"></i>Back to catalog</button>
+          </div>
+          <div class="ev-d-title" style="margin-bottom:18px">
+            <div class="b-ic"><i class="ti ti-bolt"></i></div>
+            <div>
+              <h2 id="evTestName">Test name</h2>
+              <div class="sub" id="evTestSub">Measured test · detail view (skeleton)</div>
+            </div>
+          </div>
+
+          <!-- sub-navigation: View results / Upload results -->
+          <div class="ev-subnav" id="evDetailSubnav">
+            <button class="is-on" data-pane-btn="view"><i class="ti ti-chart-bar"></i>View results</button>
+            <button data-pane-btn="upload"><i class="ti ti-cloud-upload"></i>Upload results</button>
+          </div>
+
+          <!-- PANE: View results (Team / Individual) -->
+          <div data-pane="view" class="is-on">
+            <div class="ev-mini-seg" data-mini="viewMode">
+              <button class="is-on" data-mini-btn="team">Team</button>
+              <button data-mini-btn="individual">Individual</button>
+            </div>
+            <div data-mini-pane="viewMode:team" class="ev-card" style="display:block">
+              <div class="ev-placeholder"><i class="ti ti-users-group"></i><h3>Team results</h3><p>Team-level results table / chart for this test will live here. No data wired yet.</p></div>
+            </div>
+            <div data-mini-pane="viewMode:individual" class="ev-card" style="display:none">
+              <div class="ev-placeholder"><i class="ti ti-user"></i><h3>Individual results</h3><p>Per-player history &amp; trend for this test will live here. No data wired yet.</p></div>
+            </div>
+          </div>
+
+          <!-- PANE: Upload results (Manual/Bulk · Import CSV) -->
+          <div data-pane="upload">
+            <div class="ev-mini-seg" data-mini="uploadMode">
+              <button class="is-on" data-mini-btn="manual">Manual / Bulk</button>
+              <button data-mini-btn="csv">Import CSV</button>
+            </div>
+            <div data-mini-pane="uploadMode:manual" class="ev-card" style="display:block">
+              <div class="ev-placeholder"><i class="ti ti-keyboard"></i><h3>Manual / bulk entry</h3><p>Manual entry form &amp; bulk grid for this test will live here. No logic wired yet.</p></div>
+            </div>
+            <div data-mini-pane="uploadMode:csv" class="ev-card" style="display:none">
+              <div class="ev-placeholder"><i class="ti ti-file-import"></i><h3>Import CSV</h3><p>CSV import &amp; column mapping (PapaParse) will live here. No parsing wired yet.</p></div>
+            </div>
+          </div>
+
+        </div><!-- /#testDetailView -->
+
+      </div><!-- /branch:measured -->
+
+      <!-- ============================================================ -->
+      <!-- BRANCH: FIELD ASSESSMENT                                     -->
+      <!-- ============================================================ -->
+      <div data-branch="field" id="fieldView">
+        <div class="ev-card">
+          <div class="ev-placeholder">
+            <i class="ti ti-clipboard-list"></i>
+            <h3>Field assessment</h3>
+            <p>Player grid with overall assessment score (subjective / technical field evaluation) will live here. No logic wired yet.</p>
+          </div>
+        </div>
+      </div><!-- /branch:field -->
+
+    </section>
+  </main>
+</div>
+
+<!-- ── Core wiring (same as Evaluations.html) ── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<!-- ── Catalog registry + data-status + navigation (no detail logic yet) ── -->
+<script>
+(function(){
+  // ════════════════════════════════════════════════════════════════════
+  //  TEST REGISTRY  (ported from Evaluations.html: PHYS_TESTS + the
+  //  .pt-cat-group category grouping). Each test declares its data SOURCE:
+  //    { from:'evaluations', match:'<prefix>' }   → evaluations.evaluation_type LIKE prefix%
+  //    { from:'force_tests', testType:'<prefix>' } → force_tests.test_type  LIKE prefix%
+  //  (prefix match is case-insensitive; e.g. VBT → 'VBT · back squat …',
+  //   1RM → '1RM bench', CMJ → force-plate 'CMJ …'.)
+  // ════════════════════════════════════════════════════════════════════
+  var CATALOG = [
+    { name:'Jumps & power', icon:'ti-rocket', ic:'rgba(168,85,247,0.12)', ico:'#7C3AED', tests:[
+      { key:'cmj',    label:'CMJ',            sub:'Counter-movement jump',  icon:'ti-arrow-up',         src:{from:'force_tests', testType:'CMJ'} },
+      { key:'sj',     label:'Squat jump',     sub:'90° · no arm swing',     icon:'ti-stairs-up',        src:{from:'force_tests', testType:'SJ'} },
+      { key:'dj',     label:'Drop jump',      sub:'Box · RSI',              icon:'ti-arrows-vertical',  src:{from:'force_tests', testType:'DJ'} },
+      { key:'slcmj',  label:'SL-CMJ + LSI',   sub:'L vs R asymmetry',       icon:'ti-shoe',             src:{from:'force_tests', testType:'SL-CMJ'} },
+      { key:'broad',  label:'Broad jump',     sub:'Horizontal standing',    icon:'ti-arrows-horizontal',src:{from:'evaluations', match:'Broad jump'} },
+    ]},
+    { name:'Speed & agility', icon:'ti-bolt', ic:'rgba(245,158,11,0.12)', ico:'#B45309', tests:[
+      { key:'sprint',   label:'Sprint splits',   sub:'10 · 20 · 30 · 40 m',  icon:'ti-run',           src:{from:'evaluations', match:'Sprint splits'} },
+      { key:'cod505',   label:'505 COD',         sub:'Change of direction',  icon:'ti-arrow-back',    src:{from:'evaluations', match:'505 COD'} },
+      { key:'illinois', label:'Illinois agility',sub:'40 m · 4 cones',       icon:'ti-route-square',  src:{from:'evaluations', match:'Illinois agility'} },
+      { key:'rsa',      label:'RSA · 6×30m',     sub:'Fatigue index',        icon:'ti-history-toggle',src:{from:'evaluations', match:'RSA'} },
+    ]},
+    { name:'Endurance / VO₂max', icon:'ti-heart', ic:'rgba(34,197,94,0.12)', ico:'#15803D', tests:[
+      { key:'ift',    label:'30-15 IFT',     sub:'VIFT → MAS, VO₂max',  icon:'ti-activity-heartbeat', src:{from:'evaluations', match:'30-15 IFT'} },
+      { key:'yoyo1',  label:'Yo-Yo IR1',     sub:'Bangsbo intermittent',icon:'ti-refresh',           src:{from:'evaluations', match:'Yo-Yo IR1'} },
+      { key:'yoyo2',  label:'Yo-Yo IR2',     sub:'High-level',          icon:'ti-refresh',           src:{from:'evaluations', match:'Yo-Yo IR2'} },
+      { key:'cooper', label:'Cooper 12-min', sub:'VO₂ estimation',      icon:'ti-clock-12',          src:{from:'evaluations', match:'Cooper 12-min'} },
+      { key:'tt1600', label:'1,600 m TT',    sub:'ACSM pace formula',   icon:'ti-stopwatch',         src:{from:'evaluations', match:'1,600 m TT'} },
+      { key:'leger',  label:'Léger shuttle', sub:'20 m · stage',        icon:'ti-arrows-shuffle',    src:{from:'evaluations', match:'Léger'} },
+    ]},
+    { name:'Strength / VBT', icon:'ti-barbell', ic:'rgba(220,38,38,0.10)', ico:'#B91C1C', tests:[
+      { key:'vbt',       label:'VBT · Load-Velocity', sub:'Velocity → %1RM',    icon:'ti-barbell',     src:{from:'evaluations', match:'VBT'} },
+      { key:'orm',       label:'1RM',                 sub:'Epley + Brzycki',    icon:'ti-weight',      src:{from:'evaluations', match:'1RM'} },
+      { key:'fvprofile', label:'F-V Profile · jumps', sub:'Samozino · F₀ V₀ Pmax',icon:'ti-chart-line',src:{from:'evaluations', match:'F-V Profile'} },
+      { key:'nordic',    label:'Nordic hamstring',    sub:'Reps · Bahr',        icon:'ti-stretching-2',src:{from:'evaluations', match:'Nordic'} },
+      { key:'hq',        label:'Isokinetic H:Q',      sub:'Knee balance',       icon:'ti-scale-outline',src:{from:'evaluations', match:'Isokinetic'} },
+    ]},
+    { name:'Mobility & screening', icon:'ti-stretching', ic:'rgba(59,130,246,0.12)', ico:'#1D4ED8', tests:[
+      { key:'fms',      label:'FMS',                sub:'Functional movement screen', icon:'ti-checkbox', src:{from:'evaluations', match:'FMS'} },
+      { key:'ankle',    label:'Ankle dorsiflexion', sub:'Weight-bearing lunge · L/R', icon:'ti-angle',    src:{from:'evaluations', match:'Ankle dorsiflexion'} },
+      { key:'hiprot',   label:'Hip ER/IR',          sub:'Hip rotation · L/R',         icon:'ti-rotate',   src:{from:'evaluations', match:'Hip ER/IR'} },
+      { key:'sitreach', label:'Sit & reach',        sub:'Posterior chain',            icon:'ti-yoga',     src:{from:'evaluations', match:'Sit'} },
+    ]},
+    { name:'Anthropometrics', icon:'ti-ruler', ic:'rgba(17,94,89,0.12)', ico:'#0F766E', tests:[
+      { key:'bodycomp',  label:'Body composition', sub:'JP3/JP7/DW4 · Siri %BF', icon:'ti-body-scan',  src:{from:'evaluations', match:'Body composition'} },
+      { key:'somato',    label:'Somatotype',       sub:'Heath-Carter',           icon:'ti-categories', src:{from:'evaluations', match:'Somatotype'} },
+      { key:'bmirfm',    label:'BMI / RFM',        sub:'Relative fat mass',      icon:'ti-percentage', src:{from:'evaluations', match:'BMI'} },
+    ]},
+  ];
+
+  // flat lookup by key
+  var TEST_BY_KEY = {};
+  CATALOG.forEach(function(cat){ cat.tests.forEach(function(t){ t._cat = cat; TEST_BY_KEY[t.key] = t; }); });
+
+  var catalog = document.getElementById('catalogView');
+  var detail  = document.getElementById('testDetailView');
+
+  // ── helpers ──
+  function show(scope, attr, value){
+    scope.querySelectorAll('['+attr+']').forEach(function(el){
+      el.classList.toggle('is-on', el.getAttribute(attr) === value);
+    });
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function startsWithCI(haystack, prefix){ return String(haystack||'').toLowerCase().indexOf(String(prefix||'').toLowerCase()) === 0; }
+  function fmtDate(d){
+    if (!d) return '';
+    var dt = new Date(String(d).length <= 10 ? d + 'T00:00:00' : d);
+    if (isNaN(dt)) return String(d).slice(0,10);
+    return dt.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  }
+  function fmtVal(v){
+    if (v == null || v === '') return '';
+    var n = Number(v);
+    if (!isNaN(n)) return (Math.round(n*100)/100).toString();
+    return String(v);
+  }
+
+  // ── render the catalog (cards start in a "loading…" status state) ──
+  function renderCatalog(){
+    var html = CATALOG.map(function(cat, i){
+      var cards = cat.tests.map(function(t){
+        return '<button class="ev-test-card" data-open-test="'+t.key+'">'
+          + '<div class="b-ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+t.icon+'"></i></div>'
+          + '<div class="b-l">'+esc(t.label)+'</div>'
+          + '<div class="b-s">'+esc(t.sub)+'</div>'
+          + '<div class="b-status" data-status="'+t.key+'"><span class="dot"></span>Loading…</div>'
+          + '</button>';
+      }).join('');
+      return '<div class="ev-cat'+(i===0?'':' is-collapsed')+'">'
+        + '<div class="ev-cat-h" data-cat-toggle>'
+        +   '<span class="ic" style="background:'+cat.ic+';color:'+cat.ico+'"><i class="ti '+cat.icon+'"></i></span>'
+        +   '<h4>'+esc(cat.name)+'</h4><span class="ct">'+cat.tests.length+' tests</span>'
+        +   '<span class="chev"><i class="ti ti-chevron-down"></i></span>'
+        + '</div>'
+        + '<div class="ev-cat-body">'+cards+'</div>'
+        + '</div>';
+    }).join('');
+    document.getElementById('catalogCats').innerHTML = html;
+  }
+
+  // ── apply a status object {count, lastDate, lastValue} to a card ──
+  function paintStatus(key, st){
+    var el = catalog.querySelector('[data-status="'+key+'"]');
+    if (!el) return;
+    if (st && st.count > 0){
+      var parts = ['last ' + fmtDate(st.lastDate), st.count + ' record' + (st.count===1?'':'s')];
+      if (st.lastValue != null && st.lastValue !== '') parts.push(fmtVal(st.lastValue));
+      el.innerHTML = '<span class="dot" style="background:var(--cm-success)"></span>' + esc(parts.join(' · '));
+      el.style.color = 'var(--cm-fg-muted)';
+    } else {
+      el.innerHTML = '<span class="dot"></span>No data yet';
+      el.style.color = 'var(--cm-fg-faint)';
+    }
+  }
+  function paintAll(statusByKey){
+    Object.keys(TEST_BY_KEY).forEach(function(k){ paintStatus(k, statusByKey[k]); });
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  DATA STATUS  — one query per source, aggregated, then matched to cards.
+  // ════════════════════════════════════════════════════════════════════
+  var _clubId = null, _teamId = null, _teamPlayerIds = null;
+
+  async function loadTeamScope(){
+    try {
+      _clubId = await window.getClubId();
+      var prof = await window.getProfile();
+      var bucket = ((prof && (prof.role || prof.club_role)) || '').toLowerCase();
+      var full = bucket === 'admin' || bucket === 'owner';
+      if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch(e){} }
+      var teams = await window.getTeams(_clubId);
+      if (!full) {
+        var mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch(e){}
+        var s = new Set(mine); teams = teams.filter(function(t){ return s.has(t.id); });
+      }
+      var sel = document.getElementById('evTeamSelect');
+      if (!teams.length){ sel.innerHTML = '<option value="">No teams</option>'; _teamId = null; return; }
+      var saved = sessionStorage.getItem('cal_active_team');
+      _teamId = (saved && teams.some(function(t){ return t.id===saved; })) ? saved : teams[0].id;
+      sel.innerHTML = teams.map(function(t){ return '<option value="'+t.id+'"'+(t.id===_teamId?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
+      // resolve player ids for the active team (evaluations are scoped via player, not team_id)
+      var pr = await window.sb.from('players').select('id').eq('club_id', _clubId).eq('team_id', _teamId);
+      _teamPlayerIds = (pr.data || []).map(function(r){ return r.id; });
+    } catch(e){ console.warn('[ev2] team scope failed', e); }
+  }
+
+  // evaluations: aggregate by evaluation_type → {count, lastDate, lastValue}
+  async function loadEvaluationStatus(){
+    var agg = {}; // evaluation_type → {count, lastDate, lastValue}
+    if (!_clubId) return agg;
+    try {
+      var q = window.sb.from('evaluations').select('evaluation_type, test_date, value').eq('club_id', _clubId);
+      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000'); // team has no players → no data
+      var res = await q;
+      (res.data || []).forEach(function(r){
+        var t = r.evaluation_type; if (!t) return;
+        var a = agg[t] || (agg[t] = { count:0, lastDate:null, lastValue:null });
+        a.count++;
+        if (!a.lastDate || String(r.test_date) > String(a.lastDate)){ a.lastDate = r.test_date; a.lastValue = r.value; }
+      });
+    } catch(e){ console.warn('[ev2] evaluations status failed', e); }
+    return agg;
+  }
+
+  // force_tests: aggregate by test_type → {count, lastDate} (values live in force_test_metrics; not fetched here)
+  async function loadForceStatus(){
+    var agg = {};
+    if (!_clubId) return agg;
+    try {
+      var q = window.sb.from('force_tests').select('test_type, test_date').eq('club_id', _clubId);
+      if (_teamId) q = q.eq('team_id', _teamId);
+      var res = await q;
+      (res.data || []).forEach(function(r){
+        var t = r.test_type; if (!t) return;
+        var a = agg[t] || (agg[t] = { count:0, lastDate:null });
+        a.count++;
+        if (!a.lastDate || String(r.test_date) > String(a.lastDate)) a.lastDate = r.test_date;
+      });
+    } catch(e){ console.warn('[ev2] force_tests status failed', e); }
+    return agg;
+  }
+
+  // match aggregated source buckets to each catalog test (prefix match)
+  function buildStatusByKey(evalAgg, forceAgg){
+    var out = {};
+    Object.keys(TEST_BY_KEY).forEach(function(key){
+      var src = TEST_BY_KEY[key].src;
+      var agg = src.from === 'force_tests' ? forceAgg : evalAgg;
+      var prefix = src.from === 'force_tests' ? src.testType : src.match;
+      var st = { count:0, lastDate:null, lastValue:null };
+      Object.keys(agg).forEach(function(type){
+        if (!startsWithCI(type, prefix)) return;
+        var a = agg[type];
+        st.count += a.count;
+        if (a.lastDate && (!st.lastDate || String(a.lastDate) > String(st.lastDate))){
+          st.lastDate = a.lastDate;
+          st.lastValue = (a.lastValue != null) ? a.lastValue : null;
+        }
+      });
+      out[key] = st;
+    });
+    return out;
+  }
+
+  async function loadStatuses(){
+    if (!window.sb || !window.getClubId){ console.warn('[ev2] supabase not ready'); return; }
+    await loadTeamScope();
+    var ev = await loadEvaluationStatus();
+    var ft = await loadForceStatus();
+    var byKey = buildStatusByKey(ev, ft);
+    paintAll(byKey);
+  }
+
+  // team switch → reload (same pattern as Evaluations.html)
+  window.evOnTeamChange = function(){
+    var v = document.getElementById('evTeamSelect').value;
+    sessionStorage.setItem('cal_active_team', v);
+    location.reload();
+  };
+
+  // ════════════════════════════════════════════════════════════════════
+  //  NAVIGATION (shell only — detail View/Upload stay as placeholders)
+  // ════════════════════════════════════════════════════════════════════
+
+  // top-level branch segment (Measured / Field assessment)
+  var seg = document.getElementById('evBranchSeg');
+  seg.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-branch-btn]'); if(!btn) return;
+    var v = btn.getAttribute('data-branch-btn');
+    seg.querySelectorAll('[data-branch-btn]').forEach(function(b){ b.classList.toggle('is-on', b===btn); });
+    show(document, 'data-branch', v);
+  });
+
+  // catalog category collapse/expand + open a test (event delegation, works for rendered cards)
+  document.getElementById('catalogCats').addEventListener('click', function(e){
+    var head = e.target.closest('[data-cat-toggle]');
+    if (head){ head.closest('.ev-cat').classList.toggle('is-collapsed'); return; }
+    var card = e.target.closest('[data-open-test]');
+    if (card){
+      var t = TEST_BY_KEY[card.getAttribute('data-open-test')];
+      if (!t) return;
+      document.getElementById('evTestName').textContent = t.label;
+      document.getElementById('evTestSub').textContent  = t._cat.name + ' · ' + t.sub + ' · detail view (skeleton)';
+      catalog.classList.remove('is-on');
+      detail.classList.add('is-on');
+      window.scrollTo(0,0);
+    }
+  });
+
+  // back to catalog
+  document.getElementById('evBackToCatalog').addEventListener('click', function(){
+    detail.classList.remove('is-on');
+    catalog.classList.add('is-on');
+  });
+
+  // detail sub-nav: View results / Upload results
+  var subnav = document.getElementById('evDetailSubnav');
+  subnav.addEventListener('click', function(e){
+    var btn = e.target.closest('[data-pane-btn]'); if(!btn) return;
+    var v = btn.getAttribute('data-pane-btn');
+    subnav.querySelectorAll('[data-pane-btn]').forEach(function(b){ b.classList.toggle('is-on', b===btn); });
+    show(detail, 'data-pane', v);
+  });
+
+  // mini-segments (Team/Individual · Manual/CSV)
+  document.querySelectorAll('[data-mini]').forEach(function(segEl){
+    var group = segEl.getAttribute('data-mini');
+    segEl.addEventListener('click', function(e){
+      var btn = e.target.closest('[data-mini-btn]'); if(!btn) return;
+      var v = btn.getAttribute('data-mini-btn');
+      segEl.querySelectorAll('[data-mini-btn]').forEach(function(b){ b.classList.toggle('is-on', b===btn); });
+      detail.querySelectorAll('[data-mini-pane^="'+group+':"]').forEach(function(p){
+        p.style.display = (p.getAttribute('data-mini-pane') === group+':'+v) ? 'block' : 'none';
+      });
+    });
+  });
+
+  // ── boot ──
+  renderCatalog();
+  loadStatuses();
+})();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
