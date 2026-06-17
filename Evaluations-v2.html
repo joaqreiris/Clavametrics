@@ -387,6 +387,50 @@
   .pa-zone-active { background:var(--cm-accent-soft) !important; }
   .pa-foot { padding:12px 18px; border-top:1px solid var(--cm-border); display:flex; gap:8px; align-items:center; background:var(--cm-bg-soft); flex-shrink:0; }
   .pa-foot .info { flex:1; font:500 11.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ===== CSV import drawers (force + VBT bulk) — ported verbatim ===== */
+  .pt-imp-btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-border-strong); color:var(--cm-fg-strong); font:600 12.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .pt-imp-btn:hover { background:color-mix(in srgb, var(--cm-accent) 18%, transparent); }
+  .pt-imp-btn .ti { font-size:14px; color:var(--cm-accent); }
+
+  .pt-imp-overlay { position:fixed; inset:0; background:rgba(8,10,12,0.45); backdrop-filter:blur(4px); opacity:0; pointer-events:none; transition:opacity 200ms; z-index:800; }
+  .pt-imp-overlay.is-open { opacity:1; pointer-events:auto; }
+  .pt-imp-drawer { position:fixed; top:0; right:0; bottom:0; width:540px; max-width:96vw; background:var(--cm-bg); border-left:1px solid var(--cm-border); box-shadow:-12px 0 40px rgba(0,0,0,0.2); transform:translateX(100%); transition:transform 280ms cubic-bezier(.2,.7,.2,1); z-index:810; display:flex; flex-direction:column; }
+  .pt-imp-drawer.is-open { transform:translateX(0); }
+  .pt-imp-h { display:flex; align-items:center; gap:12px; padding:18px 20px; border-bottom:1px solid var(--cm-border); }
+  .pt-imp-h h3 { font:600 16px/1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-fg-strong); }
+  .pt-imp-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .pt-imp-x { width:32px; height:32px; border-radius:8px; border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .pt-imp-x .ti { font-size:16px; }
+  .pt-imp-body { flex:1; overflow-y:auto; padding:16px 20px 24px; }
+  .pt-drop { border:1.5px dashed var(--cm-border-strong); border-radius:10px; padding:18px; background:var(--cm-bg-soft); display:flex; flex-direction:column; gap:10px; cursor:pointer; margin-bottom:18px; }
+  .pt-drop:hover { border-color:var(--cm-accent); background:var(--cm-accent-soft); }
+  .pt-drop .top { display:flex; align-items:center; gap:10px; }
+  .pt-drop .ic { width:36px; height:36px; border-radius:9px; background:var(--cm-surface); border:1px solid var(--cm-border); display:flex; align-items:center; justify-content:center; color:var(--cm-fg-muted); flex-shrink:0; }
+  .pt-drop .ic .ti { font-size:18px; }
+  .pt-drop h4 { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pt-drop p { font:500 12px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .pt-drop .formats { display:flex; gap:5px; flex-wrap:wrap; }
+  .pt-drop .fmt { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:4px; background:var(--cm-surface); border:1px solid var(--cm-border-soft); font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .pt-providers { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .pt-provider { border:1px solid var(--cm-border); background:var(--cm-surface); border-radius:10px; padding:12px; display:flex; gap:10px; cursor:pointer; }
+  .pt-provider:hover { border-color:var(--cm-border-strong); }
+  .pt-provider.is-active { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+  .pt-provider .logo { width:32px; height:32px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:#fff; font:700 12px/1 var(--cm-font-sans); flex-shrink:0; }
+  .pt-provider .logo.plate { background:#0066FF; }
+  .pt-provider .logo.enc { background:#16A34A; }
+  .pt-provider .logo.lpt { background:#FB923C; }
+  .pt-provider .logo.gate { background:#7C3AED; }
+  .pt-provider .logo.opt { background:#DC2626; }
+  .pt-provider .logo.csv { background:var(--cm-neutral); }
+  .pt-provider .info h5 { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pt-provider .info .desc { font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:2px; }
+  .pt-provider-status { display:inline-flex; align-items:center; gap:4px; height:18px; padding:0 6px; border-radius:4px; font:600 10px/1 var(--cm-font-mono); margin-top:8px; }
+  .pt-provider-status .d { width:6px; height:6px; border-radius:50%; }
+  .pt-provider-status.ok { background:var(--cm-success-bg); color:var(--cm-success); }
+  .pt-provider-status.ok .d { background:var(--cm-success); }
+  .pt-provider-status.av { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border-soft); }
+  .pt-imp-section-l { font:600 11px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin:18px 0 10px; }
 </style>
 </head>
 <body class="cm">
@@ -779,7 +823,20 @@
                   <i class="ti ti-calculator"></i>
                   <h3 id="evUploadCalcTitle">Guided entry</h3>
                   <p id="evUploadCalcTxt">This test has a dedicated calculator with live formulas, zones and a chart.</p>
-                  <button class="cm-btn is-primary is-sm" id="evUploadCalcBtn" style="margin-top:14px"><i class="ti ti-plus" style="font-size:14px"></i>New entry</button>
+                  <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+                    <button class="cm-btn is-primary is-sm" id="evUploadCalcBtn"><i class="ti ti-plus" style="font-size:14px"></i>New entry</button>
+                    <button class="cm-btn is-outline is-sm" id="evVbtImportBtn" style="display:none"><i class="ti ti-cloud-upload" style="font-size:14px"></i>Import VBT session (CSV)</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- force_tests → CSV import drawer -->
+              <div id="evUploadForce" class="ev-card" style="display:none">
+                <div class="ev-placeholder">
+                  <i class="ti ti-cloud-upload"></i>
+                  <h3>Import force tests</h3>
+                  <p>Upload a CSV exported from your force platform (VALD ForceDecks &amp; others). Identity columns are detected automatically; every other column is treated as a metric.</p>
+                  <button class="cm-btn is-primary is-sm" id="evForceImportBtn" style="margin-top:14px"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
                 </div>
               </div>
             </div>
@@ -808,6 +865,126 @@
     </section>
   </main>
 </div>
+
+
+<!-- ===== CSV import drawers (ported from Evaluations.html) ===== -->
+<div class="pt-imp-overlay" id="ftImpOverlay"></div>
+<aside class="pt-imp-drawer" id="ftImpDrawer">
+  <header class="pt-imp-h">
+    <i class="ti ti-activity" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3>Import force tests</h3><div class="sub">CSV from VALD ForceDecks &amp; other platforms</div></div>
+    <button class="pt-imp-x" id="ftImpClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="pt-imp-body">
+    <div class="pt-drop" id="ftDropZone" onclick="document.getElementById('ftFileInput').click()">
+      <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop CSV here or click to browse</h4><p>Identity columns (Name, Test Type, Date…) are detected automatically. Every other column is treated as a metric.</p></div></div>
+      <div class="formats"><span class="fmt">.csv</span><span class="fmt">VALD ForceDecks</span><span class="fmt">Generic</span></div>
+      <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
+        <button class="cm-btn is-outline is-sm" onclick="document.getElementById('ftFileInput').click()"><i class="ti ti-upload" style="font-size:14px"></i>Browse files</button>
+      </div>
+    </div>
+    <input type="file" id="ftFileInput" accept=".csv,.tsv,.txt" style="display:none">
+
+    <!-- Classification + match + preview -->
+    <div id="ftResultArea" style="display:none">
+      <!-- Detected fields vs metric columns -->
+      <div class="pt-imp-section-l">Column classification</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:10px 12px">
+          <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Detected fields</div>
+          <div id="ftDetectedFields" style="display:flex;flex-direction:column;gap:5px"></div>
+        </div>
+        <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:10px 12px">
+          <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:8px">Metric columns <span id="ftMetricCount" style="font-family:var(--cm-font-mono);color:var(--cm-fg-faint)"></span></div>
+          <div id="ftMetricCols" style="display:flex;flex-wrap:wrap;gap:4px;max-height:140px;overflow-y:auto"></div>
+        </div>
+      </div>
+
+      <!-- Match summary -->
+      <div class="pt-imp-section-l">Player match</div>
+      <div id="ftMatchSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="ftUnmatched" style="margin-bottom:14px"></div>
+
+      <!-- Metric mapping -->
+      <div class="pt-imp-section-l">Metric mapping <span id="ftMapCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:none;letter-spacing:0"></span></div>
+      <div id="ftMappingRows" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+      <!-- Inline create-metric form (writes to force_metric_definitions; tests are NOT saved yet) -->
+      <div id="ftCreateForm" style="display:none;background:var(--cm-surface);border:1px solid var(--cm-accent);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font:600 11px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:9px">New metric for <span id="ftCreateForCol" style="font-family:var(--cm-font-mono);color:var(--cm-fg-strong);text-transform:none;letter-spacing:0"></span></div>
+        <div style="display:grid;grid-template-columns:1fr 90px;gap:8px;margin-bottom:8px">
+          <div class="ev-frow"><label class="ev-fl">Label</label><input id="ftNewLabel" class="ev-finput" style="height:32px" placeholder="e.g. Eccentric Braking RFD"></div>
+          <div class="ev-frow"><label class="ev-fl">Unit</label><input id="ftNewUnit" class="ev-finput" style="height:32px" placeholder="N/s"></div>
+        </div>
+        <div class="ev-frow" style="margin-bottom:10px"><label class="ev-fl">Category</label>
+          <select id="ftNewCategory" class="ev-finput" style="height:32px">
+            <option value="jump">jump</option><option value="force">force</option><option value="power">power</option><option value="velocity">velocity</option><option value="time">time</option><option value="asymmetry">asymmetry</option><option value="count">count</option><option value="custom" selected>custom</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="cm-btn is-primary is-sm" onclick="createForceMetric()" style="flex:1"><i class="ti ti-plus" style="font-size:13px"></i>Create metric</button>
+          <button class="cm-btn is-outline is-sm" onclick="cancelCreateForceMetric()">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="pt-imp-section-l">Preview <span id="ftPreviewCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:none;letter-spacing:0"></span></div>
+      <div id="ftPreviewTable" style="overflow-x:auto;max-height:280px;overflow-y:auto;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;margin-bottom:14px"></div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="cm-btn is-primary" id="ftSaveBtn" onclick="saveForceImport()" style="flex:1"><i class="ti ti-database-import" style="font-size:14px"></i>Import to database</button>
+        <button class="cm-btn is-outline" onclick="resetForceImport()">Reset</button>
+      </div>
+      <div id="ftSaveResult" style="font:500 11.5px/1.5 var(--cm-font-sans);margin-top:10px;text-align:center"></div>
+    </div>
+  </div>
+</aside>
+
+<!-- VBT bulk · Import drawer (read + map + group + calc + preview only — no save yet) -->
+<div class="pt-imp-overlay" id="vbtBulkOverlay"></div>
+<aside class="pt-imp-drawer" id="vbtBulkDrawer">
+  <header class="pt-imp-h">
+    <i class="ti ti-barbell" style="font-size:20px;color:var(--cm-fg-muted)"></i>
+    <div style="flex:1"><h3>Import VBT session</h3><div class="sub">Load-velocity CSV from any encoder · multi-player × multi-lift</div></div>
+    <button class="pt-imp-x" id="vbtBulkClose"><i class="ti ti-x"></i></button>
+  </header>
+  <div class="pt-imp-body">
+    <div class="pt-drop" id="vbtDropZone" onclick="document.getElementById('vbtFileInput').click()">
+      <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop CSV here or click to browse</h4><p>One row per rep/set. Columns (player, exercise, load, velocity) are detected and editable below.</p></div></div>
+      <div class="formats"><span class="fmt">.csv</span><span class="fmt">Any encoder</span><span class="fmt">Load-velocity</span></div>
+      <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
+        <button class="cm-btn is-outline is-sm" onclick="document.getElementById('vbtFileInput').click()"><i class="ti ti-upload" style="font-size:14px"></i>Browse files</button>
+      </div>
+    </div>
+    <input type="file" id="vbtFileInput" accept=".csv,.tsv,.txt" style="display:none">
+
+    <div id="vbtResultArea" style="display:none">
+      <!-- Column mapping -->
+      <div class="pt-imp-section-l">Column mapping</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+        <div class="ev-frow"><label class="ev-fl">Player</label><select id="vbtColPlayer" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Exercise</label><select id="vbtColExercise" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Load (kg)</label><select id="vbtColLoad" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Velocity (m/s)</label><select id="vbtColVelocity" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+        <div class="ev-frow"><label class="ev-fl">Date <span style="color:var(--cm-fg-faint)">(optional)</span></label><select id="vbtColDate" class="ev-finput" style="height:32px" onchange="onVbtMapChange()"></select></div>
+      </div>
+
+      <!-- Player match -->
+      <div class="pt-imp-section-l">Player match</div>
+      <div id="vbtMatchSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="vbtUnmatched" style="margin-bottom:14px"></div>
+
+      <!-- Detected profiles -->
+      <div class="pt-imp-section-l">Detected profiles <span id="vbtProfCount" style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:none;letter-spacing:0"></span></div>
+      <div id="vbtProfiles" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="cm-btn is-primary" id="vbtSaveBtn" onclick="saveVbtBulk()" style="flex:1"><i class="ti ti-database-import" style="font-size:14px"></i>Save profiles</button>
+        <button class="cm-btn is-outline" onclick="resetVbtBulk()">Reset</button>
+      </div>
+      <div id="vbtSaveResult" style="font:500 11.5px/1.5 var(--cm-font-sans);margin-top:10px;text-align:center"></div>
+    </div>
+  </div>
+</aside>
 
 <!-- ========== MODAL: Physical Test Analysis (ported) ========== -->
 <div class="ev-overlay" id="physAnalysisOvl" onclick="if(event.target===this)closePhysModal()">
@@ -1116,17 +1293,20 @@
       openEvalTest(t);
     }
 
-    // ── Upload pane dispatch: single-value → manual+bulk · calculator → modal · force → placeholder ──
+    // ── Upload pane dispatch: single-value → manual+bulk · calculator → modal · force → CSV drawer ──
     var isCalc = !isForce && !!EV_CALC[t.key] && !!EV_CALC_LABEL[t.key];
     var isSingleEval = !isForce && !EV_CALC[t.key];
     document.getElementById('evUploadReal').style.display        = isSingleEval ? '' : 'none';
     document.getElementById('evUploadCalc').style.display        = isCalc ? '' : 'none';
-    document.getElementById('evUploadPlaceholder').style.display = (isSingleEval || isCalc) ? 'none' : '';
+    document.getElementById('evUploadForce').style.display       = isForce ? '' : 'none';
+    document.getElementById('evUploadPlaceholder').style.display = (isSingleEval || isCalc || isForce) ? 'none' : '';
     activateMini('uploadMode', 'manual');
     if (isSingleEval){ activateMini('entryMode', 'single'); setupEvalUpload(t); }
     if (isCalc){
       document.getElementById('evUploadCalcTitle').textContent = t.label;
       document.getElementById('evUploadCalcBtn').setAttribute('data-label', EV_CALC_LABEL[t.key]);
+      // VBT also gets the multi-player bulk CSV importer
+      document.getElementById('evVbtImportBtn').style.display = (t.key === 'vbt') ? '' : 'none';
     }
 
     window.scrollTo(0,0);
@@ -1924,6 +2104,14 @@
   document.getElementById('evUploadCalcBtn').addEventListener('click', function(){
     var label = this.getAttribute('data-label');
     if (label && typeof openPhysAnalysis === 'function') openPhysAnalysis(label);
+  });
+  // VBT → multi-player bulk CSV importer (ported openVbtBulkDrawer)
+  document.getElementById('evVbtImportBtn').addEventListener('click', function(){
+    if (typeof openVbtBulkDrawer === 'function') openVbtBulkDrawer();
+  });
+  // force tests → CSV import drawer (ported openForceImport)
+  document.getElementById('evForceImportBtn').addEventListener('click', function(){
+    if (typeof openForceImport === 'function') openForceImport();
   });
 
 
@@ -3402,6 +3590,841 @@
     calcIFT, calc1600m, calcVBT, onVBTExerciseChange, addVBTRow, applyVBTCsvImport,
     calc1RM_modal, on1RMExerciseChange, calcFMS, calcAnkle, calcHipRot,
     onSkinfoldMethodChange, calcSkinfold, addFVRow, calcFVProfile, applyFVCsvImport });
+
+
+  // ════════════════════════════════════════════════════════════════════
+  //  CSV IMPORTERS (ported verbatim from Evaluations.html): force tests
+  //  + VBT bulk. Scope glue: clubId->_clubId, _evTeamId->_teamId,
+  //  allPlayers->_ftPlayers; save refresh -> View results + catalog status.
+  // ════════════════════════════════════════════════════════════════════
+  const _ftNorm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[._\-\/]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Identity/fixed columns, by priority of role. First header that matches a role wins.
+  const _FT_IDENTITY = [
+    { role: 'externalId', label: 'External ID', match: h => /\b(external\s*id|externalid|profile\s*id|athlete\s*id|athleteid)\b/.test(h) },
+    { role: 'name',       label: 'Name',        match: h => /\b(name|player|athlete|jugador)\b/.test(h) },
+    { role: 'testType',   label: 'Test Type',   match: h => /\b(test\s*type|testtype|test|movement|exercise|type)\b/.test(h) },
+    { role: 'date',       label: 'Date',        match: h => /\b(date|recorded|fecha)\b/.test(h) && !/time/.test(h) },
+    { role: 'time',       label: 'Time',        match: h => /\b(time|hora)\b/.test(h) },
+    { role: 'bw',         label: 'Bodyweight',  match: h => /\b(bw|bodyweight|body\s*weight|body\s*mass|weight|mass|peso)\b/.test(h) },
+    { role: 'reps',       label: 'Reps',        match: h => /\b(reps?|repetitions?)\b/.test(h) },
+    { role: 'tags',       label: 'Tags',        match: h => /\b(tags?|notes?|comments?|label)\b/.test(h) },
+  ];
+
+  let _ftState = null; // { rows, headers, fields:{role->header}, metrics:[], roster:[], byId:Map, byName:Map, manual:Map<normName,playerId> }
+
+  function classifyForceColumns(headers) {
+    const fields = {};   // role -> header
+    const used = new Set();
+    for (const def of _FT_IDENTITY) {
+      const hit = headers.find(h => !used.has(h) && def.match(_ftNorm(h)));
+      if (hit) { fields[def.role] = hit; used.add(hit); }
+    }
+    const metrics = headers.filter(h => !used.has(h));
+    return { fields, metrics };
+  }
+
+  async function loadForceRoster() {
+    if (!_clubId) return [];
+    // external_force_id may not exist yet (migration 051) — fall back to name-only roster.
+    let q = window.sb.from('players').select('id, first_name, last_name, external_force_id').eq('club_id', _clubId);
+    if (_teamId) q = q.eq('team_id', _teamId);
+    let res = await q;
+    if (res.error) {
+      let q2 = window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId);
+      if (_teamId) q2 = q2.eq('team_id', _teamId);
+      res = await q2;
+    }
+    return res.data || [];
+  }
+
+  // Resolve a row to a player id: (1) external_force_id, (2) name (incl. swapped "Last First"), (3) manual map.
+  function matchForceRow(row) {
+    const { fields, byId, byName, manual } = _ftState;
+    const ext = fields.externalId ? String(row[fields.externalId] ?? '').trim() : '';
+    if (ext && byId.has(ext)) return { playerId: byId.get(ext), how: 'id' };
+    const rawName = fields.name ? String(row[fields.name] ?? '').trim() : '';
+    const nn = _ftNorm(rawName);
+    if (nn) {
+      if (byName.has(nn)) return { playerId: byName.get(nn), how: 'name' };
+      const parts = nn.split(' ');
+      if (parts.length === 2) {
+        const swapped = parts[1] + ' ' + parts[0];
+        if (byName.has(swapped)) return { playerId: byName.get(swapped), how: 'name' };
+      }
+      if (manual.has(nn)) return { playerId: manual.get(nn), how: 'manual' };
+    }
+    return { playerId: null, how: null };
+  }
+
+  function playerName(id) {
+    const p = (_ftState.roster.find(x => x.id === id)) || _ftPlayers.find(x => x.id === id);
+    return p ? `${p.first_name} ${p.last_name}` : '—';
+  }
+
+  function parseForceCsv(file) {
+    if (!window.Papa) { alert('PapaParse not loaded'); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      async complete(res) {
+        if (!res.data.length) { alert('Empty file.'); return; }
+        const headers = res.meta.fields || [];
+        const { fields, metrics } = classifyForceColumns(headers);
+        const roster = await loadForceRoster();
+        const byId = new Map(), byName = new Map();
+        roster.forEach(p => {
+          if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
+          byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
+        });
+        _ftState = { rows: res.data, headers, fields, metrics, roster, byId, byName, manual: new Map(), defs: [], savedMap: {}, colMap: {}, sourceLabel: 'csv', _createCol: null };
+        // Catalog + saved column mappings (degrade gracefully if tables/migration absent)
+        const looksVald = !!fields.testType && headers.some(h => /\[kg\]/i.test(h) || /\(asym\)/i.test(h));
+        _ftState.sourceLabel = looksVald ? 'forcedecks' : 'csv';
+        await loadForceCatalog();
+        autoMapForceColumns();
+        document.getElementById('ftDropZone').style.display = 'none';
+        document.getElementById('ftResultArea').style.display = '';
+        document.getElementById('ftSaveResult').textContent = '';
+        renderForceClassification();
+        renderForceMatch();
+        renderForceMapping();
+        renderForcePreview();
+      },
+      error(err) { alert('Parse error: ' + err.message); }
+    });
+  }
+
+  // Parse a force value that may carry an L/R asymmetry side: "3.5 R" → {value:3.5, side:'R'}.
+  function parseForceValue(raw) {
+    if (raw == null) return { value: null, side: null };
+    const s = String(raw).trim();
+    if (!s) return { value: null, side: null };
+    const m = s.match(/^(-?\d+(?:[.,]\d+)?)\s*([LR])?$/i);
+    if (m) {
+      const v = parseFloat(m[1].replace(',', '.'));
+      return { value: isNaN(v) ? null : v, side: m[2] ? m[2].toUpperCase() : null };
+    }
+    const n = parseFloat(s.replace(',', '.'));
+    return { value: isNaN(n) ? null : n, side: null };
+  }
+
+  // Normalize a metric name for fuzzy matching: drop [..]/(..) units, keep alphanumerics only.
+  const _ftMetricNorm = s => String(s ?? '').toLowerCase().replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').replace(/[^a-z0-9]/g, '');
+
+  async function loadForceCatalog() {
+    if (!_clubId) return;
+    try {
+      const { data } = await window.sb.from('force_metric_definitions').select('*').or(`club_id.is.null,club_id.eq.${_clubId}`);
+      _ftState.defs = data || [];
+    } catch (e) { _ftState.defs = []; }
+    try {
+      const { data } = await window.sb.from('force_column_mappings').select('*').eq('club_id', _clubId).eq('source_label', _ftState.sourceLabel);
+      const map = {};
+      (data || []).forEach(r => { const col = r.source_column ?? r.source_column_name; if (col) map[col] = r.target_metric_key; });
+      _ftState.savedMap = map;
+    } catch (e) { _ftState.savedMap = {}; }
+  }
+
+  function autoMapForceColumns() {
+    const { metrics, defs, savedMap } = _ftState;
+    const defIndex = [];
+    defs.forEach(d => {
+      if (d.label) defIndex.push({ norm: _ftMetricNorm(d.label), key: d.key });
+      if (d.key)   defIndex.push({ norm: _ftMetricNorm(d.key), key: d.key });
+    });
+    const colMap = {};
+    metrics.forEach(col => {
+      if (savedMap[col]) { colMap[col] = savedMap[col]; return; }        // (a) saved memory
+      const cn = _ftMetricNorm(col);
+      let best = null;
+      for (const di of defIndex) { if (di.norm && di.norm === cn) { best = di.key; break; } }  // (b1) exact
+      if (!best) {                                                        // (b2) substring, longest wins
+        let bestLen = 0;
+        for (const di of defIndex) {
+          if (di.norm.length >= 4 && (cn.includes(di.norm) || di.norm.includes(cn)) && di.norm.length > bestLen) { bestLen = di.norm.length; best = di.key; }
+        }
+      }
+      colMap[col] = best || null;                                         // (c) unmapped
+    });
+    _ftState.colMap = colMap;
+  }
+
+  function forceDefLabel(key) { const d = _ftState.defs.find(x => x.key === key); return d ? (d.label || d.key) : key; }
+
+  function forceDefOptions(selectedKey) {
+    const byCat = {};
+    _ftState.defs.forEach(d => { (byCat[d.category || 'other'] = byCat[d.category || 'other'] || []).push(d); });
+    let html = `<option value="" ${!selectedKey ? 'selected' : ''}>— don't import —</option>`;
+    Object.keys(byCat).sort().forEach(cat => {
+      html += `<optgroup label="${cat}">`;
+      byCat[cat].sort((a, b) => (a.label || a.key).localeCompare(b.label || b.key)).forEach(d => {
+        html += `<option value="${d.key}" ${d.key === selectedKey ? 'selected' : ''}>${d.label || d.key}${d.unit ? ` · ${d.unit}` : ''}</option>`;
+      });
+      html += `</optgroup>`;
+    });
+    html += `<option value="__create__">+ Create new metric…</option>`;
+    return html;
+  }
+
+  function renderForceMapping() {
+    const { metrics, colMap } = _ftState;
+    const mapped = metrics.filter(c => colMap[c]).length;
+    document.getElementById('ftMapCount').textContent = `(${mapped}/${metrics.length} mapped)`;
+    document.getElementById('ftMappingRows').innerHTML = metrics.length
+      ? metrics.map((col, i) =>
+          `<div style="display:grid;grid-template-columns:1fr 230px;gap:8px;align-items:center">
+             <span style="font:500 12px/1.3 var(--cm-font-mono);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${col}">${col}</span>
+             <select class="ev-finput" style="height:30px" data-i="${i}" onchange="onForceColMapChange(this)">${forceDefOptions(colMap[col])}</select>
+           </div>`).join('')
+      : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">No metric columns detected.</div>';
+  }
+
+  function onForceColMapChange(sel) {
+    const col = _ftState.metrics[+sel.dataset.i];
+    if (sel.value === '__create__') { openCreateForceMetric(col, sel); return; }
+    _ftState.colMap[col] = sel.value || null;
+    renderForceMapping();
+    renderForcePreview();
+  }
+  window.onForceColMapChange = onForceColMapChange;
+
+  function openCreateForceMetric(col, sel) {
+    _ftState._createCol = col;
+    if (sel) sel.value = _ftState.colMap[col] || '';
+    document.getElementById('ftCreateForCol').textContent = col;
+    document.getElementById('ftNewLabel').value = '';
+    document.getElementById('ftNewUnit').value = '';
+    document.getElementById('ftNewCategory').value = 'custom';
+    document.getElementById('ftCreateForm').style.display = '';
+  }
+
+  function cancelCreateForceMetric() {
+    if (_ftState) _ftState._createCol = null;
+    document.getElementById('ftCreateForm').style.display = 'none';
+  }
+  window.cancelCreateForceMetric = cancelCreateForceMetric;
+
+  async function createForceMetric() {
+    if (!_ftState || !_clubId) return;
+    const label = document.getElementById('ftNewLabel').value.trim();
+    const unit = document.getElementById('ftNewUnit').value.trim();
+    const category = document.getElementById('ftNewCategory').value;
+    if (!label) { alert('Enter a label.'); return; }
+    let key = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+    if (!key) key = 'metric_' + Date.now();
+    const row = { club_id: _clubId, key, label, unit: unit || null, category };
+    const { data, error } = await window.sb.from('force_metric_definitions').insert(row).select().single();
+    if (error) { alert('Could not create metric: ' + error.message); return; }
+    _ftState.defs.push(data);
+    if (_ftState._createCol) _ftState.colMap[_ftState._createCol] = data.key;
+    _ftState._createCol = null;
+    document.getElementById('ftCreateForm').style.display = 'none';
+    renderForceMapping();
+    renderForcePreview();
+  }
+  window.createForceMetric = createForceMetric;
+
+  // Parse a test date → 'yyyy-mm-dd'. VALD exports DD/MM/YYYY; fall back to Date(); else today (warn).
+  function parseForceDate(raw) {
+    const today = new Date().toISOString().slice(0, 10);
+    const s = String(raw ?? '').trim();
+    if (!s) return { date: today, warn: true };
+    let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);   // DD/MM/YYYY (day-first)
+    if (m) {
+      let [, d, mo, y] = m;
+      if (y.length === 2) y = '20' + y;
+      const iso = `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      if (!isNaN(new Date(iso).getTime())) return { date: iso, warn: false };
+    }
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);                          // ISO yyyy-mm-dd...
+    if (m) return { date: `${m[1]}-${m[2]}-${m[3]}`, warn: false };
+    const t = new Date(s);                                            // fallback
+    if (!isNaN(t.getTime())) return { date: t.toISOString().slice(0, 10), warn: false };
+    return { date: today, warn: true };
+  }
+
+  // Save matched rows to force_tests + force_test_metrics; persist mapping memory; skip unmatched; no dups.
+  async function saveForceImport() {
+    if (!_ftState || !_clubId) return;
+    const btn = document.getElementById('ftSaveBtn');
+    const resEl = document.getElementById('ftSaveResult');
+    const { rows, fields, metrics, colMap, defs, sourceLabel } = _ftState;
+
+    let uid = null, uname = null;
+    try { const { data: { user } } = await window.sb.auth.getUser(); uid = user?.id || null; } catch (e) {}
+    try { const prof = await window.getProfile(); uname = prof?.full_name || null; } catch (e) {}
+
+    const unitFor = key => { const d = defs.find(x => x.key === key); return d?.unit || null; };
+    const mappedCols = metrics.filter(c => colMap[c] && colMap[c] !== '__none__');
+
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>Saving…';
+    resEl.style.color = 'var(--cm-fg-muted)';
+    resEl.textContent = 'Saving…';
+
+    // Natural key for a test, normalized so re-imports match the DB (date → yyyy-mm-dd, time → HH:MM).
+    const normTime = t => (t == null ? '' : String(t).trim().slice(0, 5));
+    const natOf = (pid, type, date, time) => `${pid}|${type}|${String(date).slice(0, 10)}|${normTime(time)}`;
+
+    let testsCount = 0, metricsCount = 0, skipped = 0, dateWarns = 0;
+    try {
+      // ── 1) Build the plan in memory (collapse in-file duplicates by natural key; last wins) ──
+      const planMap = new Map();
+      for (const row of rows) {
+        const m = matchForceRow(row);
+        if (!m.playerId) { skipped++; continue; }
+        const { date, warn } = parseForceDate(fields.date ? row[fields.date] : '');
+        const testType = (fields.testType ? String(row[fields.testType] || '').trim() : '') || 'Unknown';
+        const testTime = fields.time ? (String(row[fields.time] || '').trim() || null) : null;
+        const rec = {
+          club_id: _clubId, team_id: _teamId || null, player_id: m.playerId,
+          test_type: testType, test_date: date, test_time: testTime,
+          bodyweight_kg: fields.bw ? (parseFloat(row[fields.bw]) || null) : null,
+          reps: fields.reps ? (parseInt(row[fields.reps], 10) || null) : null,
+          tags: fields.tags ? (String(row[fields.tags] || '').trim() || null) : null,
+          source: sourceLabel,
+          external_id: fields.externalId ? (String(row[fields.externalId] || '').trim() || null) : null,
+          uploaded_by: uid, uploaded_by_name: uname,
+        };
+        const metricsRaw = [];
+        for (const col of mappedCols) {
+          const { value, side } = parseForceValue(row[col]);
+          if (value == null) continue;
+          metricsRaw.push({ metric_key: colMap[col], value, side, unit: unitFor(colMap[col]) });
+        }
+        planMap.set(natOf(m.playerId, testType, date, testTime), { rec, metricsRaw, warn });
+      }
+      const plan = [...planMap.entries()].map(([natKey, p]) => ({ natKey, ...p }));
+      dateWarns = plan.filter(p => p.warn).length;
+
+      if (plan.length) {
+        // ── 2) Pre-fetch existing tests for the players in the plan (1 query) ──
+        const pids = [...new Set(plan.map(p => p.rec.player_id))];
+        let exQ = window.sb.from('force_tests').select('id, player_id, test_type, test_date, test_time')
+          .eq('club_id', _clubId).in('player_id', pids);
+        if (_teamId) exQ = exQ.eq('team_id', _teamId);
+        const { data: existing, error: exErr } = await exQ;
+        if (exErr) throw exErr;
+
+        // ── 3) Delete the ones that collide with the plan (metrics cascade) (1 query) ──
+        const planKeys = new Set(plan.map(p => p.natKey));
+        const existingIds = (existing || [])
+          .filter(e => planKeys.has(natOf(e.player_id, e.test_type, e.test_date, e.test_time)))
+          .map(e => e.id);
+        if (existingIds.length) {
+          const { error: delErr } = await window.sb.from('force_tests').delete().in('id', existingIds);
+          if (delErr) throw delErr;
+        }
+
+        // ── 4) Insert all tests in one shot, correlate returned ids by natural key ──
+        const { data: insTests, error: insErr } = await window.sb.from('force_tests')
+          .insert(plan.map(p => p.rec))
+          .select('id, player_id, test_type, test_date, test_time');
+        if (insErr) throw insErr;
+        const idByKey = new Map();
+        (insTests || []).forEach(t => idByKey.set(natOf(t.player_id, t.test_type, t.test_date, t.test_time), t.id));
+        testsCount = (insTests || []).length;
+
+        // ── 5) Gather every metric row and insert in chunks (1 query, or a few if huge) ──
+        const allMetricRows = [];
+        plan.forEach(p => {
+          const tid = idByKey.get(p.natKey);
+          if (!tid) return;
+          p.metricsRaw.forEach(mr => allMetricRows.push({ test_id: tid, club_id: _clubId, metric_key: mr.metric_key, value: mr.value, side: mr.side, unit: mr.unit }));
+        });
+        const CHUNK = 500;
+        for (let i = 0; i < allMetricRows.length; i += CHUNK) {
+          const { error: mErr } = await window.sb.from('force_test_metrics').insert(allMetricRows.slice(i, i + CHUNK));
+          if (mErr) throw mErr;
+        }
+        metricsCount = allMetricRows.length;
+      }
+
+      // ── 6) Persist column-mapping memory once (non-fatal if it fails) ──
+      if (mappedCols.length) {
+        const mapRows = mappedCols.map(col => ({ club_id: _clubId, source_label: sourceLabel, source_column_name: col, target_metric_key: colMap[col] }));
+        try { await window.sb.from('force_column_mappings').upsert(mapRows, { onConflict: 'club_id,source_label,source_column_name' }); } catch (e) {}
+      }
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = btnHtml;
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = 'Import failed: ' + (e.message || e) + (testsCount ? ` — ${testsCount} tests saved before the error` : '');
+      return;
+    }
+
+    const parts = [`Imported ${testsCount} tests`, `${metricsCount} metric values`, `${skipped} rows skipped (unmatched)`];
+    if (dateWarns) parts.push(`${dateWarns} dates defaulted to today`);
+    btn.disabled = false; btn.innerHTML = btnHtml;
+    resEl.style.color = 'var(--cm-success)';
+    resEl.textContent = parts.join(' · ');
+    setTimeout(() => {
+      document.getElementById('ftImpDrawer').classList.remove('is-open');
+      document.getElementById('ftImpOverlay').classList.remove('is-open');
+      resetForceImport();
+      if (typeof loadForceView === 'function') loadForceView();   // refresh team view with the new data
+      if (typeof loadStatuses === 'function') loadStatuses();
+    }, 2000);
+  }
+  window.saveForceImport = saveForceImport;
+
+  function renderForceClassification() {
+    const { fields, metrics } = _ftState;
+    const fieldsEl = document.getElementById('ftDetectedFields');
+    const rows = _FT_IDENTITY.filter(d => fields[d.role]).map(d =>
+      `<div style="display:flex;justify-content:space-between;gap:8px;font:500 12px/1.3 var(--cm-font-sans)"><span style="color:var(--cm-fg-muted)">${d.label}</span><span style="color:var(--cm-fg-strong);font-family:var(--cm-font-mono);font-size:11.5px;text-align:right">${fields[d.role]}</span></div>`
+    ).join('');
+    fieldsEl.innerHTML = rows || '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">None detected</div>';
+    document.getElementById('ftMetricCount').textContent = `(${metrics.length})`;
+    document.getElementById('ftMetricCols').innerHTML = metrics.length
+      ? metrics.map(m => `<span class="fmt" title="${m}">${m}</span>`).join('')
+      : '<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint)">None</div>';
+  }
+
+  function renderForceMatch() {
+    const { rows } = _ftState;
+    let matched = 0; const unmatchedNames = new Map(); // normName -> rawName
+    rows.forEach(r => {
+      const m = matchForceRow(r);
+      if (m.playerId) matched++;
+      else {
+        const raw = _ftState.fields.name ? String(r[_ftState.fields.name] ?? '').trim() : '';
+        const nn = _ftNorm(raw);
+        if (nn && !unmatchedNames.has(nn)) unmatchedNames.set(nn, raw || '(blank)');
+      }
+    });
+    const unmatched = rows.length - matched;
+    const pill = (txt, tone) => `<span class="pt-provider-status ${tone}" style="margin-top:0"><span class="d"></span>${txt}</span>`;
+    document.getElementById('ftMatchSummary').innerHTML =
+      pill(`${rows.length} tests`, 'av') + pill(`${matched} players matched`, 'ok') + pill(`${unmatched} unmatched`, unmatched ? 'av' : 'ok');
+
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const un = [...unmatchedNames.entries()];
+    document.getElementById('ftUnmatched').innerHTML = un.length
+      ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched rows to a player (kept in memory for the next step):</div>` +
+        un.map(([nn, raw]) =>
+          `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${raw}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignForcePlayer('${nn.replace(/'/g, "\\'")}', this.value)">
+               <option value="">— assign player —</option>${opts}
+             </select>
+           </div>`
+        ).join('')
+      : '<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-success)">All rows matched a player.</div>';
+  }
+
+  function assignForcePlayer(nn, playerId) {
+    if (!_ftState) return;
+    if (playerId) _ftState.manual.set(nn, playerId); else _ftState.manual.delete(nn);
+    renderForceMatch();
+    renderForcePreview();
+  }
+  window.assignForcePlayer = assignForcePlayer;
+
+  function forceSideBadge(side) {
+    if (!side) return '';
+    const c = side === 'R' ? 'rgba(59,130,246,0.16);color:#1D4ED8' : 'rgba(220,38,38,0.16);color:#B91C1C';
+    return `<span style="display:inline-block;margin-left:5px;padding:0 5px;height:15px;border-radius:3px;font:700 9px/15px var(--cm-font-mono);background:${c}">${side}</span>`;
+  }
+
+  function renderForcePreview() {
+    const { rows, fields, metrics, colMap } = _ftState;
+    // Show up to 3 sample metric columns — mapped ones first, falling back to raw columns.
+    const mappedCols = metrics.filter(c => colMap[c]);
+    const sampleMetrics = (mappedCols.length ? mappedCols : metrics).slice(0, 3);
+    const MAX = 10;
+    const metricHeads = sampleMetrics.map(c => colMap[c] ? forceDefLabel(colMap[c]) : c);
+    const head = ['Player', 'Test Type', 'Date', ...metricHeads];
+    const th = head.map(h => `<th style="padding:7px 10px;text-align:left;font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);white-space:nowrap">${h}</th>`).join('');
+    const trs = rows.slice(0, MAX).map(r => {
+      const m = matchForceRow(r);
+      const rawName = fields.name ? String(r[fields.name] ?? '').trim() : '';
+      const cellName = m.playerId
+        ? `<span style="color:var(--cm-fg-strong)">${playerName(m.playerId)}</span>`
+        : `<span style="color:var(--cm-warning)" title="Unmatched">${rawName || '—'}</span>`;
+      const tt = fields.testType ? (r[fields.testType] || '—') : '—';
+      const dt = fields.date ? (r[fields.date] || '—') : '—';
+      const metricCells = sampleMetrics.map(mc => {
+        const { value, side } = parseForceValue(r[mc]);
+        const inner = value == null ? '—' : `${value}${forceSideBadge(side)}`;
+        return `<td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${inner}</td>`;
+      }).join('');
+      return `<tr><td style="padding:7px 10px;font:500 12.5px/1 var(--cm-font-sans)">${cellName}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg)">${tt}</td><td style="padding:7px 10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap">${dt}</td>${metricCells}</tr>`;
+    }).join('');
+    const mappedCount = metrics.filter(c => colMap[c]).length;
+    document.getElementById('ftPreviewCount').textContent = `(${rows.length} rows · ${mappedCount}/${metrics.length} metrics mapped)`;
+    document.getElementById('ftPreviewTable').innerHTML =
+      `<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--cm-bg-soft)">${th}</tr></thead><tbody>${trs}</tbody></table>` +
+      (rows.length > MAX ? `<div style="padding:7px 10px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">…and ${rows.length - MAX} more</div>` : '');
+  }
+
+  function resetForceImport() {
+    _ftState = null;
+    const fi = document.getElementById('ftFileInput'); if (fi) fi.value = '';
+    document.getElementById('ftCreateForm').style.display = 'none';
+    const rEl = document.getElementById('ftSaveResult'); if (rEl) rEl.textContent = '';
+    document.getElementById('ftResultArea').style.display = 'none';
+    document.getElementById('ftDropZone').style.display = '';
+  }
+  window.resetForceImport = resetForceImport;
+
+  // ── Force import drawer wiring ──
+  (function initForceImportDrawer() {
+    const drawer = document.getElementById('ftImpDrawer');
+    const overlay = document.getElementById('ftImpOverlay');
+    const open = () => { drawer.classList.add('is-open'); overlay.classList.add('is-open'); };
+    const close = () => { drawer.classList.remove('is-open'); overlay.classList.remove('is-open'); };
+    document.getElementById('ftImpOpen')?.addEventListener('click', open);
+    document.getElementById('ftImpOpen2')?.addEventListener('click', open);
+    document.getElementById('ftImpClose')?.addEventListener('click', close);
+    overlay?.addEventListener('click', close);
+    document.getElementById('ftFileInput')?.addEventListener('change', e => { if (e.target.files[0]) parseForceCsv(e.target.files[0]); });
+    const dz = document.getElementById('ftDropZone');
+    dz?.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz?.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz?.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseForceCsv(e.dataTransfer.files[0]); });
+  })();
+
+  let _vbt = null; // { rows, headers, map:{player,exercise,load,velocity,date}, roster, byId, byName, manual:Map, sourceLabel }
+
+  const _VBT_ROLE_PATTERNS = {
+    player:   /\b(athlete|player|name|jugador|lifter)\b/,
+    exercise: /\b(exercise|lift|movement|ejercicio|drill)\b/,
+    load:     /\b(load|kg|weight|carga|mass|resistance)\b/,
+    velocity: /\b(velocity|vmp|mean velocity|mean propulsive|vel|m s|speed)\b/,
+    date:     /\b(date|fecha|timestamp)\b/,
+  };
+
+  // Map a raw exercise string to a canonical VBT_V1RM key (so the 1RM threshold applies); else keep raw.
+  function vbtCanonExercise(raw) {
+    const nn = _ftNorm(raw);
+    if (!nn) return raw;
+    for (const key of Object.keys(VBT_V1RM)) {
+      const kn = _ftNorm(key);
+      if (nn === kn || nn.includes(kn) || kn.includes(nn)) return key;
+    }
+    return raw;
+  }
+
+  function classifyVbtColumns(headers) {
+    const map = { player: '', exercise: '', load: '', velocity: '', date: '' };
+    const used = new Set();
+    // Priority order avoids e.g. a velocity column being grabbed as load.
+    ['player', 'exercise', 'velocity', 'load', 'date'].forEach(role => {
+      const hit = headers.find(h => !used.has(h) && _VBT_ROLE_PATTERNS[role].test(_ftNorm(h)));
+      if (hit) { map[role] = hit; used.add(hit); }
+    });
+    return map;
+  }
+
+  function vbtMatchPlayer(rawName, externalVal) {
+    const ext = String(externalVal ?? '').trim();
+    if (ext && _vbt.byId.has(ext)) return _vbt.byId.get(ext);
+    const nn = _ftNorm(rawName);
+    if (!nn) return null;
+    if (_vbt.byName.has(nn)) return _vbt.byName.get(nn);
+    const parts = nn.split(' ');
+    if (parts.length === 2 && _vbt.byName.has(parts[1] + ' ' + parts[0])) return _vbt.byName.get(parts[1] + ' ' + parts[0]);
+    if (_vbt.manual.has(nn)) return _vbt.manual.get(nn);
+    return null;
+  }
+
+  function parseVbtCsv(file) {
+    if (!window.Papa) { alert('PapaParse not loaded'); return; }
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      async complete(res) {
+        if (!res.data.length) { alert('Empty file.'); return; }
+        const headers = res.meta.fields || [];
+        const map = classifyVbtColumns(headers);
+        const roster = await loadForceRoster();
+        const byId = new Map(), byName = new Map();
+        roster.forEach(p => {
+          if (p.external_force_id) byId.set(String(p.external_force_id).trim(), p.id);
+          byName.set(_ftNorm(`${p.first_name} ${p.last_name}`), p.id);
+        });
+        _vbt = { rows: res.data, headers, map, roster, byId, byName, manual: new Map(), sourceLabel: 'vbt' };
+        await loadVbtSavedMappings();
+        document.getElementById('vbtDropZone').style.display = 'none';
+        document.getElementById('vbtResultArea').style.display = '';
+        document.getElementById('vbtSaveResult').textContent = '';
+        populateVbtMapSelects();
+        renderVbtAll();
+      },
+      error(err) { alert('Parse error: ' + err.message); }
+    });
+  }
+
+  // Saved role mappings live in force_column_mappings under a 'vbt' source_label (target_metric_key holds the role).
+  async function loadVbtSavedMappings() {
+    if (!_clubId) return;
+    try {
+      const { data } = await window.sb.from('force_column_mappings').select('source_column_name, target_metric_key')
+        .eq('club_id', _clubId).eq('source_label', _vbt.sourceLabel);
+      (data || []).forEach(r => {
+        const role = r.target_metric_key, col = r.source_column_name;
+        if (role && _vbt.map[role] !== undefined && _vbt.headers.includes(col)) _vbt.map[role] = col;
+      });
+    } catch (e) {}
+  }
+
+  function populateVbtMapSelects() {
+    const opts = noneFirst => `<option value="">${noneFirst}</option>` + _vbt.headers.map(h => `<option value="${h}">${h}</option>`).join('');
+    const setSel = (id, role, noneLabel) => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = opts(noneLabel);
+      sel.value = _vbt.map[role] || '';
+    };
+    setSel('vbtColPlayer', 'player', '— select —');
+    setSel('vbtColExercise', 'exercise', '— select —');
+    setSel('vbtColLoad', 'load', '— select —');
+    setSel('vbtColVelocity', 'velocity', '— select —');
+    setSel('vbtColDate', 'date', '— none —');
+  }
+
+  function onVbtMapChange() {
+    if (!_vbt) return;
+    _vbt.map.player = document.getElementById('vbtColPlayer').value;
+    _vbt.map.exercise = document.getElementById('vbtColExercise').value;
+    _vbt.map.load = document.getElementById('vbtColLoad').value;
+    _vbt.map.velocity = document.getElementById('vbtColVelocity').value;
+    _vbt.map.date = document.getElementById('vbtColDate').value;
+    renderVbtAll();
+  }
+  window.onVbtMapChange = onVbtMapChange;
+
+  function assignVbtPlayer(nn, playerId) {
+    if (!_vbt) return;
+    if (playerId) _vbt.manual.set(nn, playerId); else _vbt.manual.delete(nn);
+    renderVbtAll();
+  }
+  window.assignVbtPlayer = assignVbtPlayer;
+
+  // Group rows by (player + exercise), pick best VMP per load, track the latest date per group.
+  function buildVbtGroups() {
+    const { rows, map } = _vbt;
+    const today = new Date().toISOString().slice(0, 10);
+    const groups = new Map();         // key → { playerId, name, exercise, loadBest:Map<load,vmp>, testDate }
+    const unmatchedNames = new Map(); // normName → rawName
+    let matchedRows = 0;
+    rows.forEach(r => {
+      const rawName = map.player ? String(r[map.player] ?? '').trim() : '';
+      const exercise = map.exercise ? String(r[map.exercise] ?? '').trim() : '';
+      const load = map.load ? parseFloat(r[map.load]) : NaN;
+      const vmp = map.velocity ? parseFloat(r[map.velocity]) : NaN;
+      const pid = vbtMatchPlayer(rawName);
+      if (!pid) {
+        const nn = _ftNorm(rawName);
+        if (nn && !unmatchedNames.has(nn)) unmatchedNames.set(nn, rawName || '(blank)');
+        return;
+      }
+      matchedRows++;
+      if (!exercise || !isFinite(load) || !isFinite(vmp) || load <= 0 || vmp <= 0) return;
+      const key = pid + '||' + exercise.toLowerCase();
+      let g = groups.get(key);
+      if (!g) { g = { playerId: pid, name: ftPlayerName(pid), exercise, loadBest: new Map(), testDate: '' }; groups.set(key, g); }
+      const prev = g.loadBest.get(load);
+      if (prev == null || vmp > prev) g.loadBest.set(load, vmp);   // best (max) VMP per load
+      const d = map.date ? parseForceDate(r[map.date]).date : today;
+      if (d > g.testDate) g.testDate = d;                          // latest date among the group's rows
+    });
+    return { groups: [...groups.values()], unmatchedNames, matchedRows };
+  }
+
+  // Build the full profile list (display + save share this so they never diverge).
+  function computeVbtProfiles() {
+    const today = new Date().toISOString().slice(0, 10);
+    const { groups, unmatchedNames } = buildVbtGroups();
+    const profiles = groups.map(g => {
+      const pairs = [...g.loadBest.entries()].map(([load, vmp]) => ({ load, vmp }));
+      const canon = vbtCanonExercise(g.exercise);
+      const fit = fitVBTProfile(pairs, canon);
+      return { name: g.name, playerId: g.playerId, exercise: g.exercise, canon, nLoads: pairs.length, fit, testDate: g.testDate || today };
+    }).sort((a, b) => a.name.localeCompare(b.name) || a.exercise.localeCompare(b.exercise));
+    return { profiles, unmatchedNames };
+  }
+
+  function renderVbtAll() {
+    const { profiles, unmatchedNames } = computeVbtProfiles();
+
+    const valid = profiles.filter(p => !p.fit.error && p.fit.est1RM != null);
+    const players = new Set(profiles.map(p => p.playerId)).size;
+    const unmatched = unmatchedNames.size;
+
+    // Match summary
+    const pill = (txt, tone) => `<span class="pt-provider-status ${tone}" style="margin-top:0"><span class="d"></span>${txt}</span>`;
+    document.getElementById('vbtMatchSummary').innerHTML =
+      pill(`${profiles.length} profiles`, 'av') + pill(`${players} players`, 'ok') + pill(`${unmatched} unmatched (skipped)`, unmatched ? 'av' : 'ok');
+
+    // Unmatched assign
+    const opts = _ftPlayers.map(p => `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`).join('');
+    const un = [...unmatchedNames.entries()];
+    document.getElementById('vbtUnmatched').innerHTML = un.length
+      ? `<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:7px">Assign unmatched players (kept in memory):</div>` +
+        un.map(([nn, raw]) =>
+          `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:6px">
+             <span style="font:500 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${raw}</span>
+             <select class="ev-finput" style="height:30px;width:200px" onchange="assignVbtPlayer('${nn.replace(/'/g, "\\'")}', this.value)">
+               <option value="">— assign player —</option>${opts}
+             </select>
+           </div>`).join('')
+      : (un.length === 0 && _vbt.map.player ? '<div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-success)">All players matched.</div>' : '');
+
+    // Profiles list
+    document.getElementById('vbtProfCount').textContent = `(${valid.length} ready · ${profiles.length} total)`;
+    const list = document.getElementById('vbtProfiles');
+    if (!profiles.length) {
+      list.innerHTML = '<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint)">No profiles yet — check the Player / Exercise / Load / Velocity mapping.</div>';
+      return;
+    }
+    list.innerHTML = profiles.map(p => {
+      const needsLoads = p.fit.error === 'few' || p.nLoads < 2;
+      const flag = needsLoads
+        ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>needs ≥2 loads</span>'
+        : p.fit.error === 'sameload'
+          ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>loads must differ</span>'
+          : p.fit.est1RM == null
+            ? '<span class="pt-provider-status av" style="margin-top:0"><span class="d"></span>invalid slope</span>'
+            : `<span style="font:600 13px/1 var(--cm-font-mono);color:var(--cm-fg-strong)">${p.fit.est1RM} kg</span><span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:8px">R² ${(+p.fit.R2).toFixed(2)}</span>`;
+      return `<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;padding:9px 12px">
+        <div style="min-width:0">
+          <div style="font:600 12.5px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+          <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:2px">${p.exercise} · ${p.nLoads} load${p.nLoads === 1 ? '' : 's'}</div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">${flag}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function resetVbtBulk() {
+    _vbt = null;
+    const fi = document.getElementById('vbtFileInput'); if (fi) fi.value = '';
+    const r = document.getElementById('vbtSaveResult'); if (r) r.textContent = '';
+    document.getElementById('vbtResultArea').style.display = 'none';
+    document.getElementById('vbtDropZone').style.display = '';
+  }
+  window.resetVbtBulk = resetVbtBulk;
+
+  // Batch-save VBT profiles to evaluations — same shape as the manual VBT save; dedup by (player, type, date).
+  async function saveVbtBulk() {
+    if (!_vbt || !_clubId) return;
+    const btn = document.getElementById('vbtSaveBtn');
+    const resEl = document.getElementById('vbtSaveResult');
+    const { profiles, unmatchedNames } = computeVbtProfiles();
+
+    // Only matched players with a valid ≥2-load profile are saveable.
+    const saveable = profiles.filter(p => !p.fit.error && p.fit.est1RM != null && isFinite(p.fit.est1RM) && p.fit.est1RM > 0);
+    const tooFewLoads = profiles.length - saveable.length;
+    const unmatched = unmatchedNames.size;
+
+    if (!saveable.length) {
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = 'Nothing to save — no profile has a matched player with ≥2 loads.';
+      return;
+    }
+
+    const btnHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>Saving…';
+    resEl.style.color = 'var(--cm-fg-muted)';
+    resEl.textContent = 'Saving…';
+
+    // Build evaluation records (identical structure to the manual VBT save), collapsing in-file dups by natural key.
+    const natOf = (pid, type, date) => `${pid}|${type}|${date}`;
+    const planMap = new Map();
+    saveable.forEach(p => {
+      const f = p.fit;
+      const evalType = VBT_EVAL_TYPES[p.canon] || `VBT · ${p.canon.toLowerCase()}`;
+      const computed = {
+        inputs: f.pairs.map(x => ({ kg: x.load, vmp: x.vmp })),
+        slope: +f.b.toFixed(5), intercept: +f.a.toFixed(4), R2: f.R2,
+        v1rm_used: f.v1rm, est1RM: f.est1RM, method: f.method, exercise: p.canon,
+      };
+      const rec = {
+        player_id: p.playerId, club_id: _clubId, evaluation_type: evalType,
+        value: f.est1RM, unit: 'kg', test_date: p.testDate, notes: JSON.stringify(computed),
+      };
+      planMap.set(natOf(p.playerId, evalType, p.testDate), rec);   // last wins
+    });
+    const plan = [...planMap.values()];
+
+    let savedCount = 0;
+    try {
+      // ── 1) Pre-fetch existing evaluations for these players + types (1 query) ──
+      const pids = [...new Set(plan.map(r => r.player_id))];
+      const types = [...new Set(plan.map(r => r.evaluation_type))];
+      const { data: existing, error: exErr } = await window.sb.from('evaluations')
+        .select('id, player_id, evaluation_type, test_date')
+        .eq('club_id', _clubId).in('player_id', pids).in('evaluation_type', types);
+      if (exErr) throw exErr;
+
+      // ── 2) Delete the colliding ones (1 query), then insert the whole plan (1 query) — replace, no dup ──
+      const planKeys = new Set(plan.map(r => natOf(r.player_id, r.evaluation_type, r.test_date)));
+      const collideIds = (existing || [])
+        .filter(e => planKeys.has(natOf(e.player_id, e.evaluation_type, String(e.test_date).slice(0, 10))))
+        .map(e => e.id);
+      if (collideIds.length) {
+        const { error: delErr } = await window.sb.from('evaluations').delete().in('id', collideIds);
+        if (delErr) throw delErr;
+      }
+      const { error: insErr } = await window.sb.from('evaluations').insert(plan);
+      if (insErr) throw insErr;
+      savedCount = plan.length;
+
+      // ── 3) Persist column-mapping memory once (non-fatal) ──
+      const mapRows = Object.entries(_vbt.map)
+        .filter(([role, col]) => col)
+        .map(([role, col]) => ({ club_id: _clubId, source_label: _vbt.sourceLabel, source_column_name: col, target_metric_key: role }));
+      if (mapRows.length) {
+        try { await window.sb.from('force_column_mappings').upsert(mapRows, { onConflict: 'club_id,source_label,source_column_name' }); } catch (e) {}
+      }
+    } catch (e) {
+      btn.disabled = false; btn.innerHTML = btnHtml;
+      resEl.style.color = 'var(--cm-danger)';
+      resEl.textContent = 'Save failed: ' + (e.message || e);
+      return;
+    }
+
+    const skipped = unmatched + tooFewLoads;
+    const skipDetail = skipped ? ` (${unmatched} unmatched, ${tooFewLoads} need ≥2 loads)` : '';
+    btn.disabled = false; btn.innerHTML = btnHtml;
+    resEl.style.color = 'var(--cm-success)';
+    resEl.textContent = `Saved ${savedCount} profiles · ${skipped} skipped${skipDetail}`;
+    if (typeof reloadEvalViews === 'function') reloadEvalViews();
+    if (typeof loadStatuses === 'function') loadStatuses();
+    setTimeout(() => {
+      document.getElementById('vbtBulkDrawer').classList.remove('is-open');
+      document.getElementById('vbtBulkOverlay').classList.remove('is-open');
+      resetVbtBulk();
+    }, 2200);
+  }
+  window.saveVbtBulk = saveVbtBulk;
+
+  function openVbtBulkDrawer() {
+    document.getElementById('vbtBulkDrawer').classList.add('is-open');
+    document.getElementById('vbtBulkOverlay').classList.add('is-open');
+  }
+  window.openVbtBulkDrawer = openVbtBulkDrawer;
+
+  (function initVbtBulkDrawer() {
+    const drawer = document.getElementById('vbtBulkDrawer');
+    const overlay = document.getElementById('vbtBulkOverlay');
+    const close = () => { drawer.classList.remove('is-open'); overlay.classList.remove('is-open'); };
+    document.getElementById('vbtBulkClose')?.addEventListener('click', close);
+    overlay?.addEventListener('click', close);
+    document.getElementById('vbtFileInput')?.addEventListener('change', e => { if (e.target.files[0]) parseVbtCsv(e.target.files[0]); });
+    const dz = document.getElementById('vbtDropZone');
+    dz?.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+    dz?.addEventListener('dragleave', () => { dz.style.borderColor = ''; });
+    dz?.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseVbtCsv(e.dataTransfer.files[0]); });
+  })();
+
+  // v2 helper: open the force-import drawer from the Upload pane button
+  function openForceImport(){ document.getElementById('ftImpDrawer').classList.add('is-open'); document.getElementById('ftImpOverlay').classList.add('is-open'); }
+  // expose importer functions for inline on*= handlers in the ported drawer markup
+  Object.assign(window, { saveForceImport, resetForceImport, cancelCreateForceMetric, createForceMetric,
+    onForceColMapChange, openCreateForceMetric, assignForcePlayer,
+    openVbtBulkDrawer, saveVbtBulk, resetVbtBulk, onVbtMapChange, assignVbtPlayer });
 
   // ── boot ──
   renderCatalog();
