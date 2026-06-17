@@ -233,7 +233,7 @@
         <div class="gp-card-h">
           <h3>Athletes</h3>
           <span class="ct" id="gymAthCt">—</span>
-          <div class="right"><button class="cm-btn is-ghost is-sm" onclick="gpOpenSquad()"><i class="ti ti-users-plus" style="font-size:13px"></i>Pick from squad</button></div>
+          <div class="right"><button class="cm-btn is-ghost is-sm" onclick="gpOpenGroups()"><i class="ti ti-layout-grid" style="font-size:13px"></i>Load groups</button><button class="cm-btn is-ghost is-sm" onclick="gpOpenSquad()"><i class="ti ti-users-plus" style="font-size:13px"></i>Pick from squad</button></div>
         </div>
         <div class="gp-athletes" id="gymAthPills">
           <!-- Populated by gpLoadAthletes() -->
@@ -351,6 +351,7 @@ let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
 let _gpTeamId = null, _gpTeams = [];
 let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [];
 let _gpRoster = new Set(), _gpSavedRoster = null, _gpAvailMap = {}, _gpAdaptNotes = {}, _gpSquadBuilt = false, _gpSquadSel = null;
+let _gpGrpBuilt = false, _gpGrpRows = [], _gpGrpMode = 'rm', _gpGrpVariant = '', _gpGrpK = 'auto', _gpGrpPct = 80;
 
 const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'DM', WG:'WG', ST:'ST', CM:'MF', CF:'CF' };
 
@@ -937,6 +938,127 @@ function gpRenderSquadList() {
   });
 }
 function gpSquadApply() { if (_gpSquadSel) { _gpRoster = new Set(_gpSquadSel); gpRenderRoster(); gpScheduleSave(); } gpCloseSquad(); }
+
+// ── Load groups (subgrupos por nivel según tests) ──
+function gpGroupEqual(entries, k) {            // PASO 1: equilibrado por nivel
+  const sorted = entries.slice().sort((a,b)=>a.value-b.value);
+  const n = sorted.length, groups = Array.from({length:k},()=>[]);
+  for (let i=0;i<n;i++) groups[Math.min(k-1, Math.floor(i*k/n))].push(sorted[i]);
+  return groups.filter(g=>g.length);
+}
+function gpAutoK(entries) {                     // PASO 1: heurística simple (paso 2 la reemplaza)
+  const n = entries.length;
+  return Math.max(2, Math.min(4, Math.round(n/5)));
+}
+async function gpLoadGroupRows(mode) {
+  const prefix = mode === 'vbt' ? 'VBT' : '1RM';
+  const { data } = await window.sb.from('evaluations')
+    .select('player_id,evaluation_type,value,unit,test_date')
+    .eq('club_id', _gpClubId).ilike('evaluation_type', prefix + '%')
+    .order('test_date', { ascending:false });
+  return (data || []).filter(r => r.value != null && r.value !== '' && !isNaN(parseFloat(r.value)));
+}
+function gpBuildGroupsModal() {
+  if (_gpGrpBuilt) return; _gpGrpBuilt = true;
+  const ov = document.createElement('div');
+  ov.id = 'gpGrpOv';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:48px';
+  ov.onclick = e => { if (e.target === ov) gpCloseGroups(); };
+  ov.innerHTML = `
+    <style>
+      .gp-grp-seg{display:inline-flex;border:1px solid var(--cm-border);border-radius:7px;overflow:hidden}
+      .gp-grp-seg button{height:30px;padding:0 12px;border:0;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 12px/1 var(--cm-font-sans);cursor:pointer}
+      .gp-grp-seg button.is-on{background:var(--cm-accent);color:#fff}
+      .gp-grp-card{border:1px solid var(--cm-border);border-radius:9px;padding:11px 13px;margin:8px 0;background:var(--cm-bg-soft)}
+      .gp-grp-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;margin:3px 3px 0 0;border-radius:13px;background:var(--cm-surface);border:1px solid var(--cm-border);font:600 11px/1 var(--cm-font-sans);color:var(--cm-fg-strong)}
+    </style>
+    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:620px;max-width:95vw;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
+        <i class="ti ti-layout-grid" style="font-size:16px;color:var(--cm-accent)"></i>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Load groups</div>
+        <button onclick="gpCloseGroups()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--cm-border)">
+        <div class="gp-grp-seg" id="gpGrpMode">
+          <button data-m="rm" class="is-on">%RM</button><button data-m="vbt">VBT</button>
+        </div>
+        <select id="gpGrpVariant" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;max-width:240px"></select>
+        <div id="gpGrpPctWrap" style="display:flex;align-items:center;gap:6px">
+          <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">%RM</span>
+          <input id="gpGrpPct" type="number" min="30" max="100" value="80" style="width:58px;height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+          <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Groups</span>
+          <select id="gpGrpK" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+            <option value="auto">Auto</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+          </select>
+        </div>
+      </div>
+      <div id="gpGrpBody" style="overflow-y:auto;flex:1;padding:10px 18px"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#gpGrpMode').addEventListener('click', e => {
+    const b = e.target.closest('button[data-m]'); if (!b) return;
+    _gpGrpMode = b.dataset.m;
+    ov.querySelectorAll('#gpGrpMode button').forEach(x => x.classList.toggle('is-on', x === b));
+    document.getElementById('gpGrpPctWrap').style.display = _gpGrpMode === 'rm' ? 'flex' : 'none';
+    _gpGrpVariant = ''; gpRefreshGroupData();
+  });
+  ov.querySelector('#gpGrpVariant').addEventListener('change', e => { _gpGrpVariant = e.target.value; gpRenderGroups(); });
+  ov.querySelector('#gpGrpK').addEventListener('change', e => { _gpGrpK = e.target.value; gpRenderGroups(); });
+  ov.querySelector('#gpGrpPct').addEventListener('input', e => { _gpGrpPct = parseFloat(e.target.value) || 80; gpRenderGroups(); });
+}
+async function gpOpenGroups() {
+  gpBuildGroupsModal();
+  document.getElementById('gpGrpOv').style.display = 'flex';
+  document.getElementById('gpGrpPctWrap').style.display = _gpGrpMode === 'rm' ? 'flex' : 'none';
+  await gpRefreshGroupData();
+}
+function gpCloseGroups() { const ov = document.getElementById('gpGrpOv'); if (ov) ov.style.display = 'none'; }
+async function gpRefreshGroupData() {
+  document.getElementById('gpGrpBody').innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading…</div>`;
+  _gpGrpRows = await gpLoadGroupRows(_gpGrpMode);
+  const variants = [...new Set(_gpGrpRows.map(r => r.evaluation_type))].sort();
+  const sel = document.getElementById('gpGrpVariant');
+  sel.innerHTML = variants.length ? variants.map(v => `<option value="${v.replace(/"/g,'&quot;')}">${v}</option>`).join('') : `<option value="">— No tests —</option>`;
+  if (!variants.includes(_gpGrpVariant)) _gpGrpVariant = variants[0] || '';
+  sel.value = _gpGrpVariant;
+  gpRenderGroups();
+}
+function gpRenderGroups() {
+  const body = document.getElementById('gpGrpBody');
+  const rosterIds = new Set([..._gpRoster]);
+  if (!rosterIds.size) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in the session roster.</div>`; return; }
+  if (!_gpGrpVariant) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No ${_gpGrpMode==='vbt'?'VBT':'1RM'} tests found. Load tests in Evaluations first.</div>`; return; }
+  // latest value per player for the selected variant (rows already date-desc)
+  const latest = {}; let unit = '';
+  _gpGrpRows.forEach(r => { if (r.evaluation_type === _gpGrpVariant && rosterIds.has(r.player_id) && !(r.player_id in latest)) { latest[r.player_id] = parseFloat(r.value); if (!unit && r.unit) unit = r.unit; } });
+  const nameOf = id => { const p = _gpPlayers.find(x => x.id === id); return p ? ((`${p.first_name||''} ${p.last_name||''}`).trim().split(' ').pop() + (p.number?` #${p.number}`:'')) : '—'; };
+  const entries = Object.entries(latest).map(([pid,value]) => ({ pid, value }));
+  const noData = [...rosterIds].filter(id => !(id in latest));
+  if (!entries.length) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in the roster have this test yet.</div>`; return; }
+  const k = _gpGrpK === 'auto' ? gpAutoK(entries) : Math.min(parseInt(_gpGrpK), entries.length);
+  const groups = gpGroupEqual(entries, k);
+  const COLORS = ['#3b82f6','#10b981','#f59e0b','#a855f7','#ef4444'];
+  const isRM = _gpGrpMode === 'rm';
+  const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
+  let html = `<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">${entries.length} player${entries.length>1?'s':''} · ${k} groups${isRM?` · target ${_gpGrpPct}% RM`:''}</div>`;
+  groups.forEach((g, i) => {
+    const vals = g.map(e => isRM ? e.value * _gpGrpPct/100 : e.value);
+    const lo = fmt(Math.min(...vals)), hi = fmt(Math.max(...vals));
+    const range = isRM ? `${lo}–${hi} kg @ ${_gpGrpPct}%` : `${lo}–${hi}${unit?` ${unit}`:''}`;
+    const chips = g.map(e => { const load = isRM ? fmt(e.value*_gpGrpPct/100)+' kg' : fmt(e.value)+(unit?` ${unit}`:''); return `<span class="gp-grp-chip"><span style="color:var(--cm-fg-muted);font:500 10px/1 var(--cm-font-mono)">${load}</span>${nameOf(e.pid)}</span>`; }).join('');
+    html += `<div class="gp-grp-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="width:9px;height:9px;border-radius:50%;background:${COLORS[i%COLORS.length]}"></span>
+        <span style="font:700 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Group ${String.fromCharCode(65+i)}</span>
+        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${g.length} · ${range}</span>
+      </div>
+      <div>${chips}</div></div>`;
+  });
+  if (noData.length) html += `<div style="margin-top:8px;font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">No test data (${noData.length}): ${noData.map(nameOf).join(', ')}</div>`;
+  body.innerHTML = html;
+}
 
 async function gpLoadAthletes(dateStr) {
   const [availRes, treatRes] = await Promise.all([
