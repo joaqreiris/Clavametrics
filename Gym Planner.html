@@ -628,6 +628,47 @@ function gpDeleteRow(btn) {
   gpRecalcTotals();
 }
 
+// ── Persistencia del contenido (warmup/plyo/main) ──
+function gpCollectRows(tbodyId, withMode) {
+  return [...document.getElementById(tbodyId).querySelectorAll('tr')].map(tr => {
+    const v = [...tr.querySelectorAll('input')].map(i => i.value);
+    if (withMode) {
+      const on = tr.querySelector('.gp-mode button.is-on');
+      return { v, mode: on ? on.textContent.trim() : 'SR' };
+    }
+    return v;
+  });
+}
+function gpCollectContent() {
+  const m = id => document.getElementById(id)?.value || '';
+  return {
+    warmup: { min: m('gpWarmupMin'), rows: gpCollectRows('gpWarmupBody', false) },
+    plyo:   { min: m('gpPlyoMin'),   rows: gpCollectRows('gpPlyoBody', false) },
+    main:   { min: m('gpMainMin'),   rows: gpCollectRows('gpMainBody', true) }
+  };
+}
+function gpFillRow(tr, vals) {
+  const inputs = tr.querySelectorAll('input');
+  (vals || []).forEach((val, i) => { if (inputs[i]) inputs[i].value = val; });
+}
+function gpApplyContent(content) {
+  content = content || {};
+  const setMin = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  const wb = document.getElementById('gpWarmupBody'); wb.innerHTML = '';
+  (content.warmup?.rows || []).forEach(v => { gpAddWarmupRow(); gpFillRow(wb.lastElementChild, v); });
+  setMin('gpWarmupMin', content.warmup?.min);
+  const pb = document.getElementById('gpPlyoBody'); pb.innerHTML = '';
+  (content.plyo?.rows || []).forEach(v => { gpAddPlyoRow(); gpFillRow(pb.lastElementChild, v); });
+  setMin('gpPlyoMin', content.plyo?.min);
+  const mb = document.getElementById('gpMainBody'); mb.innerHTML = '';
+  (content.main?.rows || []).forEach(r => {
+    gpAddMainRow(); const tr = mb.lastElementChild; gpFillRow(tr, r.v);
+    if (r.mode) tr.querySelectorAll('.gp-mode button').forEach(b => b.classList.toggle('is-on', b.textContent.trim() === r.mode));
+  });
+  setMin('gpMainMin', content.main?.min);
+  gpRecalcTotals();
+}
+
 function gpAddWarmupRow() {
   const tbody = document.getElementById('gpWarmupBody');
   const num   = tbody.querySelectorAll('tr').length + 1;
@@ -682,6 +723,7 @@ function gpAddMainRow() {
   modeEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     modeEl.querySelectorAll('button').forEach(o => o.classList.remove('is-on'));
     b.classList.add('is-on');
+    gpScheduleSave();
   }));
   tr.querySelector('input').focus();
   gpRecalcTotals();
@@ -826,7 +868,7 @@ async function gpLoadDay(dateStr) {
   document.getElementById('gpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : ''}`;
 
   const { data: sess } = await window.sb.from('training_sessions')
-    .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe')
+    .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe,gym_content')
     .eq('club_id', _gpClubId).eq('team_id', _gpTeamId).eq('session_date', dateStr)
     .in('session_type', ['gym'])
     .maybeSingle().catch(() => ({ data: null }));
@@ -841,6 +883,7 @@ async function gpLoadDay(dateStr) {
   setVal('gpLocation',  sess?.location || '');
   setVal('gpNotes',     sess?.notes || '');
   setVal('gpEstRpe',    sess?.estimated_rpe || '');
+  gpApplyContent(sess?.gym_content);
 
   _gpUpdatePublishBtn();
   gpRecalcTotals();
@@ -866,6 +909,7 @@ async function gpAutoSave() {
     location:      document.getElementById('gpLocation')?.value?.trim() || null,
     notes:         document.getElementById('gpNotes')?.value?.trim() || null,
     estimated_rpe: parseInt(document.getElementById('gpEstRpe')?.value) || null,
+    gym_content:   gpCollectContent(),
   };
   if (_gpCurrentSessionId) {
     await window.sb.from('training_sessions').update(payload).eq('id', _gpCurrentSessionId).eq('club_id', _gpClubId);
@@ -958,9 +1002,12 @@ async function gpExportPDF() {
   });
 
   // Recalc totals when any table input changes
-  document.getElementById('gpWarmupBody').addEventListener('input', gpRecalcTotals);
-  document.getElementById('gpMainBody').addEventListener('input', gpRecalcTotals);
-  document.getElementById('gpPlyoBody').addEventListener('input', gpRecalcTotals);
+  ['gpWarmupBody','gpPlyoBody','gpMainBody'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => { gpRecalcTotals(); gpScheduleSave(); });
+  });
+  ['gpWarmupMin','gpPlyoMin','gpMainMin'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.addEventListener('input', gpScheduleSave);
+  });
 })().catch(console.error);
 
   async function gpInitTeamSwitch() {
