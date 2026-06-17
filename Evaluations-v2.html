@@ -320,9 +320,23 @@
             <!-- ── TEAM mini-pane ── -->
             <div data-mini-pane="viewMode:team" style="display:block">
 
-              <!-- Evaluations source → placeholder (wired in the next step) -->
-              <div id="ftEvalTeamPlaceholder" class="ev-card" style="display:none">
-                <div class="ev-placeholder"><i class="ti ti-users-group"></i><h3>Team results</h3><p>Team-level results for this test will live here. (This test reads from <b>evaluations</b> — wired in the next step.)</p></div>
+              <!-- Evaluations source → team view (same bar+avg component as force) -->
+              <div id="ftEvalTeamPlaceholder" style="display:none">
+                <div class="ft-card ft-controls" style="margin-bottom:14px">
+                  <div class="ft-control is-variant" id="evTeamVariantWrap" style="display:none">
+                    <label for="ev-variant">Variant</label>
+                    <select id="ev-variant" class="ev-finput"></select>
+                  </div>
+                  <div class="ft-spacer"></div>
+                  <div class="ft-control is-order">
+                    <label>Order</label>
+                    <div class="ft-seg" id="ev-order">
+                      <button data-order="desc" class="is-active"><i class="ti ti-sort-descending-2"></i>High → Low</button>
+                      <button data-order="asc"><i class="ti ti-sort-ascending-2"></i>Low → High</button>
+                    </div>
+                  </div>
+                </div>
+                <div id="evTeamRender"></div>
               </div>
 
               <!-- force_tests source → ported team view -->
@@ -410,9 +424,24 @@
             <!-- ── INDIVIDUAL mini-pane ── -->
             <div data-mini-pane="viewMode:individual" style="display:none">
 
-              <!-- Evaluations source → placeholder -->
-              <div id="ftEvalIndivPlaceholder" class="ev-card" style="display:none">
-                <div class="ev-placeholder"><i class="ti ti-user"></i><h3>Individual results</h3><p>Per-player history &amp; trend for this test will live here. (This test reads from <b>evaluations</b> — wired in the next step.)</p></div>
+              <!-- Evaluations source → individual view (same chart pattern as force) -->
+              <div id="ftEvalIndivPlaceholder" style="display:none">
+                <a class="ft-back" id="evBackTeam"><i class="ti ti-arrow-left"></i>Back to team view</a>
+                <div class="ft-card ft-controls" style="margin-bottom:14px">
+                  <div class="ft-control is-player">
+                    <label for="ev-player">Player</label>
+                    <select id="ev-player" class="ev-finput"></select>
+                  </div>
+                  <div class="ft-control is-variant" id="eviVariantWrap" style="display:none">
+                    <label for="evi-variant">Variant</label>
+                    <select id="evi-variant" class="ev-finput"></select>
+                  </div>
+                </div>
+                <div id="evIndivNoData" style="display:none;border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">
+                  <div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No records for this player</div>
+                  <div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">Pick another player, or add results for this one.</div>
+                </div>
+                <div id="evIndivRender"></div>
               </div>
 
               <!-- force_tests source → ported individual view (test is fixed — no test selector) -->
@@ -820,6 +849,8 @@
       _ftTeam.test = t.src.testType; _ftTeam.metric = null;
       _ftIndiv.test = t.src.testType; _ftIndiv.metric = null; _ftIndiv.player = null;
       loadForceView();
+    } else {
+      openEvalTest(t);
     }
     window.scrollTo(0,0);
   }
@@ -863,11 +894,11 @@
   }
   function activateViewMode(v){ activateMini('viewMode', v); }
 
-  // when switching Team/Individual on a force test, lazy-load the individual view
+  // when switching Team/Individual, lazy-load the individual view for the current source
   function onViewModeChange(v){
-    if (_openTest && _openTest.src && _openTest.src.from === 'force_tests' && v === 'individual'){
-      loadForceIndiv();
-    }
+    if (!_openTest || !_openTest.src || v !== 'individual') return;
+    if (_openTest.src.from === 'force_tests') loadForceIndiv();
+    else renderEvalIndiv();
   }
 
   // mini-segments (Team/Individual · Manual/CSV)
@@ -1284,6 +1315,235 @@
   document.getElementById('ftBackTeam').addEventListener('click', function(){ activateViewMode('team'); });
   document.getElementById('ft-player').addEventListener('change', async function(e){ _ftIndiv.player = e.target.value; await loadForceIndivTests(); });
   document.getElementById('fti-metric').addEventListener('change', async function(e){ _ftIndiv.metric = e.target.value; await renderForceIndiv(); });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  EVALUATIONS · View results (single value per evaluation_type)
+  //  Reuses the force visual component: same .ft-* markup/classes, same
+  //  helpers (ftClassify/ftFmt/ftDec, buildForceChart, ftDate*).
+  // ════════════════════════════════════════════════════════════════════
+  var _ev = { test: null, types: [], variant: null, order: 'desc', rows: [], player: null };
+
+  // direction: time/agility tests (unit s/ms, or sprint/505/agility) → lower is better
+  var EV_LOWER_BETTER = { sprint:1, cod505:1, illinois:1, rsa:1, tt1600:1 };
+  function evBetterHigh(test, unit){
+    var u = String(unit || '').toLowerCase().trim();
+    if (u === 's' || u === 'ms' || u === 'sec' || u === 'secs' || u === 'min') return false;
+    if (test && EV_LOWER_BETTER[test.key]) return false;
+    return true;
+  }
+
+  // Load every evaluation row that matches this test's prefix, team-scoped via players.
+  async function loadEvalData(test){
+    _ev.rows = [];
+    if (!_clubId){ return; }
+    try {
+      var q = window.sb.from('evaluations').select('player_id, evaluation_type, test_date, value, unit, notes').eq('club_id', _clubId);
+      if (_teamPlayerIds && _teamPlayerIds.length) q = q.in('player_id', _teamPlayerIds);
+      else if (_teamId) q = q.eq('player_id', '00000000-0000-0000-0000-000000000000');
+      var res = await q;
+      _ev.rows = (res.data || []).filter(function(r){ return startsWithCI(r.evaluation_type, test.src.match); });
+    } catch(e){ console.warn('[ev2] evaluations data failed', e); _ev.rows = []; }
+
+    // distinct evaluation_type variants present in the data (e.g. VBT per exercise)
+    _ev.types = Array.from(new Set(_ev.rows.map(function(r){ return r.evaluation_type; }).filter(Boolean))).sort();
+    if (_ev.types.indexOf(_ev.variant) === -1) _ev.variant = _ev.types[0] || test.label;
+
+    // variant selectors (team + individual) — only shown when >1 variant
+    var multi = _ev.types.length > 1;
+    var optsHtml = _ev.types.map(function(t){ return '<option value="'+esc(t)+'">'+esc(t)+'</option>'; }).join('');
+    document.getElementById('evTeamVariantWrap').style.display = multi ? '' : 'none';
+    document.getElementById('eviVariantWrap').style.display    = multi ? '' : 'none';
+    var vt = document.getElementById('ev-variant'), vi = document.getElementById('evi-variant');
+    vt.innerHTML = optsHtml; vi.innerHTML = optsHtml;
+    vt.value = _ev.variant || ''; vi.value = _ev.variant || '';
+
+    // player selector for the individual view
+    var psel = document.getElementById('ev-player');
+    psel.innerHTML = _ftPlayers.map(function(p){ return '<option value="'+p.id+'">'+esc(p.first_name + ' ' + p.last_name)+'</option>'; }).join('');
+    if (!_ev.player || !_ftPlayers.some(function(p){ return p.id === _ev.player; })) _ev.player = (_ftPlayers[0] && _ftPlayers[0].id) || null;
+    psel.value = _ev.player || '';
+  }
+
+  async function openEvalTest(t){
+    _ev = { test: t, types: [], variant: null, order: 'desc', rows: [], player: null };
+    document.getElementById('ev-order').querySelectorAll('button').forEach(function(b){ b.classList.toggle('is-active', b.getAttribute('data-order')==='desc'); });
+    await loadEvalData(t);
+    renderEvalTeam();          // individual renders lazily on Team→Individual switch
+  }
+
+  // Generic team chart (summary + bars + avg line) into a root element — same look as force.
+  function drawTeamChart(root, rows, opts){
+    if (!rows.length){
+      root.innerHTML = '<div style="border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">'
+        + '<div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No values for this test yet</div>'
+        + '<div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">No player has a recorded value for this test yet.</div></div>';
+      return;
+    }
+    var dec = opts.dec, unit = opts.unit, betterHigh = opts.betterHigh, label = opts.label;
+    var values = rows.map(function(r){ return r.value; });
+    var avg = values.reduce(function(a, b){ return a + b; }, 0) / values.length;
+    var maxV = Math.max.apply(null, values), minV = Math.min.apply(null, values);
+    var scaleMax = maxV > 0 ? maxV * 1.12 : 1;
+    rows.sort(function(a, b){ return opts.order === 'desc' ? b.value - a.value : a.value - b.value; });
+    var best = betterHigh ? rows.reduce(function(a, b){ return b.value > a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value < a.value ? b : a; });
+    var worst = betterHigh ? rows.reduce(function(a, b){ return b.value < a.value ? b : a; }) : rows.reduce(function(a, b){ return b.value > a.value ? b : a; });
+    var below = rows.filter(function(r){ return ftClassify(r.value, avg, betterHigh) !== ''; }).length;
+    var us = unit ? ('<small>' + esc(unit) + '</small>') : '';
+
+    root.innerHTML =
+      '<div class="ft-card ft-summary" style="margin-bottom:14px">'
+      +  '<div class="ft-avg"><span class="lab">' + esc(label) + ' · group average</span>'
+      +    '<div class="big"><span class="num">' + ftFmt(avg, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
+      +    '<span class="sub">Range <b>' + ftFmt(minV, dec) + ' – ' + ftFmt(maxV, dec) + '</b> · n = ' + rows.length + '</span></div>'
+      +  '<div class="ft-stats">'
+      +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-up-right" style="font-size:13px"></i>Top</div><div class="v">' + ftFmt(best.value, dec) + us + '</div><div class="n">' + esc(best.name) + '</div></div>'
+      +    '<div class="ft-stat"><div class="k"><i class="ti ti-arrow-down-right" style="font-size:13px"></i>Lowest</div><div class="v">' + ftFmt(worst.value, dec) + us + '</div><div class="n">' + esc(worst.name) + '</div></div>'
+      +    '<div class="ft-stat"><div class="k"><i class="ti ti-alert-triangle" style="font-size:13px"></i>Below avg</div><div class="v is-bad">' + below + '</div><div class="n">of ' + rows.length + ' players</div></div>'
+      +  '</div>'
+      + '</div>'
+      + '<div class="ft-card">'
+      +  '<div class="ft-chart-head"><div class="ft-chart-title">' + esc(label) + ' by player' + (betterHigh ? '' : ' · lower is better') + '</div>'
+      +    '<div class="ft-legend"><span class="it"><span class="sw avgl"></span>Group avg</span><span class="it"><span class="sw ok"></span>At / above</span><span class="it"><span class="sw warn"></span>Below</span><span class="it"><span class="sw bad"></span>Well below</span></div></div>'
+      +  '<div class="ft-plotwrap"><div class="ft-plot"></div><div class="ft-names"></div></div>'
+      + '</div>';
+
+    var plot = root.querySelector('.ft-plot'), names = root.querySelector('.ft-names');
+    rows.forEach(function(r){
+      var cls = ftClassify(r.value, avg, betterHigh);
+      var hPct = Math.max(0, (r.value / scaleMax) * 100);
+      var col = document.createElement('div');
+      col.className = 'ft-col' + (cls ? ' ' + cls : '');
+      col.style.cursor = 'pointer';
+      col.title = r.name + ' — open profile';
+      col.innerHTML = '<span class="ft-val">' + ftFmt(r.value, dec) + '</span><span class="ft-bar" style="height:' + hPct.toFixed(1) + '%"></span>';
+      col.addEventListener('click', function(){ if (opts.onBarClick) opts.onBarClick(r.pid); });
+      plot.appendChild(col);
+      var nm = document.createElement('div');
+      nm.className = 'ft-nm' + (cls ? ' ' + cls : '');
+      nm.style.cursor = 'pointer';
+      nm.innerHTML = '<span>' + esc(r.name) + '</span>';
+      nm.title = r.name + ' — open profile';
+      nm.addEventListener('click', function(){ if (opts.onBarClick) opts.onBarClick(r.pid); });
+      names.appendChild(nm);
+    });
+    var line = document.createElement('div');
+    line.className = 'ft-avgline ' + (opts.order === 'asc' ? 'tag-left' : 'tag-right');
+    line.style.top = (100 - (avg / scaleMax) * 100).toFixed(1) + '%';
+    line.innerHTML = '<span class="tag">avg ' + ftFmt(avg, dec) + (unit ? ' ' + unit : '') + '</span>';
+    plot.appendChild(line);
+  }
+
+  function renderEvalTeam(){
+    var root = document.getElementById('evTeamRender');
+    var variant = _ev.variant;
+    var src = _ev.rows.filter(function(r){ return r.evaluation_type === variant && r.value != null && r.value !== ''; });
+    // per player: latest value (max test_date)
+    var perP = {};
+    src.forEach(function(r){
+      var n = Number(r.value); if (isNaN(n)) return;
+      var prev = perP[r.player_id];
+      if (!prev || String(r.test_date) > String(prev.date)) perP[r.player_id] = { date: r.test_date, value: n };
+    });
+    var rows = Object.keys(perP).map(function(pid){ return { pid: pid, name: ftPlayerName(pid), value: perP[pid].value }; });
+    var unit = (src.map(function(r){ return r.unit; }).find(Boolean)) || '';
+    drawTeamChart(root, rows, {
+      dec: ftDec(unit), unit: unit, betterHigh: evBetterHigh(_ev.test, unit),
+      order: _ev.order, label: variant || (_ev.test ? _ev.test.label : ''), onBarClick: openEvalPlayer
+    });
+  }
+
+  function openEvalPlayer(pid){
+    _ev.player = pid;
+    var psel = document.getElementById('ev-player'); if (psel) psel.value = pid;
+    activateViewMode('individual');
+  }
+
+  function renderEvalIndiv(){
+    var root = document.getElementById('evIndivRender');
+    var noData = document.getElementById('evIndivNoData');
+    var variant = _ev.variant, pid = _ev.player;
+    var rows = _ev.rows
+      .filter(function(r){ return r.player_id === pid && r.evaluation_type === variant && r.value != null && r.value !== ''; })
+      .map(function(r){ return { iso: String(r.test_date).slice(0,10), value: Number(r.value), unit: r.unit, notes: r.notes }; })
+      .filter(function(r){ return !isNaN(r.value); })
+      .sort(function(a, b){ return a.iso < b.iso ? -1 : 1; });
+
+    if (!rows.length){ root.style.display = 'none'; root.innerHTML = ''; noData.style.display = ''; return; }
+    noData.style.display = 'none'; root.style.display = '';
+
+    var unit = (rows.map(function(r){ return r.unit; }).find(Boolean)) || '';
+    var dec = ftDec(unit);
+    var betterHigh = evBetterHigh(_ev.test, unit);
+    var label = variant || (_ev.test ? _ev.test.label : '');
+    var meta = { dec: dec, unit: unit };
+
+    var vals = rows.map(function(r){ return r.value; });
+    var avg = vals.reduce(function(a, b){ return a + b; }, 0) / vals.length;
+    var latest = rows[rows.length - 1];
+    var rawDelta = avg ? (latest.value - avg) / avg * 100 : 0;
+    var good = betterHigh ? rawDelta >= 0 : rawDelta <= 0;
+    var dAgo = ftDaysAgo(latest.iso);
+
+    // summary cards (latest · personal avg · last test)
+    var cards =
+      '<div class="ft-cards" style="margin-bottom:14px">'
+      + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-bolt"></i>Latest · ' + esc(label.toLowerCase()) + '</div>'
+      +   '<div class="big"><span class="num">' + ftFmt(latest.value, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
+      +   '<div class="sub"><span class="ft-delta ' + (good ? 'good' : 'bad') + '"><i class="ti ti-trending-' + (rawDelta >= 0 ? 'up' : 'down') + '"></i>' + ftPctDelta(rawDelta) + '</span><span style="color:var(--cm-fg-faint)"> vs personal avg</span></div></div>'
+      + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-chart-line"></i>Personal avg</div>'
+      +   '<div class="big"><span class="num">' + ftFmt(avg, dec) + '</span><span class="unit">' + esc(unit) + '</span></div>'
+      +   '<div class="sub"><b>' + rows.length + ' test' + (rows.length === 1 ? '' : 's') + '</b> · all time</div></div>'
+      + '<div class="ft-card ft-sc"><div class="lab"><i class="ti ti-calendar-event"></i>Last test</div>'
+      +   '<div class="big"><span class="num" style="font-size:26px">' + dAgo + '</span><span class="unit">' + (dAgo === 1 ? 'day ago' : 'days ago') + '</span></div>'
+      +   '<div class="sub">' + ftDateFull(latest.iso) + '</div></div>'
+      + '</div>';
+
+    // chart (reuses the force SVG builder)
+    var chart =
+      '<div class="ft-card" style="margin-bottom:14px">'
+      + '<div class="ft-chart-head"><div class="ft-chart-title">' + esc(label) + ' over time' + (betterHigh ? '' : ' · lower is better') + '</div>'
+      +   '<div class="ft-legend"><span class="it"><span class="sw" style="width:12px;height:3px;border-radius:2px;background:#475569"></span>' + esc(label) + '</span><span class="it"><span class="sw avgl"></span>Personal avg</span></div></div>'
+      + '<div class="ft-chartwrap">' + buildForceChart(rows.map(function(r){ return { value: r.value, label: ftDateShort(r.iso) }; }), avg, meta) + '</div>'
+      + '</div>';
+
+    // table (most recent first): date · value · vs avg · note
+    var body = rows.slice().reverse().slice(0, 10).map(function(r, idx){
+      var dlt = avg ? (r.value - avg) / avg * 100 : 0;
+      var rGood = betterHigh ? dlt >= 0 : dlt <= 0;
+      return '<tr' + (idx === 0 ? ' class="is-latest"' : '') + '>'
+        + '<td class="c-date">' + ftDateFull(r.iso) + (idx === 0 ? '<span class="ft-tag">Latest</span>' : '') + '</td>'
+        + '<td class="num c-val">' + ftFmt(r.value, dec) + (unit ? ' <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">' + esc(unit) + '</span>' : '') + '</td>'
+        + '<td class="num"><span class="ft-vsavg ' + (rGood ? 'good' : 'bad') + '">' + ftPctDelta(dlt) + '</span></td>'
+        + '<td>' + (r.notes ? esc(r.notes) : '<span style="color:var(--cm-fg-faint)">—</span>') + '</td>'
+        + '</tr>';
+    }).join('');
+    var table =
+      '<div class="ft-card"><div class="ft-table-head"><h2>Recent tests</h2><span class="count">' + rows.length + ' session' + (rows.length === 1 ? '' : 's') + '</span></div>'
+      + '<table class="ft-table"><thead><tr><th>Date</th><th class="num">' + esc(label) + (unit ? ' (' + esc(unit) + ')' : '') + '</th><th class="num">vs avg</th><th>Note</th></tr></thead>'
+      + '<tbody>' + body + '</tbody></table></div>';
+
+    root.innerHTML = cards + chart + table;
+  }
+
+  // eval controls (variant in team + individual, order, player, back)
+  document.getElementById('ev-variant').addEventListener('change', function(e){
+    _ev.variant = e.target.value;
+    var vi = document.getElementById('evi-variant'); if (vi) vi.value = _ev.variant;
+    renderEvalTeam();
+  });
+  document.getElementById('evi-variant').addEventListener('change', function(e){
+    _ev.variant = e.target.value;
+    var vt = document.getElementById('ev-variant'); if (vt) vt.value = _ev.variant;
+    renderEvalIndiv();
+  });
+  document.querySelectorAll('#ev-order button').forEach(function(btn){ btn.addEventListener('click', function(){
+    document.querySelectorAll('#ev-order button').forEach(function(b){ b.classList.remove('is-active'); });
+    btn.classList.add('is-active');
+    _ev.order = btn.getAttribute('data-order');
+    renderEvalTeam();
+  }); });
+  document.getElementById('ev-player').addEventListener('change', function(e){ _ev.player = e.target.value; renderEvalIndiv(); });
+  document.getElementById('evBackTeam').addEventListener('click', function(){ activateViewMode('team'); });
 
   // ── boot ──
   renderCatalog();
