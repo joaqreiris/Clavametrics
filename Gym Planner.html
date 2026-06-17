@@ -177,7 +177,7 @@
       <div class="gp-card">
         <div class="gp-card-h">
           <h3>Session info</h3>
-          <div class="right"><button class="cm-btn is-ghost is-sm" title="Próximamente" disabled><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
+          <div class="right"><button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
         </div>
         <div class="gp-card-b">
           <div class="gp-fg">
@@ -601,6 +601,93 @@ function gpPickLib(name) {
     if (fn) { fn(); fill(document.getElementById(bodyId).lastElementChild?.querySelector('input')); }
   }
   gpCloseLib();
+}
+
+// ── Session templates (Load template) ──
+let _gpTplBuilt = false, _gpTpls = [];
+function gpBuildTplModal() {
+  if (_gpTplBuilt) return; _gpTplBuilt = true;
+  const ov = document.createElement('div');
+  ov.id = 'gpTplOv';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
+  ov.onclick = e => { if (e.target === ov) gpCloseTpl(); };
+  ov.innerHTML = `
+    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:520px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
+        <i class="ti ti-template" style="font-size:16px;color:var(--cm-accent)"></i>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Session templates</div>
+        <button onclick="gpCloseTpl()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="display:flex;gap:8px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
+        <input id="gpTplName" type="text" placeholder="Template name…" style="flex:1;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+        <button class="cm-btn is-primary is-sm" onclick="gpSaveTemplate()"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save current</button>
+      </div>
+      <div id="gpTplList" style="overflow-y:auto;flex:1;padding:8px"></div>
+      <div id="gpTplFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+async function gpOpenTemplates() {
+  gpBuildTplModal();
+  document.getElementById('gpTplOv').style.display = 'flex';
+  document.getElementById('gpTplName').value = '';
+  document.getElementById('gpTplFoot').textContent = 'Loading…';
+  document.getElementById('gpTplList').innerHTML = '';
+  await gpLoadTemplates();
+}
+function gpCloseTpl() { const ov = document.getElementById('gpTplOv'); if (ov) ov.style.display = 'none'; }
+async function gpLoadTemplates() {
+  const { data } = await window.sb.from('gym_session_templates')
+    .select('id,name,content,updated_at').eq('club_id', _gpClubId).order('name');
+  _gpTpls = data || [];
+  gpRenderTemplates();
+}
+function gpTplCount(c) {
+  const n = s => (c?.[s]?.rows || []).length;
+  return n('warmup') + n('plyo') + n('main');
+}
+function gpRenderTemplates() {
+  const list = document.getElementById('gpTplList'), foot = document.getElementById('gpTplFoot');
+  if (!_gpTpls.length) {
+    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No templates yet. Build a session and click "Save current".</div>`;
+    foot.textContent = '0 templates'; return;
+  }
+  list.innerHTML = _gpTpls.map(t => {
+    const cnt = gpTplCount(t.content);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px">
+      <div style="flex:1;min-width:0">
+        <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(t.name||'—').replace(/</g,'&lt;')}</div>
+        <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${cnt} exercise${cnt!==1?'s':''}</div>
+      </div>
+      <button class="cm-btn is-outline is-sm" onclick="gpApplyTemplate('${t.id}')"><i class="ti ti-download" style="font-size:13px"></i>Apply</button>
+      <button class="cm-btn is-ghost is-sm" title="Delete" onclick="gpDeleteTemplate('${t.id}')" style="color:var(--cm-danger)"><i class="ti ti-trash" style="font-size:14px"></i></button>
+    </div>`;
+  }).join('');
+  foot.textContent = `${_gpTpls.length} template${_gpTpls.length!==1?'s':''}`;
+}
+async function gpSaveTemplate() {
+  const name = (document.getElementById('gpTplName').value || '').trim();
+  if (!name) { alert('Enter a template name.'); return; }
+  const c = gpCollectContent();
+  const content = { warmup: c.warmup, plyo: c.plyo, main: c.main };
+  const { error } = await window.sb.from('gym_session_templates').insert({ club_id: _gpClubId, name, content });
+  if (error) { alert('Could not save template: ' + error.message); return; }
+  document.getElementById('gpTplName').value = '';
+  await gpLoadTemplates();
+}
+async function gpApplyTemplate(id) {
+  const t = _gpTpls.find(x => x.id === id);
+  if (!t) return;
+  gpApplyContent(t.content || {});
+  gpScheduleSave();
+  gpCloseTpl();
+}
+async function gpDeleteTemplate(id) {
+  const t = _gpTpls.find(x => x.id === id);
+  if (!confirm(`Delete template "${t?.name || ''}"?`)) return;
+  const { error } = await window.sb.from('gym_session_templates').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  await gpLoadTemplates();
 }
 
 function gpAddWarmupRow() {
