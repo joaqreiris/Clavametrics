@@ -350,7 +350,7 @@
 <script>
 let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
 let _gpTeamId = null, _gpTeams = [];
-let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false;
+let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [];
 
 const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'DM', WG:'WG', ST:'ST', CM:'MF', CF:'CF' };
 
@@ -508,7 +508,8 @@ function gpCollectContent() {
   return {
     warmup: { min: m('gpWarmupMin'), rows: gpCollectRows('gpWarmupBody', false) },
     plyo:   { min: m('gpPlyoMin'),   rows: gpCollectRows('gpPlyoBody', false) },
-    main:   { min: m('gpMainMin'),   rows: gpCollectRows('gpMainBody', true) }
+    main:   { min: m('gpMainMin'),   rows: gpCollectRows('gpMainBody', true) },
+    adaptations: gpCollectAdapt()
   };
 }
 function gpFillRow(tr, vals) {
@@ -608,40 +609,63 @@ function gpAddAdaptRow() {
   tr.querySelector('input').focus();
   const ct = document.getElementById('gpAdaptCt');
   if (ct) ct.textContent = tbody.querySelectorAll('tr').length;
+  gpScheduleSave();
 }
 
 // ── Adaptations from physio (treatments table, same source as Daily Planning) ──
+function gpAdaptRowHtml(label, affected, replacement, reason, phase, manual) {
+  const e = s => String(s==null?'':s).replace(/"/g,'&quot;');
+  if (manual) {
+    return `<tr>
+      <td><input value="${e(label)}" placeholder="Player name · #" style="font-weight:600"></td>
+      <td><input value="${e(affected)}" placeholder="Affected exercises"></td>
+      <td><input value="${e(replacement)}" placeholder="Replacement"></td>
+      <td><input value="${e(reason)}" placeholder="Reason / physio notes"></td></tr>`;
+  }
+  return `<tr>
+    <td><strong style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e(label)}</strong><br>
+      <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${e(phase)}</span></td>
+    <td><input value="${e(affected)}" placeholder="Affected exercises"></td>
+    <td><input value="${e(replacement)}" placeholder="Replacement"></td>
+    <td><input value="${e(reason)}" placeholder="—"></td></tr>`;
+}
+function gpCollectAdapt() {
+  const tbody = document.getElementById('gpAdaptBody');
+  if (!tbody) return [];
+  return [...tbody.querySelectorAll('tr')].filter(tr => !tr.hasAttribute('data-empty')).map(tr => {
+    const strong = tr.querySelector('strong');
+    const inp = [...tr.querySelectorAll('input')];
+    if (strong) return { player: strong.textContent.trim(), affected: inp[0]?.value||'', replacement: inp[1]?.value||'', seeded: true };
+    return { player: inp[0]?.value||'', affected: inp[1]?.value||'', replacement: inp[2]?.value||'', reason: inp[3]?.value||'', seeded: false };
+  });
+}
 function gpRenderAdaptations(treatments) {
   const tbody = document.getElementById('gpAdaptBody');
   const ct    = document.getElementById('gpAdaptCt');
   if (!tbody) return;
-
+  const saved = Array.isArray(_gpSavedAdapt) ? _gpSavedAdapt : [];
+  const savedSeeded = {};
+  saved.forEach(s => { if (s.seeded) savedSeeded[s.player] = s; });
   const withAdapt = (treatments || []).filter(t => t.adaptation_notes);
-  if (ct) ct.textContent = withAdapt.length || '0';
-
-  if (!withAdapt.length) {
+  const rows = [];
+  withAdapt.forEach(t => {
+    const pl = t.players || {};
+    const name = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'Unknown';
+    const label = `${name}${pl.number ? ` · #${pl.number}` : ''}`;
+    const phase = t.treatment_type || (Array.isArray(t.modalities) ? t.modalities.join(' · ') : (t.modalities||'')) || '—';
+    const sv = savedSeeded[label] || {};
+    rows.push(gpAdaptRowHtml(label, sv.affected||'', sv.replacement||'', t.adaptation_notes||'', phase, false));
+  });
+  saved.filter(s => !s.seeded).forEach(s => {
+    rows.push(gpAdaptRowHtml(s.player||'', s.affected||'', s.replacement||'', s.reason||'', '', true));
+  });
+  if (!rows.length) {
     tbody.innerHTML = `<tr data-empty><td colspan="4" style="text-align:center;padding:20px 0;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No physio adaptations for this session.</td></tr>`;
+    if (ct) ct.textContent = '0';
     return;
   }
-
-  tbody.innerHTML = withAdapt.map(t => {
-    const pl   = t.players || {};
-    const name = `${pl.first_name || ''} ${pl.last_name || ''}`.trim() || 'Unknown';
-    const num  = pl.number ? ` · #${pl.number}` : '';
-    const tt   = t.treatment_type || '';
-    const mods = Array.isArray(t.modalities) ? t.modalities.join(' · ') : (t.modalities || '');
-    const phase = tt || mods || '—';
-    const reason = (t.adaptation_notes || '').replace(/"/g, '&quot;');
-    return `<tr>
-      <td>
-        <strong style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${name}${num}</strong><br>
-        <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${phase}</span>
-      </td>
-      <td><input value="" placeholder="Affected exercises"></td>
-      <td><input value="" placeholder="Replacement"></td>
-      <td><input value="${reason}" placeholder="—"></td>
-    </tr>`;
-  }).join('');
+  tbody.innerHTML = rows.join('');
+  if (ct) ct.textContent = rows.length;
 }
 
 // ── Athletes (identical logic to Daily Planning's gpLoadAthletes → treatments for ·adapt) ──
@@ -748,6 +772,7 @@ async function gpLoadDay(dateStr) {
   setVal('gpNotes',     sess?.notes || '');
   setVal('gpEstRpe',    sess?.estimated_rpe || '');
   gpApplyContent(sess?.gym_content);
+  _gpSavedAdapt = sess?.gym_content?.adaptations || [];
 
   _gpUpdatePublishBtn();
   gpRecalcTotals();
@@ -872,6 +897,7 @@ async function gpExportPDF() {
   ['gpWarmupMin','gpPlyoMin','gpMainMin'].forEach(id => {
     const el = document.getElementById(id); if (el) el.addEventListener('input', gpScheduleSave);
   });
+  document.getElementById('gpAdaptBody').addEventListener('input', gpScheduleSave);
 })().catch(console.error);
 
   async function gpInitTeamSwitch() {
