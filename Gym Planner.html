@@ -1086,16 +1086,23 @@ async function gpRefreshGroupData() {
 }
 function gpRenderGroups() {
   const body = document.getElementById('gpGrpBody');
-  const rosterIds = new Set([..._gpRoster]);
-  if (!rosterIds.size) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in the session roster.</div>`; return; }
+  const squadIds = new Set(_gpPlayers.map(p => p.id));
+  if (!squadIds.size) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in this team/category.</div>`; return; }
   if (!_gpGrpVariant) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No ${_gpGrpMode==='vbt'?'VBT':'1RM'} tests found. Load tests in Evaluations first.</div>`; return; }
   // latest value per player for the selected variant (rows already date-desc)
   const latest = {}; let unit = '';
-  _gpGrpRows.forEach(r => { if (r.evaluation_type === _gpGrpVariant && rosterIds.has(r.player_id) && !(r.player_id in latest)) { latest[r.player_id] = parseFloat(r.value); if (!unit && r.unit) unit = r.unit; } });
+  _gpGrpRows.forEach(r => { if (r.evaluation_type === _gpGrpVariant && squadIds.has(r.player_id) && !(r.player_id in latest)) { latest[r.player_id] = parseFloat(r.value); if (!unit && r.unit) unit = r.unit; } });
   const nameOf = id => { const p = _gpPlayers.find(x => x.id === id); return p ? ((`${p.first_name||''} ${p.last_name||''}`).trim().split(' ').pop() + (p.number?` #${p.number}`:'')) : '—'; };
   const entries = Object.entries(latest).map(([pid,value]) => ({ pid, value }));
-  const noData = [...rosterIds].filter(id => !(id in latest));
-  if (!entries.length) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in the roster have this test yet.</div>`; return; }
+  const noData = [...squadIds].filter(id => !(id in latest));
+  if (!entries.length) {
+    const testedInClub = new Set(_gpGrpRows.filter(r => r.evaluation_type === _gpGrpVariant).map(r => r.player_id)).size;
+    const msg = testedInClub
+      ? `Found this test for ${testedInClub} player(s) in the club, but none belong to this team/category. Check their category in Squad.`
+      : `This test has no numeric values saved yet.`;
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${msg}</div>`;
+    return;
+  }
   let k = _gpGrpK === 'auto' ? gpAutoKJenks(entries) : parseInt(_gpGrpK);
   k = Math.max(1, Math.min(k, entries.length));
   const groups = gpJenksGroups(entries, k);
