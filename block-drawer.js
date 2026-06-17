@@ -481,7 +481,7 @@
           h('th', null, 'Load'),
           h('th', null, 'Tempo'),
           h('th', null, 'Rest'),
-          h('th', { style: 'width:32px' })
+          h('th', { style: 'width:58px' })
         )
       ),
       h('tbody', null,
@@ -491,7 +491,13 @@
           h('td', null, h('input', { value: s.load,  oninput: (e) => s.load  = e.target.value })),
           h('td', null, h('input', { value: s.tempo, oninput: (e) => s.tempo = e.target.value })),
           h('td', null, h('input', { value: s.rest,  oninput: (e) => s.rest  = e.target.value })),
-          h('td', null, h('button', { class: 'rm-row', onclick: () => { sets.splice(i, 1); renderBody(); renderFooter(); } }, h('i', { class: 'ti ti-x' })))
+          h('td', { style: 'white-space:nowrap' },
+            h('button', { class: 'rm-row', title: 'Copy this set to the ones below',
+              style: i === sets.length - 1 ? 'opacity:.3;pointer-events:none' : '',
+              onclick: () => { for (let j = i + 1; j < sets.length; j++) { sets[j].reps = s.reps; sets[j].load = s.load; sets[j].tempo = s.tempo; sets[j].rest = s.rest; } renderBody(); renderFooter(); }
+            }, h('i', { class: 'ti ti-arrow-bar-to-down' })),
+            h('button', { class: 'rm-row', onclick: () => { sets.splice(i, 1); renderBody(); renderFooter(); } }, h('i', { class: 'ti ti-x' }))
+          )
         ))
       )
     );
