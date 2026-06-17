@@ -449,6 +449,10 @@
   .eg-row .pname { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .eg-row .pval { font:700 14px/1 var(--cm-font-mono); color:var(--cm-fg-strong); flex-shrink:0; }
   .eg-row .pval small { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+  .eg-right { display:flex; align-items:center; gap:16px; flex-shrink:0; }
+  .eg-rx { display:flex; flex-direction:column; align-items:flex-end; gap:2px; min-width:104px; }
+  .eg-rx .rx-s { font:600 12px/1 var(--cm-font-mono); color:var(--cm-accent); white-space:nowrap; }
+  .eg-rx .rx-d { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; }
 
   /* ===== CSV import drawers (force + VBT bulk) — ported verbatim ===== */
   .pt-imp-btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-border-strong); color:var(--cm-fg-strong); font:600 12.5px/1 var(--cm-font-sans); cursor:pointer; }
@@ -829,7 +833,20 @@
                 <div class="ev-placeholder"><i class="ti ti-calculator"></i><h3>Guided entry</h3><p id="evUploadPlaceholderTxt">This test uses a dedicated calculator or device import — wired in a later step.</p></div>
               </div>
 
-              <!-- Real manual + bulk entry for single-value evaluations tests -->
+              <!-- Calculator tests (VBT, F-V, IFT, 1RM, FMS, ankle, hip rot, body comp) → guided modal on top -->
+              <div id="evUploadCalc" class="ev-card" style="display:none;margin-bottom:14px">
+                <div class="ev-placeholder">
+                  <i class="ti ti-calculator"></i>
+                  <h3 id="evUploadCalcTitle">Guided entry</h3>
+                  <p id="evUploadCalcTxt">Single player · full detail with velocity/strength zones &amp; VO₂max. Use Bulk below for quick team entry.</p>
+                  <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+                    <button class="cm-btn is-primary is-sm" id="evUploadCalcBtn"><i class="ti ti-plus" style="font-size:14px"></i>New entry</button>
+                    <button class="cm-btn is-outline is-sm" id="evVbtImportBtn" style="display:none"><i class="ti ti-cloud-upload" style="font-size:14px"></i>Import VBT session (CSV)</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Real manual + bulk entry (single-value evaluations, and bulk for calculator tests) -->
               <div id="evUploadReal" style="display:none">
                 <div class="ev-mini-seg" data-mini="entryMode">
                   <button class="is-on" data-mini-btn="single">Single entry</button>
@@ -879,19 +896,6 @@
                 </div>
               </div>
 
-              <!-- Calculator tests (VBT, F-V, IFT, 1RM, FMS, ankle, hip rot, body comp) → guided modal -->
-              <div id="evUploadCalc" class="ev-card" style="display:none">
-                <div class="ev-placeholder">
-                  <i class="ti ti-calculator"></i>
-                  <h3 id="evUploadCalcTitle">Guided entry</h3>
-                  <p id="evUploadCalcTxt">This test has a dedicated calculator with live formulas, zones and a chart.</p>
-                  <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">
-                    <button class="cm-btn is-primary is-sm" id="evUploadCalcBtn"><i class="ti ti-plus" style="font-size:14px"></i>New entry</button>
-                    <button class="cm-btn is-outline is-sm" id="evVbtImportBtn" style="display:none"><i class="ti ti-cloud-upload" style="font-size:14px"></i>Import VBT session (CSV)</button>
-                  </div>
-                </div>
-              </div>
-
               <!-- force_tests → CSV import drawer -->
               <div id="evUploadForce" class="ev-card" style="display:none">
                 <div class="ev-placeholder">
@@ -903,7 +907,38 @@
               </div>
             </div>
             <div data-mini-pane="uploadMode:csv" class="ev-card" style="display:none">
-              <div class="ev-placeholder"><i class="ti ti-file-import"></i><h3>Import CSV</h3><p>CSV import &amp; column mapping (PapaParse) will live here. No parsing wired yet.</p></div>
+              <!-- evaluations CSV importer (Player + Value [+ Date]) -->
+              <div id="evCsvReal" style="display:none">
+                <div style="font:600 12px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:12px">Import results · <span id="evCsvType" style="color:var(--cm-fg-strong);text-transform:none;letter-spacing:0">—</span></div>
+                <div id="evCsvDropWrap">
+                  <div class="pt-drop" id="evCsvDrop" onclick="document.getElementById('evCsvFile').click()">
+                    <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop CSV here or click to browse</h4><p>Columns: Player name + Value (e.g. VIFT). Date optional. Players are matched by name.</p></div></div>
+                    <div class="formats"><span class="fmt">.csv</span><span class="fmt">.tsv</span></div>
+                  </div>
+                  <input type="file" id="evCsvFile" accept=".csv,.tsv,.txt" style="display:none">
+                </div>
+                <div id="evCsvMap" style="display:none">
+                  <div class="ev-f2" style="margin-top:4px">
+                    <div class="ev-frow"><label class="ev-fl">Player column</label><select id="evCsvColPlayer" class="ev-finput" style="height:32px"></select></div>
+                    <div class="ev-frow"><label class="ev-fl">Value column</label><select id="evCsvColValue" class="ev-finput" style="height:32px"></select></div>
+                  </div>
+                  <div class="ev-f2">
+                    <div class="ev-frow"><label class="ev-fl">Date column</label><select id="evCsvColDate" class="ev-finput" style="height:32px"></select></div>
+                    <div class="ev-frow"><label class="ev-fl">Unit</label><input id="evCsvUnit" class="ev-finput" style="height:32px" placeholder="km/h, m…"></div>
+                  </div>
+                  <div class="ev-frow"><label class="ev-fl">Date (fallback)</label><input id="evCsvFallbackDate" type="date" class="ev-finput" style="height:32px"></div>
+                  <div id="evCsvPreview" style="overflow-x:auto;max-height:260px;overflow-y:auto;margin:8px 0 12px"></div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <button class="cm-btn is-primary is-sm" id="evCsvImportBtn"><i class="ti ti-database-import" style="font-size:14px"></i>Import to database</button>
+                    <button class="cm-btn is-outline is-sm" id="evCsvResetBtn">Reset</button>
+                    <span id="evCsvResult" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-success)"></span>
+                  </div>
+                </div>
+              </div>
+              <!-- force tests use their own device importer -->
+              <div id="evCsvNote" style="display:none">
+                <div class="ev-placeholder"><i class="ti ti-file-import"></i><h3>Import CSV</h3><p>Force tests import via the device CSV drawer — open it from the <b>Import CSV</b> button in the <b>Manual / Bulk</b> tab.</p></div>
+              </div>
             </div>
           </div>
 
@@ -1412,21 +1447,37 @@
       openEvalTest(t);
     }
 
-    // ── Upload pane dispatch: single-value → manual+bulk · calculator → modal · force → CSV drawer ──
+    // ── Upload pane dispatch ──
+    //  single-value evaluations → manual + bulk (+ CSV)
+    //  calculator evaluations    → New entry (modal) + bulk grid (+ CSV)
+    //  force_tests               → device CSV drawer
     var isCalc = !isForce && !!EV_CALC[t.key] && !!EV_CALC_LABEL[t.key];
     var isSingleEval = !isForce && !EV_CALC[t.key];
-    document.getElementById('evUploadReal').style.display        = isSingleEval ? '' : 'none';
+    var isEval = isSingleEval || isCalc;
+    document.getElementById('evUploadReal').style.display        = isEval ? '' : 'none';
     document.getElementById('evUploadCalc').style.display        = isCalc ? '' : 'none';
     document.getElementById('evUploadForce').style.display       = isForce ? '' : 'none';
-    document.getElementById('evUploadPlaceholder').style.display = (isSingleEval || isCalc || isForce) ? 'none' : '';
+    document.getElementById('evUploadPlaceholder').style.display = (isEval || isForce) ? 'none' : '';
     activateMini('uploadMode', 'manual');
-    if (isSingleEval){ activateMini('entryMode', 'single'); setupEvalUpload(t); }
-    if (isCalc){
+
+    var entrySeg = detail.querySelector('[data-mini="entryMode"]');
+    if (isSingleEval){
+      // both Single + Bulk tabs (Single is the primary manual entry)
+      if (entrySeg) entrySeg.style.display = '';
+      activateMini('entryMode', 'single');
+      setupEvalUpload(t);
+    } else if (isCalc){
+      // Single entry = the modal; the grid is for quick team bulk → show Bulk only
+      if (entrySeg) entrySeg.style.display = 'none';
+      activateMini('entryMode', 'bulk');
+      setupEvalUpload(t);
       document.getElementById('evUploadCalcTitle').textContent = t.label;
       document.getElementById('evUploadCalcBtn').setAttribute('data-label', EV_CALC_LABEL[t.key]);
-      // VBT also gets the multi-player bulk CSV importer
       document.getElementById('evVbtImportBtn').style.display = (t.key === 'vbt') ? '' : 'none';
     }
+
+    // CSV pane: simple Player+Value importer for evaluations; force uses its own drawer
+    setupCsvImport(t, isForce);
 
     window.scrollTo(0,0);
   }
@@ -1908,7 +1959,8 @@
     hiprot:'Hip ER/IR', bodycomp:'Body composition'
   };
   // default unit prefill per single-value test
-  var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'' };
+  var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'',
+    ift:'km/h', tt1600:'ml/kg/min', orm:'kg', vbt:'kg', fvprofile:'N', fms:'/21', ankle:'cm', hiprot:'°', bodycomp:'%BF' };
   function evToday(){ return new Date().toISOString().slice(0,10); }
 
   // direction: time/agility tests (unit s/ms, or sprint/505/agility) → lower is better
@@ -2062,6 +2114,16 @@
     cooper: { unit:'m',    bands:[['elite',3000,Infinity],['advanced',2700,3000],['intermediate',2400,2700],['developing',0,2400]] },
   };
   var IFT_LEVEL_MAP = { 'Elite/Professional':'elite', 'Advanced':'advanced', 'Intermediate':'intermediate', 'Developing':'developing' };
+  // Interval prescription presets (velocity-based tests). pct of VIFT · run/rest seconds.
+  var EV_RX_PRESETS = [
+    { id:'15-15-90',  label:'15-15 · 90% VIFT',  run:15, rest:15, pct:90,  desc:'15s run / 15s rest · 90%' },
+    { id:'15-15-95',  label:'15-15 · 95% VIFT',  run:15, rest:15, pct:95,  desc:'15s run / 15s rest · 95%' },
+    { id:'10-10-100', label:'10-10 · 100% VIFT', run:10, rest:10, pct:100, desc:'10s run / 10s rest · 100%' },
+    { id:'10-20-105', label:'10-20 · 105% VIFT', run:10, rest:20, pct:105, desc:'10s run / 20s rest · 105%' },
+    { id:'30-30-85',  label:'30-30 · 85% VIFT',  run:30, rest:30, pct:85,  desc:'30s run / 30s rest · 85%' },
+  ];
+  // velocity-based = value is a running speed (km/h ≈ VIFT). Only 30-15 IFT today.
+  var EV_VELOCITY_TEST = { ift:1 };
   function evParseComputed(notes){ if (!notes) return null; try { return (typeof notes==='string') ? JSON.parse(notes) : notes; } catch(e){ return null; } }
   function evBandKey(key, value){
     var spec = EV_BANDS[key]; if (!spec) return 'developing';
@@ -2093,14 +2155,17 @@
       return;
     }
     var dec = ftDec(unit);
+    var isVel = !!EV_VELOCITY_TEST[test.key];   // velocity-based → show prescription panel
     rows.forEach(function(r){ r.level = evEnduranceLevel(test, r.value, r.notes); });
     var groupsHtml = EV_LEVEL_ORDER.map(function(lvl){
       var meta = EV_LEVEL_META[lvl];
       var grp = rows.filter(function(r){ return r.level===lvl; }).sort(function(a,b){ return b.value - a.value; });
       if (!grp.length) return '';
       var rowsHtml = grp.map(function(r){
+        var rx = isVel ? '<span class="eg-rx" data-vift="'+r.value+'"><span class="rx-s">—</span><span class="rx-d">—</span></span>' : '';
         return '<button class="eg-row" data-eg-pid="'+r.pid+'"><span class="pname">'+esc(r.name)+'</span>'
-          + '<span class="pval">'+ftFmt(r.value, dec)+(unit?' <small>'+esc(unit)+'</small>':'')+'</span></button>';
+          + '<span class="eg-right">'+rx
+          + '<span class="pval">'+ftFmt(r.value, dec)+(unit?' <small>'+esc(unit)+'</small>':'')+'</span></span></button>';
       }).join('');
       return '<div class="eg-group" style="border-left-color:'+meta.color+'">'
         + '<div class="eg-head"><span class="eg-dot" style="background:'+meta.color+'"></span>'
@@ -2109,11 +2174,51 @@
         + '<span class="eg-ct">'+grp.length+' player'+(grp.length===1?'':'s')+'</span></div>'
         + '<div class="eg-rows">'+rowsHtml+'</div></div>';
     }).join('');
+
+    // ── Prescription panel (velocity-based tests) or a note (non-velocity) ──
+    var rxPanel;
+    if (isVel){
+      var opts2 = EV_RX_PRESETS.map(function(p){ return '<option value="'+p.id+'">'+esc(p.label)+'</option>'; }).join('');
+      rxPanel = '<div class="ft-card" style="padding:14px 18px;margin-bottom:12px">'
+        + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+        +   '<label for="egRxType" style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Work type</label>'
+        +   '<select id="egRxType" class="ev-finput" style="width:auto;min-width:210px">'+opts2+'</select>'
+        +   '<span id="egRxDesc" style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-accent)"></span>'
+        + '</div>'
+        + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:8px">Target speed = VIFT × % · Distance per rep = target speed × run seconds. Per player below.</div>'
+        + '</div>';
+    } else {
+      rxPanel = '<div class="ft-card" style="padding:12px 18px;margin-bottom:12px">'
+        + '<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)"><i class="ti ti-info-circle" style="font-size:14px"></i> Interval prescription is available for velocity-based tests (e.g. 30-15 IFT).</div></div>';
+    }
+
     root.innerHTML = '<div class="ft-card" style="padding:14px 18px;margin-bottom:12px">'
       + '<div style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px">'+esc(test.label||'')+' · team by level</div>'
       + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">'+rows.length+' player'+(rows.length===1?'':'s')+' evaluated · grouped by '+(test.key==='ift'?'30-15 IFT level':'performance band')+'</div></div>'
+      + rxPanel
       + '<div class="eg-list">'+groupsHtml+'</div>';
+
     root.querySelectorAll('[data-eg-pid]').forEach(function(b){ b.addEventListener('click', function(){ openEvalPlayer(b.getAttribute('data-eg-pid')); }); });
+
+    // live prescription recompute
+    if (isVel){
+      var applyRx = function(){
+        var sel = document.getElementById('egRxType'); if (!sel) return;
+        var p = EV_RX_PRESETS.find(function(x){ return x.id === sel.value; }) || EV_RX_PRESETS[0];
+        var d = document.getElementById('egRxDesc'); if (d) d.textContent = p.desc;
+        root.querySelectorAll('.eg-rx').forEach(function(el){
+          var vift = parseFloat(el.getAttribute('data-vift'));
+          var sEl = el.querySelector('.rx-s'), dEl = el.querySelector('.rx-d');
+          if (isNaN(vift)){ sEl.textContent='—'; dEl.textContent='—'; return; }
+          var speed = vift * p.pct / 100;             // km/h
+          var dist  = speed * (1000/3600) * p.run;    // m per rep
+          sEl.textContent = 'target ' + speed.toFixed(1) + ' km/h';
+          dEl.textContent = Math.round(dist) + ' m / rep';
+        });
+      };
+      var selEl = document.getElementById('egRxType');
+      if (selEl){ selEl.addEventListener('change', applyRx); applyRx(); }
+    }
   }
 
   function openEvalPlayer(pid){
@@ -2340,6 +2445,113 @@
   document.getElementById('evForceImportBtn').addEventListener('click', function(){
     if (typeof openForceImport === 'function') openForceImport();
   });
+
+  // ════════════════════════════════════════════════════════════════════
+  //  EVALUATIONS · Import CSV (simple Player + Value [+ Date] → bulk insert)
+  //  evaluation_type = opened test. Used by single-value AND calculator tests.
+  // ════════════════════════════════════════════════════════════════════
+  var _evCsv = null; // { rows, headers }
+
+  function setupCsvImport(t, isForce){
+    var real = document.getElementById('evCsvReal');
+    var note = document.getElementById('evCsvNote');
+    var isEval = !isForce;
+    real.style.display = isEval ? '' : 'none';
+    note.style.display = isEval ? 'none' : '';
+    if (isEval){
+      resetEvCsv();
+      document.getElementById('evCsvType').textContent = t.label;
+      document.getElementById('evCsvUnit').value = EV_DEFAULT_UNIT[t.key] || '';
+      document.getElementById('evCsvFallbackDate').value = evToday();
+    }
+  }
+  function resetEvCsv(){
+    _evCsv = null;
+    document.getElementById('evCsvMap').style.display = 'none';
+    document.getElementById('evCsvDropWrap').style.display = '';
+    var fi = document.getElementById('evCsvFile'); if (fi) fi.value = '';
+    document.getElementById('evCsvPreview').innerHTML = '';
+    document.getElementById('evCsvResult').textContent = '';
+  }
+  function parseEvCsv(file){
+    if (!window.Papa){ alert('PapaParse not loaded'); return; }
+    window.Papa.parse(file, { header:true, skipEmptyLines:true, complete:function(res){
+      var rows = (res.data || []).filter(function(r){ return Object.values(r).some(function(v){ return String(v||'').trim(); }); });
+      if (!rows.length){ alert('Empty CSV'); return; }
+      _evCsv = { rows: rows, headers: (res.meta && res.meta.fields) || Object.keys(rows[0]) };
+      populateEvCsvMap();
+    }});
+  }
+  function evNormName(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,''); }
+  function evMatchPlayer(name){
+    var nn = evNormName(name); if (!nn) return null;
+    var p = _ftPlayers.find(function(x){ return evNormName(x.first_name+' '+x.last_name)===nn; });
+    if (p) return p;
+    p = _ftPlayers.find(function(x){ return evNormName(x.last_name+' '+x.first_name)===nn; });
+    if (p) return p;
+    return _ftPlayers.find(function(x){ var f=evNormName(x.first_name+' '+x.last_name); return f && (f.indexOf(nn)>=0 || nn.indexOf(f)>=0); }) || null;
+  }
+  function populateEvCsvMap(){
+    var heads = _evCsv.headers;
+    var opts = function(extra){ return (extra?'<option value="">'+extra+'</option>':'') + heads.map(function(h){ return '<option value="'+esc(h)+'">'+esc(h)+'</option>'; }).join(''); };
+    var pSel=document.getElementById('evCsvColPlayer'), vSel=document.getElementById('evCsvColValue'), dSel=document.getElementById('evCsvColDate');
+    pSel.innerHTML=opts(); vSel.innerHTML=opts(); dSel.innerHTML=opts('— none —');
+    var find = function(re){ return heads.find(function(h){ return re.test(String(h).toLowerCase()); }); };
+    pSel.value = find(/name|player|athlete|jugador/) || heads[0] || '';
+    vSel.value = find(/vift|value|result|score|km\/h|distance|dist|metre|meter|m\b/) || heads[1] || heads[0] || '';
+    dSel.value = find(/date|fecha/) || '';
+    document.getElementById('evCsvDropWrap').style.display='none';
+    document.getElementById('evCsvMap').style.display='';
+    ['evCsvColPlayer','evCsvColValue','evCsvColDate'].forEach(function(id){ document.getElementById(id).onchange = renderEvCsvPreview; });
+    renderEvCsvPreview();
+  }
+  function renderEvCsvPreview(){
+    if (!_evCsv) return;
+    var pCol=document.getElementById('evCsvColPlayer').value, vCol=document.getElementById('evCsvColValue').value, dCol=document.getElementById('evCsvColDate').value;
+    var matched=0, unmatched=0, trs='';
+    _evCsv.rows.slice(0,60).forEach(function(r){
+      var nm=r[pCol], val=parseFloat(r[vCol]), p=evMatchPlayer(nm);
+      if (p && !isNaN(val)) matched++; else unmatched++;
+      trs += '<tr><td>'+esc(nm||'—')+'</td><td>'+(p?esc(p.first_name+' '+p.last_name):'<span style="color:var(--cm-danger)">no match</span>')+'</td><td class="num c-val">'+(isNaN(val)?'—':val)+'</td><td>'+(dCol?esc(r[dCol]||''):'<span style="color:var(--cm-fg-faint)">—</span>')+'</td></tr>';
+    });
+    document.getElementById('evCsvPreview').innerHTML =
+      '<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:6px">'+matched+' matched · '+unmatched+' unmatched'+(_evCsv.rows.length>60?' · showing first 60':'')+'</div>'
+      + '<table class="ft-table"><thead><tr><th>CSV name</th><th>Player</th><th class="num">Value</th><th>Date</th></tr></thead><tbody>'+trs+'</tbody></table>';
+  }
+  async function saveEvCsv(){
+    if (!_evCsv || !_openTest || !_clubId) return;
+    var pCol=document.getElementById('evCsvColPlayer').value, vCol=document.getElementById('evCsvColValue').value, dCol=document.getElementById('evCsvColDate').value;
+    var unit=document.getElementById('evCsvUnit').value.trim();
+    var fallback=document.getElementById('evCsvFallbackDate').value || evToday();
+    var records=[], skipped=0;
+    _evCsv.rows.forEach(function(r){
+      var p=evMatchPlayer(r[pCol]); var val=parseFloat(r[vCol]);
+      if (!p || isNaN(val)){ skipped++; return; }
+      var date=fallback;
+      if (dCol && String(r[dCol]||'').trim()){ var d=new Date(String(r[dCol]).trim()); date = isNaN(d) ? fallback : d.toISOString().slice(0,10); }
+      records.push({ player_id:p.id, club_id:_clubId, evaluation_type:_openTest.label, value:val, unit:unit||null, test_date:date, notes:null });
+    });
+    if (!records.length){ alert('No matched rows with a value to import.'); return; }
+    var res=await window.sb.from('evaluations').insert(records);
+    if (res.error){ alert('Error: '+res.error.message); return; }
+    document.getElementById('evCsvResult').textContent='✓ Imported '+records.length+' record'+(records.length>1?'s':'')+(skipped?(' · '+skipped+' skipped'):'');
+    await reloadEvalViews();
+    loadStatuses();
+    setTimeout(resetEvCsv, 2500);
+  }
+
+  (function initEvCsv(){
+    var fi=document.getElementById('evCsvFile');
+    if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseEvCsv(e.target.files[0]); });
+    var dz=document.getElementById('evCsvDrop');
+    if (dz){
+      dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.borderColor='var(--cm-accent)'; });
+      dz.addEventListener('dragleave', function(){ dz.style.borderColor=''; });
+      dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor=''; if (e.dataTransfer.files[0]) parseEvCsv(e.dataTransfer.files[0]); });
+    }
+    var ib=document.getElementById('evCsvImportBtn'); if (ib) ib.addEventListener('click', saveEvCsv);
+    var rb=document.getElementById('evCsvResetBtn'); if (rb) rb.addEventListener('click', resetEvCsv);
+  })();
 
 
   // ════════════════════════════════════════════════════════════════════
