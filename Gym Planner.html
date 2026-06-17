@@ -249,7 +249,7 @@
           <div class="right">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
             <input type="number" id="gpWarmupMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm" onclick="gpOpenLib({section:'warmup'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
@@ -276,7 +276,7 @@
           <div class="right">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
             <input type="number" id="gpPlyoMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm" onclick="gpOpenLib({section:'plyo'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
@@ -303,8 +303,7 @@
           <div class="right">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
             <input type="number" id="gpMainMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
-            <button class="cm-btn is-outline is-sm" title="Próximamente" disabled><i class="ti ti-bolt" style="font-size:13px"></i>Pull from VITRUVE</button>
+            <button class="cm-btn is-outline is-sm" onclick="gpOpenLib({section:'main'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
@@ -534,12 +533,82 @@ function gpApplyContent(content) {
   gpRecalcTotals();
 }
 
+// ── Exercise library picker ──
+let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false;
+async function gpEnsureLib() {
+  if (_gpLib) return _gpLib;
+  const { data } = await window.sb.from('gym_exercises')
+    .select('id,name,muscle_group,category,complexity,equipment')
+    .eq('club_id', _gpClubId).order('name');
+  _gpLib = data || [];
+  return _gpLib;
+}
+function gpBuildLibModal() {
+  if (_gpLibBuilt) return; _gpLibBuilt = true;
+  const ov = document.createElement('div');
+  ov.id = 'gpLibOv';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
+  ov.onclick = e => { if (e.target === ov) gpCloseLib(); };
+  ov.innerHTML = `
+    <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
+        <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Exercise library</div>
+        <input id="gpLibSearch" type="text" placeholder="Search exercises…" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:200px">
+        <button onclick="gpCloseLib()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="gpLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
+      <div id="gpLibFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#gpLibSearch').addEventListener('input', gpRenderLibList);
+}
+function gpRenderLibList() {
+  const list = document.getElementById('gpLibList'), foot = document.getElementById('gpLibFoot');
+  const q = (document.getElementById('gpLibSearch').value || '').toLowerCase().trim();
+  const items = (_gpLib || []).filter(e => !q || (`${e.name} ${e.muscle_group||''} ${e.category||''}`).toLowerCase().includes(q));
+  if (!items.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises found.</div>`; foot.textContent = '0 exercises'; return; }
+  list.innerHTML = items.map(e => {
+    const meta = [e.muscle_group, e.category, e.complexity].filter(Boolean).join(' · ');
+    return `<button class="gp-lib-item" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
+      <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name||'—'}</div>
+      ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
+    </button>`;
+  }).join('');
+  foot.textContent = `${items.length} exercise${items.length>1?'s':''}`;
+  list.querySelectorAll('.gp-lib-item').forEach(b => {
+    b.onmouseenter = () => b.style.background = 'var(--cm-bg-soft)';
+    b.onmouseleave = () => b.style.background = 'transparent';
+    b.onclick = () => gpPickLib(b.dataset.name);
+  });
+}
+async function gpOpenLib(ctx) {
+  _gpLibCtx = ctx; gpBuildLibModal();
+  document.getElementById('gpLibOv').style.display = 'flex';
+  const s = document.getElementById('gpLibSearch'); s.value = ''; s.focus();
+  document.getElementById('gpLibFoot').textContent = 'Loading…';
+  document.getElementById('gpLibList').innerHTML = '';
+  await gpEnsureLib(); gpRenderLibList();
+}
+function gpCloseLib() { const ov = document.getElementById('gpLibOv'); if (ov) ov.style.display = 'none'; }
+function gpPickLib(name) {
+  const ctx = _gpLibCtx || {};
+  const fill = inp => { if (inp) { inp.value = name; inp.dispatchEvent(new Event('input', { bubbles: true })); } };
+  if (ctx.input) { fill(ctx.input); }
+  else if (ctx.section) {
+    const fn = { warmup: gpAddWarmupRow, plyo: gpAddPlyoRow, main: gpAddMainRow }[ctx.section];
+    const bodyId = { warmup: 'gpWarmupBody', plyo: 'gpPlyoBody', main: 'gpMainBody' }[ctx.section];
+    if (fn) { fn(); fill(document.getElementById(bodyId).lastElementChild?.querySelector('input')); }
+  }
+  gpCloseLib();
+}
+
 function gpAddWarmupRow() {
   const tbody = document.getElementById('gpWarmupBody');
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
   tr.innerHTML = `<td class="gp-num">${num}</td>
-    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" title="Próximamente" disabled>LIB</button></div></td>
+    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><input class="num-input" placeholder="1"></td>
     <td><input placeholder="—"></td>
     <td><input placeholder="—"></td>
@@ -555,7 +624,7 @@ function gpAddPlyoRow() {
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
   tr.innerHTML = `<td class="gp-num">${num}</td>
-    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" title="Próximamente" disabled>LIB</button></div></td>
+    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><select><option>Intensive</option><option>Extensive</option></select></td>
     <td><input placeholder="3 × 5"></td>
     <td><input class="num-input" placeholder="0" oninput="gpRecalcTotals()"></td>
@@ -573,7 +642,7 @@ function gpAddMainRow() {
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
   tr.innerHTML = `<td class="gp-num">${num}</td>
-    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" title="Próximamente" disabled>LIB</button></div></td>
+    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
     <td><input class="num-input" placeholder="—"> <span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span></td>
