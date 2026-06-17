@@ -624,6 +624,25 @@
     await loadWeek(currentWeekStart);
   }
 
+  window._rpAddExerciseToSelected = async (libEx) => {
+    const sid = window._rpSel?.sessionId;
+    if (!sid) { alert('Select a block first, then use + to add exercises to it.'); return; }
+    const sess = window._rpSessionsMap?.[sid];
+    if (!sess) { alert('Could not find the selected block — click it again and retry.'); return; }
+    const arr = Array.isArray(sess.exercises) ? sess.exercises.slice() : [];
+    arr.push({ name: libEx.name, sets: [
+      { reps:'', load:'', tempo:'', rest:'' },
+      { reps:'', load:'', tempo:'', rest:'' },
+      { reps:'', load:'', tempo:'', rest:'' }
+    ]});
+    const { error } = await window.sb.from('rehab_sessions')
+      .update({ exercises: arr, block_count: arr.length }).eq('id', sid);
+    if (error) { alert('Could not add exercise: ' + error.message); return; }
+    if (window._rpSessionsMap[sid]) window._rpSessionsMap[sid].exercises = arr;
+    await rpReloadWeek();
+    document.querySelector(`.rp-block[data-session-id="${sid}"]`)?.click();
+  };
+
   window.addEventListener('blockdrawer:save', async ev => {
     const d   = ev.detail;
     const sid = window._rpSel?.sessionId;

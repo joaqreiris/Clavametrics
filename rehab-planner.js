@@ -242,6 +242,7 @@
         <button class="add-btn" title="Add to selected block"><i class="ti ti-plus"></i></button>
       `;
       root.appendChild(row);
+      row.querySelector('.add-btn')?.addEventListener('click', () => window._rpAddExerciseToSelected?.(ex));
     });
   }
 
