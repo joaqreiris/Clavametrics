@@ -434,6 +434,22 @@
   .fa-hist-row .dims { font:500 11.5px/1.4 var(--cm-font-sans); color:var(--cm-fg); }
   .fa-hist-row .ov { font:700 15px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
 
+  /* Endurance team — grouped by level */
+  .eg-list { display:flex; flex-direction:column; gap:10px; }
+  .eg-group { background:var(--cm-surface); border:1px solid var(--cm-border); border-left:3px solid var(--cm-border); border-radius:var(--cm-r-3); box-shadow:var(--cm-shadow-1); overflow:hidden; }
+  .eg-head { display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .eg-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .eg-nm { font:600 13px/1 var(--cm-font-sans); }
+  .eg-rng { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+  .eg-ct { margin-left:auto; font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); padding:3px 8px; background:var(--cm-bg-soft); border-radius:4px; }
+  .eg-rows { display:flex; flex-direction:column; }
+  .eg-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 14px; background:transparent; border:0; border-top:1px solid var(--cm-border-soft); cursor:pointer; text-align:left; width:100%; }
+  .eg-row:first-child { border-top:0; }
+  .eg-row:hover { background:var(--cm-bg-soft); }
+  .eg-row .pname { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .eg-row .pval { font:700 14px/1 var(--cm-font-mono); color:var(--cm-fg-strong); flex-shrink:0; }
+  .eg-row .pval small { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
+
   /* ===== CSV import drawers (force + VBT bulk) — ported verbatim ===== */
   .pt-imp-btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-border-strong); color:var(--cm-fg-strong); font:600 12.5px/1 var(--cm-font-sans); cursor:pointer; }
   .pt-imp-btn:hover { background:color-mix(in srgb, var(--cm-accent) 18%, transparent); }
@@ -2009,19 +2025,95 @@
     var root = document.getElementById('evTeamRender');
     var variant = _ev.variant;
     var src = _ev.rows.filter(function(r){ return r.evaluation_type === variant && r.value != null && r.value !== ''; });
-    // per player: latest value (max test_date)
+    // per player: latest value (max test_date), keeping notes for level grouping
     var perP = {};
     src.forEach(function(r){
       var n = Number(r.value); if (isNaN(n)) return;
       var prev = perP[r.player_id];
-      if (!prev || String(r.test_date) > String(prev.date)) perP[r.player_id] = { date: r.test_date, value: n };
+      if (!prev || String(r.test_date) > String(prev.date)) perP[r.player_id] = { date: r.test_date, value: n, notes: r.notes };
     });
-    var rows = Object.keys(perP).map(function(pid){ return { pid: pid, name: ftPlayerName(pid), value: perP[pid].value }; });
-    var unit = (src.map(function(r){ return r.unit; }).find(Boolean)) || '';
+    var rows = Object.keys(perP).map(function(pid){ return { pid: pid, name: ftPlayerName(pid), value: perP[pid].value, notes: perP[pid].notes }; });
+    var unit = (src.map(function(r){ return r.unit; }).find(Boolean)) || (EV_DEFAULT_UNIT[_ev.test && _ev.test.key] || '');
+    // Endurance tests → grouped-by-level view instead of generic bars
+    if (_ev.test && EV_ENDURANCE[_ev.test.key]) {
+      renderEnduranceGroups(root, rows, { test: _ev.test, unit: unit });
+      return;
+    }
     drawTeamChart(root, rows, {
       dec: ftDec(unit), unit: unit, betterHigh: evBetterHigh(_ev.test, unit),
       order: _ev.order, label: variant || (_ev.test ? _ev.test.label : ''), onBarClick: openEvalPlayer
     });
+  }
+
+  // ── Endurance team view: group players by fitness level (semantic colours) ──
+  var EV_ENDURANCE = { ift:1, yoyo1:1, yoyo2:1, cooper:1 };
+  var EV_LEVEL_META = {
+    elite:        { name:'Elite / Professional', color:'var(--cm-success)' },
+    advanced:     { name:'Advanced',             color:'var(--cm-info)' },
+    intermediate: { name:'Intermediate',         color:'var(--cm-warning)' },
+    developing:   { name:'Developing',           color:'var(--cm-danger)' },
+  };
+  var EV_LEVEL_ORDER = ['elite','advanced','intermediate','developing'];
+  // simple value bands per test (IFT bands are the male-threshold fallback; level usually comes from computed)
+  var EV_BANDS = {
+    ift:    { unit:'km/h', bands:[['elite',19.5,Infinity],['advanced',17.5,19.5],['intermediate',15.5,17.5],['developing',0,15.5]] },
+    yoyo1:  { unit:'m',    bands:[['elite',2400,Infinity],['advanced',1800,2400],['intermediate',1200,1800],['developing',0,1200]] },
+    yoyo2:  { unit:'m',    bands:[['elite',1000,Infinity],['advanced',750,1000],['intermediate',500,750],['developing',0,500]] },
+    cooper: { unit:'m',    bands:[['elite',3000,Infinity],['advanced',2700,3000],['intermediate',2400,2700],['developing',0,2400]] },
+  };
+  var IFT_LEVEL_MAP = { 'Elite/Professional':'elite', 'Advanced':'advanced', 'Intermediate':'intermediate', 'Developing':'developing' };
+  function evParseComputed(notes){ if (!notes) return null; try { return (typeof notes==='string') ? JSON.parse(notes) : notes; } catch(e){ return null; } }
+  function evBandKey(key, value){
+    var spec = EV_BANDS[key]; if (!spec) return 'developing';
+    for (var i=0;i<spec.bands.length;i++){ var b=spec.bands[i]; if (value>=b[1] && value<b[2]) return b[0]; }
+    return 'developing';
+  }
+  // level: IFT prefers the stored (gender-aware) computed.level; everything else uses value bands
+  function evEnduranceLevel(test, value, notes){
+    if (test.key === 'ift'){
+      var c = evParseComputed(notes);
+      if (c && c.level && IFT_LEVEL_MAP[c.level]) return IFT_LEVEL_MAP[c.level];
+    }
+    return evBandKey(test.key, value);
+  }
+  function evBandRangeLabel(key, lvlKey){
+    var spec = EV_BANDS[key]; if (!spec) return '';
+    var b = spec.bands.find(function(x){ return x[0]===lvlKey; }); if (!b) return '';
+    var u = spec.unit;
+    if (b[2]===Infinity) return '≥ '+b[1]+' '+u;
+    if (b[1]===0) return '< '+b[2]+' '+u;
+    return b[1]+'–'+b[2]+' '+u;
+  }
+  function renderEnduranceGroups(root, rows, opts){
+    var test = opts.test, unit = opts.unit || (EV_BANDS[test.key] && EV_BANDS[test.key].unit) || '';
+    if (!rows.length){
+      root.innerHTML = '<div style="border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">'
+        + '<div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No values for this test yet</div>'
+        + '<div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">No player has a recorded result for this test yet.</div></div>';
+      return;
+    }
+    var dec = ftDec(unit);
+    rows.forEach(function(r){ r.level = evEnduranceLevel(test, r.value, r.notes); });
+    var groupsHtml = EV_LEVEL_ORDER.map(function(lvl){
+      var meta = EV_LEVEL_META[lvl];
+      var grp = rows.filter(function(r){ return r.level===lvl; }).sort(function(a,b){ return b.value - a.value; });
+      if (!grp.length) return '';
+      var rowsHtml = grp.map(function(r){
+        return '<button class="eg-row" data-eg-pid="'+r.pid+'"><span class="pname">'+esc(r.name)+'</span>'
+          + '<span class="pval">'+ftFmt(r.value, dec)+(unit?' <small>'+esc(unit)+'</small>':'')+'</span></button>';
+      }).join('');
+      return '<div class="eg-group" style="border-left-color:'+meta.color+'">'
+        + '<div class="eg-head"><span class="eg-dot" style="background:'+meta.color+'"></span>'
+        + '<span class="eg-nm" style="color:'+meta.color+'">'+meta.name+'</span>'
+        + '<span class="eg-rng">'+evBandRangeLabel(test.key, lvl)+'</span>'
+        + '<span class="eg-ct">'+grp.length+' player'+(grp.length===1?'':'s')+'</span></div>'
+        + '<div class="eg-rows">'+rowsHtml+'</div></div>';
+    }).join('');
+    root.innerHTML = '<div class="ft-card" style="padding:14px 18px;margin-bottom:12px">'
+      + '<div style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px">'+esc(test.label||'')+' · team by level</div>'
+      + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">'+rows.length+' player'+(rows.length===1?'':'s')+' evaluated · grouped by '+(test.key==='ift'?'30-15 IFT level':'performance band')+'</div></div>'
+      + '<div class="eg-list">'+groupsHtml+'</div>';
+    root.querySelectorAll('[data-eg-pid]').forEach(function(b){ b.addEventListener('click', function(){ openEvalPlayer(b.getAttribute('data-eg-pid')); }); });
   }
 
   function openEvalPlayer(pid){
@@ -2094,7 +2186,39 @@
       + '<table class="ft-table"><thead><tr><th>Date</th><th class="num">' + esc(label) + (unit ? ' (' + esc(unit) + ')' : '') + '</th><th class="num">vs avg</th><th>Note</th></tr></thead>'
       + '<tbody>' + body + '</tbody></table></div>';
 
-    root.innerHTML = cards + chart + table;
+    // VBT: load-velocity profile of the latest record (line + zones + work zones), via the shared modal drawing
+    var vbtCard = '';
+    var vbtProfile = (_ev.test && _ev.test.key === 'vbt') ? parseVbtProfileFromNotes(latest.notes) : null;
+    if (_ev.test && _ev.test.key === 'vbt') {
+      vbtCard =
+        '<div class="ft-card" style="margin-bottom:14px"><div class="ft-chart-head">'
+        + '<div class="ft-chart-title">Load-velocity profile · ' + esc(label) + '</div>'
+        + '<div class="ft-legend"><span class="it" style="color:var(--cm-fg-muted)">latest · ' + ftDateFull(latest.iso) + '</span></div></div>'
+        + '<div id="evVbtProfile" style="padding:14px 16px 16px"></div></div>';
+    }
+
+    root.innerHTML = cards + vbtCard + chart + table;
+
+    if (_ev.test && _ev.test.key === 'vbt') {
+      var host = document.getElementById('evVbtProfile');
+      if (host) {
+        if (vbtProfile && typeof renderVBTProfileChart === 'function') renderVBTProfileChart(vbtProfile, host);
+        else host.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">No load-velocity profile stored for this entry.</div>';
+      }
+    }
+  }
+
+  // Parse the stored VBT JSON (evaluations.notes) into a profile for renderVBTProfileChart.
+  function parseVbtProfileFromNotes(notes){
+    if (!notes) return null;
+    var c;
+    try { c = (typeof notes === 'string') ? JSON.parse(notes) : notes; } catch(e){ return null; }
+    if (!c || !c.inputs || !c.inputs.length || c.slope == null || c.intercept == null) return null;
+    return {
+      a: c.intercept, b: c.slope, r2: c.R2, v1rm: c.v1rm_used, est1RM: c.est1RM,
+      method: c.method, exercise: c.exercise,
+      pairs: c.inputs.map(function(p){ return { load: p.kg, vmp: p.vmp }; })
+    };
   }
 
   // eval controls (variant in team + individual, order, player, back)
@@ -2744,23 +2868,16 @@
     return { ...profile, pairs: domPairs };   // override with {kg,v} pairs used by the SVG below
   }
 
-  function calcVBT() {
-    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
-    const resEl    = document.getElementById('paResults');
-    const zoneEl   = document.getElementById('paZones');
-    if (!resEl || !zoneEl) return;
-    const fit = vbtFit();
-    if (fit.error==='few') {
-      resEl.innerHTML='';
-      zoneEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter at least 2 loads to build the load-velocity profile (current: ${fit.pairs.length})</div>`;
-      return;
-    }
-    if (fit.error==='sameload') {
-      resEl.innerHTML='';
-      zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loads must differ to fit a load-velocity line.</div>';
-      return;
-    }
-    const { pairs, a, b, method, R2, v1rm, est1RM, hasThreshold } = fit;
+  // Shared VBT drawing — renders the FULL load-velocity viz (line + colour zones +
+  // KPIs + work-zones load prescription + formula) into one host element, exactly
+  // as the modal does. profile = { a, b, r2, est1RM, v1rm, exercise, method, pairs:[{load,vmp}] }.
+  // Returns a one-line footer summary string. Used by both calcVBT (modal) and renderEvalIndiv.
+  function renderVBTProfileChart(profile, hostEl) {
+    if (!hostEl || !profile) return '';
+    const pairs = (profile.pairs || []).map(p => ({ kg: +p.load, v: +p.vmp }));
+    const a = +profile.a, b = +profile.b, R2 = profile.r2, v1rm = +profile.v1rm, est1RM = +profile.est1RM;
+    const method = profile.method || '', exercise = profile.exercise || '';
+    const hasThreshold = (typeof VBT_V1RM !== 'undefined') && VBT_V1RM[exercise] !== undefined;
     const validSlope = b < 0;
     const eqStr = `v = ${a.toFixed(3)} ${b < 0 ? '−' : '+'} ${Math.abs(b).toFixed(4)}·Load`;
 
@@ -2868,10 +2985,8 @@
       ${notice}
       ${interp}`;
 
-    // Whole analysis lives in the right column (#paZones); left column shows only the form
-    resEl.innerHTML='';
     const maxErr=Math.max(...pairs.map(p=>Math.abs(p.v-(a+b*p.kg))));
-    zoneEl.innerHTML=`
+    hostEl.innerHTML=`
       <div class="pa-result-hero">${chart}${summary}</div>
       ${rxBlock}
       <div class="pa-section"${rxBlock?'':' style="margin-top:0"'}>Formula · load-velocity profile</div>
@@ -2882,7 +2997,31 @@
         <span class="cit">González-Badillo &amp; Sánchez-Medina (2010) · García-Ramos et al. (2018) two-point method · MVT thresholds Sánchez-Medina et al.</span>
       </div>`;
 
-    document.getElementById('paFootInfo').textContent=`${exercise} · ${method} · ${eqStr} · R²=${R2}${est1RM&&est1RM>0?` · Est. 1RM ${est1RM} kg @ V1RM ${v1rm}`:''}`;
+    return `${exercise} · ${method} · ${eqStr} · R²=${R2}${est1RM&&est1RM>0?` · Est. 1RM ${est1RM} kg @ V1RM ${v1rm}`:''}`;
+  }
+
+  function calcVBT() {
+    const exercise = document.getElementById('paExercise')?.value || 'Back Squat';
+    const resEl    = document.getElementById('paResults');
+    const zoneEl   = document.getElementById('paZones');
+    if (!resEl || !zoneEl) return;
+    const fit = vbtFit();
+    if (fit.error==='few') {
+      resEl.innerHTML='';
+      zoneEl.innerHTML=`<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Enter at least 2 loads to build the load-velocity profile (current: ${fit.pairs.length})</div>`;
+      return;
+    }
+    if (fit.error==='sameload') {
+      resEl.innerHTML='';
+      zoneEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loads must differ to fit a load-velocity line.</div>';
+      return;
+    }
+    const { pairs, a, b, method, R2, v1rm, est1RM } = fit;
+    // Whole analysis lives in the right column (#paZones); left column shows only the form
+    resEl.innerHTML='';
+    const profile = { a, b, r2:R2, v1rm, est1RM, method, exercise, pairs: pairs.map(p=>({ load:p.kg, vmp:p.v })) };
+    const foot = renderVBTProfileChart(profile, zoneEl);
+    document.getElementById('paFootInfo').textContent = foot;
   }
 
   function onVBTExerciseChange() {
