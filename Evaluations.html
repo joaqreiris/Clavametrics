@@ -2153,6 +2153,11 @@
     });
     var rows = Object.keys(perP).map(function(pid){ return { pid: pid, name: ftPlayerName(pid), value: perP[pid].value, notes: perP[pid].notes }; });
     var unit = (src.map(function(r){ return r.unit; }).find(Boolean)) || (EV_DEFAULT_UNIT[_ev.test && _ev.test.key] || '');
+    // Sprint H-FVP → group by F-V bias relative to the squad (training need)
+    if (_ev.test && _ev.test.key === 'hfvp') {
+      renderHfvpGroups(root, rows);
+      return;
+    }
     // Endurance tests → grouped-by-level view instead of generic bars
     if (_ev.test && EV_ENDURANCE[_ev.test.key]) {
       renderEnduranceGroups(root, rows, { test: _ev.test, unit: unit });
@@ -2201,6 +2206,32 @@
     return { speed: value, label: 'VIFT' };   // ift: value is already the VIFT speed
   }
   function evParseComputed(notes){ if (!notes) return null; try { return (typeof notes==='string') ? JSON.parse(notes) : notes; } catch(e){ return null; } }
+  // Short, readable summary of a computed-profile blob (no raw JSON). Returns ''
+  // when the object isn't a recognised profile, so the caller can fall back to '—'.
+  function evNoteSummary(c){
+    if (!c || typeof c !== 'object') return '';
+    if (c.F0 != null && c.V0 != null){            // H-FVP sprint profile
+      var s = 'F₀ ' + Math.round(c.F0) + 'N · V₀ ' + Number(c.V0).toFixed(2);
+      if (c.Pmax_rel != null) s += ' · Pmax ' + Number(c.Pmax_rel).toFixed(1) + ' W/kg';
+      return s;
+    }
+    if (c.est1RM != null){                         // VBT / load-velocity profile
+      return '1RM ' + c.est1RM + ' kg' + (c.R2 != null ? ' · R² ' + c.R2 : '');
+    }
+    return '';                                     // other computed blob → no JSON dump
+  }
+  // NOTE cell for the Recent-tests table: text notes pass through, profile JSON
+  // (H-FVP, VBT, …) is shown as a short summary, empty → dash.
+  function evNoteCell(notes){
+    var dash = '<span style="color:var(--cm-fg-faint)">—</span>';
+    if (!notes) return dash;
+    var c = evParseComputed(notes);
+    if (c && typeof c === 'object'){               // parsed to an object → profile JSON
+      var sum = evNoteSummary(c);
+      return sum ? esc(sum) : dash;
+    }
+    return esc(String(notes));                      // plain text (or a bare number) → as-is
+  }
   function evBandKey(key, value){
     var spec = EV_BANDS[key]; if (!spec) return 'developing';
     for (var i=0;i<spec.bands.length;i++){ var b=spec.bands[i]; if (value>=b[1] && value<b[2]) return b[0]; }
@@ -2305,6 +2336,95 @@
     }
   }
 
+  // ── Sprint H-FVP team view: group by F-V bias RELATIVE TO THE SQUAD (Morin) ──
+  // Classification metric = FVslope (F-V slope, N/(m/s), negative). A steeper
+  // (more negative) slope ⇒ force-dominant, hence velocity-DEFICIENT; a flatter
+  // (less negative) slope ⇒ velocity-dominant, hence force-DEFICIENT. Each player
+  // is grouped by how far their slope sits from the squad mean, in squad SDs.
+  // HFVP_BIAS_K — half-width of the "balanced" band, in SDs. Tune here.
+  var HFVP_BIAS_K = 0.5;
+  // Group descriptors keep the squad-relative deficiency name; the recommendation
+  // targets the lacking quality (consistent with the individual-view verdict).
+  var HFVP_GROUPS = {
+    veloDef:  { name:'Velocity-deficient — train maximal velocity',
+                rec:'Steeper F-V slope than the squad: strong relative force, comparatively low velocity. Emphasize maximal-velocity sprinting (fly-ins, sprint-float-sprint, overspeed).',
+                color:'var(--cm-warning)' },
+    forceDef: { name:'Force-deficient — train horizontal force',
+                rec:'Flatter F-V slope than the squad: strong velocity, comparatively low horizontal force. Emphasize horizontal-force work (resisted/sled sprints, short accelerations, hill sprints).',
+                color:'var(--cm-info)' },
+    balanced: { name:'Well-balanced — maintain',
+                rec:'F-V slope within ±' + HFVP_BIAS_K + ' SD of the squad mean. Maintain a mixed stimulus (accelerations + maximal-velocity exposure).',
+                color:'var(--cm-success)' },
+  };
+  var HFVP_GROUP_ORDER = ['veloDef','forceDef','balanced'];
+
+  function renderHfvpGroups(root, rows){
+    // latest record per player → parse computed; keep only those with a usable FVslope
+    var data = rows.map(function(r){
+      var c = evParseComputed(r.notes);
+      if (!c || c.FVslope == null || isNaN(Number(c.FVslope))) return null;
+      return { pid:r.pid, name:r.name, slope:Number(c.FVslope), F0_rel:c.F0_rel, V0:c.V0, Pmax_rel:c.Pmax_rel };
+    }).filter(Boolean);
+
+    if (!data.length){
+      root.innerHTML = '<div style="border:1.5px dashed var(--cm-border);border-radius:12px;padding:32px 24px;text-align:center;background:var(--cm-bg-soft)">'
+        + '<div style="font:600 13.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">No H-FVP profiles yet</div>'
+        + '<div style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:4px">No player has a stored sprint F-V profile for this team.</div></div>';
+      return;
+    }
+
+    // squad mean & SD of the slope (population SD)
+    var n = data.length;
+    var mean = data.reduce(function(s,d){ return s + d.slope; }, 0) / n;
+    var sd = Math.sqrt(data.reduce(function(s,d){ return s + (d.slope - mean) * (d.slope - mean); }, 0) / n);
+    var margin = HFVP_BIAS_K * sd;
+
+    data.forEach(function(d){
+      if (d.slope < mean - margin)      d.grp = 'veloDef';   // steeper ⇒ force-dominant ⇒ velocity-deficient
+      else if (d.slope > mean + margin) d.grp = 'forceDef';  // flatter ⇒ velocity-dominant ⇒ force-deficient
+      else                              d.grp = 'balanced';
+    });
+
+    var fmt = function(v, d){ return (v == null || isNaN(Number(v))) ? '—' : Number(v).toFixed(d); };
+    var groupsHtml = HFVP_GROUP_ORDER.map(function(key){
+      var meta = HFVP_GROUPS[key];
+      var grp = data.filter(function(d){ return d.grp === key; }).sort(function(a, b){ return a.slope - b.slope; });
+      if (!grp.length) return '';
+      var rowsHtml = grp.map(function(d){
+        var kpi = function(lbl, val){ return '<span style="white-space:nowrap">' + lbl + ' <b style="color:var(--cm-fg-strong)">' + val + '</b></span>'; };
+        return '<button class="eg-row" data-eg-pid="' + d.pid + '"><span class="pname">' + esc(d.name) + '</span>'
+          + '<span class="eg-right" style="gap:14px;font:600 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">'
+          +   kpi('F₀', fmt(d.F0_rel, 1) + ' <small style="color:var(--cm-fg-faint)">N/kg</small>')
+          +   kpi('V₀', fmt(d.V0, 2))
+          +   kpi('P', fmt(d.Pmax_rel, 1) + ' <small style="color:var(--cm-fg-faint)">W/kg</small>')
+          +   kpi('S<sub>FV</sub>', fmt(d.slope, 1))
+          + '</span></button>';
+      }).join('');
+      return '<div class="eg-group" style="border-left-color:' + meta.color + '">'
+        + '<div class="eg-head"><span class="eg-dot" style="background:' + meta.color + ';flex-shrink:0"></span>'
+        +   '<div style="display:flex;flex-direction:column;gap:3px;min-width:0">'
+        +     '<span class="eg-nm" style="color:' + meta.color + '">' + meta.name + '</span>'
+        +     '<span style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">' + meta.rec + '</span>'
+        +   '</div>'
+        +   '<span class="eg-ct">' + grp.length + ' player' + (grp.length === 1 ? '' : 's') + '</span></div>'
+        + '<div class="eg-rows">' + rowsHtml + '</div></div>';
+    }).join('');
+
+    var lowN = data.length < 3
+      ? '<div style="margin-top:8px;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-warning);border-radius:6px;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-warning)"><i class="ti ti-alert-triangle" style="font-size:13px"></i> Need more players for reliable squad-relative grouping (only ' + data.length + ' assessed).</div>'
+      : '';
+
+    root.innerHTML = '<div class="ft-card" style="padding:14px 18px;margin-bottom:12px">'
+      + '<div style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:6px">Sprint H-FVP · team by training need</div>'
+      + '<div style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">' + data.length + ' player' + (data.length === 1 ? '' : 's') + ' assessed · grouped by F-V slope vs squad mean (' + fmt(mean, 1) + ' ± ' + fmt(sd, 1) + ' N/(m/s), ±' + HFVP_BIAS_K + ' SD band)</div>'
+      + '<div style="font:500 11.5px/1.45 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:8px">Classification is relative to the assessed squad (Morin &amp; Samozino). A coaching aid, not a prescription.<br><span style="font:500 10.5px/1.4 var(--cm-font-mono)">Method: Samozino et al. (2016), Scand J Med Sci Sports. Interpretation: Morin &amp; Samozino (2016), IJSPP.</span></div>'
+      + lowN
+      + '</div>'
+      + '<div class="eg-list">' + groupsHtml + '</div>';
+
+    root.querySelectorAll('[data-eg-pid]').forEach(function(b){ b.addEventListener('click', function(){ openEvalPlayer(b.getAttribute('data-eg-pid')); }); });
+  }
+
   function openEvalPlayer(pid){
     _ev.player = pid;
     var psel = document.getElementById('ev-player'); if (psel) psel.value = pid;
@@ -2367,7 +2487,7 @@
         + '<td class="c-date">' + ftDateFull(r.iso) + (idx === 0 ? '<span class="ft-tag">Latest</span>' : '') + '</td>'
         + '<td class="num c-val">' + ftFmt(r.value, dec) + (unit ? ' <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">' + esc(unit) + '</span>' : '') + '</td>'
         + '<td class="num"><span class="ft-vsavg ' + (rGood ? 'good' : 'bad') + '">' + ftPctDelta(dlt) + '</span></td>'
-        + '<td>' + (r.notes ? esc(r.notes) : '<span style="color:var(--cm-fg-faint)">—</span>') + '</td>'
+        + '<td>' + evNoteCell(r.notes) + '</td>'
         + '</tr>';
     }).join('');
     var table =
