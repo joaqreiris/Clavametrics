@@ -32,6 +32,9 @@
   .pf-num{width:80px;padding:5px 7px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);text-align:right;font:inherit}
   .pf-save{margin-top:20px;padding:10px 20px;background:var(--cm-accent);color:var(--cm-fg-on-accent);border:0;border-radius:8px;font:600 14px var(--cm-font-sans);cursor:pointer}
   .pf-msg{margin-top:12px;font-size:13px;color:var(--cm-fg-muted);min-height:18px}
+  .pf-annual{margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--cm-fg-muted)}
+  .pf-mini{padding:6px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;font:600 12px var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .pf-hint{color:var(--cm-fg-faint);font-size:12px}
 </style>
 </head>
 <body class="cm">
@@ -112,9 +115,26 @@
             ${FEATURE_CATALOG.map(featRow).join('')}
           </tbody>
         </table>
+        <div class="pf-annual">
+          Annual price = monthly ×
+          <input class="pf-num" id="pfAnnualMonths" type="number" min="1" step="1" value="10" style="width:56px;text-align:center">
+          months
+          <button class="pf-mini" id="pfApplyAnnual">Apply to all</button>
+          <span class="pf-hint">10 = 2 months free (~17% off)</span>
+        </div>
         <button class="pf-save" id="pfSaveBtn">Save changes</button>
         <div class="pf-msg" id="pfMsg"></div>`;
       document.getElementById('pfSaveBtn').addEventListener('click', pfSavePlans);
+      document.getElementById('pfApplyAnnual').addEventListener('click', ()=>{
+        const n = Number(document.getElementById('pfAnnualMonths').value) || 10;
+        _plans.forEach(p=>{
+          const m = document.querySelector(`[data-plan="${p.id}"][data-field="price_monthly"]`);
+          const y = document.querySelector(`[data-plan="${p.id}"][data-field="price_yearly"]`);
+          const mv = m.value.trim()==='' ? 0 : Number(m.value);
+          y.value = mv * n;
+        });
+        pfMsg('Annual prices filled (×'+n+'). Review and Save.');
+      });
     } catch(e){ host.innerHTML = '<div class="pf-loading">Could not load plans.</div>'; }
   };
 
