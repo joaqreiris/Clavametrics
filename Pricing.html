@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pricing — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -500,7 +502,7 @@
       <div class="pr-tier-name"><i class="ti ti-seedling"></i>Iniciación</div>
       <p class="pr-tier-tag" data-i18n="pr.tier1.tag">For grassroots and youth categories getting started.</p>
       <div class="pr-tier-price">
-        <span class="amt">$0</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
+        <span class="amt" data-slug="initiation">$0</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
       </div>
       <div class="pr-tier-meta" data-i18n="pr.tier1.meta">Up to 15 athletes · manual data only</div>
       <a class="cm-btn is-outline is-block pr-tier-cta" href="Register.html" style="text-decoration:none"><span data-i18n="pr.cta.free">Get started free</span></a>
@@ -518,7 +520,7 @@
       <div class="pr-tier-name"><i class="ti ti-ball-football"></i>Básico</div>
       <p class="pr-tier-tag" data-i18n="pr.tier2.tag">For developing categories with real planning needs.</p>
       <div class="pr-tier-price">
-        <span class="amt">$60</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
+        <span class="amt" data-slug="basic">$60</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
       </div>
       <div class="pr-tier-meta" data-i18n="pr.tier2.meta">Up to 30 athletes · CSV imports</div>
       <a class="cm-btn is-outline is-block pr-tier-cta" href="Register.html" style="text-decoration:none"><span data-i18n="pr.cta.trial">Start 14-day trial</span></a>
@@ -537,7 +539,7 @@
       <div class="pr-tier-name"><i class="ti ti-trophy"></i>Profesional</div>
       <p class="pr-tier-tag" data-i18n="pr.tier3.tag">For senior &amp; pre-pro teams running full performance ops.</p>
       <div class="pr-tier-price">
-        <span class="amt">$120</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
+        <span class="amt" data-slug="professional">$120</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
       </div>
       <div class="pr-tier-meta" data-i18n="pr.tier3.meta">Up to 75 athletes · native GPS integrations</div>
       <a class="cm-btn is-primary is-block pr-tier-cta" href="Register.html" style="text-decoration:none"><span data-i18n="pr.cta.trial">Start 14-day trial</span></a>
@@ -556,7 +558,7 @@
       <div class="pr-tier-name"><i class="ti ti-crown"></i>Full</div>
       <p class="pr-tier-tag" data-i18n="pr.tier4.tag">For elite squads with unlimited rosters and reporting.</p>
       <div class="pr-tier-price">
-        <span class="amt">$150</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
+        <span class="amt" data-slug="full">$150</span><span class="cur">USD</span><span class="per" data-i18n="pr.per">/ category / mo</span>
       </div>
       <div class="pr-tier-meta" data-i18n="pr.tier4.meta">Unlimited athletes · everything included</div>
       <a class="cm-btn is-outline is-block pr-tier-cta" href="Register.html" style="text-decoration:none"><span data-i18n="pr.cta.trial">Start 14-day trial</span></a>
@@ -813,10 +815,50 @@
 <div id="tweaks-root"></div>
 
 <script>
-  document.querySelectorAll('.pr-toggle button').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.pr-toggle button').forEach(o => o.classList.remove('is-on'));
-    b.classList.add('is-on');
-  }));
+  // Precios en vivo + toggle mensual/anual. Los hardcodeados quedan como fallback.
+  (function(){
+    let PLANS = {};            // slug -> { price_monthly, price_yearly }
+    let cycle = 'monthly';
+
+    function renderPrices(){
+      document.querySelectorAll('.amt[data-slug]').forEach(el => {
+        const p = PLANS[el.dataset.slug];
+        if (!p) return;
+        const val = cycle === 'annual' ? p.price_yearly : p.price_monthly;
+        if (val == null) return;
+        el.textContent = '$' + Number(val);
+        const per = el.parentElement.querySelector('.per');
+        if (per) per.textContent = cycle === 'annual' ? '/ category / yr' : '/ category / mo';
+      });
+    }
+
+    function renderSavings(){
+      const b = PLANS['basic'];  // % de ahorro calculado de un plan pago representativo
+      const badge = document.querySelector('.pr-toggle .save');
+      if (badge && b && b.price_monthly > 0 && b.price_yearly != null){
+        const pct = Math.round((1 - b.price_yearly / (b.price_monthly * 12)) * 100);
+        badge.textContent = pct > 0 ? ('−' + pct + '%') : '';
+      }
+    }
+
+    document.querySelectorAll('.pr-toggle button').forEach(b => b.addEventListener('click', () => {
+      document.querySelectorAll('.pr-toggle button').forEach(o => o.classList.remove('is-on'));
+      b.classList.add('is-on');
+      cycle = b.dataset.billing === 'annual' ? 'annual' : 'monthly';
+      renderPrices();
+    }));
+
+    (async function(){
+      try {
+        if (!window.sb) return;
+        const { data, error } = await window.sb.from('plans').select('slug, price_monthly, price_yearly');
+        if (error || !data) return;
+        PLANS = Object.fromEntries(data.map(p => [p.slug, p]));
+        renderPrices();
+        renderSavings();
+      } catch(e){}
+    })();
+  })();
 </script>
 <script src="i18n.js"></script>
 </body>
