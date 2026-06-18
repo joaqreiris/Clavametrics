@@ -1174,6 +1174,7 @@
 <!-- ── Core wiring (same as Evaluations.html) ── -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/hfvp-calc.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -1199,6 +1200,7 @@
     ]},
     { name:'Speed & agility', icon:'ti-bolt', ic:'rgba(245,158,11,0.12)', ico:'#B45309', tests:[
       { key:'sprint',   label:'Sprint splits',   sub:'10 · 20 · 30 · 40 m',  icon:'ti-run',           src:{from:'evaluations', match:'Sprint splits'} },
+      { key:'hfvp',     label:'Sprint H-FVP',    sub:'Horizontal F-V profile · Samozino-Morin', icon:'ti-run',  src:{from:'evaluations', match:'Sprint H-FVP'} },
       { key:'cod505',   label:'505 COD',         sub:'Change of direction',  icon:'ti-arrow-back',    src:{from:'evaluations', match:'505 COD'} },
       { key:'illinois', label:'Illinois agility',sub:'40 m · 4 cones',       icon:'ti-route-square',  src:{from:'evaluations', match:'Illinois agility'} },
       { key:'rsa',      label:'RSA · 6×30m',     sub:'Fatigue index',        icon:'ti-history-toggle',src:{from:'evaluations', match:'RSA'} },
@@ -1479,6 +1481,17 @@
 
     // CSV pane: simple Player+Value importer for evaluations; force uses its own drawer
     setupCsvImport(t, isForce);
+
+    // H-FVP: manual single entry only this step — bulk grid + CSV import come next.
+    var csvBtn = detail.querySelector('[data-mini-btn="csv"]');
+    if (t.key === 'hfvp'){
+      document.getElementById('evUploadReal').style.display = 'none';
+      document.getElementById('evUploadCalcTxt').textContent =
+        'Single player · enter sprint splits → full horizontal F-V profile. Bulk & CSV import coming soon.';
+      if (csvBtn) csvBtn.style.display = 'none';
+    } else if (csvBtn) {
+      csvBtn.style.display = '';
+    }
 
     window.scrollTo(0,0);
   }
@@ -1952,16 +1965,16 @@
   var _ev = { test: null, types: [], variant: null, order: 'desc', rows: [], player: null };
 
   // tests that have their OWN calculator modal → openPhysAnalysis(label)
-  var EV_CALC = { ift:1, tt1600:1, vbt:1, orm:1, fvprofile:1, fms:1, ankle:1, hiprot:1, bodycomp:1 };
+  var EV_CALC = { ift:1, tt1600:1, vbt:1, orm:1, fvprofile:1, hfvp:1, fms:1, ankle:1, hiprot:1, bodycomp:1 };
   // v2 test key → PHYS_TESTS label (the key used by openPhysAnalysis)
   var EV_CALC_LABEL = {
     ift:'30-15 IFT', tt1600:'1,600 m TT', vbt:'VBT · Load-Velocity', orm:'1RM',
-    fvprofile:'F-V Profile · jumps', fms:'FMS', ankle:'Ankle dorsiflexion',
+    fvprofile:'F-V Profile · jumps', hfvp:'Sprint H-FVP', fms:'FMS', ankle:'Ankle dorsiflexion',
     hiprot:'Hip ER/IR', bodycomp:'Body composition'
   };
   // default unit prefill per single-value test
   var EV_DEFAULT_UNIT = { broad:'cm', sprint:'s', cod505:'s', illinois:'s', rsa:'%', yoyo1:'m', yoyo2:'m', cooper:'m', leger:'', nordic:'reps', hq:'', sitreach:'cm', somato:'', bmirfm:'',
-    ift:'km/h', tt1600:'ml/kg/min', orm:'kg', vbt:'kg', fvprofile:'N', fms:'/21', ankle:'cm', hiprot:'°', bodycomp:'%BF' };
+    ift:'km/h', tt1600:'ml/kg/min', orm:'kg', vbt:'kg', fvprofile:'N', hfvp:'W/kg', fms:'/21', ankle:'cm', hiprot:'°', bodycomp:'%BF' };
   function evToday(){ return new Date().toISOString().slice(0,10); }
 
   // direction: time/agility tests (unit s/ms, or sprint/505/agility) → lower is better
@@ -2587,6 +2600,7 @@
     'Hip ER/IR':        { key:'hiprot',    label:'Hip ER/IR — Rotación de cadera', sub:'Lerebours et al. (2016) · IR/ER bilateral · alertas BIBE/FAI' },
     'Body composition': { key:'skinfold',  label:'Composición corporal — Pliegues', sub:'JP3 · JP7 · DW4 · Siri (1956) · %BF · masa grasa y magra' },
     'F-V Profile · jumps':{ key:'fvprofile', label:'F-V Profile · jumps',     sub:'Samozino & Morin (2012–2016) · loaded jumps · F₀ V₀ Pmax · FVimb' },
+    'Sprint H-FVP':     { key:'hfvp',      label:'Sprint H-FVP — Horizontal F-V profile', sub:'Samozino et al. (2016) · sprint splits · F₀ V₀ Pmax · RFmax · DRF' },
   };
 
   const VBT_EVAL_TYPES = { 'Back Squat':'VBT · back squat', 'Bench Press':'VBT · bench press', 'Hip Thrust':'VBT · hip thrust', 'Deadlift':'VBT · deadlift', 'Military Press':'VBT · military press', 'Bench Pull':'VBT · bench pull' };
@@ -2831,6 +2845,23 @@
           <label class="ev-fl">h_SJ — altura salto sin carga <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(opcional · para perfil óptimo)</span></label>
           <div class="pt-field"><div class="input-wrap"><input id="paFVhSJ" type="number" step="0.5" min="5" max="100" class="ev-finput" placeholder="cm" oninput="calcFVProfile()"><span class="unit">cm</span></div></div>
         </div>`;
+
+    } else if (cfg.key === 'hfvp') {
+      const distRows = [5, 10, 20, 30, 40].map(d => `
+        <div class="ev-frow" style="margin-bottom:0">
+          <label class="ev-fl">${d} m</label>
+          <div class="pt-field"><div class="input-wrap"><input id="paHfvp${d}" type="number" step="0.01" min="0.5" max="12" class="ev-finput" placeholder="s" oninput="calcHFVP()"><span class="unit">s</span></div></div>
+        </div>`).join('');
+      specificFields = `
+        <div class="pa-section" style="margin-top:14px">Athlete</div>
+        <div class="ev-f2">
+          <div class="ev-frow"><label class="ev-fl">Mass <span style="color:var(--cm-danger)">*</span> <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from profile)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHfvpMass" type="number" step="0.1" min="30" max="150" class="ev-finput" placeholder="kg" oninput="calcHFVP()"><span class="unit">kg</span></div></div></div>
+          <div class="ev-frow"><label class="ev-fl">Height <span style="color:var(--cm-danger)">*</span> <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(auto from profile)</span></label>
+            <div class="pt-field"><div class="input-wrap"><input id="paHfvpHeight" type="number" step="0.01" min="1.2" max="2.3" class="ev-finput" placeholder="m" oninput="calcHFVP()"><span class="unit">m</span></div></div></div>
+        </div>
+        <div class="pa-section" style="margin-top:14px">Split times <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(cumulative from start · min 4 · standard air 20°C, sea level)</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 14px">${distRows}</div>`;
     }
 
     document.getElementById('paFormContent').innerHTML = playerSel + specificFields +
@@ -2843,6 +2874,7 @@
     if (cfg.key === 'fms') calcFMS();
     if (cfg.key === 'skinfold') onSkinfoldMethodChange();
     if (cfg.key === 'fvprofile') { for (let i = 0; i < 4; i++) addFVRow(); initFVCsvImport(); }
+    if (cfg.key === 'hfvp') calcHFVP();
     if (cfg.key === 'vbt') { for (let i = 0; i < 3; i++) addVBTRow(); initVBTCsvImport(); }
   }
 
@@ -2865,6 +2897,18 @@
         if (wEl && !wEl.value) wEl.value = data.weight;
       }
       calcIFT();
+    }
+    if (data && cfg?.key === 'hfvp') {
+      if (data.weight) {
+        const mEl = document.getElementById('paHfvpMass');
+        if (mEl && !mEl.value) mEl.value = data.weight;
+      }
+      if (data.height) {
+        const hEl = document.getElementById('paHfvpHeight');
+        // players.height is stored in cm → convert to metres for the model
+        if (hEl && !hEl.value) hEl.value = data.height > 3 ? +(data.height / 100).toFixed(2) : data.height;
+      }
+      calcHFVP();
     }
     if (data && cfg?.key === 'skinfold') {
       if (data.date_of_birth) {
@@ -3894,6 +3938,144 @@
     document.getElementById('paFootInfo').textContent=`F-V Profile · F₀=${Math.round(F0)}N · V₀=${V0||'?'}m/s · Pmax=${Pmax?Math.round(Pmax):'?'}W · R²=${R2}${FVimb_pct!==null?` · FVimb=${FVimb_pct}%`:''}`;
   }
 
+  // ─── Calc: Sprint Horizontal F-V profile (Samozino et al. 2016) ───
+  // Reads the 5 fixed split-time inputs (5/10/20/30/40 m) + mass + height,
+  // builds the splits array (only distances with a time, min 4) and calls the
+  // validated engine window.hfvpProfile(). Renders KPIs, the F-V line chart and
+  // a short actionable conclusion. Returns the computed object (used by save).
+  function readHfvpInputs() {
+    const mass   = parseFloat(document.getElementById('paHfvpMass')?.value);
+    const height = parseFloat(document.getElementById('paHfvpHeight')?.value);
+    const splits = [];
+    [5, 10, 20, 30, 40].forEach(d => {
+      const t = parseFloat(document.getElementById('paHfvp' + d)?.value);
+      if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t });
+    });
+    return { mass, height, splits };
+  }
+
+  function calcHFVP() {
+    const resEl = document.getElementById('paResults');
+    const zoneEl = document.getElementById('paZones');
+    if (!resEl || !zoneEl) return null;
+    const { mass, height, splits } = readHfvpInputs();
+
+    if (isNaN(mass) || isNaN(height) || splits.length < 4) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">Enter mass, height and at least 4 split times to compute the profile (current splits: ${splits.length}).</div>`;
+      document.getElementById('paFootInfo').textContent = 'Fill in mass, height and ≥4 split times to save';
+      return null;
+    }
+    if (typeof window.hfvpProfile !== 'function') {
+      resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">hfvp-calc.js not loaded.</div>`;
+      return null;
+    }
+
+    let r;
+    try { r = window.hfvpProfile(splits, mass, height); }
+    catch (e) { resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">${esc(e.message)}</div>`; return null; }
+
+    const F0 = r.F0, V0 = r.V0, Pmax = r.Pmax;
+
+    // ── F-V line chart: F₀ (Y intercept) → V₀ (X intercept), Pmax at midpoint ──
+    const W = 460, H = 240, pl = 55, pr = 15, pt = 24, pb = 38;
+    const gW = W - pl - pr, gH = H - pt - pb;
+    const maxV_ax = V0 * 1.1, maxF_ax = F0 * 1.1;
+    const toX = v => pl + (v / maxV_ax) * gW, toY = F => pt + gH - (F / maxF_ax) * gH;
+    let gridSvg = '';
+    for (let i = 0; i <= 4; i++) {
+      const v = maxV_ax * i / 4, x = toX(v);
+      gridSvg += `<line x1="${x.toFixed(0)}" y1="${pt}" x2="${x.toFixed(0)}" y2="${pt + gH}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg += `<text x="${x.toFixed(0)}" y="${pt + gH + 14}" text-anchor="middle" font-size="10" fill="var(--cm-fg-muted)">${v.toFixed(1)}</text>`;
+    }
+    for (let i = 0; i <= 4; i++) {
+      const F = maxF_ax * i / 4, y = toY(F);
+      gridSvg += `<line x1="${pl}" y1="${y.toFixed(0)}" x2="${pl + gW}" y2="${y.toFixed(0)}" stroke="var(--cm-border-soft)" stroke-width="1"/>`;
+      gridSvg += `<text x="${pl - 6}" y="${(y + 4).toFixed(0)}" text-anchor="end" font-size="10" fill="var(--cm-fg-muted)">${Math.round(F)}</text>`;
+    }
+    const ax0 = toX(0), ayF0 = toY(F0), v0X = toX(V0), baseY = toY(0);
+    const pmX = toX(V0 / 2), pmY = toY(F0 / 2);
+    const areaFill = `<polygon points="${ax0.toFixed(1)},${baseY.toFixed(1)} ${ax0.toFixed(1)},${ayF0.toFixed(1)} ${v0X.toFixed(1)},${baseY.toFixed(1)}" fill="var(--cm-accent)" opacity="0.07"/>`;
+    const chart = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;border-radius:8px;margin-bottom:12px">
+      <rect width="${W}" height="${H}" fill="var(--cm-bg-soft)" rx="8"/>
+      <g>${gridSvg}</g>
+      ${areaFill}
+      <line x1="${v0X.toFixed(1)}" y1="${pt}" x2="${v0X.toFixed(1)}" y2="${pt + gH}" stroke="var(--cm-fg-muted)" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>
+      <line x1="${ax0.toFixed(1)}" y1="${ayF0.toFixed(1)}" x2="${v0X.toFixed(1)}" y2="${baseY.toFixed(1)}" stroke="var(--cm-accent)" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="${ax0.toFixed(1)}" cy="${ayF0.toFixed(1)}" r="3.5" fill="var(--cm-fg-strong)"/>
+      <circle cx="${v0X.toFixed(1)}" cy="${baseY.toFixed(1)}" r="3.5" fill="var(--cm-fg-strong)"/>
+      <circle cx="${pmX.toFixed(1)}" cy="${pmY.toFixed(1)}" r="5" fill="var(--cm-warning)" opacity="0.95"/>
+      <text x="${pl + 4}" y="${(ayF0 - 5).toFixed(1)}" font-size="10" fill="var(--cm-fg-muted)">F₀=${Math.round(F0)}N</text>
+      <text x="${(v0X + 3).toFixed(1)}" y="${pt + gH - 4}" font-size="10" fill="var(--cm-fg-muted)">V₀=${V0.toFixed(2)}</text>
+      <text x="${(pmX + 6).toFixed(1)}" y="${(pmY - 5).toFixed(1)}" font-size="10" fill="var(--cm-warning)">Pmax=${Math.round(Pmax)}W</text>
+      <text x="${pl + gW / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Velocity (m/s)</text>
+      <text transform="translate(13 ${pt + gH / 2}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--cm-fg-muted)">Horizontal force (N)</text>
+    </svg>`;
+
+    const kpis = [
+      ['F₀', Math.round(F0), 'N', `${r.F0_rel.toFixed(2)} N/kg`],
+      ['V₀', V0.toFixed(2), 'm/s', 'theoretical max velocity'],
+      ['Pmax', Math.round(Pmax), 'W', `${r.Pmax_rel.toFixed(2)} W/kg`],
+      ['RFmax', (r.RFmax * 100).toFixed(1), '%', 'max ratio of force'],
+      ['DRF', r.DRF.toFixed(4), '', 'RF decay rate'],
+      ['Vmax', r.vmax.toFixed(2), 'm/s', 'modelled top speed'],
+    ];
+
+    // ── Conclusion (force vs velocity bias) ──
+    // Practical heuristic: balance the relative force (F0_rel, ref ≈ 8 N/kg)
+    // against the theoretical max velocity (V0, ref ≈ 9 m/s). Ratio >1.1 ⇒
+    // force-oriented (velocity-deficient); <0.9 ⇒ velocity-oriented.
+    const balance = (r.F0_rel / 8.0) / (V0 / 9.0);
+    let verdict, vCls;
+    if (balance > 1.10) {
+      verdict = 'Force-oriented profile — velocity-deficient: prioritize maximal-velocity sprinting (fly-ins, sprint-float-sprint, overspeed).';
+      vCls = '#B45309';
+    } else if (balance < 0.90) {
+      verdict = 'Velocity-oriented profile — force-deficient: prioritize horizontal-force work (resisted/sled sprints, short accelerations, hill sprints).';
+      vCls = '#B91C1C';
+    } else {
+      verdict = 'Well-balanced F-V profile — maintain a mixed stimulus (accelerations + maximal-velocity exposure).';
+      vCls = '#15803D';
+    }
+    let drfLine;
+    if (r.DRF < -0.10) drfLine = `Steep ratio-of-force decay (DRF ${r.DRF.toFixed(3)}) — mechanical effectiveness drops quickly with speed: refine sprint technique / forward force orientation.`;
+    else if (r.DRF > -0.06) drfLine = `Well-maintained ratio of force (DRF ${r.DRF.toFixed(3)}) — good mechanical effectiveness across the acceleration.`;
+    else drfLine = `Ratio-of-force decay within typical range (DRF ${r.DRF.toFixed(3)}, RFmax ${(r.RFmax * 100).toFixed(1)}%).`;
+
+    resEl.innerHTML = `<div class="pa-result-hero">
+      ${chart}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
+        ${kpis.map(([l, v, u, d]) => `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
+      </div>
+      <div style="margin-top:8px;padding:10px;background:${vCls}18;border-radius:6px;border:1px solid ${vCls}40;font:600 12.5px/1.45 var(--cm-font-sans);color:${vCls}">${verdict}</div>
+      <div style="margin-top:6px;padding:8px 10px;background:var(--cm-surface);border-radius:6px;border:1px solid var(--cm-border-soft);font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">${drfLine}</div>
+    </div>`;
+
+    const splitRows = splits.map(s => `<tr><td>${s.distance_m} m</td><td class="r">${s.time_s.toFixed(2)} s</td></tr>`).join('');
+    zoneEl.innerHTML = `
+      <div class="pa-section" style="margin-top:0">Splits · ${splits.length} points</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><thead><tr><th>Distance</th><th class="r">Time</th></tr></thead><tbody>${splitRows}</tbody></table>
+      </div>
+      <div class="pa-section">Mechanics</div>
+      <div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden">
+        <table class="pa-zone-table"><tbody>
+          <tr><td>F-V slope</td><td class="r">${r.FVslope.toFixed(2)} N/(m/s)</td></tr>
+          <tr><td>τ (tau)</td><td class="r">${r.tau.toFixed(3)} s</td></tr>
+          <tr><td>Mass · Height</td><td class="r">${mass} kg · ${height} m</td></tr>
+        </tbody></table>
+      </div>
+      <div class="pa-section">Method &amp; interpretation</div>
+      <div class="pt-formula" style="font-size:11px">
+        v(t) = Vmax·(1 − e<sup>−t/τ</sup>) · F<sub>h</sub> = m·a + ½ρA<sub>f</sub>C<sub>d</sub>v²<br>
+        F-V linear → F₀, V₀ · Pmax = F₀·V₀ / 4 · air 20°C, sea level<br>
+        <span class="cit">Method: Samozino et al. (2016), Scand J Med Sci Sports. Interpretation: Morin &amp; Samozino (2016), IJSPP.</span>
+      </div>`;
+
+    document.getElementById('paFootInfo').textContent = `H-FVP · F₀=${Math.round(F0)}N (${r.F0_rel.toFixed(2)} N/kg) · V₀=${V0.toFixed(2)} m/s · Pmax=${Math.round(Pmax)}W (${r.Pmax_rel.toFixed(2)} W/kg)`;
+    return { r, mass, height, splits };
+  }
+
   // ─── Bulk entry ───
 
   async function savePhysAnalysis() {
@@ -4045,6 +4227,20 @@
       if (R2<0.70&&!confirm(`Low R² (${R2}). Save anyway?`)) return;
       value=F0; unit='N (F0)'; evalType='VBT · F-V Profile';
       computed={ inputs:pairs.map(p=>({kg:p.kg,vmp:p.v})), F0, V0, Pmax, Sfv, R2, FVimb_pct, hSJ_cm:isNaN(hSJ_cm)?null:hSJ_cm };
+
+    } else if (cfg.key === 'hfvp') {
+      const out = calcHFVP();
+      if (!out) { alert('Enter mass, height and at least 4 split times.'); return; }
+      const { r, mass, height, splits } = out;
+      value    = +r.Pmax_rel.toFixed(2);   // principal value: relative max power (W/kg)
+      unit     = 'W/kg';
+      evalType = 'Sprint H-FVP';
+      // full profile + inputs in notes JSON → redraw the F-V profile in the player view
+      computed = {
+        inputs: { mass, height, splits, air: { tempC: 20, pressure_kPa: 101.325 } },
+        vmax: r.vmax, tau: r.tau, F0: r.F0, F0_rel: r.F0_rel, V0: r.V0,
+        Pmax: r.Pmax, Pmax_rel: r.Pmax_rel, RFmax: r.RFmax, DRF: r.DRF, FVslope: r.FVslope,
+      };
     }
 
     if (userNote) computed.userNotes = userNote;
@@ -4061,7 +4257,7 @@
   Object.assign(window, { openPhysAnalysis, closePhysModal, savePhysAnalysis, onPaPlayerChange,
     calcIFT, calc1600m, calcVBT, onVBTExerciseChange, addVBTRow, applyVBTCsvImport,
     calc1RM_modal, on1RMExerciseChange, calcFMS, calcAnkle, calcHipRot,
-    onSkinfoldMethodChange, calcSkinfold, addFVRow, calcFVProfile, applyFVCsvImport });
+    onSkinfoldMethodChange, calcSkinfold, addFVRow, calcFVProfile, applyFVCsvImport, calcHFVP });
 
 
   // ════════════════════════════════════════════════════════════════════
