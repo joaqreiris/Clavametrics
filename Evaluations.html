@@ -2386,13 +2386,34 @@
         + '<div id="evVbtProfile" style="padding:14px 16px 16px"></div></div>';
     }
 
-    root.innerHTML = cards + vbtCard + chart + table;
+    // H-FVP: full horizontal F-V profile of the latest record (line + KPIs +
+    // diagnosis + citation), via the same shared drawing used by the modal.
+    // The Pmax_rel (W/kg) evolution over time is already the generic chart below
+    // (value = Pmax_rel), so this card just adds the latest-profile picture.
+    var hfvpCard = '';
+    var hfvpProfileData = (_ev.test && _ev.test.key === 'hfvp') ? evParseComputed(latest.notes) : null;
+    if (_ev.test && _ev.test.key === 'hfvp') {
+      hfvpCard =
+        '<div class="ft-card" style="margin-bottom:14px"><div class="ft-chart-head">'
+        + '<div class="ft-chart-title">Horizontal F-V profile · ' + esc(label) + '</div>'
+        + '<div class="ft-legend"><span class="it" style="color:var(--cm-fg-muted)">latest · ' + ftDateFull(latest.iso) + '</span></div></div>'
+        + '<div id="evHfvpProfile" style="padding:14px 16px 16px"></div></div>';
+    }
+
+    root.innerHTML = cards + vbtCard + hfvpCard + chart + table;
 
     if (_ev.test && _ev.test.key === 'vbt') {
       var host = document.getElementById('evVbtProfile');
       if (host) {
         if (vbtProfile && typeof renderVBTProfileChart === 'function') renderVBTProfileChart(vbtProfile, host);
         else host.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">No load-velocity profile stored for this entry.</div>';
+      }
+    }
+    if (_ev.test && _ev.test.key === 'hfvp') {
+      var hhost = document.getElementById('evHfvpProfile');
+      if (hhost) {
+        if (hfvpProfileData && typeof renderHFVPProfile === 'function') renderHFVPProfile(hfvpProfileData, hhost);
+        else hhost.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">No H-FVP profile stored for this entry.</div>';
       }
     }
   }
@@ -4231,28 +4252,26 @@
     return { mass, height, splits };
   }
 
-  function calcHFVP() {
-    const resEl = document.getElementById('paResults');
-    const zoneEl = document.getElementById('paZones');
-    if (!resEl || !zoneEl) return null;
-    const { mass, height, splits } = readHfvpInputs();
-
-    if (isNaN(mass) || isNaN(height) || splits.length < 4) {
-      resEl.innerHTML = '';
-      zoneEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">Enter mass, height and at least 4 split times to compute the profile (current splits: ${splits.length}).</div>`;
-      document.getElementById('paFootInfo').textContent = 'Fill in mass, height and ≥4 split times to save';
-      return null;
+  // ── Shared H-FVP profile drawing: KPIs + F-V line + diagnosis (+ citation) ──
+  // profile: the stored computed object OR a live window.hfvpProfile() result —
+  // both expose { F0, F0_rel, V0, Pmax, Pmax_rel, RFmax, DRF, vmax }.
+  // Used by the modal (calcHFVP) and the individual View results (renderEvalIndiv).
+  // opts.showCitation (default true) — the modal suppresses it because its right
+  // panel already prints the method/citation block, so the modal stays identical.
+  function renderHFVPProfile(profile, host, opts) {
+    if (!host) return;
+    opts = opts || {};
+    const p = profile || {};
+    if (p.F0 == null || p.V0 == null || p.Pmax == null) {
+      host.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">No H-FVP profile stored for this entry.</div>';
+      return;
     }
-    if (typeof window.hfvpProfile !== 'function') {
-      resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">hfvp-calc.js not loaded.</div>`;
-      return null;
-    }
-
-    let r;
-    try { r = window.hfvpProfile(splits, mass, height); }
-    catch (e) { resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">${esc(e.message)}</div>`; return null; }
-
-    const F0 = r.F0, V0 = r.V0, Pmax = r.Pmax;
+    const F0 = p.F0, V0 = p.V0, Pmax = p.Pmax;
+    const F0_rel   = (p.F0_rel   != null) ? p.F0_rel   : (p.mass ? F0 / p.mass : 0);
+    const Pmax_rel = (p.Pmax_rel != null) ? p.Pmax_rel : (p.mass ? Pmax / p.mass : 0);
+    const RFmax = p.RFmax != null ? p.RFmax : 0;
+    const DRF   = p.DRF   != null ? p.DRF   : 0;
+    const vmax  = p.vmax  != null ? p.vmax  : 0;
 
     // ── F-V line chart: F₀ (Y intercept) → V₀ (X intercept), Pmax at midpoint ──
     const W = 460, H = 240, pl = 55, pr = 15, pt = 24, pb = 38;
@@ -4290,19 +4309,19 @@
     </svg>`;
 
     const kpis = [
-      ['F₀', Math.round(F0), 'N', `${r.F0_rel.toFixed(2)} N/kg`],
+      ['F₀', Math.round(F0), 'N', `${F0_rel.toFixed(2)} N/kg`],
       ['V₀', V0.toFixed(2), 'm/s', 'theoretical max velocity'],
-      ['Pmax', Math.round(Pmax), 'W', `${r.Pmax_rel.toFixed(2)} W/kg`],
-      ['RFmax', (r.RFmax * 100).toFixed(1), '%', 'max ratio of force'],
-      ['DRF', r.DRF.toFixed(4), '', 'RF decay rate'],
-      ['Vmax', r.vmax.toFixed(2), 'm/s', 'modelled top speed'],
+      ['Pmax', Math.round(Pmax), 'W', `${Pmax_rel.toFixed(2)} W/kg`],
+      ['RFmax', (RFmax * 100).toFixed(1), '%', 'max ratio of force'],
+      ['DRF', DRF.toFixed(4), '', 'RF decay rate'],
+      ['Vmax', vmax.toFixed(2), 'm/s', 'modelled top speed'],
     ];
 
     // ── Conclusion (force vs velocity bias) ──
     // Practical heuristic: balance the relative force (F0_rel, ref ≈ 8 N/kg)
     // against the theoretical max velocity (V0, ref ≈ 9 m/s). Ratio >1.1 ⇒
     // force-oriented (velocity-deficient); <0.9 ⇒ velocity-oriented.
-    const balance = (r.F0_rel / 8.0) / (V0 / 9.0);
+    const balance = (F0_rel / 8.0) / (V0 / 9.0);
     let verdict, vCls;
     if (balance > 1.10) {
       verdict = 'Force-oriented profile — velocity-deficient: prioritize maximal-velocity sprinting (fly-ins, sprint-float-sprint, overspeed).';
@@ -4315,18 +4334,50 @@
       vCls = '#15803D';
     }
     let drfLine;
-    if (r.DRF < -0.10) drfLine = `Steep ratio-of-force decay (DRF ${r.DRF.toFixed(3)}) — mechanical effectiveness drops quickly with speed: refine sprint technique / forward force orientation.`;
-    else if (r.DRF > -0.06) drfLine = `Well-maintained ratio of force (DRF ${r.DRF.toFixed(3)}) — good mechanical effectiveness across the acceleration.`;
-    else drfLine = `Ratio-of-force decay within typical range (DRF ${r.DRF.toFixed(3)}, RFmax ${(r.RFmax * 100).toFixed(1)}%).`;
+    if (DRF < -0.10) drfLine = `Steep ratio-of-force decay (DRF ${DRF.toFixed(3)}) — mechanical effectiveness drops quickly with speed: refine sprint technique / forward force orientation.`;
+    else if (DRF > -0.06) drfLine = `Well-maintained ratio of force (DRF ${DRF.toFixed(3)}) — good mechanical effectiveness across the acceleration.`;
+    else drfLine = `Ratio-of-force decay within typical range (DRF ${DRF.toFixed(3)}, RFmax ${(RFmax * 100).toFixed(1)}%).`;
 
-    resEl.innerHTML = `<div class="pa-result-hero">
+    const citation = (opts.showCitation === false) ? '' :
+      `<div style="margin-top:8px;font:500 10.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-faint)">Method: Samozino et al. (2016), Scand J Med Sci Sports. Interpretation: Morin &amp; Samozino (2016), IJSPP.</div>`;
+
+    host.innerHTML = `<div class="pa-result-hero">
       ${chart}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
         ${kpis.map(([l, v, u, d]) => `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px"><div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">${l}</div><div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">${v}<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">${u}</span></div><div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">${d}</div></div>`).join('')}
       </div>
       <div style="margin-top:8px;padding:10px;background:${vCls}18;border-radius:6px;border:1px solid ${vCls}40;font:600 12.5px/1.45 var(--cm-font-sans);color:${vCls}">${verdict}</div>
-      <div style="margin-top:6px;padding:8px 10px;background:var(--cm-surface);border-radius:6px;border:1px solid var(--cm-border-soft);font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">${drfLine}</div>
+      <div style="margin-top:6px;padding:8px 10px;background:var(--cm-surface);border-radius:6px;border:1px solid var(--cm-border-soft);font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">${drfLine}</div>${citation}
     </div>`;
+  }
+
+  function calcHFVP() {
+    const resEl = document.getElementById('paResults');
+    const zoneEl = document.getElementById('paZones');
+    if (!resEl || !zoneEl) return null;
+    const { mass, height, splits } = readHfvpInputs();
+
+    if (isNaN(mass) || isNaN(height) || splits.length < 4) {
+      resEl.innerHTML = '';
+      zoneEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--cm-fg-muted)">Enter mass, height and at least 4 split times to compute the profile (current splits: ${splits.length}).</div>`;
+      document.getElementById('paFootInfo').textContent = 'Fill in mass, height and ≥4 split times to save';
+      return null;
+    }
+    if (typeof window.hfvpProfile !== 'function') {
+      resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">hfvp-calc.js not loaded.</div>`;
+      return null;
+    }
+
+    let r;
+    try { r = window.hfvpProfile(splits, mass, height); }
+    catch (e) { resEl.innerHTML = `<div style="padding:12px;color:var(--cm-danger)">${esc(e.message)}</div>`; return null; }
+
+    const F0 = r.F0, V0 = r.V0, Pmax = r.Pmax;
+
+    // KPIs + F-V line + diagnosis (shared with the individual View results).
+    // showCitation:false → the citation stays in the modal's right panel below,
+    // so the modal renders exactly as before the refactor.
+    renderHFVPProfile(r, resEl, { showCitation: false });
 
     const splitRows = splits.map(s => `<tr><td>${s.distance_m} m</td><td class="r">${s.time_s.toFixed(2)} s</td></tr>`).join('');
     zoneEl.innerHTML = `
