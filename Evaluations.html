@@ -456,6 +456,8 @@
   .eg-rx .rx-run b { font:700 16px/1 var(--cm-font-mono); color:var(--cm-accent); }
   /* Y m / rep — distance per repetition, prominent */
   .eg-rx .rx-rep { font:600 12.5px/1 var(--cm-font-mono); color:var(--cm-fg-strong); white-space:nowrap; }
+  /* Shuttle breakdown — lengths × length (turns), only in shuttle mode */
+  .eg-rx .rx-shuttle { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); white-space:nowrap; }
   /* VIFT / VAM — the test result, shown small as context */
   .eg-rx .rx-ctx { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); white-space:nowrap; letter-spacing:.02em; }
 
@@ -2296,6 +2298,7 @@
           rightHtml = '<span class="eg-rx" data-ref="'+ref.speed+'">'
             + '<span class="rx-run">Run @ <b>—</b> km/h</span>'
             + '<span class="rx-rep"><b>—</b> m / rep</span>'
+            + '<span class="rx-shuttle" style="display:none"></span>'
             + '<span class="rx-ctx">'+refLabel+' '+ref.speed.toFixed(1)+' km/h</span>'
             + '</span>';
         } else {
@@ -2324,6 +2327,10 @@
         +   '<select id="egRxType" class="ev-finput" style="width:auto;min-width:210px">'+opts2+'</select>'
         +   '<span id="egRxDesc" style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-accent)"></span>'
         +   '<span id="egRxZone" style="display:inline-flex;align-items:center;height:20px;padding:0 9px;border-radius:5px;font:700 10.5px/1 var(--cm-font-mono);letter-spacing:.04em;background:var(--cm-bg-soft);border:1px solid var(--cm-border)"></span>'
+        +   '<span style="width:1px;height:22px;background:var(--cm-border)"></span>'
+        +   '<label for="egRxPattern" style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Run pattern</label>'
+        +   '<select id="egRxPattern" class="ev-finput" style="width:auto;min-width:120px"><option value="straight">Straight</option><option value="shuttle">Shuttle</option></select>'
+        +   '<span id="egRxShuttleWrap" style="display:none;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Shuttle length <input id="egRxShuttle" type="number" min="5" max="120" step="1" value="20" class="ev-finput" style="'+nInp+'"> m</span>'
         + '</div>'
         + '<div id="egRxCustom" style="display:none;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px">'
         +   '<span style="display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Work <input id="egRxWork" type="number" min="1" max="120" step="1" value="15" class="ev-finput" style="'+nInp+'"> s</span>'
@@ -2332,6 +2339,7 @@
         + '</div>'
         + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:8px">Target speed = '+refLabel+' × % · Distance per rep = target speed × work seconds.'+(showRef?' '+refLabel+' derived from distance.':'')+' Per player below.</div>'
         + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:4px">Intensity zone by % of '+refLabel+' (orientation). Actual physiological emphasis also depends on interval duration, work:rest ratio and format. Ref: Buchheit &amp; Laursen (2013), Sports Med.</div>'
+        + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:4px">Shuttle (out-and-back) adds change-of-direction load: at the same speed, internal intensity is higher than straight-line — adjust the % manually if needed. For VIFT (a shuttle test) this matches the test condition; for Cooper-derived VAM, straight-line is the matched condition. Ref: Buchheit &amp; Laursen (2013).</div>'
         + '</div>';
     } else {
       rxPanel = '<div class="ft-card" style="padding:12px 18px;margin-bottom:12px">'
@@ -2368,19 +2376,36 @@
         var zone = evWorkZone(pct, work);
         var z = document.getElementById('egRxZone');
         if (z){ z.textContent = zone.label; z.style.color = zone.color; z.style.borderColor = zone.color; }
+        // run pattern: straight (default) vs shuttle (out-and-back). Shuttle only
+        // splits the SAME distance/rep into lengths — it never changes the distance.
+        var pattern = (document.getElementById('egRxPattern') || {}).value || 'straight';
+        var shuttleLen = parseFloat((document.getElementById('egRxShuttle') || {}).value) || 0;
+        var shuttleWrap = document.getElementById('egRxShuttleWrap');
+        if (shuttleWrap) shuttleWrap.style.display = (pattern === 'shuttle') ? 'inline-flex' : 'none';
         root.querySelectorAll('.eg-rx').forEach(function(el){
           var ref = parseFloat(el.getAttribute('data-ref'));
-          var runEl = el.querySelector('.rx-run b'), repEl = el.querySelector('.rx-rep b');
-          if (isNaN(ref) || !pct || !work){ if (runEl) runEl.textContent='—'; if (repEl) repEl.textContent='—'; return; }
+          var runEl = el.querySelector('.rx-run b'), repEl = el.querySelector('.rx-rep b'), shEl = el.querySelector('.rx-shuttle');
+          if (isNaN(ref) || !pct || !work){ if (runEl) runEl.textContent='—'; if (repEl) repEl.textContent='—'; if (shEl) shEl.style.display='none'; return; }
           var speed = ref * pct / 100;              // km/h (× VIFT or VAM) — run speed
           var dist  = speed * (1000/3600) * work;   // m per rep (target speed × work seconds)
           if (runEl) runEl.textContent = speed.toFixed(1);
           if (repEl) repEl.textContent = Math.round(dist);
+          if (shEl){
+            if (pattern === 'shuttle' && shuttleLen > 0){
+              var N = Math.max(1, Math.round(dist / shuttleLen));   // lengths (same total distance)
+              var T = Math.max(0, N - 1);                           // changes of direction
+              shEl.textContent = '~' + N + ' × ' + shuttleLen + ' m (' + T + ' turn' + (T === 1 ? '' : 's') + ')';
+              shEl.style.display = '';
+            } else {
+              shEl.style.display = 'none';
+            }
+          }
         });
       };
       var selEl = document.getElementById('egRxType');
       if (selEl){ selEl.addEventListener('change', applyRx); }
-      ['egRxWork','egRxRest','egRxPct'].forEach(function(id){ var e = document.getElementById(id); if (e) e.addEventListener('input', applyRx); });
+      ['egRxWork','egRxRest','egRxPct','egRxShuttle'].forEach(function(id){ var e = document.getElementById(id); if (e) e.addEventListener('input', applyRx); });
+      var patEl = document.getElementById('egRxPattern'); if (patEl) patEl.addEventListener('change', applyRx);
       applyRx();
     }
   }
