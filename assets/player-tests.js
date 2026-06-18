@@ -32,6 +32,23 @@
     if (!isFinite(n)) return esc(v);
     return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
   }
+  function fmtNotes(notes){
+    if (!notes) return '—';
+    let o = null;
+    try { o = JSON.parse(notes); } catch (_) { return esc(notes); }   // plain text → as-is
+    if (!o || typeof o !== 'object') return esc(notes);
+    const parts = [];
+    if (o.exercise) parts.push(o.exercise);
+    if (o.method)   parts.push(String(o.method));
+    if (o.est1RM != null) parts.push('est1RM ' + fmtNum(o.est1RM));
+    if (o.R2 != null)     parts.push('R² ' + Number(o.R2).toFixed(2));
+    if (parts.length) return esc(parts.join(' · '));
+    // unknown JSON shape → compact scalar fields only (never dump arrays/objects)
+    const scal = Object.entries(o)
+      .filter(([,v]) => v == null || typeof v !== 'object')
+      .slice(0, 4).map(([k,v]) => k + ':' + v);
+    return scal.length ? esc(scal.join(' · ')) : '—';
+  }
   function styleInject() {
     if (document.getElementById('pp-ts-styles')) return;
     const css = `
@@ -166,7 +183,7 @@
         <td class="col-date">${esc(shortDate(r.test_date))}</td>
         <td class="col-val"><span class="vl">${r.value == null ? '—' : esc(fmtNum(r.value))}<span class="un">${esc(r.unit || '')}</span></span></td>
         <td class="col-delta"><span class="dl">${esc(dl)}</span></td>
-        <td class="nt">${r.notes ? esc(r.notes) : '—'}</td>
+        <td class="nt" title="${esc(r.notes || '')}">${fmtNotes(r.notes)}</td>
       </tr>`;
     }).join('');
 
