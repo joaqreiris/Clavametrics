@@ -183,6 +183,7 @@
       { href: '#',           icon: 'ti-settings',    label: 'Settings', extra: 'data-open-settings' },
       { href: 'Admin.html',  icon: 'ti-user-shield', label: 'Admin',   adminOnly: true },
       { href: 'Billing.html',icon: 'ti-credit-card', label: 'Billing', adminOnly: true },
+      { href: 'Platform.html', icon: 'ti-shield-lock', label: 'Platform Admin', platformOnly: true },
     ]},
   ];
 
@@ -207,7 +208,8 @@
           const extra  = item.extra ? ` ${item.extra}` : '';
           const adm    = item.adminOnly ? ' data-admin-only' : '';
           const mod    = item.key ? ` data-mod="${item.key}"` : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}${mod} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt">${item.label}</span></a>`;
+          const plt    = item.platformOnly ? ' data-platform-only' : '';
+          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}${mod}${plt} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt">${item.label}</span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -397,6 +399,12 @@
           if (!_mods.keys.has(el.dataset.mod)) el.remove();
         });
       }
+    }
+    // Platform Admin: solo platform admins (cross-club). NO para admin de club.
+    if (typeof window.isSuperAdmin === 'function') {
+      let _isPA = false;
+      try { _isPA = await window.isSuperAdmin(); } catch (e) {}
+      if (!_isPA) document.querySelectorAll('[data-platform-only]').forEach(el => el.remove());
     }
     // Ocultar grupos que quedaron sin items
     document.querySelectorAll('.hub-nav-group').forEach(g => {
