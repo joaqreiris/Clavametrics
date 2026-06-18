@@ -302,7 +302,7 @@
     "pr.cmp.athletes": { en: "Athletes per category", es: "Atletas por categoría", pt: "Atletas por categoria" },
     "pr.cmp.seats": { en: "Staff seats", es: "Asientos de staff", pt: "Assentos de equipe" },
     "pr.cmp.micro": { en: "Microcycles & daily planner", es: "Microciclos y planificador diario", pt: "Microciclos e planejador diário" },
-    "pr.cmp.sessions": { en: "Sessions library", es: "Biblioteca de sesiones", pt: "Biblioteca de sessões" },
+    "pr.cmp.sessions": { en: "Exercises Library", es: "Exercises Library", pt: "Exercises Library" },
     "pr.cmp.tactical": { en: "Tactical planner canvas", es: "Pizarra de planificación táctica", pt: "Quadro de planejamento tático" },
     "pr.cmp.rpe": { en: "RPE & wellness", es: "RPE y bienestar", pt: "RPE e bem-estar" },
     "pr.cmp.acwr": { en: "ACWR & load alerts", es: "ACWR y alertas de carga", pt: "ACWR e alertas de carga" },

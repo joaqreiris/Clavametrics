@@ -101,7 +101,7 @@
   // ── Taxonomía única de secciones (consumida por sidebar + Admin) ──
   window.CM_SECTIONS = [
     { key:'planner',          href:'Planner.html',             icon:'ti-clipboard-list',    name:'Drill Designer' },
-    { key:'sessions-lib',     href:'Sessions Library.html',    icon:'ti-list-tree',         name:'Exercise library' },
+    { key:'sessions-lib',     href:'Sessions Library.html',    icon:'ti-list-tree',         name:'Exercises Library' },
     { key:'daily-planning',   href:'Daily Planning.html',      icon:'ti-soccer-field',      name:'Daily planning' },
     { key:'sessions-history', href:'Sessions History.html',    icon:'ti-history',           name:'Sessions history' },
     { key:'squad',            href:'Squad.html',               icon:'ti-users-group',       name:'Squad' },
