@@ -35,6 +35,16 @@
   .pf-annual{margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--cm-fg-muted)}
   .pf-mini{padding:6px 12px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;font:600 12px var(--cm-font-sans);color:var(--cm-fg-strong)}
   .pf-hint{color:var(--cm-fg-faint);font-size:12px}
+  .pf-calc-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .pf-calc-row select{flex:1;max-width:280px;padding:7px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit}
+  .pf-calc-row .pf-cat{color:var(--cm-fg-muted);font-size:13px;min-width:90px}
+  .pf-calc-row .pf-line{margin-left:auto;font:600 13px var(--cm-font-mono);color:var(--cm-fg-strong)}
+  .pf-x{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:16px}
+  .pf-addcat{margin-top:6px;padding:7px 14px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;cursor:pointer;font:600 13px var(--cm-font-sans);color:var(--cm-fg-strong)}
+  .pf-summary{margin-top:24px;padding:18px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:10px}
+  .pf-srow{display:flex;justify-content:space-between;padding:5px 0;font-size:14px;color:var(--cm-fg-muted)}
+  .pf-srow.total{border-top:1px solid var(--cm-border);margin-top:8px;padding-top:12px;font-size:18px;font-weight:700;color:var(--cm-fg-strong)}
+  .pf-disc{color:var(--cm-info)}
 </style>
 </head>
 <body class="cm">
@@ -64,12 +74,14 @@
   document.getElementById('pfGate').style.display='none';
   document.getElementById('pfRoot').style.display='block';
   window.pfRenderPlans();
+  let _calcDrawn=false;
   document.querySelectorAll('.pf-tab').forEach(t=>{
     t.addEventListener('click',()=>{
       document.querySelectorAll('.pf-tab').forEach(x=>x.classList.remove('is-active'));
       document.querySelectorAll('.pf-panel').forEach(x=>x.classList.remove('is-active'));
       t.classList.add('is-active');
       document.getElementById(t.dataset.tab==='plans'?'pfPlans':'pfCalculator').classList.add('is-active');
+      if(t.dataset.tab==='calculator' && !_calcDrawn){ window.pfRenderCalc(); _calcDrawn=true; }
     });
   });
 })();
@@ -161,6 +173,66 @@
       }
       pfMsg('Saved ✓');
     } catch(e){ pfMsg('Save failed: ' + (e.message||e)); }
+  }
+</script>
+
+<script>
+  // Tramos de descuento por volumen (PROVISORIOS, editables acá). Cuentan solo categorías PAGAS.
+  // [minCategoriasPagas, %off]
+  const VOLUME_TIERS = [[1,0],[3,10],[6,15],[11,20]];
+  function discountPct(paidCount){
+    let pct = 0;
+    for (const [min,p] of VOLUME_TIERS){ if (paidCount >= min) pct = p; }
+    return pct;
+  }
+  let _calcRows = [];  // [{planId}]
+
+  window.pfRenderCalc = async function(){
+    const host = document.getElementById('pfCalculator');
+    if (!_plans || !_plans.length){
+      try { const { data } = await window.sb.from('plans').select('*').order('sort_order'); _plans = data||[]; }
+      catch(e){ host.innerHTML='<div class="pf-loading">Could not load plans.</div>'; return; }
+    }
+    host.innerHTML = `
+      <div id="pfCalcRows"></div>
+      <button class="pf-addcat" id="pfAddCat"><i class="ti ti-plus"></i> Add category</button>
+      <div class="pf-summary" id="pfCalcSummary"></div>`;
+    document.getElementById('pfAddCat').addEventListener('click', ()=>{ _calcRows.push({planId:_plans[0].id}); pfDrawCalc(); });
+    if (_calcRows.length===0) _calcRows.push({planId:_plans[0].id});
+    pfDrawCalc();
+  };
+
+  function pfDrawCalc(){
+    const wrap = document.getElementById('pfCalcRows');
+    wrap.innerHTML = _calcRows.map((r,i)=>{
+      const p = _plans.find(x=>x.id===r.planId) || _plans[0];
+      return `<div class="pf-calc-row">
+        <span class="pf-cat">Category ${i+1}</span>
+        <select data-row="${i}">${_plans.map(pl=>`<option value="${pl.id}" ${pl.id===r.planId?'selected':''}>${pl.name} — $${pl.price_monthly}/mo</option>`).join('')}</select>
+        <span class="pf-line">$${p.price_monthly}/mo</span>
+        <button class="pf-x" data-del="${i}" title="Remove">×</button>
+      </div>`;
+    }).join('');
+    wrap.querySelectorAll('select').forEach(s=>s.addEventListener('change',e=>{ _calcRows[+e.target.dataset.row].planId=e.target.value; pfDrawCalc(); }));
+    wrap.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',e=>{ _calcRows.splice(+e.target.dataset.del,1); pfDrawCalc(); }));
+    pfCalcSummary();
+  }
+
+  function pfCalcSummary(){
+    const rows = _calcRows.map(r=>_plans.find(x=>x.id===r.planId)).filter(Boolean);
+    const subtotal = rows.reduce((s,p)=>s + Number(p.price_monthly||0), 0);
+    const paidCount = rows.filter(p=>Number(p.price_monthly||0) > 0).length;
+    const pct = discountPct(paidCount);
+    const discount = subtotal * pct/100;
+    const monthly = subtotal - discount;
+    const annualMonths = Number(document.getElementById('pfAnnualMonths')?.value) || 10;
+    const annual = monthly * annualMonths;
+    document.getElementById('pfCalcSummary').innerHTML = `
+      <div class="pf-srow"><span>Categories</span><span>${rows.length} (${paidCount} paid)</span></div>
+      <div class="pf-srow"><span>Subtotal / month</span><span>$${subtotal.toFixed(2)}</span></div>
+      <div class="pf-srow pf-disc"><span>Volume discount (${pct}%)</span><span>−$${discount.toFixed(2)}</span></div>
+      <div class="pf-srow total"><span>Total / month</span><span>$${monthly.toFixed(2)}</span></div>
+      <div class="pf-srow"><span>Total / year (×${annualMonths})</span><span>$${annual.toFixed(2)}</span></div>`;
   }
 </script>
 </body>
