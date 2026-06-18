@@ -897,6 +897,35 @@
                 </div>
               </div>
 
+              <!-- H-FVP → dedicated team grid (mass · height · 5 split times → full profile) -->
+              <div id="evHfvpBulk" class="ev-card" style="display:none;margin-bottom:14px">
+                <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                  <div class="ev-frow" style="flex:0 0 170px;margin-bottom:0"><label class="ev-fl">Date</label><input id="evHfvpBulkDate" type="date" class="ev-finput"></div>
+                  <div class="ev-spacer" style="flex:1"></div>
+                  <button id="evHfvpBulkSave" class="cm-btn is-primary is-sm"><i class="ti ti-calculator" style="font-size:14px"></i>Calculate &amp; save all</button>
+                </div>
+                <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px">Mass/height auto-filled from each profile (editable). Enter split times in seconds. Rows with fewer than 4 valid times are skipped. Standard air (20°C, sea level).</div>
+                <div style="overflow-x:auto;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4)">
+                  <table style="width:100%;border-collapse:collapse;min-width:760px">
+                    <thead>
+                      <tr style="background:var(--cm-bg-soft)">
+                        <th style="text-align:left;padding:10px 10px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border);white-space:nowrap">Player</th>
+                        <th style="text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">Mass</th>
+                        <th style="text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">Height</th>
+                        <th style="text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">5 m</th>
+                        <th style="text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">10 m</th>
+                        <th style="text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">20 m</th>
+                        <th style="text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">30 m</th>
+                        <th style="text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">40 m</th>
+                        <th style="text-align:left;padding:10px 10px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)">Result</th>
+                      </tr>
+                    </thead>
+                    <tbody id="evHfvpBulkBody"></tbody>
+                  </table>
+                </div>
+                <div id="evHfvpBulkMsg" style="margin-top:10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></div>
+              </div>
+
               <!-- force_tests → CSV import drawer -->
               <div id="evUploadForce" class="ev-card" style="display:none">
                 <div class="ev-placeholder">
@@ -933,6 +962,26 @@
                     <button class="cm-btn is-primary is-sm" id="evCsvImportBtn"><i class="ti ti-database-import" style="font-size:14px"></i>Import to database</button>
                     <button class="cm-btn is-outline is-sm" id="evCsvResetBtn">Reset</button>
                     <span id="evCsvResult" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-success)"></span>
+                  </div>
+                </div>
+              </div>
+              <!-- H-FVP dedicated CSV importer (Player, Mass, Height, t5..t40, Date) -->
+              <div id="evHfvpCsv" style="display:none">
+                <div style="font:600 12px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:12px">Import H-FVP profiles · <span style="color:var(--cm-fg-strong);text-transform:none;letter-spacing:0">Sprint H-FVP</span></div>
+                <div id="evHfvpCsvDropWrap">
+                  <div class="pt-drop" id="evHfvpCsvDrop" onclick="document.getElementById('evHfvpCsvFile').click()">
+                    <div class="top"><div class="ic"><i class="ti ti-file-spreadsheet"></i></div><div><h4>Drop CSV here or click to browse</h4><p>Columns: Player, Mass, Height, t5, t10, t20, t30, t40, Date (optional). Header variants accepted; players matched by name.</p></div></div>
+                    <div class="formats"><span class="fmt">.csv</span><span class="fmt">.tsv</span></div>
+                  </div>
+                  <input type="file" id="evHfvpCsvFile" accept=".csv,.tsv,.txt" style="display:none">
+                </div>
+                <div id="evHfvpCsvMap" style="display:none">
+                  <div class="ev-frow" style="margin-top:4px"><label class="ev-fl">Date (fallback)</label><input id="evHfvpCsvFallbackDate" type="date" class="ev-finput" style="height:32px"></div>
+                  <div id="evHfvpCsvPreview" style="overflow-x:auto;max-height:280px;overflow-y:auto;margin:8px 0 12px"></div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <button class="cm-btn is-primary is-sm" id="evHfvpCsvImportBtn"><i class="ti ti-database-import" style="font-size:14px"></i>Import to database</button>
+                    <button class="cm-btn is-outline is-sm" id="evHfvpCsvResetBtn">Reset</button>
+                    <span id="evHfvpCsvResult" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-success)"></span>
                   </div>
                 </div>
               </div>
@@ -1482,15 +1531,19 @@
     // CSV pane: simple Player+Value importer for evaluations; force uses its own drawer
     setupCsvImport(t, isForce);
 
-    // H-FVP: manual single entry only this step — bulk grid + CSV import come next.
+    // H-FVP: dedicated team grid + CSV (mass · height · 5 split times → full profile)
     var csvBtn = detail.querySelector('[data-mini-btn="csv"]');
-    if (t.key === 'hfvp'){
-      document.getElementById('evUploadReal').style.display = 'none';
+    var isHfvp = (t.key === 'hfvp');
+    document.getElementById('evHfvpBulk').style.display = isHfvp ? '' : 'none';
+    document.getElementById('evHfvpCsv').style.display  = isHfvp ? '' : 'none';
+    if (csvBtn) csvBtn.style.display = isForce ? 'none' : '';
+    if (isHfvp){
+      document.getElementById('evUploadReal').style.display = 'none';  // hide generic Player+Value grid
+      document.getElementById('evCsvReal').style.display     = 'none';  // hide generic CSV importer
       document.getElementById('evUploadCalcTxt').textContent =
-        'Single player · enter sprint splits → full horizontal F-V profile. Bulk & CSV import coming soon.';
-      if (csvBtn) csvBtn.style.display = 'none';
-    } else if (csvBtn) {
-      csvBtn.style.display = '';
+        'Single player · enter sprint splits → full horizontal F-V profile. Use the team grid below, or Import CSV, for bulk.';
+      setupHfvpBulk();
+      resetHfvpCsv();
     }
 
     window.scrollTo(0,0);
@@ -2582,6 +2635,230 @@
     }
     var ib=document.getElementById('evCsvImportBtn'); if (ib) ib.addEventListener('click', saveEvCsv);
     var rb=document.getElementById('evCsvResetBtn'); if (rb) rb.addEventListener('click', resetEvCsv);
+  })();
+
+
+  // ════════════════════════════════════════════════════════════════════
+  //  SPRINT H-FVP · BULK (team grid) + CSV import
+  //  Both reuse window.hfvpProfile and the exact save shape of the manual
+  //  entry (2a): value=Pmax_rel (W/kg), notes=JSON computed + splits + mass/height.
+  //  Dedup by (player, 'Sprint H-FVP', date) — same as the VBT bulk save.
+  // ════════════════════════════════════════════════════════════════════
+  var HFVP_DISTS = [5, 10, 20, 30, 40];
+
+  // Build one evaluations record + return the raw profile for the summary cell.
+  function buildHfvpRecord(pid, mass, height, splits, date){
+    var r = window.hfvpProfile(splits, mass, height);
+    var computed = {
+      inputs: { mass: mass, height: height, splits: splits, air: { tempC: 20, pressure_kPa: 101.325 } },
+      vmax: r.vmax, tau: r.tau, F0: r.F0, F0_rel: r.F0_rel, V0: r.V0,
+      Pmax: r.Pmax, Pmax_rel: r.Pmax_rel, RFmax: r.RFmax, DRF: r.DRF, FVslope: r.FVslope,
+    };
+    var rec = {
+      player_id: pid, club_id: _clubId, evaluation_type: 'Sprint H-FVP',
+      value: +r.Pmax_rel.toFixed(2), unit: 'W/kg', test_date: date, notes: JSON.stringify(computed),
+    };
+    return { rec: rec, r: r };
+  }
+
+  // Replace-on-collide insert: delete any existing (player, test, date), then insert.
+  async function saveHfvpRecords(records){
+    var natOf = function(pid, date){ return pid + '|Sprint H-FVP|' + date; };
+    var pids = [...new Set(records.map(function(r){ return r.player_id; }))];
+    var ex = await window.sb.from('evaluations')
+      .select('id, player_id, test_date')
+      .eq('club_id', _clubId).eq('evaluation_type', 'Sprint H-FVP').in('player_id', pids);
+    if (ex.error) return ex.error;
+    var keys = new Set(records.map(function(r){ return natOf(r.player_id, r.test_date); }));
+    var collide = (ex.data || [])
+      .filter(function(e){ return keys.has(natOf(e.player_id, String(e.test_date).slice(0,10))); })
+      .map(function(e){ return e.id; });
+    if (collide.length){
+      var del = await window.sb.from('evaluations').delete().in('id', collide);
+      if (del.error) return del.error;
+    }
+    var ins = await window.sb.from('evaluations').insert(records);
+    return ins.error || null;
+  }
+
+  // tolerate comma decimals ("1,73") and stray spaces
+  function hfvpNum(v){ var n = parseFloat(String(v == null ? '' : v).replace(',', '.').trim()); return isNaN(n) ? NaN : n; }
+  function hfvpHeightM(h){ return (!isNaN(h) && h > 3) ? +(h / 100).toFixed(2) : h; }  // players.height is cm
+
+  // ── BULK grid ──
+  var _hfvpMeta = {};   // playerId → { weight, height }
+  async function setupHfvpBulk(){
+    document.getElementById('evHfvpBulkDate').value = evToday();
+    document.getElementById('evHfvpBulkMsg').style.display = 'none';
+    _hfvpMeta = {};
+    if (_ftPlayers.length && _clubId){
+      var ids = _ftPlayers.map(function(p){ return p.id; });
+      var res = await window.sb.from('players').select('id, weight, height').in('id', ids);
+      (res.data || []).forEach(function(p){ _hfvpMeta[p.id] = { weight: p.weight, height: p.height }; });
+    }
+    renderHfvpBulkRoster();
+  }
+  function renderHfvpBulkRoster(){
+    var tb = document.getElementById('evHfvpBulkBody');
+    var cell = 'padding:6px 6px;border-bottom:1px solid var(--cm-border-soft)';
+    var inp = function(cls, val, step){ return '<td style="'+cell+'"><input type="number" step="'+step+'" class="ev-finput '+cls+'" style="height:30px;min-width:60px;padding:0 8px" value="'+(val===''||val==null?'':val)+'"></td>'; };
+    tb.innerHTML = _ftPlayers.map(function(p){
+      var m = _hfvpMeta[p.id] || {};
+      var w = (m.weight != null) ? m.weight : '';
+      var h = (m.height != null) ? hfvpHeightM(m.height) : '';
+      return '<tr data-pid="'+p.id+'">'
+        + '<td style="padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong);white-space:nowrap">'+esc(p.first_name+' '+p.last_name)+'</td>'
+        + inp('hf-mass', w, '0.1') + inp('hf-height', h, '0.01')
+        + inp('hf-t5', '', '0.01') + inp('hf-t10', '', '0.01') + inp('hf-t20', '', '0.01') + inp('hf-t30', '', '0.01') + inp('hf-t40', '', '0.01')
+        + '<td style="'+cell+';font:600 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap" class="hf-result">—</td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in this team.</td></tr>';
+  }
+  function hfvpRowSplits(tr){
+    var splits = [];
+    HFVP_DISTS.forEach(function(d){
+      var el = tr.querySelector('.hf-t' + d);
+      var t = el ? hfvpNum(el.value) : NaN;
+      if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t });
+    });
+    return splits;
+  }
+  async function saveHfvpBulk(){
+    if (!_clubId) return;
+    if (typeof window.hfvpProfile !== 'function'){ alert('hfvp-calc.js not loaded'); return; }
+    var date = document.getElementById('evHfvpBulkDate').value;
+    if (!date){ alert('Enter a date.'); return; }
+    var records = [], skipped = 0;
+    document.querySelectorAll('#evHfvpBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var resCell = tr.querySelector('.hf-result');
+      var mass = hfvpNum(tr.querySelector('.hf-mass').value);
+      var height = hfvpHeightM(hfvpNum(tr.querySelector('.hf-height').value));
+      var splits = hfvpRowSplits(tr);
+      if (isNaN(mass) || isNaN(height) || splits.length < 4){
+        if (resCell){ resCell.textContent = '—'; resCell.style.color = 'var(--cm-fg-faint)'; }
+        skipped++; return;
+      }
+      try {
+        var built = buildHfvpRecord(pid, mass, height, splits, date);
+        records.push(built.rec);
+        if (resCell){ resCell.style.color = 'var(--cm-fg-muted)'; resCell.innerHTML = 'F₀ '+Math.round(built.r.F0)+'N · V₀ '+built.r.V0.toFixed(2)+' · P '+Math.round(built.r.Pmax)+'W'; }
+      } catch (e){ if (resCell){ resCell.textContent = 'error'; resCell.style.color = 'var(--cm-danger)'; } skipped++; }
+    });
+    if (!records.length){ alert('No rows with mass, height and at least 4 split times.'); return; }
+    var err = await saveHfvpRecords(records);
+    if (err){ alert('Error: ' + err.message); return; }
+    var msg = document.getElementById('evHfvpBulkMsg');
+    msg.textContent = '✓ ' + records.length + ' profile' + (records.length > 1 ? 's' : '') + ' saved' + (skipped ? (' · ' + skipped + ' skipped') : '');
+    msg.style.display = '';
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  // ── CSV import ──
+  var _hfvpCsv = null;   // { rows, headers, cols }
+  function resetHfvpCsv(){
+    _hfvpCsv = null;
+    document.getElementById('evHfvpCsvMap').style.display = 'none';
+    document.getElementById('evHfvpCsvDropWrap').style.display = '';
+    var fi = document.getElementById('evHfvpCsvFile'); if (fi) fi.value = '';
+    document.getElementById('evHfvpCsvPreview').innerHTML = '';
+    document.getElementById('evHfvpCsvResult').textContent = '';
+  }
+  function hfvpFindCol(heads, regexes){ return heads.find(function(h){ var s = String(h).toLowerCase().trim(); return regexes.some(function(re){ return re.test(s); }); }) || null; }
+  function hfvpTimeCol(heads, used, d){
+    return heads.find(function(h){
+      if (used.indexOf(h) >= 0) return false;
+      var m = String(h).match(/\d+/);
+      return m && parseInt(m[0], 10) === d;
+    }) || null;
+  }
+  function parseHfvpCsv(file){
+    if (!window.Papa){ alert('PapaParse not loaded'); return; }
+    window.Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(res){
+      var rows = (res.data || []).filter(function(r){ return Object.values(r).some(function(v){ return String(v||'').trim(); }); });
+      if (!rows.length){ alert('Empty CSV'); return; }
+      var heads = (res.meta && res.meta.fields) || Object.keys(rows[0]);
+      var cols = {
+        player: hfvpFindCol(heads, [/name/, /player/, /athlete/, /jugador/]),
+        mass:   hfvpFindCol(heads, [/mass/, /weight/, /peso/, /masa/, /kg/]),
+        height: hfvpFindCol(heads, [/height/, /talla/, /altura/, /stature/]),
+        date:   hfvpFindCol(heads, [/date/, /fecha/]),
+      };
+      var used = [cols.player, cols.mass, cols.height, cols.date].filter(Boolean);
+      HFVP_DISTS.forEach(function(d){ var c = hfvpTimeCol(heads, used, d); cols['t' + d] = c; if (c) used.push(c); });
+      _hfvpCsv = { rows: rows, headers: heads, cols: cols };
+      document.getElementById('evHfvpCsvFallbackDate').value = evToday();
+      document.getElementById('evHfvpCsvDropWrap').style.display = 'none';
+      document.getElementById('evHfvpCsvMap').style.display = '';
+      renderHfvpCsvPreview();
+    }});
+  }
+  function hfvpCsvParseRow(r){
+    var c = _hfvpCsv.cols;
+    var name = c.player ? r[c.player] : '';
+    var p = evMatchPlayer(name);
+    var mass = c.mass ? hfvpNum(r[c.mass]) : NaN;
+    var height = hfvpHeightM(c.height ? hfvpNum(r[c.height]) : NaN);
+    var splits = [];
+    HFVP_DISTS.forEach(function(d){ var col = c['t' + d]; if (!col) return; var t = hfvpNum(r[col]); if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t }); });
+    var dateStr = null;
+    if (c.date && String(r[c.date]||'').trim()){ var dt = new Date(String(r[c.date]).trim()); if (!isNaN(dt)) dateStr = dt.toISOString().slice(0,10); }
+    return { name: name, player: p, mass: mass, height: height, splits: splits, dateStr: dateStr };
+  }
+  function renderHfvpCsvPreview(){
+    if (!_hfvpCsv) return;
+    var ok = 0, skip = 0, trs = '';
+    _hfvpCsv.rows.slice(0, 60).forEach(function(r){
+      var d = hfvpCsvParseRow(r);
+      var reason = '', resCell = '';
+      if (!d.player) reason = 'no match';
+      else if (isNaN(d.mass) || isNaN(d.height)) reason = 'mass/height missing';
+      else if (d.splits.length < 4) reason = '<4 times';
+      if (reason){ skip++; resCell = '<span style="color:var(--cm-danger)">'+reason+'</span>'; }
+      else {
+        ok++;
+        try { var b = window.hfvpProfile(d.splits, d.mass, d.height); resCell = 'F₀ '+Math.round(b.F0)+'N · V₀ '+b.V0.toFixed(2)+' · P '+Math.round(b.Pmax)+'W'; }
+        catch (e){ skip++; ok--; resCell = '<span style="color:var(--cm-danger)">calc error</span>'; }
+      }
+      trs += '<tr><td>'+esc(d.name||'—')+'</td><td>'+(d.player?esc(d.player.first_name+' '+d.player.last_name):'<span style="color:var(--cm-danger)">no match</span>')+'</td>'
+        + '<td class="num">'+(isNaN(d.mass)?'—':d.mass)+'</td><td class="num">'+(isNaN(d.height)?'—':d.height)+'</td><td class="num">'+d.splits.length+'</td><td>'+resCell+'</td></tr>';
+    });
+    document.getElementById('evHfvpCsvPreview').innerHTML =
+      '<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:6px">'+ok+' importable · '+skip+' skipped'+(_hfvpCsv.rows.length>60?' · showing first 60':'')+'</div>'
+      + '<table class="ft-table"><thead><tr><th>CSV name</th><th>Player</th><th class="num">Mass</th><th class="num">Height</th><th class="num">#t</th><th>Profile</th></tr></thead><tbody>'+trs+'</tbody></table>';
+  }
+  async function saveHfvpCsv(){
+    if (!_hfvpCsv || !_clubId) return;
+    if (typeof window.hfvpProfile !== 'function'){ alert('hfvp-calc.js not loaded'); return; }
+    var fallback = document.getElementById('evHfvpCsvFallbackDate').value || evToday();
+    var records = [], skipped = 0;
+    _hfvpCsv.rows.forEach(function(r){
+      var d = hfvpCsvParseRow(r);
+      if (!d.player || isNaN(d.mass) || isNaN(d.height) || d.splits.length < 4){ skipped++; return; }
+      try { records.push(buildHfvpRecord(d.player.id, d.mass, d.height, d.splits, d.dateStr || fallback).rec); }
+      catch (e){ skipped++; }
+    });
+    if (!records.length){ alert('No matched rows with mass, height and at least 4 split times.'); return; }
+    var err = await saveHfvpRecords(records);
+    if (err){ alert('Error: ' + err.message); return; }
+    document.getElementById('evHfvpCsvResult').textContent = '✓ Imported ' + records.length + ' profile' + (records.length>1?'s':'') + (skipped ? (' · ' + skipped + ' skipped') : '');
+    await reloadEvalViews();
+    loadStatuses();
+    setTimeout(resetHfvpCsv, 2500);
+  }
+
+  (function initHfvp(){
+    var bs = document.getElementById('evHfvpBulkSave'); if (bs) bs.addEventListener('click', saveHfvpBulk);
+    var fi = document.getElementById('evHfvpCsvFile'); if (fi) fi.addEventListener('change', function(e){ if (e.target.files[0]) parseHfvpCsv(e.target.files[0]); });
+    var dz = document.getElementById('evHfvpCsvDrop');
+    if (dz){
+      dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.borderColor = 'var(--cm-accent)'; });
+      dz.addEventListener('dragleave', function(){ dz.style.borderColor = ''; });
+      dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.borderColor = ''; if (e.dataTransfer.files[0]) parseHfvpCsv(e.dataTransfer.files[0]); });
+    }
+    var ib = document.getElementById('evHfvpCsvImportBtn'); if (ib) ib.addEventListener('click', saveHfvpCsv);
+    var rb = document.getElementById('evHfvpCsvResetBtn'); if (rb) rb.addEventListener('click', resetHfvpCsv);
   })();
 
 
