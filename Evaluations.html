@@ -1060,6 +1060,30 @@
             </form>
           </div>
 
+          <!-- Technical attributes (6 canonical /10 scores → feeds Player.html radar) -->
+          <div class="ev-card" style="margin-bottom:14px">
+            <div style="font:600 12px/1 var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-muted);margin-bottom:12px">Technical attributes</div>
+            <div style="margin:4px 0 10px;font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Scores (1–10)</div>
+            <div class="ev-f2">
+              <div class="ev-frow"><label class="ev-fl"><i class="ti ti-ball-football"></i> Technique</label>
+                <div class="ev-range-row"><input id="taTechnique" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+              <div class="ev-frow"><label class="ev-fl"><i class="ti ti-arrow-guide"></i> Passing</label>
+                <div class="ev-range-row"><input id="taPassing" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+              <div class="ev-frow"><label class="ev-fl"><i class="ti ti-eye"></i> Vision</label>
+                <div class="ev-range-row"><input id="taVision" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+              <div class="ev-frow"><label class="ev-fl"><i class="ti ti-user-bolt"></i> 1v1</label>
+                <div class="ev-range-row"><input id="taOneVOne" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+              <div class="ev-frow"><label class="ev-fl"><i class="ti ti-shield"></i> Defending</label>
+                <div class="ev-range-row"><input id="taDefending" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+              <div class="ev-frow"><label class="ev-fl"><i class="ti ti-swords"></i> Duels</label>
+                <div class="ev-range-row"><input id="taDuels" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button id="taSaveBtn" class="cm-btn is-primary is-sm">Save technical attributes</button>
+              <span id="taSaveMsg" style="align-self:center;display:none;color:var(--cm-success);font:600 12px/1 var(--cm-font-sans)"></span>
+            </div>
+          </div>
+
           <!-- History for the selected player -->
           <div class="ev-card">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -5758,6 +5782,38 @@
   }
   window.saveSubjEval = saveSubjEval;
 
+  // ── Technical attributes (6 canonical /10 scores → Player.html radar) ──
+  const TA_MAP = [['taTechnique','Technique'],['taPassing','Passing'],['taVision','Vision'],
+                  ['taOneVOne','1v1'],['taDefending','Defending'],['taDuels','Duels']];
+  async function saveTechEval(){
+    const playerId = document.getElementById('subjPlayer').value;
+    const date = document.getElementById('subjDate').value;
+    if (!playerId || !date) { alert('Pick a player and date'); return; }
+    const tag = TA_MAP.map(([id,t]) => t+':'+document.getElementById(id).value).join(' ');
+    const rows = TA_MAP.map(([id,type]) => ({
+      player_id:playerId, club_id:_clubId, evaluation_type:type,
+      value:+document.getElementById(id).value, unit:'/10', test_date:date, notes:tag }));
+    const { error } = await window.sb.from('evaluations').insert(rows);
+    if (error){ alert('Error: '+error.message); return; }
+    const msg=document.getElementById('taSaveMsg'); msg.textContent='✓ Saved'; msg.style.display='';
+    setTimeout(()=>{ msg.style.display='none'; }, 3000);
+    if (typeof loadStatuses==='function') loadStatuses();
+  }
+  document.getElementById('taSaveBtn').addEventListener('click', saveTechEval);
+
+  // Prefill the 6 sliders from the latest saved values when a player is chosen (reset to 5 if none):
+  async function loadTechValues(playerId){
+    const reset = ()=>TA_MAP.forEach(([id])=>{ const el=document.getElementById(id); el.value=5; el.nextElementSibling.textContent='5'; });
+    if (!playerId){ reset(); return; }
+    reset();
+    const { data } = await window.sb.from('evaluations')
+      .select('evaluation_type,value,test_date').eq('club_id',_clubId).eq('player_id',playerId)
+      .eq('unit','/10').in('evaluation_type', TA_MAP.map(m=>m[1])).order('test_date',{ascending:false});
+    const seen={}; (data||[]).forEach(r=>{ if(seen[r.evaluation_type]) return; seen[r.evaluation_type]=true;
+      const m=TA_MAP.find(x=>x[1]===r.evaluation_type); if(m){ const el=document.getElementById(m[0]); el.value=r.value; el.nextElementSibling.textContent=r.value; } });
+  }
+  document.getElementById('subjPlayer').addEventListener('change', e=>loadTechValues(e.target.value));
+
   // field interactions
   document.getElementById('faGrid').addEventListener('click', function(e){
     var card = e.target.closest('[data-fa-pid]'); if(!card) return;
@@ -5772,6 +5828,7 @@
     document.getElementById('subjPlayer').value = '';
     document.getElementById('subjDate').value = evToday();
     ['subjTech','subjTact','subjPhys','subjMent'].forEach(function(id){ var el=document.getElementById(id); el.value=5; el.nextElementSibling.textContent='5'; });
+    if (typeof loadTechValues==='function') loadTechValues('');
     document.getElementById('subjNotes').value = '';
     document.getElementById('faPlayerName').textContent = 'New evaluation';
     document.getElementById('faPlayerMeta').textContent = 'Pick a player, score the four dimensions and save.';

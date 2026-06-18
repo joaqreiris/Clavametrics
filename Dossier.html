@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Player Dossier — ClavaMetrics (export)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Auth/client bootstrap (same as Player.html) — NO app shell is rendered. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/player-profile.js"></script>
+<style>
+/* Real ClavaMetrics tokens (clavametrics.css · hybrid). Geist, pitch-green,
+   neutral premium-SaaS palette — same family as the internal profile.
+   Hero uses the app's dark sidebar surface (#0E1116) = the "dark split". */
+:root{
+  --cm-font-sans:'Geist',ui-sans-serif,system-ui,sans-serif;
+  --cm-font-mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --cm-bg:#FBFBFA;--cm-bg-soft:#F4F4F2;--cm-bg-sunk:#EDEDEA;
+  --cm-surface:#FFFFFF;--cm-surface-2:#FAFAF9;
+  --cm-fg:#0F1115;--cm-fg-strong:#000;--cm-fg-muted:#5B6470;--cm-fg-faint:#8A93A0;
+  --cm-border:#E7E7E4;--cm-border-soft:#EFEFED;--cm-border-strong:#D6D6D3;
+  --accent:#15803D;--accent-press:#14532D;--accent-soft:#ECFDF5;--accent-bd:#BBF7D0;
+  --cm-success:#16A34A;--cm-warning:#D97706;--cm-danger:#DC2626;--cm-info:#2563EB;
+  --dark:#0E1116;--dark-fg:#E6E8EB;--dark-fg-muted:#8A93A0;--dark-line:rgba(255,255,255,.08);
+  --r-3:8px;--r-4:10px;--r-5:12px;--r-6:16px;--r-pill:999px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--cm-font-mono);font-variant-numeric:tabular-nums}
+
+.stage{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 16px 60px}
+.toolbar{width:100%;max-width:840px;display:flex;align-items:center;gap:12px;margin-bottom:18px;color:var(--cm-fg-muted)}
+.toolbar .ttl{font-weight:600;font-size:13px;color:var(--cm-fg)}
+.toolbar .note{font-size:12px;color:var(--cm-fg-faint)}
+.toolbar .sp{margin-left:auto;display:flex;gap:10px;align-items:center}
+.tb-btn{height:34px;padding:0 14px;border-radius:var(--r-3);border:1px solid var(--cm-border-strong);background:var(--cm-surface);color:var(--cm-fg);font:500 13px var(--cm-font-sans);cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.tb-btn:hover{background:var(--cm-bg-soft)}
+.tb-btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.swatch{display:flex;gap:6px;align-items:center}
+.sw{width:18px;height:18px;border-radius:5px;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--cm-border)}
+.sw.on{box-shadow:0 0 0 2px var(--cm-fg-strong)}
+
+.sheet{width:840px;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--r-6);overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.14)}
+
+/* hero — dark split (echoes app sidebar) */
+.hero{background:var(--dark);color:var(--dark-fg);padding:26px 30px;display:grid;grid-template-columns:128px 1fr;gap:24px;position:relative}
+.hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:linear-gradient(90deg,var(--accent),transparent 70%)}
+.crestline{position:absolute;top:22px;right:30px;display:flex;align-items:center;gap:10px}
+.crestline .meta{text-align:right}
+.crestline .a{font:500 10px var(--cm-font-sans);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);filter:brightness(1.6)}
+.crestline .b{font-size:11px;color:var(--dark-fg-muted)}
+.crestline .crest{width:28px;height:28px;border-radius:7px;background:var(--accent);color:#fff;display:grid;place-items:center;font:600 13px var(--cm-font-sans);overflow:hidden}
+.crestline .crest img{width:100%;height:100%;object-fit:cover}
+
+.portrait{width:128px;height:160px;border-radius:var(--r-5);overflow:hidden;background:linear-gradient(165deg,#222b25,#0a0d0b);display:grid;place-items:center;position:relative;border:1px solid var(--dark-line)}
+.portrait img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.portrait .mark{font:600 56px var(--cm-font-sans);color:rgba(255,255,255,.10);letter-spacing:-.02em}
+.portrait .num{position:absolute;left:10px;top:8px;font:600 30px var(--cm-font-mono);color:#fff;z-index:1;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+
+.heroinfo{align-self:center}
+.eyebrow{font:500 10.5px var(--cm-font-sans);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);filter:brightness(1.55)}
+.pname{font:600 40px/1.02 var(--cm-font-sans);letter-spacing:-.025em;color:#fff;margin:7px 0 0}
+.role{font-size:14px;color:var(--dark-fg);margin-top:8px}
+.role .em{color:#fff;font-weight:600}
+.bio{display:flex;flex-wrap:wrap;margin-top:16px;gap:0;border:1px solid var(--dark-line);border-radius:var(--r-4);overflow:hidden;width:fit-content}
+.bio .b{padding:8px 15px;border-right:1px solid var(--dark-line)}.bio .b:last-child{border-right:0}
+.bio .k{font:500 9px var(--cm-font-sans);letter-spacing:.1em;text-transform:uppercase;color:var(--dark-fg-muted)}
+.bio .v{font-weight:600;font-size:14px;color:#fff;margin-top:2px}
+
+.hstats{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--cm-border)}
+.hstat{padding:18px 22px;border-right:1px solid var(--cm-border-soft)}.hstat:last-child{border-right:0}
+.hstat .k{font:500 10px var(--cm-font-sans);letter-spacing:.08em;text-transform:uppercase;color:var(--cm-fg-faint)}
+.hstat .v{font:600 38px/1 var(--cm-font-sans);letter-spacing:-.03em;color:var(--cm-fg-strong);margin-top:8px;font-variant-numeric:tabular-nums}
+.hstat .v .u{font-size:15px;color:var(--cm-fg-faint);font-weight:500;letter-spacing:0}
+.hstat .x{font-size:12px;color:var(--cm-fg-muted);margin-top:5px}
+
+.body{display:grid;grid-template-columns:1fr 1fr}
+.col{padding:24px 26px}.col.l{border-right:1px solid var(--cm-border-soft)}
+.sec-h{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.sec-h h2{font:600 13px var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--cm-fg-strong);white-space:nowrap}
+.sec-h .rule{flex:1;height:1px;background:var(--cm-border)}
+.sec-h .tag{font:500 10px var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+
+.radarwrap{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}
+.attr{display:flex;flex-direction:column;gap:8px;min-width:118px}
+.attr .row{display:flex;justify-content:space-between;font-size:13px}
+.attr .row span:first-child{color:var(--cm-fg-muted)}
+.attr .row .v{font-weight:600;color:var(--cm-fg);font-variant-numeric:tabular-nums}
+.empty-note{font-weight:300;font-size:13px;color:var(--cm-fg-faint);padding:18px 0}
+
+.scout{font-weight:300;font-size:13.5px;line-height:1.6;color:var(--cm-fg);outline:none}
+.scout:focus{background:var(--cm-bg-soft);border-radius:var(--r-3)}
+.scout:empty:before{content:attr(data-ph);color:var(--cm-fg-faint)}
+.signoff{margin-top:13px;font-size:12px;color:var(--cm-fg-muted)}.signoff b{color:var(--cm-fg);font-weight:600}
+
+.ath{display:flex;flex-direction:column;gap:14px}
+.am .top{display:flex;justify-content:space-between;align-items:baseline}
+.am .nm{font-size:13px;color:var(--cm-fg-muted)}
+.am .vv{font:600 15px var(--cm-font-mono);color:var(--cm-fg-strong)}.am .vv .u{font-size:11px;color:var(--cm-fg-faint);font-weight:400}
+.bar{height:7px;border-radius:99px;background:var(--cm-bg-sunk);margin-top:7px;overflow:hidden;position:relative}
+.bar .f{position:absolute;inset:0 auto 0 0;border-radius:99px;background:var(--accent)}
+.bar .f.neutral{background:var(--cm-border-strong)}
+.am .pct{font:500 10.5px var(--cm-font-sans);letter-spacing:.04em;text-transform:uppercase;color:var(--accent);margin-top:5px}
+
+.ribbon{display:flex;align-items:center;gap:16px;padding:16px 30px;border-top:1px solid var(--cm-border);background:var(--accent-soft)}
+.ribbon .big{font:600 34px var(--cm-font-sans);letter-spacing:-.02em;color:var(--accent)}
+.ribbon .txt{font-weight:300;font-size:13.5px;color:var(--cm-fg)}.ribbon .txt b{font-weight:600;color:var(--cm-fg-strong)}
+.ribbon .caps{margin-left:auto;text-align:right}
+.ribbon .caps .v{font:600 26px var(--cm-font-sans);color:var(--cm-fg-strong);letter-spacing:-.02em}
+.ribbon .caps .k{font:500 9px var(--cm-font-sans);letter-spacing:.08em;text-transform:uppercase;color:var(--cm-fg-faint)}
+
+.foot{display:flex;align-items:center;gap:12px;padding:15px 30px;color:var(--cm-fg-muted);font-size:12px;border-top:1px solid var(--cm-border)}
+.foot .club{display:flex;align-items:center;gap:9px;color:var(--cm-fg)}
+.foot .club .c{width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;display:grid;place-items:center;font:600 11px var(--cm-font-sans);overflow:hidden}
+.foot .club .c img{width:100%;height:100%;object-fit:cover}
+.foot .sp{margin-left:auto;text-align:right}
+.foot .mark{font:500 10px var(--cm-font-sans);letter-spacing:.1em;text-transform:uppercase;color:var(--cm-fg-faint);margin-top:2px}
+
+/* keep any sidebar.js artifacts out of the export */
+#cm-shell-mount,.cm-sidebar-overlay,.cm-sidebar-toggle{display:none!important}
+
+@media print{body{background:#fff}.stage{padding:0}.toolbar{display:none}.sheet{box-shadow:none;border:none;border-radius:0;width:100%}}
+@media(max-width:880px){.sheet{width:100%}.hero{grid-template-columns:1fr}.body{grid-template-columns:1fr}.col.l{border-right:0;border-bottom:1px solid var(--cm-border-soft)}.hstats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<!-- hidden mount so sidebar.js has a node but no shell is shown -->
+<div id="cm-shell-mount"><div id="hub-side-root"></div></div>
+
+<div class="stage">
+  <div class="toolbar">
+    <span class="ttl" id="tbTitle">Player dossier — export</span>
+    <span class="note" id="tbNote">Print to PDF · branded per club · EN / ES / PT</span>
+    <div class="sp">
+      <div class="swatch" title="Club accent">
+        <span class="sw on" style="background:#15803D" data-c="#15803D" data-p="#14532D" data-s="#ECFDF5" data-b="#BBF7D0"></span>
+        <span class="sw" style="background:#2563EB" data-c="#2563EB" data-p="#1d4fb8" data-s="#EFF6FF" data-b="#BFDBFE"></span>
+        <span class="sw" style="background:#DC2626" data-c="#DC2626" data-p="#a32d2d" data-s="#FEF2F2" data-b="#FECACA"></span>
+        <span class="sw" style="background:#0F1115" data-c="#0F1115" data-p="#000000" data-s="#F4F4F2" data-b="#D6D6D3"></span>
+      </div>
+      <button class="tb-btn pri" onclick="window.print()" id="tbExport">⤓ Export PDF</button>
+    </div>
+  </div>
+
+  <div id="sheetHost"></div>
+</div>
+
+<script>
+// ── i18n (light) — only static labels; proper nouns are not translated ──
+const LABELS = {
+  en: { dossier:'Player Dossier', season:'Season', appearances:'Appearances', minutes:'Minutes',
+    topSpeed:'Top speed', distMatch:'Distance / match', minPerMatch:'min / match', seasonMax:'season max',
+    matchAvg:'match avg', technicalProfile:'Technical profile', coachScored:'Coach-scored',
+    scoutingSummary:'Scouting summary', athleticProfile:'Athletic profile', vsCategory:'vs category',
+    cmj:'CMJ', hsrMatch:'High-speed running / match', sprint30:'Sprint 30 m',
+    availableTxt:'Available', ofSeason:'of the season.', intlCaps:'Int. caps',
+    noTechEval:'No technical evaluation yet', assessedBy:'Assessed by', perfStaff:'Performance Staff',
+    generatedWith:'Generated with ClavaMetrics', contact:'Contact', notFound:'Player not found',
+    scoutPlaceholder:'Type the scouting summary here — it prints with whatever you write (not saved).',
+    age:'Age', born:'Born', nation:'Nation', height:'Height', weight:'Weight', foot:'Foot',
+    tbTitle:'Player dossier — export', tbNote:'Print to PDF · branded per club · EN / ES / PT', tbExport:'Export PDF' },
+  es: { dossier:'Dossier del jugador', season:'Temporada', appearances:'Partidos', minutes:'Minutos',
+    topSpeed:'Velocidad máx.', distMatch:'Distancia / partido', minPerMatch:'min / partido', seasonMax:'máx. temporada',
+    matchAvg:'media partido', technicalProfile:'Perfil técnico', coachScored:'Evaluado por cuerpo técnico',
+    scoutingSummary:'Informe de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoría',
+    cmj:'CMJ', hsrMatch:'Carrera alta velocidad / partido', sprint30:'Sprint 30 m',
+    availableTxt:'Disponible', ofSeason:'de la temporada.', intlCaps:'Internac.',
+    noTechEval:'Sin evaluación técnica aún', assessedBy:'Evaluado por', perfStaff:'Cuerpo Técnico',
+    generatedWith:'Generado con ClavaMetrics', contact:'Contacto', notFound:'Jugador no encontrado',
+    scoutPlaceholder:'Escribe aquí el informe de scouting — se imprime con lo que escribas (no se guarda).',
+    age:'Edad', born:'Nacim.', nation:'Nación', height:'Altura', weight:'Peso', foot:'Pie',
+    tbTitle:'Dossier del jugador — exportar', tbNote:'Imprimir a PDF · con marca del club · EN / ES / PT', tbExport:'Exportar PDF' },
+  pt: { dossier:'Dossiê do jogador', season:'Temporada', appearances:'Jogos', minutes:'Minutos',
+    topSpeed:'Velocidade máx.', distMatch:'Distância / jogo', minPerMatch:'min / jogo', seasonMax:'máx. temporada',
+    matchAvg:'média jogo', technicalProfile:'Perfil técnico', coachScored:'Avaliado pela comissão técnica',
+    scoutingSummary:'Relatório de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoria',
+    cmj:'CMJ', hsrMatch:'Corrida em alta velocidade / jogo', sprint30:'Sprint 30 m',
+    availableTxt:'Disponível', ofSeason:'da temporada.', intlCaps:'Internac.',
+    noTechEval:'Sem avaliação técnica ainda', assessedBy:'Avaliado por', perfStaff:'Comissão Técnica',
+    generatedWith:'Gerado com ClavaMetrics', contact:'Contato', notFound:'Jogador não encontrado',
+    scoutPlaceholder:'Escreva aqui o relatório de scouting — imprime com o que você escrever (não é salvo).',
+    age:'Idade', born:'Nasc.', nation:'Nação', height:'Altura', weight:'Peso', foot:'Pé',
+    tbTitle:'Dossiê do jogador — exportar', tbNote:'Imprimir em PDF · com marca do clube · EN / ES / PT', tbExport:'Exportar PDF' },
+};
+
+// ── helpers ──
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function monogram(a,b){ return [(a||'')[0],(b||'')[0]].filter(Boolean).join('').toUpperCase() || '?'; }
+function clubMono(name){ const w=(name||'').trim().split(/\s+/).filter(Boolean); return ((w[0]||'')[0]||'')+((w[1]||'')[0]||'') || (name||'?').slice(0,2); }
+function age(dob){ if(!dob) return null; const d=new Date(String(dob).slice(0,10)+'T00:00:00'); if(isNaN(d)) return null;
+  const n=new Date(); let a=n.getFullYear()-d.getFullYear(); const m=n.getMonth()-d.getMonth();
+  if(m<0||(m===0&&n.getDate()<d.getDate()))a--; return (a>=0&&a<130)?a:null; }
+function bornLabel(dob){ if(!dob) return '—'; const d=new Date(String(dob).slice(0,10)+'T00:00:00'); if(isNaN(d)) return '—';
+  const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${M[d.getMonth()]} ${d.getFullYear()}`; }
+function cap(s){ return s? s[0].toUpperCase()+s.slice(1) : '—'; }
+function fmtThousands(n){ return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' '); }
+function num1(n){ return (Math.round(n*10)/10).toFixed(1); }
+function seasonLabel(start){ if(!start) return ''; const y=+String(start).slice(0,4); if(!y) return '';
+  return `${y}/${String(y+1).slice(2)}`; }
+
+// reuse Player.html posKey for the position label tier (used only for the eyebrow text)
+function posKey(position){ const p=(position||'').toLowerCase();
+  if(/goal|\bgk\b/.test(p))return 'gk'; if(/cent(re|er)\s*back|\bcb\b/.test(p))return 'cb';
+  if(/full\s*back|wing\s*back|\bfb\b|\blb\b|\brb\b/.test(p))return 'fb';
+  if(/wing|winger|\bwg\b|\blw\b|\brw\b/.test(p))return 'wg';
+  if(/strik|forward|\bst\b|\bcf\b/.test(p))return 'st';
+  if(/\bmid\b|midfield|\bmf\b|\bcm\b|\bdm\b|\bam\b/.test(p))return 'mf'; return 'mf'; }
+
+// Radar geometry for the 6 canonical attributes, axis order matching the mockup labels:
+// top=TECH, upper-right=PASS, lower-right=DEF, bottom=VISION, lower-left=DUEL, upper-left=1V1
+const RADAR_AXES = ['Technique','Passing','Defending','Vision','Duels','1v1'];
+function radarPolygon(scoreByType, R){
+  const pts=[];
+  for(let i=0;i<6;i++){
+    const ang = (-90 + i*60) * Math.PI/180;
+    const v = scoreByType[RADAR_AXES[i]]; const r = (v==null?0:Math.max(0,Math.min(10,v)))/10*R;
+    pts.push((r*Math.cos(ang)).toFixed(1)+','+(r*Math.sin(ang)).toFixed(1));
+  }
+  return pts.join(' ');
+}
+
+// Athletic bars: reference maxima for a neutral magnitude fill (NOT a percentile).
+// TODO: replace with real category-percentile aggregate + accent fill + "Top N%" label.
+function neutralFill(value, refMax, higherBetter){
+  if(value==null||!higherBetter) return null; // sprint (lower=better) → track only
+  return Math.max(4, Math.min(100, value/refMax*100));
+}
+
+function notFoundSheet(L){
+  return `<div class="sheet"><div class="hero" style="grid-template-columns:1fr">
+    <div class="heroinfo"><div class="eyebrow">${esc(L.dossier)}</div>
+    <div class="pname">${esc(L.notFound)}</div></div></div></div>`;
+}
+
+async function boot(){
+  const params = new URLSearchParams(location.search);
+  const lang = (params.get('lang')||'en').toLowerCase();
+  const L = LABELS[lang] || LABELS.en;
+  document.documentElement.lang = (LABELS[lang]?lang:'en');
+  // toolbar labels
+  document.getElementById('tbTitle').textContent = L.tbTitle;
+  document.getElementById('tbNote').textContent  = L.tbNote;
+  document.getElementById('tbExport').textContent = '⤓ ' + L.tbExport;
+
+  const host = document.getElementById('sheetHost');
+
+  if(!(await window.guardModule())) return;
+  const id = params.get('id');
+  const clubId = await window.getClubId();
+  const club = await window.getClub();
+  try { window.applyClubTheme(); } catch(_){}
+
+  // Club accent → --accent (else keep pitch-green)
+  const brand = club && (club.primary_color || club.accent_color);
+  if(brand && /^#?[0-9a-fA-F]{6}$/.test(brand)){
+    const hex = brand[0]==='#'?brand:'#'+brand;
+    document.documentElement.style.setProperty('--accent', hex);
+  }
+
+  if(!id){ host.innerHTML = notFoundSheet(L); return; }
+
+  const { data: player } = await window.sb.from('players')
+    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
+    .eq('id', id).eq('club_id', clubId).single();
+  if(!player){ host.innerHTML = notFoundSheet(L); return; }
+
+  // KPIs (minutes, matches, availabilityPct, season window)
+  let k = {}; try { k = await window.playerProfile.loadKpis(id, clubId) || {}; } catch(_){ k = {}; }
+  const seasonStart = k.seasonStart, seasonEnd = k.seasonEnd;
+
+  // Category (team name)
+  let catLabel = '—';
+  if(player.team_id){ try { const teams = await window.getTeams(clubId);
+    const t=(teams||[]).find(x=>x.id===player.team_id); if(t&&t.name) catLabel=t.name; } catch(_){} }
+
+  // GPS (season window): top speed (max), distance/match (avg over matches), HSR/match (avg over matches)
+  let topSpeed=null, distPerMatch=null, hsrPerMatch=null;
+  if(seasonStart && seasonEnd){
+    try {
+      const { data: g } = await window.sb.from('gps_reports')
+        .select('max_speed,total_distance,high_speed_distance, session:training_sessions!inner(session_type,session_date)')
+        .eq('player_id', id).eq('club_id', clubId)
+        .gte('session.session_date', seasonStart).lte('session.session_date', seasonEnd);
+      const rows = g||[];
+      const speeds = rows.map(r=>Number(r.max_speed)).filter(v=>isFinite(v));
+      if(speeds.length) topSpeed = Math.max(...speeds);
+      const matchRows = rows.filter(r=>{ const s=r.session; return (Array.isArray(s)?s[0]:s)?.session_type==='match'; });
+      const td = matchRows.map(r=>Number(r.total_distance)).filter(v=>isFinite(v));
+      if(td.length) distPerMatch = td.reduce((a,b)=>a+b,0)/td.length; // meters
+      const hsr = matchRows.map(r=>Number(r.high_speed_distance)).filter(v=>isFinite(v));
+      if(hsr.length) hsrPerMatch = hsr.reduce((a,b)=>a+b,0)/hsr.length; // meters
+    } catch(_){}
+  }
+
+  // Technical radar (subjective /10, 6 canonical types — latest per type)
+  const TECH=['Technique','Passing','Vision','1v1','Defending','Duels'];
+  const scoreByType = {};
+  try {
+    const { data } = await window.sb.from('evaluations')
+      .select('evaluation_type,value,test_date').eq('club_id',clubId).eq('player_id',id)
+      .eq('unit','/10').in('evaluation_type',TECH).order('test_date',{ascending:false});
+    (data||[]).forEach(r=>{ if(!(r.evaluation_type in scoreByType) && r.value!=null) scoreByType[r.evaluation_type]=Number(r.value); });
+  } catch(_){}
+  const hasRadar = TECH.some(t=>scoreByType[t]!=null);
+
+  // Objective evals → CMJ + Sprint (latest match by type)
+  let cmj=null, sprint=null;
+  try {
+    const { data } = await window.sb.from('evaluations')
+      .select('evaluation_type,value,test_date').eq('club_id',clubId).eq('player_id',id)
+      .neq('unit','/10').order('test_date',{ascending:false});
+    for(const r of (data||[])){ const t=(r.evaluation_type||'').toLowerCase();
+      if(cmj==null && /\bcmj\b|counter\s*movement/.test(t) && r.value!=null) cmj=Number(r.value);
+      if(sprint==null && /sprint/.test(t) && r.value!=null) sprint=Number(r.value);
+    }
+  } catch(_){}
+
+  // National-team caps: availability rows status='away' in season (distinct dates)
+  let caps=null;
+  if(seasonStart && seasonEnd){
+    try {
+      const { data } = await window.sb.from('availability').select('date')
+        .eq('club_id',clubId).eq('player_id',id).eq('status','away')
+        .gte('date',seasonStart).lte('date',seasonEnd);
+      if(data){ caps = new Set(data.map(r=>String(r.date).slice(0,10))).size; }
+    } catch(_){}
+  }
+
+  // ── derive display values ──
+  const full = [player.first_name,player.last_name].filter(Boolean).join(' ') || 'Player';
+  const a = age(player.date_of_birth);
+  const minPerMatch = (k.matches>0 && k.minutes!=null) ? Math.round(k.minutes/k.matches) : null;
+  const eyebrow = [player.position||'—', player.number!=null&&player.number!==''?('#'+player.number):null, catLabel!=='—'?catLabel:null].filter(Boolean).join(' · ');
+
+  // hero portrait
+  const portraitInner = player.photo_url
+    ? `<img src="${esc(player.photo_url)}" alt="${esc(full)}">`
+    : `<span class="mark">${esc(monogram(player.first_name,player.last_name))}</span>`;
+  const numBadge = (player.number!=null&&player.number!=='')?`<span class="num">${esc(player.number)}</span>`:'';
+
+  // crest (logo or monogram)
+  const crestInner = club&&club.logo_url ? `<img src="${esc(club.logo_url)}" alt="">` : esc(clubMono(club&&club.name));
+  const clubName = club&&club.name ? club.name : '—';
+
+  // headline strip
+  const hstat = (key, val, unit, sub)=>`<div class="hstat"><div class="k">${esc(key)}</div>
+    <div class="v">${val}${unit?`<span class="u"> ${esc(unit)}</span>`:''}</div>${sub?`<div class="x">${esc(sub)}</div>`:''}</div>`;
+  const hstats = `<div class="hstats">
+    ${hstat(L.appearances, k.matches!=null?esc(k.matches):'—', '', catLabel!=='—'?catLabel:'')}
+    ${hstat(L.minutes, k.minutes!=null?fmtThousands(k.minutes):'—', k.minutes!=null?"'":'', minPerMatch!=null?`${minPerMatch} ${L.minPerMatch}`:'')}
+    ${hstat(L.topSpeed, topSpeed!=null?num1(topSpeed):'—', topSpeed!=null?'km/h':'', topSpeed!=null?L.seasonMax:'')}
+    ${hstat(L.distMatch, distPerMatch!=null?num1(distPerMatch/1000):'—', distPerMatch!=null?'km':'', distPerMatch!=null?L.matchAvg:'')}
+  </div>`;
+
+  // radar
+  let radarHTML;
+  if(hasRadar){
+    const R=80, poly=radarPolygon(scoreByType,R);
+    const rings = [80,53,27].map(r=>{ const p=[]; for(let i=0;i<6;i++){ const ang=(-90+i*60)*Math.PI/180; p.push((r*Math.cos(ang)).toFixed(1)+','+(r*Math.sin(ang)).toFixed(1)); } return `<polygon points="${p.join(' ')}" fill="none" stroke="${r===80?'#E7E7E4':'#EFEFED'}"/>`; }).join('');
+    const attrRows = TECH.map(t=>`<div class="row"><span>${esc(t)}</span><span class="v">${scoreByType[t]!=null?num1(scoreByType[t]):'—'}</span></div>`).join('');
+    radarHTML = `<div class="radarwrap">
+      <svg viewBox="0 0 220 200" width="100%" style="max-width:200px"><g transform="translate(110,100)">
+        ${rings}
+        <polygon points="${poly}" fill="rgba(21,128,61,.14)" stroke="var(--accent)" stroke-width="2"/>
+        <g font-family="var(--cm-font-sans)" font-size="9" font-weight="600" fill="#5B6470" text-anchor="middle">
+          <text x="0" y="-88">TECH</text><text x="86" y="-42">PASS</text><text x="84" y="52">DEF</text>
+          <text x="0" y="96">VISION</text><text x="-84" y="52">DUEL</text><text x="-86" y="-42">1V1</text>
+        </g></g></svg>
+      <div class="attr">${attrRows}</div></div>`;
+  } else {
+    radarHTML = `<div class="empty-note">${esc(L.noTechEval)}</div>`;
+  }
+
+  // athletic profile rows — neutral magnitude fill, no percentile label (TODO: real percentile)
+  const am = (name, value, unit, refMax, higherBetter)=>{
+    const has = value!=null;
+    const w = has ? neutralFill(value, refMax, higherBetter) : null;
+    return `<div class="am"><div class="top"><span class="nm">${esc(name)}</span>
+      <span class="vv">${has?num1(value):'—'}${has&&unit?`<span class="u"> ${esc(unit)}</span>`:''}</span></div>
+      <div class="bar">${w!=null?`<div class="f neutral" style="width:${w.toFixed(0)}%"></div>`:''}</div></div>`;
+  };
+  const ath = `<div class="ath">
+    ${am(L.topSpeed, topSpeed, 'km/h', 36, true)}
+    ${am(L.distMatch, distPerMatch!=null?distPerMatch/1000:null, 'km', 13, true)}
+    ${am(L.cmj, cmj, 'cm', 50, true)}
+    ${am(L.hsrMatch, hsrPerMatch, 'm', 1000, true)}
+    ${am(L.sprint30, sprint, 's', null, false)}
+  </div>`;
+
+  // ribbon (availability) — hidden if availabilityPct is null
+  let ribbon='';
+  if(k.availabilityPct!=null){
+    ribbon = `<div class="ribbon">
+      <div class="big">${esc(k.availabilityPct)}%</div>
+      <div class="txt"><b>${esc(L.availableTxt)} ${esc(k.availabilityPct)}% ${esc(L.ofSeason)}</b></div>
+      ${caps!=null&&caps>0?`<div class="caps"><div class="v">${esc(caps)}</div><div class="k">${esc(L.intlCaps)}</div></div>`:''}
+    </div>`;
+  }
+
+  // role line (foot-derived; no editorial role field exists)
+  const roleLine = player.dominant_foot ? `<div class="role"><span class="em">${esc(player.position||'')}</span> · ${esc(player.dominant_foot)}-footed</div>` : (player.position?`<div class="role"><span class="em">${esc(player.position)}</span></div>`:'');
+
+  host.innerHTML = `<div class="sheet">
+    <div class="hero">
+      <div class="crestline"><div class="meta"><div class="a">${esc(L.dossier)}</div><div class="b">${esc(L.season)} ${esc(seasonLabel(seasonStart))}</div></div><div class="crest">${crestInner}</div></div>
+      <div class="portrait">${numBadge}${portraitInner}</div>
+      <div class="heroinfo">
+        <div class="eyebrow">${esc(eyebrow)}</div>
+        <div class="pname">${esc(full)}</div>
+        ${roleLine}
+        <div class="bio">
+          <div class="b"><div class="k">${esc(L.age)}</div><div class="v">${a!=null?a:'—'}</div></div>
+          <div class="b"><div class="k">${esc(L.born)}</div><div class="v">${esc(bornLabel(player.date_of_birth))}</div></div>
+          <div class="b"><div class="k">${esc(L.nation)}</div><div class="v">${esc(player.nationality||'—')}</div></div>
+          <div class="b"><div class="k">${esc(L.height)}</div><div class="v">${player.height?esc(player.height)+' cm':'—'}</div></div>
+          <div class="b"><div class="k">${esc(L.weight)}</div><div class="v">${player.weight?esc(player.weight)+' kg':'—'}</div></div>
+          <div class="b"><div class="k">${esc(L.foot)}</div><div class="v">${esc(cap(player.dominant_foot))}</div></div>
+        </div>
+      </div>
+    </div>
+
+    ${hstats}
+
+    <div class="body">
+      <div class="col l">
+        <div class="sec-h"><h2>${esc(L.technicalProfile)}</h2><div class="rule"></div><span class="tag">${esc(L.coachScored)}</span></div>
+        ${radarHTML}
+        <div class="sec-h" style="margin-top:24px"><h2>${esc(L.scoutingSummary)}</h2><div class="rule"></div></div>
+        <p class="scout" contenteditable="true" data-ph="${esc(L.scoutPlaceholder)}"></p>
+        <div class="signoff">${esc(L.assessedBy)} <b>${esc(L.perfStaff)}</b> · <b>ClavaMetrics</b></div>
+      </div>
+      <div class="col">
+        <div class="sec-h"><h2>${esc(L.athleticProfile)}</h2><div class="rule"></div></div>
+        ${ath}
+        <!-- TODO: Season production card (G+A, key passes, MOTM, pass acc.) omitted — no data source yet. -->
+      </div>
+    </div>
+
+    ${ribbon}
+
+    <div class="foot">
+      <div class="club"><span class="c">${crestInner}</span><span>${esc(clubName)}${catLabel!=='—'?' · '+esc(catLabel):''}</span></div>
+      <div class="sp"><div class="mark">${esc(L.generatedWith)}</div></div>
+    </div>
+  </div>`;
+  // NOTE: the scouting summary is intentionally NOT persisted — it prints with
+  // whatever the user types. Persisting it is a future `players`/dossier field.
+}
+
+// accent swatches (no-print toolbar)
+document.querySelectorAll('.sw').forEach(s=>s.addEventListener('click',()=>{
+  document.querySelectorAll('.sw').forEach(x=>x.classList.remove('on'));s.classList.add('on');
+  const r=document.documentElement.style;
+  r.setProperty('--accent',s.dataset.c);r.setProperty('--accent-press',s.dataset.p);
+  r.setProperty('--accent-soft',s.dataset.s);r.setProperty('--accent-bd',s.dataset.b);
+}));
+
+boot().catch(e=>{ console.warn('dossier boot failed', e); });
+</script>
+</body>
+</html>
