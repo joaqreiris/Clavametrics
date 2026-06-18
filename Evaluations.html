@@ -2126,9 +2126,9 @@
   // velocity-based = a reference running speed (km/h) can be used for interval prescription.
   // 30-15 IFT: value IS the VIFT. Cooper 12-min: VAM is derived from distance.
   var EV_VELOCITY_TEST = { ift:1, cooper:1 };
-  // Cooper VAM (maximal aerobic speed, km/h). VO2max ≈ (distance_m − 504.9) / 45 [ml/kg/min];
-  // VAM = VO2max / 3.5 (≈ speed at VO2max). e.g. 3000 m → ~15.8 km/h.
-  function cooperVAM(distM){ return ((distM - 504.9) / 45) / 3.5; }
+  // Cooper VAM (maximal aerobic speed, km/h) ≈ distance_m / 200.
+  // (12-min avg speed: dist/1000 km × 60/12 h⁻¹ = dist/200.) e.g. 3100 m → 15.5 km/h.
+  function cooperVAM(distM){ return distM / 200; }
   // reference speed (km/h) + its label, per velocity test
   function evRefSpeed(test, value){
     if (test.key === 'cooper') return { speed: cooperVAM(value), label: 'VAM' };
