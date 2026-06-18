@@ -1198,7 +1198,7 @@ function renderTable() {
         <td><span class="sq-anthro">${h}${w}</span></td>
         <td><span class="sq-role-pill">${(_teams.find(t => t.id === p.team_id)?.name) || '—'}</span></td>
         <td class="sq-mono">—</td>
-        <td><div class="sq-row-actions"><button class="sq-edit-btn" data-id="${p.id}" title="Edit profile"><i class="ti ti-edit"></i></button></div></td>
+        <td><div class="sq-row-actions"><button class="sq-edit-btn" data-id="${p.id}" title="Edit player"><i class="ti ti-edit"></i></button></div></td>
       </tr>`;
     });
   });
@@ -1217,13 +1217,13 @@ function renderTable() {
     });
   });
 
-  // Row click opens edit
+  // Row click opens the player profile
   tbody.querySelectorAll('tr:not(.is-group)').forEach(tr => {
+    tr.style.cursor = 'pointer';
     tr.addEventListener('click', e => {
-      if (e.target.closest('[data-cb]') || e.target.closest('.sq-edit-btn')) return;
-      const id = tr.querySelector('.sq-edit-btn')?.dataset.id;
-      const player = _allPlayers.find(p => p.id === id);
-      if (player) openModal(player);
+      if (e.target.closest('[data-cb]') || e.target.closest('.sq-edit-btn')) return; // ignore checkbox + edit btn
+      const id = tr.dataset.id;
+      if (id) window.location.href = `Player.html?id=${encodeURIComponent(id)}`;
     });
   });
 
@@ -1582,7 +1582,8 @@ async function reloadPlayers() {
       const pos = (p.position||'').toUpperCase();
       const pcfg = POS_CFG[pos] || { css:'', pill: pos };
       const age = calcAge(p.date_of_birth);
-      return `<div class="sq-card" data-id="${p.id}">
+      return `<div class="sq-card" data-id="${p.id}" style="position:relative">
+        <button class="sq-card-edit" data-id="${p.id}" title="Edit player" style="position:absolute;top:6px;right:6px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--cm-fg-faint);border-radius:6px;cursor:pointer"><i class="ti ti-edit" style="font-size:14px"></i></button>
         <div class="sq-card-av">${cardAvInner}<span class="sq-card-num">${p.number||'—'}</span></div>
         <div class="sq-card-name">${fullName||'—'}</div>
         <div class="sq-card-meta">
@@ -1592,10 +1593,18 @@ async function reloadPlayers() {
         </div>
       </div>`;
     }).join('');
-    grid.querySelectorAll('.sq-card').forEach(card => {
-      card.addEventListener('click', () => {
-        const player = _allPlayers.find(p => p.id === card.dataset.id);
+    grid.querySelectorAll('.sq-card-edit').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const player = _allPlayers.find(p => p.id === btn.dataset.id);
         if (player) openModal(player);
+      });
+    });
+    grid.querySelectorAll('.sq-card').forEach(card => {
+      card.addEventListener('click', e => {
+        if (e.target.closest('.sq-card-edit')) return; // ignore edit btn
+        const id = card.dataset.id;
+        if (id) window.location.href = `Player.html?id=${encodeURIComponent(id)}`;
       });
     });
   }
