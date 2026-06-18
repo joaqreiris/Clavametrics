@@ -159,6 +159,16 @@
   // esté vivo y los comps sembrados a clubes/testers.
   window.CM_PLAN_GATING_ENABLED = false;
 
+  // Equipo activo global (lo setea el selector del sidebar y las páginas).
+  // Fuente única de verdad para el gating per-team (Opción B).
+  window.getActiveTeamId = function () {
+    try {
+      return sessionStorage.getItem('cal_active_team')
+          || localStorage.getItem('cal_active_team')
+          || null;
+    } catch (e) { return null; }
+  };
+
   let _planPromise = null;
   // Set de features a las que el club del usuario tiene derecho. Fail-open:
   // ante error devuelve null = "desconocido" → planAllows permite todo.
@@ -166,7 +176,14 @@
     if (_planPromise) return _planPromise;
     _planPromise = (async () => {
       try {
-        const { data, error } = await window.sb.rpc('my_plan_features');
+        const teamId = window.getActiveTeamId && window.getActiveTeamId();
+        let data, error;
+        if (teamId) {
+          ({ data, error } = await window.sb.rpc('team_features', { p_team_id: teamId }));
+        } else {
+          // sin equipo activo (ej. página sin selector y storage vacío) → rollup del club
+          ({ data, error } = await window.sb.rpc('my_plan_features'));
+        }
         if (error || !Array.isArray(data)) return null; // fail-open
         return new Set(data);
       } catch (e) {
