@@ -2198,6 +2198,19 @@
     { id:'10-20-105', label:'10-20 · 105% VIFT', run:10, rest:20, pct:105, desc:'10s run / 20s rest · 105%' },
     { id:'30-30-85',  label:'30-30 · 85% VIFT',  run:30, rest:30, pct:85,  desc:'30s run / 30s rest · 85%' },
   ];
+  // Work-zone cuts by % of VIFT/VAM (Buchheit & Laursen 2013). Orientation, not dogma.
+  // <=90 Aerobic · 90-100 Supra-aerobic · 100-110 Anaerobic · >110 (+ short work) Speed/RSA.
+  // (vVO2max ≈ 85% VIFT; VIFT is the upper bound of HIIT.) Tune here.
+  var EV_ZONE_CUTS = { aerobic: 90, supra: 100, anaerobic: 110 };
+  var EV_ZONE_SPRINT_MAXWORK = 10; // s — "Speed/RSA" needs %>110 AND short work reps
+  // intensity zone from effective % and interval work duration → { label, color }
+  function evWorkZone(pct, workSec){
+    if (pct <= EV_ZONE_CUTS.aerobic)    return { label:'Aerobic',       color:'var(--cm-success)' };
+    if (pct <= EV_ZONE_CUTS.supra)      return { label:'Supra-aerobic', color:'var(--cm-info)' };
+    if (pct <= EV_ZONE_CUTS.anaerobic)  return { label:'Anaerobic',     color:'var(--cm-warning)' };
+    if (workSec <= EV_ZONE_SPRINT_MAXWORK) return { label:'Speed / RSA', color:'var(--cm-danger)' };
+    return { label:'Anaerobic', color:'var(--cm-warning)' };
+  }
   // velocity-based = a reference running speed (km/h) can be used for interval prescription.
   // 30-15 IFT: value IS the VIFT. Cooper 12-min: VAM is derived from distance.
   var EV_VELOCITY_TEST = { ift:1, cooper:1 };
@@ -2310,6 +2323,7 @@
         +   '<label for="egRxType" style="font:500 11px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Work type</label>'
         +   '<select id="egRxType" class="ev-finput" style="width:auto;min-width:210px">'+opts2+'</select>'
         +   '<span id="egRxDesc" style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-accent)"></span>'
+        +   '<span id="egRxZone" style="display:inline-flex;align-items:center;height:20px;padding:0 9px;border-radius:5px;font:700 10.5px/1 var(--cm-font-mono);letter-spacing:.04em;background:var(--cm-bg-soft);border:1px solid var(--cm-border)"></span>'
         + '</div>'
         + '<div id="egRxCustom" style="display:none;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px">'
         +   '<span style="display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Work <input id="egRxWork" type="number" min="1" max="120" step="1" value="15" class="ev-finput" style="'+nInp+'"> s</span>'
@@ -2317,6 +2331,7 @@
         +   '<span style="display:inline-flex;align-items:center;gap:6px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"><input id="egRxPct" type="number" min="50" max="130" step="1" value="90" class="ev-finput" style="'+nInp+'"> % of '+refLabel+'</span>'
         + '</div>'
         + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:8px">Target speed = '+refLabel+' × % · Distance per rep = target speed × work seconds.'+(showRef?' '+refLabel+' derived from distance.':'')+' Per player below.</div>'
+        + '<div style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:4px">Intensity zone by % of '+refLabel+' (orientation). Actual physiological emphasis also depends on interval duration, work:rest ratio and format. Ref: Buchheit &amp; Laursen (2013), Sports Med.</div>'
         + '</div>';
     } else {
       rxPanel = '<div class="ft-card" style="padding:12px 18px;margin-bottom:12px">'
@@ -2349,6 +2364,10 @@
           work = p.run; pct = p.pct; desc = p.desc;
         }
         var d = document.getElementById('egRxDesc'); if (d) d.textContent = desc;
+        // intensity-zone badge (Buchheit & Laursen) — by effective % and work duration
+        var zone = evWorkZone(pct, work);
+        var z = document.getElementById('egRxZone');
+        if (z){ z.textContent = zone.label; z.style.color = zone.color; z.style.borderColor = zone.color; }
         root.querySelectorAll('.eg-rx').forEach(function(el){
           var ref = parseFloat(el.getAttribute('data-ref'));
           var runEl = el.querySelector('.rx-run b'), repEl = el.querySelector('.rx-rep b');
