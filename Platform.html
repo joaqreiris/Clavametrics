@@ -116,6 +116,13 @@
         _plans.map(p=>{ const on=(p.features||[]).includes(key);
           return `<td><input type="checkbox" data-plan="${p.id}" data-feat="${key}" ${on?'checked':''}></td>`; }).join('')+`</tr>`;
       host.innerHTML = `
+        <div class="pf-annual">
+          Annual price = monthly ×
+          <input class="pf-num" id="pfAnnualMonths" type="number" min="1" step="1" value="10" style="width:56px;text-align:center">
+          months
+          <button class="pf-mini" id="pfApplyAnnual">Apply to all</button>
+          <span class="pf-hint">10 = 2 months free (~17% off)</span>
+        </div>
         <table class="pf-tbl">
           <thead><tr><th class="lbl">Plan</th>${_plans.map(p=>`<th>${p.name}<span class="slug">${p.slug}</span></th>`).join('')}</tr></thead>
           <tbody>
@@ -127,13 +134,6 @@
             ${FEATURE_CATALOG.map(featRow).join('')}
           </tbody>
         </table>
-        <div class="pf-annual">
-          Annual price = monthly ×
-          <input class="pf-num" id="pfAnnualMonths" type="number" min="1" step="1" value="10" style="width:56px;text-align:center">
-          months
-          <button class="pf-mini" id="pfApplyAnnual">Apply to all</button>
-          <span class="pf-hint">10 = 2 months free (~17% off)</span>
-        </div>
         <button class="pf-save" id="pfSaveBtn">Save changes</button>
         <div class="pf-msg" id="pfMsg"></div>`;
       document.getElementById('pfSaveBtn').addEventListener('click', pfSavePlans);
