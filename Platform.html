@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Platform Admin — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<style>
+  body.cm{background:var(--cm-bg);color:var(--cm-fg-strong);font-family:var(--cm-font-sans);margin:0}
+  .pf-wrap{max-width:980px;margin:0 auto;padding:32px 20px}
+  .pf-head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .pf-head h1{font-size:22px;margin:0}
+  .pf-back{color:var(--cm-fg-muted);text-decoration:none;font-size:13px;margin-bottom:16px;display:inline-flex;gap:6px;align-items:center}
+  .pf-badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:var(--cm-r-pill);background:var(--cm-info-bg);color:var(--cm-info)}
+  .pf-sub{color:var(--cm-fg-muted);margin:0 0 24px}
+  .pf-tabs{display:flex;gap:4px;border-bottom:1px solid var(--cm-border);margin-bottom:24px}
+  .pf-tab{padding:10px 16px;background:none;border:0;border-bottom:2px solid transparent;color:var(--cm-fg-muted);cursor:pointer;font:600 14px var(--cm-font-sans)}
+  .pf-tab.is-active{color:var(--cm-fg-strong);border-bottom-color:var(--cm-accent)}
+  .pf-panel{display:none}
+  .pf-panel.is-active{display:block}
+  .pf-loading{color:var(--cm-fg-muted);padding:40px;text-align:center}
+  .pf-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .pf-tbl th,.pf-tbl td{padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);text-align:center}
+  .pf-tbl th{color:var(--cm-fg-strong);font-weight:700;border-bottom:1px solid var(--cm-border)}
+  .pf-tbl th .slug{display:block;font:600 11px var(--cm-font-mono);color:var(--cm-fg-muted)}
+  .pf-tbl td.lbl,.pf-tbl th.lbl{text-align:left;color:var(--cm-fg-muted)}
+  .pf-tbl tr.sep td{background:var(--cm-bg-soft);font-weight:700;color:var(--cm-fg-strong);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  .pf-num{width:80px;padding:5px 7px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);text-align:right;font:inherit}
+  .pf-save{margin-top:20px;padding:10px 20px;background:var(--cm-accent);color:var(--cm-fg-on-accent);border:0;border-radius:8px;font:600 14px var(--cm-font-sans);cursor:pointer}
+  .pf-msg{margin-top:12px;font-size:13px;color:var(--cm-fg-muted);min-height:18px}
+</style>
+</head>
+<body class="cm">
+  <div class="pf-wrap" id="pfRoot" style="display:none">
+    <a class="pf-back" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to app</a>
+    <div class="pf-head">
+      <h1>Platform Admin</h1>
+      <span class="pf-badge">Owner only</span>
+    </div>
+    <p class="pf-sub">Manage plans, pricing and quotes. Changes here affect all clubs.</p>
+    <div class="pf-tabs">
+      <button class="pf-tab is-active" data-tab="plans">Plans</button>
+      <button class="pf-tab" data-tab="calculator">Budget calculator</button>
+    </div>
+    <section class="pf-panel is-active" id="pfPlans"><div class="pf-loading">Plans editor — coming next.</div></section>
+    <section class="pf-panel" id="pfCalculator"><div class="pf-loading">Budget calculator — coming next.</div></section>
+  </div>
+  <div class="pf-loading" id="pfGate">Checking access…</div>
+
+<script>
+(async function(){
+  const ok = await window.requireAuth('Login.html');
+  if(!ok) return;
+  let isPA=false;
+  try { isPA = await window.isSuperAdmin(); } catch(e){}
+  if(!isPA){ window.location.replace('Hub.html'); return; }   // no platform admin → fuera
+  document.getElementById('pfGate').style.display='none';
+  document.getElementById('pfRoot').style.display='block';
+  window.pfRenderPlans();
+  document.querySelectorAll('.pf-tab').forEach(t=>{
+    t.addEventListener('click',()=>{
+      document.querySelectorAll('.pf-tab').forEach(x=>x.classList.remove('is-active'));
+      document.querySelectorAll('.pf-panel').forEach(x=>x.classList.remove('is-active'));
+      t.classList.add('is-active');
+      document.getElementById(t.dataset.tab==='plans'?'pfPlans':'pfCalculator').classList.add('is-active');
+    });
+  });
+})();
+</script>
+
+<script>
+  // Catálogo de features (key → label legible). Es la fuente de los toggles.
+  const FEATURE_CATALOG = [
+    ['squad','Squad'],['wellness_capture','Wellness — capture'],['rpe_capture','RPE — capture'],
+    ['athlete_app','Athlete app'],['calendar','Calendar'],['daily_planning','Daily planning'],
+    ['sessions_library','Exercises Library (browse)'],['drill_designer','Drill Designer (create)'],
+    ['wellness_analysis','Wellness/RPE — analysis'],['evaluations','Evaluations'],['injuries','Injuries'],
+    ['availability','Availability'],['gps_analysis','GPS Analysis'],['annual_planner','Annual Planner'],
+    ['gym','Gym (planner + library)'],['load_monitor','Load Monitor'],['load_wellness_cross','Load × wellness cross'],
+    ['individual_planner','Individual Planner'],['physio','Physio'],['rehab_planner','Rehab Planner'],
+    ['match_reports','Match Reports'],['lineup','Lineup'],['multi_staff','Multi-staff / roles'],
+    ['nutrition','Nutrition'],['video_room','Video Room'],
+  ];
+  let _plans = [];
+  function pfMsg(t){ const e=document.getElementById('pfMsg'); if(e) e.textContent=t; }
+
+  window.pfRenderPlans = async function(){
+    const host = document.getElementById('pfPlans');
+    try {
+      const { data, error } = await window.sb.from('plans').select('*').order('sort_order');
+      if (error || !data) throw error || new Error('no data');
+      _plans = data;
+      const numRow = (label, field) => `<tr><td class="lbl">${label}</td>`+
+        _plans.map(p=>`<td><input class="pf-num" type="number" step="any" min="0"
+          data-plan="${p.id}" data-field="${field}" value="${p[field]??''}" placeholder="∞"></td>`).join('')+`</tr>`;
+      const featRow = ([key,label]) => `<tr><td class="lbl">${label}</td>`+
+        _plans.map(p=>{ const on=(p.features||[]).includes(key);
+          return `<td><input type="checkbox" data-plan="${p.id}" data-feat="${key}" ${on?'checked':''}></td>`; }).join('')+`</tr>`;
+      host.innerHTML = `
+        <table class="pf-tbl">
+          <thead><tr><th class="lbl">Plan</th>${_plans.map(p=>`<th>${p.name}<span class="slug">${p.slug}</span></th>`).join('')}</tr></thead>
+          <tbody>
+            ${numRow('Price / month (USD)','price_monthly')}
+            ${numRow('Price / year (USD)','price_yearly')}
+            ${numRow('Max players','max_players')}
+            ${numRow('Max staff','max_staff')}
+            <tr class="sep"><td colspan="${_plans.length+1}">Features</td></tr>
+            ${FEATURE_CATALOG.map(featRow).join('')}
+          </tbody>
+        </table>
+        <button class="pf-save" id="pfSaveBtn">Save changes</button>
+        <div class="pf-msg" id="pfMsg"></div>`;
+      document.getElementById('pfSaveBtn').addEventListener('click', pfSavePlans);
+    } catch(e){ host.innerHTML = '<div class="pf-loading">Could not load plans.</div>'; }
+  };
+
+  async function pfSavePlans(){
+    pfMsg('Saving…');
+    try {
+      const numVal = (pid, field, dflt=null) => {
+        const v = document.querySelector(`[data-plan="${pid}"][data-field="${field}"]`).value.trim();
+        return v==='' ? dflt : Number(v);
+      };
+      for (const p of _plans){
+        const features = FEATURE_CATALOG
+          .filter(([k])=>document.querySelector(`[data-plan="${p.id}"][data-feat="${k}"]`)?.checked)
+          .map(([k])=>k);
+        const payload = {
+          price_monthly: numVal(p.id,'price_monthly',0),   // NOT NULL → default 0
+          price_yearly:  numVal(p.id,'price_yearly',null),
+          max_players:   numVal(p.id,'max_players',null),   // null = ilimitado
+          max_staff:     numVal(p.id,'max_staff',null),
+          features
+        };
+        const { error } = await window.sb.from('plans').update(payload).eq('id', p.id);
+        if (error) throw error;
+      }
+      pfMsg('Saved ✓');
+    } catch(e){ pfMsg('Save failed: ' + (e.message||e)); }
+  }
+</script>
+</body>
+</html>
