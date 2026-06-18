@@ -152,6 +152,9 @@
     font: 600 36px/1 var(--cm-font-sans);
     letter-spacing: -0.025em; color: var(--cm-fg-strong);
   }
+  .pr-tier-price .amt{transition:opacity .18s ease, transform .18s ease}
+  .pr-tier-price .amt.amt-swap{opacity:0;transform:translateY(5px)}
+  .pr-eq{font:500 12px/1.2 var(--cm-font-sans);color:var(--cm-accent);margin:2px 0 0}
   .pr-tier-price .cur {
     font: 500 14px/1 var(--cm-font-mono); color: var(--cm-fg-muted);
   }
@@ -815,10 +818,21 @@
 <div id="tweaks-root"></div>
 
 <script>
-  // Precios en vivo + toggle mensual/anual. Los hardcodeados quedan como fallback.
   (function(){
-    let PLANS = {};            // slug -> { price_monthly, price_yearly }
+    let PLANS = {};
     let cycle = 'monthly';
+
+    function ensureEq(amtEl){
+      const price = amtEl.closest('.pr-tier-price');
+      if (!price) return null;
+      let eq = price.nextElementSibling;
+      if (!eq || !eq.classList.contains('pr-eq')){
+        eq = document.createElement('div');
+        eq.className = 'pr-eq';
+        price.insertAdjacentElement('afterend', eq);
+      }
+      return eq;
+    }
 
     function renderPrices(){
       document.querySelectorAll('.amt[data-slug]').forEach(el => {
@@ -829,11 +843,18 @@
         el.textContent = '$' + Number(val);
         const per = el.parentElement.querySelector('.per');
         if (per) per.textContent = cycle === 'annual' ? '/ category / yr' : '/ category / mo';
+        const eq = ensureEq(el);
+        if (eq){
+          if (cycle === 'annual' && Number(p.price_yearly) > 0){
+            eq.textContent = '≈ $' + Math.round(Number(p.price_yearly)/12) + '/mo · billed annually';
+            eq.style.display = '';
+          } else { eq.textContent = ''; eq.style.display = 'none'; }
+        }
       });
     }
 
     function renderSavings(){
-      const b = PLANS['basic'];  // % de ahorro calculado de un plan pago representativo
+      const b = PLANS['basic'];
       const badge = document.querySelector('.pr-toggle .save');
       if (badge && b && b.price_monthly > 0 && b.price_yearly != null){
         const pct = Math.round((1 - b.price_yearly / (b.price_monthly * 12)) * 100);
@@ -841,11 +862,20 @@
       }
     }
 
+    function swapTo(newCycle){
+      cycle = newCycle;
+      const amts = document.querySelectorAll('.amt[data-slug]');
+      amts.forEach(el => el.classList.add('amt-swap'));
+      setTimeout(() => {
+        renderPrices();
+        requestAnimationFrame(() => amts.forEach(el => el.classList.remove('amt-swap')));
+      }, 130);
+    }
+
     document.querySelectorAll('.pr-toggle button').forEach(b => b.addEventListener('click', () => {
       document.querySelectorAll('.pr-toggle button').forEach(o => o.classList.remove('is-on'));
       b.classList.add('is-on');
-      cycle = b.dataset.billing === 'annual' ? 'annual' : 'monthly';
-      renderPrices();
+      swapTo(b.dataset.billing === 'annual' ? 'annual' : 'monthly');
     }));
 
     (async function(){
