@@ -151,6 +151,46 @@
     return m.all || m.keys.has(key);
   };
 
+  // ── Plan gating (entitlement por plan del club) ──────────────────
+  // Eje SEPARADO de getMyModules (que es permiso por staff). Un módulo se
+  // ve si pasa AMBOS candados: canAccess (RBAC) Y planAllows (plan del club).
+  // INTERRUPTOR MAESTRO: mientras esté en false, planAllows() siempre da true
+  // (el mecanismo queda armado pero no esconde nada). Prender cuando Paddle
+  // esté vivo y los comps sembrados a clubes/testers.
+  window.CM_PLAN_GATING_ENABLED = false;
+
+  let _planPromise = null;
+  // Set de features a las que el club del usuario tiene derecho. Fail-open:
+  // ante error devuelve null = "desconocido" → planAllows permite todo.
+  window.getPlanFeatures = function () {
+    if (_planPromise) return _planPromise;
+    _planPromise = (async () => {
+      try {
+        const { data, error } = await window.sb.rpc('my_plan_features');
+        if (error || !Array.isArray(data)) return null; // fail-open
+        return new Set(data);
+      } catch (e) {
+        return null; // ante error, no gatear
+      }
+    })();
+    return _planPromise;
+  };
+
+  // ¿El plan del club permite este módulo? (por su key de CM_SECTIONS)
+  window.planAllows = async function (key) {
+    try {
+      if (!window.CM_PLAN_GATING_ENABLED) return true;   // interruptor maestro OFF
+      const sec = (window.CM_SECTIONS || []).find(s => s.key === key);
+      const feat = sec ? sec.feature : null;
+      if (!feat) return true;                            // sin feature = always-on
+      const feats = await window.getPlanFeatures();
+      if (!feats) return true;                           // fail-open
+      return feats.has(feat);
+    } catch (e) {
+      return true;                                       // fail-open
+    }
+  };
+
   // Mapa archivo → key, derivado de CM_SECTIONS (decodifica %20, etc.)
   window.moduleKeyForPage = function (file) {
     const f = decodeURIComponent(file || (location.pathname.split('/').pop() || '')).toLowerCase();
@@ -166,9 +206,9 @@
       if (!ok) return false;
       const k = key || window.moduleKeyForPage();
       if (!k) return true;                 // página no gateable → pasa
-      if (await window.canAccess(k)) return true;
-      window.location.replace('Hub.html'); // sin acceso → fuera
-      return false;
+      if (!(await window.canAccess(k))) { window.location.replace('Hub.html'); return false; }   // RBAC
+      if (!(await window.planAllows(k))) { window.location.replace('Plan Picker.html'); return false; } // plan
+      return true;
     } catch (e) {
       return true;                         // fail-open: ante error no bloquear
     }
