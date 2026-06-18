@@ -125,12 +125,14 @@ CREATE POLICY payment_methods_select ON payment_methods
   );
 
 -- ─── Seed básico de planes ────────────────────────────────────
-INSERT INTO plans (slug, name, description, price_monthly, price_yearly, max_players, max_staff, features, sort_order)
-VALUES
-  ('starter',    'Starter',    'Para clubes amateur o juveniles', 49.00,  490.00, 30,   3,    '["squad","wellness","calendar"]'::jsonb,                                                                  1),
-  ('pro',        'Pro',        'Para clubes semi-profesionales',  199.00, 1990.00, 60,  10,   '["squad","wellness","calendar","gps","injuries","planner","nutrition","rehab"]'::jsonb,                  2),
-  ('enterprise', 'Enterprise', 'Clubes profesionales',            499.00, 4990.00, null, null,'["squad","wellness","calendar","gps","injuries","planner","nutrition","rehab","individual_planner"]'::jsonb, 3)
-ON CONFLICT (slug) DO NOTHING;
+-- SEED OBSOLETO — reemplazado por el seed real de planes en docs/packaging-spec.md §6
+-- (initiation/basic/professional/full). No aplicar este INSERT.
+-- INSERT INTO plans (slug, name, description, price_monthly, price_yearly, max_players, max_staff, features, sort_order)
+-- VALUES
+--   ('starter',    'Starter',    'Para clubes amateur o juveniles', 49.00,  490.00, 30,   3,    '["squad","wellness","calendar"]'::jsonb,                                                                  1),
+--   ('pro',        'Pro',        'Para clubes semi-profesionales',  199.00, 1990.00, 60,  10,   '["squad","wellness","calendar","gps","injuries","planner","nutrition","rehab"]'::jsonb,                  2),
+--   ('enterprise', 'Enterprise', 'Clubes profesionales',            499.00, 4990.00, null, null,'["squad","wellness","calendar","gps","injuries","planner","nutrition","rehab","individual_planner"]'::jsonb, 3)
+-- ON CONFLICT (slug) DO NOTHING;
 
 -- ─── Trigger updated_at ───────────────────────────────────────
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger LANGUAGE plpgsql AS $$
