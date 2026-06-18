@@ -191,6 +191,12 @@
   .sq-row-actions button:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
   .sq-row-actions button .ti { font-size:15px; }
 
+  /* Row actions kebab menu (shared popover) */
+  .sq-row-menu { width:180px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); box-shadow:var(--cm-shadow-2); padding:4px; }
+  .sq-row-menu button { width:100%; display:flex; align-items:center; gap:9px; height:32px; padding:0 9px; border:0; border-radius:5px; background:transparent; color:var(--cm-fg); font:500 12.5px/1 var(--cm-font-sans); text-align:left; cursor:pointer; }
+  .sq-row-menu button:hover { background:var(--cm-bg-soft); }
+  .sq-row-menu button .ti { font-size:15px; color:var(--cm-fg-muted); }
+
   /* Group header row */
   .sq-table tbody tr.is-group { scroll-margin-top:94px; }
   .sq-table tbody tr.is-group td {
@@ -887,6 +893,13 @@
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
+<!-- Shared row-actions menu (kebab) -->
+<div id="sqRowMenu" class="sq-row-menu" style="display:none;position:fixed;z-index:200">
+  <button data-act="view"><i class="ti ti-user"></i> View profile</button>
+  <button data-act="edit"><i class="ti ti-edit"></i> Edit</button>
+  <button data-act="dossier"><i class="ti ti-file-export"></i> Export dossier</button>
+</div>
+
 <!-- Player modal (add / edit) -->
 <div class="sq-modal-backdrop" id="sqModalBackdrop">
   <div class="sq-modal" role="dialog" aria-modal="true" aria-labelledby="sqModalTitle">
@@ -1136,6 +1149,43 @@ let _currentClubId = null;
 let _currentClubName = '';
 let _currentClubLogoUrl = '';
 
+// ── Row actions kebab menu (shared popover; state + actions bound once) ──
+let _menuPid = null;
+function openRowMenu(btn) {
+  _menuPid = btn.dataset.id;
+  const m = document.getElementById('sqRowMenu');
+  const r = btn.getBoundingClientRect();
+  m.style.display = 'block';
+  // position below-right of the button, clamped to viewport
+  const mw = m.offsetWidth || 180;
+  m.style.top  = Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 8) + 'px';
+  m.style.left = Math.min(r.right - mw, window.innerWidth - mw - 8) + 'px';
+}
+function closeRowMenu() { document.getElementById('sqRowMenu').style.display = 'none'; _menuPid = null; }
+let _rowMenuBound = false;
+function initRowMenuOnce() {
+  if (_rowMenuBound) return;
+  _rowMenuBound = true;
+  const m = document.getElementById('sqRowMenu');
+  m.querySelectorAll('button').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const act = b.dataset.act, pid = _menuPid;
+    if (!pid) { closeRowMenu(); return; }
+    if (act === 'view') { window.location.href = `Player.html?id=${encodeURIComponent(pid)}`; }
+    else if (act === 'edit') { const p = _allPlayers.find(x => x.id === pid); if (p) openModal(p); closeRowMenu(); }
+    else if (act === 'dossier') { window.open(`Dossier.html?id=${encodeURIComponent(pid)}`, '_blank'); closeRowMenu(); }
+  }));
+  // close on outside click / Escape / table scroll
+  document.addEventListener('click', e => {
+    if (m.style.display === 'none') return;
+    if (e.target.closest('#sqRowMenu') || e.target.closest('.sq-menu-btn')) return;
+    closeRowMenu();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRowMenu(); });
+  const sc = document.querySelector('.sq-table-scroll');
+  if (sc) sc.addEventListener('scroll', closeRowMenu);
+}
+
 function renderTable() {
   const tbody = document.getElementById('sqTbody');
   const foot  = document.getElementById('sqTableFoot');
@@ -1198,7 +1248,7 @@ function renderTable() {
         <td><span class="sq-anthro">${h}${w}</span></td>
         <td><span class="sq-role-pill">${(_teams.find(t => t.id === p.team_id)?.name) || '—'}</span></td>
         <td class="sq-mono">—</td>
-        <td><div class="sq-row-actions"><button class="sq-edit-btn" data-id="${p.id}" title="Edit player"><i class="ti ti-edit"></i></button></div></td>
+        <td><div class="sq-row-actions"><button class="sq-menu-btn" data-id="${p.id}" title="Actions"><i class="ti ti-dots-vertical"></i></button></div></td>
       </tr>`;
     });
   });
@@ -1207,21 +1257,17 @@ function renderTable() {
   // Reset select-all when table re-renders (filter/search change)
   document.querySelector('thead [data-cb]')?.classList.remove('is-on');
 
-  // Edit button handlers
-  tbody.querySelectorAll('.sq-edit-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      const player = _allPlayers.find(p => p.id === id);
-      if (player) openModal(player);
-    });
-  });
+  // Row actions: kebab menu (per-render open buttons; popover actions bound once)
+  tbody.querySelectorAll('.sq-menu-btn').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation(); openRowMenu(btn);
+  }));
+  initRowMenuOnce();
 
   // Row click opens the player profile
   tbody.querySelectorAll('tr:not(.is-group)').forEach(tr => {
     tr.style.cursor = 'pointer';
     tr.addEventListener('click', e => {
-      if (e.target.closest('[data-cb]') || e.target.closest('.sq-edit-btn')) return; // ignore checkbox + edit btn
+      if (e.target.closest('[data-cb]') || e.target.closest('.sq-menu-btn')) return; // ignore checkbox + kebab btn
       const id = tr.dataset.id;
       if (id) window.location.href = `Player.html?id=${encodeURIComponent(id)}`;
     });
