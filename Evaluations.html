@@ -1058,8 +1058,16 @@
               </div>
               <div style="margin:10px 0 10px;font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Tactical (1–10)</div>
               <div class="ev-f2">
-                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-tournament"></i> Tactical</label>
-                  <div class="ev-range-row"><input id="subjTactical" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-map-pin"></i> Positioning</label>
+                  <div class="ev-range-row"><input id="subjPositioning" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-radar-2"></i> Game reading</label>
+                  <div class="ev-range-row"><input id="subjGameReading" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-run"></i> Pressing</label>
+                  <div class="ev-range-row"><input id="subjPressing" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-user-shield"></i> Marking</label>
+                  <div class="ev-range-row"><input id="subjMarking" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
+                <div class="ev-frow"><label class="ev-fl"><i class="ti ti-route"></i> Off-ball movement</label>
+                  <div class="ev-range-row"><input id="subjOffBall" type="range" min="1" max="10" step="1" value="5" class="ev-range" oninput="this.nextElementSibling.textContent=this.value"><span class="ev-range-val">5</span></div></div>
               </div>
               <div style="margin:10px 0 10px;font:600 11px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Mental (1–10)</div>
               <div class="ev-f2">
@@ -5642,7 +5650,9 @@
   //  reloadFieldView). Team grid + overall ring + per-player history are glue.
   // ════════════════════════════════════════════════════════════════════
   var _field = { rows: [], player: null, loaded: false };
-  var SUBJ_DIMS = ['Technique','Passing','Vision','1v1','Defending','Duels','Tactical','Concentration','Composure','Decision-making','Leadership'];
+  var SUBJ_DIMS = ['Technique','Passing','Vision','1v1','Defending','Duels',
+                   'Positioning','Game reading','Pressing','Marking','Off-ball movement',
+                   'Concentration','Composure','Decision-making','Leadership'];
   function faColor(v){ return v>=7 ? 'var(--cm-success)' : v>=5 ? 'var(--cm-warning)' : 'var(--cm-danger)'; }
 
   async function loadFieldData(){
@@ -5700,7 +5710,8 @@
   var FA_ID2DIM = {
     subjTechnique:'Technique', subjPassing:'Passing', subjVision:'Vision', subjOneVOne:'1v1',
     subjDefending:'Defending', subjDuels:'Duels',
-    subjTactical:'Tactical',
+    subjPositioning:'Positioning', subjGameReading:'Game reading', subjPressing:'Pressing',
+    subjMarking:'Marking', subjOffBall:'Off-ball movement',
     subjConcentration:'Concentration', subjComposure:'Composure', subjDecision:'Decision-making', subjLeadership:'Leadership'
   };
   function openFieldPlayer(pid){
