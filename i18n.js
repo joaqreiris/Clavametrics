@@ -144,7 +144,7 @@
     "foot.status":  { en: "Status",  es: "Estado",     pt: "Status" },
 
     // ── Modules cards ──
-    "mod.planner.t": { en: "Planner", es: "Planificador", pt: "Planejador" },
+    "mod.planner.t": { en: "Drill Designer", es: "Drill Designer", pt: "Drill Designer" },
     "mod.planner.d": { en: "Build microcycles and daily sessions with drag-and-drop blocks, tagged by focus.", es: "Construye microciclos y sesiones diarias con bloques drag-and-drop, etiquetados por objetivo.", pt: "Monte microciclos e sessões diárias com blocos de arrastar e soltar, marcados por foco." },
     "mod.load.t": { en: "Load monitor", es: "Monitor de carga", pt: "Monitor de carga" },
     "mod.load.d": { en: "Acute:chronic workload ratios and alerts that flag spikes before they become injuries.", es: "Ratios de carga aguda:crónica y alertas que avisan los picos antes de que se vuelvan lesiones.", pt: "Razões de carga aguda:crônica e alertas que sinalizam picos antes que virem lesões." },
