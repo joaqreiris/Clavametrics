@@ -125,7 +125,7 @@ CREATE POLICY payment_methods_select ON payment_methods
   );
 
 -- ─── Seed básico de planes ────────────────────────────────────
--- SEED OBSOLETO — reemplazado por el seed real de planes en docs/packaging-spec.md §6
+-- SEED OBSOLETO — reemplazado por el seed real de planes en packaging-spec.md §6
 -- (initiation/basic/professional/full). No aplicar este INSERT.
 -- INSERT INTO plans (slug, name, description, price_monthly, price_yearly, max_players, max_staff, features, sort_order)
 -- VALUES
