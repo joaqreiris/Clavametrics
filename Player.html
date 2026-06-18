@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Player — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#15803D">
+  <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/gps-acwr.js"></script>
+<script src="assets/gps-science.js"></script>
+<script src="assets/player-profile.js"></script>
+<script src="assets/player-overview.js"></script>
+<script src="assets/player-tests.js"></script>
+<script src="assets/player-load.js"></script>
+<script src="assets/player-availability.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* Topbar (same as Squad) ---------------------------------- */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-crumb a { color:var(--cm-fg-muted); text-decoration:none; }
+  .hub-crumb a:hover { color:var(--cm-fg); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search:hover { border-color:var(--cm-border-strong); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search input::placeholder { color:var(--cm-fg-faint); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* Page ---------------------------------------------------- */
+  .pp-page { padding:24px 28px 64px; max-width:1400px; width:100%; }
+
+  /* Empty state -------------------------------------------- */
+  .pp-empty {
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
+    padding:48px 24px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+  }
+  .pp-empty .ti { font-size:30px; color:var(--cm-fg-faint); }
+  .pp-empty h2 { font:600 17px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pp-empty p { font:var(--cm-body-sm); color:var(--cm-fg-muted); max-width:420px; }
+
+  /* Identity card ------------------------------------------ */
+  .pp-idcard {
+    position:relative; display:flex; gap:18px; align-items:flex-start;
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
+    padding:18px 20px 18px 26px; margin-bottom:18px; overflow:hidden;
+  }
+  .pp-idcard .pp-accent {
+    position:absolute; left:0; top:0; bottom:0; width:5px;
+    background:var(--cm-pos-mf);
+  }
+  .pp-avatar {
+    position:relative; width:84px; height:84px; flex:0 0 84px;
+    border-radius:var(--cm-r-3); overflow:hidden;
+    background:#11161c; border:1px solid var(--cm-border);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pp-avatar img { width:100%; height:100%; object-fit:cover; }
+  .pp-avatar .pp-monogram { font:600 30px/1 var(--cm-font-sans); color:#e7edf3; letter-spacing:0.02em; }
+  .pp-avatar .pp-numbadge {
+    position:absolute; right:-4px; bottom:-4px;
+    min-width:24px; height:24px; padding:0 5px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--cm-fg-strong); color:var(--cm-bg);
+    border:2px solid var(--cm-surface); border-radius:999px;
+    font:600 12px/1 var(--cm-font-mono);
+  }
+
+  .pp-idmain { flex:1; min-width:0; }
+  .pp-idtop { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .pp-idtop h1 { font:600 24px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+
+  .pp-chip {
+    display:inline-flex; align-items:center; gap:5px;
+    height:22px; padding:0 9px; border-radius:999px;
+    font:600 11.5px/1 var(--cm-font-sans); white-space:nowrap;
+  }
+  .pp-chip.pp-pos { color:#fff; }
+  .pp-chip.pp-cat { background:var(--cm-bg-soft); border:1px solid var(--cm-border); color:var(--cm-fg-muted); font-weight:500; }
+  .pp-badge {
+    display:inline-flex; align-items:center; gap:5px;
+    height:22px; padding:0 9px; border-radius:999px;
+    font:600 11.5px/1 var(--cm-font-sans);
+  }
+  .pp-badge .dot { width:7px; height:7px; border-radius:50%; }
+
+  .pp-facts { display:flex; flex-wrap:wrap; gap:22px; margin-top:14px; }
+  .pp-fact { display:flex; flex-direction:column; gap:3px; }
+  .pp-fact .lbl { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .pp-fact .val { font:var(--cm-body-sm); color:var(--cm-fg-strong); }
+
+  /* KPI rail ----------------------------------------------- */
+  .pp-kpis {
+    display:grid; grid-template-columns:repeat(6, 1fr); gap:12px;
+    margin-bottom:20px;
+  }
+  .pp-kpi {
+    background:var(--cm-surface); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1);
+    padding:14px 16px; display:flex; flex-direction:column; gap:6px;
+  }
+  .pp-kpi .lbl { font:500 11px/1.1 var(--cm-font-sans); letter-spacing:0.04em; color:var(--cm-fg-muted); }
+  .pp-kpi .val { font:600 24px/1 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.01em; }
+  .pp-kpi .sub { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-fg-faint); }
+  @media (max-width:1080px){ .pp-kpis { grid-template-columns:repeat(3, 1fr); } }
+  @media (max-width:620px){ .pp-kpis { grid-template-columns:repeat(2, 1fr); } }
+
+  /* Tabs --------------------------------------------------- */
+  .pp-tabstrip {
+    display:flex; gap:4px; border-bottom:1px solid var(--cm-border);
+    margin-bottom:18px; overflow-x:auto;
+  }
+  .pp-tab {
+    position:relative; padding:10px 14px; border:0; background:transparent;
+    font:500 13px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+    cursor:pointer; white-space:nowrap;
+    border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .pp-tab:hover { color:var(--cm-fg); }
+  .pp-tab.is-on { color:var(--cm-fg-strong); border-bottom-color:var(--cm-accent); }
+
+  .pp-panel { display:none; }
+  .pp-panel.is-on { display:block; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="04 Player">
+
+  <!-- Sidebar (same as Squad) -->
+  <div id="hub-side-root"></div>
+
+  <!-- Main -->
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i>
+        <a href="Squad.html">Squad</a>
+        <span class="sep">/</span>
+        <span id="ppCrumbCat">…</span>
+        <span class="sep">/</span>
+        <span id="ppCrumbName" style="color:var(--cm-fg-strong);font-weight:600">Player</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, sessions, microcycles…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="pp-page" id="ppPage">
+      <!-- Rendered by JS -->
+    </section>
+
+  </main>
+</div>
+
+<!-- Tweaks + Settings -->
+<div id="tweaks-root"></div>
+<div id="settings-host"></div>
+
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
+<script defer src="settings-drawer.js"></script>
+<script defer src="tweaks-panel.js"></script>
+<script defer src="theme-tweaks.js"></script>
+
+<script>
+  // ── Helpers ───────────────────────────────────────────────────
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  // Map a position string to a token key (gk/cb/fb/mf/wg/st)
+  function posKey(position) {
+    const p = (position || '').toLowerCase();
+    if (/goal|\bgk\b/.test(p)) return 'gk';
+    if (/cent(re|er)\s*back|\bcb\b/.test(p)) return 'cb';
+    if (/full\s*back|wing\s*back|\bfb\b|\blb\b|\brb\b/.test(p)) return 'fb';
+    if (/wing|winger|\bwg\b|\blw\b|\brw\b/.test(p)) return 'wg';
+    if (/strik|forward|\bst\b|\bcf\b/.test(p)) return 'st';
+    if (/\bmid\b|midfield|\bmf\b|\bcm\b|\bdm\b|\bam\b/.test(p)) return 'mf';
+    return 'mf';
+  }
+
+  function statusMeta(status) {
+    const s = (status || '').toLowerCase();
+    const map = {
+      available:   { label: 'Available',   color: 'var(--cm-success)' },
+      injured:     { label: 'Injured',     color: 'var(--cm-danger)'  },
+      modified:    { label: 'Modified',    color: 'var(--cm-warning)' },
+      unavailable: { label: 'Unavailable', color: 'var(--cm-neutral)' },
+    };
+    return map[s] || { label: status ? (status[0].toUpperCase() + status.slice(1)) : '—', color: 'var(--cm-neutral)' };
+  }
+
+  function age(dob) {
+    if (!dob) return '—';
+    const d = new Date(dob);
+    if (isNaN(d)) return '—';
+    const now = new Date();
+    let a = now.getFullYear() - d.getFullYear();
+    const m = now.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < d.getDate())) a--;
+    return a >= 0 && a < 130 ? a : '—';
+  }
+
+  function cap(s) { return s ? (s[0].toUpperCase() + s.slice(1)) : '—'; }
+
+  function emptyState(icon, title, body) {
+    return `<div class="pp-empty">
+      <i class="ti ${icon}"></i>
+      <h2>${esc(title)}</h2>
+      ${body ? `<p>${esc(body)}</p>` : ''}
+    </div>`;
+  }
+
+  // ── Render ────────────────────────────────────────────────────
+  function renderProfile(player, catLabel) {
+    const page = document.getElementById('ppPage');
+    const pk = posKey(player.position);
+    const sm = statusMeta(player.status);
+    const full = [player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player';
+    const monogram = [player.first_name, player.last_name]
+      .filter(Boolean).map(n => n[0]).join('').toUpperCase() || '?';
+
+    // Crumb
+    document.getElementById('ppCrumbCat').textContent = catLabel || '—';
+    document.getElementById('ppCrumbName').textContent = full;
+    document.title = `${full} — ClavaMetrics`;
+
+    const anthro = (player.height || player.weight)
+      ? `${player.height ? player.height + ' cm' : '—'} · ${player.weight ? player.weight + ' kg' : '—'}`
+      : '—';
+
+    const avatar = player.photo_url
+      ? `<img src="${esc(player.photo_url)}" alt="${esc(full)}">`
+      : `<span class="pp-monogram">${esc(monogram)}</span>`;
+    const numBadge = (player.number != null && player.number !== '')
+      ? `<span class="pp-numbadge">${esc(player.number)}</span>` : '';
+
+    const kpis = [
+      { key: 'minutes',      label: 'Minutes played' },
+      { key: 'trainings',    label: 'Trainings done' },
+      { key: 'availability', label: 'Availability'   },
+      { key: 'days_out',     label: 'Days out'       },
+      { key: 'acwr',         label: 'ACWR'           },
+      { key: 'readiness',    label: 'Readiness'      },
+    ].map(k => `<div class="pp-kpi" data-kpi="${k.key}">
+        <span class="lbl">${k.label}</span>
+        <span class="val">…</span>
+        <span class="sub" data-kpi-sub></span>
+      </div>`).join('');
+
+    const tabs = [
+      { id: 'overview',     label: 'Overview' },
+      { id: 'physical',     label: 'Physical & tests' },
+      { id: 'load',         label: 'Load & wellness' },
+      { id: 'availability', label: 'Availability & injuries' },
+    ];
+    const tabBtns = tabs.map((t, i) =>
+      `<button class="pp-tab ${i === 0 ? 'is-on' : ''}" data-tab="${t.id}">${t.label}</button>`).join('');
+    const panels = tabs.map((t, i) =>
+      `<div class="pp-panel ${i === 0 ? 'is-on' : ''}" data-panel="${t.id}">
+        ${emptyState('ti-tools', 'This section is built in the next step.', '')}
+      </div>`).join('');
+
+    page.innerHTML = `
+      <div class="pp-idcard">
+        <span class="pp-accent" style="background:var(--cm-pos-${pk})"></span>
+        <div class="pp-avatar">${avatar}${numBadge}</div>
+        <div class="pp-idmain">
+          <div class="pp-idtop">
+            <h1>${esc(full)}</h1>
+            ${player.position ? `<span class="pp-chip pp-pos" style="background:var(--cm-pos-${pk})">${esc(player.position)}</span>` : ''}
+            <span class="pp-badge" style="background:color-mix(in srgb, ${sm.color} 14%, transparent);color:${sm.color}">
+              <span class="dot" style="background:${sm.color}"></span>${esc(sm.label)}
+            </span>
+            <span class="pp-chip pp-cat">${esc(catLabel || '—')}</span>
+          </div>
+          <div class="pp-facts">
+            <div class="pp-fact"><span class="lbl">Age</span><span class="val">${age(player.date_of_birth)}</span></div>
+            <div class="pp-fact"><span class="lbl">Nationality</span><span class="val">${esc(player.nationality || '—')}</span></div>
+            <div class="pp-fact"><span class="lbl">Height / Weight</span><span class="val">${esc(anthro)}</span></div>
+            <div class="pp-fact"><span class="lbl">Foot</span><span class="val">${esc(cap(player.dominant_foot))}</span></div>
+            <div class="pp-fact"><span class="lbl">Joined</span><span class="val">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pp-kpis">${kpis}</div>
+
+      <div class="pp-tabstrip">${tabBtns}</div>
+      ${panels}
+    `;
+
+    // Tab switching
+    page.querySelectorAll('.pp-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.tab;
+        page.querySelectorAll('.pp-tab').forEach(b => b.classList.toggle('is-on', b === btn));
+        page.querySelectorAll('.pp-panel').forEach(p => p.classList.toggle('is-on', p.dataset.panel === id));
+      });
+    });
+  }
+
+  // ── KPI fill ──────────────────────────────────────────────────
+  function setKpi(key, value, sub) {
+    const card = document.querySelector(`.pp-kpi[data-kpi="${key}"]`);
+    if (!card) return;
+    const vEl = card.querySelector('.val');
+    const sEl = card.querySelector('[data-kpi-sub]');
+    if (vEl) vEl.textContent = value;
+    if (sEl) sEl.textContent = sub || '';
+  }
+
+  function fillKpis(k) {
+    // minutes — total match minutes; subtitle = match count
+    setKpi('minutes',
+      k.minutes != null ? String(k.minutes) : '—',
+      k.matches != null ? `${k.matches} matches` : '');
+
+    // trainings — done / total
+    setKpi('trainings',
+      k.trainingsDone != null ? String(k.trainingsDone) : '—',
+      k.trainingsTotal != null ? `of ${k.trainingsTotal}` : '');
+
+    // availability — % of tracked days available
+    setKpi('availability',
+      k.availabilityPct != null ? `${k.availabilityPct}%` : '—',
+      k.availabilityPct != null ? 'days available' : '');
+
+    // days_out — distinct days unavailable; subtitle = source
+    setKpi('days_out',
+      k.daysOut != null ? String(k.daysOut) : '—',
+      k.daysOut != null && k.daysOutSource ? `from ${k.daysOutSource}` : '');
+
+    // acwr — Player Load acute:chronic
+    setKpi('acwr',
+      k.acwr != null ? k.acwr.toFixed(2) : '—',
+      k.acwr != null
+        ? `${k.acwrLabel ? k.acwrLabel + ' · ' : ''}Player Load`
+        : (k.acwrLabel || ''));
+
+    // readiness — 7-day wellness average
+    setKpi('readiness',
+      k.readiness != null ? `${k.readiness.toFixed(1)}/10` : '—',
+      k.readiness != null ? '7-day avg' : '');
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────
+  (async () => {
+    if (!(await window.guardModule())) return;
+
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    const page = document.getElementById('ppPage');
+
+    if (!id) {
+      page.innerHTML = emptyState('ti-user-off', 'No player selected',
+        'Open this page from the Squad with a player selected.');
+      return;
+    }
+
+    const clubId = await window.getClubId();
+    const club = await window.getClub();
+    window.applyClubTheme();
+
+    const { data: player } = await window.sb.from('players')
+      .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
+      .eq('id', id).eq('club_id', clubId).single();
+
+    if (!player) {
+      page.innerHTML = emptyState('ti-user-off', 'Player not found',
+        'This player does not exist or belongs to another club.');
+      return;
+    }
+
+    // Resolve category label: team_id → team name, fallback ?cat=, else "—"
+    let catLabel = params.get('cat') || '—';
+    if (player.team_id && clubId) {
+      try {
+        const teams = await window.getTeams(clubId);
+        const t = (teams || []).find(t => t.id === player.team_id);
+        if (t && t.name) catLabel = t.name;
+      } catch {}
+    }
+
+    renderProfile(player, catLabel);
+
+    // KPI rail: cards render with "…" already; fill from real data.
+    let kpis = null;
+    try {
+      kpis = await window.playerProfile.loadKpis(player.id, clubId);
+      fillKpis(kpis);
+    } catch (e) {
+      // Total failure → leave every KPI as "—" rather than the loading "…".
+      ['minutes', 'trainings', 'availability', 'days_out', 'acwr', 'readiness']
+        .forEach(key => setKpi(key, '—', ''));
+    }
+
+    // Overview tab: build the 3 cards into its panel using the resolved season window.
+    try {
+      const mount = page.querySelector('.pp-panel[data-panel="overview"]');
+      if (mount && window.playerOverview) {
+        await window.playerOverview.render({
+          playerId: player.id,
+          clubId,
+          seasonStart: kpis ? kpis.seasonStart : null,
+          seasonEnd: kpis ? kpis.seasonEnd : null,
+          mount,
+        });
+      }
+    } catch (e) { /* overview is self-contained; ignore */ }
+
+    // "Physical & tests" tab: render lazily on first activation (not while hidden).
+    let _testsRendered = false;
+    const physTab = page.querySelector('.pp-tab[data-tab="physical"]');
+    const physPanel = page.querySelector('.pp-panel[data-panel="physical"]');
+    if (physTab && physPanel) {
+      physTab.addEventListener('click', async () => {
+        if (_testsRendered || !window.playerTests) return;
+        _testsRendered = true;
+        try { await window.playerTests.render({ playerId: player.id, clubId, mount: physPanel }); }
+        catch (e) { /* tests module is self-contained; ignore */ }
+      });
+    }
+
+    // "Load & wellness" tab: render lazily on first activation.
+    let _loadRendered = false;
+    const loadTab = page.querySelector('.pp-tab[data-tab="load"]');
+    const loadPanel = page.querySelector('.pp-panel[data-panel="load"]');
+    if (loadTab && loadPanel) {
+      loadTab.addEventListener('click', async () => {
+        if (_loadRendered || !window.playerLoad) return;
+        _loadRendered = true;
+        try {
+          await window.playerLoad.render({
+            playerId: player.id,
+            clubId,
+            seasonStart: kpis ? kpis.seasonStart : null,
+            seasonEnd: kpis ? kpis.seasonEnd : null,
+            mount: loadPanel,
+          });
+        } catch (e) { /* load module is self-contained; ignore */ }
+      });
+    }
+
+    // "Availability & injuries" tab: render lazily on first activation.
+    let _availRendered = false;
+    const availTab = page.querySelector('.pp-tab[data-tab="availability"]');
+    const availPanel = page.querySelector('.pp-panel[data-panel="availability"]');
+    if (availTab && availPanel) {
+      availTab.addEventListener('click', async () => {
+        if (_availRendered || !window.playerAvailability) return;
+        _availRendered = true;
+        try {
+          await window.playerAvailability.render({
+            playerId: player.id,
+            clubId,
+            seasonStart: kpis ? kpis.seasonStart : null,
+            seasonEnd: kpis ? kpis.seasonEnd : null,
+            mount: availPanel,
+          });
+        } catch (e) { /* availability module is self-contained; ignore */ }
+      });
+    }
+  })();
+</script>
+
+</body>
+</html>
