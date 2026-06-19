@@ -85,6 +85,7 @@
     .pp-prow .dl { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); min-width:48px; text-align:right; }
     .pp-prow .dl.dl-pos{color:var(--cm-success)} .pp-prow .dl.dl-neg{color:var(--cm-danger)}
     .pp-prow .pp-pct{ font:600 10.5px/1 var(--cm-font-sans); color:var(--cm-accent); background:color-mix(in srgb,var(--cm-accent) 12%,transparent); border:1px solid color-mix(in srgb,var(--cm-accent) 30%,transparent); padding:2px 7px; border-radius:999px; white-space:nowrap; }
+    .pp-force-h { margin:14px 0 6px; padding-top:12px; border-top:1px solid var(--cm-border-soft); font:600 11px/1 var(--cm-font-sans); letter-spacing:.05em; text-transform:uppercase; color:var(--cm-fg-muted); }
 
     /* Injury stats */
     .pp-istats { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
@@ -247,8 +248,40 @@
     } catch(_) { el.innerHTML = miniEmpty('No tactical/mental evaluation yet','Add one from Evaluations'); }
   }
 
+  // ── Force plate: latest test snapshot (label · value+unit), L/R collapsed ──
+  async function loadForceLatest(playerId, clubId){
+    try {
+      const { data: tests } = await sb().from('force_tests')
+        .select('id, test_type, test_date').eq('club_id',clubId).eq('player_id',playerId)
+        .order('test_date',{ascending:false}).limit(1);
+      const t = (tests||[])[0];
+      if(!t) return '';
+      const [mres, dres] = await Promise.all([
+        sb().from('force_test_metrics').select('metric_key, value, side').eq('test_id', t.id),
+        sb().from('force_metric_definitions').select('key, label, unit, category').or('club_id.is.null,club_id.eq.'+clubId)
+      ]);
+      const defMap = {}; (dres.data||[]).forEach(d=>defMap[d.key]=d);
+      const byKey = {}; for(const r of (mres.data||[])) (byKey[r.metric_key]=byKey[r.metric_key]||[]).push(r);
+      const collapse = rows => { const bil=rows.find(r=>(r.side==null||r.side==='')&&r.value!=null);
+        if(bil) return Number(bil.value); const s=rows.filter(r=>r.value!=null).map(r=>Number(r.value));
+        return s.length ? s.reduce((a,b)=>a+b,0)/s.length : null; };
+      const decFor = u => (u==='W'||u==='N'||u==='ms'||u==='N/s') ? 0 : (!u ? 2 : 1);
+      const items = Object.keys(byKey).map(k=>{ const d=defMap[k]||{}; return { label:d.label||k, unit:d.unit||'', category:d.category||'', value:collapse(byKey[k]) }; })
+        .filter(it=>it.value!=null)
+        .sort((a,b)=> (a.category||'').localeCompare(b.category||'') || a.label.localeCompare(b.label));
+      if(!items.length) return '';
+      const rowsHTML = items.map(it=>{ const dd=decFor(it.unit);
+        const vtxt = dd===0 ? Math.round(it.value).toLocaleString('en-US') : Number(it.value).toFixed(dd);
+        return `<div class="pp-prow"><span class="nm">${esc(it.label)}</span>`
+             + `<span class="vl">${esc(vtxt)}<span class="un">${esc(it.unit||'')}</span></span><span class="dl"></span></div>`; }).join('');
+      let dlabel = ''; try { dlabel = new Date(t.test_date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); } catch(_) { dlabel = esc(t.test_date||''); }
+      return `<div class="pp-force-h">Force plate · ${esc(t.test_type||'')} · ${esc(dlabel)}</div>${rowsHTML}`;
+    } catch(_) { return ''; }
+  }
+
   // ── Card B: Current physical assessment ───────────────────────────────────
   async function fillPhysical(el, playerId, clubId, teamId) {
+    let evalHTML = '';
     try {
       const { data } = await sb()
         .from('evaluations')
@@ -258,10 +291,7 @@
         .neq('unit', '/10')
         .order('test_date', { ascending: false });
       const rows = data || [];
-      if (!rows.length) {
-        el.innerHTML = miniEmpty('No physical tests recorded', '');
-        return;
-      }
+      if (rows.length) {
       // group by type (rows already desc by test_date)
       const groups = {};
       for (const r of rows) {
@@ -290,7 +320,7 @@
         } catch (_) { stats = null; }
       }
 
-      el.innerHTML = list.map(it => {
+      evalHTML = list.map(it => {
         let dl = '—';
         if (it.delta != null) {
           const sign = it.delta > 0 ? '+' : (it.delta < 0 ? '−' : '');
@@ -308,9 +338,14 @@
           <span class="dl${dir==='flat'?'':' dl-'+dir}">${esc(dl)}</span>
         </div>`;
       }).join('');
+      }
     } catch (_) {
-      el.innerHTML = miniEmpty('No physical tests recorded', '');
+      evalHTML = '';
     }
+
+    const forceHTML = await loadForceLatest(playerId, clubId);
+    if (!evalHTML && !forceHTML) { el.innerHTML = miniEmpty('No physical tests recorded', ''); return; }
+    el.innerHTML = evalHTML + forceHTML;
   }
 
   // ── Card C: Injury summary ────────────────────────────────────────────────
