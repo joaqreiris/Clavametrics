@@ -20,6 +20,8 @@
   // CANONICAL contract — the 6 attributes the future technical evaluation form
   // MUST write to `evaluations` (as evaluation_type, unit='/10'). Order = radar axes.
   const TECH_ATTRS = ['Technique', 'Passing', 'Vision', '1v1', 'Defending', 'Duels'];
+  const TACTICAL_ATTRS = ['Positioning', 'Game reading', 'Pressing', 'Marking', 'Off-ball movement'];
+  const MENTAL_ATTRS   = ['Concentration', 'Composure', 'Decision-making', 'Leadership'];
 
   // ── tiny utils ──────────────────────────────────────────────────────────
   function esc(s) {
@@ -87,6 +89,17 @@
     .pp-istat .l { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.05em; text-transform:uppercase; color:var(--cm-fg-faint); }
     .pp-istat .v { font:600 16px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-top:3px; }
     .pp-istat .v small { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); }
+
+    /* Score bars (tactical & mental) */
+    .pp-sbar-group { margin-bottom:14px; } .pp-sbar-group:last-child { margin-bottom:0; }
+    .pp-sbar-h { display:flex; align-items:center; font:600 11px/1 var(--cm-font-sans); letter-spacing:.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:9px; }
+    .pp-sbar-h .avg { margin-left:auto; font:600 11px/1 var(--cm-font-mono); color:var(--cm-fg-faint); text-transform:none; letter-spacing:0; }
+    .pp-sbar-row { display:flex; align-items:center; gap:10px; padding:5px 0; }
+    .pp-sbar-row .nm { font:var(--cm-body-sm); color:var(--cm-fg); flex:0 0 132px; }
+    .pp-sbar-row .track { flex:1; height:7px; border-radius:999px; background:var(--cm-bg-sunk); overflow:hidden; }
+    .pp-sbar-row .fill { display:block; height:100%; border-radius:999px; background:var(--cm-accent); }
+    .pp-sbar-row .sc { flex:0 0 28px; text-align:right; font:600 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); }
+    .pp-sbar-row .sc.na { color:var(--cm-fg-faint); font-weight:500; }
     `;
     const el = document.createElement('style');
     el.id = 'pp-ov-styles';
@@ -201,6 +214,35 @@
     } catch (_) {
       el.innerHTML = miniEmpty('No technical evaluation yet', 'Add one from Evaluations');
     }
+  }
+
+  // ── Card A2: Tactical & mental score bars ─────────────────────────────────
+  function sbarGroup(title, attrs, latest){
+    const rows = attrs.map(a=>{
+      const v = (a in latest && latest[a]!=null) ? Number(latest[a]) : null;
+      const pct = v==null ? 0 : Math.max(0, Math.min(100, v*10));
+      return `<div class="pp-sbar-row"><span class="nm">${esc(a)}</span>`
+           + `<span class="track"><span class="fill" style="width:${pct}%"></span></span>`
+           + `<span class="sc${v==null?' na':''}">${v==null?'—':fmtNum(v)}</span></div>`;
+    }).join('');
+    const present = attrs.filter(a=> a in latest && latest[a]!=null).map(a=>Number(latest[a]));
+    const avg = present.length ? (present.reduce((s,n)=>s+n,0)/present.length) : null;
+    return `<div class="pp-sbar-group"><div class="pp-sbar-h">${esc(title)}`
+         + `${avg==null?'':`<span class="avg">avg ${fmtNum(avg)}</span>`}</div>${rows}</div>`;
+  }
+  async function fillTacticalMental(el, playerId, clubId){
+    try {
+      const all = TACTICAL_ATTRS.concat(MENTAL_ATTRS);
+      const { data } = await sb().from('evaluations')
+        .select('evaluation_type, test_date, value, unit')
+        .eq('club_id', clubId).eq('player_id', playerId).eq('unit','/10')
+        .in('evaluation_type', all).order('test_date',{ascending:false});
+      const rows = data || [];
+      if (!rows.length){ el.innerHTML = miniEmpty('No tactical/mental evaluation yet','Add one from Evaluations'); return; }
+      const latest = {};
+      for (const r of rows){ if(!(r.evaluation_type in latest)) latest[r.evaluation_type]=r.value; }
+      el.innerHTML = sbarGroup('Tactical', TACTICAL_ATTRS, latest) + sbarGroup('Mental', MENTAL_ATTRS, latest);
+    } catch(_) { el.innerHTML = miniEmpty('No tactical/mental evaluation yet','Add one from Evaluations'); }
   }
 
   // ── Card B: Current physical assessment ───────────────────────────────────
@@ -341,6 +383,10 @@
             <div class="pp-card-head"><i class="ti ti-chart-radar"></i><h3>Technical profile</h3></div>
             <div data-ov-body="technical">${loadingHTML()}</div>
           </div>
+          <div class="pp-card" data-ov="tacmental">
+            <div class="pp-card-head"><i class="ti ti-chart-bar"></i><h3>Tactical &amp; mental</h3></div>
+            <div data-ov-body="tacmental">${loadingHTML()}</div>
+          </div>
         </div>
         <div class="pp-ov-col">
           <div class="pp-card" data-ov="physical">
@@ -355,12 +401,14 @@
       </div>`;
 
     const techEl = mount.querySelector('[data-ov-body="technical"]');
+    const tacEl = mount.querySelector('[data-ov-body="tacmental"]');
     const physEl = mount.querySelector('[data-ov-body="physical"]');
     const injBadge = mount.querySelector('[data-ov-badge="injuries"]');
     const injBody = mount.querySelector('[data-ov-body="injuries"]');
 
     await Promise.all([
       fillTechnical(techEl, playerId, clubId),
+      fillTacticalMental(tacEl, playerId, clubId),
       fillPhysical(physEl, playerId, clubId),
       fillInjuries(injBadge, injBody, playerId, clubId, seasonStart, seasonEnd),
     ]);
