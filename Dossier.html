@@ -126,6 +126,11 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 
 @media print{body{background:#fff}.stage{padding:0}.toolbar{display:none}.sheet{box-shadow:none;border:none;border-radius:0;width:100%}}
 @media(max-width:880px){.sheet{width:100%}.hero{grid-template-columns:1fr}.body{grid-template-columns:1fr}.col.l{border-right:0;border-bottom:1px solid var(--cm-border-soft)}.hstats{grid-template-columns:repeat(2,1fr)}}
+.scout-save{ margin-top:8px; display:flex; align-items:center; gap:10px; }
+.scout-save-btn{ height:30px; padding:0 12px; border:1px solid var(--cm-border-strong); background:var(--cm-surface); color:var(--cm-fg); font:500 12px var(--cm-font-sans); border-radius:8px; cursor:pointer; }
+.scout-save-btn:hover{ background:var(--cm-bg-soft); }
+#scoutSaveMsg{ font:600 12px var(--cm-font-sans); color:var(--cm-success); }
+@media print{ .scout-save{ display:none } }
 </style>
 </head>
 <body>
@@ -162,6 +167,7 @@ const LABELS = {
     noTechEval:'No technical evaluation yet', assessedBy:'Assessed by', perfStaff:'Performance Staff',
     generatedWith:'Generated with ClavaMetrics', contact:'Contact', notFound:'Player not found',
     scoutPlaceholder:'Type the scouting summary here — it prints with whatever you write (not saved).',
+    saveNote:'Save note', saved:'Saved',
     age:'Age', born:'Born', nation:'Nation', height:'Height', weight:'Weight', foot:'Foot',
     tbTitle:'Player dossier — export', tbNote:'Print to PDF · branded per club · EN / ES / PT', tbExport:'Export PDF' },
   es: { dossier:'Dossier del jugador', season:'Temporada', appearances:'Partidos', minutes:'Minutos',
@@ -173,6 +179,7 @@ const LABELS = {
     noTechEval:'Sin evaluación técnica aún', assessedBy:'Evaluado por', perfStaff:'Cuerpo Técnico',
     generatedWith:'Generado con ClavaMetrics', contact:'Contacto', notFound:'Jugador no encontrado',
     scoutPlaceholder:'Escribe aquí el informe de scouting — se imprime con lo que escribas (no se guarda).',
+    saveNote:'Guardar nota', saved:'Guardado',
     age:'Edad', born:'Nacim.', nation:'Nación', height:'Altura', weight:'Peso', foot:'Pie',
     tbTitle:'Dossier del jugador — exportar', tbNote:'Imprimir a PDF · con marca del club · EN / ES / PT', tbExport:'Exportar PDF' },
   pt: { dossier:'Dossiê do jogador', season:'Temporada', appearances:'Jogos', minutes:'Minutos',
@@ -184,6 +191,7 @@ const LABELS = {
     noTechEval:'Sem avaliação técnica ainda', assessedBy:'Avaliado por', perfStaff:'Comissão Técnica',
     generatedWith:'Gerado com ClavaMetrics', contact:'Contato', notFound:'Jogador não encontrado',
     scoutPlaceholder:'Escreva aqui o relatório de scouting — imprime com o que você escrever (não é salvo).',
+    saveNote:'Salvar nota', saved:'Salvo',
     age:'Idade', born:'Nasc.', nation:'Nação', height:'Altura', weight:'Peso', foot:'Pé',
     tbTitle:'Dossiê do jogador — exportar', tbNote:'Imprimir em PDF · com marca do clube · EN / ES / PT', tbExport:'Exportar PDF' },
 };
@@ -265,7 +273,7 @@ async function boot(){
   if(!id){ host.innerHTML = notFoundSheet(L); return; }
 
   const { data: player } = await window.sb.from('players')
-    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
+    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id,scouting_summary')
     .eq('id', id).eq('club_id', clubId).single();
   if(!player){ host.innerHTML = notFoundSheet(L); return; }
 
@@ -476,6 +484,7 @@ async function boot(){
         ${radarHTML}
         <div class="sec-h" style="margin-top:24px"><h2>${esc(L.scoutingSummary)}</h2><div class="rule"></div></div>
         <p class="scout" contenteditable="true" data-ph="${esc(L.scoutPlaceholder)}"></p>
+        <div class="scout-save"><button id="scoutSaveBtn" class="scout-save-btn">${esc(L.saveNote)}</button><span id="scoutSaveMsg"></span></div>
         <div class="signoff">${esc(L.assessedBy)} <b>${esc(L.perfStaff)}</b> · <b>ClavaMetrics</b></div>
       </div>
       <div class="col">
@@ -492,8 +501,20 @@ async function boot(){
       <div class="sp"><div class="mark">${esc(L.generatedWith)}</div></div>
     </div>
   </div>`;
-  // NOTE: the scouting summary is intentionally NOT persisted — it prints with
-  // whatever the user types. Persisting it is a future `players`/dossier field.
+
+  // Scouting summary — prefill from players.scouting_summary + persist on save.
+  const scoutEl = host.querySelector('.scout');
+  if (scoutEl) scoutEl.textContent = player.scouting_summary || '';
+  const scoutBtn = host.querySelector('#scoutSaveBtn');
+  if (scoutBtn) scoutBtn.addEventListener('click', async () => {
+    const txt = (scoutEl.innerText || '').trim() || null;
+    const msg = host.querySelector('#scoutSaveMsg');
+    try {
+      const { error } = await window.sb.from('players').update({ scouting_summary: txt }).eq('id', id).eq('club_id', clubId);
+      if (error) throw error;
+      msg.textContent = '✓ ' + L.saved; setTimeout(() => { msg.textContent = ''; }, 3000);
+    } catch (e) { msg.style.color = 'var(--cm-danger)'; msg.textContent = 'Error'; }
+  });
 }
 
 // accent swatches (no-print toolbar)
