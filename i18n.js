@@ -304,6 +304,7 @@
     "pr.f.videoroom": { en: "Video Room", es: "Video Room", pt: "Video Room" },
     "pr.mix.h3": { en: "Mix tiers across your categories.", es: "Combina planes entre tus categorías.", pt: "Combine planos entre suas categorias." },
     "pr.mix.p": { en: "You don't pay one fixed plan per club — each category picks its own tier. The Sub-14 stays free while the senior squad runs on Profesional. Your bill reflects exactly what each squad uses.", es: "No pagas un plan fijo por club — cada categoría elige su propio plan. La Sub-14 sigue gratis mientras la primera usa Profesional. Tu factura refleja exactamente lo que usa cada equipo.", pt: "Você não paga um plano fixo por clube — cada categoria escolhe seu próprio plano. O Sub-14 fica grátis enquanto o time principal usa o Profesional. Sua fatura reflete exatamente o que cada equipe usa." },
+    "pr.mix.hint": { en: "Tap a tier to build your own mix.", es: "Tocá un tier para armar tu propia mezcla.", pt: "Toque em um nível para montar sua própria combinação." },
     "pr.cat.senior": { en: "Senior", es: "Primera", pt: "Principal" },
     "pr.cat.senior.sub": { en: "28 athletes · GPS · match analysis", es: "28 atletas · GPS · análisis de partido", pt: "28 atletas · GPS · análise de jogo" },
     "pr.cat.reserves": { en: "Reserves", es: "Reserva", pt: "Reservas" },
