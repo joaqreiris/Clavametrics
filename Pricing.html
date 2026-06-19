@@ -810,41 +810,46 @@
 <script>
 (function(){
   const SLUGS = ['initiation','basic','professional','full'];
-  const tt = k => (window.CM_I18N && window.CM_I18N.t) ? window.CM_I18N.t(k) : k;
+  // tr(key, label): traduce si la key existe; si no, cae al label inglés (nunca "null")
+  const tr = (k, label) => {
+    try { const v = window.CM_I18N && window.CM_I18N.t(k); return (v && v !== k) ? v : label; }
+    catch(e){ return label; }
+  };
   const SPEC = [
-    { g:'pr.cmp.g.limits', rows:[
-      { type:'limit', i:'pr.cmp.athletes', ic:'ti-users',        field:'max_players' },
-      { type:'limit', i:'pr.cmp.seats',    ic:'ti-user-cog',     field:'max_staff' },
+    { g:'pr.cmp.g.limits', gl:'Limits', rows:[
+      { type:'limit', i:'pr.cmp.athletes', l:'Athletes per category', ic:'ti-users',    field:'max_players' },
+      { type:'limit', i:'pr.cmp.seats',    l:'Staff seats',           ic:'ti-user-cog', field:'max_staff' },
     ]},
-    { g:'pr.cmp.g.planning', rows:[
-      { i:'pr.cmp.roster',     ic:'ti-clipboard-list', key:'availability' },
-      { i:'pr.cmp.daily',      ic:'ti-calendar-stats', key:'daily_planning' },
-      { i:'pr.cmp.exlib',      ic:'ti-list-tree',      key:'sessions_library' },
-      { i:'pr.cmp.drill',      ic:'ti-pencil',         key:'drill_designer' },
-      { i:'pr.cmp.annual',     ic:'ti-calendar',       key:'annual_planner' },
-      { i:'pr.cmp.individual', ic:'ti-user-check',     key:'individual_planner' },
+    { g:'pr.cmp.g.planning', gl:'Planning', rows:[
+      { i:'pr.cmp.roster',     l:'Roster & availability',      ic:'ti-clipboard-list', key:'availability' },
+      { i:'pr.cmp.daily',      l:'Daily planning & calendar',  ic:'ti-calendar-stats', key:'daily_planning' },
+      { i:'pr.cmp.exlib',      l:'Exercises Library',          ic:'ti-list-tree',      key:'sessions_library' },
+      { i:'pr.cmp.drill',      l:'Drill Designer',             ic:'ti-pencil',         key:'drill_designer' },
+      { i:'pr.cmp.annual',     l:'Annual Planner',             ic:'ti-calendar',       key:'annual_planner' },
+      { i:'pr.cmp.individual', l:'Individual Planner',         ic:'ti-user-check',     key:'individual_planner' },
     ]},
-    { g:'pr.cmp.g.perf', rows:[
-      { i:'pr.cmp.rpe',          ic:'ti-heartbeat',  key:'rpe_capture' },
-      { i:'pr.cmp.wellanalysis', ic:'ti-chart-line', key:'wellness_analysis' },
-      { i:'pr.cmp.gps',          ic:'ti-satellite',  key:'gps_analysis' },
-      { i:'pr.cmp.gym',          ic:'ti-barbell',    key:'gym' },
-      { i:'pr.cmp.loadmon',      ic:'ti-activity',   key:'load_monitor' },
-      { i:'pr.cmp.matchlineup',  ic:'ti-soccer-field', key:'match_reports' },
+    { g:'pr.cmp.g.perf', gl:'Performance & load', rows:[
+      { i:'pr.cmp.rpe',          l:'RPE & wellness',                     ic:'ti-heartbeat',    key:'rpe_capture' },
+      { i:'pr.cmp.wellanalysis', l:'Wellness analysis & trends',         ic:'ti-chart-line',   key:'wellness_analysis' },
+      { i:'pr.cmp.gps',          l:'GPS Analysis (CSV)',                 ic:'ti-satellite',    key:'gps_analysis' },
+      { i:'pr.cmp.gym',          l:'Gym (planner + library)',            ic:'ti-barbell',      key:'gym' },
+      { i:'pr.cmp.loadmon',      l:'Load Monitor (ACWR · CTL/ATL/TSB)',  ic:'ti-activity',     key:'load_monitor' },
+      { i:'pr.cmp.matchlineup',  l:'Match reports & lineup',             ic:'ti-soccer-field', key:'match_reports' },
     ]},
-    { g:'pr.cmp.g.health', rows:[
-      { i:'pr.cmp.treatments', ic:'ti-stethoscope', key:'physio' },
-      { i:'pr.cmp.evalinj',    ic:'ti-bandage',     key:'injuries' },
-      { i:'pr.cmp.rehab',      ic:'ti-run',         key:'rehab_planner' },
-      { i:'pr.cmp.nutrition',  ic:'ti-apple',       key:'nutrition' },
-      { i:'pr.cmp.video',      ic:'ti-video',       key:'video_room' },
+    { g:'pr.cmp.g.health', gl:'Health', rows:[
+      { i:'pr.cmp.treatments', l:'Treatments (physio log)',  ic:'ti-stethoscope', key:'physio' },
+      { i:'pr.cmp.evalinj',    l:'Evaluations & injuries',   ic:'ti-bandage',     key:'injuries' },
+      { i:'pr.cmp.rehab',      l:'Rehab Planner',            ic:'ti-run',         key:'rehab_planner' },
+      { i:'pr.cmp.nutrition',  l:'Nutrition',                ic:'ti-apple',       key:'nutrition' },
+      { i:'pr.cmp.video',      l:'Video Room',               ic:'ti-video',       key:'video_room' },
     ]},
-    { g:'pr.cmp.g.collab', rows:[
-      { i:'pr.cmp.multistaff', ic:'ti-users-group', key:'multi_staff' },
+    { g:'pr.cmp.g.collab', gl:'Collaboration', rows:[
+      { i:'pr.cmp.multistaff', l:'Multi-staff & roles', ic:'ti-users-group', key:'multi_staff' },
     ]},
-    { g:'pr.cmp.g.support', rows:[
-      { type:'support', i:'pr.cmp.support', ic:'ti-headset',
-        vals:{ initiation:'pr.cmp.community', basic:'pr.cmp.email', professional:'pr.cmp.prioemail', full:'pr.cmp.sla' } },
+    { g:'pr.cmp.g.support', gl:'Support', rows:[
+      { type:'support', i:'pr.cmp.support', l:'Support', ic:'ti-headset',
+        vals:{ initiation:['pr.cmp.community','Community'], basic:['pr.cmp.email','Email'],
+               professional:['pr.cmp.prioemail','Priority email'], full:['pr.cmp.sla','SLA + Slack'] } },
     ]},
   ];
 
@@ -852,17 +857,17 @@
     const by = Object.fromEntries(plans.map(p=>[p.slug,p]));
     let h = '';
     for (const grp of SPEC){
-      h += '<tr class="group-row"><td colspan="5" data-i18n="'+grp.g+'">'+tt(grp.g)+'</td></tr>';
+      h += '<tr class="group-row"><td colspan="5">'+tr(grp.g, grp.gl)+'</td></tr>';
       for (const r of grp.rows){
-        h += '<tr><td class="feat"><i class="ti '+r.ic+'"></i><span data-i18n="'+r.i+'">'+tt(r.i)+'</span></td>';
+        h += '<tr><td class="feat"><i class="ti '+r.ic+'"></i><span>'+tr(r.i, r.l)+'</span></td>';
         for (const s of SLUGS){
           const p = by[s] || {};
           if (r.type==='limit'){
             const v = p[r.field];
-            h += '<td class="center mono">'+(v==null ? '<span data-i18n="pr.cmp.unlimited">'+tt('pr.cmp.unlimited')+'</span>' : v)+'</td>';
+            h += '<td class="center mono">'+(v==null ? tr('pr.cmp.unlimited','Unlimited') : v)+'</td>';
           } else if (r.type==='support'){
-            const vk = r.vals[s];
-            h += '<td class="center muted"><span class="mono" data-i18n="'+vk+'">'+tt(vk)+'</span></td>';
+            const [vk,vl] = r.vals[s];
+            h += '<td class="center muted"><span class="mono">'+tr(vk,vl)+'</span></td>';
           } else {
             const on = Array.isArray(p.features) && p.features.includes(r.key);
             h += '<td class="center"><i class="ti '+(on?'ti-check':'ti-minus')+'"></i></td>';
@@ -872,7 +877,7 @@
       }
     }
     const body = document.getElementById('prCmpBody');
-    if (body){ body.innerHTML = h; if (window.CM_I18N) window.CM_I18N.setLang(window.CM_I18N.current); }
+    if (body) body.innerHTML = h;
   }
 
   (async function(){
