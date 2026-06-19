@@ -84,6 +84,7 @@
     .pp-prow .un { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
     .pp-prow .dl { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); min-width:48px; text-align:right; }
     .pp-prow .dl.dl-pos{color:var(--cm-success)} .pp-prow .dl.dl-neg{color:var(--cm-danger)}
+    .pp-prow .pp-pct{ font:600 10.5px/1 var(--cm-font-sans); color:var(--cm-accent); background:color-mix(in srgb,var(--cm-accent) 12%,transparent); border:1px solid color-mix(in srgb,var(--cm-accent) 30%,transparent); padding:2px 7px; border-radius:999px; white-space:nowrap; }
 
     /* Injury stats */
     .pp-istats { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
@@ -247,7 +248,7 @@
   }
 
   // ── Card B: Current physical assessment ───────────────────────────────────
-  async function fillPhysical(el, playerId, clubId) {
+  async function fillPhysical(el, playerId, clubId, teamId) {
     try {
       const { data } = await sb()
         .from('evaluations')
@@ -280,6 +281,15 @@
         return { type, value: latest.value, unit: latest.unit, date: latest.test_date, delta };
       }).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6);
 
+      // Category (team) benchmarking — percentile of latest value vs ≥4 peers.
+      let stats = null;
+      if (teamId && window.evalBench) {
+        try {
+          const types = list.map(it => it.type);
+          stats = await window.evalBench.categoryStats({ clubId, teamId, types, physicalOnly: true });
+        } catch (_) { stats = null; }
+      }
+
       el.innerHTML = list.map(it => {
         let dl = '—';
         if (it.delta != null) {
@@ -287,9 +297,14 @@
           dl = sign + fmtNum(Math.abs(it.delta));
         }
         const dir = window.evalDir ? window.evalDir.deltaDir(it.delta, it.type, it.unit) : 'flat';
+        const lb = window.evalDir ? window.evalDir.isLowerBetter(it.type, it.unit) : false;
+        const st = stats ? stats[it.type] : null;
+        const pr = (st && st.n >= 4 && window.evalBench) ? window.evalBench.percentile(Number(it.value), st, lb) : null; // need ≥4 peers
+        const chip = pr != null ? `<span class="pp-pct">Top ${100 - pr}%</span>` : '';
         return `<div class="pp-prow">
           <span class="nm">${esc(it.type)}</span>
           <span class="vl">${it.value == null ? '—' : fmtNum(it.value)}<span class="un">${esc(it.unit || '')}</span></span>
+          ${chip}
           <span class="dl${dir==='flat'?'':' dl-'+dir}">${esc(dl)}</span>
         </div>`;
       }).join('');
@@ -374,7 +389,7 @@
   }
 
   // ── Public entry ──────────────────────────────────────────────────────────
-  async function render({ playerId, clubId, seasonStart, seasonEnd, mount }) {
+  async function render({ playerId, clubId, teamId, seasonStart, seasonEnd, mount }) {
     if (!mount) return;
     styleInject();
 
@@ -411,7 +426,7 @@
     await Promise.all([
       fillTechnical(techEl, playerId, clubId),
       fillTacticalMental(tacEl, playerId, clubId),
-      fillPhysical(physEl, playerId, clubId),
+      fillPhysical(physEl, playerId, clubId, teamId),
       fillInjuries(injBadge, injBody, playerId, clubId, seasonStart, seasonEnd),
     ]);
   }
