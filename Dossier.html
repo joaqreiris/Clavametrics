@@ -11,6 +11,8 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/player-profile.js"></script>
+<script src="assets/eval-direction.js"></script>
+<script src="assets/eval-benchmark.js"></script>
 <style>
 /* Real ClavaMetrics tokens (clavametrics.css · hybrid). Geist, pitch-green,
    neutral premium-SaaS palette — same family as the internal profile.
@@ -155,7 +157,7 @@ const LABELS = {
     topSpeed:'Top speed', distMatch:'Distance / match', minPerMatch:'min / match', seasonMax:'season max',
     matchAvg:'match avg', technicalProfile:'Technical profile', coachScored:'Coach-scored',
     scoutingSummary:'Scouting summary', athleticProfile:'Athletic profile', vsCategory:'vs category',
-    cmj:'CMJ', hsrMatch:'High-speed running / match', sprint30:'Sprint 30 m',
+    cmj:'CMJ', topPct:'Top', hsrMatch:'High-speed running / match', sprint30:'Sprint 30 m',
     availableTxt:'Available', ofSeason:'of the season.', intlCaps:'Int. caps',
     noTechEval:'No technical evaluation yet', assessedBy:'Assessed by', perfStaff:'Performance Staff',
     generatedWith:'Generated with ClavaMetrics', contact:'Contact', notFound:'Player not found',
@@ -166,7 +168,7 @@ const LABELS = {
     topSpeed:'Velocidad máx.', distMatch:'Distancia / partido', minPerMatch:'min / partido', seasonMax:'máx. temporada',
     matchAvg:'media partido', technicalProfile:'Perfil técnico', coachScored:'Evaluado por cuerpo técnico',
     scoutingSummary:'Informe de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoría',
-    cmj:'CMJ', hsrMatch:'Carrera alta velocidad / partido', sprint30:'Sprint 30 m',
+    cmj:'CMJ', topPct:'Top', hsrMatch:'Carrera alta velocidad / partido', sprint30:'Sprint 30 m',
     availableTxt:'Disponible', ofSeason:'de la temporada.', intlCaps:'Internac.',
     noTechEval:'Sin evaluación técnica aún', assessedBy:'Evaluado por', perfStaff:'Cuerpo Técnico',
     generatedWith:'Generado con ClavaMetrics', contact:'Contacto', notFound:'Jugador no encontrado',
@@ -177,7 +179,7 @@ const LABELS = {
     topSpeed:'Velocidade máx.', distMatch:'Distância / jogo', minPerMatch:'min / jogo', seasonMax:'máx. temporada',
     matchAvg:'média jogo', technicalProfile:'Perfil técnico', coachScored:'Avaliado pela comissão técnica',
     scoutingSummary:'Relatório de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoria',
-    cmj:'CMJ', hsrMatch:'Corrida em alta velocidade / jogo', sprint30:'Sprint 30 m',
+    cmj:'CMJ', topPct:'Top', hsrMatch:'Corrida em alta velocidade / jogo', sprint30:'Sprint 30 m',
     availableTxt:'Disponível', ofSeason:'da temporada.', intlCaps:'Internac.',
     noTechEval:'Sem avaliação técnica ainda', assessedBy:'Avaliado por', perfStaff:'Comissão Técnica',
     generatedWith:'Gerado com ClavaMetrics', contact:'Contato', notFound:'Jogador não encontrado',
@@ -222,8 +224,8 @@ function radarPolygon(scoreByType, R){
   return pts.join(' ');
 }
 
-// Athletic bars: reference maxima for a neutral magnitude fill (NOT a percentile).
-// TODO: replace with real category-percentile aggregate + accent fill + "Top N%" label.
+// Athletic bars fallback: reference maxima for a neutral magnitude fill (NOT a
+// percentile) — used when fewer than 4 team peers have the metric.
 function neutralFill(value, refMax, higherBetter){
   if(value==null||!higherBetter) return null; // sprint (lower=better) → track only
   return Math.max(4, Math.min(100, value/refMax*100));
@@ -318,6 +320,47 @@ async function boot(){
     }
   } catch(_){}
 
+  // Category percentiles ("Top N%") vs same-team peers, same aggregation as the player side.
+  let pctTopSpeed=null, pctDist=null, pctHsr=null, pctCmj=null, pctSprint=null;
+  if(player.team_id && seasonStart && seasonEnd && window.evalBench){
+    try {
+      const { data: mates } = await window.sb.from('players').select('id').eq('club_id',clubId).eq('team_id',player.team_id);
+      const ids=(mates||[]).map(p=>p.id);
+      if(ids.length){
+        const { data: g } = await window.sb.from('gps_reports')
+          .select('player_id,max_speed,total_distance,high_speed_distance, session:training_sessions!inner(session_type,session_date)')
+          .eq('club_id',clubId).in('player_id', ids)
+          .gte('session.session_date', seasonStart).lte('session.session_date', seasonEnd);
+        const byP={};
+        for(const r of (g||[])){ const s=r.session, st=(Array.isArray(s)?s[0]:s);
+          const o=byP[r.player_id]=byP[r.player_id]||{sp:[],dm:[],hs:[]};
+          const sp=Number(r.max_speed); if(isFinite(sp)) o.sp.push(sp);
+          if(st && st.session_type==='match'){ const d=Number(r.total_distance); if(isFinite(d)) o.dm.push(d);
+            const h=Number(r.high_speed_distance); if(isFinite(h)) o.hs.push(h); } }
+        const speedsArr=[], distArr=[], hsrArr=[];
+        for(const pid in byP){ const o=byP[pid];
+          if(o.sp.length) speedsArr.push(Math.max(...o.sp));
+          if(o.dm.length) distArr.push(o.dm.reduce((a,b)=>a+b,0)/o.dm.length);
+          if(o.hs.length) hsrArr.push(o.hs.reduce((a,b)=>a+b,0)/o.hs.length); }
+        const { data: ev } = await window.sb.from('evaluations')
+          .select('player_id,evaluation_type,value,test_date').eq('club_id',clubId).in('player_id', ids)
+          .neq('unit','/10').order('test_date',{ascending:false});
+        const cmjBy={}, sprBy={};
+        for(const r of (ev||[])){ const t=(r.evaluation_type||'').toLowerCase();
+          if(!(r.player_id in cmjBy) && (/\bcmj\b/.test(t)||/counter\s*movement/.test(t)) && r.value!=null) cmjBy[r.player_id]=Number(r.value);
+          if(!(r.player_id in sprBy) && /sprint/.test(t) && r.value!=null) sprBy[r.player_id]=Number(r.value); }
+        const cmjArr=Object.values(cmjBy), sprintArr=Object.values(sprBy);
+        const P=(val,arr,lower)=> (val!=null && arr.length>=4) ? window.evalBench.percentile(val,{n:arr.length,values:arr},lower) : null;
+        const toTop=r=> r==null?null:(100-r);
+        pctTopSpeed=toTop(P(topSpeed,speedsArr,false));
+        pctDist    =toTop(P(distPerMatch,distArr,false));
+        pctHsr     =toTop(P(hsrPerMatch,hsrArr,false));
+        pctCmj     =toTop(P(cmj,cmjArr,false));
+        pctSprint  =toTop(P(sprint,sprintArr,true));   // sprint = lower is better
+      }
+    } catch(_){}
+  }
+
   // National-team caps: availability rows status='away' in season (distinct dates)
   let caps=null;
   if(seasonStart && seasonEnd){
@@ -374,20 +417,23 @@ async function boot(){
     radarHTML = `<div class="empty-note">${esc(L.noTechEval)}</div>`;
   }
 
-  // athletic profile rows — neutral magnitude fill, no percentile label (TODO: real percentile)
-  const am = (name, value, unit, refMax, higherBetter)=>{
+  // athletic profile rows — accent fill + "Top N%" when ≥4 peers; else neutral magnitude fill
+  const am = (name, value, unit, refMax, higherBetter, topN)=>{
     const has = value!=null;
-    const w = has ? neutralFill(value, refMax, higherBetter) : null;
+    let fillW=null, accent=false, chip='';
+    if(has && topN!=null){ fillW=Math.max(4,Math.min(100,100-topN)); accent=true; chip=`<div class="pct">${esc(L.topPct)} ${topN}%</div>`; }
+    else if(has){ fillW=neutralFill(value, refMax, higherBetter); }
     return `<div class="am"><div class="top"><span class="nm">${esc(name)}</span>
       <span class="vv">${has?num1(value):'—'}${has&&unit?`<span class="u"> ${esc(unit)}</span>`:''}</span></div>
-      <div class="bar">${w!=null?`<div class="f neutral" style="width:${w.toFixed(0)}%"></div>`:''}</div></div>`;
+      <div class="bar">${fillW!=null?`<div class="f${accent?'':' neutral'}" style="width:${fillW.toFixed(0)}%"></div>`:''}</div>
+      ${chip}</div>`;
   };
   const ath = `<div class="ath">
-    ${am(L.topSpeed, topSpeed, 'km/h', 36, true)}
-    ${am(L.distMatch, distPerMatch!=null?distPerMatch/1000:null, 'km', 13, true)}
-    ${am(L.cmj, cmj, 'cm', 50, true)}
-    ${am(L.hsrMatch, hsrPerMatch, 'm', 1000, true)}
-    ${am(L.sprint30, sprint, 's', null, false)}
+    ${am(L.topSpeed, topSpeed, 'km/h', 36, true, pctTopSpeed)}
+    ${am(L.distMatch, distPerMatch!=null?distPerMatch/1000:null, 'km', 13, true, pctDist)}
+    ${am(L.cmj, cmj, 'cm', 50, true, pctCmj)}
+    ${am(L.hsrMatch, hsrPerMatch, 'm', 1000, true, pctHsr)}
+    ${am(L.sprint30, sprint, 's', null, false, pctSprint)}
   </div>`;
 
   // ribbon (availability) — hidden if availabilityPct is null
