@@ -293,6 +293,7 @@
     background: var(--cm-accent-soft);
     color: var(--cm-accent);
   }
+  .pr-table thead th.center { text-align: center; }
   .pr-table tbody td {
     padding: 12px 18px;
     border-bottom: 1px solid var(--cm-border-soft);
@@ -643,82 +644,7 @@
           <th class="center">Full</th>
         </tr>
       </thead>
-      <tbody>
-
-        <tr class="group-row"><td colspan="5">Limits</td></tr>
-        <tr>
-          <td class="feat"><i class="ti ti-users"></i><span data-i18n="pr.cmp.athletes">Athletes per category</span></td>
-          <td class="center mono">15</td>
-          <td class="center mono">30</td>
-          <td class="center mono">80</td>
-          <td class="center mono" data-i18n="pr.cmp.unlimited">Unlimited</td>
-        </tr>
-        <tr>
-          <td class="feat"><i class="ti ti-user-cog"></i><span data-i18n="pr.cmp.seats">Staff seats</span></td>
-          <td class="center mono">2</td>
-          <td class="center mono">5</td>
-          <td class="center mono">12</td>
-          <td class="center mono" data-i18n="pr.cmp.unlimited">Unlimited</td>
-        </tr>
-
-        <tr class="group-row"><td colspan="5">Planning</td></tr>
-        <tr>
-          <td class="feat"><i class="ti ti-calendar-stats"></i><span data-i18n="pr.cmp.micro">Microcycles &amp; daily planner</span></td>
-          <td class="center"><i class="ti ti-minus"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-        </tr>
-        <tr>
-          <td class="feat"><i class="ti ti-clipboard"></i><span data-i18n="pr.cmp.sessions">Exercises Library</span></td>
-          <td class="center"><i class="ti ti-minus"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-        </tr>
-        <tr>
-          <td class="feat"><i class="ti ti-soccer-field"></i><span data-i18n="pr.cmp.tactical">Tactical planner canvas</span></td>
-          <td class="center"><i class="ti ti-minus"></i></td>
-          <td class="center"><i class="ti ti-minus"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-        </tr>
-
-        <tr class="group-row"><td colspan="5">Load &amp; wellness</td></tr>
-        <tr>
-          <td class="feat"><i class="ti ti-heartbeat"></i><span data-i18n="pr.cmp.rpe">RPE &amp; wellness</span></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-        </tr>
-        <tr>
-          <td class="feat"><i class="ti ti-activity"></i><span data-i18n="pr.cmp.acwr">ACWR &amp; load alerts</span></td>
-          <td class="center"><i class="ti ti-minus"></i></td>
-          <td class="center"><i class="ti ti-minus"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-        </tr>
-
-        <tr class="group-row"><td colspan="5">Integrations</td></tr>
-        <tr>
-          <td class="feat"><i class="ti ti-file-import"></i><span data-i18n="pr.cmp.csv">CSV imports</span></td>
-          <td class="center"><i class="ti ti-minus"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-          <td class="center"><i class="ti ti-check ti-check"></i></td>
-        </tr>
-
-        <tr class="group-row"><td colspan="5">Support</td></tr>
-        <tr>
-          <td class="feat"><i class="ti ti-headset"></i><span data-i18n="pr.cmp.support">Support</span></td>
-          <td class="center muted"><span class="mono" data-i18n="pr.cmp.community">Community</span></td>
-          <td class="center muted"><span class="mono" data-i18n="pr.cmp.email">Email</span></td>
-          <td class="center muted"><span class="mono" data-i18n="pr.cmp.prioemail">Priority email</span></td>
-          <td class="center muted"><span class="mono">SLA + Slack</span></td>
-        </tr>
-
-      </tbody>
+      <tbody id="prCmpBody"></tbody>
     </table>
   </div>
 
@@ -880,5 +806,84 @@
   })();
 </script>
 <script src="i18n.js"></script>
+
+<script>
+(function(){
+  const SLUGS = ['initiation','basic','professional','full'];
+  const tt = k => (window.CM_I18N && window.CM_I18N.t) ? window.CM_I18N.t(k) : k;
+  const SPEC = [
+    { g:'pr.cmp.g.limits', rows:[
+      { type:'limit', i:'pr.cmp.athletes', ic:'ti-users',        field:'max_players' },
+      { type:'limit', i:'pr.cmp.seats',    ic:'ti-user-cog',     field:'max_staff' },
+    ]},
+    { g:'pr.cmp.g.planning', rows:[
+      { i:'pr.cmp.roster',     ic:'ti-clipboard-list', key:'availability' },
+      { i:'pr.cmp.daily',      ic:'ti-calendar-stats', key:'daily_planning' },
+      { i:'pr.cmp.exlib',      ic:'ti-list-tree',      key:'sessions_library' },
+      { i:'pr.cmp.drill',      ic:'ti-pencil',         key:'drill_designer' },
+      { i:'pr.cmp.annual',     ic:'ti-calendar',       key:'annual_planner' },
+      { i:'pr.cmp.individual', ic:'ti-user-check',     key:'individual_planner' },
+    ]},
+    { g:'pr.cmp.g.perf', rows:[
+      { i:'pr.cmp.rpe',          ic:'ti-heartbeat',  key:'rpe_capture' },
+      { i:'pr.cmp.wellanalysis', ic:'ti-chart-line', key:'wellness_analysis' },
+      { i:'pr.cmp.gps',          ic:'ti-satellite',  key:'gps_analysis' },
+      { i:'pr.cmp.gym',          ic:'ti-barbell',    key:'gym' },
+      { i:'pr.cmp.loadmon',      ic:'ti-activity',   key:'load_monitor' },
+      { i:'pr.cmp.matchlineup',  ic:'ti-soccer-field', key:'match_reports' },
+    ]},
+    { g:'pr.cmp.g.health', rows:[
+      { i:'pr.cmp.treatments', ic:'ti-stethoscope', key:'physio' },
+      { i:'pr.cmp.evalinj',    ic:'ti-bandage',     key:'injuries' },
+      { i:'pr.cmp.rehab',      ic:'ti-run',         key:'rehab_planner' },
+      { i:'pr.cmp.nutrition',  ic:'ti-apple',       key:'nutrition' },
+      { i:'pr.cmp.video',      ic:'ti-video',       key:'video_room' },
+    ]},
+    { g:'pr.cmp.g.collab', rows:[
+      { i:'pr.cmp.multistaff', ic:'ti-users-group', key:'multi_staff' },
+    ]},
+    { g:'pr.cmp.g.support', rows:[
+      { type:'support', i:'pr.cmp.support', ic:'ti-headset',
+        vals:{ initiation:'pr.cmp.community', basic:'pr.cmp.email', professional:'pr.cmp.prioemail', full:'pr.cmp.sla' } },
+    ]},
+  ];
+
+  function render(plans){
+    const by = Object.fromEntries(plans.map(p=>[p.slug,p]));
+    let h = '';
+    for (const grp of SPEC){
+      h += '<tr class="group-row"><td colspan="5" data-i18n="'+grp.g+'">'+tt(grp.g)+'</td></tr>';
+      for (const r of grp.rows){
+        h += '<tr><td class="feat"><i class="ti '+r.ic+'"></i><span data-i18n="'+r.i+'">'+tt(r.i)+'</span></td>';
+        for (const s of SLUGS){
+          const p = by[s] || {};
+          if (r.type==='limit'){
+            const v = p[r.field];
+            h += '<td class="center mono">'+(v==null ? '<span data-i18n="pr.cmp.unlimited">'+tt('pr.cmp.unlimited')+'</span>' : v)+'</td>';
+          } else if (r.type==='support'){
+            const vk = r.vals[s];
+            h += '<td class="center muted"><span class="mono" data-i18n="'+vk+'">'+tt(vk)+'</span></td>';
+          } else {
+            const on = Array.isArray(p.features) && p.features.includes(r.key);
+            h += '<td class="center"><i class="ti '+(on?'ti-check':'ti-minus')+'"></i></td>';
+          }
+        }
+        h += '</tr>';
+      }
+    }
+    const body = document.getElementById('prCmpBody');
+    if (body){ body.innerHTML = h; if (window.CM_I18N) window.CM_I18N.setLang(window.CM_I18N.current); }
+  }
+
+  (async function(){
+    try {
+      if (!window.sb) return;
+      const { data, error } = await window.sb.from('plans').select('slug, max_players, max_staff, features').order('sort_order');
+      if (error || !data) return;
+      render(data);
+    } catch(e){}
+  })();
+})();
+</script>
 </body>
 </html>
