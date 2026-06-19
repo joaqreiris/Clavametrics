@@ -90,6 +90,7 @@
     .pp-ts-table .vl { font:600 13px/1 var(--cm-font-mono); color:var(--cm-fg-strong); white-space:nowrap; }
     .pp-ts-table .un { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
     .pp-ts-table .dl { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint); white-space:nowrap; }
+    .pp-ts-table .dl.dl-pos{color:var(--cm-success)} .pp-ts-table .dl.dl-neg{color:var(--cm-danger)}
     .pp-ts-table .nt { color:var(--cm-fg-muted); }
     .pp-ts-table .col-date { width:96px; }
     .pp-ts-table .col-val { width:110px; }
@@ -172,17 +173,18 @@
     const body = desc.map((r, idx) => {
       // previous (chronologically earlier) measurement for the delta
       const prev = desc[idx + 1];
-      let dl = '—';
+      let dl = '—', d = null;
       if (prev && r.value != null && prev.value != null) {
-        const d = Number(r.value) - Number(prev.value);
-        // TODO (deferred): direction-of-better coloring (lower-is-better tests).
+        d = Number(r.value) - Number(prev.value);
+        // delta colored by direction-of-better (lower-is-better via window.evalDir)
         const sign = d > 0 ? '+' : (d < 0 ? '−' : '');
         dl = sign + fmtNum(Math.abs(d));
       }
+      const dir = window.evalDir ? window.evalDir.deltaDir(d, r.evaluation_type, r.unit) : 'flat';
       return `<tr>
         <td class="col-date">${esc(shortDate(r.test_date))}</td>
         <td class="col-val"><span class="vl">${r.value == null ? '—' : esc(fmtNum(r.value))}<span class="un">${esc(r.unit || '')}</span></span></td>
-        <td class="col-delta"><span class="dl">${esc(dl)}</span></td>
+        <td class="col-delta"><span class="dl${dir==='flat'?'':' dl-'+dir}">${esc(dl)}</span></td>
         <td class="nt" title="${esc(r.notes || '')}">${fmtNotes(r.notes)}</td>
       </tr>`;
     }).join('');

@@ -83,6 +83,7 @@
     .pp-prow .vl { font:600 14px/1 var(--cm-font-mono); color:var(--cm-fg-strong); white-space:nowrap; }
     .pp-prow .un { font:500 11px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
     .pp-prow .dl { font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-fg-faint); min-width:48px; text-align:right; }
+    .pp-prow .dl.dl-pos{color:var(--cm-success)} .pp-prow .dl.dl-neg{color:var(--cm-danger)}
 
     /* Injury stats */
     .pp-istats { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
@@ -270,8 +271,8 @@
         const g = groups[type];
         const latest = g[0];
         const prev = g[1];
-        // delta vs PREVIOUS measurement (signed). TODO: direction-aware coloring
-        // (some tests are "lower is better", e.g. sprint time) — neutral for now.
+        // delta vs PREVIOUS measurement (signed); colored by direction-of-better
+        // (lower-is-better tests handled via window.evalDir).
         let delta = null;
         if (prev && latest.value != null && prev.value != null) {
           delta = Number(latest.value) - Number(prev.value);
@@ -285,10 +286,11 @@
           const sign = it.delta > 0 ? '+' : (it.delta < 0 ? '−' : '');
           dl = sign + fmtNum(Math.abs(it.delta));
         }
+        const dir = window.evalDir ? window.evalDir.deltaDir(it.delta, it.type, it.unit) : 'flat';
         return `<div class="pp-prow">
           <span class="nm">${esc(it.type)}</span>
           <span class="vl">${it.value == null ? '—' : fmtNum(it.value)}<span class="un">${esc(it.unit || '')}</span></span>
-          <span class="dl">${esc(dl)}</span>
+          <span class="dl${dir==='flat'?'':' dl-'+dir}">${esc(dl)}</span>
         </div>`;
       }).join('');
     } catch (_) {
