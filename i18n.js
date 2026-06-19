@@ -364,8 +364,6 @@
     "pr.ent.eyebrow": { en: "Enterprise & federations", es: "Enterprise y federaciones", pt: "Enterprise e federações" },
     "pr.ent.h3": { en: "Running <em>10+ categories</em> or a national federation?", es: "¿Manejas <em>10+ categorías</em> o una federación nacional?", pt: "Gerencia <em>10+ categorias</em> ou uma federação nacional?" },
     "pr.ent.p": { en: "Custom contracts for clubs and federations running many categories — consolidated billing, dedicated onboarding, and volume pricing beyond 10 paid categories.", es: "Contratos a medida para clubes y federaciones con muchas categorías — facturación consolidada, onboarding dedicado y precios por volumen a partir de 10 categorías pagas.", pt: "Contratos sob medida para clubes e federações com muitas categorias — faturamento consolidado, onboarding dedicado e preços por volume a partir de 10 categorias pagas." },
-    "pr.ent.regions": { en: "EU & LATAM regions", es: "Regiones EU y LATAM", pt: "Regiões EU e LATAM" },
-    "pr.ent.api": { en: "API access", es: "Acceso API", pt: "Acesso API" },
     "pr.ent.dpa": { en: "Custom DPA", es: "DPA a medida", pt: "DPA sob medida" },
     "pr.ent.f.volume":     { en: "Volume pricing", es: "Precios por volumen", pt: "Preços por volume" },
     "pr.ent.f.billing":    { en: "Consolidated billing", es: "Facturación consolidada", pt: "Faturamento consolidado" },
