@@ -721,6 +721,7 @@
   (function(){
     let PLANS = {};
     let cycle = 'monthly';
+    const tt = (k,l) => { try{ const v=window.CM_I18N&&window.CM_I18N.t(k); return (v&&v!==k)?v:l; }catch(e){ return l; } };
 
     function ensureEq(amtEl){
       const price = amtEl.closest('.pr-tier-price');
@@ -742,11 +743,11 @@
         if (val == null) return;
         el.textContent = '$' + Number(val);
         const per = el.parentElement.querySelector('.per');
-        if (per) per.textContent = cycle === 'annual' ? '/ category / yr' : '/ category / mo';
+        if (per) per.textContent = cycle === 'annual' ? tt('pr.peryr', '/ category / yr') : tt('pr.per', '/ category / mo');
         const eq = ensureEq(el);
         if (eq){
           if (cycle === 'annual' && Number(p.price_yearly) > 0){
-            eq.textContent = '≈ $' + Math.round(Number(p.price_yearly)/12) + '/mo · billed annually';
+            eq.textContent = '≈ $' + Math.round(Number(p.price_yearly)/12) + tt('pr.eq.suffix', '/mo · billed annually');
             eq.style.display = '';
           } else { eq.textContent = ''; eq.style.display = 'none'; }
         }
