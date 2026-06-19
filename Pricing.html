@@ -245,21 +245,20 @@
   .pr-percat-row .pill{cursor:pointer;user-select:none;transition:transform .1s ease}
   .pr-percat-row .pill:hover{transform:translateY(-1px);filter:brightness(.97)}
   .pr-mix-hint{font-size:13px;color:var(--cm-fg-muted);margin-top:8px}
-  .pr-cfg-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--cm-border-soft)}
-  .pr-cfg-name{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit}
-  .pr-cfg-tier{padding:7px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;cursor:pointer}
-  .pr-cfg-price{min-width:60px;text-align:right;font:600 14px var(--cm-font-mono);color:var(--cm-fg-strong)}
-  .pr-cfg-del{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:18px;line-height:1;padding:0 4px}
-  .pr-cfg-del:hover{color:var(--cm-danger)}
-  .pr-cfg-add{margin-top:12px;padding:8px 14px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;cursor:pointer;font:600 13px var(--cm-font-sans);color:var(--cm-fg-strong);display:inline-flex;align-items:center;gap:6px}
-  .pr-cfg-summary{margin-top:18px;padding-top:14px;border-top:1px solid var(--cm-border)}
-  .pr-cfg-srow{display:flex;justify-content:space-between;font-size:13.5px;color:var(--cm-fg-muted);padding:3px 0}
+  .pr-percat-row .pr-cfg-name{flex:1;min-width:0;max-width:200px;border:0;background:transparent;font:600 14px var(--cm-font-sans);color:var(--cm-fg-strong);padding:3px 6px;border-radius:6px}
+  .pr-percat-row .pr-cfg-name:hover{background:var(--cm-bg-soft)}
+  .pr-percat-row .pr-cfg-name:focus{outline:none;background:var(--cm-bg-soft);box-shadow:inset 0 0 0 1px var(--cm-border)}
+  .pr-cfg-pillwrap{position:relative;display:inline-flex}
+  .pr-cfg-pillwrap .pill{cursor:pointer;display:inline-flex;align-items:center}
+  .pr-cfg-pillwrap .pill::after{content:'▾';margin-left:6px;font-size:9px;opacity:.55}
+  .pr-cfg-pillwrap .pr-cfg-tiersel{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;cursor:pointer}
+  .pr-percat-row .pr-cfg-del{background:none;border:0;color:var(--cm-fg-faint);cursor:pointer;font-size:17px;line-height:1;padding:0 2px;opacity:0;transition:opacity .12s}
+  .pr-percat-row:hover .pr-cfg-del{opacity:1}
+  .pr-cfg-add{margin-top:12px;padding:8px 14px;background:none;border:1px dashed var(--cm-border);border-radius:8px;cursor:pointer;font:600 13px var(--cm-font-sans);color:var(--cm-fg-muted);display:inline-flex;align-items:center;gap:6px}
+  .pr-cfg-add:hover{border-color:var(--cm-accent);color:var(--cm-accent)}
+  .pr-cfg-summary{margin-top:14px;padding-top:12px;border-top:1px solid var(--cm-border)}
+  .pr-cfg-srow{display:flex;justify-content:space-between;font-size:13px;color:var(--cm-fg-muted);padding:3px 0}
   .pr-cfg-srow.disc{color:var(--cm-accent)}
-  .pr-cfg-total{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px}
-  .pr-cfg-total .lbl{font-weight:700;color:var(--cm-fg-strong)}
-  .pr-cfg-total .vs{font-size:12px;color:var(--cm-fg-muted);margin-left:auto;margin-right:10px}
-  .pr-cfg-total .amt{font:600 26px var(--cm-font-sans);color:var(--cm-fg-strong)}
-  .pr-cfg-total .permo{font-size:12px;color:var(--cm-fg-muted);font-weight:500;margin-left:4px}
   .pr-percat-row .price {
     font: 600 14px/1 var(--cm-font-mono);
     color: var(--cm-fg-strong);
@@ -880,6 +879,7 @@
 (function(){
   const VOLUME_TIERS = [[1,0],[3,10],[6,15],[11,20]];
   const discountPct = n => { let p=0; for(const [m,v] of VOLUME_TIERS){ if(n>=m) p=v; } return p; };
+  const CLS = { initiation:'t-free', basic:'t-basic', professional:'t-pro', full:'t-full' };
   const FALLBACK = [
     {slug:'initiation',name:'Iniciación',price_monthly:0},
     {slug:'basic',name:'Básico',price_monthly:60},
@@ -893,7 +893,10 @@
     {name:'Sub-17',slug:'basic'},
     {name:'Sub-14',slug:'initiation'},
   ];
-  const priceOf = s => { const p=PLANS.find(x=>x.slug===s); return p?Number(p.price_monthly||0):0; };
+  const plan = s => PLANS.find(x=>x.slug===s) || {};
+  const priceOf = s => Number((plan(s).price_monthly)||0);
+  const nameOf = s => plan(s).name || s;
+  const esc = v => String(v||'').replace(/"/g,'&quot;');
   const tt = (k,l) => { try{ const v=window.CM_I18N&&window.CM_I18N.t(k); return (v&&v!==k)?v:l; }catch(e){ return l; } };
   const opts = sel => PLANS.map(p=>`<option value="${p.slug}" ${p.slug===sel?'selected':''}>${p.name} — $${Number(p.price_monthly||0)}/mo</option>`).join('');
 
@@ -901,14 +904,17 @@
     const host = document.getElementById('prCfgRows');
     if (!host) return;
     host.innerHTML = ROWS.map((r,i)=>`
-      <div class="pr-cfg-row">
-        <input class="pr-cfg-name" data-i="${i}" value="${(r.name||'').replace(/"/g,'&quot;')}" aria-label="Category name">
-        <select class="pr-cfg-tier" data-i="${i}">${opts(r.slug)}</select>
-        <span class="pr-cfg-price">$${priceOf(r.slug)}</span>
+      <div class="pr-percat-row">
+        <input class="pr-cfg-name" data-i="${i}" value="${esc(r.name)}" aria-label="Category name">
+        <span class="pr-cfg-pillwrap">
+          <span class="pill ${CLS[r.slug]||'t-free'}">${nameOf(r.slug)}</span>
+          <select class="pr-cfg-tiersel" data-i="${i}" aria-label="Tier">${opts(r.slug)}</select>
+        </span>
+        <span class="price">$${priceOf(r.slug)}</span>
         <button class="pr-cfg-del" data-i="${i}" aria-label="Remove">&times;</button>
       </div>`).join('');
     host.querySelectorAll('.pr-cfg-name').forEach(el=>el.addEventListener('input',e=>{ ROWS[+e.target.dataset.i].name=e.target.value; }));
-    host.querySelectorAll('.pr-cfg-tier').forEach(el=>el.addEventListener('change',e=>{ ROWS[+e.target.dataset.i].slug=e.target.value; draw(); }));
+    host.querySelectorAll('.pr-cfg-tiersel').forEach(el=>el.addEventListener('change',e=>{ ROWS[+e.target.dataset.i].slug=e.target.value; draw(); }));
     host.querySelectorAll('.pr-cfg-del').forEach(el=>el.addEventListener('click',e=>{ ROWS.splice(+e.target.dataset.i,1); draw(); }));
     summary();
   }
@@ -923,11 +929,11 @@
     box.innerHTML =
       `<div class="pr-cfg-srow"><span>${tt('pr.cfg.subtotal','Subtotal')}</span><span>$${sub.toFixed(0)}/mo</span></div>`+
       (pct>0?`<div class="pr-cfg-srow disc"><span>${tt('pr.cfg.discount','Volume discount')} (${pct}%)</span><span>−$${disc.toFixed(0)}</span></div>`:'')+
-      `<div class="pr-cfg-total"><span class="lbl">${tt('pr.calc.total','Monthly total')}</span><span class="vs">${tt('pr.calc.vs','vs $600+ flat-rate competitors')}</span><span class="amt">$${total.toFixed(0)}<span class="permo">${tt('pr.permo','/ mo')}</span></span></div>`;
+      `<div class="pr-percat-total"><span class="lbl">${tt('pr.calc.total','Monthly total')}</span><span class="vs">${tt('pr.calc.vs','vs $600+ flat-rate competitors')}</span><span class="amt">$${total.toFixed(0)}<span style="font-size:12px;color:var(--cm-fg-muted);font-weight:500;margin-left:4px">${tt('pr.permo','/ mo')}</span></span></div>`;
   }
 
   const addBtn = document.getElementById('prCfgAdd');
-  if (addBtn) addBtn.addEventListener('click',()=>{ ROWS.push({name:'Category '+(ROWS.length+1),slug:'initiation'}); draw(); });
+  if (addBtn) addBtn.addEventListener('click',()=>{ ROWS.push({name:'New category',slug:'initiation'}); draw(); });
 
   draw();
   (async function(){
