@@ -640,15 +640,14 @@
       <h3 data-i18n-html="pr.ent.h3">Running <em>10+ categories</em> or a national federation?</h3>
       <p data-i18n="pr.ent.p">Custom contracts for clubs and federations with multi-tenant needs, on-prem data residency, SSO/SAML, and dedicated onboarding. Volume pricing applies after 10 paid categories.</p>
       <div class="pr-ent-feats">
-        <span><i class="ti ti-shield-check"></i>SOC&nbsp;2 Type II</span>
-        <span><i class="ti ti-lock"></i>SSO / SAML</span>
-        <span><i class="ti ti-database"></i><span data-i18n="pr.ent.regions">EU &amp; LATAM regions</span></span>
-        <span><i class="ti ti-api"></i><span data-i18n="pr.ent.api">API access</span></span>
+        <span><i class="ti ti-discount"></i><span data-i18n="pr.ent.f.volume">Volume pricing</span></span>
+        <span><i class="ti ti-file-invoice"></i><span data-i18n="pr.ent.f.billing">Consolidated billing</span></span>
+        <span><i class="ti ti-rocket"></i><span data-i18n="pr.ent.f.onboarding">Dedicated onboarding</span></span>
         <span><i class="ti ti-user-shield"></i><span data-i18n="pr.ent.dpa">Custom DPA</span></span>
       </div>
     </div>
 
-    <form class="pr-ent-form" onsubmit="event.preventDefault();this.querySelector('button').innerHTML='<i class=&quot;ti ti-check&quot;></i> Sent — we\'ll reach out';">
+    <form class="pr-ent-form" id="prEntForm">
       <div class="pr-ent-form-row">
         <label data-i18n="ct.lbl.email">Work email</label>
         <input type="email" required placeholder="performance@yourclub.com">
@@ -779,6 +778,8 @@
       swapTo(b.dataset.billing === 'annual' ? 'annual' : 'monthly');
     }));
 
+    document.addEventListener('cm:langchanged', renderPrices);
+
     (async function(){
       try {
         if (!window.sb) return;
@@ -866,11 +867,15 @@
     if (body) body.innerHTML = h;
   }
 
+  let LAST = null;
+  document.addEventListener('cm:langchanged', () => { if (LAST) render(LAST); });
+
   (async function(){
     try {
       if (!window.sb) return;
       const { data, error } = await window.sb.from('plans').select('slug, max_players, max_staff, features').order('sort_order');
       if (error || !data) return;
+      LAST = data;
       render(data);
     } catch(e){}
   })();
@@ -937,6 +942,8 @@
   const addBtn = document.getElementById('prCfgAdd');
   if (addBtn) addBtn.addEventListener('click',()=>{ ROWS.push({name:'New category',slug:'initiation'}); draw(); });
 
+  document.addEventListener('cm:langchanged', draw);
+
   draw();
   (async function(){
     try {
@@ -945,6 +952,21 @@
       if (data && data.length){ PLANS = data; draw(); }
     } catch(e){}
   })();
+})();
+</script>
+<script>
+(function(){
+  const f = document.getElementById('prEntForm');
+  if (!f) return;
+  f.addEventListener('submit', e => {
+    e.preventDefault();
+    const em  = (f.querySelector('input[type=email]')||{}).value || '';
+    const org = (f.querySelector('input[type=text]') ||{}).value || '';
+    const cat = (f.querySelector('select')           ||{}).value || '';
+    const subject = 'Enterprise inquiry — ' + org;
+    const body = 'Email: '+em+'\nOrganization: '+org+'\nScale: '+cat;
+    window.location.href = 'mailto:reiris.joaquin@gmail.com?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+  });
 })();
 </script>
 </body>

@@ -444,6 +444,9 @@
     // How-it-works tabs: expose translated data + re-render active tab
     api.how = HOW[current] || HOW.en;
     if (typeof window.__renderHow === "function") window.__renderHow();
+
+    // Notify JS-rendered content (built outside [data-i18n]) so it can re-render.
+    try { document.dispatchEvent(new CustomEvent("cm:langchanged", { detail: { lang: current } })); } catch (e) {}
   }
 
   function setLang(l) {
