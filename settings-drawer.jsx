@@ -348,7 +348,7 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
           {tab === "notifications" && <>
             <Section label="In-app alerts" hint="Shown as badges and banners inside the app.">
               {[
-                { key:"alertInjury",  label:"Injury reported",         sub:"Badge on the Physio nav item" },
+                { key:"alertInjury",  label:"Injury reported",         sub:"Badge on the Treatments nav item" },
                 { key:"alertTask",    label:"Task assigned to me",      sub:"Badge on the Tasks nav item" },
                 { key:"alertSession", label:"Session published",        sub:"Shown in Hub activity feed" },
               ].map(({ key, label, sub }) => (
