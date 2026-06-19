@@ -103,7 +103,7 @@
   }
 
   // ── Evolution chart (viewBox-responsive SVG) ──────────────────────────────
-  function renderChart(rows) {
+  function renderChart(rows, band) {
     // rows: chronological [{test_date, value, unit}], value coerced to number
     const W = 640, H = 240;
     const padL = 46, padR = 18, padT = 16, padB = 34;
@@ -114,7 +114,14 @@
       return `<div class="pp-ts-note">No numeric values to plot.</div>`;
     }
 
-    let yMin = Math.min(...vals), yMax = Math.max(...vals);
+    // Fold the squad band into the scale so it's visible.
+    const scaleVals = vals.slice();
+    if (band && band.n >= 4 && band.mean != null) {
+      scaleVals.push(band.mean);
+      if (band.sd) { scaleVals.push(band.mean - band.sd, band.mean + band.sd); }
+    }
+
+    let yMin = Math.min(...scaleVals), yMax = Math.max(...scaleVals);
     if (yMin === yMax) { const pad = Math.abs(yMin) * 0.1 || 1; yMin -= pad; yMax += pad; }
     else { const pad = (yMax - yMin) * 0.08; yMin -= pad; yMax += pad; }
 
@@ -122,8 +129,20 @@
     const xAt = i => n === 1 ? (padL + plotW / 2) : (padL + (i / (n - 1)) * plotW);
     const yAt = v => padT + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
 
-    // TODO (deferred): squad-average band + per-test "PB" marker — both need
-    // team aggregation and per-test direction-of-better; not drawn in this step.
+    // TODO (deferred): per-test "PB" marker — needs per-test direction-of-better.
+
+    // Squad mean±SD band (drawn first, behind grid/line/dots).
+    let bandSvg = '';
+    if (band && band.n >= 4 && band.mean != null) {
+      const lo = band.sd ? band.mean - band.sd : band.mean;
+      const hi = band.sd ? band.mean + band.sd : band.mean;
+      const yA = yAt(Math.max(yMin, Math.min(yMax, lo))), yB = yAt(Math.max(yMin, Math.min(yMax, hi)));
+      const yTop = Math.min(yA, yB), yBot = Math.max(yA, yB);
+      bandSvg += `<rect x="${padL}" y="${yTop.toFixed(1)}" width="${plotW}" height="${(yBot - yTop).toFixed(1)}" fill="color-mix(in srgb,var(--cm-fg-muted) 8%,transparent)"/>`;
+      const yMean = yAt(Math.max(yMin, Math.min(yMax, band.mean)));
+      bandSvg += `<line x1="${padL}" y1="${yMean.toFixed(1)}" x2="${padL + plotW}" y2="${yMean.toFixed(1)}" stroke="var(--cm-fg-muted)" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>`;
+      bandSvg += `<text x="${padL + plotW}" y="${(yMean - 4).toFixed(1)}" text-anchor="end" font-family="var(--cm-font-sans)" font-size="9.5" fill="var(--cm-fg-faint)">squad avg ${fmtNum(band.mean)}</text>`;
+    }
 
     // gridlines + Y labels (5 lines)
     const LINES = 5;
@@ -161,7 +180,7 @@
 
     return `<div class="pp-ts-chart">
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Test evolution chart">
-        ${grid}${line}${dots}${xlabels}
+        ${bandSvg}${grid}${line}${dots}${xlabels}
       </svg>
     </div>${n === 1 ? `<div class="pp-ts-note">Only one measurement — no trend yet.</div>` : ''}`;
   }
@@ -201,9 +220,10 @@
   }
 
   // ── Public entry ────────────────────────────────────────────────────────
-  async function render({ playerId, clubId, mount }) {
+  async function render({ playerId, clubId, teamId, mount }) {
     if (!mount) return;
     styleInject();
+    const statsCache = {};
     mount.innerHTML = `<div class="pp-ts-loading"><i class="ti ti-loader-2"></i> …</div>`;
 
     let rows = [];
@@ -260,14 +280,29 @@
     const tableEl = mount.querySelector('[data-ts-table]');
     const subEl = mount.querySelector('[data-ts-sub]');
 
-    function paint() {
+    async function paint() {
       const g = groups[selected] || [];
-      // active pill
-      pillsEl.querySelectorAll('.pp-tpill').forEach(p =>
-        p.classList.toggle('is-on', p.dataset.type === selected));
+      pillsEl.querySelectorAll('.pp-tpill').forEach(p => p.classList.toggle('is-on', p.dataset.type === selected));
       const unit = (g.find(r => r.unit) || {}).unit || '';
-      subEl.textContent = `${selected}${unit ? ' · ' + unit : ''} · ${g.length} record${g.length === 1 ? '' : 's'}`;
-      chartEl.innerHTML = renderChart(g);
+      let band = null, pctTxt = '';
+      if (teamId && window.evalBench) {
+        try {
+          if (!(selected in statsCache)) {
+            const s = await window.evalBench.categoryStats({ clubId, teamId, types:[selected], physicalOnly:true });
+            statsCache[selected] = s[selected] || null;
+          }
+          const st = statsCache[selected];
+          if (st && st.n >= 4) {
+            band = { mean: st.mean, sd: st.sd, n: st.n };
+            const lb = window.evalDir ? window.evalDir.isLowerBetter(selected, unit) : false;
+            const latestVal = g.length ? Number(g[g.length - 1].value) : null;
+            const pr = window.evalBench.percentile(latestVal, st, lb);
+            if (pr != null) pctTxt = ` · Top ${100 - pr}%`;
+          }
+        } catch (_) {}
+      }
+      subEl.textContent = `${selected}${unit ? ' · ' + unit : ''} · ${g.length} record${g.length === 1 ? '' : 's'}${pctTxt}`;
+      chartEl.innerHTML = renderChart(g, band);
       tableEl.innerHTML = renderTable(g);
     }
 
