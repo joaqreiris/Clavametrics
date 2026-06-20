@@ -809,7 +809,7 @@
   const seasonStart = (firstSessRes.data || [])[0]?.session_date || from28dStr;
 
   const wellRes = await window.sb.from('wellness')
-    .select('id,player_id,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at,note,body_areas,acknowledged_at')
+    .select('id,player_id,hooper_index,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at,note,body_areas,acknowledged_at')
     .eq('club_id', clubId)
     .gte('submitted_at', todayStr + 'T00:00:00')
     .lt('submitted_at', tomorrowStr + 'T00:00:00');
@@ -818,6 +818,9 @@
   console.log('[LM] wellness records (hoy):', wellnessList.length);
   const wellMap = {};
   wellnessList.forEach(w => { wellMap[w.player_id] = w; });
+  // Transición a Hooper Index (rango 4–28, alto = peor). Cortes igual que el checklist.
+  const LM_HOOPER = { amber:12, red:18 };
+  const hasHooper = wellnessList.some(w => w.hooper_index != null);
 
   function getVal(obj, keys) { for (const k of keys) { if (obj?.[k] != null) return +obj[k]; } return null; }
   function avgDim(list, keys) {
@@ -842,11 +845,39 @@
   const submittedToday = new Set(wellnessList.map(w => w.player_id)).size;
   document.getElementById('lmWellSub').textContent  = `${submittedToday} of ${total} submitted today`;
   document.getElementById('lmWellHead').textContent = `${submittedToday} of ${total} submitted`;
-  document.getElementById('lmKpiWellness').innerHTML = avgReadiness != null
-    ? `${avgReadiness.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
+  if (hasHooper) {
+    const hooperVals = wellnessList.map(w => w.hooper_index).filter(v => v != null).map(Number);
+    const avgHooper  = hooperVals.length ? hooperVals.reduce((a,b)=>a+b,0)/hooperVals.length : null;
+    const lmKpiW = document.getElementById('lmKpiWellness');
+    lmKpiW.innerHTML = avgHooper != null ? `${avgHooper.toFixed(1)} <sub>/ 28</sub>` : `— <sub>/ 28</sub>`;
+    lmKpiW.title = 'Hooper Index · lower = better';
+  } else {
+    document.getElementById('lmKpiWellness').innerHTML = avgReadiness != null
+      ? `${avgReadiness.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
+  }
 
   const wellBars = document.getElementById('lmWellBars');
-  if (wellnessList.length && dimAvgs.some(v => v != null)) {
+  if (hasHooper) {
+    // Solo los 4 ítems Hooper (1–7, alto = malo), promediando filas con hooper_index.
+    const hooperRows = wellnessList.filter(w => w.hooper_index != null);
+    const hDims = [
+      { label:'Sleep',    keys:['sleep_quality','sleep'] },
+      { label:'Fatigue',  keys:['fatigue'] },
+      { label:'Stress',   keys:['stress'] },
+      { label:'Soreness', keys:['muscle_soreness','soreness'] }
+    ];
+    const moodAvg = avgDim(hooperRows, ['mood']);
+    wellBars.innerHTML = hDims.map(d => {
+      const val = avgDim(hooperRows, d.keys);
+      if (val == null) return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"></span><span class="v">—</span></div>`;
+      const pct = Math.round(val/7*100);
+      const col = val>=6 ? 'var(--cm-danger)' : val>=4 ? 'var(--cm-warning)' : 'var(--cm-success)';
+      return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"><span class="bf" style="width:${pct}%;background:${col}"></span></span><span class="v">${val.toFixed(1)}<sub>/7</sub></span></div>`;
+    }).join('') +
+    (moodAvg != null
+      ? `<div class="lm-wellbar"><span class="l">Mood</span><span class="b"><span class="bf" style="width:${Math.round(moodAvg/7*100)}%;background:var(--cm-fg-muted)"></span></span><span class="v">${moodAvg.toFixed(1)}<sub>/7</sub></span></div>`
+      : `<div class="lm-wellbar"><span class="l">Mood</span><span class="b"></span><span class="v">—</span></div>`);
+  } else if (wellnessList.length && dimAvgs.some(v => v != null)) {
     wellBars.innerHTML = wDims.map((d, i) => {
       const val = dimAvgs[i];
       if (val == null) return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"></span><span class="v">—</span></div>`;
@@ -953,9 +984,18 @@
       const flag = (areas.length || noteTxt)
         ? `<span class="lm-flag${ackd?' is-ack':''}" onclick="lmOpenAction('${w.id}','${(fullName||'').replace(/'/g,"\\'")}','${areas.join(',')}','${(noteTxt||'').replace(/'/g,"\\'").replace(/</g,'&lt;')}','${p.id}',${ackd?'true':'false'})" title="${ackd?'Revisado':'Click para accionar'}"><i class="ti ti-${ackd?'circle-check':'alert-triangle'}"></i><span class="lm-tip">${areas.length?`<div class="areas">${areas.join(', ')}</div>`:''}${noteTxt?noteTxt.replace(/</g,'&lt;'):'Sin nota'}${ackd?'<div style="margin-top:4px;color:#86efac">✓ Revisado</div>':''}</span></span>`
         : '';
-      const cellWell = well != null
-        ? `<td><div class="lm-cell"><span class="lm-cell-v ${well>=7?'good':well>=5?'warn':'danger'}">${well.toFixed(1)}</span>${flag}<div class="lm-cell-bar"><span class="lm-cell-fill ${well>=7?'green':well>=5?'amber':'red'}" style="width:${Math.round(well*10)}%"></span></div></div></td>`
-        : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span>${flag}</div></td>`;
+      const hooper = w ? w.hooper_index : null;
+      const cellWell = hooper != null
+        ? (() => {
+            const h = Math.round(hooper);
+            const vCls = h>=LM_HOOPER.red ? 'danger' : h>=LM_HOOPER.amber ? 'warn' : 'good';
+            const fCls = h>=LM_HOOPER.red ? 'red'    : h>=LM_HOOPER.amber ? 'amber' : 'green';
+            const fill = Math.max(0, Math.min(100, Math.round((hooper-4)/24*100)));
+            return `<td><div class="lm-cell"><span class="lm-cell-v ${vCls}">${h}</span>${flag}<div class="lm-cell-bar"><span class="lm-cell-fill ${fCls}" style="width:${fill}%"></span></div></div></td>`;
+          })()
+        : (well != null
+            ? `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-muted)">${well.toFixed(1)}<sub style="opacity:.6">·old</sub></span>${flag}<div class="lm-cell-bar"></div></div></td>`
+            : `<td><div class="lm-cell"><span class="lm-cell-v" style="color:var(--cm-fg-faint)">—</span>${flag}</div></td>`);
       const cellAC = hist.length
         ? `<td><span class="lm-cell-v" style="font:500 12px/1 var(--cm-font-mono)">${Math.round(acuteLoad)} / ${chronicLoad}</span></td>`
         : `<td><span class="lm-cell-v" style="color:var(--cm-fg-faint)">— / —</span></td>`;
