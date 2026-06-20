@@ -126,6 +126,10 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 
 @media print{body{background:#fff}.stage{padding:0}.toolbar{display:none}.sheet{box-shadow:none;border:none;border-radius:0;width:100%}}
 @media(max-width:880px){.sheet{width:100%}.hero{grid-template-columns:1fr}.body{grid-template-columns:1fr}.col.l{border-right:0;border-bottom:1px solid var(--cm-border-soft)}.hstats{grid-template-columns:repeat(2,1fr)}}
+.prod{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.prod .p{text-align:center;border:1px solid var(--cm-border);border-radius:10px;padding:13px 6px;background:var(--cm-surface-2)}
+.prod .p .v{font:600 26px var(--cm-font-sans);letter-spacing:-.02em;color:var(--cm-fg-strong)}
+.prod .p .k{font:500 9px var(--cm-font-sans);letter-spacing:.08em;text-transform:uppercase;color:var(--cm-fg-faint);margin-top:5px}
 .scout-save{ margin-top:8px; display:flex; align-items:center; gap:10px; }
 .scout-save-btn{ height:30px; padding:0 12px; border:1px solid var(--cm-border-strong); background:var(--cm-surface); color:var(--cm-fg); font:500 12px var(--cm-font-sans); border-radius:8px; cursor:pointer; }
 .scout-save-btn:hover{ background:var(--cm-bg-soft); }
@@ -163,6 +167,7 @@ const LABELS = {
     matchAvg:'match avg', technicalProfile:'Technical profile', coachScored:'Coach-scored',
     scoutingSummary:'Scouting summary', athleticProfile:'Athletic profile', vsCategory:'vs category',
     cmj:'CMJ', topPct:'Top', hsrMatch:'High-speed running / match', sprint30:'Sprint 30 m',
+    seasonProduction:'Season production', goals:'Goals', assists:'Assists', ga:'G + A', avgRating:'Avg rating',
     availableTxt:'Available', ofSeason:'of the season.', intlCaps:'Int. caps',
     noTechEval:'No technical evaluation yet', assessedBy:'Assessed by', perfStaff:'Performance Staff',
     generatedWith:'Generated with ClavaMetrics', contact:'Contact', notFound:'Player not found',
@@ -175,6 +180,7 @@ const LABELS = {
     matchAvg:'media partido', technicalProfile:'Perfil técnico', coachScored:'Evaluado por cuerpo técnico',
     scoutingSummary:'Informe de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoría',
     cmj:'CMJ', topPct:'Top', hsrMatch:'Carrera alta velocidad / partido', sprint30:'Sprint 30 m',
+    seasonProduction:'Producción de temporada', goals:'Goles', assists:'Asistencias', ga:'G + A', avgRating:'Rating medio',
     availableTxt:'Disponible', ofSeason:'de la temporada.', intlCaps:'Internac.',
     noTechEval:'Sin evaluación técnica aún', assessedBy:'Evaluado por', perfStaff:'Cuerpo Técnico',
     generatedWith:'Generado con ClavaMetrics', contact:'Contacto', notFound:'Jugador no encontrado',
@@ -187,6 +193,7 @@ const LABELS = {
     matchAvg:'média jogo', technicalProfile:'Perfil técnico', coachScored:'Avaliado pela comissão técnica',
     scoutingSummary:'Relatório de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoria',
     cmj:'CMJ', topPct:'Top', hsrMatch:'Corrida em alta velocidade / jogo', sprint30:'Sprint 30 m',
+    seasonProduction:'Produção da temporada', goals:'Gols', assists:'Assistências', ga:'G + A', avgRating:'Rating médio',
     availableTxt:'Disponível', ofSeason:'da temporada.', intlCaps:'Internac.',
     noTechEval:'Sem avaliação técnica ainda', assessedBy:'Avaliado por', perfStaff:'Comissão Técnica',
     generatedWith:'Gerado com ClavaMetrics', contact:'Contato', notFound:'Jogador não encontrado',
@@ -369,6 +376,22 @@ async function boot(){
     } catch(_){}
   }
 
+  // Season production — goals/assists/avg-rating from player_match_stats (season-filtered)
+  let prod = null;
+  try {
+    const { data } = await window.sb.from('player_match_stats')
+      .select('goals, assists, minutes, rating, match:match_results!inner(match_date)')
+      .eq('club_id', clubId).eq('player_id', id);
+    let rows = data || [];
+    if (seasonStart && seasonEnd) rows = rows.filter(r => { const d = r.match?.match_date; return d && d >= seasonStart && d <= seasonEnd; });
+    if (rows.length) {
+      const sum = k => rows.reduce((a,r) => a + (Number(r[k]) || 0), 0);
+      const ratings = rows.map(r => r.rating).filter(v => v != null).map(Number);
+      prod = { apps: rows.length, goals: sum('goals'), assists: sum('assists'),
+               avgRating: ratings.length ? (ratings.reduce((a,b)=>a+b,0)/ratings.length) : null };
+    }
+  } catch(_) {}
+
   // National-team caps: availability rows status='away' in season (distinct dates)
   let caps=null;
   if(seasonStart && seasonEnd){
@@ -444,6 +467,16 @@ async function boot(){
     ${am(L.sprint30, sprint, 's', null, false, pctSprint)}
   </div>`;
 
+  // season production card — omitted (empty string) when no match stats
+  const prodHTML = prod ? `
+    <div class="sec-h" style="margin-top:24px"><h2>${esc(L.seasonProduction)}</h2><div class="rule"></div></div>
+    <div class="prod">
+      <div class="p"><div class="v">${prod.goals}</div><div class="k">${esc(L.goals)}</div></div>
+      <div class="p"><div class="v">${prod.assists}</div><div class="k">${esc(L.assists)}</div></div>
+      <div class="p"><div class="v">${prod.goals + prod.assists}</div><div class="k">${esc(L.ga)}</div></div>
+      <div class="p"><div class="v">${prod.avgRating != null ? num1(prod.avgRating) : prod.apps}</div><div class="k">${esc(prod.avgRating != null ? L.avgRating : L.appearances)}</div></div>
+    </div>` : '';
+
   // ribbon (availability) — hidden if availabilityPct is null
   let ribbon='';
   if(k.availabilityPct!=null){
@@ -490,7 +523,7 @@ async function boot(){
       <div class="col">
         <div class="sec-h"><h2>${esc(L.athleticProfile)}</h2><div class="rule"></div></div>
         ${ath}
-        <!-- TODO: Season production card (G+A, key passes, MOTM, pass acc.) omitted — no data source yet. -->
+        ${prodHTML}
       </div>
     </div>
 
