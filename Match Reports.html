@@ -459,7 +459,7 @@
         <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
         <span style="color:var(--cm-fg-strong);font-weight:600">Match reports</span>
         <span class="sep">/</span>
-        <span>vs Vélez · May 14</span>
+        <span id="mrCrumb">Match report</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
@@ -477,15 +477,13 @@
       <!-- Hero scoreboard -->
       <header class="mr-hero">
         <div class="mr-hero-top">
-          <span class="league">Liga Profesional · Round 13</span>
+          <span class="league" id="mrComp">—</span>
           <span class="sep">·</span>
-          <span class="date" id="mrDate">Wed 14 May 2026</span>
+          <span class="date" id="mrDate">—</span>
           <span class="sep">·</span>
-          <span class="venue" id="mrVenue">Estadio Clava · home · 27,460</span>
+          <span class="venue" id="mrVenue">—</span>
           <div class="right">
-            <span class="pill"><i class="ti ti-thermometer" style="font-size:13px"></i>16°C · clear</span>
-            <span class="pill"><i class="ti ti-clock-play" style="font-size:13px"></i>21:00 KO</span>
-            <span class="pill"><i class="ti ti-circle-check" style="font-size:13px;color:#86EFAC"></i>Final · Win</span>
+            <span class="pill" id="mrResultBadge" style="display:none"></span>
             <button id="impOpen" style="display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 12px; border-radius:7px; border:1px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.12); color:#fff; font:600 12px/1 var(--cm-font-sans); cursor:pointer">
               <i class="ti ti-cloud-download" style="font-size:14px"></i>Import data
             </button>
@@ -494,88 +492,40 @@
 
         <div class="mr-scoreline">
           <div class="mr-team is-home">
-            <div class="crest is-home">CF</div>
+            <div class="crest is-home" id="mrHomeCrest">—</div>
             <div>
-              <h2>Clava FC</h2>
-              <div class="sub">Home · 4-3-3 · 67% possession</div>
+              <h2 id="mrHomeName">—</h2>
+              <div class="sub" id="mrHomeSub"></div>
             </div>
           </div>
           <div style="text-align:center">
             <div class="mr-score">
-              <span>2</span>
+              <span id="mrScoreFor">–</span>
               <span class="dash"></span>
-              <span>1</span>
+              <span id="mrScoreAgainst">–</span>
             </div>
-            <div class="mr-score-meta"><strong>FT</strong> · 90+4′</div>
+            <div class="mr-score-meta" id="mrScoreMeta"></div>
           </div>
           <div class="mr-team is-away">
-            <div class="crest" style="background:#3B82F6">VL</div>
+            <div class="crest" id="mrAwayCrest" style="background:#3B82F6">—</div>
             <div>
-              <h2>Vélez Sarsfield</h2>
-              <div class="sub">Away · 4-2-3-1 · 33%</div>
+              <h2 id="mrAwayName">—</h2>
+              <div class="sub" id="mrAwaySub"></div>
             </div>
           </div>
         </div>
 
-        <div class="mr-scorers">
-          <div>
-            <div class="mr-scorer"><i class="ti ti-ball-football"></i><strong>S. Rivas</strong><span class="min">23′</span></div>
-            <div class="mr-scorer"><i class="ti ti-ball-football"></i><strong>F. Domínguez</strong><span class="min">81′ (pen)</span></div>
-            <div class="mr-scorer"><i class="ti ti-square-rotated-filled ti yellow"></i><strong>J. Bocanegra</strong><span class="min">36′</span></div>
-          </div>
-          <div>
-            <div class="mr-scorer"><strong>M. Pellegrino</strong><i class="ti ti-ball-football"></i><span class="min">68′</span></div>
-            <div class="mr-scorer"><strong>A. Morales</strong><i class="ti ti-square-rotated-filled ti yellow"></i><span class="min">42′</span></div>
-            <div class="mr-scorer"><strong>L. Cabrera</strong><i class="ti ti-square-rotated-filled ti red"></i><span class="min">88′</span></div>
-          </div>
+        <div class="mr-notice" id="mrNotice" style="display:none; margin-top:10px; font:500 12.5px/1.4 var(--cm-font-sans); color:rgba(255,255,255,0.7)"></div>
+
+        <div class="mr-scorers" id="mrScorers" style="display:none">
+          <div id="mrScorersOurs"></div>
+          <div id="mrScorersOpp"></div>
         </div>
       </header>
 
-      <!-- KPI strip -->
-      <div class="mr-kpis">
-        <div class="mr-kpi">
-          <div class="mr-kpi-l"><i class="ti ti-circle-percentage"></i>Possession</div>
-          <div class="mr-kpi-cmp">
-            <span class="mr-kpi-us">67<sub>%</sub></span>
-            <span class="mr-kpi-vs">vs</span>
-            <span class="mr-kpi-them">33</span>
-          </div>
-          <div class="mr-kpi-bar"><span class="us" style="width:67%"></span><span class="them" style="width:33%"></span></div>
-        </div>
-        <div class="mr-kpi">
-          <div class="mr-kpi-l"><i class="ti ti-target"></i>Shots (on)</div>
-          <div class="mr-kpi-cmp">
-            <span class="mr-kpi-us">16 <sub>· 7</sub></span>
-            <span class="mr-kpi-vs">vs</span>
-            <span class="mr-kpi-them">8 · 3</span>
-          </div>
-          <div class="mr-kpi-bar"><span class="us" style="width:67%"></span><span class="them" style="width:33%"></span></div>
-        </div>
-        <div class="mr-kpi">
-          <div class="mr-kpi-l"><i class="ti ti-chart-bubble"></i>xG</div>
-          <div class="mr-kpi-cmp">
-            <span class="mr-kpi-us">2.34</span>
-            <span class="mr-kpi-vs">vs</span>
-            <span class="mr-kpi-them">0.78</span>
-          </div>
-          <div class="mr-kpi-bar"><span class="us" style="width:75%"></span><span class="them" style="width:25%"></span></div>
-        </div>
-        <div class="mr-kpi">
-          <div class="mr-kpi-l"><i class="ti ti-run"></i>Distance · sprints</div>
-          <div class="mr-kpi-cmp">
-            <span class="mr-kpi-us">112 <sub>km · 174</sub></span>
-          </div>
-          <div class="mr-kpi-bar"><span class="us" style="width:100%"></span></div>
-        </div>
-        <div class="mr-kpi">
-          <div class="mr-kpi-l"><i class="ti ti-arrows-shuffle"></i>Pass acc.</div>
-          <div class="mr-kpi-cmp">
-            <span class="mr-kpi-us">88<sub>%</sub></span>
-            <span class="mr-kpi-vs">vs</span>
-            <span class="mr-kpi-them">79</span>
-          </div>
-          <div class="mr-kpi-bar"><span class="us" style="width:88%"></span><span class="them" style="width:79%"></span></div>
-        </div>
+      <!-- KPI strip — no team-vs-team source in our model yet -->
+      <div class="mr-card" style="margin-bottom:18px">
+        <div style="padding:20px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">Team KPIs — not available yet</div>
       </div>
 
       <!-- Two-col -->
@@ -585,7 +535,7 @@
         <div class="mr-card">
           <div class="mr-card-h">
             <h3>Player report</h3>
-            <span class="sub">14 of 14 used · sorted by rating</span>
+            <span class="sub" id="mrPlayerSub"></span>
             <div class="right">
               <button class="cm-icon-btn"><i class="ti ti-arrows-sort"></i></button>
               <button class="cm-icon-btn"><i class="ti ti-columns-3"></i></button>
@@ -595,8 +545,8 @@
 
           <div class="mr-tabs">
             <button class="mr-tab is-on"><i class="ti ti-list-details"></i>All</button>
-            <button class="mr-tab"><i class="ti ti-shield"></i>Starters · 11</button>
-            <button class="mr-tab"><i class="ti ti-arrows-exchange"></i>Subs · 3</button>
+            <button class="mr-tab"><i class="ti ti-shield"></i>Starters</button>
+            <button class="mr-tab"><i class="ti ti-arrows-exchange"></i>Subs</button>
           </div>
 
           <table class="mr-table">
@@ -621,165 +571,31 @@
         <!-- RIGHT: shot map + heatmap + stat compare -->
         <div style="display:flex;flex-direction:column;gap:14px">
 
-          <!-- Shot map -->
+          <!-- Shot map — no shot-event source in our model yet -->
           <div class="mr-card">
-            <div class="mr-card-h">
-              <h3>Shot map</h3>
-              <span class="sub">24 shots · xG 3.12</span>
-              <div class="right">
-                <div style="display:inline-flex;padding:3px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;gap:2px">
-                  <button class="cm-btn is-sm" style="height:24px;padding:0 8px;border:0;background:transparent;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong);box-shadow:var(--cm-shadow-1);background:var(--cm-surface)">Both</button>
-                  <button class="cm-btn is-sm" style="height:24px;padding:0 8px;border:0;background:transparent;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Us</button>
-                  <button class="cm-btn is-sm" style="height:24px;padding:0 8px;border:0;background:transparent;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Them</button>
-                </div>
-              </div>
-            </div>
-            <div class="mr-shotmap">
-              <!-- Our shots (right half attack) -->
-              <span class="shot goal"      style="left:80%; top:48%" title="Rivas 23' goal"></span>
-              <span class="shot goal"      style="left:73%; top:55%" title="Domínguez 81' pen"></span>
-              <span class="shot on-target" style="left:74%; top:40%"></span>
-              <span class="shot on-target" style="left:69%; top:62%"></span>
-              <span class="shot on-target" style="left:82%; top:36%"></span>
-              <span class="shot on-target" style="left:65%; top:52%"></span>
-              <span class="shot on-target" style="left:78%; top:60%"></span>
-              <span class="shot off"       style="left:60%; top:30%"></span>
-              <span class="shot off"       style="left:64%; top:68%"></span>
-              <span class="shot off"       style="left:72%; top:24%"></span>
-              <span class="shot off"       style="left:88%; top:55%"></span>
-              <span class="shot off"       style="left:66%; top:46%"></span>
-              <span class="shot block"     style="left:70%; top:50%"></span>
-              <span class="shot block"     style="left:76%; top:44%"></span>
-              <span class="shot block"     style="left:71%; top:58%"></span>
-              <span class="shot block"     style="left:79%; top:52%"></span>
-              <!-- Them (attacking the other goal) -->
-              <span class="shot them goal" style="left:18%; top:54%" title="Pellegrino 68'"></span>
-              <span class="shot them on-target" style="left:24%; top:44%"></span>
-              <span class="shot them on-target" style="left:28%; top:58%"></span>
-              <span class="shot them off" style="left:32%; top:38%"></span>
-              <span class="shot them off" style="left:30%; top:64%"></span>
-              <span class="shot them off" style="left:35%; top:50%"></span>
-              <span class="shot them block" style="left:22%; top:52%"></span>
-              <span class="shot them block" style="left:26%; top:46%"></span>
-            </div>
-            <div class="mr-shotmap-legend">
-              <span class="it"><span class="d" style="background:var(--cm-success)"></span>Goal</span>
-              <span class="it"><span class="d" style="background:var(--cm-info)"></span>On target</span>
-              <span class="it"><span class="d" style="background:transparent;border-color:var(--cm-warning)"></span>Off target</span>
-              <span class="it"><span class="d" style="background:var(--cm-neutral)"></span>Blocked</span>
-              <span style="margin-left:auto;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">Attacks → ←</span>
-            </div>
+            <div class="mr-card-h"><h3>Shot map</h3></div>
+            <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">Not available yet</div>
           </div>
 
-          <!-- Team heatmap -->
+          <!-- Team heatmap — no positional source in our model yet -->
           <div class="mr-card">
-            <div class="mr-card-h">
-              <h3>Team heatmap</h3>
-              <span class="sub">avg position · all 90'</span>
-              <div class="right">
-                <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
-              </div>
-            </div>
-            <div class="mr-heatmap">
-              <div class="blob" style="left:36%; top:50%; width:140px; height:140px; background:rgba(74,222,128,0.7)"></div>
-              <div class="blob" style="left:48%; top:35%; width:170px; height:170px; background:rgba(74,222,128,0.6)"></div>
-              <div class="blob" style="left:55%; top:60%; width:180px; height:180px; background:rgba(74,222,128,0.65)"></div>
-              <div class="blob" style="left:68%; top:48%; width:200px; height:200px; background:rgba(74,222,128,0.8)"></div>
-              <div class="blob" style="left:78%; top:42%; width:130px; height:130px; background:rgba(252,211,77,0.6)"></div>
-              <div class="blob" style="left:80%; top:60%; width:110px; height:110px; background:rgba(252,211,77,0.55)"></div>
-              <div class="blob" style="left:25%; top:50%; width:90px; height:90px; background:rgba(74,222,128,0.45)"></div>
-              <div class="blob" style="left:12%; top:50%; width:60px; height:60px; background:rgba(74,222,128,0.55)"></div>
-            </div>
+            <div class="mr-card-h"><h3>Team heatmap</h3></div>
+            <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">Not available yet</div>
           </div>
 
-          <!-- Compare bars -->
+          <!-- Match stats compare — no team-vs-team source in our model yet -->
           <div class="mr-card">
-            <div class="mr-card-h">
-              <h3>Match stats</h3>
-              <span class="sub">us · them</span>
-            </div>
-            <div class="mr-cmp">
-              <div class="mr-cmp-row">
-                <span class="mr-cmp-l">18</span>
-                <div class="mr-cmp-mid">
-                  <span class="mr-cmp-name">Corners</span>
-                  <div class="mr-cmp-bars"><div class="b us"><div class="f" style="width:90%"></div></div><div class="b them"><div class="f" style="width:25%"></div></div></div>
-                </div>
-                <span class="mr-cmp-r">5</span>
-              </div>
-              <div class="mr-cmp-row">
-                <span class="mr-cmp-l">12</span>
-                <div class="mr-cmp-mid">
-                  <span class="mr-cmp-name">Fouls</span>
-                  <div class="mr-cmp-bars"><div class="b us"><div class="f" style="width:60%"></div></div><div class="b them"><div class="f" style="width:80%"></div></div></div>
-                </div>
-                <span class="mr-cmp-r">16</span>
-              </div>
-              <div class="mr-cmp-row">
-                <span class="mr-cmp-l">22</span>
-                <div class="mr-cmp-mid">
-                  <span class="mr-cmp-name">Tackles · won</span>
-                  <div class="mr-cmp-bars"><div class="b us"><div class="f" style="width:70%"></div></div><div class="b them"><div class="f" style="width:55%"></div></div></div>
-                </div>
-                <span class="mr-cmp-r">17</span>
-              </div>
-              <div class="mr-cmp-row">
-                <span class="mr-cmp-l">8</span>
-                <div class="mr-cmp-mid">
-                  <span class="mr-cmp-name">Offsides</span>
-                  <div class="mr-cmp-bars"><div class="b us"><div class="f" style="width:80%"></div></div><div class="b them"><div class="f" style="width:10%"></div></div></div>
-                </div>
-                <span class="mr-cmp-r">1</span>
-              </div>
-              <div class="mr-cmp-row">
-                <span class="mr-cmp-l">112</span>
-                <div class="mr-cmp-mid">
-                  <span class="mr-cmp-name">Distance (km)</span>
-                  <div class="mr-cmp-bars"><div class="b us"><div class="f" style="width:55%"></div></div><div class="b them"><div class="f" style="width:50%"></div></div></div>
-                </div>
-                <span class="mr-cmp-r">108</span>
-              </div>
-            </div>
+            <div class="mr-card-h"><h3>Match stats</h3></div>
+            <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">Not available yet</div>
           </div>
 
         </div>
       </div>
 
-      <!-- Match timeline (full width) -->
+      <!-- Match timeline — no match-events model yet -->
       <div class="mr-card" style="margin-top:14px">
-        <div class="mr-card-h">
-          <h3>Match timeline</h3>
-          <span class="sub">90+4′ · 6 events</span>
-          <div class="right">
-            <button class="cm-btn is-outline is-sm"><i class="ti ti-video" style="font-size:14px"></i>Open in video room</button>
-          </div>
-        </div>
-        <div class="mr-timeline">
-          <div class="tl-track">
-            <span class="tl-half-label l">1st half</span>
-            <span class="tl-half-label m">HT</span>
-            <span class="tl-half-label r">2nd half</span>
-            <div class="tl-half"></div>
-
-            <span class="tl-evt goal" style="left:25%" title="Rivas 23'"><i class="ti ti-ball-football"></i></span>
-            <span class="tl-min" style="left:25%">23′ · Rivas</span>
-
-            <span class="tl-evt yc" style="left:40%" title="Bocanegra YC 36'"><i class="ti ti-square"></i></span>
-            <span class="tl-min" style="left:40%">36′ · YC</span>
-
-            <span class="tl-evt sub" style="left:43%" title="Bocanegra off (injury)"><i class="ti ti-arrows-exchange"></i></span>
-            <span class="tl-min" style="left:43%">38′ · Sub</span>
-
-            <span class="tl-evt them" style="left:74%" title="Pellegrino 68'"><i class="ti ti-ball-football"></i></span>
-            <span class="tl-min" style="left:74%">68′ · Vélez</span>
-
-            <span class="tl-evt goal" style="left:88%" title="Domínguez pen 81'"><i class="ti ti-ball-football"></i></span>
-            <span class="tl-min" style="left:88%">81′ · Pen</span>
-
-            <span class="tl-evt yc" style="left:95%" style="background:#DC2626;border-color:#DC2626" title="Cabrera RC 88'"><i class="ti ti-square"></i></span>
-            <span class="tl-min" style="left:95%">88′ · RC</span>
-          </div>
-        </div>
+        <div class="mr-card-h"><h3>Match timeline</h3></div>
+        <div style="padding:28px 16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">Not available yet</div>
       </div>
 
     </section>
@@ -912,30 +728,7 @@
     <section class="imp-section">
       <div class="imp-section-l">Recent imports</div>
       <div>
-        <div class="imp-history-row">
-          <span class="ic hudl" style="background:#FA4616">H</span>
-          <div class="info">
-            <div class="title">vs Vélez · 14 May<span class="badge ok"><i class="ti ti-check" style="font-size:10px"></i>OK</span></div>
-            <div class="meta">2,184 events · 24 shots · 8 video clips · mapped 14/14 players</div>
-          </div>
-          <span class="when">2 h ago</span>
-        </div>
-        <div class="imp-history-row">
-          <span class="ic" style="background:#F47C0A">S</span>
-          <div class="info">
-            <div class="title">StatSports session · MD−1<span class="badge ok"><i class="ti ti-check" style="font-size:10px"></i>OK</span></div>
-            <div class="meta">22 player files · 87 min · GPS + heart rate</div>
-          </div>
-          <span class="when">yesterday</span>
-        </div>
-        <div class="imp-history-row">
-          <span class="ic" style="background:#0E7C66">W</span>
-          <div class="info">
-            <div class="title">Atlético opposition pack<span class="badge partial"><i class="ti ti-alert-triangle" style="font-size:10px"></i>Partial · 3 unmapped</span></div>
-            <div class="meta">Players, last 5 matches, set-piece tendencies</div>
-          </div>
-          <span class="when">Wed</span>
-        </div>
+        <div style="padding:18px 4px;color:var(--cm-fg-faint);font:var(--cm-body-sm)">No imports yet.</div>
       </div>
     </section>
 
@@ -984,16 +777,28 @@
       .limit(1);
 
     const match = matches?.[0];
+    let _mrResult = null, _mrStats = [];
     if (match) {
       const dt = new Date(match.session_date);
       const dayStr = `${DAYS_LONG[dt.getDay()].slice(0,3)} ${dt.getDate()} ${MONTHS_SHORT[dt.getMonth()]} ${dt.getFullYear()}`;
       document.getElementById('mrDate').textContent = dayStr;
-      if (match.title) document.getElementById('mrVenue').textContent = match.title;
+
+      const { data: mr } = await window.sb.from('match_results').select('*')
+        .eq('club_id', clubId).eq('session_id', match.id).limit(1);
+      _mrResult = mr?.[0] || null;
+      if (_mrResult) {
+        const { data: ps } = await window.sb.from('player_match_stats')
+          .select('player_id, minutes, goals, assists, yellow_cards, red_cards, rating, players(first_name,last_name)')
+          .eq('club_id', clubId).eq('match_id', _mrResult.id);
+        _mrStats = ps || [];
+      }
       await loadGPS(match.id, clubId);
     } else {
       document.getElementById('mrPlayerBody').innerHTML =
         '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">No match sessions found</td></tr>';
     }
+    renderHero(match, _mrResult, club);
+    renderScorers(_mrStats);
   }
 
   async function loadGPS(sessionId, clubId) {
@@ -1005,10 +810,13 @@
 
     const rows = data || [];
     const tbody = document.getElementById('mrPlayerBody');
+    const subEl = document.getElementById('mrPlayerSub');
     if (!rows.length) {
+      if (subEl) subEl.textContent = '';
       tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">No GPS data for this match</td></tr>';
       return;
     }
+    if (subEl) subEl.textContent = `${rows.length} player${rows.length === 1 ? '' : 's'} · GPS`;
     tbody.innerHTML = rows.map(r => {
       const p = r.players || {};
       const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
@@ -1031,6 +839,106 @@
         <td><div class="mr-cards"></div></td>
       </tr>`;
     }).join('');
+  }
+
+  // ── Hero / scorers from real data ─────────────────────────────
+  function mrInitials(name){
+    const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+    return ((w[0]?.[0] || '') + (w[1]?.[0] || '')).toUpperCase() || (name ? name.slice(0,2).toUpperCase() : '—');
+  }
+  function mrShortName(p){
+    p = p || {};
+    const f = p.first_name || '', l = p.last_name || '';
+    if (f && l) return `${f[0]}. ${l}`;
+    return (l || f || 'Unknown');
+  }
+  function _set(id, txt){ const el = document.getElementById(id); if (el) el.textContent = txt; }
+
+  function renderHero(match, r, club){
+    const ourName = club?.name || 'Us';
+    _set('mrHomeName', ourName);
+    _set('mrHomeCrest', mrInitials(ourName));
+
+    const badge  = document.getElementById('mrResultBadge');
+    const notice = document.getElementById('mrNotice');
+    const crumb  = document.getElementById('mrCrumb');
+    const shortDate = match ? (() => { const d = new Date(match.session_date);
+      return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`; })() : '';
+
+    if (!r) {
+      // blank scoreboard; no fabricated values
+      _set('mrComp', '—');
+      _set('mrVenue', match?.title || '—');
+      _set('mrAwayName', '—');
+      _set('mrAwayCrest', '—');
+      _set('mrScoreFor', '–');
+      _set('mrScoreAgainst', '–');
+      _set('mrScoreMeta', '');
+      _set('mrHomeSub', '');
+      _set('mrAwaySub', '');
+      if (badge) badge.style.display = 'none';
+      if (notice) {
+        if (match) { notice.textContent = 'No match data entered for this session yet.'; notice.style.display = ''; }
+        else { notice.style.display = 'none'; }
+      }
+      if (crumb) crumb.textContent = 'Match report';
+      const sc = document.getElementById('mrScorers'); if (sc) sc.style.display = 'none';
+      return;
+    }
+
+    const opponent = r.opponent || '—';
+    _set('mrComp', r.competition || '—');
+    _set('mrVenue', r.venue || match?.title || '—');
+    _set('mrAwayName', opponent);
+    _set('mrAwayCrest', mrInitials(opponent === '—' ? '' : opponent));
+    _set('mrScoreFor', r.score_for ?? '–');
+    _set('mrScoreAgainst', r.score_against ?? '–');
+    _set('mrScoreMeta', '');
+
+    const ha = r.home_away;
+    const homeLabel = ha ? (ha[0].toUpperCase() + ha.slice(1)) : '';
+    const awayLabel = ha === 'home' ? 'Away' : (ha === 'away' ? 'Home' : '');
+    _set('mrHomeSub', [homeLabel, r.formation, r.possession != null ? `${r.possession}% possession` : null].filter(Boolean).join(' · '));
+    _set('mrAwaySub', awayLabel);
+
+    if (badge) {
+      if (r.score_for != null && r.score_against != null) {
+        const res = r.score_for > r.score_against ? 'Win' : (r.score_for < r.score_against ? 'Loss' : 'Draw');
+        const ic = res === 'Win' ? ['ti-circle-check', '#86EFAC'] : (res === 'Loss' ? ['ti-circle-x', '#FCA5A5'] : ['ti-minus', '#FCD34D']);
+        badge.innerHTML = `<i class="ti ${ic[0]}" style="font-size:13px;color:${ic[1]}"></i>Final · ${res}`;
+        badge.style.display = '';
+      } else { badge.style.display = 'none'; }
+    }
+    if (notice) notice.style.display = 'none';
+    if (crumb) crumb.textContent = `vs ${opponent}${shortDate ? ' · ' + shortDate : ''}`;
+    const sc = document.getElementById('mrScorers'); if (sc) sc.style.display = '';
+  }
+
+  function renderScorers(stats){
+    const box = document.getElementById('mrScorers');
+    const ours = document.getElementById('mrScorersOurs');
+    const opp  = document.getElementById('mrScorersOpp');
+    if (!box || !ours || !opp) return;
+    if (box.style.display === 'none') return; // hidden by renderHero when no match_results
+    opp.innerHTML = ''; // we don't track opponent players
+
+    const list = stats || [];
+    const goals = list.filter(s => (s.goals || 0) > 0);
+    const yellows = list.filter(s => (s.yellow_cards || 0) > 0);
+    const reds = list.filter(s => (s.red_cards || 0) > 0);
+
+    if (!goals.length && !yellows.length && !reds.length) {
+      ours.innerHTML = '<div class="mr-scorer" style="opacity:.75">No goals or cards recorded.</div>';
+      return;
+    }
+    let html = '';
+    goals.forEach(s => { const n = s.goals || 1;
+      html += `<div class="mr-scorer"><i class="ti ti-ball-football"></i><strong>${mrShortName(s.players)}</strong>${n > 1 ? `<span class="min">×${n}</span>` : ''}</div>`; });
+    yellows.forEach(s => {
+      html += `<div class="mr-scorer"><i class="ti ti-square-rotated-filled ti yellow"></i><strong>${mrShortName(s.players)}</strong></div>`; });
+    reds.forEach(s => {
+      html += `<div class="mr-scorer"><i class="ti ti-square-rotated-filled ti red"></i><strong>${mrShortName(s.players)}</strong></div>`; });
+    ours.innerHTML = html;
   }
 
   boot();
