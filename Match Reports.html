@@ -802,41 +802,99 @@
   }
 
   async function loadGPS(sessionId, clubId) {
-    const { data } = await window.sb.from('gps_reports')
-      .select('player_id, total_distance, sprint_distance, max_speed, player_load, players(first_name, last_name, position)')
-      .eq('session_id', sessionId)
-      .eq('club_id', clubId)
-      .order('total_distance', { ascending: false });
-
-    const rows = data || [];
     const tbody = document.getElementById('mrPlayerBody');
     const subEl = document.getElementById('mrPlayerSub');
-    if (!rows.length) {
+
+    // 1) Resolve the match + per-player stats
+    let result = null, statsByPlayer = {};
+    try {
+      const { data: mr } = await window.sb.from('match_results').select('id')
+        .eq('club_id', clubId).eq('session_id', sessionId).limit(1);
+      result = mr?.[0] || null;
+      if (result) {
+        const { data: ps } = await window.sb.from('player_match_stats')
+          .select('player_id, minutes, goals, assists, yellow_cards, red_cards, rating, position, players(first_name,last_name,position)')
+          .eq('club_id', clubId).eq('match_id', result.id);
+        (ps || []).forEach(s => { statsByPlayer[s.player_id] = s; });
+      }
+    } catch (_) {}
+
+    // 2) GPS rows keyed by player_id
+    const gpsByPlayer = {};
+    try {
+      const { data } = await window.sb.from('gps_reports')
+        .select('player_id, total_distance, sprint_distance, max_speed, player_load, players(first_name, last_name, position)')
+        .eq('session_id', sessionId)
+        .eq('club_id', clubId);
+      (data || []).forEach(g => { gpsByPlayer[g.player_id] = g; });
+    } catch (_) {}
+
+    // 3) union of player ids
+    const ids = Array.from(new Set([...Object.keys(gpsByPlayer), ...Object.keys(statsByPlayer)]));
+    if (!ids.length) {
       if (subEl) subEl.textContent = '';
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">No GPS data for this match</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--cm-fg-muted)">No match data for this match</td></tr>';
       return;
     }
-    if (subEl) subEl.textContent = `${rows.length} player${rows.length === 1 ? '' : 's'} · GPS`;
-    tbody.innerHTML = rows.map(r => {
-      const p = r.players || {};
+
+    // 4) build + sort (rating desc, then total_distance desc)
+    const rows = ids.map(id => {
+      const g = gpsByPlayer[id] || null;
+      const s = statsByPlayer[id] || null;
+      const p = (s && s.players) || (g && g.players) || {};
+      return { id, g, s, p };
+    }).sort((a, b) => {
+      const ra = a.s && a.s.rating != null ? Number(a.s.rating) : -Infinity;
+      const rb = b.s && b.s.rating != null ? Number(b.s.rating) : -Infinity;
+      if (rb !== ra) return rb - ra;
+      const da = a.g && a.g.total_distance != null ? Number(a.g.total_distance) : -Infinity;
+      const db = b.g && b.g.total_distance != null ? Number(b.g.total_distance) : -Infinity;
+      return db - da;
+    });
+
+    if (subEl) subEl.textContent = `${rows.length} player${rows.length === 1 ? '' : 's'}`;
+
+    // 5) render
+    tbody.innerHTML = rows.map(({ g, s, p }) => {
       const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown';
       const init = `${p.first_name?.[0]||''}${p.last_name?.[0]||''}`.toUpperCase();
-      const pos = p.position || '—';
+      const pos = p.position || (s && s.position) || '—';
       const posCls = POS_MAP[pos] || 'mf';
-      const dist = r.total_distance != null ? +(r.total_distance / 1000).toFixed(1) : '—';
-      const sprint = r.sprint_distance != null ? Math.round(r.sprint_distance) : '—';
-      const spd = r.max_speed != null ? +r.max_speed.toFixed(1) : '—';
+
+      const min = (s && s.minutes != null) ? s.minutes : '—';
+
+      let ratingCell = '<span class="mr-rating neu">—</span>';
+      if (s && s.rating != null) {
+        const rv = Number(s.rating);
+        const cls = rv >= 7.5 ? 'high' : (rv >= 6 ? 'neu' : 'low');
+        ratingCell = `<span class="mr-rating ${cls}">${rv.toFixed(1)}</span>`;
+      }
+
+      const goalsCell = s
+        ? `${s.goals || 0}${s.assists ? ` <span style="color:var(--cm-fg-faint)">+${s.assists}A</span>` : ''}`
+        : '—';
+
+      const dist = (g && g.total_distance != null) ? +(g.total_distance / 1000).toFixed(1) : '—';
+      const sprint = (g && g.sprint_distance != null) ? Math.round(g.sprint_distance) : '—';
+      const spd = (g && g.max_speed != null) ? +g.max_speed.toFixed(1) : '—';
+
+      let cards = '';
+      if (s) {
+        for (let i = 0; i < (s.yellow_cards || 0); i++) cards += '<span class="c y"></span>';
+        for (let i = 0; i < (s.red_cards || 0); i++) cards += '<span class="c r"></span>';
+      }
+
       return `<tr>
         <td><div class="mr-player"><div class="mr-av">${init}</div><div><div class="mr-pname">${name}</div><div class="mr-pdorsal">${pos}</div></div></div></td>
         <td><span class="mr-pos ${posCls}">${pos}</span></td>
-        <td><span class="mr-min">—</span></td>
-        <td><span class="mr-rating neu">—</span></td>
-        <td class="num">—</td>
+        <td><span class="mr-min">${min}</span></td>
+        <td>${ratingCell}</td>
+        <td class="num">${goalsCell}</td>
         <td class="num">—</td>
         <td class="num">${dist}</td>
         <td class="num">${sprint}</td>
         <td class="num">${spd}</td>
-        <td><div class="mr-cards"></div></td>
+        <td><div class="mr-cards">${cards}</div></td>
       </tr>`;
     }).join('');
   }
