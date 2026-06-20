@@ -50,6 +50,8 @@
 .hub-nav-item .count{margin-left:auto;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-side-fg-muted)}
 .hub-nav-item.is-active{background:var(--cm-side-item-active-bg);color:var(--cm-side-item-active-fg)}
 .hub-nav-item.is-active .count{color:var(--cm-side-item-active-fg);opacity:0.8}
+.hub-nav-item.is-locked{opacity:.55}
+.hub-nav-lock{margin-left:auto;font-size:14px;opacity:.85}
 .hub-side-foot{border-top:1px solid var(--cm-side-border);padding:10px}
 .hub-user{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--cm-r-3);cursor:pointer}
 .hub-user:hover{background:var(--cm-side-item-active-bg)}
@@ -399,6 +401,23 @@
           if (!_mods.keys.has(el.dataset.mod)) el.remove();
         });
       }
+    }
+    // Gating de plan: NO se quita el ítem; candado + CTA de upgrade (esconder no convierte).
+    if (typeof window.planAllows === 'function') {
+      const items = [...document.querySelectorAll('.hub-nav-item[data-mod]')];
+      const checks = await Promise.all(items.map(async el => ({ el, ok: await window.planAllows(el.dataset.mod) })));
+      checks.forEach(({ el, ok }) => {
+        if (ok) return;
+        el.classList.add('is-locked');
+        el.setAttribute('href', 'Plan Picker.html');
+        const t = el.getAttribute('title') || '';
+        if (!t.includes('Upgrade')) el.setAttribute('title', t + ' — Upgrade to unlock');
+        if (!el.querySelector('.hub-nav-lock')) {
+          const lk = document.createElement('i');
+          lk.className = 'ti ti-lock hub-nav-lock';
+          el.appendChild(lk);
+        }
+      });
     }
     // Platform Admin: solo platform admins (cross-club). NO para admin de club.
     if (typeof window.isSuperAdmin === 'function') {
