@@ -79,7 +79,10 @@ const T={
     parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _n=(navigator.language||'en').toLowerCase();
-const L=T[_n.startsWith('es')?'es':_n.startsWith('pt')?'pt':'en'];
+// Idioma del survey. Hoy la app está en inglés → forzamos 'en'.
+// Futuro: null = auto-detectar por dispositivo · 'es'/'pt' = forzar ese idioma.
+const SURVEY_LANG='en';
+const L=T[SURVEY_LANG || (_n.startsWith('es')?'es':_n.startsWith('pt')?'pt':'en')];
 const SB_URL='https://xesrumijvdmqjrufgeka.supabase.co';
 const SB_KEY='sb_publishable_p4DBCWsAm9u-Wf5-_CP-Yw_MYh_3cR6';
 const sb=supabase.createClient(SB_URL,SB_KEY);
