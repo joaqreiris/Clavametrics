@@ -115,6 +115,9 @@ begin
 end; $function$;
 
 -- 3) wellness_status: expone hooper_index para la alerta del checklist
+-- DROP necesario: cambia el tipo de retorno (agrega hooper_index a la TABLE),
+-- y CREATE OR REPLACE no puede cambiar el return type de una función existente.
+DROP FUNCTION IF EXISTS public.wellness_status(uuid, uuid, date);
 CREATE OR REPLACE FUNCTION public.wellness_status(p_club_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE)
  RETURNS TABLE(player_id uuid, player_name text, responded boolean, readiness numeric, hooper_index numeric)
  LANGUAGE plpgsql
