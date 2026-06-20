@@ -310,6 +310,20 @@
   .club.is-add .l { font:500 13px/1.3 var(--cm-font-sans); }
   .club.is-add small { font:500 11px/1.3 var(--cm-font-mono); color:var(--cm-fg-faint); display:block; text-align:center; }
   #adClubSelect option { color:#0f172a; background:#ffffff; }
+  .gps-int-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;max-width:900px}
+  .gps-int-card{border:1px solid var(--cm-border);border-radius:12px;padding:18px;background:var(--cm-bg)}
+  .gps-int-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .gps-int-head h3{margin:0;font-size:16px}
+  .gps-int-badge{font:600 11px/1 var(--cm-font-sans);padding:4px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}
+  .gps-int-badge.s-connected{background:var(--cm-accent-soft);color:var(--cm-accent)}
+  .gps-int-badge.s-pending,.gps-int-badge.s-disabled{background:var(--cm-bg-soft);color:var(--cm-fg-muted)}
+  .gps-int-badge.s-error{background:var(--cm-danger-bg);color:var(--cm-danger)}
+  .gps-int-hint{font-size:12.5px;color:var(--cm-fg-muted);margin:6px 0 14px;line-height:1.5}
+  .gps-int-form{display:flex;flex-direction:column;gap:8px}
+  .gps-int-form input{padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit}
+  .gps-int-btn{padding:8px 14px;border-radius:8px;border:0;background:var(--cm-accent);color:var(--cm-fg-on-accent);font:600 13px var(--cm-font-sans);cursor:pointer}
+  .gps-int-btn.ghost{background:none;border:1px solid var(--cm-border);color:var(--cm-fg)}
+  .gps-int-msg{font-size:12px;margin-top:6px;min-height:16px}
 </style>
 </head>
 <body class="cm">
@@ -335,6 +349,7 @@
       <button class="ad-tab" data-panel="sections"><i class="ti ti-layout-grid"></i>Sections<span class="ct">14</span></button>
       <button class="ad-tab" data-panel="subscription"><i class="ti ti-credit-card"></i>Subscription</button>
       <button class="ad-tab" data-panel="notifications"><i class="ti ti-bell-cog"></i>Notifications</button>
+      <button class="ad-tab" data-panel="integrations"><i class="ti ti-plug"></i>Integrations</button>
       <button class="ad-tab" data-panel="security"><i class="ti ti-key"></i>Security &amp; SSO</button>
       <button class="ad-tab" data-panel="audit"><i class="ti ti-history"></i>Audit log</button>
     </div>
@@ -698,6 +713,18 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="ad-panel" data-panel="integrations">
+        <h1 style="margin:0 0 6px">GPS integrations</h1>
+        <p style="color:var(--cm-fg-muted);max-width:640px;margin:0 0 8px">
+          Connect your club's GPS provider account to sync sessions automatically.
+          Your data stays yours — credentials are stored isolated and never shared.
+        </p>
+        <p style="color:var(--cm-fg-faint);font-size:12.5px;max-width:640px;margin:0 0 24px">
+          Saving credentials prepares the connection. Automatic syncing activates as provider sync rolls out.
+        </p>
+        <div id="gpsIntCards" class="gps-int-grid"><div style="color:var(--cm-fg-muted)">Loading…</div></div>
       </div>
 
       <div class="ad-panel" data-panel="security">
@@ -1780,6 +1807,84 @@
       navigator.serviceWorker.register('/service-worker.js').catch(() => {});
     });
   }
+</script>
+
+<script>
+(function(){
+  const PROVIDERS = [
+    { slug:'catapult', name:'Catapult (OpenField)',
+      hint:'In OpenField Cloud → Settings → API Tokens, create a token and paste it here. You may need to enable the "API Token Admin" module via Catapult support first.',
+      accountLabel:'OpenField account / team ID (optional)' },
+    { slug:'statsports', name:'StatSports (Sonra)',
+      hint:'Ask your StatSports account manager to enable the Third-Party API for ClavaMetrics and give you the API key, then paste it here.',
+      accountLabel:'StatSports Team ID (optional)' },
+  ];
+  let CLUB_ID = null, INTS = {};
+
+  async function getClubId(){
+    if (CLUB_ID) return CLUB_ID;
+    const { data: u } = await window.sb.auth.getUser();
+    const { data } = await window.sb.from('profiles').select('club_id').eq('id', u.user.id).single();
+    CLUB_ID = data?.club_id || null; return CLUB_ID;
+  }
+  async function load(){
+    try {
+      const { data } = await window.sb.from('gps_integrations').select('id, provider, status, external_account_id');
+      INTS = {}; (data||[]).forEach(r => INTS[r.provider] = r);
+    } catch(e){ INTS = {}; }
+    render();
+  }
+  function msg(prov,t,err){ const el=document.querySelector(`[data-msg="${prov}"]`); if(el){ el.textContent=t; el.style.color=err?'var(--cm-danger)':'var(--cm-fg-muted)'; } }
+  function render(){
+    const host = document.getElementById('gpsIntCards'); if(!host) return;
+    host.innerHTML = PROVIDERS.map(p=>{
+      const row=INTS[p.slug], status=row?.status||'not_connected', connected=status==='connected';
+      const bc=connected?'s-connected':(status==='error'?'s-error':(status==='disabled'?'s-disabled':'s-pending'));
+      const bt=connected?'Connected':(status==='error'?'Error':(status==='disabled'?'Disabled':'Not connected'));
+      return `<div class="gps-int-card">
+        <div class="gps-int-head"><h3>${p.name}</h3><span class="gps-int-badge ${bc}">${bt}</span></div>
+        <div class="gps-int-hint">${p.hint}</div>
+        ${connected
+          ? `<button class="gps-int-btn ghost" data-act="disconnect" data-prov="${p.slug}">Disconnect</button>`
+          : `<div class="gps-int-form">
+               <input type="text" placeholder="${p.accountLabel}" data-field="account" data-prov="${p.slug}" value="${row?.external_account_id||''}">
+               <input type="password" placeholder="API token / key" data-field="token" data-prov="${p.slug}" autocomplete="off">
+               <button class="gps-int-btn" data-act="connect" data-prov="${p.slug}">Connect</button>
+             </div>`}
+        <div class="gps-int-msg" data-msg="${p.slug}"></div></div>`;
+    }).join('');
+    host.querySelectorAll('[data-act="connect"]').forEach(b=>b.addEventListener('click',()=>connect(b.dataset.prov)));
+    host.querySelectorAll('[data-act="disconnect"]').forEach(b=>b.addEventListener('click',()=>disconnect(b.dataset.prov)));
+  }
+  async function connect(prov){
+    const token=document.querySelector(`[data-field="token"][data-prov="${prov}"]`)?.value.trim();
+    const account=document.querySelector(`[data-field="account"][data-prov="${prov}"]`)?.value.trim();
+    if(!token){ msg(prov,'Paste your API token first.',true); return; }
+    msg(prov,'Connecting…');
+    try{
+      let intId=INTS[prov]?.id;
+      if(!intId){
+        const clubId=await getClubId(); if(!clubId) throw new Error('No club found');
+        const { data, error }=await window.sb.from('gps_integrations')
+          .insert({ club_id:clubId, provider:prov, status:'pending', external_account_id:account||null })
+          .select('id').single();
+        if(error) throw error; intId=data.id;
+      } else if(account){ await window.sb.from('gps_integrations').update({ external_account_id:account }).eq('id',intId); }
+      const { error:e2 }=await window.sb.rpc('set_gps_credential',{ p_integration_id:intId, p_credential:token });
+      if(e2) throw e2;
+      msg(prov,'Connected ✓'); await load();
+    }catch(e){ msg(prov,'Failed: '+(e.message||e),true); }
+  }
+  async function disconnect(prov){
+    const intId=INTS[prov]?.id; if(!intId) return;
+    if(!confirm('Disconnect this GPS provider? Synced data stays; only the credential is removed.')) return;
+    try{ const { error }=await window.sb.rpc('clear_gps_credential',{ p_integration_id:intId }); if(error) throw error; await load(); }
+    catch(e){ msg(prov,'Failed: '+(e.message||e),true); }
+  }
+  const tab=document.querySelector('.ad-tab[data-panel="integrations"]');
+  let loaded=false;
+  if(tab) tab.addEventListener('click',()=>{ if(!loaded){ loaded=true; load(); } });
+})();
 </script>
 </body>
 </html>
