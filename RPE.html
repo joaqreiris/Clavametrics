@@ -277,21 +277,21 @@
     <h1>Session RPE</h1>
     <div class="ctx-section">
       <button class="cm-btn is-outline" style="width:100%" onclick="linkPendingRpe(this)">
-        <i class="ti ti-link" style="font-size:15px"></i><span>Asociar RPE del día automáticamente</span>
+        <i class="ti ti-link" style="font-size:15px"></i><span>Auto-link today's RPE</span>
       </button>
       <p style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">
-        Vincula los RPE enviados hoy a la sesión de hoy y calcula la carga (sRPE).
+        Links today's submitted RPE to today's session and calculates load (sRPE).
       </p>
       <div id="pendingRpeWrap" style="margin-top:16px">
         <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px">
-          <i class="ti ti-clock-exclamation" style="font-size:14px"></i>RPE tardíos sin sesión
+          <i class="ti ti-clock-exclamation" style="font-size:14px"></i>Late RPE without a session
         </div>
         <div id="pendingRpeList" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
           <div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
         </div>
       </div>
       <div id="rpeChecklistWrap" style="margin-top:18px">
-        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Checklist por sesión</div>
+        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Checklist by session</div>
         <select id="checklistSession" onchange="loadRpeChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px">
           <option value="">Pick a session…</option>
         </select>
@@ -300,31 +300,31 @@
     </div>
     <div class="ctx-section">
       <button class="cm-btn is-primary" style="width:100%" onclick="openShareRpe()">
-        <i class="ti ti-share" style="font-size:15px"></i>Compartir link con jugadores
+        <i class="ti ti-share" style="font-size:15px"></i>Share link with players
       </button>
     </div>
     <div id="shareRBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
       <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:440px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
         <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
           <i class="ti ti-share" style="font-size:18px;color:var(--cm-accent)"></i>
-          <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Compartir RPE</div>
+          <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Share RPE</div>
           <button onclick="closeShareRpe()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
         </div>
         <div style="padding:18px">
           <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Team</label>
           <select id="shareRTeam" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px"></select>
-          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 6px">Sesión (opcional · para checklist exacta)</label>
+          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 6px">Session (optional · for exact checklist)</label>
           <select id="shareRSession" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px">
-            <option value="">Sin sesión (se asocia por fecha)</option>
+            <option value="">No session (linked by date)</option>
           </select>
-          <button class="cm-btn is-primary" style="width:100%" onclick="genShareRpe()"><i class="ti ti-link" style="font-size:14px"></i>Generar link</button>
+          <button class="cm-btn is-primary" style="width:100%" onclick="genShareRpe()"><i class="ti ti-link" style="font-size:14px"></i>Generate link</button>
           <div id="shareRResult" style="display:none;margin-top:14px">
-            <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Link (válido hasta que lo revoces):</div>
+            <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Link (valid until you revoke it):</div>
             <div style="display:flex;gap:8px">
               <input id="shareRUrl" readonly style="flex:1;height:38px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">
-              <button class="cm-btn is-outline is-sm" onclick="copyShareRpe()" id="shareRCopy"><i class="ti ti-copy" style="font-size:14px"></i>Copiar</button>
+              <button class="cm-btn is-outline is-sm" onclick="copyShareRpe()" id="shareRCopy"><i class="ti ti-copy" style="font-size:14px"></i>Copy</button>
             </div>
-            <a id="shareRWa" target="_blank" class="cm-btn is-outline is-sm" style="width:100%;margin-top:8px;justify-content:center"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Compartir por WhatsApp</a>
+            <a id="shareRWa" target="_blank" class="cm-btn is-outline is-sm" style="width:100%;margin-top:8px;justify-content:center"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Share via WhatsApp</a>
           </div>
         </div>
       </div>
@@ -488,8 +488,8 @@
               <div style="display:flex; gap:10px; align-items:flex-start; padding:6px">
                 <div style="width:32px;height:32px;border-radius:8px;background:rgba(34,197,94,0.20);color:#15803D;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-info-circle" style="font-size:16px"></i></div>
                 <div style="text-align:left;flex:1">
-                  <div style="font:600 13px/1.2 var(--cm-font-sans);color:#0A0A0A;margin-bottom:4px">ACWR este microciclo</div>
-                  <div style="font:500 12px/1.4 var(--cm-font-sans);color:#166534">1.12 · dentro del sweet-spot. Sigue con el plan de recuperación de mañana.</div>
+                  <div style="font:600 13px/1.2 var(--cm-font-sans);color:#0A0A0A;margin-bottom:4px">ACWR this microcycle</div>
+                  <div style="font:500 12px/1.4 var(--cm-font-sans);color:#166534">1.12 · within the sweet spot. Stick to tomorrow's recovery plan.</div>
                 </div>
               </div>
             </div>
@@ -747,8 +747,8 @@ async function submitRPE() {
     try {
       const sess = await window.sb.rpc('recent_sessions', { p_club_id: cid, p_limit: 8 });
       const ss = document.getElementById('shareRSession');
-      ss.innerHTML = '<option value="">Sin sesión (se asocia por fecha)</option>' +
-        (sess.data||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')} (${s.duration||'?'}′)</option>`).join('');
+      ss.innerHTML = '<option value="">No session (linked by date)</option>' +
+        (sess.data||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Session')} (${s.duration||'?'}′)</option>`).join('');
     } catch {}
   }
   function closeShareRpe() { document.getElementById('shareRBackdrop').style.display = 'none'; }
@@ -769,7 +769,7 @@ async function submitRPE() {
     const inp = document.getElementById('shareRUrl');
     navigator.clipboard?.writeText(inp.value);
     const btn = document.getElementById('shareRCopy');
-    const old = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i>Copiado';
+    const old = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i>Copied';
     setTimeout(() => btn.innerHTML = old, 1500);
   }
   window.openShareRpe = openShareRpe;
@@ -780,14 +780,14 @@ async function submitRPE() {
   async function linkPendingRpe(btn) {
     const span = btn.querySelector('span');
     const original = span.textContent;
-    btn.disabled = true; span.textContent = 'Asociando…';
+    btn.disabled = true; span.textContent = 'Linking…';
     try {
       const cid = await window.getClubId();
       const { data, error } = await window.sb.rpc('link_pending_rpe', { p_club_id: cid, p_date: null });
       if (error) { span.textContent = 'Error'; console.warn('[RPE] link_pending error:', error.message); }
       else {
         const n = data || 0;
-        span.textContent = n > 0 ? `✓ ${n} RPE asociados` : 'Sin RPE pendientes';
+        span.textContent = n > 0 ? `✓ ${n} RPE linked` : 'No pending RPE';
       }
     } catch (e) {
       span.textContent = 'Error'; console.warn('[RPE] link_pending:', e.message);
@@ -816,26 +816,26 @@ async function submitRPE() {
       }
       document.getElementById('pendingRpeWrap').style.display = 'block';
       const opts = _recentSessions.map(s =>
-        `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')} (${s.duration||'?'}′)</option>`
+        `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Session')} (${s.duration||'?'}′)</option>`
       ).join('');
       list.innerHTML = rows.map(r => {
-        const d = new Date(r.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+        const d = new Date(r.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
         return `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <span style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${r.player_name}</span>
             <span style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-accent)">RPE ${Number(r.rpe)}</span>
           </div>
-          <div style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Enviado ${d}</div>
+          <div style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Sent ${d}</div>
           <div style="display:flex;gap:6px">
             <select id="sess_${r.id}" style="flex:1;height:32px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 11.5px/1 var(--cm-font-sans)">
-              <option value="">Elegir sesión…</option>${opts}
+              <option value="">Pick a session…</option>${opts}
             </select>
             <button class="cm-btn is-primary is-sm" onclick="assignRpe('${r.id}', this)"><i class="ti ti-check" style="font-size:13px"></i></button>
           </div>
         </div>`;
       }).join('');
     } catch (e) {
-      list.innerHTML = `<div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">No se pudo cargar.</div>`;
+      list.innerHTML = `<div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Couldn't load.</div>`;
       console.warn('[RPE] pending:', e.message);
     }
   }
@@ -874,7 +874,7 @@ async function submitRPE() {
       const sel = document.getElementById('checklistSession');
       if (!sel) return;
       sel.innerHTML = '<option value="">Pick a session…</option>' +
-        (sess||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Sesión')}</option>`).join('');
+        (sess||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Session')}</option>`).join('');
     } catch (e) { console.warn('[RPE] checklist init:', e.message); }
   }
   async function loadRpeChecklist() {
@@ -888,7 +888,7 @@ async function submitRPE() {
       const rows = data || [];
       const done = rows.filter(r => r.responded).length;
       body.innerHTML =
-        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} respondieron</div>` +
+        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} responded</div>` +
         '<div style="display:flex;flex-direction:column;gap:4px">' +
         rows.map(r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
           <i class="ti ${r.responded?'ti-circle-check':'ti-circle'}" style="font-size:15px;color:${r.responded?'var(--cm-accent)':'var(--cm-fg-muted)'}"></i>
@@ -899,10 +899,10 @@ async function submitRPE() {
       const pending = rows.filter(r => !r.responded);
       if (pending.length) {
         const names = pending.map(r => r.player_name).join(', ');
-        body.innerHTML += `<button onclick="remindRpeMissing('${sid}', this)" data-names="${names.replace(/"/g,'&quot;')}" style="margin-top:12px;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--cm-accent);color:#fff;border:none;border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Recordar a los que faltan (${pending.length})</button>`;
+        body.innerHTML += `<button onclick="remindRpeMissing('${sid}', this)" data-names="${names.replace(/"/g,'&quot;')}" style="margin-top:12px;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--cm-accent);color:#fff;border:none;border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Remind missing (${pending.length})</button>`;
       }
     } catch (e) {
-      body.innerHTML = `<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">No se pudo cargar.</div>`;
+      body.innerHTML = `<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Couldn't load.</div>`;
     }
   }
   async function remindRpeMissing(sessionId, btn) {
@@ -921,10 +921,10 @@ async function submitRPE() {
       if (ins.error) throw ins.error;
       const url = location.origin + '/survey.html?token=' + ins.data.token;
       const names = btn.getAttribute('data-names');
-      const msg = `Recordatorio RPE de la sesión / Session RPE reminder.\nFaltan: ${names}\nCompletá acá: ${url}`;
+      const msg = `Session RPE reminder.\nMissing: ${names}\nComplete it here: ${url}`;
       window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
     } catch (e) {
-      alert('No se pudo generar el recordatorio: ' + e.message);
+      alert("Couldn't generate the reminder: " + e.message);
     }
   }
   window.remindRpeMissing = remindRpeMissing;
