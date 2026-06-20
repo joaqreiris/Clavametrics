@@ -24,15 +24,28 @@
   }
 
   .canvas {
-    max-width: 1280px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 40px 32px;
-    display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 48px;
-    align-items: start;
+    display: block;
   }
-  @media (max-width: 1000px) { .canvas { grid-template-columns: 1fr; gap: 24px; padding: 24px; } }
+  @media (max-width: 1000px) { .canvas { padding: 24px; } }
+
+  /* Secondary collapsible zones — native-feeling */
+  .cm-fold {
+    border: 0.5px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    margin-top: 24px;
+    padding: 0 18px;
+  }
+  .cm-fold > summary {
+    cursor: pointer;
+    padding: 14px 0;
+    font: 600 13.5px/1.2 var(--cm-font-sans);
+    color: var(--cm-fg-strong);
+  }
+  .cm-fold[open] > summary { margin-bottom: 14px; border-bottom: 0.5px solid var(--cm-border); }
+  .cm-fold > :not(summary):last-child { margin-bottom: 18px; }
 
   /* Left rail — context */
   .ctx h1 {
@@ -485,7 +498,7 @@
 
 <div class="canvas" data-screen-label="07 Wellness check-in">
 
-  <!-- Left rail: context -->
+  <!-- Zone 1: operating console (hero) -->
   <aside class="ctx">
     <a class="ctx-link" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to Staff Hub</a>
     <h1>Daily wellness check-in</h1>
@@ -521,61 +534,69 @@
         </div>
       </div>
     </div>
-    <p>The only player-facing surface in ClavaMetrics. Players get a unique link by SMS or WhatsApp each morning; the form takes under a minute and feeds straight into the Load Monitor.</p>
 
-    <div class="ctx-section">
-      <div class="ctx-eyebrow">What's measured</div>
-      <div class="ctx-tag-row">
-        <span class="ctx-tag"><i class="ti ti-moon"></i>Sleep</span>
-        <span class="ctx-tag"><i class="ti ti-mood-smile"></i>Mood</span>
-        <span class="ctx-tag"><i class="ti ti-battery-2"></i>Fatigue</span>
-        <span class="ctx-tag"><i class="ti ti-brain"></i>Stress</span>
-        <span class="ctx-tag"><i class="ti ti-bandage"></i>Soreness</span>
-        <span class="ctx-tag"><i class="ti ti-pin"></i>Body locations</span>
-      </div>
-    </div>
+    <!-- Zone 2: secondary — preview, collapsed -->
+    <details class="cm-fold">
+      <summary>Preview — what players see</summary>
+      <section class="phones" id="phoneRow">
 
-    <div class="ctx-section">
-      <div class="ctx-eyebrow">Design notes</div>
-      <div class="ctx-card">
-        <h3>Two states shown</h3>
-        <p>Form (left) — what players see most days. Success (right) — confirmation with 7-day streak and history.</p>
-      </div>
-      <div class="ctx-card">
-        <h3>Mobile-first, no app</h3>
-        <p>Designed to work on any phone via a tokenized URL — no installs, no auth friction. Survives offline submission &amp; auto-retries.</p>
-      </div>
-      <div class="ctx-card">
-        <h3>Localized</h3>
-        <p>The form auto-translates EN ↔ ES at the SMS layer per club preference. Tap a number, tap submit — done.</p>
-      </div>
-    </div>
+        <!-- Phone 1 — Form -->
+        <div>
+          <div id="phone1"></div>
+          <div class="canvas-legend">Form · in-progress</div>
+        </div>
 
-    <div class="ctx-section">
-      <div class="ctx-eyebrow">Theme</div>
-      <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:10px">The check-in honors the workspace theme. Toggle below or switch from Settings.</p>
-      <button class="cm-btn is-outline is-sm" onclick="toggleDark()">
-        <i class="ti ti-moon" style="font-size:14px"></i><span id="darkLabel">Switch to dark</span>
-      </button>
-    </div>
+        <!-- Phone 2 — Success -->
+        <div>
+          <div id="phone2"></div>
+          <div class="canvas-legend">Submitted · streak day 6</div>
+        </div>
+
+      </section>
+    </details>
+
+    <!-- Zone 2: secondary — context, collapsed -->
+    <details class="cm-fold">
+      <summary>About this check-in</summary>
+      <p>The only player-facing surface in ClavaMetrics. Players get a unique link by SMS or WhatsApp each morning; the form takes under a minute and feeds straight into the Load Monitor.</p>
+
+      <div class="ctx-section">
+        <div class="ctx-eyebrow">What's measured</div>
+        <div class="ctx-tag-row">
+          <span class="ctx-tag"><i class="ti ti-moon"></i>Sleep</span>
+          <span class="ctx-tag"><i class="ti ti-mood-smile"></i>Mood</span>
+          <span class="ctx-tag"><i class="ti ti-battery-2"></i>Fatigue</span>
+          <span class="ctx-tag"><i class="ti ti-brain"></i>Stress</span>
+          <span class="ctx-tag"><i class="ti ti-bandage"></i>Soreness</span>
+          <span class="ctx-tag"><i class="ti ti-pin"></i>Body locations</span>
+        </div>
+      </div>
+
+      <div class="ctx-section">
+        <div class="ctx-eyebrow">Design notes</div>
+        <div class="ctx-card">
+          <h3>Two states shown</h3>
+          <p>Form (left) — what players see most days. Success (right) — confirmation with 7-day streak and history.</p>
+        </div>
+        <div class="ctx-card">
+          <h3>Mobile-first, no app</h3>
+          <p>Designed to work on any phone via a tokenized URL — no installs, no auth friction. Survives offline submission &amp; auto-retries.</p>
+        </div>
+        <div class="ctx-card">
+          <h3>Localized</h3>
+          <p>The form auto-translates EN ↔ ES at the SMS layer per club preference. Tap a number, tap submit — done.</p>
+        </div>
+      </div>
+
+      <div class="ctx-section">
+        <div class="ctx-eyebrow">Theme</div>
+        <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:10px">The check-in honors the workspace theme. Toggle below or switch from Settings.</p>
+        <button class="cm-btn is-outline is-sm" onclick="toggleDark()">
+          <i class="ti ti-moon" style="font-size:14px"></i><span id="darkLabel">Switch to dark</span>
+        </button>
+      </div>
+    </details>
   </aside>
-
-  <!-- Right rail: phones -->
-  <section class="phones" id="phoneRow">
-
-    <!-- Phone 1 — Form -->
-    <div>
-      <div id="phone1"></div>
-      <div class="canvas-legend">Form · in-progress</div>
-    </div>
-
-    <!-- Phone 2 — Success -->
-    <div>
-      <div id="phone2"></div>
-      <div class="canvas-legend">Submitted · streak day 6</div>
-    </div>
-
-  </section>
 </div>
 
 <div id="tweaks-root"></div>
