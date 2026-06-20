@@ -739,6 +739,14 @@
       teams.map(t => `<option value="${t.id}" ${t.id === _useTeam ? 'selected' : ''}>${t.name}</option>`).join('');
     loadWellChecklist();
   }
+  // Cortes del Hooper Index (rango 4–28, alto = peor). Editables.
+  const HOOPER_BANDS = { amber: 12, red: 18 }; // < amber = verde · [amber,red) = ámbar · >= red = rojo
+  function hooperBand(h){
+    if (h == null) return null; // legacy / sin dato → neutro
+    if (h >= HOOPER_BANDS.red)   return { key:'red',   bg:'color-mix(in srgb,var(--cm-danger) 10%,transparent)',  fg:'var(--cm-danger)',  flag:true };
+    if (h >= HOOPER_BANDS.amber) return { key:'amber', bg:'color-mix(in srgb,var(--cm-warning) 10%,transparent)', fg:'var(--cm-warning)', flag:false };
+    return { key:'green', bg:'color-mix(in srgb,var(--cm-accent) 10%,transparent)', fg:'var(--cm-accent)', flag:false };
+  }
   async function loadWellChecklist() {
     const body = document.getElementById('wellChkBody');
     const teamId = document.getElementById('wellChkTeam').value || null;
@@ -749,16 +757,44 @@
       if (error) throw error;
       const rows = data || [];
       const done = rows.filter(r => r.responded).length;
+      const responders = rows.filter(r => r.responded);
+      const pending    = rows.filter(r => !r.responded);
+      // peores arriba: hooper_index DESC; respondieron sin hooper (null) van después de los numéricos
+      responders.sort((a, b) => {
+        if (a.hooper_index == null && b.hooper_index == null) return 0;
+        if (a.hooper_index == null) return 1;
+        if (b.hooper_index == null) return -1;
+        return b.hooper_index - a.hooper_index;
+      });
+      const redCount = responders.filter(r => { const bd = hooperBand(r.hooper_index); return bd && bd.flag; }).length;
+      const respRow = r => {
+        const bd = hooperBand(r.hooper_index);
+        const flagged = !!(bd && bd.flag);
+        const icon = flagged ? 'ti-alert-triangle' : 'ti-circle-check';
+        const iconColor = flagged ? bd.fg : 'var(--cm-accent)';
+        let badge = '';
+        if (r.hooper_index != null) {
+          badge = `<span style="font:600 11px/1 var(--cm-font-mono);color:${bd.fg};background:${bd.bg};padding:2px 7px;border-radius:999px">${r.hooper_index}</span>`;
+        } else if (r.readiness != null) {
+          badge = `<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);background:color-mix(in srgb,var(--cm-fg-muted) 14%,transparent);padding:2px 7px;border-radius:999px">${r.readiness}<span style="opacity:.55;font-weight:500"> ·old</span></span>`;
+        }
+        const rowBg = (bd && bd.key === 'red') ? `background:${bd.bg};border-radius:6px;padding:3px 6px;` : '';
+        return `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans);${rowBg}">
+          <i class="ti ${icon}" style="font-size:15px;color:${iconColor}"></i>
+          <span style="color:var(--cm-fg);flex:1">${r.player_name}</span>
+          ${badge}
+        </div>`;
+      };
+      const pendRow = r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
+          <i class="ti ti-circle" style="font-size:15px;color:var(--cm-fg-muted)"></i>
+          <span style="color:var(--cm-fg-muted);flex:1">${r.player_name}</span>
+        </div>`;
       body.innerHTML =
-        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} completed</div>` +
+        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} completed${redCount?`<span style="color:var(--cm-danger)"> · ${redCount} flagged</span>`:''}</div>` +
         '<div style="display:flex;flex-direction:column;gap:4px">' +
-        rows.map(r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
-          <i class="ti ${r.responded?'ti-circle-check':'ti-circle'}" style="font-size:15px;color:${r.responded?'var(--cm-accent)':'var(--cm-fg-muted)'}"></i>
-          <span style="color:${r.responded?'var(--cm-fg)':'var(--cm-fg-muted)'};flex:1">${r.player_name}</span>
-          ${r.responded&&r.readiness!=null?`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-accent)">${r.readiness}</span>`:''}
-        </div>`).join('') +
+        responders.map(respRow).join('') +
+        pending.map(pendRow).join('') +
         '</div>';
-      const pending = rows.filter(r => !r.responded);
       if (pending.length) {
         const names = pending.map(r => r.player_name).join(', ');
         body.innerHTML += `<button onclick="remindWellMissing('${teamId||''}', this)" data-names="${names.replace(/"/g,'&quot;')}" style="margin-top:12px;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--cm-accent);color:#fff;border:none;border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Remind missing (${pending.length})</button>`;
