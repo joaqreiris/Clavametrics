@@ -1838,14 +1838,16 @@
   function render(){
     const host = document.getElementById('gpsIntCards'); if(!host) return;
     host.innerHTML = PROVIDERS.map(p=>{
-      const row=INTS[p.slug], status=row?.status||'not_connected', connected=status==='connected';
-      const bc=connected?'s-connected':(status==='error'?'s-error':(status==='disabled'?'s-disabled':'s-pending'));
-      const bt=connected?'Connected':(status==='error'?'Error':(status==='disabled'?'Disabled':'Not connected'));
+      const row=INTS[p.slug], status=row?.status||'not_connected';
+      const isSet=(status==='configured'||status==='connected');  // hay credencial guardada
+      const bc=status==='connected'?'s-connected':(status==='configured'?'s-pending':(status==='error'?'s-error':(status==='disabled'?'s-disabled':'s-pending')));
+      const bt=status==='connected'?'Connected':(status==='configured'?'Configured':(status==='error'?'Error':(status==='disabled'?'Disabled':'Not connected')));
       return `<div class="gps-int-card">
         <div class="gps-int-head"><h3>${p.name}</h3><span class="gps-int-badge ${bc}">${bt}</span></div>
         <div class="gps-int-hint">${p.hint}</div>
-        ${connected
-          ? `<button class="gps-int-btn ghost" data-act="disconnect" data-prov="${p.slug}">Disconnect</button>`
+        ${isSet
+          ? `<button class="gps-int-btn ghost" data-act="disconnect" data-prov="${p.slug}">Disconnect</button>
+             <div style="font-size:11.5px;color:var(--cm-fg-muted);margin-top:8px">Credentials saved · verification pending</div>`
           : `<div class="gps-int-form">
                <input type="text" placeholder="${p.accountLabel}" data-field="account" data-prov="${p.slug}" value="${row?.external_account_id||''}">
                <input type="password" placeholder="API token / key" data-field="token" data-prov="${p.slug}" autocomplete="off">
