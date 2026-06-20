@@ -21,15 +21,28 @@
   }
 
   .canvas {
-    max-width: 1280px;
+    max-width: 960px;
     margin: 0 auto;
     padding: 40px 32px;
-    display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 48px;
-    align-items: start;
+    display: block;
   }
-  @media (max-width: 1000px) { .canvas { grid-template-columns: 1fr; gap: 24px; padding: 24px; } }
+  @media (max-width: 1000px) { .canvas { padding: 24px; } }
+
+  /* Secondary collapsible zones — native-feeling */
+  .cm-fold {
+    border: 0.5px solid var(--cm-border);
+    border-radius: var(--cm-r-4);
+    margin-top: 24px;
+    padding: 0 18px;
+  }
+  .cm-fold > summary {
+    cursor: pointer;
+    padding: 14px 0;
+    font: 600 13.5px/1.2 var(--cm-font-sans);
+    color: var(--cm-fg-strong);
+  }
+  .cm-fold[open] > summary { margin-bottom: 14px; border-bottom: 0.5px solid var(--cm-border); }
+  .cm-fold > :not(summary):last-child { margin-bottom: 18px; }
 
   .ctx h1 { font: 600 32px/1.1 var(--cm-font-sans); letter-spacing: -0.025em; color: var(--cm-fg-strong); margin-bottom: 12px; }
   .ctx p { font: var(--cm-body); color: var(--cm-fg-muted); margin-bottom: 20px; }
@@ -329,31 +342,10 @@
         </div>
       </div>
     </div>
-    <p>Posted to each player ~30 min after the final whistle. CR-10 Borg scale. Combined with session duration gives us <strong>sRPE = RPE × min</strong> — the daily load proxy that feeds the Load Monitor and ACWR.</p>
-
-    <div class="ctx-section">
-      <div class="ctx-eyebrow">Scale used</div>
-      <div class="ctx-card">
-        <h3>CR-10 Borg · adapted</h3>
-        <p>0 rest · 1-2 very easy · 3-4 moderate · 5-6 hard · 7-8 very hard · 9-10 maximal. Each row carries a verbal anchor in the player's language.</p>
-      </div>
-      <div class="ctx-card">
-        <h3>When &amp; how</h3>
-        <p>Auto-sent 30 min after session ends. Player picks one number, optionally tags body region + note. Total time on form: ~25 s.</p>
-      </div>
-      <div class="ctx-card">
-        <h3>Localized</h3>
-        <p>Anchors auto-translate EN ↔ ES per club preference. Designed for one-handed phone use during cool-down or on the bus.</p>
-      </div>
-    </div>
-
-    <div class="ctx-section">
-      <div class="ctx-eyebrow">Two states shown</div>
-      <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">Left: in-progress form with score 7 picked. Right: confirmation with sRPE result + 7-day history.</p>
-    </div>
-  </aside>
-
-  <section class="phones">
+    <!-- Zone 2: secondary — preview, collapsed -->
+    <details class="cm-fold">
+      <summary>Preview — what players see</summary>
+      <section class="phones">
 
     <!-- Phone 1: FORM -->
     <div>
@@ -499,7 +491,36 @@
       <div class="canvas-legend">Sent · sRPE 630 · ACWR 1.12</div>
     </div>
 
-  </section>
+      </section>
+    </details>
+
+    <!-- Zone 2: secondary — context, collapsed -->
+    <details class="cm-fold">
+      <summary>About session RPE</summary>
+      <p>Posted to each player ~30 min after the final whistle. CR-10 Borg scale. Combined with session duration gives us <strong>sRPE = RPE × min</strong> — the daily load proxy that feeds the Load Monitor and ACWR.</p>
+
+      <div class="ctx-section">
+        <div class="ctx-eyebrow">Scale used</div>
+        <div class="ctx-card">
+          <h3>CR-10 Borg · adapted</h3>
+          <p>0 rest · 1-2 very easy · 3-4 moderate · 5-6 hard · 7-8 very hard · 9-10 maximal. Each row carries a verbal anchor in the player's language.</p>
+        </div>
+        <div class="ctx-card">
+          <h3>When &amp; how</h3>
+          <p>Auto-sent 30 min after session ends. Player picks one number, optionally tags body region + note. Total time on form: ~25 s.</p>
+        </div>
+        <div class="ctx-card">
+          <h3>Localized</h3>
+          <p>Anchors auto-translate EN ↔ ES per club preference. Designed for one-handed phone use during cool-down or on the bus.</p>
+        </div>
+      </div>
+
+      <div class="ctx-section">
+        <div class="ctx-eyebrow">Two states shown</div>
+        <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">Left: in-progress form with score 7 picked. Right: confirmation with sRPE result + 7-day history.</p>
+      </div>
+    </details>
+  </aside>
 </div>
 
 <div id="tweaks-root"></div>
