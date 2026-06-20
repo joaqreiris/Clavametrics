@@ -88,6 +88,7 @@ const T={
     done:n=>'Done, '+n+'!',doneSub:'Your check-in was recorded. Thanks.',
     last7:'Your last 7 days',readiness:'Readiness',today:'Today',loadLbl:'Session load',durLbl:'Duration',rpeLbl:'RPE',
     already:'Already checked in',alreadySub:"You already sent today's check-in. See you tomorrow!",
+    alreadyRpe:'Already submitted',alreadyRpeSub:'You already submitted your RPE for this session.',
     parts:{hamstring:'Hamstring',quads:'Quads',calves:'Calves',groin:'Groin',knee:'Knee',ankle:'Ankle',shoulder:'Shoulder',back:'Lower back'}},
   es:{invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
     eyebrow:'Check-in diario',who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar.',notme:n=>'No soy '+n,
@@ -98,6 +99,7 @@ const T={
     done:n=>'¡Listo, '+n+'!',doneSub:'Tu check-in se registró. Gracias.',
     last7:'Tus últimos 7 días',readiness:'Preparación',today:'Hoy',loadLbl:'Carga (sRPE)',durLbl:'Duración',rpeLbl:'RPE',
     already:'Ya completaste',alreadySub:'Ya enviaste el check-in de hoy. ¡Nos vemos mañana!',
+    alreadyRpe:'Ya enviado',alreadyRpeSub:'Ya enviaste tu RPE de esta sesión.',
     parts:{hamstring:'Isquios',quads:'Cuádriceps',calves:'Gemelos',groin:'Aductores',knee:'Rodilla',ankle:'Tobillo',shoulder:'Hombro',back:'Lumbares'}},
   pt:{invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
     eyebrow:'Check-in diário',who:'Quem é você?',whoSub:'Toque no seu nome para começar.',notme:n=>'Não sou '+n,
@@ -108,6 +110,7 @@ const T={
     done:n=>'Pronto, '+n+'!',doneSub:'Seu check-in foi registrado. Obrigado.',
     last7:'Seus últimos 7 dias',readiness:'Prontidão',today:'Hoje',loadLbl:'Carga (sRPE)',durLbl:'Duração',rpeLbl:'RPE',
     already:'Já registrado',alreadySub:'Você já enviou o check-in de hoje. Até amanhã!',
+    alreadyRpe:'Já enviado',alreadyRpeSub:'Você já enviou seu RPE desta sessão.',
     parts:{hamstring:'Isquiotibiais',quads:'Quadríceps',calves:'Panturrilhas',groin:'Adutores',knee:'Joelho',ankle:'Tornozelo',shoulder:'Ombro',back:'Lombar'}}
 };
 const _n=(navigator.language||'en').toLowerCase();
@@ -187,8 +190,9 @@ window.submitForm=async()=>{
 };
 function renderDone(hist, already){
   const name=picked.name.split(' ')[0];
-  const hl=already?L.already:L.done(name);
-  const sub=already?L.alreadySub:L.doneSub;
+  const isRpe=(scope==='rpe');
+  const hl=already?(isRpe?L.alreadyRpe:L.already):L.done(name);
+  const sub=already?(isRpe?L.alreadyRpeSub:L.alreadySub):L.doneSub;
   if(!hist||!hist.history||!hist.history.length){
     app.innerHTML=`<div class="center"><i class="ti ti-circle-check big"></i><div class="t">${hl}</div><div>${sub}</div></div>`;
     return;
