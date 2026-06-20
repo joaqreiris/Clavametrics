@@ -609,136 +609,20 @@
     <div class="imp-head-l">
       <i class="ti ti-cloud-download"></i>
       <div>
-        <div class="imp-title">Import match data</div>
-        <div class="imp-sub">Pull event data, video tags &amp; GPS from your providers</div>
+        <div class="imp-title">Match details</div>
+        <div class="imp-sub">Enter the match result and details for this session</div>
       </div>
     </div>
     <button class="imp-x" id="impClose" aria-label="Close"><i class="ti ti-x"></i></button>
   </header>
 
   <div class="imp-body">
-
-    <section class="imp-section">
-      <div class="imp-section-l">Connected providers</div>
-      <div class="imp-section-h">Live integrations. Data syncs after every match.</div>
-      <div class="imp-providers">
-
-        <button class="imp-prov is-active">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo hudl">H</span>
-            <div>
-              <div class="imp-prov-name">Hudl Pro Suite</div>
-              <div class="imp-prov-meta">Event data · video</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">Pulls events, video clips and coding sessions via OAuth.</div>
-          <span class="imp-prov-status connected"><span class="dot"></span>Connected · auto-sync</span>
-        </button>
-
-        <button class="imp-prov">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo wyscout">W</span>
-            <div>
-              <div class="imp-prov-name">Wyscout</div>
-              <div class="imp-prov-meta">Pro events · scouting</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">REST API · matches, events, players, video.</div>
-          <span class="imp-prov-status connected"><span class="dot"></span>Connected</span>
-        </button>
-
-        <button class="imp-prov">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo statsports">S</span>
-            <div>
-              <div class="imp-prov-name">StatSports</div>
-              <div class="imp-prov-meta">GPS · physical</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">Auto-import per-player CSV after sessions.</div>
-          <span class="imp-prov-status connected"><span class="dot"></span>Connected · 22 files today</span>
-        </button>
-
-        <button class="imp-prov">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo catapult">C</span>
-            <div>
-              <div class="imp-prov-name">Catapult Vector</div>
-              <div class="imp-prov-meta">GPS · IMU</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">OpenField API + CSV fallback.</div>
-          <span class="imp-prov-status error"><span class="dot"></span>Token expired</span>
-        </button>
-
-      </div>
-    </section>
-
-    <section class="imp-section">
-      <div class="imp-section-l">Other sources</div>
-      <div class="imp-section-h">One-off imports or providers we haven't auto-wired yet.</div>
-      <div class="imp-providers">
-        <button class="imp-prov">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo opta">O</span>
-            <div>
-              <div class="imp-prov-name">Opta / StatsPerform</div>
-              <div class="imp-prov-meta">F24 XML · JSON</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">Drop the F24 file or paste the feed URL.</div>
-          <span class="imp-prov-status available"><span class="dot"></span>Available</span>
-        </button>
-        <button class="imp-prov">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo instat">In</span>
-            <div>
-              <div class="imp-prov-name">InStat</div>
-              <div class="imp-prov-meta">XML · video</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">Webhook + XML feed import.</div>
-          <span class="imp-prov-status available"><span class="dot"></span>Available</span>
-        </button>
-        <button class="imp-prov">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo csv">CSV</span>
-            <div>
-              <div class="imp-prov-name">CSV / Excel</div>
-              <div class="imp-prov-meta">Manual upload</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">Drop a file with our column template.</div>
-          <span class="imp-prov-status available"><span class="dot"></span>Always available</span>
-        </button>
-        <button class="imp-prov">
-          <div class="imp-prov-top">
-            <span class="imp-prov-logo api">API</span>
-            <div>
-              <div class="imp-prov-name">Custom webhook</div>
-              <div class="imp-prov-meta">REST endpoint</div>
-            </div>
-          </div>
-          <div class="imp-prov-desc">Push data from your own pipeline.</div>
-          <span class="imp-prov-status available"><span class="dot"></span>Developer settings</span>
-        </button>
-      </div>
-    </section>
-
-    <section class="imp-section">
-      <div class="imp-section-l">Recent imports</div>
-      <div>
-        <div style="padding:18px 4px;color:var(--cm-fg-faint);font:var(--cm-body-sm)">No imports yet.</div>
-      </div>
-    </section>
-
+    <div id="impForm"></div>
   </div>
 
   <footer class="imp-foot">
-    <i class="ti ti-shield-lock" style="font-size:13px"></i>OAuth tokens stored encrypted · SOC&nbsp;2
     <span class="grow"></span>
     <button class="cm-btn is-outline is-sm" id="impCancel">Close</button>
-    <button class="cm-btn is-primary is-sm"><i class="ti ti-cloud-download" style="font-size:14px"></i>Sync now</button>
   </footer>
 </aside>
 
@@ -1030,15 +914,13 @@
   const impOverlay = document.getElementById('impOverlay');
   const open = () => { impDrawer.classList.add('is-open'); impOverlay.classList.add('is-open'); };
   const close = () => { impDrawer.classList.remove('is-open'); impOverlay.classList.remove('is-open'); };
-  document.getElementById('impOpen').addEventListener('click', open);
+  document.getElementById('impOpen').addEventListener('click', () => {
+    open();
+    if (window.matchImport) window.matchImport.open(); // (re)build the form with fresh sessions
+  });
   document.getElementById('impClose').addEventListener('click', close);
   document.getElementById('impCancel').addEventListener('click', close);
   impOverlay.addEventListener('click', close);
-  // Provider card select
-  document.querySelectorAll('.imp-prov').forEach(c => c.addEventListener('click', () => {
-    document.querySelectorAll('.imp-prov').forEach(o => o.classList.remove('is-active'));
-    c.classList.add('is-active');
-  }));
 </script>
 
 <script>
@@ -1048,5 +930,6 @@
     });
   }
 </script>
+<script src="assets/match-import.js"></script>
 </body>
 </html>
