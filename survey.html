@@ -82,8 +82,8 @@ const T={
   en:{invalid:'Invalid link',expired:'This link has expired or been revoked.',notoken:'Missing token in the link.',
     eyebrow:'Daily check-in',who:'Who are you?',whoSub:'Tap your name to start.',notme:n=>"I'm not "+n,
     hi:n=>'Hi, '+n+'.',formSub:'Tell us how you slept and feel. 40 seconds.',rpeSub:'Rate your effort from 1 to 10.',
-    sleep:'Sleep quality',mood:'Mood',energy:'Energy',stress:'Stress',soreness:'Muscle soreness',rpeTitle:'How hard was the session?',
-    e_sleep:['Poor','Excellent'],e_mood:['Low','High'],e_energy:['Exhausted','Full'],e_stress:['Calm','Stressed'],e_soreness:['None','A lot'],e_rpe:['Very easy','Maximal'],
+    sleep:'Sleep quality',mood:'Mood',energy:'Energy',fatigue:'Fatigue',stress:'Stress',soreness:'Muscle soreness',rpeTitle:'How hard was the session?',
+    e_sleep:['Very good','Very bad'],e_mood:['Low','Great'],e_energy:['Exhausted','Full'],e_fatigue:['None','Extreme'],e_stress:['Very low','Very high'],e_soreness:['None','Severe'],e_rpe:['Very easy','Maximal'],
     soreQ:'Any soreness?',note:'Note (optional)',notePh:"Anything to add…",send:'Send',sending:'Sending…',retry:'Retry',sendErr:'Could not send: ',
     done:n=>'Done, '+n+'!',doneSub:'Your check-in was recorded. Thanks.',
     last7:'Your last 7 days',readiness:'Readiness',today:'Today',loadLbl:'Session load',durLbl:'Duration',rpeLbl:'RPE',
@@ -91,8 +91,8 @@ const T={
   es:{invalid:'Link no válido',expired:'Este link expiró o fue revocado.',notoken:'Falta el token en el link.',
     eyebrow:'Check-in diario',who:'¿Quién sos?',whoSub:'Tocá tu nombre para empezar.',notme:n=>'No soy '+n,
     hi:n=>'Hola, '+n+'.',formSub:'Contanos cómo dormiste y cómo te sentís. 40 segundos.',rpeSub:'Calificá tu esfuerzo del 1 al 10.',
-    sleep:'Calidad de sueño',mood:'Ánimo',energy:'Energía',stress:'Estrés',soreness:'Dolor muscular',rpeTitle:'¿Qué tan duro fue el entrenamiento?',
-    e_sleep:['Mala','Excelente'],e_mood:['Bajo','Alto'],e_energy:['Agotado','Pleno'],e_stress:['Tranquilo','Estresado'],e_soreness:['Ninguno','Mucho'],e_rpe:['Muy suave','Máximo'],
+    sleep:'Calidad de sueño',mood:'Ánimo',energy:'Energía',fatigue:'Fatiga',stress:'Estrés',soreness:'Dolor muscular',rpeTitle:'¿Qué tan duro fue el entrenamiento?',
+    e_sleep:['Muy buena','Muy mala'],e_mood:['Bajo','Excelente'],e_energy:['Agotado','Pleno'],e_fatigue:['Nada','Extrema'],e_stress:['Muy bajo','Muy alto'],e_soreness:['Ninguno','Severo'],e_rpe:['Muy suave','Máximo'],
     soreQ:'¿Alguna molestia?',note:'Nota (opcional)',notePh:'Algo que quieras agregar…',send:'Enviar',sending:'Enviando…',retry:'Reintentar',sendErr:'No se pudo enviar: ',
     done:n=>'¡Listo, '+n+'!',doneSub:'Tu check-in se registró. Gracias.',
     last7:'Tus últimos 7 días',readiness:'Preparación',today:'Hoy',loadLbl:'Carga (sRPE)',durLbl:'Duración',rpeLbl:'RPE',
@@ -100,8 +100,8 @@ const T={
   pt:{invalid:'Link inválido',expired:'Este link expirou ou foi revogado.',notoken:'Falta o token no link.',
     eyebrow:'Check-in diário',who:'Quem é você?',whoSub:'Toque no seu nome para começar.',notme:n=>'Não sou '+n,
     hi:n=>'Olá, '+n+'.',formSub:'Conte como dormiu e se sente. 40 segundos.',rpeSub:'Avalie seu esforço de 1 a 10.',
-    sleep:'Qualidade do sono',mood:'Humor',energy:'Energia',stress:'Estresse',soreness:'Dor muscular',rpeTitle:'Quão difícil foi o treino?',
-    e_sleep:['Ruim','Excelente'],e_mood:['Baixo','Alto'],e_energy:['Exausto','Pleno'],e_stress:['Calmo','Estressado'],e_soreness:['Nenhuma','Muita'],e_rpe:['Muito leve','Máximo'],
+    sleep:'Qualidade do sono',mood:'Humor',energy:'Energia',fatigue:'Fadiga',stress:'Estresse',soreness:'Dor muscular',rpeTitle:'Quão difícil foi o treino?',
+    e_sleep:['Muito boa','Muito ruim'],e_mood:['Baixo','Ótimo'],e_energy:['Exausto','Pleno'],e_fatigue:['Nenhuma','Extrema'],e_stress:['Muito baixo','Muito alto'],e_soreness:['Nenhuma','Intensa'],e_rpe:['Muito leve','Máximo'],
     soreQ:'Alguma dor?',note:'Nota (opcional)',notePh:'Algo a adicionar…',send:'Enviar',sending:'Enviando…',retry:'Tentar de novo',sendErr:'Não foi possível enviar: ',
     done:n=>'Pronto, '+n+'!',doneSub:'Seu check-in foi registrado. Obrigado.',
     last7:'Seus últimos 7 dias',readiness:'Prontidão',today:'Hoje',loadLbl:'Carga (sRPE)',durLbl:'Duração',rpeLbl:'RPE',
@@ -118,7 +118,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const app=document.getElementById('app');
 const token=new URLSearchParams(location.search).get('token');
 let players=[],picked=null,scope='wellness';
-const state={sleepQ:7,mood:7,fatigue:5,stress:3,soreness:3,rpe:6,body:new Set(),note:''};
+const state={sleepQ:4,mood:4,fatigue:4,stress:4,soreness:4,rpe:6,body:new Set(),note:''};
 const today=new Date().toLocaleDateString(L===T.en?'en-GB':'es-ES',{weekday:'long',day:'numeric',month:'short'});
 
 function show404(msg){app.innerHTML=`<div class="center"><i class="ti ti-link-off big"></i><div class="t">${L.invalid}</div><div>${msg||L.expired}</div></div>`;}
@@ -139,9 +139,9 @@ function renderPick(){
     `<div class="players">`+players.map((p,i)=>`<button class="player-btn" data-i="${i}"><span class="av">${(p.name[0]||'?').toUpperCase()}</span>${p.name}</button>`).join('')+`</div>`;
   app.querySelectorAll('.player-btn').forEach(b=>b.onclick=()=>{picked=players[+b.dataset.i];renderForm();});
 }
-function scaleHtml(key,icon,label,ends){
+function scaleHtml(key,icon,label,ends,max=10){
   return `<div class="ph-section"><div class="q-label"><span class="ic"><i class="ti ${icon}"></i></span><span class="title">${label}</span><span class="val" id="v_${key}">${state[key]}</span></div>
-    <div class="ph-scale" id="sc_${key}">`+[...Array(10)].map((_,i)=>`<button class="${state[key]===i+1?'is-on':''}" onclick="setScale('${key}',${i+1})">${i+1}</button>`).join('')+`</div>
+    <div class="ph-scale" id="sc_${key}">`+[...Array(max)].map((_,i)=>`<button class="${state[key]===i+1?'is-on':''}" onclick="setScale('${key}',${i+1})">${i+1}</button>`).join('')+`</div>
     <div class="ph-scale-ends"><span>${ends[0]}</span><span>${ends[1]}</span></div></div>`;
 }
 function bodyHtml(){const parts=Object.keys(L.parts);
@@ -156,9 +156,11 @@ function renderForm(){
   if(scope==='rpe'){
     body=scaleHtml('rpe','ti-flame',L.rpeTitle,L.e_rpe)+bodyHtml()+noteHtml();
   }else{
-    body=scaleHtml('sleepQ','ti-moon',L.sleep,L.e_sleep)+scaleHtml('mood','ti-mood-smile',L.mood,L.e_mood)+
-         scaleHtml('fatigue','ti-battery-2',L.energy,L.e_energy)+scaleHtml('stress','ti-brain',L.stress,L.e_stress)+
-         scaleHtml('soreness','ti-bandage',L.soreness,L.e_soreness)+bodyHtml()+noteHtml();
+    body=scaleHtml('sleepQ','ti-moon',L.sleep,L.e_sleep,7)+
+         scaleHtml('fatigue','ti-bolt',L.fatigue,L.e_fatigue,7)+
+         scaleHtml('stress','ti-brain',L.stress,L.e_stress,7)+
+         scaleHtml('soreness','ti-bandage',L.soreness,L.e_soreness,7)+
+         scaleHtml('mood','ti-mood-smile',L.mood,L.e_mood,7)+bodyHtml()+noteHtml();
   }
   app.innerHTML=`<button class="back" onclick="renderPick()"><i class="ti ti-arrow-left"></i>${L.notme(picked.name)}</button>`+
     header()+`<div class="ph-hero"><span class="eyebrow"><span class="dot"></span>${L.eyebrow}</span><h1>${L.hi(picked.name.split(' ')[0])}</h1><p>${scope==='rpe'?L.rpeSub:L.formSub}</p></div>`+
@@ -171,7 +173,7 @@ window.submitForm=async()=>{
   const btn=document.getElementById('submitBtn');btn.disabled=true;btn.textContent=L.sending;
   const payload=scope==='rpe'
     ?{rpe:state.rpe,body:[...state.body],note:state.note}
-    :{sleepQ:state.sleepQ,mood:state.mood,fatigue:state.fatigue,stress:state.stress,soreness:state.soreness,body:[...state.body],note:state.note};
+    :{scale:'7',sleepQ:state.sleepQ,mood:state.mood,fatigue:state.fatigue,stress:state.stress,soreness:state.soreness,body:[...state.body],note:state.note};
   const {data,error}=await sb.rpc('submit_survey',{p_token:token,p_player_id:picked.id,p_payload:payload});
   if(error||data?.error){btn.disabled=false;btn.textContent=L.retry;alert(L.sendErr+(error?.message||data?.error));return;}
   let hist=null;
