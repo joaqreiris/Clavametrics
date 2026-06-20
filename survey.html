@@ -144,7 +144,7 @@ function renderPick(){
 }
 function scaleHtml(key,icon,label,ends,max=10){
   return `<div class="ph-section"><div class="q-label"><span class="ic"><i class="ti ${icon}"></i></span><span class="title">${label}</span><span class="val" id="v_${key}">${state[key]}</span></div>
-    <div class="ph-scale" id="sc_${key}">`+[...Array(max)].map((_,i)=>`<button class="${state[key]===i+1?'is-on':''}" onclick="setScale('${key}',${i+1})">${i+1}</button>`).join('')+`</div>
+    <div class="ph-scale" id="sc_${key}" style="grid-template-columns:repeat(${max},1fr)">`+[...Array(max)].map((_,i)=>`<button class="${state[key]===i+1?'is-on':''}" onclick="setScale('${key}',${i+1})">${i+1}</button>`).join('')+`</div>
     <div class="ph-scale-ends"><span>${ends[0]}</span><span>${ends[1]}</span></div></div>`;
 }
 function bodyHtml(){const parts=Object.keys(L.parts);
