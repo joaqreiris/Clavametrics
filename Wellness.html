@@ -507,7 +507,7 @@
         <i class="ti ti-share" style="font-size:15px"></i>Share link with players
       </button>
       <div id="wellChecklistWrap" style="margin-top:18px">
-        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Today's check-in</div>
+        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Today's check-in<button type="button" id="wellChkRefresh" onclick="refreshWellChecklist(this)" title="Refresh" style="margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:transparent;border:1px solid var(--cm-border);border-radius:6px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-refresh" style="font-size:13px"></i></button></div>
         <select id="wellChkTeam" onchange="if(this.value)sessionStorage.setItem('cal_active_team',this.value);loadWellChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px"></select>
         <div id="wellChkBody" style="margin-top:10px"></div>
       </div>
@@ -823,6 +823,31 @@
     }
   }
   window.remindWellMissing = remindWellMissing;
+  // Refresco manual del checklist con mini indicador de carga
+  async function refreshWellChecklist(btn){
+    const ic = btn && btn.querySelector('i');
+    const prev = ic ? ic.className : null;
+    if (ic) ic.className = 'ti ti-loader-2';
+    if (btn) btn.disabled = true;
+    try { await loadWellChecklist(); }
+    finally { if (ic) ic.className = prev; if (btn) btn.disabled = false; }
+  }
+  window.refreshWellChecklist = refreshWellChecklist;
+  // Refresca solo si el select ya tiene opciones (init terminó); si no, inicializa.
+  function _wellRefreshIfReady(){
+    const sel = document.getElementById('wellChkTeam');
+    if (sel && sel.options.length) loadWellChecklist();
+    else initWellChecklist();
+  }
+  // Auto-refresh al volver a primer plano (una sola vez aunque el script corra dos veces)
+  if (!window._wellRefreshWired) {
+    window._wellRefreshWired = true;
+    window.addEventListener('focus', () => _wellRefreshIfReady());
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _wellRefreshIfReady(); });
+  }
+  // Polling suave: cada 60s, solo con pestaña visible. Id en variable de módulo para no duplicar.
+  if (window._wellPollId) clearInterval(window._wellPollId);
+  window._wellPollId = setInterval(() => { if (document.visibilityState === 'visible') loadWellChecklist(); }, 60000);
   initWellChecklist();
 </script>
 
