@@ -418,12 +418,12 @@
         <div class="pp-ctx-cat">
           <div class="badge"><i class="ti ti-ball-football"></i></div>
           <div>
-            <h1>Clava FC · U-17 <span style="color:var(--cm-fg-muted);font-weight:500;font-size:14px;">— Youth competitive</span></h1>
-            <div class="sub">38 / 40 players · 4 staff · created Aug 2024</div>
+            <h1><span id="ppHdrTitle">Clava FC · U-17</span> <span style="color:var(--cm-fg-muted);font-weight:500;font-size:14px;">— Youth competitive</span></h1>
+            <div class="sub" id="ppHdrMeta">38 / 40 players · 4 staff · created Aug 2024</div>
           </div>
         </div>
         <div class="pp-arrow">
-          <span class="stage is-curr"><span class="dot"></span>Basic · $60/mo</span>
+          <span class="stage is-curr"><span class="dot"></span><span id="ppCurBadge">Basic · $60/mo</span></span>
           <i class="ti ti-arrow-right"></i>
           <span class="stage is-next"><span class="dot"></span>Professional · $120/mo</span>
         </div>
@@ -469,7 +469,7 @@
 
         <!-- BASIC (current) -->
         <div class="pp-tier is-current" data-tier="basic">
-          <span class="pp-tier-badge">Current</span>
+          <span class="pp-tier-badge pp-current-badge">Current</span>
           <span class="pp-tier-radio"></span>
           <div class="pp-tier-name"><i class="ti ti-clipboard-text"></i>Basic</div>
           <div class="pp-tier-tag">Up to 30 players · planning &amp; reports for youth &amp; B-teams.</div>
@@ -653,7 +653,7 @@
       <div class="pp-foot-summary">
         <div class="group">
           <span class="lbl">Category</span>
-          <span class="val">Clava FC · U-17</span>
+          <span class="val" id="ppFootCat">Clava FC · U-17</span>
         </div>
         <span class="sep"></span>
         <div class="group">
@@ -673,7 +673,7 @@
         <span class="sep"></span>
         <div class="pp-proration">
           Prorated today · <strong id="pp-foot-pro">$38.71</strong><br>
-          <span style="color:var(--cm-fg-faint)">19 days left in this cycle · next bill <strong style="color:var(--cm-fg-muted)">Jun 14</strong></span>
+          <span style="color:var(--cm-fg-faint)" id="ppFootCycle">19 days left in this cycle · next bill <strong style="color:var(--cm-fg-muted)">Jun 14</strong></span>
         </div>
       </div>
       <div class="actions">
@@ -797,5 +797,76 @@
       }catch(e){}
     })();
     </script>
+<script>
+(async function(){
+  try{
+    if(!window.sb || typeof window.getActiveTeamId!=='function') return;
+    const teamId = window.getActiveTeamId();
+    if(!teamId) return;
+    const sb = window.sb;
+
+    const [teamRes, planRes, plansRes, cntRes, subRes] = await Promise.all([
+      sb.from('teams').select('name, created_at, clubs(name)').eq('id', teamId).single(),
+      sb.rpc('team_plan_slug', { p_team_id: teamId }),
+      sb.from('plans').select('slug, name, price_monthly, max_players'),
+      sb.from('players').select('id', { count:'exact', head:true }).eq('team_id', teamId),
+      sb.from('subscriptions').select('is_comp, current_period_end').eq('team_id', teamId).eq('status','active').maybeSingle()
+    ]);
+
+    const team = teamRes.data || {};
+    const clubName = team.clubs?.name || '';
+    const teamName = team.name || '';
+    const curSlug = planRes.data || 'initiation';
+    const plans = {}; (plansRes.data||[]).forEach(p=> plans[p.slug]=p);
+    const playerCount = cntRes.count ?? null;
+    const curPlan = plans[curSlug] || {};
+    const curPrice = Number(curPlan.price_monthly||0);
+    const limit = curPlan.max_players;
+    const sub = subRes.data;
+
+    const setTxt = (id,t)=>{ const e=document.getElementById(id); if(e) e.textContent=t; };
+    const title = clubName ? `${clubName} · ${teamName}` : teamName;
+    setTxt('ppHdrTitle', title);
+    setTxt('ppFootCat', title);
+
+    if(document.getElementById('ppHdrMeta')){
+      const created = team.created_at ? new Date(team.created_at).toLocaleDateString('en',{month:'short',year:'numeric'}) : '';
+      const lim = (limit==null) ? '∞' : limit;
+      const parts = [];
+      if(playerCount!=null) parts.push(`${playerCount} / ${lim} players`);
+      if(created) parts.push(`created ${created}`);
+      setTxt('ppHdrMeta', parts.join(' · '));
+    }
+
+    setTxt('ppCurBadge', `${(curPlan.name||curSlug)} · $${curPrice}/mo`);
+
+    // footer billing: honesto según el plan
+    if(document.getElementById('ppFootCycle')){
+      if(!sub || curPrice===0) setTxt('ppFootCycle','Free plan · no billing');
+      else if(sub.is_comp) setTxt('ppFootCycle','Complimentary · no billing');
+      else if(sub.current_period_end) setTxt('ppFootCycle','next bill '+new Date(sub.current_period_end).toLocaleDateString('en',{month:'short',day:'numeric'}));
+      else setTxt('ppFootCycle','');
+    }
+
+    // por cada tier: badge CURRENT + meta (current / delta real)
+    document.querySelectorAll('.amt[data-slug]').forEach(amt=>{
+      const slug = amt.dataset.slug;
+      const card = amt.closest('.pp-tier'); if(!card) return;
+      const price = Number((plans[slug]||{}).price_monthly||0);
+      card.querySelectorAll('.pp-current-badge').forEach(b=>b.remove());
+      const meta = card.querySelector('.pp-tier-meta');
+      if(slug===curSlug){
+        const head = card.querySelector('.pp-tier-head') || card.firstElementChild || card;
+        const b=document.createElement('span'); b.className='pp-current-badge'; b.textContent='CURRENT';
+        head.appendChild(b);
+        if(meta) meta.textContent='your current tier · no change';
+      } else if(meta){
+        const d = price - curPrice;
+        meta.textContent = (d>=0?`+ $${d}`:`− $${Math.abs(d)}`)+'/mo vs current';
+      }
+    });
+  }catch(e){ /* fail-soft: si algo falla, deja el contenido como está */ }
+})();
+</script>
 </body>
 </html>
