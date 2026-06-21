@@ -2830,6 +2830,18 @@
         return `<svg viewBox="${vb||'0 0 1050 680'}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">${s.innerHTML}</svg>`;
       } catch(_) { return markup; }
     }
+    let _previewPng = null;
+    try {
+      const fieldEl = document.getElementById('plField');
+      if (fieldEl && window.html2canvas) {
+        const canvas = await html2canvas(fieldEl, {
+          backgroundColor: null,
+          scale: Math.min(2, 1600 / Math.max(1, fieldEl.offsetWidth)),  // ~crisp but bounded width
+          logging: false, useCORS: true
+        });
+        _previewPng = canvas.toDataURL('image/png');
+      }
+    } catch(_) { _previewPng = null; }
     const payload = {
       name:              document.getElementById('plExName')?.value?.trim() || 'Untitled',
       players_count:     players,
@@ -2849,6 +2861,7 @@
       description:       document.getElementById('plExDescription')?.value?.trim() || null,
       objects_json:      _oj,
       preview_svg:       _previewSvg,
+      preview_png:       _previewPng,
       visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
     };
 
