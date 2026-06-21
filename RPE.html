@@ -559,9 +559,12 @@ async function boot() {
 
 // ── SESSION ──
 async function loadLastSession(clubId) {
-  const { data } = await window.sb.from('training_sessions')
+  const activeTeam = sessionStorage.getItem('cal_active_team');
+  let _rpeSessQ = window.sb.from('training_sessions')
     .select('id, title, session_date, duration, session_type')
-    .eq('club_id', clubId)
+    .eq('club_id', clubId);
+  if (activeTeam) _rpeSessQ = _rpeSessQ.eq('team_id', activeTeam);
+  const { data } = await _rpeSessQ
     .order('session_date', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -583,11 +586,13 @@ async function loadLastSession(clubId) {
 
 // ── PLAYERS ──
 async function loadPlayers(clubId) {
-  const { data } = await window.sb.from('players')
+  const activeTeam = sessionStorage.getItem('cal_active_team');
+  let _rpePlQ = window.sb.from('players')
     .select('id, first_name, last_name, position')
     .eq('club_id', clubId)
-    .eq('status', 'available')
-    .order('last_name');
+    .eq('status', 'available');
+  if (activeTeam) _rpePlQ = _rpePlQ.eq('team_id', activeTeam);
+  const { data } = await _rpePlQ.order('last_name');
   players = data || [];
   const sel = document.getElementById('playerSelect');
   sel.innerHTML = '<option value="">Select player…</option>';
