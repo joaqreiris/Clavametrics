@@ -6,6 +6,7 @@
 <title>Player Dossier — ClavaMetrics (export)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/print-system.css">
 <!-- Auth/client bootstrap (same as Player.html) — NO app shell is rendered. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
@@ -34,6 +35,8 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 .mono{font-family:var(--cm-font-mono);font-variant-numeric:tabular-nums}
 
 .stage{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 16px 60px}
+/* on-screen paper frame for the print-system sheet (screen ≈ A4 print) */
+#sheetHost{width:100%;max-width:840px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08);border-radius:4px;overflow:hidden}
 .toolbar{width:100%;max-width:840px;display:flex;align-items:center;gap:12px;margin-bottom:18px;color:var(--cm-fg-muted)}
 .toolbar .ttl{font-weight:600;font-size:13px;color:var(--cm-fg)}
 .toolbar .note{font-size:12px;color:var(--cm-fg-faint)}
@@ -124,28 +127,7 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 /* keep any sidebar.js artifacts out of the export */
 #cm-shell-mount,.cm-sidebar-overlay,.cm-sidebar-toggle{display:none!important}
 
-@media print{
-  @page{ size:A4; margin:8mm }
-  /* print colors/backgrounds exactly as on screen — this is what keeps it looking like the web */
-  *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-  body{ background:#fff }
-  .stage{ padding:0; background:#fff }
-  .toolbar, .no-print, [data-noprint]{ display:none !important }
-  .sheet{ box-shadow:none; width:100%; margin:0; }
-  /* DO NOT remove borders/backgrounds — let the sheet keep its real styling */
-  /* fix breaks: never split a card / stat / bar row / section across pages */
-  .sheet, .hero, .body, .col, .card, .sec-h, .am, .prod, .prod .p, .ribbon, .foot,
-  .hstat, .row, tr, .radar, svg { break-inside:avoid !important; page-break-inside:avoid !important; }
-  .sec-h{ break-after:avoid !important; }            /* keep a section header with its content */
-  /* PORTRAIT (photo-less): light gray box instead of the dark web gradient */
-  .portrait{ background:#eef1ef !important; border:1px solid #cfd6d1 !important; }
-  .portrait .mark{ color:#b9c2bc !important }
-  .portrait .num{ color:#2b3a31 !important; text-shadow:none !important }
-  /* if a real photo exists it prints normally */
-  .portrait img{ object-fit:cover }
-  /* light density so a typical player fits ~1–2 clean pages (no aggressive shrink) */
-  .sheet{ font-size:12.5px }
-}
+/* Print is governed entirely by assets/print-system.css (paper aesthetic + @media print). */
 @media(max-width:880px){.sheet{width:100%}.hero{grid-template-columns:1fr}.body{grid-template-columns:1fr}.col.l{border-right:0;border-bottom:1px solid var(--cm-border-soft)}.hstats{grid-template-columns:repeat(2,1fr)}}
 .prod{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .prod .p{text-align:center;border:1px solid var(--cm-border);border-radius:10px;padding:13px 6px;background:var(--cm-surface-2)}
@@ -155,7 +137,6 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 .scout-save-btn{ height:30px; padding:0 12px; border:1px solid var(--cm-border-strong); background:var(--cm-surface); color:var(--cm-fg); font:500 12px var(--cm-font-sans); border-radius:8px; cursor:pointer; }
 .scout-save-btn:hover{ background:var(--cm-bg-soft); }
 #scoutSaveMsg{ font:600 12px var(--cm-font-sans); color:var(--cm-success); }
-@media print{ .scout-save{ display:none } }
 </style>
 </head>
 <body>
@@ -163,7 +144,7 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 <div id="cm-shell-mount"><div id="hub-side-root"></div></div>
 
 <div class="stage">
-  <div class="toolbar">
+  <div class="toolbar no-print">
     <span class="ttl" id="tbTitle">Player dossier — export</span>
     <span class="note" id="tbNote">Print to PDF · branded per club · EN / ES / PT</span>
     <div class="sp">
@@ -183,7 +164,7 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 <script>
 // ── i18n (light) — only static labels; proper nouns are not translated ──
 const LABELS = {
-  en: { dossier:'Player Dossier', season:'Season', appearances:'Appearances', minutes:'Minutes',
+  en: { dossier:'Player Dossier', playerDossier:'Player Dossier', season:'Season', appearances:'Appearances', minutes:'Minutes',
     topSpeed:'Top speed', distMatch:'Distance / match', minPerMatch:'min / match', seasonMax:'season max',
     matchAvg:'match avg', technicalProfile:'Technical profile', coachScored:'Coach-scored',
     scoutingSummary:'Scouting summary', athleticProfile:'Athletic profile', vsCategory:'vs category',
@@ -196,7 +177,7 @@ const LABELS = {
     saveNote:'Save note', saved:'Saved',
     age:'Age', born:'Born', nation:'Nation', height:'Height', weight:'Weight', foot:'Foot',
     tbTitle:'Player dossier — export', tbNote:'Print to PDF · branded per club · EN / ES / PT', tbExport:'Export PDF' },
-  es: { dossier:'Dossier del jugador', season:'Temporada', appearances:'Partidos', minutes:'Minutos',
+  es: { dossier:'Dossier del jugador', playerDossier:'Dossier del jugador', season:'Temporada', appearances:'Partidos', minutes:'Minutos',
     topSpeed:'Velocidad máx.', distMatch:'Distancia / partido', minPerMatch:'min / partido', seasonMax:'máx. temporada',
     matchAvg:'media partido', technicalProfile:'Perfil técnico', coachScored:'Evaluado por cuerpo técnico',
     scoutingSummary:'Informe de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoría',
@@ -209,7 +190,7 @@ const LABELS = {
     saveNote:'Guardar nota', saved:'Guardado',
     age:'Edad', born:'Nacim.', nation:'Nación', height:'Altura', weight:'Peso', foot:'Pie',
     tbTitle:'Dossier del jugador — exportar', tbNote:'Imprimir a PDF · con marca del club · EN / ES / PT', tbExport:'Exportar PDF' },
-  pt: { dossier:'Dossiê do jogador', season:'Temporada', appearances:'Jogos', minutes:'Minutos',
+  pt: { dossier:'Dossiê do jogador', playerDossier:'Dossiê do jogador', season:'Temporada', appearances:'Jogos', minutes:'Minutos',
     topSpeed:'Velocidade máx.', distMatch:'Distância / jogo', minPerMatch:'min / jogo', seasonMax:'máx. temporada',
     matchAvg:'média jogo', technicalProfile:'Perfil técnico', coachScored:'Avaliado pela comissão técnica',
     scoutingSummary:'Relatório de scouting', athleticProfile:'Perfil atlético', vsCategory:'vs categoria',
@@ -440,17 +421,31 @@ async function boot(){
   const crestInner = club&&club.logo_url ? `<img src="${esc(club.logo_url)}" alt="">` : esc(clubMono(club&&club.name));
   const clubName = club&&club.name ? club.name : '—';
 
-  // headline strip
-  const hstat = (key, val, unit, sub)=>`<div class="hstat"><div class="k">${esc(key)}</div>
-    <div class="v">${val}${unit?`<span class="u"> ${esc(unit)}</span>`:''}</div>${sub?`<div class="x">${esc(sub)}</div>`:''}</div>`;
-  const hstats = `<div class="hstats">
-    ${hstat(L.appearances, k.matches!=null?esc(k.matches):'—', '', catLabel!=='—'?catLabel:'')}
-    ${hstat(L.minutes, k.minutes!=null?fmtThousands(k.minutes):'—', k.minutes!=null?"'":'', minPerMatch!=null?`${minPerMatch} ${L.minPerMatch}`:'')}
-    ${hstat(L.topSpeed, topSpeed!=null?num1(topSpeed):'—', topSpeed!=null?'km/h':'', topSpeed!=null?L.seasonMax:'')}
-    ${hstat(L.distMatch, distPerMatch!=null?num1(distPerMatch/1000):'—', distPerMatch!=null?'km':'', distPerMatch!=null?L.matchAvg:'')}
-  </div>`;
+  // ── print-system render helpers (close over L / lang) ──
+  const phMetric = (name, value, unit, topN, lowerBetter)=>{
+    const has = value!=null;
+    const w = topN!=null ? Math.max(0,Math.min(100,100-topN)) : 0;
+    const chip = topN!=null ? `<div class="pct">${esc(L.topPct)} ${topN}%</div>` : '';
+    return `<div class="ph-metric"><div class="top"><span class="nm">${esc(name)}</span>`
+      + `<span class="vv">${has?num1(value):'—'}${has&&unit?`<span class="u"> ${esc(unit)}</span>`:''}</span></div>`
+      + `<div class="ph-bar"><div class="f" style="width:${w}%"></div></div>${chip}</div>`;
+  };
+  const seasonLabelFrom = (start,end)=>{
+    const y=+String(start||'').slice(0,4);
+    return y ? `${L.season} ${y}/${String(y+1).slice(2)}` : esc(L.season);
+  };
+  const todayLabel = ()=>{
+    const loc = {en:'en-GB',es:'es-ES',pt:'pt-BR'}[lang] || 'en-GB';
+    try { return new Date().toLocaleDateString(loc,{day:'2-digit',month:'short',year:'numeric'}); }
+    catch(_){ return new Date().toISOString().slice(0,10); }
+  };
+  const availTxt = (pct, caps, L)=>{
+    let s = `${L.availableTxt} ${Math.round(pct)}% ${L.ofSeason}`;
+    if(caps!=null && caps>0) s += ` · ${caps} ${L.intlCaps}`;
+    return s;
+  };
 
-  // radar
+  // radar (unchanged builder; reused inside the technical ph-block)
   let radarHTML;
   if(hasRadar){
     const R=80, poly=radarPolygon(scoreByType,R);
@@ -469,91 +464,79 @@ async function boot(){
     radarHTML = `<div class="empty-note">${esc(L.noTechEval)}</div>`;
   }
 
-  // athletic profile rows — accent fill + "Top N%" when ≥4 peers; else neutral magnitude fill
-  const am = (name, value, unit, refMax, higherBetter, topN)=>{
-    const has = value!=null;
-    let fillW=null, accent=false, chip='';
-    if(has && topN!=null){ fillW=Math.max(4,Math.min(100,100-topN)); accent=true; chip=`<div class="pct">${esc(L.topPct)} ${topN}%</div>`; }
-    else if(has){ fillW=neutralFill(value, refMax, higherBetter); }
-    return `<div class="am"><div class="top"><span class="nm">${esc(name)}</span>
-      <span class="vv">${has?num1(value):'—'}${has&&unit?`<span class="u"> ${esc(unit)}</span>`:''}</span></div>
-      <div class="bar">${fillW!=null?`<div class="f${accent?'':' neutral'}" style="width:${fillW.toFixed(0)}%"></div>`:''}</div>
-      ${chip}</div>`;
-  };
-  const ath = `<div class="ath">
-    ${am(L.topSpeed, topSpeed, 'km/h', 36, true, pctTopSpeed)}
-    ${am(L.distMatch, distPerMatch!=null?distPerMatch/1000:null, 'km', 13, true, pctDist)}
-    ${am(L.cmj, cmj, 'cm', 50, true, pctCmj)}
-    ${am(L.hsrMatch, hsrPerMatch, 'm', 1000, true, pctHsr)}
-    ${am(L.sprint30, sprint, 's', null, false, pctSprint)}
-  </div>`;
+  host.innerHTML = `<div class="ph-page">
+    <header class="ph-head">
+      <div class="ph-crest">${crestInner}</div>
+      <div><div class="ph-club">${esc(clubName)}</div>${catLabel!=='—'?`<div class="ph-sub">${esc(catLabel)}</div>`:''}</div>
+      <div class="ph-right">
+        <div class="ph-doc">${esc(L.playerDossier||'Player Dossier')}</div>
+        <div class="ph-date">${seasonLabelFrom(k.seasonStart,k.seasonEnd)} · ${todayLabel()}</div>
+      </div>
+    </header>
 
-  // season production card — omitted (empty string) when no match stats
-  const prodHTML = prod ? `
-    <div class="sec-h" style="margin-top:24px"><h2>${esc(L.seasonProduction)}</h2><div class="rule"></div></div>
-    <div class="prod">
-      <div class="p"><div class="v">${prod.goals}</div><div class="k">${esc(L.goals)}</div></div>
-      <div class="p"><div class="v">${prod.assists}</div><div class="k">${esc(L.assists)}</div></div>
-      <div class="p"><div class="v">${prod.goals + prod.assists}</div><div class="k">${esc(L.ga)}</div></div>
-      <div class="p"><div class="v">${prod.avgRating != null ? num1(prod.avgRating) : prod.apps}</div><div class="k">${esc(prod.avgRating != null ? L.avgRating : L.appearances)}</div></div>
-    </div>` : '';
-
-  // ribbon (availability) — hidden if availabilityPct is null
-  let ribbon='';
-  if(k.availabilityPct!=null){
-    ribbon = `<div class="ribbon">
-      <div class="big">${esc(k.availabilityPct)}%</div>
-      <div class="txt"><b>${esc(L.availableTxt)} ${esc(k.availabilityPct)}% ${esc(L.ofSeason)}</b></div>
-      ${caps!=null&&caps>0?`<div class="caps"><div class="v">${esc(caps)}</div><div class="k">${esc(L.intlCaps)}</div></div>`:''}
-    </div>`;
-  }
-
-  // role line (foot-derived; no editorial role field exists)
-  const roleLine = player.dominant_foot ? `<div class="role"><span class="em">${esc(player.position||'')}</span> · ${esc(player.dominant_foot)}-footed</div>` : (player.position?`<div class="role"><span class="em">${esc(player.position)}</span></div>`:'');
-
-  host.innerHTML = `<div class="sheet">
-    <div class="hero">
-      <div class="crestline"><div class="meta"><div class="a">${esc(L.dossier)}</div><div class="b">${esc(L.season)} ${esc(seasonLabel(seasonStart))}</div></div><div class="crest">${crestInner}</div></div>
-      <div class="portrait">${numBadge}${portraitInner}</div>
-      <div class="heroinfo">
-        <div class="eyebrow">${esc(eyebrow)}</div>
-        <div class="pname">${esc(full)}</div>
-        ${roleLine}
-        <div class="bio">
-          <div class="b"><div class="k">${esc(L.age)}</div><div class="v">${a!=null?a:'—'}</div></div>
-          <div class="b"><div class="k">${esc(L.born)}</div><div class="v">${esc(bornLabel(player.date_of_birth))}</div></div>
-          <div class="b"><div class="k">${esc(L.nation)}</div><div class="v">${esc(player.nationality||'—')}</div></div>
-          <div class="b"><div class="k">${esc(L.height)}</div><div class="v">${player.height?esc(player.height)+' cm':'—'}</div></div>
-          <div class="b"><div class="k">${esc(L.weight)}</div><div class="v">${player.weight?esc(player.weight)+' kg':'—'}</div></div>
-          <div class="b"><div class="k">${esc(L.foot)}</div><div class="v">${esc(cap(player.dominant_foot))}</div></div>
+    <section class="ph-hero">
+      <div class="ph-mark">${numBadge}${player.photo_url?`<img src="${esc(player.photo_url)}" alt="">`:`<span class="ini">${esc(monogram(player.first_name,player.last_name))}</span>`}</div>
+      <div class="ph-id">
+        <div class="ph-tag">${esc(eyebrow)}</div>
+        <div class="ph-name">${esc(full)}</div>
+        ${player.position?`<div class="ph-pos">${esc(player.position)}</div>`:''}
+        <div class="ph-bio">
+          <div class="b"><div class="k">${esc(L.age||'Age')}</div><div class="v">${a??'—'}</div></div>
+          <div class="b"><div class="k">${esc(L.born||'Born')}</div><div class="v">${player.date_of_birth?esc(bornLabel(player.date_of_birth)):'—'}</div></div>
+          <div class="b"><div class="k">${esc(L.nation||'Nation')}</div><div class="v">${esc(player.nationality||'—')}</div></div>
+          <div class="b"><div class="k">${esc(L.height||'Height')}</div><div class="v">${player.height?esc(player.height)+' cm':'—'}</div></div>
+          <div class="b"><div class="k">${esc(L.weight||'Weight')}</div><div class="v">${player.weight?esc(player.weight)+' kg':'—'}</div></div>
+          <div class="b"><div class="k">${esc(L.foot||'Foot')}</div><div class="v">${esc(player.dominant_foot||'—')}</div></div>
         </div>
       </div>
+    </section>
+
+    <section class="ph-kpis">
+      <div class="ph-kpi"><div class="k">${esc(L.appearances)}</div><div class="v">${k.matches!=null?esc(k.matches):'—'}</div><div class="x">${catLabel!=='—'?esc(catLabel):''}</div></div>
+      <div class="ph-kpi"><div class="k">${esc(L.minutes)}</div><div class="v">${k.minutes!=null?fmtThousands(k.minutes):'—'}</div><div class="x">${minPerMatch!=null?`${minPerMatch} ${esc(L.minPerMatch)}`:''}</div></div>
+      <div class="ph-kpi"><div class="k">${esc(L.topSpeed)}</div><div class="v">${topSpeed!=null?num1(topSpeed):'—'}<span class="u">${topSpeed!=null?'km/h':''}</span></div><div class="x">${topSpeed!=null?esc(L.seasonMax):''}</div></div>
+      <div class="ph-kpi"><div class="k">${esc(L.distMatch)}</div><div class="v">${distPerMatch!=null?num1(distPerMatch/1000):'—'}<span class="u">${distPerMatch!=null?'km':''}</span></div><div class="x">${distPerMatch!=null?esc(L.matchAvg):''}</div></div>
+    </section>
+
+    <!-- Technical -->
+    <div class="ph-block">
+      <div class="ph-sec"><h2>${esc(L.technicalProfile||'Technical profile')}</h2><div class="rule"></div><span class="tag">${esc(L.coachScored||'Coach-scored')}</span></div>
+      ${hasRadar ? radarHTML : `<div class="ph-note">${esc(L.noTechEval||'No technical evaluation yet.')}</div>`}
     </div>
 
-    ${hstats}
-
-    <div class="body">
-      <div class="col l">
-        <div class="sec-h"><h2>${esc(L.technicalProfile)}</h2><div class="rule"></div><span class="tag">${esc(L.coachScored)}</span></div>
-        ${radarHTML}
-        <div class="sec-h" style="margin-top:24px"><h2>${esc(L.scoutingSummary)}</h2><div class="rule"></div></div>
-        <p class="scout" contenteditable="true" data-ph="${esc(L.scoutPlaceholder)}"></p>
-        <div class="scout-save"><button id="scoutSaveBtn" class="scout-save-btn">${esc(L.saveNote)}</button><span id="scoutSaveMsg"></span></div>
-        <div class="signoff">${esc(L.assessedBy)} <b>${esc(L.perfStaff)}</b> · <b>ClavaMetrics</b></div>
-      </div>
-      <div class="col">
-        <div class="sec-h"><h2>${esc(L.athleticProfile)}</h2><div class="rule"></div></div>
-        ${ath}
-        ${prodHTML}
-      </div>
+    <!-- Scouting (editable + Save, save button is .no-print) -->
+    <div class="ph-block">
+      <div class="ph-sec"><h2>${esc(L.scoutingSummary||'Scouting summary')}</h2><div class="rule"></div></div>
+      <div class="ph-note scout" contenteditable="true" data-ph="${esc(L.scoutPlaceholder||'')}"></div>
+      <div class="scout-save no-print"><button id="scoutSaveBtn" class="scout-save-btn">${esc(L.saveNote)}</button><span id="scoutSaveMsg"></span></div>
     </div>
 
-    ${ribbon}
-
-    <div class="foot">
-      <div class="club"><span class="c">${crestInner}</span><span>${esc(clubName)}${catLabel!=='—'?' · '+esc(catLabel):''}</span></div>
-      <div class="sp"><div class="mark">${esc(L.generatedWith)}</div></div>
+    <!-- Athletic profile (percentile bars) -->
+    <div class="ph-block">
+      <div class="ph-sec"><h2>${esc(L.athleticProfile||'Athletic profile')}</h2><div class="rule"></div><span class="tag">${esc(L.vsCategory)}</span></div>
+      ${phMetric(L.topSpeed, topSpeed, 'km/h', pctTopSpeed, false)}
+      ${phMetric(L.distMatch, distPerMatch!=null?distPerMatch/1000:null, 'km', pctDist, false)}
+      ${phMetric(L.cmj||'CMJ', cmj, 'cm', pctCmj, false)}
+      ${phMetric(L.hsrMatch, hsrPerMatch, 'm', pctHsr, false)}
+      ${phMetric(L.sprint30, sprint, 's', pctSprint, true)}
     </div>
+
+    <!-- Season production (only if prod) -->
+    ${prod ? `<div class="ph-block"><div class="ph-sec"><h2>${esc(L.seasonProduction)}</h2><div class="rule"></div></div>
+      <section class="ph-kpis">
+        <div class="ph-kpi"><div class="k">${esc(L.goals)}</div><div class="v">${prod.goals}</div></div>
+        <div class="ph-kpi"><div class="k">${esc(L.assists)}</div><div class="v">${prod.assists}</div></div>
+        <div class="ph-kpi"><div class="k">${esc(L.ga)}</div><div class="v">${prod.goals+prod.assists}</div></div>
+        <div class="ph-kpi"><div class="k">${esc(prod.avgRating!=null?L.avgRating:L.appearances)}</div><div class="v">${prod.avgRating!=null?num1(prod.avgRating):prod.apps}</div></div>
+      </section></div>` : ''}
+
+    <!-- Availability ribbon -->
+    ${k.availabilityPct!=null ? `<div class="ph-ribbon"><div class="big">${Math.round(k.availabilityPct)}%</div><div class="txt">${esc(availTxt(k.availabilityPct, caps, L))}</div></div>` : ''}
+
+    <footer class="ph-foot">
+      <div class="who"><span class="ph-crest" style="width:16px;height:16px;border-radius:4px;font-size:8px">${crestInner}</span> ${esc(clubName)}${catLabel!=='—'?' · '+esc(catLabel):''}</div>
+      <div class="gen">${esc(L.generatedWith||'Generated with ClavaMetrics')}</div>
+    </footer>
   </div>`;
 
   // Scouting summary — prefill from players.scouting_summary + persist on save.
