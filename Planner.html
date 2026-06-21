@@ -2833,10 +2833,10 @@
     let _previewPng = null;
     try {
       const fieldEl = document.getElementById('plField');
-      if (fieldEl && window.html2canvas) {
+      const pitchEl = document.getElementById('plPitch');
+      if (fieldEl && pitchEl && window.html2canvas) {
         const shot = await html2canvas(fieldEl, {
-          backgroundColor: '#2f7d4c',                         // match the designer grass
-          scale: 2, logging:false, useCORS:true,
+          backgroundColor: '#2f7d4c', scale: 2, logging:false, useCORS:true,
           ignoreElements: (el) => {
             if (el.id && ['plFieldTag','plFieldSel','plPropBar'].includes(el.id)) return true;
             if (el.classList && ['pl-canvas-bar','pl-field-sel','pl-field-tag'].some(c=>el.classList.contains(c))) return true;
@@ -2844,16 +2844,17 @@
             return false;
           }
         });
-        // re-fit into the pitch aspect 1050x680 (cover), so cards never letterbox
-        const TW = 1050, TH = 680;
-        const out = document.createElement('canvas'); out.width = TW; out.height = TH;
+        // crop to the pitch rect (relative to #plField), in the SAME scale html2canvas used
+        const fr = fieldEl.getBoundingClientRect();
+        const pr = pitchEl.getBoundingClientRect();
+        const s  = shot.width / fr.width;                 // actual scale html2canvas produced
+        const cx = Math.max(0, (pr.left - fr.left) * s);
+        const cy = Math.max(0, (pr.top  - fr.top ) * s);
+        const cw = Math.min(shot.width  - cx, pr.width  * s);
+        const ch = Math.min(shot.height - cy, pr.height * s);
+        const out = document.createElement('canvas'); out.width = Math.round(cw); out.height = Math.round(ch);
         const ctx = out.getContext('2d');
-        ctx.fillStyle = '#2f7d4c'; ctx.fillRect(0,0,TW,TH);
-        const sAR = shot.width/shot.height, tAR = TW/TH;
-        let sw, sh, sx, sy;
-        if (sAR > tAR) { sh = shot.height; sw = sh*tAR; sx = (shot.width-sw)/2; sy = 0; }
-        else           { sw = shot.width;  sh = sw/tAR; sx = 0; sy = (shot.height-sh)/2; }
-        ctx.drawImage(shot, sx, sy, sw, sh, 0, 0, TW, TH);
+        ctx.drawImage(shot, cx, cy, cw, ch, 0, 0, out.width, out.height);
         _previewPng = out.toDataURL('image/png');
       }
     } catch(_) { _previewPng = null; }
