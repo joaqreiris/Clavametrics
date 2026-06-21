@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daily Planning — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
+<link rel="stylesheet" href="assets/print-system.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
   <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
@@ -179,10 +180,17 @@
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 
   /* ===== PRINT ===== */
+  /* Letterhead solo-impresión (paper system): oculto en pantalla, visible en print */
+  .print-only{ display:none !important }
+
   @media print {
     @page { size: A4; margin: 14mm 12mm; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     body.cm{ background:#fff }
+    /* Shared print system: el letterhead reemplaza el título genérico del editor */
+    .print-only{ display:flex !important }
+    .dp-head{ display:none !important }
+    .no-print, [data-noprint]{ display:none !important }
     /* Hide chrome */
     #hub-side-root, .hub-sidebar { display:none!important }
     .hub-topbar { display:none!important }
@@ -256,6 +264,11 @@
     .dp-physio-alert .zones{ margin-top:2px }
     .dp-physio-alert .z{ height:13px; padding:0 4px; font-size:8.5px; color:#000 !important; background:#fff !important }
     .dp-physio-alert .act{ display:none }
+
+    /* Field-exercise drill diagrams (inline SVG) must print; cards must not split */
+    .dp-ex{ break-inside:avoid; page-break-inside:avoid; }
+    .dp-ex-thumb, .dp-ex-thumb.has-svg, .dp-ex-svg, .dp-ex-svg svg{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    .dp-ex-svg svg{ width:100% !important; height:100% !important; }
   }
 </style>
 </head>
@@ -633,6 +646,7 @@ async function loadDay(dateStr) {
   const today = new Date().toISOString().split('T')[0];
   const subLabel = dateStr === today ? 'today' : '';
   document.getElementById('dpDateInput').value = dateStr;
+  const _phDate = document.getElementById('dpPhDate'); if (_phDate) _phDate.textContent = fmt;
 
   // Match microcycle for this date
   const mc = _dpMicrocycles.find(m => m.start_date <= dateStr && dateStr <= m.end_date);
@@ -802,8 +816,8 @@ function renderExerciseList(exercises) {
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">PLANNER</span>
             <span class="grow"></span>
-            <a href="Planner.html" title="Open in Drill Designer" style="width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:var(--cm-fg-muted);text-decoration:none" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''"><i class="ti ti-external-link" style="font-size:13px"></i></a>
-            <button onclick="deleteExercise('${e.id}')" title="Remove"><i class="ti ti-trash"></i></button>
+            <a class="no-print" href="Planner.html" title="Open in Drill Designer" style="width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:var(--cm-fg-muted);text-decoration:none" onmouseover="this.style.background='var(--cm-bg-soft)'" onmouseout="this.style.background=''"><i class="ti ti-external-link" style="font-size:13px"></i></a>
+            <button class="no-print" onclick="deleteExercise('${e.id}')" title="Remove"><i class="ti ti-trash"></i></button>
           </div>
         </div>
       </div>`;
@@ -830,12 +844,12 @@ function renderExerciseList(exercises) {
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? 'LIBRARY' : 'MANUAL'}</span>
             <span class="grow"></span>
-            <button onclick="deleteExercise('${e.id}')" title="Remove"><i class="ti ti-trash"></i></button>
+            <button class="no-print" onclick="deleteExercise('${e.id}')" title="Remove"><i class="ti ti-trash"></i></button>
           </div>
         </div>
       </div>`;
     }
-  }).join('') + '<button class="dp-ex-add" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
+  }).join('') + '<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
 }
 
 let _dpSessionTotalMin = 0;
@@ -1099,7 +1113,7 @@ async function loadActivationActivities(sessionId) {
   const ctEl  = document.getElementById('dpActCt');
   const durEl = document.getElementById('dpActDuration');
   if (!sessionId) {
-    strip.innerHTML = '<button class="dp-act-add" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
+    strip.innerHTML = '<button class="dp-act-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
     if (ctEl) ctEl.textContent = '—';
     if (durEl) durEl.value = '';
     _dpActTotalMin = 0;
@@ -1119,7 +1133,7 @@ async function loadActivationActivities(sessionId) {
       <span class="min">${a.duration ? a.duration + '′' : '—'}</span>
       <button class="x" onclick="dpActDelete('${a.id}')"><i class="ti ti-x"></i></button>
     </div>`
-  ).join('') + '<button class="dp-act-add" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
+  ).join('') + '<button class="dp-act-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
   recalcTotals();
 }
 
@@ -1239,6 +1253,28 @@ async function dpExportPDF() {
 
   _dpProfile = profile;
   await dpInitTeamSwitch();
+
+  // ── Print-only letterhead (paper system: crest + club + "Daily session" + session date) ──
+  (function dpBuildLetterhead(){
+    const doc = document.querySelector('.dp-doc');
+    if (!doc || doc.querySelector('.ph-head.print-only')) return;
+    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
+    const clubName = (club && club.name) ? club.name : '—';
+    const teamName = (_dpTeams||[]).find(t=>t.id===_dpTeamId)?.name || '';
+    const crest = (club && club.logo_url) ? `<img src="${esc(club.logo_url)}" alt="">` : esc(mono(club&&club.name));
+    const brand = club && (club.primary_color || club.accent_color);
+    if (brand && /^#?[0-9a-fA-F]{6}$/.test(brand)) document.documentElement.style.setProperty('--accent', brand[0]==='#'?brand:'#'+brand);
+    const today = new Date().toISOString().split('T')[0];
+    const dateStr = _dpCurrentDate || (document.getElementById('dpDateInput')?.value) || today;
+    const head = document.createElement('header');
+    head.className = 'ph-head print-only';
+    head.innerHTML = `<div class="ph-crest">${crest}</div>`
+      + `<div><div class="ph-club">${esc(clubName)}</div>${teamName?`<div class="ph-sub">${esc(teamName)}</div>`:''}</div>`
+      + `<div class="ph-right"><div class="ph-doc">Daily session</div><div class="ph-date" id="dpPhDate">${esc(_dpFmt(dateStr))}</div></div>`;
+    doc.insertBefore(head, doc.firstChild);
+  })();
+
   const nameEl = document.getElementById('dpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
 
