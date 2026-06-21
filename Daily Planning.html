@@ -145,6 +145,9 @@
   .dp-ex{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
   .dp-ex:hover{border-color:var(--cm-border-strong)}
   .dp-ex-thumb{position:relative;aspect-ratio:16/9;background:url(assets/field.jpg) center/cover no-repeat;border-bottom:1px solid var(--cm-border-soft)}
+  .dp-ex-thumb.has-svg{ background:#0c2a16 !important; }
+  .dp-ex-svg{ position:absolute; inset:0; }
+  .dp-ex-svg svg{ width:100% !important; height:100% !important; display:block; }
   .dp-ex-tag{position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:4px;font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;backdrop-filter:blur(4px);background:rgba(0,0,0,0.55);color:#fff}
   .dp-ex-tag.tac{background:rgba(59,130,246,0.92);color:#fff}
   .dp-ex-tag.fis{background:rgba(245,158,11,0.92);color:#451a03}
@@ -742,6 +745,15 @@ async function loadSessionExercises(sessionId) {
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
+  try {
+    const pids = [...new Set((_dpFieldExercises||[]).map(e=>e.planner_exercise_id).filter(Boolean))];
+    if (pids.length) {
+      const { data: drills } = await window.sb.from('exercises')
+        .select('id, preview_svg').eq('club_id', _dpClubId).in('id', pids);
+      const svgById = {}; (drills||[]).forEach(d=>{ svgById[d.id] = d.preview_svg || null; });
+      _dpFieldExercises.forEach(e=>{ e._previewSvg = e.planner_exercise_id ? (svgById[e.planner_exercise_id]||null) : null; });
+    }
+  } catch(_) {}
   renderExerciseList(_dpFieldExercises);
   recalcTotals();
 }
@@ -769,13 +781,17 @@ function renderExerciseList(exercises) {
       const w = e.field_width, h = e.field_height;
       const fieldStr = (w && h) ? `${w}×${h}m` : null;
       return `<div class="dp-ex" data-seid="${e.id}">
-        <div class="dp-ex-thumb">
+        ${e._previewSvg ? `<div class="dp-ex-thumb has-svg">
+          <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
+          <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
+          <div class="dp-ex-svg">${e._previewSvg}</div>
+        </div>` : `<div class="dp-ex-thumb">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
           <div class="dp-ex-thumb-content" style="display:flex;align-items:center;justify-content:center">
             <i class="ti ti-soccer-field" style="font-size:28px;opacity:.35;color:#fff"></i>
           </div>
-        </div>
+        </div>`}
         <div class="dp-ex-b">
           <div class="dp-ex-name">${e.name || '—'}</div>
           <div class="dp-ex-meta">
