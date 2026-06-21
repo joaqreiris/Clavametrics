@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gym Planner — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
+<link rel="stylesheet" href="assets/print-system.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
   <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
@@ -120,60 +121,58 @@
 
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 
-  /* PRINT */
-  /* Hide editing affordances during PDF export (html2canvas snapshot) */
-  body.gp-print .gp-head .meta,
-  body.gp-print .no-print,
-  body.gp-print .gp-tbl .btn-x,
-  body.gp-print .gp-tbl .btn-lib{display:none !important}
-  /* Export PDF (html2canvas captura el DOM en vivo, no aplica @media print):
-     forzar claro/legible igual que la impresión, sin importar el tema. */
+  /* ===== PRINT — usa assets/print-system.css (shell-hide / .no-print / light / breaks / exact-color) ===== */
+  /* Letterhead solo-impresión: oculto en pantalla, visible en print + export PDF */
+  .print-only{ display:none !important }
+
+  /* Export PDF (html2canvas captura el DOM en vivo; @media print no aplica) — mismo look claro */
   body.gp-print{
     --cm-bg:#fff; --cm-bg-soft:#f6f6f6; --cm-bg-sunk:#f0f0f0; --cm-surface:#fff; --cm-surface-2:#fafafa;
-    --cm-fg:#111; --cm-fg-strong:#000; --cm-fg-muted:#444; --cm-fg-faint:#666;
+    --cm-fg:#16181D; --cm-fg-strong:#000; --cm-fg-muted:#454a52; --cm-fg-faint:#7b818b;
     --cm-border:#cfcfcf; --cm-border-soft:#e2e2e2; --cm-border-strong:#bdbdbd;
   }
-  body.gp-print .gp-doc, body.gp-print .gp-doc *{
-    background-color:transparent !important; color:#111 !important; border-color:#ccc !important }
-  body.gp-print .gp-doc{ background:#fff !important }
+  body.gp-print .print-only{ display:flex !important }
+  body.gp-print .gp-head{ display:none !important }
+  body.gp-print .no-print, body.gp-print [data-noprint],
+  body.gp-print .gp-tbl .btn-x, body.gp-print .gp-tbl .btn-lib{ display:none !important }
+  body.gp-print .gp-doc{ background:#fff !important; padding:0 }
+  body.gp-print .gp-card{ border:1px solid var(--ph-line,#e2e4e8) !important; border-radius:9px; margin-bottom:10px; background:#fff !important }
+  body.gp-print .gp-card-h{ background:var(--ph-surface,#fafafa) !important; border-bottom:1px solid #e6e6e6 }
+  body.gp-print .gp-card-h h3{ color:#16181D }
+  body.gp-print .gp-tbl thead th{ background:var(--ph-surface,#fafafa) !important; color:#7b818b }
+  body.gp-print .gp-tbl tbody td{ color:#16181D }
+  body.gp-print .gp-tbl input, body.gp-print .gp-tbl select,
   body.gp-print .gp-doc input, body.gp-print .gp-doc select, body.gp-print .gp-doc textarea{
-    background:#fff !important; color:#111 !important; border:1px solid #ccc !important }
+    background:transparent !important; color:#16181D !important; border:none !important; -webkit-appearance:none; appearance:none }
   body.gp-print .gp-doc select{ background-image:none !important }
-  body.gp-print .gp-card-h{ background:#f4f4f4 !important }
-  body.gp-print .gp-tbl thead th{ background:#f8f8f8 !important }
-  /* Shell hiding, light theme, @page y .no-print los aporta el @media print global de clavametrics.css.
-     Aquí solo va lo específico del Gym Planner: compactación + ocultar afordances que no son .no-print. */
+  body.gp-print .gp-totals .t{ border:1px solid #e6e6e6 }
+
   @media print{
     @page{ size:A4; margin:12mm }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; box-shadow:none !important }
-    /* token re-map so EVERY token-based bg/fg prints light, even in dark theme */
+    /* re-map de tokens para que todo lo basado en --cm-* imprima claro, incluso en tema oscuro */
     :root, [data-theme="dark"], [data-theme="hybrid"]{
       --cm-bg:#fff; --cm-bg-soft:#f6f6f6; --cm-bg-sunk:#f0f0f0; --cm-surface:#fff; --cm-surface-2:#fafafa;
-      --cm-fg:#111; --cm-fg-strong:#000; --cm-fg-muted:#444; --cm-fg-faint:#666;
+      --cm-fg:#16181D; --cm-fg-strong:#000; --cm-fg-muted:#454a52; --cm-fg-faint:#7b818b;
       --cm-border:#cfcfcf; --cm-border-soft:#e2e2e2; --cm-border-strong:#bdbdbd;
     }
-    html, body, body.cm{ background:#fff !important; color:#111 !important }
-    /* BLANKET: anything inside the printable doc prints on white with dark text */
-    .gp-doc, .gp-doc *{ background-color:transparent !important; color:#111 !important; border-color:#ccc !important }
-    .gp-doc{ background:#fff !important; max-width:100%; padding:0; margin:0 }
-    /* form controls readable as plain text */
-    .gp-doc input, .gp-doc select, .gp-doc textarea{
-      background:#fff !important; color:#111 !important; border:1px solid #ccc !important;
-      -webkit-appearance:none; appearance:none }
-    .gp-doc select{ background-image:none !important }
-    /* structural refinements applied ON TOP of the blanket (light grays + sizing) */
-    .gp-head{ padding-bottom:8px; margin-bottom:10px; border-bottom:1px solid #333 }
-    .gp-head h1{ font-size:18px; color:#000 }
-    .gp-card{ border:1px solid #bbb !important; margin-bottom:8px; break-inside:avoid; page-break-inside:avoid }
-    .gp-card-h{ padding:6px 12px; background:#f4f4f4 !important; border-bottom:1px solid #ddd }
-    .gp-card-h h3{ font-size:11px }
+    html, body, body.cm{ background:#fff !important; color:#16181D !important }
+    .print-only{ display:flex !important }
+    /* el letterhead .ph-head reemplaza el header del editor */
+    .gp-doc{ padding:0 }
+    .gp-head{ display:none !important }
+    .gp-card{ border:1px solid var(--ph-line,#e2e4e8) !important; border-radius:9px; margin-bottom:10px; break-inside:avoid; page-break-inside:avoid; background:#fff !important }
+    .gp-card-h{ background:var(--ph-surface,#fafafa) !important; border-bottom:1px solid #e6e6e6; padding:6px 12px }
+    .gp-card-h h3{ color:#16181D; font-size:11px }
     .gp-card-b{ padding:6px 12px }
-    .gp-tbl thead th{ padding:4px 6px; font-size:9px; background:#f8f8f8 !important }
-    .gp-tbl tbody td{ padding:3px 6px }
-    .gp-tbl input,.gp-tbl select{ padding:2px 4px; font-size:10.5px }
-    .gp-totals .t{ padding:6px 10px } .gp-totals .t .v{ font-size:16px } .gp-totals .t .l{ font-size:9px }
+    .gp-tbl thead th{ background:var(--ph-surface,#fafafa) !important; color:#7b818b; padding:4px 6px; font-size:9px }
+    .gp-tbl tbody td{ color:#16181D; padding:3px 6px }
+    .gp-tbl input, .gp-tbl select, .gp-doc input, .gp-doc select, .gp-doc textarea{
+      background:transparent !important; color:#16181D !important; border:none !important; -webkit-appearance:none; appearance:none }
+    .gp-doc select{ background-image:none !important }
+    .gp-totals .t{ border:1px solid #e6e6e6; padding:6px 10px } .gp-totals .t .v{ font-size:16px } .gp-totals .t .l{ font-size:9px }
     body.cm{ font-size:11px }
-    /* hide non-printables */
+    /* ocultar afordances de edición (gp-head ya está oculto) */
     .gp-head .meta, .no-print, [data-noprint]{ display:none !important }
     .gp-tbl .btn-x, .gp-tbl .btn-lib{ display:none !important }  /* per-row delete + LIB handles */
   }
@@ -205,7 +204,7 @@
           <h1>Gym planner</h1>
           <div class="ctx"><span class="save-dot"></span>Autosaved · <span id="gpUserName">…</span></div>
         </div>
-        <div class="meta">
+        <div class="meta no-print">
           <div class="gp-pager"><button id="gpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="gpPagerLabel"><i class="ti ti-calendar-event"></i>—</span><button id="gpNavNext"><i class="ti ti-chevron-right"></i></button></div>
           <button class="cm-btn is-outline is-sm" onclick="gpPrint()"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
           <button class="cm-btn is-outline is-sm" onclick="gpExportPDF()"><i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF</button>
@@ -1217,6 +1216,7 @@ async function gpLoadDay(dateStr) {
   const fmt = _gpFmt(dateStr);
   document.getElementById('gpCrumbDate').textContent = fmt;
   document.getElementById('gpDateInput').value = dateStr;
+  const _phDate = document.getElementById('gpPhDate'); if (_phDate) _phDate.textContent = fmt;
 
   const mc    = _gpMicrocycles.find(m => m.start_date <= dateStr && dateStr <= m.end_date);
   const mcSel = document.getElementById('gpMicrocycle');
@@ -1353,6 +1353,26 @@ async function gpExportPDF() {
   if (club) window.applyClubTheme();
 
   await gpInitTeamSwitch();
+
+  // ── Print-only letterhead (paper system: crest + club + "Gym session" + session date) ──
+  (function gpBuildLetterhead(){
+    const doc = document.querySelector('.gp-doc');
+    if (!doc || doc.querySelector('.ph-head.print-only')) return;
+    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
+    const clubName = (club && club.name) ? club.name : '—';
+    const teamName = (_gpTeams||[]).find(t=>t.id===_gpTeamId)?.name || '';
+    const crest = (club && club.logo_url) ? `<img src="${esc(club.logo_url)}" alt="">` : esc(mono(club&&club.name));
+    const brand = club && (club.primary_color || club.accent_color);
+    if (brand && /^#?[0-9a-fA-F]{6}$/.test(brand)) document.documentElement.style.setProperty('--accent', brand[0]==='#'?brand:'#'+brand);
+    const today = new Date().toISOString().split('T')[0];
+    const head = document.createElement('header');
+    head.className = 'ph-head print-only';
+    head.innerHTML = `<div class="ph-crest">${crest}</div>`
+      + `<div><div class="ph-club">${esc(clubName)}</div>${teamName?`<div class="ph-sub">${esc(teamName)}</div>`:''}</div>`
+      + `<div class="ph-right"><div class="ph-doc">Gym session</div><div class="ph-date" id="gpPhDate">${esc(_gpFmt(_gpCurrentDate || today))}</div></div>`;
+    doc.insertBefore(head, doc.firstChild);
+  })();
 
   const nameEl = document.getElementById('gpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
