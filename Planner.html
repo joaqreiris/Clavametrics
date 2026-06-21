@@ -2786,6 +2786,15 @@
     const mdRaw = document.getElementById('plExMatchDay')?.value;
     const _oj = fc.toJSON(ARROW_PROPS);
     _oj.field = _plField;   // pitch sport/variant/orient (ignored by loadFromJSON)
+    let _previewSvg = null;
+    try {
+      _previewSvg = fc.toSVG({
+        viewBox: { x:0, y:0, width: fc.getWidth(), height: fc.getHeight() },
+        width:  fc.getWidth(),
+        height: fc.getHeight(),
+        suppressPreamble: false
+      });
+    } catch(_) { _previewSvg = null; }
     const payload = {
       name:              document.getElementById('plExName')?.value?.trim() || 'Untitled',
       players_count:     players,
@@ -2804,6 +2813,7 @@
       objective:         document.getElementById('plExObjective')?.value?.trim()   || null,
       description:       document.getElementById('plExDescription')?.value?.trim() || null,
       objects_json:      _oj,
+      preview_svg:       _previewSvg,
       visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
     };
 
