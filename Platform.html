@@ -59,7 +59,29 @@
       <button class="pf-tab is-active" data-tab="plans">Plans</button>
       <button class="pf-tab" data-tab="calculator">Budget calculator</button>
     </div>
-    <section class="pf-panel is-active" id="pfPlans"><div class="pf-loading">Plans editor — coming next.</div></section>
+    <section class="pf-panel is-active" id="pfPlans">
+      <div style="border:1px solid var(--cm-border);border-radius:12px;padding:18px;margin-bottom:22px;background:var(--cm-bg)">
+        <h3 style="margin:0 0 4px;font-size:15px">Grant complimentary plan</h3>
+        <p style="margin:0 0 14px;color:var(--cm-fg-muted);font-size:12.5px">Give a club a plan without payment — for testing, partners or trials.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--cm-fg-muted)">Club
+            <select id="pfCompClub" style="min-width:240px;padding:8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong)"><option value="">Loading…</option></select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--cm-fg-muted)">Plan
+            <select id="pfCompPlan" style="padding:8px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong)">
+              <option value="full">Full</option><option value="professional">Professional</option><option value="basic">Basic</option><option value="initiation">Free</option>
+            </select>
+          </label>
+          <button id="pfCompGrant" class="pf-save" style="height:37px">Grant to club</button>
+        </div>
+        <div id="pfCompMsg" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+        <div style="margin-top:18px">
+          <div style="font-size:11px;color:var(--cm-fg-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Active complimentary subscriptions</div>
+          <div id="pfCompList" style="font-size:13px">Loading…</div>
+        </div>
+      </div>
+      <div id="pfPlansMatrix"><div class="pf-loading">Plans editor — coming next.</div></div>
+    </section>
     <section class="pf-panel" id="pfCalculator"><div class="pf-loading">Budget calculator — coming next.</div></section>
   </div>
   <div class="pf-loading" id="pfGate">Checking access…</div>
@@ -104,7 +126,7 @@
   function pfMsg(t){ const e=document.getElementById('pfMsg'); if(e) e.textContent=t; }
 
   window.pfRenderPlans = async function(){
-    const host = document.getElementById('pfPlans');
+    const host = document.getElementById('pfPlansMatrix');
     try {
       const { data, error } = await window.sb.from('plans').select('*').order('sort_order');
       if (error || !data) throw error || new Error('no data');
@@ -235,5 +257,50 @@
       <div class="pf-srow"><span>Total / year (×${annualMonths})</span><span>$${annual.toFixed(2)}</span></div>`;
   }
 </script>
+  <script>
+  (function(){
+    const sb = window.sb, $ = id => document.getElementById(id);
+    function msg(t,err){ const e=$('pfCompMsg'); if(e){ e.textContent=t; e.style.color=err?'var(--cm-danger)':'var(--cm-accent)'; } }
+    async function loadClubs(){
+      const sel=$('pfCompClub'); if(!sel) return;
+      try{
+        const { data, error }=await sb.from('clubs').select('id, name').order('name');
+        if(error) throw error;
+        sel.innerHTML = (data&&data.length) ? data.map(c=>`<option value="${c.id}">${c.name||c.id}</option>`).join('') : '<option value="">No clubs found</option>';
+      }catch(e){ sel.innerHTML='<option value="">Cannot list clubs</option>'; }
+    }
+    async function loadComps(){
+      const host=$('pfCompList'); if(!host) return;
+      try{
+        const { data, error }=await sb.from('subscriptions')
+          .select('team_id, teams(name, clubs(name)), plans(name, slug)')
+          .eq('is_comp', true).eq('status','active');
+        if(error) throw error;
+        if(!data||!data.length){ host.innerHTML='<span style="color:var(--cm-fg-muted)">None yet.</span>'; return; }
+        host.innerHTML = data.map(r=>{
+          const club=r.teams?.clubs?.name||'', team=r.teams?.name||r.team_id, plan=r.plans?.name||r.plans?.slug||'';
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--cm-border-soft)">
+            <span>${club} · <strong>${team}</strong> — ${plan}</span>
+            <button class="pf-mini" data-revoke="${r.team_id}">Revoke</button></div>`;
+        }).join('');
+        host.querySelectorAll('[data-revoke]').forEach(b=>b.addEventListener('click',()=>revoke(b.dataset.revoke)));
+      }catch(e){ host.innerHTML='<span style="color:var(--cm-danger)">Cannot load.</span>'; }
+    }
+    async function grant(){
+      const club=$('pfCompClub')?.value, plan=$('pfCompPlan')?.value;
+      if(!club){ msg('Pick a club first.',true); return; }
+      msg('Granting…');
+      try{ const { error }=await sb.rpc('grant_comp_subscription_club',{ p_club_id:club, p_plan_slug:plan }); if(error) throw error; msg('Granted ✓'); await loadComps(); }
+      catch(e){ msg('Failed: '+(e.message||e),true); }
+    }
+    async function revoke(teamId){
+      if(!confirm('Revoke this complimentary subscription?')) return;
+      try{ const { error }=await sb.rpc('revoke_comp_subscription',{ p_team_id:teamId }); if(error) throw error; await loadComps(); }
+      catch(e){ alert('Failed: '+(e.message||e)); }
+    }
+    function init(){ if(!$('pfCompClub')) return; loadClubs(); loadComps(); $('pfCompGrant')?.addEventListener('click', grant); }
+    if(document.readyState!=='loading') init(); else document.addEventListener('DOMContentLoaded', init);
+  })();
+  </script>
 </body>
 </html>
