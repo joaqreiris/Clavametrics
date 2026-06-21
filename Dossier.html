@@ -125,30 +125,26 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 #cm-shell-mount,.cm-sidebar-overlay,.cm-sidebar-toggle{display:none!important}
 
 @media print{
-  @page{ size:A4; margin:9mm }
+  @page{ size:A4; margin:8mm }
+  /* print colors/backgrounds exactly as on screen — this is what keeps it looking like the web */
+  *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   body{ background:#fff }
-  .stage{ padding:0 }
+  .stage{ padding:0; background:#fff }
   .toolbar, .no-print, [data-noprint]{ display:none !important }
-  .sheet{ box-shadow:none; border:1px solid #ddd; border-radius:0; width:100%; }
-  /* KEEP structure: visible borders + subtle surfaces, do NOT flatten to pure white */
-  .hero{ border-bottom:1px solid #e2e2e2 }
-  .col.l{ border-right:1px solid #e2e2e2 }
-  .card, .sec-h, .am, .prod .p, .ribbon{ break-inside:avoid; page-break-inside:avoid }
-  /* PORTRAIT: give it a real light frame so the number/monogram (or photo) reads */
-  .portrait{
-    background:#eef1ef !important; border:1px solid #cfd6d1 !important;
-    -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
-  }
-  .portrait .mark{ color:#b9c2bc !important }            /* monogram visible on light frame */
+  .sheet{ box-shadow:none; width:100%; margin:0; }
+  /* DO NOT remove borders/backgrounds — let the sheet keep its real styling */
+  /* fix breaks: never split a card / stat / bar row / section across pages */
+  .sheet, .hero, .body, .col, .card, .sec-h, .am, .prod, .prod .p, .ribbon, .foot,
+  .hstat, .row, tr, .radar, svg { break-inside:avoid !important; page-break-inside:avoid !important; }
+  .sec-h{ break-after:avoid !important; }            /* keep a section header with its content */
+  /* PORTRAIT (photo-less): light gray box instead of the dark web gradient */
+  .portrait{ background:#eef1ef !important; border:1px solid #cfd6d1 !important; }
+  .portrait .mark{ color:#b9c2bc !important }
   .portrait .num{ color:#2b3a31 !important; text-shadow:none !important }
-  .portrait img{ object-fit:cover; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
-  /* crest stays exact so the club logo prints */
-  .crestline .crest, .crestline .crest img{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
-  /* accent bars / chips keep their fill */
-  .am .bar .f, .prod .p, .ribbon, [class*="accent"]{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
-  /* density so the sheet fills page 1 and fits ≤2 pages */
-  .sheet{ font-size:12px }
-  .hero{ padding:14px 18px }
+  /* if a real photo exists it prints normally */
+  .portrait img{ object-fit:cover }
+  /* light density so a typical player fits ~1–2 clean pages (no aggressive shrink) */
+  .sheet{ font-size:12.5px }
 }
 @media(max-width:880px){.sheet{width:100%}.hero{grid-template-columns:1fr}.body{grid-template-columns:1fr}.col.l{border-right:0;border-bottom:1px solid var(--cm-border-soft)}.hstats{grid-template-columns:repeat(2,1fr)}}
 .prod{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
