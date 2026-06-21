@@ -901,6 +901,7 @@ async function submitRPE() {
       if (!sel) return;
       sel.innerHTML = '<option value="">Pick a session…</option>' +
         (sess||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Session')}</option>`).join('');
+      if (sess && sess.length) { sel.value = sess[0].id; loadRpeChecklist(); }
     } catch (e) { console.warn('[RPE] checklist init:', e.message); }
   }
   async function loadRpeChecklist() {
@@ -913,7 +914,10 @@ async function submitRPE() {
       if (error) throw error;
       const rows = data || [];
       const done = rows.filter(r => r.responded).length;
+      const _selOpt = document.getElementById('checklistSession').selectedOptions[0];
+      const _sessLabel = (_selOpt && _selOpt.value) ? _selOpt.textContent : '';
       body.innerHTML =
+        (_sessLabel ? `<div style="font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">${_sessLabel}</div>` : '') +
         `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} responded</div>` +
         '<div style="display:flex;flex-direction:column;gap:4px">' +
         rows.map(r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
