@@ -779,19 +779,20 @@
           badge = `<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);background:color-mix(in srgb,var(--cm-fg-muted) 14%,transparent);padding:2px 7px;border-radius:999px">${r.readiness}<span style="opacity:.55;font-weight:500"> ·old</span></span>`;
         }
         const rowBg = (bd && bd.key === 'red') ? `background:${bd.bg};border-radius:6px;padding:3px 6px;` : '';
-        return `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans);${rowBg}">
+        return `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px;display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans);${rowBg}">
           <i class="ti ${icon}" style="font-size:15px;color:${iconColor}"></i>
           <span style="color:var(--cm-fg);flex:1">${r.player_name}</span>
           ${badge}
         </div>`;
       };
-      const pendRow = r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
+      const pendRow = r => `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px;display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
           <i class="ti ti-circle" style="font-size:15px;color:var(--cm-fg-muted)"></i>
           <span style="color:var(--cm-fg-muted);flex:1">${r.player_name}</span>
         </div>`;
+      const _cols = Math.max(1, Math.ceil(rows.length / 12));
       body.innerHTML =
         `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} completed${redCount?`<span style="color:var(--cm-danger)"> · ${redCount} flagged</span>`:''}</div>` +
-        '<div style="display:flex;flex-direction:column;gap:4px">' +
+        `<div style="column-count:${_cols};column-gap:22px">` +
         responders.map(respRow).join('') +
         pending.map(pendRow).join('') +
         '</div>';

@@ -916,11 +916,12 @@ async function submitRPE() {
       const done = rows.filter(r => r.responded).length;
       const _selOpt = document.getElementById('checklistSession').selectedOptions[0];
       const _sessLabel = (_selOpt && _selOpt.value) ? _selOpt.textContent : '';
+      const _cols = Math.max(1, Math.ceil(rows.length / 12));
       body.innerHTML =
         (_sessLabel ? `<div style="font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">${_sessLabel}</div>` : '') +
         `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} responded</div>` +
-        '<div style="display:flex;flex-direction:column;gap:4px">' +
-        rows.map(r => `<div style="display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
+        `<div style="column-count:${_cols};column-gap:22px">` +
+        rows.map(r => `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px;display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
           <i class="ti ${r.responded?'ti-circle-check':'ti-circle'}" style="font-size:15px;color:${r.responded?'var(--cm-accent)':'var(--cm-fg-muted)'}"></i>
           <span style="color:${r.responded?'var(--cm-fg)':'var(--cm-fg-muted)'};flex:1">${r.player_name}</span>
           ${r.responded?`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-accent)">${Number(r.rpe)}</span>`:''}
