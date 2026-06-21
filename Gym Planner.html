@@ -121,21 +121,61 @@
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 
   /* PRINT */
+  /* Hide editing affordances during PDF export (html2canvas snapshot) */
+  body.gp-print .gp-head .meta,
+  body.gp-print .no-print,
+  body.gp-print .gp-tbl .btn-x,
+  body.gp-print .gp-tbl .btn-lib{display:none !important}
+  /* Export PDF (html2canvas captura el DOM en vivo, no aplica @media print):
+     forzar claro/legible igual que la impresión, sin importar el tema. */
+  body.gp-print{
+    --cm-bg:#fff; --cm-bg-soft:#f6f6f6; --cm-bg-sunk:#f0f0f0; --cm-surface:#fff; --cm-surface-2:#fafafa;
+    --cm-fg:#111; --cm-fg-strong:#000; --cm-fg-muted:#444; --cm-fg-faint:#666;
+    --cm-border:#cfcfcf; --cm-border-soft:#e2e2e2; --cm-border-strong:#bdbdbd;
+  }
+  body.gp-print .gp-doc, body.gp-print .gp-doc *{
+    background-color:transparent !important; color:#111 !important; border-color:#ccc !important }
+  body.gp-print .gp-doc{ background:#fff !important }
+  body.gp-print .gp-doc input, body.gp-print .gp-doc select, body.gp-print .gp-doc textarea{
+    background:#fff !important; color:#111 !important; border:1px solid #ccc !important }
+  body.gp-print .gp-doc select{ background-image:none !important }
+  body.gp-print .gp-card-h{ background:#f4f4f4 !important }
+  body.gp-print .gp-tbl thead th{ background:#f8f8f8 !important }
+  /* Shell hiding, light theme, @page y .no-print los aporta el @media print global de clavametrics.css.
+     Aquí solo va lo específico del Gym Planner: compactación + ocultar afordances que no son .no-print. */
   @media print{
-    @page{size:A4;margin:14mm 12mm}
-    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    body.cm{background:#fff}
-    .gp-doc{max-width:100%;padding:0;margin:0}
-    .gp-head{padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid #333}
-    .gp-head h1{font-size:18px;color:#000}
-    .gp-card{box-shadow:none;border:1px solid #bbb;margin-bottom:8px;break-inside:avoid;background:#fff}
-    .gp-card-h{padding:6px 12px;background:#f4f4f4;border-bottom:1px solid #ddd}
-    .gp-card-h h3{font-size:11px;color:#222}
-    .gp-card-b{padding:6px 12px}
-    .gp-tbl thead th{padding:4px 6px;font-size:9px;background:#f8f8f8}
-    .gp-tbl tbody td{padding:3px 6px}
-    .gp-tbl input,.gp-tbl select{padding:2px 4px;font-size:10.5px;background:#fff;border:1px solid transparent;color:#000}
-    .gp-totals .t{padding:6px 10px}.gp-totals .t .v{font-size:16px}.gp-totals .t .l{font-size:9px}
+    @page{ size:A4; margin:12mm }
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; box-shadow:none !important }
+    /* token re-map so EVERY token-based bg/fg prints light, even in dark theme */
+    :root, [data-theme="dark"], [data-theme="hybrid"]{
+      --cm-bg:#fff; --cm-bg-soft:#f6f6f6; --cm-bg-sunk:#f0f0f0; --cm-surface:#fff; --cm-surface-2:#fafafa;
+      --cm-fg:#111; --cm-fg-strong:#000; --cm-fg-muted:#444; --cm-fg-faint:#666;
+      --cm-border:#cfcfcf; --cm-border-soft:#e2e2e2; --cm-border-strong:#bdbdbd;
+    }
+    html, body, body.cm{ background:#fff !important; color:#111 !important }
+    /* BLANKET: anything inside the printable doc prints on white with dark text */
+    .gp-doc, .gp-doc *{ background-color:transparent !important; color:#111 !important; border-color:#ccc !important }
+    .gp-doc{ background:#fff !important; max-width:100%; padding:0; margin:0 }
+    /* form controls readable as plain text */
+    .gp-doc input, .gp-doc select, .gp-doc textarea{
+      background:#fff !important; color:#111 !important; border:1px solid #ccc !important;
+      -webkit-appearance:none; appearance:none }
+    .gp-doc select{ background-image:none !important }
+    /* structural refinements applied ON TOP of the blanket (light grays + sizing) */
+    .gp-head{ padding-bottom:8px; margin-bottom:10px; border-bottom:1px solid #333 }
+    .gp-head h1{ font-size:18px; color:#000 }
+    .gp-card{ border:1px solid #bbb !important; margin-bottom:8px; break-inside:avoid; page-break-inside:avoid }
+    .gp-card-h{ padding:6px 12px; background:#f4f4f4 !important; border-bottom:1px solid #ddd }
+    .gp-card-h h3{ font-size:11px }
+    .gp-card-b{ padding:6px 12px }
+    .gp-tbl thead th{ padding:4px 6px; font-size:9px; background:#f8f8f8 !important }
+    .gp-tbl tbody td{ padding:3px 6px }
+    .gp-tbl input,.gp-tbl select{ padding:2px 4px; font-size:10.5px }
+    .gp-totals .t{ padding:6px 10px } .gp-totals .t .v{ font-size:16px } .gp-totals .t .l{ font-size:9px }
+    body.cm{ font-size:11px }
+    /* hide non-printables */
+    .gp-head .meta, .no-print, [data-noprint]{ display:none !important }
+    .gp-tbl .btn-x, .gp-tbl .btn-lib{ display:none !important }  /* per-row delete + LIB handles */
   }
 </style>
 </head>
@@ -177,7 +217,7 @@
       <div class="gp-card">
         <div class="gp-card-h">
           <h3>Session info</h3>
-          <div class="right"><button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
+          <div class="right no-print"><button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
         </div>
         <div class="gp-card-b">
           <div class="gp-fg">
@@ -233,7 +273,7 @@
         <div class="gp-card-h">
           <h3>Athletes</h3>
           <span class="ct" id="gymAthCt">—</span>
-          <div class="right"><button class="cm-btn is-ghost is-sm" onclick="gpOpenGroups()"><i class="ti ti-layout-grid" style="font-size:13px"></i>Load groups</button><button class="cm-btn is-ghost is-sm" onclick="gpOpenSquad()"><i class="ti ti-users-plus" style="font-size:13px"></i>Pick from squad</button></div>
+          <div class="right no-print"><button class="cm-btn is-ghost is-sm" onclick="gpOpenGroups()"><i class="ti ti-layout-grid" style="font-size:13px"></i>Load groups</button><button class="cm-btn is-ghost is-sm" onclick="gpOpenSquad()"><i class="ti ti-users-plus" style="font-size:13px"></i>Pick from squad</button></div>
         </div>
         <div class="gp-athletes" id="gymAthPills">
           <!-- Populated by gpLoadAthletes() -->
@@ -249,7 +289,7 @@
           <div class="right">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
             <input type="number" id="gpWarmupMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm" onclick="gpOpenLib({section:'warmup'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'warmup'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
@@ -263,7 +303,7 @@
             <tbody id="gpWarmupBody">
             </tbody>
           </table>
-          <button class="gp-add-row" onclick="gpAddWarmupRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add warm-up</button>
+          <button class="gp-add-row no-print" onclick="gpAddWarmupRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add warm-up</button>
         </div>
       </div>
 
@@ -276,7 +316,7 @@
           <div class="right">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
             <input type="number" id="gpPlyoMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm" onclick="gpOpenLib({section:'plyo'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'plyo'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
@@ -290,7 +330,7 @@
             <tbody id="gpPlyoBody">
             </tbody>
           </table>
-          <button class="gp-add-row" onclick="gpAddPlyoRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add plyometric</button>
+          <button class="gp-add-row no-print" onclick="gpAddPlyoRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add plyometric</button>
         </div>
       </div>
 
@@ -303,7 +343,7 @@
           <div class="right">
             <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
             <input type="number" id="gpMainMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm" onclick="gpOpenLib({section:'main'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'main'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
@@ -317,7 +357,7 @@
             <tbody id="gpMainBody">
             </tbody>
           </table>
-          <button class="gp-add-row" onclick="gpAddMainRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add main exercise</button>
+          <button class="gp-add-row no-print" onclick="gpAddMainRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add main exercise</button>
         </div>
       </div>
 
@@ -327,7 +367,7 @@
           <h3>Individual adaptations</h3>
           <span class="ct" id="gpAdaptCt">—</span>
           <span class="sub">From Physio · today</span>
-          <div class="right"><button class="cm-btn is-outline is-sm" onclick="gpAddAdaptRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add adaptation</button></div>
+          <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpAddAdaptRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add adaptation</button></div>
         </div>
         <div class="gp-card-b">
           <table class="gp-tbl">
@@ -1284,6 +1324,7 @@ async function gpExportPDF() {
     const { default: html2canvas } = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.min.js');
     const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
     const el = document.querySelector('.gp-doc');
+    document.body.classList.add('gp-print');
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1299,6 +1340,7 @@ async function gpExportPDF() {
   } catch(e) {
     alert('PDF export failed. Use Print → Save as PDF instead.');
   } finally {
+    document.body.classList.remove('gp-print');
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF'; }
   }
 }

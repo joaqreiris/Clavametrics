@@ -633,3 +633,37 @@ body.cm::before {
   color: var(--cm-fg-on-accent);
   opacity: 0.95;
 }
+
+/* ============================================================
+   GLOBAL PRINT — clean, light, legible regardless of theme.
+   One block, all pages. Hides app shell + chrome, neutralizes
+   dark mode, remaps surface/text/border tokens to light values.
+   ============================================================ */
+@media print {
+  @page { size:A4; margin:12mm; }
+  * { -webkit-print-color-adjust:exact; print-color-adjust:exact; box-shadow:none !important; text-shadow:none !important; }
+  /* Force LIGHT: re-map tokens so dark/hybrid themes print light (this fixes token-based components) */
+  :root, [data-theme="dark"], [data-theme="hybrid"] {
+    --cm-bg:#fff; --cm-bg-soft:#f6f6f6; --cm-bg-sunk:#f0f0f0; --cm-surface:#fff; --cm-surface-2:#fafafa;
+    --cm-fg:#111; --cm-fg-strong:#000; --cm-fg-muted:#444; --cm-fg-faint:#666;
+    --cm-border:#cfcfcf; --cm-border-soft:#e6e6e6; --cm-border-strong:#bdbdbd;
+  }
+  html, body, body.cm { background:#fff !important; color:#111 !important; }
+  /* Hide app shell + global chrome (.cm-sidebar-overlay/.cm-sidebar-toggle: sidebar.js los inyecta en body, position:fixed) */
+  #hub-side-root, .hub-side, .cm-shell-side, .hub-topbar, .cm-topbar, .hub-search, .hub-crumb, .actions,
+  .cm-sidebar-overlay, .cm-sidebar-toggle { display:none !important; }
+  .hub-shell, .cm-shell { display:block !important; }
+  .hub-main, .cm-shell-main { margin:0 !important; padding:0 !important; width:100% !important; max-width:100% !important; }
+  /* Global no-print utility (pages tag action/edit buttons with it) */
+  .no-print, [data-noprint] { display:none !important; }
+  /* Ensure images/logos/crests + svg PRINT (so the club crest shows even if "Background graphics" is unchecked) */
+  img, svg, .crest, .club-logo, [class*="logo"], [class*="crest"] {
+    -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
+  }
+  /* Form controls print as plain readable text (no dark input chrome) */
+  input, select, textarea { background:#fff !important; color:#111 !important; border:1px solid #ccc !important; -webkit-appearance:none; appearance:none; }
+  select { background-image:none !important; }
+  /* Avoid bad page breaks + reasonable density */
+  .cm-card, .card, .gp-card, .pp-card, section, table, tr, thead { break-inside:avoid; page-break-inside:avoid; }
+  body.cm { font-size:11px; }
+}
