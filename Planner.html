@@ -2834,6 +2834,7 @@
     try {
       const fieldEl = document.getElementById('plField');
       if (fieldEl && window.html2canvas) {
+        try { fc.discardActiveObject(); fc.renderAll(); } catch(_) {}
         const canvas = await html2canvas(fieldEl, {
           backgroundColor: '#2f7d4c', scale: 2, logging:false, useCORS:true,
           ignoreElements: (el) => {
