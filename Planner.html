@@ -2834,21 +2834,27 @@
     try {
       const fieldEl = document.getElementById('plField');
       if (fieldEl && window.html2canvas) {
-        const EXCLUDE = ['plFieldTag','plFieldSel','plPropBar'];          // ids of overlay UI to hide in the capture
-        const EXCLUDE_CLASS = ['pl-canvas-bar','pl-field-sel','pl-field-tag','pl-prop-bar']; // any tool docks/bars
-        const canvas = await html2canvas(fieldEl, {
-          backgroundColor: '#1f7a36',           // fallback grass tone (in case pitch has transparency)
-          scale: Math.min(2, 1600 / Math.max(1, fieldEl.offsetWidth)),
-          logging: false, useCORS: true,
+        const shot = await html2canvas(fieldEl, {
+          backgroundColor: '#2f7d4c',                         // match the designer grass
+          scale: 2, logging:false, useCORS:true,
           ignoreElements: (el) => {
-            if (el.id && EXCLUDE.includes(el.id)) return true;
-            if (el.classList && EXCLUDE_CLASS.some(c => el.classList.contains(c))) return true;
-            // ignore anything that's clearly an editor control overlay
+            if (el.id && ['plFieldTag','plFieldSel','plPropBar'].includes(el.id)) return true;
+            if (el.classList && ['pl-canvas-bar','pl-field-sel','pl-field-tag'].some(c=>el.classList.contains(c))) return true;
             if (el.matches && el.matches('button, .pl-drop-btn, .pl-dock-btn, .pl-toggle-btn, [id^="plProp"]')) return true;
             return false;
           }
         });
-        _previewPng = canvas.toDataURL('image/png');
+        // re-fit into the pitch aspect 1050x680 (cover), so cards never letterbox
+        const TW = 1050, TH = 680;
+        const out = document.createElement('canvas'); out.width = TW; out.height = TH;
+        const ctx = out.getContext('2d');
+        ctx.fillStyle = '#2f7d4c'; ctx.fillRect(0,0,TW,TH);
+        const sAR = shot.width/shot.height, tAR = TW/TH;
+        let sw, sh, sx, sy;
+        if (sAR > tAR) { sh = shot.height; sw = sh*tAR; sx = (shot.width-sw)/2; sy = 0; }
+        else           { sw = shot.width;  sh = sw/tAR; sx = 0; sy = (shot.height-sh)/2; }
+        ctx.drawImage(shot, sx, sy, sw, sh, 0, 0, TW, TH);
+        _previewPng = out.toDataURL('image/png');
       }
     } catch(_) { _previewPng = null; }
     const payload = {
