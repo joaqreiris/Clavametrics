@@ -124,7 +124,18 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 /* keep any sidebar.js artifacts out of the export */
 #cm-shell-mount,.cm-sidebar-overlay,.cm-sidebar-toggle{display:none!important}
 
-@media print{body{background:#fff}.stage{padding:0}.toolbar{display:none}.sheet{box-shadow:none;border:none;border-radius:0;width:100%}}
+@media print{
+  body{background:#fff}.stage{padding:0}.toolbar{display:none}.sheet{box-shadow:none;border:none;border-radius:0;width:100%}
+  @page{ size:A4; margin:10mm }
+  .sheet, .hero, .hstats, .body, .col, .card, .am, .prod, .ribbon, .foot, .sec-h, .radar, svg{ break-inside:avoid; page-break-inside:avoid }
+  .hero{ break-after:avoid }
+  /* mild density so it fits ~1–2 pages */
+  .sheet{ font-size:12px }
+  /* ensure the crest + player photo print */
+  .crest img, .portrait img, img{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+  /* keep accent fills (radar polygon, bars) visible on print */
+  .am .bar .f, .prod .p, .ribbon{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+}
 @media(max-width:880px){.sheet{width:100%}.hero{grid-template-columns:1fr}.body{grid-template-columns:1fr}.col.l{border-right:0;border-bottom:1px solid var(--cm-border-soft)}.hstats{grid-template-columns:repeat(2,1fr)}}
 .prod{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .prod .p{text-align:center;border:1px solid var(--cm-border);border-radius:10px;padding:13px 6px;background:var(--cm-surface-2)}
