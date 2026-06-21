@@ -85,15 +85,20 @@
   .dp-squad-pill .ct{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)}
   .dp-squad-pill .dot{width:6px;height:6px;border-radius:50%}
 
-  .dp-players{display:flex;flex-wrap:wrap;gap:6px}
-  .dp-player{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 4px 0 4px;border-radius:999px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;position:relative;transition:border-color 120ms}
-  .dp-player:hover{border-color:var(--cm-border-strong)}
-  .dp-player .num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--cm-accent);color:var(--cm-fg-on-accent);font:700 11px/1 var(--cm-font-mono)}
-  .dp-player .pos{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:3px;background:var(--cm-fg-strong);color:var(--cm-bg);font:700 9.5px/1 var(--cm-font-mono);letter-spacing:0.04em;margin-right:4px}
+  .dp-players{display:flex;flex-wrap:wrap;gap:4px 6px}
+  .dp-player{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:4px;background:transparent;border:0.5px solid transparent;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer;position:relative}
+  .dp-player:hover{background:var(--cm-bg-soft)}
+  .dp-player .num{font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)}
+  .dp-player .pos{display:none}
+  .dp-player.is-adapt,.dp-player.partial{background:var(--cm-warning-bg);border-color:var(--cm-warning-bd);color:#7C2D12}
+  .dp-player.is-adapt .num,.dp-player.partial .num{color:#8a5e12}
+  .adapt-dot{font-size:8px;color:#b5851f;margin-left:1px}
+  .dp-c-note{flex-basis:100%;display:none;font:500 10.5px/1.35 var(--cm-font-sans);color:#7C2D12;background:var(--cm-warning-bg);border-left:2px solid var(--cm-warning-bd);padding:3px 8px;margin-top:1px;border-radius:0 3px 3px 0}
+  .dp-squad-out{display:flex;flex-wrap:wrap;align-items:center;gap:4px 9px;border-top:0.5px solid var(--cm-border-soft);margin-top:8px;padding-top:7px;font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-faint)}
+  .dp-squad-out .o-lbl{color:var(--cm-danger);letter-spacing:0.04em}
+  .dp-squad-out .o-pl{text-decoration:line-through;text-decoration-color:var(--cm-border-strong)}
   .dp-player.unavailable{background:var(--cm-bg-soft);color:var(--cm-fg-muted);opacity:0.6;text-decoration:line-through;text-decoration-color:var(--cm-danger);text-decoration-thickness:1.5px}
   .dp-player.unavailable .num{background:var(--cm-bg-sunk);color:var(--cm-fg-muted)}
-  .dp-player.partial{background:var(--cm-warning-bg);border-color:var(--cm-warning-bd);color:#7C2D12}
-  .dp-player.partial .num{background:var(--cm-warning);color:#fff}
   .dp-player .reason{font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-danger);padding-right:6px}
   .dp-player.partial .reason{color:#7C2D12}
   .dp-player.away{background:#eff6ff;border-color:#bfdbfe;color:#1e40af}
@@ -114,7 +119,8 @@
   .dp-status-opt .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
   /* Group rows */
-  .dp-pl-group{display:flex;align-items:center;gap:8px;margin:6px 0 8px}
+  .dp-pl-group{display:flex;align-items:baseline;gap:8px;margin:5px 0}
+  .dp-pl-group .dp-players{flex:1;min-width:0}
   .dp-pl-group:first-child{margin-top:0}
   .dp-pl-group .l{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted);min-width:34px}
   .dp-pl-group .l-line{flex:1;height:1px;background:var(--cm-border-soft)}
@@ -201,21 +207,11 @@
     .dp-pl-group{ margin:4px 0 3px }
     .dp-pl-group .l{ font-size:9px; min-width:28px }
     .dp-players{ gap:2px 3px }
-    .dp-player{
-      height:18px; padding:0 5px 0 3px; gap:3px;
-      font-size:9.5px; line-height:1;
-      background:#fff !important; border:1px solid #999 !important; color:#000 !important;
-      border-radius:9px;
-    }
-    .dp-player .num{
-      width:14px; height:14px; font-size:8.5px;
-      background:#222 !important; color:#fff !important;
-    }
-    .dp-player .pos{
-      height:11px; padding:0 3px; font-size:7.5px;
-      background:#666 !important; color:#fff !important;
-      margin-right:2px;
-    }
+    .dp-player.is-adapt{ background:#fff4e0 !important; border-color:#d97706 !important; color:#7c2d12 !important }
+    .dp-c-note{ display:block !important; background:#fff4e0 !important; border-left:2px solid #d97706 !important; color:#7c2d12 !important }
+    .dp-squad-out{ display:flex !important; border-top:0.5px solid #999 !important; color:#444 !important }
+    .dp-squad-out .o-lbl{ color:#a00 !important }
+    .dp-squad-out .o-pl{ text-decoration:line-through; text-decoration-color:#999 }
     .dp-player .reason{ font-size:8px; color:#a00 !important; padding-right:2px }
     .dp-player.unavailable{ opacity:1; color:#777 !important; text-decoration:line-through; text-decoration-color:#a00 }
     .dp-player.unavailable .num{ background:#999 !important }
@@ -520,12 +516,8 @@ const _DP_POS_GROUP = {
 const _DP_POS_DISP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', DM:'DM', CM:'MF', MF:'MF', WG:'WG', ST:'ST', CF:'CF' };
 
 function dpRenderSquad(avMap) {
-  function chip(p) {
+  function statusOf(p) {
     const av = avMap[p.id], inj = _dpInjMap[p.id];
-    const pos  = (p.position || '').toUpperCase();
-    const posD = _DP_POS_DISP[pos] || pos;
-    const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
-    const num = p.number ?? '—';
     let cls = '', reason = '';
     if (inj) { cls = 'partial'; reason = inj.body_area || inj.injury_type || 'inj'; }
     if      (av?.status === 'away')      { cls = 'away';      reason = av.notes || 'away'; }
@@ -535,27 +527,45 @@ function dpRenderSquad(avMap) {
     else if (av?.status === 'partial' || av?.status === 'limited') {
       if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; }
     }
+    return { cls, reason };
+  }
+  function chip(p) {
+    const { cls, reason } = statusOf(p);
+    const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
+    const num = p.number ?? '—';
+    const isTrainee = (cls === '' || cls === 'partial');
     const adaptEntry = _dpDayAdaptMap[p.id];
-    const injBadge   = _dpInjMap[p.id]
-      ? `<a href="Injuries.html" onclick="event.stopPropagation()" title="Active injury: ${(_dpInjMap[p.id].body_area || _dpInjMap[p.id].injury_type || 'injury')}" style="font-size:11px;text-decoration:none;line-height:1;opacity:0.9">🏥</a>`
-      : '';
-    const adaptBadge = adaptEntry
-      ? `<span title="${(adaptEntry.adaptation || adaptEntry.adaptation_notes || 'Adaptation active').replace(/"/g, "'")}" style="cursor:help;display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;border-radius:2px;background:var(--cm-warning);color:#fff;font:700 9px/1 sans-serif;margin-left:2px;flex-shrink:0;vertical-align:middle">!</span>`
-      : '';
-    return `<span class="dp-player${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"><span class="num">${num}</span><span class="pos">${posD}</span>${lastName}${reason ? `<span class="reason">${reason}</span>` : ''}${injBadge}${adaptBadge}</span>`;
+    const amber = (cls === 'partial' || !!adaptEntry);
+    const note  = adaptEntry ? (adaptEntry.adaptation_notes || '') : '';
+    const tooltip = note || reason;
+    return `<span class="dp-player${amber && isTrainee ? ' is-adapt' : ''}${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}" ${tooltip ? `title="${tooltip.replace(/"/g,"'")}"` : ''}><span class="num">${num}</span>${lastName}${amber && isTrainee ? '<span class="adapt-dot">●</span>' : ''}</span>` +
+      (note && isTrainee ? `<span class="dp-c-note">${note}</span>` : '');
+  }
+  function outChip(p) {
+    const { cls, reason } = statusOf(p);
+    const lastName = (`${p.first_name} ${p.last_name}`.trim()).split(' ').pop();
+    const num = p.number ?? '—';
+    return `<span class="dp-player o-pl${cls ? ' '+cls : ''}" data-status="${cls||'available'}" data-pid="${p.id}"${reason ? ` title="${reason.replace(/"/g,"'")}"` : ''}>${num} ${lastName}${reason ? ` · ${reason}` : ''}</span>`;
   }
 
+  const trainees = [], outs = [];
+  _dpPlayers.forEach(p => { (['','partial'].includes(statusOf(p).cls) ? trainees : outs).push(p); });
+
   const groups = {};
-  _dpPlayers.forEach(p => {
+  trainees.forEach(p => {
     const g = _DP_POS_GROUP[(p.position||'').toUpperCase()] || { l:(p.position||'?').toUpperCase(), o:9 };
     if (!groups[g.l]) groups[g.l] = { o: g.o, list: [] };
     groups[g.l].list.push(p);
   });
-  document.getElementById('dpSquadBody').innerHTML = Object.entries(groups)
+  let _dpSquadHtml = Object.entries(groups)
     .sort((a,b) => a[1].o - b[1].o)
     .map(([lbl, {list}]) =>
-      `<div class="dp-pl-group"><span class="l">${lbl} · ${list.length}</span><span class="l-line"></span></div><div class="dp-players">${list.map(chip).join('')}</div>`
+      `<div class="dp-pl-group"><span class="l">${lbl} · ${list.length}</span><div class="dp-players">${list.map(chip).join('')}</div></div>`
     ).join('');
+  if (outs.length) {
+    _dpSquadHtml += `<div class="dp-squad-out"><span class="o-lbl">Out · ${outs.length}</span>${outs.map(outChip).join('')}</div>`;
+  }
+  document.getElementById('dpSquadBody').innerHTML = _dpSquadHtml;
 
   let avCt = 0, partCt = 0, unCt = 0, awayCt = 0, injCt = 0, sickCt = 0;
   _dpPlayers.forEach(p => {
