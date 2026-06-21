@@ -482,7 +482,7 @@
 <div id="settings-host"></div>
 
 <script>
-let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
+let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpDayAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 let _dpTeamId = null, _dpTeams = [];
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
@@ -535,7 +535,7 @@ function dpRenderSquad(avMap) {
     else if (av?.status === 'partial' || av?.status === 'limited') {
       if (!cls) { cls = 'partial'; reason = av.notes || reason || 'partial'; }
     }
-    const adaptEntry = _dpAdaptMap[p.id];
+    const adaptEntry = _dpDayAdaptMap[p.id];
     const injBadge   = _dpInjMap[p.id]
       ? `<a href="Injuries.html" onclick="event.stopPropagation()" title="Active injury: ${(_dpInjMap[p.id].body_area || _dpInjMap[p.id].injury_type || 'injury')}" style="font-size:11px;text-decoration:none;line-height:1;opacity:0.9">🏥</a>`
       : '';
@@ -638,7 +638,7 @@ async function loadDay(dateStr) {
 
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
+    window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
@@ -674,6 +674,11 @@ async function loadDay(dateStr) {
   const avMap = {};
   (avResult.data || []).forEach(a => { avMap[a.player_id] = a; });
   _dpAvMap = avMap;
+
+  _dpDayAdaptMap = {};
+  (adaptResult.data || []).forEach(t => {
+    if (t.notify_coaches && t.adaptation_notes && !_dpDayAdaptMap[t.player_id]) _dpDayAdaptMap[t.player_id] = t;
+  });
 
   dpRenderSquad(avMap);
 
