@@ -2834,10 +2834,19 @@
     try {
       const fieldEl = document.getElementById('plField');
       if (fieldEl && window.html2canvas) {
+        const EXCLUDE = ['plFieldTag','plFieldSel','plPropBar'];          // ids of overlay UI to hide in the capture
+        const EXCLUDE_CLASS = ['pl-canvas-bar','pl-field-sel','pl-field-tag','pl-prop-bar']; // any tool docks/bars
         const canvas = await html2canvas(fieldEl, {
-          backgroundColor: null,
-          scale: Math.min(2, 1600 / Math.max(1, fieldEl.offsetWidth)),  // ~crisp but bounded width
-          logging: false, useCORS: true
+          backgroundColor: '#1f7a36',           // fallback grass tone (in case pitch has transparency)
+          scale: Math.min(2, 1600 / Math.max(1, fieldEl.offsetWidth)),
+          logging: false, useCORS: true,
+          ignoreElements: (el) => {
+            if (el.id && EXCLUDE.includes(el.id)) return true;
+            if (el.classList && EXCLUDE_CLASS.some(c => el.classList.contains(c))) return true;
+            // ignore anything that's clearly an editor control overlay
+            if (el.matches && el.matches('button, .pl-drop-btn, .pl-dock-btn, .pl-toggle-btn, [id^="plProp"]')) return true;
+            return false;
+          }
         });
         _previewPng = canvas.toDataURL('image/png');
       }
