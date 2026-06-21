@@ -209,6 +209,8 @@
     flex-shrink:0;
   }
   .pl-ex.is-active .pl-ex-n { background:var(--cm-accent); color:var(--cm-fg-on-accent); border-color:var(--cm-accent); }
+  .pl-ex-thumb{ width:46px; height:30px; border-radius:4px; overflow:hidden; flex:none; background:#0c2a16; border:1px solid var(--cm-border-soft); }
+  .pl-ex-thumb svg{ width:100% !important; height:100% !important; display:block; }
   .pl-ex-body { flex:1; min-width:0; }
   .pl-ex-title { font:600 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pl-ex-meta  { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
@@ -752,6 +754,10 @@
               <i class="ti ti-plus" style="font-size:11px"></i>New
             </button>
           </h3>
+          <div class="hub-search" style="margin-bottom:8px">
+            <i class="ti ti-search"></i>
+            <input id="plExSearch" placeholder="Search exercises…">
+          </div>
           <div id="plExList">
             <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">Loading…</div>
           </div>
@@ -2446,6 +2452,7 @@
   // ── Exercise library state ───────────────────────────────────────
   let currentExerciseId    = null;
   let exercises            = [];
+  let _exQuery             = '';
   let currentManualOrient  = null;
   let currentIntensity     = null;
   let currentFocus         = [];
@@ -2624,7 +2631,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,objects_json,preview_svg')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -2660,7 +2667,13 @@
       list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No exercises yet. Click "New" to create one.</div>`;
       return;
     }
-    list.innerHTML = exercises.map((ex, i) => {
+    const items = exercises.filter(ex =>
+      !_exQuery || (ex.name||'').toLowerCase().includes(_exQuery) || (ex.objective||'').toLowerCase().includes(_exQuery));
+    if (!items.length) {
+      list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No exercises match.</div>`;
+      return;
+    }
+    list.innerHTML = items.map((ex) => {
       const area  = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0)
         ? Math.round((ex.field_width * ex.field_height) / ex.players_count) : null;
       const calcO = calcOrientFromM2(area);
@@ -2668,7 +2681,7 @@
       const meta  = dispO ? ORIENT_META[dispO] : null;
       return `
         <div class="pl-ex${currentExerciseId === ex.id ? ' is-active' : ''}" data-ex-id="${ex.id}">
-          <div class="pl-ex-n">${i+1}</div>
+          <div class="pl-ex-thumb">${ex.preview_svg ? ex.preview_svg : '<i class="ti ti-soccer-field" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:var(--cm-fg-faint);font-size:16px"></i>'}</div>
           <div class="pl-ex-body">
             <div class="pl-ex-title">${ex.name || 'Untitled'}</div>
             <div class="pl-ex-meta">${ex.players_count ? ex.players_count + ' pl' : '—'} · ${area ? area + ' m²/p' : '—'}</div>
@@ -2953,6 +2966,8 @@
   });
 
   // ── Initial load ─────────────────────────────────────────────────
+  const _exSearchEl = document.getElementById('plExSearch');
+  if (_exSearchEl) _exSearchEl.addEventListener('input', () => { _exQuery = (_exSearchEl.value||'').toLowerCase().trim(); renderExerciseList(); });
   await loadExercises();
   updateSpaceOrientation();
 
