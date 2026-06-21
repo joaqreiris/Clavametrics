@@ -853,12 +853,22 @@
       const slug = amt.dataset.slug;
       const card = amt.closest('.pp-tier'); if(!card) return;
       const price = Number((plans[slug]||{}).price_monthly||0);
+      // limpiar restos de la inyección vieja y cualquier badge "Current" hardcodeado
+      card.classList.remove('is-current');
       card.querySelectorAll('.pp-current-badge').forEach(b=>b.remove());
+      card.querySelectorAll('.pp-tier-badge').forEach(b=>{
+        if((b.textContent||'').trim().toLowerCase()==='current') b.remove();
+      });
       const meta = card.querySelector('.pp-tier-meta');
       if(slug===curSlug){
-        const head = card.querySelector('.pp-tier-head') || card.firstElementChild || card;
-        const b=document.createElement('span'); b.className='pp-current-badge'; b.textContent='CURRENT';
-        head.appendChild(b);
+        card.classList.add('is-current');                 // activa el estilo ámbar del CSS
+        let badge = card.querySelector('.pp-tier-badge');
+        if(badge && (badge.textContent||'').trim().toLowerCase()==='recommended'){
+          // no pisar el Recommended si justo el current fuera Pro: creamos otro
+          badge = null;
+        }
+        if(!badge){ badge=document.createElement('span'); badge.className='pp-tier-badge'; card.appendChild(badge); }
+        badge.textContent='Current';
         if(meta) meta.textContent='your current tier · no change';
       } else if(meta){
         const d = price - curPrice;
