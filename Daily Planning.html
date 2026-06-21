@@ -146,9 +146,8 @@
   .dp-ex{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
   .dp-ex:hover{border-color:var(--cm-border-strong)}
   .dp-ex-thumb{position:relative;aspect-ratio:16/9;background:url(assets/field.jpg) center/cover no-repeat;border-bottom:1px solid var(--cm-border-soft)}
-  .dp-ex-thumb.has-svg{ background:#0c2a16 !important; }
-  .dp-ex-svg{ position:absolute; inset:0; }
-  .dp-ex-svg svg{ width:100% !important; height:100% !important; display:block; }
+  .dp-ex-thumb.has-img{ background:#0c2a16; }
+  .dp-ex-img{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; display:block; }
   .dp-ex-tag{position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:4px;font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;backdrop-filter:blur(4px);background:rgba(0,0,0,0.55);color:#fff}
   .dp-ex-tag.tac{background:rgba(59,130,246,0.92);color:#fff}
   .dp-ex-tag.fis{background:rgba(245,158,11,0.92);color:#451a03}
@@ -265,10 +264,10 @@
     .dp-physio-alert .z{ height:13px; padding:0 4px; font-size:8.5px; color:#000 !important; background:#fff !important }
     .dp-physio-alert .act{ display:none }
 
-    /* Field-exercise drill diagrams (inline SVG) must print; cards must not split */
+    /* Field-exercise drill diagrams (PNG) must print; cards must not split */
     .dp-ex{ break-inside:avoid; page-break-inside:avoid; }
-    .dp-ex-thumb, .dp-ex-thumb.has-svg, .dp-ex-svg, .dp-ex-svg svg{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    .dp-ex-svg svg{ width:100% !important; height:100% !important; }
+    .dp-ex-thumb, .dp-ex-thumb.has-img, .dp-ex-img{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    .dp-ex-img{ width:100% !important; height:100% !important; object-fit:contain !important; }
   }
 </style>
 </head>
@@ -763,9 +762,9 @@ async function loadSessionExercises(sessionId) {
     const pids = [...new Set((_dpFieldExercises||[]).map(e=>e.planner_exercise_id).filter(Boolean))];
     if (pids.length) {
       const { data: drills } = await window.sb.from('exercises')
-        .select('id, preview_svg').eq('club_id', _dpClubId).in('id', pids);
-      const svgById = {}; (drills||[]).forEach(d=>{ svgById[d.id] = d.preview_svg || null; });
-      _dpFieldExercises.forEach(e=>{ e._previewSvg = e.planner_exercise_id ? (svgById[e.planner_exercise_id]||null) : null; });
+        .select('id, preview_png').eq('club_id', _dpClubId).in('id', pids);
+      const pngById = {}; (drills||[]).forEach(d=>{ pngById[d.id] = d.preview_png || null; });
+      _dpFieldExercises.forEach(e=>{ e._previewPng = e.planner_exercise_id ? (pngById[e.planner_exercise_id]||null) : null; });
     }
   } catch(_) {}
   renderExerciseList(_dpFieldExercises);
@@ -795,10 +794,10 @@ function renderExerciseList(exercises) {
       const w = e.field_width, h = e.field_height;
       const fieldStr = (w && h) ? `${w}×${h}m` : null;
       return `<div class="dp-ex" data-seid="${e.id}">
-        ${e._previewSvg ? `<div class="dp-ex-thumb has-svg">
+        ${e._previewPng ? `<div class="dp-ex-thumb has-img">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
-          <div class="dp-ex-svg">${e._previewSvg}</div>
+          <img class="dp-ex-img" src="${e._previewPng}" alt="">
         </div>` : `<div class="dp-ex-thumb">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
