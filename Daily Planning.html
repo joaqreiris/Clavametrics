@@ -1329,10 +1329,14 @@ function dpPrint() { window.print(); }
 async function dpExportPDF() {
   const btn = document.querySelector('[onclick="dpExportPDF()"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  const host = document.getElementById('dpPrintSheet');
   try {
     const { default: html2canvas } = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.min.js');
     const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
-    const el = document.querySelector('.dp-doc');
+    // Build + temporarily reveal the dedicated print sheet off-screen so html2canvas can capture it
+    dpRenderPrintSheet();
+    if (host) { host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1'; }
+    const el = document.querySelector('#dpPrintSheet .dsp-sheet') || host;
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1349,6 +1353,7 @@ async function dpExportPDF() {
     console.error('PDF error:', e);
     alert('PDF export failed. Try using Print → Save as PDF instead.');
   } finally {
+    if (host) host.style.cssText = '';   // restore (CSS hides it again via #dpPrintSheet{display:none})
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF'; }
   }
 }
