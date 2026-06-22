@@ -871,13 +871,20 @@ function dpRenderPrintSheet() {
     if (md || mc?.rival) cells.push({l:'Next match', v:`${mc?.rival?esc(mc.rival)+' ':''}${mdBadge}`, span:1});
     const or = val('dpOrientation'); if (or) cells.push({l:'Orientation', v:esc(cap(or)), span:1});
     const fo = val('dpFocus');       if (fo) cells.push({l:'Focus', v:esc(cap(fo)), span:2});
-    const notes = val('dpNotes');    if (notes) cells.push({l:'Notes', v:esc(notes), span:2, muted:true});
     const metaGrid = cells.length ? `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:14px">
       ${cells.map(c=>`<div style="grid-column:span ${c.span};background:#fff;padding:8px 11px">
         <div style="font:600 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF">${esc(c.l)}</div>
         <div style="font:${c.muted?'500 11.5px':'600 13px'} ${FONT};color:${c.muted?'#5B6470':'#15181D'};margin-top:3px">${c.v}</div>
       </div>`).join('')}
     </div>` : '';
+
+    // Notes band — between meta grid and KPI strip, only when notes exist
+    const _notes = (document.getElementById('dpNotes')?.value || '').trim();
+    const notesBand = _notes ? `
+      <div style="border:1px solid #E7E7E4; border-radius:10px; background:#FBFBFA; padding:9px 13px; margin-top:8px;">
+        <div style="font:600 8.5px/1.2 'Geist Mono',monospace; letter-spacing:0.08em; text-transform:uppercase; color:#9CA3AF; margin-bottom:3px;">Notes</div>
+        <div style="font:500 11.5px/1.45 'Geist',sans-serif; color:#3C4149;">${_notes.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/\n/g,'<br>')}</div>
+      </div>` : '';
 
     // 3) KPI strip
     const actMin = _dpActTotalMin || 0;
@@ -982,7 +989,7 @@ function dpRenderPrintSheet() {
     </div>`;
 
     host.innerHTML = `<div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-      ${head}${sessionLine}${metaGrid}${kpiStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
+      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
     </div>`;
   } catch (e) {
     console.warn('dpRenderPrintSheet failed', e);
