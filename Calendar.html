@@ -303,8 +303,6 @@
   .mc-day.is-dayoff { background: var(--cm-bg-sunk); }
   .mc-day.is-dayoff .mc-day-num { color: var(--cm-fg-muted); }
   .mc-day.is-dayoff .mc-day-md  { background: var(--cm-bg-sunk); color: var(--cm-fg-muted); border-color: var(--cm-border); }
-  .mc-day.is-dayoff .mc-evt:not([data-add-date]) { opacity: 0.45; filter: grayscale(0.55); }
-
   .mc-day-events { display:flex; flex-direction:column; gap:4px; }
   .mc-evt {
     display:flex; align-items:flex-start; gap:6px;
@@ -1794,7 +1792,7 @@ function renderGrid() {
     const isMatchTag = tagText === 'MD';
     const tagStyle = (!hasDayOff && isMatchTag) ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
 
-    const eventsHtml = isOff
+    const eventsHtml = hasDayOff ? '' : isOff
       ? '<div class="mc-evt day-off">Rest day</div>'
       : daySessions.filter(s => (_filterType === 'all' || focusToClass(s.session_type) === _filterType) && s.session_type !== 'day_off').map(s => {
           const cat = focusToClass(s.session_type);
