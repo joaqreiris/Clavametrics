@@ -80,6 +80,10 @@
     border-bottom:1px solid var(--cm-border);
   }
   .sl-thumb::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.30) 100%); pointer-events:none; }
+  .sl-thumb.has-img{ background:#2f7d4c; aspect-ratio:auto; height:auto; }
+  .sl-thumb.has-img::after{ display:none; }
+  .sl-thumb-img{ display:block; width:100%; height:auto; }
+  .sl-thumb .focus, .sl-thumb .dur, .sl-thumb .md-badge{ z-index:2; }
   .sl-thumb .focus {
     position:absolute; top:10px; left:10px;
     display:inline-flex; align-items:center; gap:5px;
@@ -408,7 +412,7 @@
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,preview_png')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -624,8 +628,9 @@
       if (ex.series) metaParts.push(`<span class="it"><i class="ti ti-repeat"></i>${ex.series}×</span>`);
 
       return `<div class="sl-card${selectedId === ex.id ? ' is-active' : ''}" data-id="${ex.id}">
-        <div class="sl-thumb">
+        <div class="sl-thumb${ex.preview_png ? ' has-img' : ''}">
           ${focusBadge}${durBadge}${mdBadgeThumb}
+          ${ex.preview_png ? `<img class="sl-thumb-img" src="${ex.preview_png}" alt="">` : ''}
         </div>
         <div class="sl-body">
           <div class="title">${ex.name || 'Untitled'}</div>
