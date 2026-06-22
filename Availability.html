@@ -574,8 +574,11 @@
   // MD label anchored to a date's microcycle match_date (mirrors Calendar.html)
   function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
   function mdLabelFor(date) {
-    const mc = MC_RANGES.find(m => m.match_date && m.start_date <= date && date <= m.end_date);
+    const mc = MC_RANGES.find(m => m.start_date <= date && date <= m.end_date);
     if (!mc) return '';
+    const ov = mc.md_overrides && mc.md_overrides[date];
+    if (ov) return ov;                       // manual override wins
+    if (!mc.match_date) return '';
     const diff = daysBetween(date, mc.match_date);
     if (diff === 0) return 'MD';
     if (diff > 0 && diff <= 10) return `MD−${diff}`;
@@ -976,7 +979,7 @@
     MC_RANGES = [];
     try {
       let mq = window.sb.from('microcycles')
-        .select('start_date,end_date,match_date')
+        .select('start_date,end_date,match_date,md_overrides')
         .eq('club_id', CLUB_ID)
         .lte('start_date', mcEnd).gte('end_date', mcStart);
       if (_avTeamId) mq = mq.eq('team_id', _avTeamId);
