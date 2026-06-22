@@ -156,7 +156,7 @@
     ]},
     { label: 'Technical', items: [
       { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Drill Designer',   key: 'planner' },
-      { href: 'Sessions%20Library.html',icon: 'ti-list-tree',         label: 'Exercises Library', key: 'sessions-lib' },
+      { href: 'Exercises%20Library.html',icon: 'ti-list-tree',         label: 'Exercises Library', key: 'sessions-lib' },
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning',   key: 'daily-planning' },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history', key: 'sessions-history' },
       { href: 'Video%20Room.html',      icon: 'ti-video',            label: 'Video room' },
