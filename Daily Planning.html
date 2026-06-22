@@ -330,7 +330,7 @@
           </div>
         </div>
         <div class="dp-card-b">
-          <div class="dp-act-strip" id="dpActStrip">
+          <div class="dp-ex-grid" id="dpActStrip" style="padding:0">
             <!-- Populated by loadActivationActivities() -->
           </div>
         </div>
@@ -717,7 +717,10 @@ function renderExerciseList(exercises) {
   }
   const totalMin = exercises.reduce((s, e) => s + (e.duration || 0), 0);
   if (ct) ct.textContent = `${exercises.length} · ${totalMin} min`;
-  grid.innerHTML = exercises.map(e => {
+  grid.innerHTML = exercises.map(dpExerciseCardHTML).join('') + '<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
+}
+
+function dpExerciseCardHTML(e) {
     const dur = e.duration ? `${e.duration}′` : '—';
     if (e.planner_exercise_id) {
       // Planner (field) exercise
@@ -784,7 +787,6 @@ function renderExerciseList(exercises) {
         </div>
       </div>`;
     }
-  }).join('') + '<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
 }
 
 let _dpSessionTotalMin = 0;
@@ -998,7 +1000,7 @@ function dpRenderPrintSheet() {
 
 async function deleteExercise(seid) {
   const { error } = await window.sb.from('session_exercises').delete().eq('id', seid).eq('club_id', _dpClubId);
-  if (!error) await loadSessionExercises(_dpCurrentSessionId);
+  if (!error) { await loadSessionExercises(_dpCurrentSessionId); await loadActivationActivities(_dpCurrentSessionId); }
 }
 
 // ── From library (Planner exercises) ──
@@ -1229,8 +1231,9 @@ async function loadActivationActivities(sessionId) {
   const strip = document.getElementById('dpActStrip');
   const ctEl  = document.getElementById('dpActCt');
   const durEl = document.getElementById('dpActDuration');
+  const addBtn = '<button class="dp-ex-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:14px"></i>Activity</button>';
   if (!sessionId) {
-    strip.innerHTML = '<button class="dp-act-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
+    strip.innerHTML = addBtn;
     if (ctEl) ctEl.textContent = '—';
     if (durEl) durEl.value = '';
     _dpActTotalMin = 0;
@@ -1239,26 +1242,40 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration').eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
+    .select('id,name,duration,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase')
+    .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
+  // instant paint using whatever previews are already cached
+  acts.forEach(e => {
+    e._previewPng = (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id] : null;
+  });
   const total = acts.reduce((s, a) => s + (a.duration || 0), 0);
   _dpActTotalMin = total;
   if (ctEl) ctEl.textContent = total ? `${total} min` : '—';
   if (durEl) durEl.value = total || '';
-  strip.innerHTML = acts.map(a =>
-    `<div class="dp-act-pill">
-      <input value="${(a.name||'').replace(/"/g,'&quot;')}" onblur="dpActSave('${a.id}',this.value)">
-      <span class="min">${a.duration ? a.duration + '′' : '—'}</span>
-      <button class="x" onclick="dpActDelete('${a.id}')"><i class="ti ti-x"></i></button>
-    </div>`
-  ).join('') + '<button class="dp-act-add no-print" onclick="dpActAdd()"><i class="ti ti-plus" style="font-size:13px"></i>Activity</button>';
+  strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
+
+  // fetch ONLY the uncached previews in the background (do NOT await)
+  const _reqSession = sessionId;
+  const need = [...new Set(acts.map(e => e.planner_exercise_id).filter(id => id && !(id in _dpPngCache)))];
+  if (need.length) {
+    window.sb.from('exercises').select('id, preview_png').eq('club_id', _dpClubId).in('id', need)
+      .then(({ data: drills }) => {
+        (drills || []).forEach(d => { _dpPngCache[d.id] = d.preview_png || null; });
+        need.forEach(id => { if (!(id in _dpPngCache)) _dpPngCache[id] = null; });
+        if (_dpCurrentSessionId !== _reqSession) return;
+        acts.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
+        strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
+      })
+      .catch(() => {});
+  }
   recalcTotals();
 }
 
 async function dpActAdd() {
   if (!await dpEnsureSession()) return;
-  const pos = document.querySelectorAll('#dpActStrip .dp-act-pill').length;
+  const pos = document.querySelectorAll('#dpActStrip .dp-ex').length;
   const { error } = await window.sb.from('session_exercises').insert({
     club_id: _dpClubId, session_id: _dpCurrentSessionId,
     name: 'New activity', phase: 'activation', duration: 5, position: pos
