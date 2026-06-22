@@ -1112,6 +1112,11 @@
     if (btn) btn.textContent = distTableVisible ? '⬅ Back to donut' : 'View as table';
   }
 
+  // Cache de sessionsData por fetchFrom. 7d/Microcycle/28d comparten fetchFrom (from28dStr)
+  // y antes disparaban la misma query 3 veces. Vive lo que dura la página: si se agrega un
+  // botón de refresh, hay que limpiarlo (_lmSessCache.clear()).
+  const _lmSessCache = new Map();
+
   // ── loadData ───────────────────────────────────────────────────────────────
   async function loadData(period) {
     currentPeriod = period;
@@ -1121,11 +1126,17 @@
     else if (period === 'Season')     { chartFrom = seasonStart;                        fetchFrom = seasonStart; }
     else                              { chartFrom = from28dStr;                         fetchFrom = from28dStr; }
 
-    const sessRes = await window.sb.from('training_sessions')
-      .select('id,session_date,rpe(player_id,rpe,duration,load)')
-      .eq('club_id', clubId).gte('session_date', fetchFrom).order('session_date');
-    if (sessRes.error) console.error('[LM] training_sessions+rpe error:', sessRes.error);
-    const sessionsData = sessRes.data || [];
+    let sessionsData;
+    if (_lmSessCache.has(fetchFrom)) {
+      sessionsData = _lmSessCache.get(fetchFrom);
+    } else {
+      const sessRes = await window.sb.from('training_sessions')
+        .select('id,session_date,rpe(player_id,rpe,duration,load)')
+        .eq('club_id', clubId).gte('session_date', fetchFrom).order('session_date');
+      if (sessRes.error) console.error('[LM] training_sessions+rpe error:', sessRes.error);
+      sessionsData = sessRes.data || [];
+      _lmSessCache.set(fetchFrom, sessionsData);
+    }
     const totalRpe = sessionsData.reduce((n, s) => n + (s.rpe||[]).length, 0);
     console.log(`[LM] period=${period} sessions=${sessionsData.length} rpe records=${totalRpe}`);
 
