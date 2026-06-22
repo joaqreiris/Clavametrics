@@ -497,6 +497,7 @@ let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAda
 let _dpTeamId = null, _dpTeams = [];
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
+const _dpPngCache = {};   // planner_exercise_id -> preview_png (or null when known-absent)
 
 // Orientation helpers for Planner exercises
 function _dpCalcOrientFromM2(m2) {
@@ -758,16 +759,26 @@ async function loadSessionExercises(sessionId) {
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
-  try {
-    const pids = [...new Set((_dpFieldExercises||[]).map(e=>e.planner_exercise_id).filter(Boolean))];
-    if (pids.length) {
-      const { data: drills } = await window.sb.from('exercises')
-        .select('id, preview_png').eq('club_id', _dpClubId).in('id', pids);
-      const pngById = {}; (drills||[]).forEach(d=>{ pngById[d.id] = d.preview_png || null; });
-      _dpFieldExercises.forEach(e=>{ e._previewPng = e.planner_exercise_id ? (pngById[e.planner_exercise_id]||null) : null; });
-    }
-  } catch(_) {}
+  // instant paint using whatever previews are already cached (others fall back to the generic pitch)
+  _dpFieldExercises.forEach(e => {
+    e._previewPng = (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id] : null;
+  });
   renderExerciseList(_dpFieldExercises);
+
+  // fetch ONLY the uncached previews in the background (do NOT await — keeps day load fast)
+  const _reqSession = sessionId;
+  const need = [...new Set(_dpFieldExercises.map(e => e.planner_exercise_id).filter(id => id && !(id in _dpPngCache)))];
+  if (need.length) {
+    window.sb.from('exercises').select('id, preview_png').eq('club_id', _dpClubId).in('id', need)
+      .then(({ data: drills }) => {
+        (drills || []).forEach(d => { _dpPngCache[d.id] = d.preview_png || null; });
+        need.forEach(id => { if (!(id in _dpPngCache)) _dpPngCache[id] = null; });  // remember misses, don't refetch
+        if (_dpCurrentSessionId !== _reqSession) return;   // user navigated away — don't paint stale
+        _dpFieldExercises.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
+        renderExerciseList(_dpFieldExercises);             // second paint: inject the diagrams
+      })
+      .catch(() => {});
+  }
   recalcTotals();
 }
 
