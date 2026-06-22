@@ -1126,13 +1126,18 @@
     else if (period === 'Season')     { chartFrom = seasonStart;                        fetchFrom = seasonStart; }
     else                              { chartFrom = from28dStr;                         fetchFrom = from28dStr; }
 
+    // Traemos 28 días extra hacia atrás del fetchFrom para que la ventana crónica del acwrTrend
+    // del chart esté bien poblada en los puntos iniciales (sin crónico subestimado / ACWR inflado).
+    // Es derivado determinístico de fetchFrom, así que la clave de _lmSessCache sigue siendo fetchFrom.
+    const lookbackFrom = new Date(new Date(fetchFrom + 'T12:00:00') - 28 * 86400000).toISOString().split('T')[0];
+
     let sessionsData;
     if (_lmSessCache.has(fetchFrom)) {
       sessionsData = _lmSessCache.get(fetchFrom);
     } else {
       const sessRes = await window.sb.from('training_sessions')
         .select('id,session_date,rpe(player_id,rpe,duration,load)')
-        .eq('club_id', clubId).gte('session_date', fetchFrom).order('session_date');
+        .eq('club_id', clubId).gte('session_date', lookbackFrom).order('session_date');
       if (sessRes.error) console.error('[LM] training_sessions+rpe error:', sessRes.error);
       sessionsData = sessRes.data || [];
       _lmSessCache.set(fetchFrom, sessionsData);
