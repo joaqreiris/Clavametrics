@@ -186,6 +186,8 @@
   .pl-stat-v sub { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:2px; }
 
   /* Exercise list */
+  #plExList{ display:none; max-height:340px; overflow-y:auto; }
+  #plExList.is-open{ display:block; }
   .pl-ex {
     display:flex; align-items:center; gap:8px;
     padding:8px 9px;
@@ -2675,8 +2677,19 @@
       list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No exercises yet. Click "New" to create one.</div>`;
       return;
     }
-    const items = exercises.filter(ex =>
-      !_exQuery || (ex.name||'').toLowerCase().includes(_exQuery) || (ex.objective||'').toLowerCase().includes(_exQuery));
+    const q = _exQuery;
+    let items;
+    if (!q) {
+      // empty query → 2 most recent (exercises is already ordered created_at desc)
+      items = exercises.slice(0, 2);
+    } else {
+      items = exercises.filter(ex =>
+        (ex.name||'').toLowerCase().includes(q) ||
+        (ex.objective||'').toLowerCase().includes(q) ||
+        (ex.orientation||'').toLowerCase().includes(q) ||
+        (ex.match_day||'').toString().toLowerCase().includes(q)
+      );  // all matches (scroll handles overflow)
+    }
     if (!items.length) {
       list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No exercises match.</div>`;
       return;
@@ -3040,7 +3053,18 @@
 
   // ── Initial load ─────────────────────────────────────────────────
   const _exSearchEl = document.getElementById('plExSearch');
-  if (_exSearchEl) _exSearchEl.addEventListener('input', () => { _exQuery = (_exSearchEl.value||'').toLowerCase().trim(); renderExerciseList(); });
+  const _exListEl = document.getElementById('plExList');
+  function _exOpen() { _exQuery = (_exSearchEl.value||'').toLowerCase().trim(); renderExerciseList(); _exListEl?.classList.add('is-open'); }
+  if (_exSearchEl) {
+    _exSearchEl.addEventListener('focus', _exOpen);
+    _exSearchEl.addEventListener('input', _exOpen);
+    _exSearchEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') { _exListEl?.classList.remove('is-open'); _exSearchEl.blur(); } });
+  }
+  document.addEventListener('click', (e) => {
+    if (!_exListEl) return;
+    if (e.target.closest('#plExSearch') || e.target.closest('#plExList')) return;
+    _exListEl.classList.remove('is-open');
+  });
   await loadExercises();
   updateSpaceOrientation();
 
