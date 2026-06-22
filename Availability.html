@@ -870,12 +870,14 @@
     // Try active microcycle from Supabase
     let mcMatchDate = null, mcRival = null;
     try {
-      const { data: mcs } = await window.sb.from('microcycles')
+      let _mcq = window.sb.from('microcycles')
         .select('start_date, end_date, name, match_date, rival')
         .eq('club_id', CLUB_ID)
         .lte('start_date', todayStr)
         .gte('end_date', todayStr)
         .limit(1);
+      if (_avTeamId) _mcq = _mcq.eq('team_id', _avTeamId);
+      const { data: mcs } = await _mcq;
       if (mcs?.length) {
         mcStart = mcs[0].start_date; mcEnd = mcs[0].end_date;
         mcMatchDate = mcs[0].match_date; mcRival = mcs[0].rival;
