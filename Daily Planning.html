@@ -178,110 +178,14 @@
 
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 
-  /* ===== PRINT ===== */
-  /* Letterhead solo-impresión (paper system): oculto en pantalla, visible en print */
-  .print-only{ display:none !important }
-  #dpPrintMeta{ display:none }
-
+  /* ===== PRINT — dedicated Daily Session Plan sheet (#dpPrintSheet) ===== */
+  #dpPrintSheet{ display:none; }
   @media print {
-    @page { size: A4; margin: 14mm 12mm; }
+    @page { size:A4; margin:0; }
+    .hub-shell, #hub-side-root, .hub-topbar, .dp-doc, .no-print { display:none !important; }
+    #dpPrintSheet{ display:block !important; }
+    .dsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    body.cm{ background:#fff }
-    /* Shared print system: el letterhead reemplaza el título genérico del editor */
-    .print-only{ display:flex !important }
-    .dp-head{ display:none !important }
-    .no-print, [data-noprint]{ display:none !important }
-    /* Hide chrome */
-    #hub-side-root, .hub-sidebar { display:none!important }
-    .hub-topbar { display:none!important }
-    .dp-head .meta { display:none!important }
-    .hub-main { margin-left:0!important; padding:0!important }
-    .hub-shell { display:block!important }
-    .dp-doc{ max-width:100%; padding:0; margin:0 }
-    .dp-head{ padding-bottom:8px; margin-bottom:10px; border-bottom:1px solid #333 }
-    .dp-head h1{ font-size:18px; color:#000 }
-    .dp-card{ box-shadow:none; border:1px solid #bbb; margin-bottom:8px; break-inside:avoid; background:#fff }
-    .dp-card-h{ padding:6px 12px; background:#f4f4f4; border-bottom:1px solid #ddd }
-    .dp-card-h h3{ font-size:11px; color:#222 }
-    .dp-card-b{ padding:8px 12px }
-    .dp-fg{ gap:6px 10px }
-    .dp-f label{ font-size:9px }
-    .dp-f input, .dp-f select, .dp-f textarea{ padding:4px 8px; font-size:11px; background:#fff; border:1px solid #ccc; color:#000 }
-    .dp-totals{ grid-template-columns:repeat(4,1fr); margin-bottom:8px }
-    .dp-totals .t{ padding:6px 10px }
-    .dp-totals .t .v{ font-size:16px }
-    .dp-totals .t .l, .dp-totals .t .delta{ font-size:9px }
-
-    /* Squad compaction */
-    .dp-squad-h{ display:none }
-    .dp-card-b{ padding:6px 10px 0 }
-    .dp-pl-group{ margin:4px 0 3px }
-    .dp-pl-group .l{ font-size:9px; min-width:28px }
-    .dp-players{ gap:2px 3px }
-    .dp-player.is-adapt{ background:#fff4e0 !important; border-color:#d97706 !important; color:#7c2d12 !important }
-    .dp-c-note{ display:block !important; background:#fff4e0 !important; border-left:2px solid #d97706 !important; color:#7c2d12 !important }
-    .dp-squad-out{ display:flex !important; border-top:0.5px solid #999 !important; color:#444 !important }
-    .dp-squad-out .o-lbl{ color:#a00 !important }
-    .dp-squad-out .o-pl{ text-decoration:line-through; text-decoration-color:#999 }
-    .dp-player .reason{ font-size:8px; color:#a00 !important; padding-right:2px }
-    .dp-player.unavailable{ opacity:1; color:#777 !important; text-decoration:line-through; text-decoration-color:#a00 }
-    .dp-player.unavailable .num{ background:#999 !important }
-    .dp-player.partial{ background:#fff4e0 !important; border-color:#d97706 !important; color:#7c2d12 !important }
-    .dp-player.partial .num{ background:#d97706 !important }
-    .dp-player.away{ background:#eff6ff !important; border-color:#bfdbfe !important; color:#1e40af !important }
-    .dp-player.away .num{ background:#3b82f6 !important }
-    .dp-player.injured{ background:#fee2e2 !important; border-color:#fca5a5 !important; color:#7f1d1d !important }
-    .dp-player.injured .num{ background:#dc2626 !important }
-    .dp-player.sick{ background:#fdf4ff !important; border-color:#e9d5ff !important; color:#581c87 !important }
-    .dp-player.sick .num{ background:#a855f7 !important }
-    .dp-player.partial .pos{ background:#7c2d12 !important }
-    .dp-squad-summary{ padding:5px 10px; font-size:10px; background:#f8f8f8; border-top:1px solid #ddd }
-    .dp-squad-summary .sep{ height:12px }
-
-    /* Activation */
-    .dp-act-strip{ gap:3px }
-    .dp-act-pill{ height:22px; padding:0 4px 0 8px; font-size:10.5px; background:#fff; border:1px solid #999 }
-    .dp-act-pill input{ font-size:10.5px; color:#000; width:auto }
-    .dp-act-pill .min{ height:16px; padding:0 6px; font-size:9.5px; background:#eee; border:1px solid #ccc; color:#000 }
-    .dp-act-pill .x{ display:none }
-
-    /* Exercises */
-    .dp-ex-grid{ grid-template-columns:repeat(3,1fr); gap:6px; padding:8px 10px }
-    .dp-ex{ break-inside:avoid; border:1px solid #bbb }
-    .dp-ex-thumb{ aspect-ratio:auto; height:50px }
-    .dp-ex-tag, .dp-ex-dur{ height:14px; padding:0 4px; font-size:8.5px }
-    .dp-ex-b{ padding:5px 8px 6px; gap:3px }
-    .dp-ex-name{ font-size:10.5px }
-    .dp-ex-meta{ font-size:9px; gap:4px }
-    .dp-ex-desc{ font-size:9.5px; color:#444 }
-    .dp-ex-foot{ display:none }
-
-    /* Physio adapt */
-    .dp-physio-alert{ padding:6px 8px; background:#fff4e0 !important; border:1px solid #d97706 !important }
-    .dp-physio-alert .av{ width:22px; height:22px; font-size:9px; background:#fff !important; color:#000 !important }
-    .dp-physio-alert .name{ font-size:11px; color:#000 !important }
-    .dp-physio-alert .note{ font-size:9.5px; color:#333 !important; margin-top:1px }
-    .dp-physio-alert .zones{ margin-top:2px }
-    .dp-physio-alert .z{ height:13px; padding:0 4px; font-size:8.5px; color:#000 !important; background:#fff !important }
-    .dp-physio-alert .act{ display:none }
-
-    /* Field-exercise drill diagrams (PNG) must print; cards must not split */
-    .dp-ex{ break-inside:avoid; page-break-inside:avoid; }
-    .dp-ex-thumb, .dp-ex-thumb.has-img, .dp-ex-img{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
-    .dp-ex-img{ width:100% !important; height:100% !important; object-fit:contain !important; }
-
-    /* B2: SESSION INFO as a fine text line (replaces the form), tighter physio + totals */
-    #dpPrintMeta{ display:block !important; font:500 11px/1.5 var(--cm-font-sans); color:#222; margin:0 0 10px; }
-    #dpPrintMeta b{ color:#000; font-weight:600; }
-    #dpPrintMeta .sep{ color:#999; margin:0 6px; }
-    .dp-session-card{ display:none !important; }              /* replaced by #dpPrintMeta */
-    .dp-physio-card.is-empty{ display:none !important; }        /* hide when no adaptations */
-    .dp-physio-card .dp-card-h .right, .dp-physio-alert .act{ display:none !important; }  /* drop "From Physio" link + Applied btn */
-    .dp-physio-alert{ grid-template-columns:24px 1fr; gap:6px; padding:5px 8px; background:#fff4e0 !important; border:1px solid #f0c98a !important; }
-    .dp-physio-alert .av{ width:20px;height:20px;font-size:9px }
-    .dp-physio-alert .name{ font-size:11px } .dp-physio-alert .note{ font-size:10px; margin-top:1px }
-    /* tighten totals a touch more */
-    .dp-totals .t{ padding:5px 8px } .dp-totals .t .v{ font-size:14px }
   }
 </style>
 </head>
@@ -317,8 +221,6 @@
           <button class="cm-btn is-primary is-sm" id="dpPublishBtn" onclick="dpPublish()"><i class="ti ti-share-2" style="font-size:14px"></i>Publish</button>
         </div>
       </header>
-
-      <div id="dpPrintMeta" class="print-only"></div>
 
       <!-- ===== SESSION INFO ===== -->
       <div class="dp-card dp-session-card">
@@ -505,6 +407,8 @@
   </div>
 </div>
 
+<div id="dpPrintSheet" aria-hidden="true"></div>
+
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
@@ -548,6 +452,7 @@ const _DP_POS_GROUP = {
 const _DP_POS_DISP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', DM:'DM', CM:'MF', MF:'MF', WG:'WG', ST:'ST', CF:'CF' };
 
 function dpRenderSquad(avMap) {
+  window._dpAvMap = avMap;
   function statusOf(p) {
     const av = avMap[p.id], inj = _dpInjMap[p.id];
     let cls = '', reason = '';
@@ -662,7 +567,6 @@ async function loadDay(dateStr) {
   const today = new Date().toISOString().split('T')[0];
   const subLabel = dateStr === today ? 'today' : '';
   document.getElementById('dpDateInput').value = dateStr;
-  const _phDate = document.getElementById('dpPhDate'); if (_phDate) _phDate.textContent = fmt;
 
   // Match microcycle for this date
   const mc = _dpMicrocycles.find(m => m.start_date <= dateStr && dateStr <= m.end_date);
@@ -713,27 +617,6 @@ async function loadDay(dateStr) {
   }
   _dpUpdatePublishBtn();
 
-  // Print-only meta line (compact text version of SESSION INFO; only non-empty fields)
-  {
-    const _mv = id => (document.getElementById(id)?.value || '').trim();
-    const _mcSel = document.getElementById('dpMicrocycle');
-    const _mcTxt = _mcSel && _mcSel.value ? (_mcSel.options[_mcSel.selectedIndex]?.text || '') : '';
-    const parts = [];
-    const tt = _mv('dpSessionType');        if (tt) parts.push(`<b>${tt}</b>`);
-    const t1 = _mv('dpStartTime'), t2 = _mv('dpEndTime'); if (t1||t2) parts.push(`${t1||'—'}–${t2||'—'}`);
-    if (_mcTxt) parts.push(_mcTxt);
-    const md = _mv('dpMatchDay');            if (md) parts.push(`MD ${md}`);
-    const or = _mv('dpOrientation');         if (or) parts.push(`Orient: ${or}`);
-    const fo = _mv('dpFocus');               if (fo) parts.push(`Focus: ${fo}`);
-    const rp = _mv('dpEstRpe');              if (rp) parts.push(`RPE ${rp}`);
-    const title = _mv('dpSessionTitle');
-    const notes = _mv('dpNotes');
-    const pm = document.getElementById('dpPrintMeta');
-    if (pm) pm.innerHTML = (title ? `<div style="font:700 14px/1.2 var(--cm-font-sans);color:#000;margin-bottom:3px">${title}</div>` : '')
-      + parts.join('<span class="sep">·</span>')
-      + (notes ? `<div style="margin-top:4px;color:#444">${notes}</div>` : '');
-  }
-
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
 
   const avMap = {};
@@ -776,7 +659,10 @@ async function loadDay(dateStr) {
     document.getElementById('dpPhysioList').innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No physio adaptations for this session.</div>';
     window._dpAdaptPids = new Set();
   }
+
+  dpRenderPrintSheet();
 }
+window.addEventListener('beforeprint', dpRenderPrintSheet);
 
 // ── Session exercises ──
 const CAT_CLS = { physical:'fis', tactical:'tac', technical:'tec', strength:'str', mobility:'mob', other:'oth' };
@@ -929,6 +815,179 @@ function dpUpdateAu() {
   const elN = document.getElementById('dpTotAuNote');
   if (elV) elV.innerHTML = au ? `${au}<sub>AU</sub>` : '—<sub>AU</sub>';
   if (elN) elN.textContent = (rpe && !dur) ? 'add exercises first' : (dur && !rpe) ? 'set RPE above' : '';
+}
+
+// ── Dedicated print sheet (ClavaMetrics "Daily Session Plan") — built from live data, NO physio ──
+function dpRenderPrintSheet() {
+  const host = document.getElementById('dpPrintSheet');
+  if (!host) return;
+  try {
+    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
+    const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
+    const val = id => (document.getElementById(id)?.value || '').trim();
+    const FONT = "'Geist',system-ui,sans-serif", MONO = "'Geist Mono',ui-monospace,monospace";
+
+    const club = window._dpClub || {};
+    let accent = club.primary_color || club.accent_color || '';
+    accent = /^#?[0-9a-fA-F]{6}$/.test(accent) ? (accent[0]==='#'?accent:'#'+accent) : '#15803D';
+    const clubName = club.name || 'Club';
+    const teamName = (_dpTeams||[]).find(t=>t.id===_dpTeamId)?.name || '';
+    const today = new Date().toISOString().split('T')[0];
+    const dateLabel = _dpFmt(_dpCurrentDate || today);
+
+    // microcycle + next match
+    const mcSel = document.getElementById('dpMicrocycle');
+    const mcTxt = mcSel && mcSel.value ? (mcSel.options[mcSel.selectedIndex]?.text || '') : '';
+    const mc = (_dpMicrocycles||[]).find(m => m.id === (mcSel && mcSel.value));
+    const md  = val('dpMatchDay');
+
+    // 1) Letterhead
+    const crest = club.logo_url
+      ? `<img src="${esc(club.logo_url)}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;display:block">`
+      : `<div style="width:46px;height:46px;border-radius:50%;background:var(--club-accent);color:#fff;display:flex;align-items:center;justify-content:center;font:700 17px ${FONT}">${esc(mono(clubName))}</div>`;
+    const head = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+      <div style="display:flex;align-items:center;gap:12px">${crest}
+        <div><div style="font:700 17px ${FONT};color:#15181D">${esc(clubName)}</div>
+        ${teamName?`<div style="font:500 11px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-top:2px">${esc(teamName)}</div>`:''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font:800 13px ${FONT};letter-spacing:.1em;text-transform:uppercase;color:var(--club-accent)">Daily session</div>
+        <div style="font:500 12px ${MONO};color:#5B6470;margin-top:3px">${esc(dateLabel)}</div>
+      </div>
+    </div><div style="height:2px;background:#15181D;margin:12px 0 14px"></div>`;
+
+    // 2) Session line + meta grid
+    const title = val('dpSessionTitle'), stype = val('dpSessionType'), rpe = val('dpEstRpe');
+    const sessionLine = (title || stype || rpe) ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:${(title||stype)?'10px':'0'}">
+      <div>${title?`<span style="font:700 16px ${FONT};color:#15181D">${esc(title)}</span>`:''}${stype?`<span style="font:500 12px ${FONT};color:#5B6470;margin-left:${title?'8px':'0'}">${esc(cap(stype))}</span>`:''}</div>
+      ${rpe?`<div style="font:700 11px ${MONO};color:var(--club-accent);border:1px solid var(--club-accent);padding:3px 9px;border-radius:999px;white-space:nowrap">RPE ${esc(rpe)}</div>`:''}
+    </div>` : '';
+
+    const mdBadge = md ? `<span style="display:inline-block;font:700 9px ${MONO};color:#fff;background:var(--club-accent);padding:2px 6px;border-radius:4px">MD ${esc(md)}</span>` : '';
+    const cells = [];
+    const t1 = val('dpStartTime'), t2 = val('dpEndTime');
+    if (t1||t2) cells.push({l:'Time', v:`${esc(t1||'—')}–${esc(t2||'—')}`, span:1});
+    if (mcTxt)  cells.push({l:'Microcycle', v:esc(mcTxt), span:1});
+    if (md || mc?.rival) cells.push({l:'Next match', v:`${mc?.rival?esc(mc.rival)+' ':''}${mdBadge}`, span:1});
+    const or = val('dpOrientation'); if (or) cells.push({l:'Orientation', v:esc(cap(or)), span:1});
+    const fo = val('dpFocus');       if (fo) cells.push({l:'Focus', v:esc(cap(fo)), span:2});
+    const notes = val('dpNotes');    if (notes) cells.push({l:'Notes', v:esc(notes), span:2, muted:true});
+    const metaGrid = cells.length ? `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:14px">
+      ${cells.map(c=>`<div style="grid-column:span ${c.span};background:#fff;padding:8px 11px">
+        <div style="font:600 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF">${esc(c.l)}</div>
+        <div style="font:${c.muted?'500 11.5px':'600 13px'} ${FONT};color:${c.muted?'#5B6470':'#15181D'};margin-top:3px">${c.v}</div>
+      </div>`).join('')}
+    </div>` : '';
+
+    // 3) KPI strip
+    const actMin = _dpActTotalMin || 0;
+    const fieldMin = (_dpFieldExercises||[]).reduce((s,e)=>s+(e.duration||0),0);
+    const total = actMin + fieldMin;
+    const au = (parseInt(rpe)||0) * total || 0;
+    const kpis = [['Activation', actMin?actMin+'′':'—'], ['Field', fieldMin?fieldMin+'′':'—'], ['Total', total?total+'′':'—'], ['Duration', total?total+'′':'—'], ['Planned AU', au?String(au):'—', true]];
+    const kpiStrip = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:16px">
+      ${kpis.map(([l,v,acc])=>`<div style="background:#fff;padding:10px 8px;text-align:center">
+        <div style="font:700 19px ${MONO};color:${acc?'var(--club-accent)':'#15181D'}">${esc(v)}</div>
+        <div style="font:600 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF;margin-top:3px">${esc(l)}</div>
+      </div>`).join('')}
+    </div>`;
+
+    // section title helper
+    const sectionTitle = txt => `<div style="display:flex;align-items:center;gap:10px;margin:0 0 9px"><span style="font:700 11px ${FONT};letter-spacing:.07em;text-transform:uppercase;color:#15181D">${esc(txt)}</span><span style="flex:1;height:1px;background:#E7E7E4"></span></div>`;
+
+    // 4) Squad — recompute status like dpRenderSquad
+    const avMap = window._dpAvMap || {};
+    const statusOf = p => {
+      const av=avMap[p.id], inj=_dpInjMap[p.id]; let cls='', reason='';
+      if (inj){ cls='partial'; reason=inj.body_area||inj.injury_type||'inj'; }
+      if (av?.status==='away'){ cls='away'; reason=av.notes||'away'; }
+      else if (av?.status==='unavailable'){ cls='unavailable'; reason=av.notes||'out'; }
+      else if (av?.status==='injured'){ cls='injured'; reason=av.notes||'inj'; }
+      else if (av?.status==='sick'){ cls='sick'; reason=av.notes||'sick'; }
+      else if (av?.status==='partial'||av?.status==='limited'){ if(!cls){ cls='partial'; reason=av.notes||reason||'partial'; } }
+      return { cls, reason };
+    };
+    const lastName = p => (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '';
+    const trainees=[], outs=[];
+    (_dpPlayers||[]).forEach(p => { (['','partial'].includes(statusOf(p).cls) ? trainees : outs).push(p); });
+    const groups = {};
+    trainees.forEach(p => { const g=_DP_POS_GROUP[(p.position||'').toUpperCase()]||{l:(p.position||'?').toUpperCase(),o:9}; (groups[g.l]=groups[g.l]||{o:g.o,list:[]}).list.push(p); });
+    const posBadge = lbl => `<span style="display:inline-block;font:700 9px ${MONO};letter-spacing:.04em;color:#fff;background:var(--club-accent);border-radius:4px;padding:2px 6px;margin-right:8px;white-space:nowrap">${esc(lbl)}</span>`;
+    const traineeRows = Object.entries(groups).sort((a,b)=>a[1].o-b[1].o).map(([lbl,{list}])=>
+      `<div style="display:flex;align-items:baseline;gap:4px;margin-bottom:5px;flex-wrap:wrap">${posBadge(`${lbl} · ${list.length}`)}
+        <span style="font:400 12px ${FONT};color:#15181D">${list.map(p=>`<span style="white-space:nowrap;margin-right:10px"><span style="color:#9CA3AF;font-family:${MONO};font-size:10.5px">${esc(p.number??'—')}</span> <b style="font-weight:600">${esc(lastName(p))}</b></span>`).join('')}</span>
+      </div>`).join('');
+    const outRow = outs.length ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #E7E7E4">
+      <span style="font:700 9px ${MONO};color:#C0392B;margin-right:8px;text-transform:uppercase">Out · ${outs.length}</span>
+      <span style="font:400 11.5px ${FONT};color:#8A93A0">${outs.map(p=>{const r=statusOf(p).reason; return `<span style="margin-right:10px;text-decoration:line-through;text-decoration-color:#C9CDD3"><span style="font-family:${MONO};font-size:10px">${esc(p.number??'—')}</span> ${esc(lastName(p))}${r?` · ${esc(r)}`:''}</span>`;}).join('')}</span>
+    </div>` : '';
+    let avCt=0,partCt=0,awayCt=0;
+    (_dpPlayers||[]).forEach(p => { const av=avMap[p.id], inj=_dpInjMap[p.id];
+      if (av?.status==='away') awayCt++;
+      else if (['unavailable','injured','sick'].includes(av?.status)) { /* out */ }
+      else if (inj || av?.status==='partial' || av?.status==='limited') partCt++;
+      else avCt++;
+    });
+    const availN = avCt + partCt;
+    const squadBlock = (_dpPlayers||[]).length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`Squad · ${availN} available`)}
+      ${traineeRows}${outRow}
+      <div style="font:500 10.5px ${MONO};color:#8A93A0;margin-top:6px">${availN} available · ${partCt} partial · ${awayCt} away</div>
+    </div>` : '';
+
+    // 5) Activation (only if present)
+    const acts = window._dpActItems || [];
+    const actBlock = acts.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`Activation · ${acts.length} · ${actMin} min`)}
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${acts.map(a=>`<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 10px;font:500 11.5px ${FONT};color:#15181D">${esc(a.name||'—')}${a.duration?`<span style="font-family:${MONO};font-size:10px;color:#8A93A0">${a.duration}′</span>`:''}</span>`).join('')}</div>
+    </div>` : '';
+
+    // 6) Field exercises
+    const fx = _dpFieldExercises || [];
+    const orientShort = e => { const o=(e.calc_orientation||'').toUpperCase(); const m=_DP_ORIENT[o]; return m?m.short:(o?o.slice(0,3):''); };
+    const fieldBlock = fx.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`Field exercises · ${fx.length} · ${fieldMin} min`)}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${fx.map(e=>{
+        const tag = orientShort(e);
+        const dur = e.duration?`${e.duration}′`:'';
+        const meta = [];
+        if (e.players_count) meta.push(`${e.players_count} pl`);
+        if (e.m2_per_player) meta.push(`${e.m2_per_player} m²/p`);
+        if (e.field_width && e.field_height) meta.push(`${e.field_width}×${e.field_height} m`);
+        const thumb = e._previewPng
+          ? `<img src="${esc(e._previewPng)}" style="display:block;width:100%;height:auto">`
+          : `<div style="width:100%;height:124px;background:#1F7A43"></div>`;
+        return `<div style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
+          <div style="position:relative;background:#1F7A43;line-height:0">${thumb}
+            ${tag?`<span style="position:absolute;top:6px;left:6px;background:var(--club-accent);color:#fff;font:700 8.5px ${MONO};letter-spacing:.05em;padding:2px 6px;border-radius:4px;line-height:1.2">${esc(tag)}</span>`:''}
+            ${dur?`<span style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;font:600 9px ${MONO};padding:2px 6px;border-radius:4px;line-height:1.2">${esc(dur)}</span>`:''}
+          </div>
+          <div style="padding:8px 10px 9px">
+            <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}</div>
+            ${meta.length?`<div style="font:500 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
+          </div>
+        </div>`;
+      }).join('')}</div>
+    </div>` : '';
+
+    // 7) Footer
+    const midParts = [];
+    if (mc?.name) midParts.push(mc.name);
+    if (md) midParts.push(`MD ${md}`);
+    if (mc?.rival) midParts.push(`vs ${mc.rival}`);
+    const footer = `<div style="margin-top:auto;display:flex;justify-content:space-between;gap:10px;padding-top:9px;border-top:1px solid #E7E7E4;font:500 9.5px ${MONO};color:#A3AAB3">
+      <span>ClavaMetrics · Daily Session Plan</span>
+      <span>${esc(midParts.join(' · '))}</span>
+      <span>${esc(clubName)}${teamName?' · '+esc(teamName):''}</span>
+    </div>`;
+
+    host.innerHTML = `<div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
+      ${head}${sessionLine}${metaGrid}${kpiStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
+    </div>`;
+  } catch (e) {
+    console.warn('dpRenderPrintSheet failed', e);
+  }
 }
 
 async function deleteExercise(seid) {
@@ -1167,12 +1226,14 @@ async function loadActivationActivities(sessionId) {
     if (ctEl) ctEl.textContent = '—';
     if (durEl) durEl.value = '';
     _dpActTotalMin = 0;
+    window._dpActItems = [];
     recalcTotals();
     return;
   }
   const { data } = await window.sb.from('session_exercises')
     .select('id,name,duration').eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
+  window._dpActItems = acts;
   const total = acts.reduce((s, a) => s + (a.duration || 0), 0);
   _dpActTotalMin = total;
   if (ctEl) ctEl.textContent = total ? `${total} min` : '—';
@@ -1298,32 +1359,12 @@ async function dpExportPDF() {
   const clubId = await window.getClubId();
   _dpClubId = clubId;
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  window._dpClub = club;
 
   if (club) await window.applyClubTheme();
 
   _dpProfile = profile;
   await dpInitTeamSwitch();
-
-  // ── Print-only letterhead (paper system: crest + club + "Daily session" + session date) ──
-  (function dpBuildLetterhead(){
-    const doc = document.querySelector('.dp-doc');
-    if (!doc || doc.querySelector('.ph-head.print-only')) return;
-    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
-    const clubName = (club && club.name) ? club.name : '—';
-    const teamName = (_dpTeams||[]).find(t=>t.id===_dpTeamId)?.name || '';
-    const crest = (club && club.logo_url) ? `<img src="${esc(club.logo_url)}" alt="">` : esc(mono(club&&club.name));
-    const brand = club && (club.primary_color || club.accent_color);
-    if (brand && /^#?[0-9a-fA-F]{6}$/.test(brand)) document.documentElement.style.setProperty('--accent', brand[0]==='#'?brand:'#'+brand);
-    const today = new Date().toISOString().split('T')[0];
-    const dateStr = _dpCurrentDate || (document.getElementById('dpDateInput')?.value) || today;
-    const head = document.createElement('header');
-    head.className = 'ph-head print-only';
-    head.innerHTML = `<div class="ph-crest">${crest}</div>`
-      + `<div><div class="ph-club">${esc(clubName)}</div>${teamName?`<div class="ph-sub">${esc(teamName)}</div>`:''}</div>`
-      + `<div class="ph-right"><div class="ph-doc">Daily session</div><div class="ph-date" id="dpPhDate">${esc(_dpFmt(dateStr))}</div></div>`;
-    doc.insertBefore(head, doc.firstChild);
-  })();
 
   const nameEl = document.getElementById('dpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
