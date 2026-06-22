@@ -146,6 +146,9 @@
   .dp-ex:hover{border-color:var(--cm-border-strong)}
   .dp-ex-thumb{position:relative;aspect-ratio:16/9;background:url(assets/field.jpg) center/cover no-repeat;border-bottom:1px solid var(--cm-border-soft)}
   .dp-ex-thumb.has-img{ position:relative; background:#2f7d4c; aspect-ratio:auto; height:auto; padding:0; border-bottom:1px solid var(--cm-border-soft); }
+  .dp-ex-thumb.is-loading{ background:#234d33; }
+  .dp-ex-skel{ position:absolute; inset:0; background:linear-gradient(100deg,#2a5a3c 30%,#356b49 50%,#2a5a3c 70%); background-size:200% 100%; animation:dpSkel 1.1s ease-in-out infinite; }
+  @keyframes dpSkel{ 0%{background-position:200% 0} 100%{background-position:-200% 0} }
   .dp-ex-img{ position:static; display:block; width:100%; height:auto; object-fit:contain; }
   .dp-ex-tag{position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:4px;font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;backdrop-filter:blur(4px);background:rgba(0,0,0,0.55);color:#fff;z-index:2}
   .dp-ex-tag.tac{background:rgba(59,130,246,0.92);color:#fff}
@@ -748,11 +751,17 @@ function dpExerciseCardHTML(e) {
       const players = e.players_count;
       const w = e.field_width, h = e.field_height;
       const fieldStr = (w && h) ? `${w}×${h}m` : null;
+      const _resolved = (e.planner_exercise_id in _dpPngCache);     // preview lookup finished (may be null)
+      const _loading  = !!e.planner_exercise_id && !_resolved && !e._previewPng;
       return `<div class="dp-ex" data-seid="${e.id}">
         ${e._previewPng ? `<div class="dp-ex-thumb has-img">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
           <img class="dp-ex-img" src="${e._previewPng}" alt="">
+        </div>` : _loading ? `<div class="dp-ex-thumb is-loading">
+          <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
+          <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
+          <div class="dp-ex-skel"></div>
         </div>` : `<div class="dp-ex-thumb">
           <span class="dp-ex-tag ${tagCls}">${tagLbl}</span>
           <span class="dp-ex-dur"><i class="ti ti-clock"></i>${dur}</span>
