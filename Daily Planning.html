@@ -682,7 +682,7 @@ async function loadDay(dateStr) {
     window._dpAdaptPids = new Set();
   }
 
-  dpRenderPrintSheet();
+  await dpRenderPrintSheet();
 }
 window.addEventListener('beforeprint', dpRenderPrintSheet);
 
@@ -844,10 +844,18 @@ function dpUpdateAu() {
 }
 
 // ── Dedicated print sheet (ClavaMetrics "Daily Session Plan") — built from live data, NO physio ──
-function dpRenderPrintSheet() {
+async function dpRenderPrintSheet() {
   const host = document.getElementById('dpPrintSheet');
   if (!host) return;
   try {
+    // Resolve signed-URL previews (base64 fallback) for field + activation before building the sheet.
+    const _allIds = [
+      ...(_dpFieldExercises||[]).map(e=>e.planner_exercise_id),
+      ...((window._dpActItems)||[]).map(e=>e.planner_exercise_id)
+    ].filter(Boolean);
+    try { await dpResolvePreviews(_allIds); } catch(_) {}
+    const _img = e => (e.planner_exercise_id && (e.planner_exercise_id in _dpPngCache)) ? _dpPngCache[e.planner_exercise_id]
+                      : (e._previewImg || e._previewPng || null);
     const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
     const cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
@@ -969,39 +977,41 @@ function dpRenderPrintSheet() {
       <div style="font:500 10.5px ${MONO};color:#8A93A0;margin-top:6px">${availN} available · ${partCt} partial · ${awayCt} away</div>
     </div>` : '';
 
-    // 5) Activation (only if present)
+    // Shared diagram-card renderer for both Field and Activation
+    const orientShort = e => { const o=(e.calc_orientation||'').toUpperCase(); const m=_DP_ORIENT[o]; return m?m.short:(o?o.slice(0,3):''); };
+    const printExCard = e => {
+      const tag = orientShort(e); const dur = e.duration?`${e.duration}′`:'';
+      const meta = [];
+      if (e.players_count) meta.push(`${e.players_count} pl`);
+      if (e.m2_per_player) meta.push(`${e.m2_per_player} m²/p`);
+      if (e.field_width && e.field_height) meta.push(`${e.field_width}×${e.field_height} m`);
+      const src = _img(e);
+      const thumb = src ? `<img src="${esc(src)}" style="display:block;width:100%;height:auto">`
+                        : `<div style="width:100%;height:124px;background:#1F7A43"></div>`;
+      return `<div style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
+        <div style="position:relative;background:#1F7A43;line-height:0">${thumb}
+          ${tag?`<span style="position:absolute;top:6px;left:6px;background:var(--club-accent);color:#fff;font:700 8.5px ${MONO};letter-spacing:.05em;padding:2px 6px;border-radius:4px;line-height:1.2">${esc(tag)}</span>`:''}
+          ${dur?`<span style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;font:600 9px ${MONO};padding:2px 6px;border-radius:4px;line-height:1.2">${esc(dur)}</span>`:''}
+        </div>
+        <div style="padding:8px 10px 9px">
+          <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}</div>
+          ${meta.length?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
+        </div>
+      </div>`;
+    };
+
+    // 5) Activation (only if present) — diagram cards like Field
     const acts = window._dpActItems || [];
     const actBlock = acts.length ? `<div style="margin-bottom:16px">
       ${sectionTitle(`Activation · ${acts.length} · ${actMin} min`)}
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${acts.map(a=>`<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid #E7E7E4;border-radius:999px;padding:4px 10px;font:500 11.5px ${FONT};color:#15181D">${esc(a.name||'—')}${a.duration?`<span style="font-family:${MONO};font-size:10px;color:#8A93A0">${a.duration}′</span>`:''}</span>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${acts.map(printExCard).join('')}</div>
     </div>` : '';
 
     // 6) Field exercises
     const fx = _dpFieldExercises || [];
-    const orientShort = e => { const o=(e.calc_orientation||'').toUpperCase(); const m=_DP_ORIENT[o]; return m?m.short:(o?o.slice(0,3):''); };
     const fieldBlock = fx.length ? `<div style="margin-bottom:16px">
       ${sectionTitle(`Field exercises · ${fx.length} · ${fieldMin} min`)}
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${fx.map(e=>{
-        const tag = orientShort(e);
-        const dur = e.duration?`${e.duration}′`:'';
-        const meta = [];
-        if (e.players_count) meta.push(`${e.players_count} pl`);
-        if (e.m2_per_player) meta.push(`${e.m2_per_player} m²/p`);
-        if (e.field_width && e.field_height) meta.push(`${e.field_width}×${e.field_height} m`);
-        const thumb = e._previewPng
-          ? `<img src="${esc(e._previewPng)}" style="display:block;width:100%;height:auto">`
-          : `<div style="width:100%;height:124px;background:#1F7A43"></div>`;
-        return `<div style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
-          <div style="position:relative;background:#1F7A43;line-height:0">${thumb}
-            ${tag?`<span style="position:absolute;top:6px;left:6px;background:var(--club-accent);color:#fff;font:700 8.5px ${MONO};letter-spacing:.05em;padding:2px 6px;border-radius:4px;line-height:1.2">${esc(tag)}</span>`:''}
-            ${dur?`<span style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;font:600 9px ${MONO};padding:2px 6px;border-radius:4px;line-height:1.2">${esc(dur)}</span>`:''}
-          </div>
-          <div style="padding:8px 10px 9px">
-            <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}</div>
-            ${meta.length?`<div style="font:500 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
-          </div>
-        </div>`;
-      }).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${fx.map(printExCard).join('')}</div>
     </div>` : '';
 
     // 7) Footer
@@ -1390,7 +1400,7 @@ async function dpExportPDF() {
     const { default: html2canvas } = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.min.js');
     const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
     // Build + temporarily reveal the dedicated print sheet off-screen so html2canvas can capture it
-    dpRenderPrintSheet();
+    await dpRenderPrintSheet();
     if (host) { host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1'; }
     const el = document.querySelector('#dpPrintSheet .dsp-sheet') || host;
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
