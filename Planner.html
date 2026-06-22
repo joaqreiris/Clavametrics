@@ -2849,9 +2849,14 @@
       // 2) pitch LINES svg from #plPitch, drawn at 0,0,W,H (its own preserveAspectRatio matches the screen)
       const pitchSvgEl = document.querySelector('#plPitch svg');
       if (pitchSvgEl) {
-        // inline --pf-line (var() doesn't resolve in a standalone SVG drawn as an image)
+        // an <img> SVG needs explicit width/height to rasterize (else it draws blank),
+        // and var(--pf-line) doesn't resolve in a standalone SVG → inline the real colour
         const lineColor = (getComputedStyle(pitchSvgEl).getPropertyValue('--pf-line').trim()) || 'rgba(255,255,255,0.92)';
-        const svgStr = new XMLSerializer().serializeToString(pitchSvgEl).replace(/var\(--pf-line\)/g, lineColor);
+        const clone = pitchSvgEl.cloneNode(true);
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        clone.setAttribute('width', W);
+        clone.setAttribute('height', H);
+        const svgStr = new XMLSerializer().serializeToString(clone).replace(/var\(--pf-line\)/g, lineColor);
         const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
         await new Promise((resolve) => {
           const img = new Image();
