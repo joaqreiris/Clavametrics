@@ -775,15 +775,6 @@
 
   console.log('[LM] club_id usado:', clubId);
 
-  // ── DIAGNÓSTICO RLS ────────────────────────────────────────────────────────
-  const { data: rpeData, error: rpeError } = await window.sb
-    .from('rpe').select('*, training_sessions(session_date)').eq('club_id', clubId);
-  console.log('[DIAG] RPE data:', rpeData?.length, '| error:', rpeError, '| first row:', rpeData?.[0]);
-  const { data: wellnessData, error: wellnessError } = await window.sb
-    .from('wellness').select('*').eq('club_id', clubId);
-  console.log('[DIAG] Wellness data:', wellnessData?.length, '| error:', wellnessError, '| first row:', wellnessData?.[0]);
-  // ── FIN DIAGNÓSTICO ────────────────────────────────────────────────────────
-
   await lmInitTeamSwitch();
 
   let _lmPlayersQ = window.sb.from('players')
