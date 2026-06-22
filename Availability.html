@@ -266,6 +266,14 @@
   .av-cell-mins { display:inline-block; font:600 10px/1 var(--cm-font-mono); color:var(--cm-info); margin-top:2px; }
   .av-cell-match { background:rgba(34,197,94,0.06); }
   .av-cell-match-min { font:700 11px/1 var(--cm-font-mono); color:var(--cm-success); }
+  .av-cell-min-input {
+    width: 38px; text-align: center; border: none; background: transparent;
+    font: 700 11px/1 var(--cm-font-mono); color: var(--cm-success);
+    outline: 1px solid var(--cm-accent); border-radius: 4px; padding: 2px 0;
+    -moz-appearance: textfield;
+  }
+  .av-cell-min-input::-webkit-outer-spin-button,
+  .av-cell-min-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
   /* Summary column on the right */
   .av-matrix th.col-sum,
@@ -1081,6 +1089,62 @@
       td.classList.toggle('is-selected');
     }
     updateBulk();
+  });
+
+  // ── Double-click: edit match minutes inline ──
+  matrix.addEventListener('dblclick', e => {
+    const td = e.target.closest('td.av-cell-match');
+    if (!td || isBlockedCell(td)) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const pid  = td.dataset.pid;
+    const date = td.dataset.date;
+    if (!pid || !date) return;
+
+    const minSpan = td.querySelector('.av-cell-match-min');
+    const current = minSpan ? (parseInt(minSpan.textContent, 10) || 90) : 90;
+    const prevHTML = td.innerHTML;
+    const prevClass = td.className;
+
+    td.innerHTML = `<input type="number" class="av-cell-min-input" min="0" max="200" value="${current}">`;
+    const input = td.querySelector('.av-cell-min-input');
+    input.addEventListener('mousedown', ev => ev.stopPropagation());
+    input.addEventListener('click', ev => ev.stopPropagation());
+    input.focus();
+    input.select();
+
+    let done = false;
+    const commit = () => {
+      if (done) return;
+      done = true;
+      let n = parseInt(input.value, 10);
+      if (isNaN(n)) n = current;
+      n = Math.max(0, Math.min(200, n));
+      if (n > 0) {
+        td.className = 'cell av-cell-match';
+        td.innerHTML = `<span class="av-cell-match-min">${n}′</span>`;
+      } else {
+        td.className = 'cell';
+        td.innerHTML = dotEl('available');
+      }
+      avMap[pid + '|' + date] = { player_id: pid, date, status: 'available', minutes: n };
+      saveAvailability(pid, date, 'available', n);
+      updateRowSummary(pid);
+      recalcKPIs();
+    };
+    const cancel = () => {
+      if (done) return;
+      done = true;
+      td.className = prevClass;
+      td.innerHTML = prevHTML;
+    };
+
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+    });
   });
 
   document.getElementById('clearSel').addEventListener('click', () => {
