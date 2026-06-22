@@ -211,6 +211,13 @@
   .pl-ex.is-active .pl-ex-n { background:var(--cm-accent); color:var(--cm-fg-on-accent); border-color:var(--cm-accent); }
   .pl-ex-thumb{ width:56px; height:auto; aspect-ratio:auto; border-radius:4px; overflow:hidden; flex:none; background:#2f7d4c; border:1px solid var(--cm-border-soft); }
   .pl-ex-thumb img{ width:100%; height:auto; display:block; }
+  .pl-ex-hover{ position:fixed; z-index:1200; display:none; pointer-events:none; width:300px; background:var(--cm-surface); border:1px solid var(--cm-border-strong); border-radius:10px; box-shadow:var(--cm-shadow-2); overflow:hidden; }
+  .pl-ex-hover.is-on{ display:block; }
+  .pl-ex-hover .ph-img{ width:100%; height:auto; display:block; background:#2f7d4c; }
+  .pl-ex-hover .ph-meta{ padding:8px 10px; }
+  .pl-ex-hover .ph-name{ font:600 12.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .pl-ex-hover .ph-sub{ font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:3px; }
+  .pl-ex-hover .ph-empty{ padding:18px; text-align:center; color:var(--cm-fg-faint); font:var(--cm-body-sm); }
   .pl-ex-body { flex:1; min-width:0; }
   .pl-ex-title { font:600 12px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pl-ex-meta  { font:500 10px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:2px; }
@@ -715,6 +722,7 @@
 </style>
 </head>
 <body class="cm">
+<div id="plExHover" class="pl-ex-hover"></div>
 
 <div class="hub-shell" data-screen-label="10 Planner">
 
@@ -2695,6 +2703,28 @@
       el.addEventListener('click', () => selectExercise(el.dataset.exId)));
     list.querySelectorAll('.pl-ex-del').forEach(btn =>
       btn.addEventListener('click', e => { e.stopPropagation(); deleteExercise(btn.dataset.delEx); }));
+
+    // Hover preview popover (preview only — never loads into the canvas)
+    const hv = document.getElementById('plExHover');
+    list.querySelectorAll('.pl-ex').forEach(el => {
+      el.addEventListener('mouseenter', () => {
+        const ex = exercises.find(e => e.id === el.dataset.exId);
+        if (!ex) return;
+        const area = (ex.players_count>0 && ex.field_width>0 && ex.field_height>0) ? Math.round((ex.field_width*ex.field_height)/ex.players_count) : null;
+        hv.innerHTML = (ex.preview_png ? `<img class="ph-img" src="${ex.preview_png}" alt="">` : `<div class="ph-empty">No preview yet</div>`)
+          + `<div class="ph-meta"><div class="ph-name">${ex.name||'Untitled'}</div>`
+          + `<div class="ph-sub">${ex.players_count?ex.players_count+' pl':'—'}${area?' · '+area+' m²/p':''}${ex.duration?' · '+ex.duration+'′':''}</div></div>`;
+        hv.classList.add('is-on');
+      });
+      el.addEventListener('mousemove', (ev) => {
+        const pad = 14, w = 300, h = hv.offsetHeight || 240;
+        let x = ev.clientX + pad, y = ev.clientY + pad;
+        if (x + w > window.innerWidth)  x = ev.clientX - w - pad;
+        if (y + h > window.innerHeight) y = window.innerHeight - h - pad;
+        hv.style.left = Math.max(8,x)+'px'; hv.style.top = Math.max(8,y)+'px';
+      });
+      el.addEventListener('mouseleave', () => hv.classList.remove('is-on'));
+    });
   }
 
   async function selectExercise(id) {
