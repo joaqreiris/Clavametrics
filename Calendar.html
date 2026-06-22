@@ -1816,7 +1816,7 @@ function renderGrid() {
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
 
     // In player view hide the + Add button
-    const addBtn = isPlayerView ? '' : `<button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">+ Add</button>`;
+    const addBtn = (isPlayerView || hasDayOff) ? '' : `<button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">+ Add</button>`;
 
     html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}${hasDayOff ? ' is-dayoff' : ''}" data-date="${dateStr}">
       <div class="mc-day-head">
@@ -2352,6 +2352,10 @@ function calCrestSetInitials(name) {
 }
 
 function openEvtModal(session, defaultDate, focusTasks) {
+  if (!session && _sessions.some(s => s.session_date === defaultDate && s.session_type === 'day_off')) {
+    showCalToast('This day is marked OFF. Remove the day off to add events.');
+    return;
+  }
   _editEvtId     = session?.id     || null;
   _editEvtSource = session?.source || null;
   document.getElementById('calEvtTitle').textContent = session ? 'Edit event' : 'New event';
