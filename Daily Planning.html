@@ -181,6 +181,7 @@
   /* ===== PRINT ===== */
   /* Letterhead solo-impresión (paper system): oculto en pantalla, visible en print */
   .print-only{ display:none !important }
+  #dpPrintMeta{ display:none }
 
   @media print {
     @page { size: A4; margin: 14mm 12mm; }
@@ -268,6 +269,19 @@
     .dp-ex{ break-inside:avoid; page-break-inside:avoid; }
     .dp-ex-thumb, .dp-ex-thumb.has-img, .dp-ex-img{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
     .dp-ex-img{ width:100% !important; height:100% !important; object-fit:contain !important; }
+
+    /* B2: SESSION INFO as a fine text line (replaces the form), tighter physio + totals */
+    #dpPrintMeta{ display:block !important; font:500 11px/1.5 var(--cm-font-sans); color:#222; margin:0 0 10px; }
+    #dpPrintMeta b{ color:#000; font-weight:600; }
+    #dpPrintMeta .sep{ color:#999; margin:0 6px; }
+    .dp-session-card{ display:none !important; }              /* replaced by #dpPrintMeta */
+    .dp-physio-card.is-empty{ display:none !important; }        /* hide when no adaptations */
+    .dp-physio-card .dp-card-h .right, .dp-physio-alert .act{ display:none !important; }  /* drop "From Physio" link + Applied btn */
+    .dp-physio-alert{ grid-template-columns:24px 1fr; gap:6px; padding:5px 8px; background:#fff4e0 !important; border:1px solid #f0c98a !important; }
+    .dp-physio-alert .av{ width:20px;height:20px;font-size:9px }
+    .dp-physio-alert .name{ font-size:11px } .dp-physio-alert .note{ font-size:10px; margin-top:1px }
+    /* tighten totals a touch more */
+    .dp-totals .t{ padding:5px 8px } .dp-totals .t .v{ font-size:14px }
   }
 </style>
 </head>
@@ -304,8 +318,10 @@
         </div>
       </header>
 
+      <div id="dpPrintMeta" class="print-only"></div>
+
       <!-- ===== SESSION INFO ===== -->
-      <div class="dp-card">
+      <div class="dp-card dp-session-card">
         <div class="dp-card-h">
           <h3>Session info</h3>
           <div class="right"><button class="cm-btn is-ghost is-sm"><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
@@ -696,6 +712,28 @@ async function loadDay(dateStr) {
     const sm = document.getElementById('dpMatchDay'); if (sm) sm.value = '';
   }
   _dpUpdatePublishBtn();
+
+  // Print-only meta line (compact text version of SESSION INFO; only non-empty fields)
+  {
+    const _mv = id => (document.getElementById(id)?.value || '').trim();
+    const _mcSel = document.getElementById('dpMicrocycle');
+    const _mcTxt = _mcSel && _mcSel.value ? (_mcSel.options[_mcSel.selectedIndex]?.text || '') : '';
+    const parts = [];
+    const tt = _mv('dpSessionType');        if (tt) parts.push(`<b>${tt}</b>`);
+    const t1 = _mv('dpStartTime'), t2 = _mv('dpEndTime'); if (t1||t2) parts.push(`${t1||'—'}–${t2||'—'}`);
+    if (_mcTxt) parts.push(_mcTxt);
+    const md = _mv('dpMatchDay');            if (md) parts.push(`MD ${md}`);
+    const or = _mv('dpOrientation');         if (or) parts.push(`Orient: ${or}`);
+    const fo = _mv('dpFocus');               if (fo) parts.push(`Focus: ${fo}`);
+    const rp = _mv('dpEstRpe');              if (rp) parts.push(`RPE ${rp}`);
+    const title = _mv('dpSessionTitle');
+    const notes = _mv('dpNotes');
+    const pm = document.getElementById('dpPrintMeta');
+    if (pm) pm.innerHTML = (title ? `<div style="font:700 14px/1.2 var(--cm-font-sans);color:#000;margin-bottom:3px">${title}</div>` : '')
+      + parts.join('<span class="sep">·</span>')
+      + (notes ? `<div style="margin-top:4px;color:#444">${notes}</div>` : '');
+  }
+
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
 
   const avMap = {};
@@ -710,6 +748,8 @@ async function loadDay(dateStr) {
   dpRenderSquad(avMap);
 
   const withAdapt = (adaptResult.data || []).filter(t => t.adaptation_notes);
+  const physioCard = document.querySelector('.dp-physio-card');
+  if (physioCard) physioCard.classList.toggle('is-empty', withAdapt.length === 0);
   if (withAdapt.length) {
     document.getElementById('dpPhysioCt').textContent = withAdapt.length;
     document.getElementById('dpPhysioList').innerHTML = withAdapt.map(t => {
