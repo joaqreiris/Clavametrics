@@ -153,6 +153,11 @@
     white-space:nowrap;
   }
   .lm-table th .ti { font-size:12px; vertical-align:-1px; margin-left:2px; opacity:0.6; }
+  .lm-table thead th[data-sort] { cursor:pointer; user-select:none; transition:color .12s ease; }
+  .lm-table thead th[data-sort]:hover { color:var(--cm-fg); }
+  .lm-table thead th.is-sorted { color:var(--cm-fg-strong, var(--cm-fg)); }
+  .lm-table th .lm-sort-i { opacity:0.3; }
+  .lm-table th.is-sorted .lm-sort-i { opacity:1; }
   .lm-table tbody td {
     padding:9px 12px;
     border-bottom:1px solid var(--cm-border-soft);
@@ -716,14 +721,14 @@
         <table class="lm-table">
           <thead>
             <tr>
-              <th class="col-num">#</th>
-              <th>Player <i class="ti ti-arrows-up-down"></i></th>
-              <th class="col-pos">Pos</th>
-              <th class="col-acwr">ACWR <i class="ti ti-arrow-down"></i></th>
-              <th class="col-rpe">Session RPE</th>
-              <th class="col-wellness">Wellness</th>
-              <th>Acute / Chronic (7d : 28d)</th>
-              <th class="col-zone">Zone</th>
+              <th class="col-num" data-sort="num"># <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th data-sort="name">Player <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-pos" data-sort="pos">Pos <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-acwr" data-sort="acwr">ACWR <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-rpe" data-sort="rpe">Session RPE <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-wellness" data-sort="wellness">Wellness <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th data-sort="ac">Acute / Chronic (7d : 28d) <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-zone" data-sort="zone">Zone <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
             </tr>
           </thead>
           <tbody id="lmTbody">
@@ -889,6 +894,8 @@
   // ── State ──────────────────────────────────────────────────────────────────
   let currentPeriod     = '28d';
   let sortMode          = 'acwr';
+  let sortDir           = 'desc';
+  const SORT_DEFAULT_DIR = { num:'asc', name:'asc', pos:'asc', acwr:'desc', rpe:'desc', wellness:'desc', ac:'desc', zone:'asc' };
   let lastTableData     = null;
   let lastChartData     = null;
   let acwrChartInstance = null;
@@ -926,26 +933,53 @@
     };
   }
 
+  // ── Sorting ────────────────────────────────────────────────────────────────
+  function setSort(col) {
+    if (col === sortMode) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    else { sortMode = col; sortDir = SORT_DEFAULT_DIR[col] || 'asc'; }
+    updateSortHeaders();
+    renderTable();
+  }
+  function updateSortHeaders() {
+    document.querySelectorAll('.lm-table thead th[data-sort]').forEach(th => {
+      const active = th.dataset.sort === sortMode;
+      th.classList.toggle('is-sorted', active);
+      const ic = th.querySelector('.lm-sort-i');
+      if (ic) ic.className = 'ti lm-sort-i ' + (active ? (sortDir === 'asc' ? 'ti-arrow-up' : 'ti-arrow-down') : 'ti-arrows-up-down');
+    });
+  }
+
   // ── Render player table (client-side, no re-fetch) ─────────────────────────
   function renderTable() {
     if (!lastTableData) return;
     const { players: pts, acwrByPlayer, playerLoadHist, latestRpeMap } = lastTableData;
 
+    const sortValue = (p, mode) => {
+      const id = p.id;
+      switch (mode) {
+        case 'num':      return p.number;
+        case 'name':     return ((p.last_name||'') + (p.first_name||'')).toLowerCase();
+        case 'pos':      return POS_ORDER[p.position?.toUpperCase()] ?? null;
+        case 'acwr':     return acwrByPlayer[id];
+        case 'rpe':      return latestRpeMap[id];
+        case 'wellness': return wellMap[id]?.hooper_index;
+        case 'ac':       { const h = playerLoadHist[id]; return h ? h.filter(r => r.date >= from7dStr).reduce((s,r) => s+r.load, 0) : null; }
+        case 'zone':     return acwrByPlayer[id] == null ? null : ZONE_ORDER(acwrByPlayer[id]);
+        default:         return null;
+      }
+    };
+    const dir = sortDir === 'asc' ? 1 : -1;
     let sorted = [...pts];
-    if (sortMode === 'acwr') {
-      sorted.sort((a, b) => {
-        const aa = acwrByPlayer[a.id], ab = acwrByPlayer[b.id];
-        if (aa == null && ab == null) return 0;
-        if (aa == null) return 1; if (ab == null) return -1;
-        return ab - aa;
-      });
-    } else if (sortMode === 'zone') {
-      sorted.sort((a, b) => ZONE_ORDER(acwrByPlayer[a.id]) - ZONE_ORDER(acwrByPlayer[b.id]));
-    } else if (sortMode === 'name') {
-      sorted.sort((a, b) => ((a.last_name||'')+(a.first_name||'')).localeCompare((b.last_name||'')+(b.first_name||'')));
-    } else if (sortMode === 'pos') {
-      sorted.sort((a, b) => (POS_ORDER[a.position?.toUpperCase()] ?? 99) - (POS_ORDER[b.position?.toUpperCase()] ?? 99));
-    }
+    sorted.sort((a, b) => {
+      const va = sortValue(a, sortMode), vb = sortValue(b, sortMode);
+      const na = va == null || (typeof va === 'number' && isNaN(va));
+      const nb = vb == null || (typeof vb === 'number' && isNaN(vb));
+      if (na && nb) return 0;
+      if (na) return 1;   // nulls siempre al final, sin importar la dirección
+      if (nb) return -1;
+      const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+      return cmp * dir;
+    });
 
     document.getElementById('lmTbody').innerHTML = sorted.map(p => {
       const pos      = p.position ? (POS_CSS[p.position.toUpperCase()] ? p.position.toUpperCase() : 'MF') : 'MF';
@@ -1370,11 +1404,15 @@
   });
   document.querySelectorAll('#lmSortMenu [data-sort]').forEach(btn => {
     btn.addEventListener('click', () => {
-      sortMode = btn.dataset.sort;
+      setSort(btn.dataset.sort);
       document.querySelectorAll('#lmSortMenu [data-sort]').forEach(b => b.classList.toggle('is-active', b.dataset.sort === sortMode));
       document.getElementById('lmSortMenu').classList.remove('is-open');
-      renderTable();
     });
+  });
+  // Headers clickeables (click delegado en el thead)
+  document.querySelector('.lm-table thead tr')?.addEventListener('click', e => {
+    const th = e.target.closest('th[data-sort]');
+    if (th) setSort(th.dataset.sort);
   });
 
   // Alert banner close
@@ -1388,6 +1426,7 @@
   });
 
   await loadData('28d');
+  updateSortHeaders();
 })().catch(console.error);
 
   let _lmAct = {};
