@@ -1013,7 +1013,6 @@ async function openLibModal(mode) {
   let q = window.sb.from('exercises')
     .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time')
     .eq('club_id', _dpClubId).order('name');
-  if (_libMode === 'activation') q = q.eq('orientation', 'ACTIVATION');
   const { data, error } = await q;
   if (error?.code === '42P01') {
     document.getElementById('libList').innerHTML = '<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Run the SQL migration to enable the Planner library.</div>';
