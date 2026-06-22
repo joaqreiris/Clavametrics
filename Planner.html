@@ -2873,7 +2873,7 @@
         return `<svg viewBox="${vb||'0 0 1050 680'}" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">${s.innerHTML}</svg>`;
       } catch(_) { return markup; }
     }
-    let _previewPng = null;
+    let _previewBlob = null;
     try {
       fc.discardActiveObject(); fc.renderAll();              // no selection handles
       const W = fc.getWidth(), H = fc.getHeight(), SCALE = 2;
@@ -2913,8 +2913,8 @@
       const objCanvas = fc.toCanvasElement(1);
       ctx.drawImage(objCanvas, 0, 0, W, H);
 
-      _previewPng = out.toDataURL('image/png');
-    } catch(_) { _previewPng = null; }
+      _previewBlob = await new Promise((res) => { try { out.toBlob(res, 'image/png'); } catch(_) { res(null); } });
+    } catch(_) { _previewBlob = null; }
     const payload = {
       name:              document.getElementById('plExName')?.value?.trim() || 'Untitled',
       players_count:     players,
@@ -2934,7 +2934,6 @@
       description:       document.getElementById('plExDescription')?.value?.trim() || null,
       objects_json:      _oj,
       preview_svg:       _previewSvg,
-      preview_png:       _previewPng,
       visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
     };
 
@@ -2953,6 +2952,18 @@
 
     btn.disabled = false;
     if (!error) {
+      if (currentExerciseId && _previewBlob) {
+        try {
+          const _pPath = `${clubId}/${currentExerciseId}.png`;
+          const _up = await window.sb.storage.from('drill-previews')
+            .upload(_pPath, _previewBlob, { upsert: true, contentType: 'image/png' });
+          if (!_up.error) {
+            await window.sb.from('exercises').update({ preview_path: _pPath, preview_png: null }).eq('id', currentExerciseId);
+          } else {
+            console.error('preview upload failed:', _up.error);
+          }
+        } catch (e) { console.error('preview upload exception:', e); }
+      }
       _dirty = false;
       btn.innerHTML = '<i class="ti ti-check" style="font-size:14px;color:var(--cm-success)"></i>Saved';
       setTimeout(() => { btn.innerHTML = '<i class="ti ti-device-floppy" style="font-size:14px"></i>Save'; }, 1800);
