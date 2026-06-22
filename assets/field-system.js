@@ -267,8 +267,8 @@
     football: {
       label: 'Football',
       variants: ['full', 'half', 'blank'],
-      vb: { full: [0, 0, 1050, 680], half: [0, 0, 555, 680], blank: [0, 0, 1050, 680] },
-      aspect: { full: 1050 / 680, half: 555 / 680 },
+      vb: { full: [0, 0, 1050, 680], half: [10, 16, 540, 648], blank: [0, 0, 1050, 680] },
+      aspect: { full: 1050 / 680, half: 540 / 648 },
       draw(variant) {
         if (variant === 'blank') return [];
         return footballMarkings(variant === 'half');
