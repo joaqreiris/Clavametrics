@@ -271,6 +271,21 @@
     border-radius:4px;
     padding:3px 5px;
   }
+  .mc-day-md.is-manual { border-style: dashed; }
+  .mc-md-menu {
+    position: absolute; z-index: 1000;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    padding: 8px; min-width: 168px;
+    background: var(--cm-surface); border: 1px solid var(--cm-border);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  }
+  .mc-md-opt {
+    font: 600 11px/1 var(--cm-font-mono); color: var(--cm-fg);
+    background: var(--cm-bg-soft); border: 1px solid var(--cm-border-soft);
+    border-radius: 5px; padding: 6px 4px; cursor: pointer; text-align: center;
+  }
+  .mc-md-opt:hover { background: var(--cm-bg-sunk); }
+  .mc-md-opt.is-active { background: var(--cm-accent-soft); color: var(--cm-accent); border-color: var(--cm-accent); }
   .mc-day.is-today {
     background:color-mix(in srgb, var(--cm-accent) 4%, var(--cm-surface));
   }
@@ -1566,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Microcycle select fields — module-level so accessible from all listeners
-const MC_BASE_SELECT = 'id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium';
+const MC_BASE_SELECT = 'id,name,start_date,end_date,match_date,rival,home_away,color,match_time,stadium,md_overrides';
 const MC_FULL_SELECT = MC_BASE_SELECT + ',publish_players,publish_medical,publish_board,published_at,publish_config';
 
 // ── Publish state ────────────────────────────────────────────────
@@ -1774,9 +1789,10 @@ function renderGrid() {
       else if (diff > 0 && diff <= 10) mdLabel = `MD−${diff}`;
       else if (diff < 0 && diff >= -3) mdLabel = `MD+${Math.abs(diff)}`;
     }
-    const mdStyle = mdLabel === 'MD' ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
-    const tagText  = hasDayOff ? 'OFF' : mdLabel;
-    const tagStyle = hasDayOff ? '' : mdStyle;
+    const dayOverride = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
+    const tagText  = hasDayOff ? 'OFF' : (dayOverride || mdLabel);
+    const isMatchTag = tagText === 'MD';
+    const tagStyle = (!hasDayOff && isMatchTag) ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
 
     const eventsHtml = isOff
       ? '<div class="mc-evt day-off">Rest day</div>'
@@ -1806,7 +1822,11 @@ function renderGrid() {
       <div class="mc-day-head">
         <span class="mc-day-dow">${DAYS_SHORT[d.getDay()]}</span>
         <span class="mc-day-num">${d.getDate()}</span>
-        ${tagText ? `<span class="mc-day-md" style="${tagStyle}">${tagText}</span>` : ''}
+        ${isPlayerView
+          ? (tagText ? `<span class="mc-day-md" style="${tagStyle}">${tagText}</span>` : '')
+          : (tagText
+              ? `<span class="mc-day-md${(!hasDayOff && dayOverride) ? ' is-manual' : ''}" data-date="${dateStr}" style="${tagStyle};cursor:pointer" title="Click to set day type">${tagText}</span>`
+              : `<span class="mc-day-md mc-day-md-empty" data-date="${dateStr}" style="cursor:pointer;opacity:0.4" title="Click to set day type">+</span>`)}
       </div>
       <div class="mc-day-events" data-date="${dateStr}">
         ${eventsHtml}
@@ -1815,6 +1835,7 @@ function renderGrid() {
     </div>`;
   }
   grid.innerHTML = html;
+  ensureMdMenu(grid);
 
   // Wire event clicks — open popover (not modal directly)
   grid.querySelectorAll('.mc-evt[data-id]').forEach(el => {
@@ -1943,6 +1964,101 @@ function renderGrid() {
 
   // Async: paint task-dot badges (non-blocking)
   if (_calView !== 'player') loadTaskBadges();
+}
+
+// ── Manual MD override menu (per-day tag click) ───────────────
+let _mdMenu = null, _mdMenuWired = false;
+const MD_MENU_OPTIONS = ['Auto','MD','MD-1','MD-2','MD-3','MD-4','MD-5','MD-6','MD+1','MD+2','MD+3','OFF'];
+
+function ensureMdMenu(grid) {
+  if (_mdMenuWired) return;
+  _mdMenuWired = true;
+  _mdMenu = document.createElement('div');
+  _mdMenu.className = 'mc-md-menu';
+  _mdMenu.style.display = 'none';
+  document.body.appendChild(_mdMenu);
+  // Delegated: grid innerHTML is rebuilt each render, so listen on the stable parent
+  grid.addEventListener('click', e => {
+    const tag = e.target.closest('.mc-day-md');
+    if (!tag || !tag.dataset.date) return;
+    e.stopPropagation();
+    openMdMenu(tag, tag.dataset.date);
+  });
+  document.addEventListener('click', e => {
+    if (_mdMenu.style.display !== 'none' && !_mdMenu.contains(e.target)) closeMdMenu();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMdMenu(); });
+}
+
+function openMdMenu(anchorEl, dateStr) {
+  const mc = _allMCs[_mcIdx];
+  if (!mc) return;
+  const hasDayOff = _sessions.some(s => s.session_date === dateStr && s.session_type === 'day_off');
+  const override  = (mc.md_overrides && mc.md_overrides[dateStr]) || null;
+  const active    = hasDayOff ? 'OFF' : (override || 'Auto');
+  _mdMenu.innerHTML = MD_MENU_OPTIONS.map(opt =>
+    `<button type="button" class="mc-md-opt${opt === active ? ' is-active' : ''}" data-opt="${opt}">${opt}</button>`
+  ).join('');
+  _mdMenu.querySelectorAll('.mc-md-opt').forEach(b =>
+    b.addEventListener('click', ev => { ev.stopPropagation(); applyMdChoice(dateStr, b.dataset.opt); })
+  );
+  _mdMenu.style.display = 'block';
+  const r = anchorEl.getBoundingClientRect();
+  const mw = _mdMenu.offsetWidth, mh = _mdMenu.offsetHeight;
+  let left = r.left + window.scrollX;
+  let top  = r.bottom + window.scrollY + 4;
+  if (left + mw > window.scrollX + window.innerWidth) left = window.scrollX + window.innerWidth - mw - 8;
+  if (r.bottom + mh + 4 > window.innerHeight) top = r.top + window.scrollY - mh - 4;
+  _mdMenu.style.left = left + 'px';
+  _mdMenu.style.top  = top + 'px';
+}
+
+function closeMdMenu() { if (_mdMenu) _mdMenu.style.display = 'none'; }
+
+// Remove a day_off marker on a date (calendar_events or training_sessions, by source)
+async function removeDayOffOnDate(dateStr) {
+  const off = _sessions.find(s => s.session_date === dateStr && s.session_type === 'day_off');
+  if (!off) return;
+  const table = off.source === 'session' ? 'training_sessions' : 'calendar_events';
+  const { error } = await window.sb.from(table).delete().eq('id', off.id);
+  if (error) throw new Error(error.message);
+}
+
+async function applyMdChoice(dateStr, opt) {
+  const mc = _allMCs[_mcIdx];
+  if (!mc) return;
+  try {
+    if (opt === 'OFF') {
+      const others = _sessions.filter(s => s.session_date === dateStr && s.session_type !== 'day_off');
+      if (others.length && !confirm(`There are ${others.length} other event(s) on ${dateStr}. Set day off anyway?`)) return;
+      const next = { ...(mc.md_overrides || {}) };
+      delete next[dateStr];
+      const { error: uerr } = await window.sb.from('microcycles').update({ md_overrides: next }).eq('id', mc.id);
+      if (uerr) { showCalToast('Error: ' + uerr.message); return; }
+      mc.md_overrides = next;
+      const existing = _sessions.some(s => s.session_date === dateStr && s.session_type === 'day_off');
+      if (!existing) {
+        const clubId = _clubId || await window.getClubId();
+        const { error: ierr } = await window.sb.from('calendar_events').insert({
+          title: 'Day off', type: 'day_off', date: dateStr,
+          club_id: clubId, team_id: _activeTeamId, visible_to: ['players','medical']
+        });
+        if (ierr) { showCalToast('Error: ' + ierr.message); return; }
+      }
+    } else {
+      await removeDayOffOnDate(dateStr);
+      const next = { ...(mc.md_overrides || {}) };
+      if (opt === 'Auto') delete next[dateStr];
+      else next[dateStr] = opt;
+      const { error: uerr } = await window.sb.from('microcycles').update({ md_overrides: next }).eq('id', mc.id);
+      if (uerr) { showCalToast('Error: ' + uerr.message); return; }
+      mc.md_overrides = next;
+    }
+    closeMdMenu();
+    await loadSessions();
+  } catch (e) {
+    showCalToast('Error: ' + (e?.message || e));
+  }
 }
 
 // Canonical sort: timed events first (by start_time ASC), then no-time (by sort_order ASC), tiebreaker created_at ASC
