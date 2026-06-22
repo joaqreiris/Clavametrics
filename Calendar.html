@@ -285,6 +285,10 @@
   }
   .mc-day.is-off { background:var(--cm-bg-sunk); }
   .mc-day.is-off .mc-day-num { color:var(--cm-fg-faint); }
+  .mc-day.is-dayoff { background: var(--cm-danger-bg); }
+  .mc-day.is-dayoff .mc-day-num { color: var(--cm-danger); }
+  .mc-day.is-dayoff .mc-day-md  { background: var(--cm-danger-bg); color: var(--cm-danger); border-color: var(--cm-danger-bd); }
+  .mc-day.is-dayoff .mc-evt:not([data-add-date]) { opacity: 0.45; filter: grayscale(0.55); }
 
   .mc-day-events { display:flex; flex-direction:column; gap:4px; }
   .mc-evt {
@@ -1756,6 +1760,7 @@ function renderGrid() {
     const d = new Date(dateStr + 'T12:00:00');
     const isToday = dateStr === TODAY;
     const allDaySessions = _sessions.filter(s => s.session_date === dateStr);
+    const hasDayOff = allDaySessions.some(s => s.session_type === 'day_off');
     // In player view: only show events visible to players
     const daySessions = isPlayerView
       ? allDaySessions.filter(s => Array.isArray(s.visible_to) && s.visible_to.includes('players'))
@@ -1770,10 +1775,12 @@ function renderGrid() {
       else if (diff < 0 && diff >= -3) mdLabel = `MD+${Math.abs(diff)}`;
     }
     const mdStyle = mdLabel === 'MD' ? 'background:var(--cm-danger-bg);color:var(--cm-danger);border-color:var(--cm-danger-bd)' : '';
+    const tagText  = hasDayOff ? 'OFF' : mdLabel;
+    const tagStyle = hasDayOff ? '' : mdStyle;
 
     const eventsHtml = isOff
       ? '<div class="mc-evt day-off">Rest day</div>'
-      : daySessions.filter(s => _filterType === 'all' || focusToClass(s.session_type) === _filterType).map(s => {
+      : daySessions.filter(s => (_filterType === 'all' || focusToClass(s.session_type) === _filterType) && s.session_type !== 'day_off').map(s => {
           const cat = focusToClass(s.session_type);
           const icon = EVT_ICONS[cat] || 'ti-calendar';
           const dur = s.duration ? ` ${s.duration}′` : '';
@@ -1795,11 +1802,11 @@ function renderGrid() {
     // In player view hide the + Add button
     const addBtn = isPlayerView ? '' : `<button class="mc-evt" style="border-style:dashed;color:var(--cm-fg-faint);justify-content:center;font-size:11px" data-add-date="${dateStr}">+ Add</button>`;
 
-    html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}" data-date="${dateStr}">
+    html += `<div class="mc-day${isToday ? ' is-today' : ''}${isOff ? ' is-off' : ''}${hasDayOff ? ' is-dayoff' : ''}" data-date="${dateStr}">
       <div class="mc-day-head">
         <span class="mc-day-dow">${DAYS_SHORT[d.getDay()]}</span>
         <span class="mc-day-num">${d.getDate()}</span>
-        ${mdLabel ? `<span class="mc-day-md" style="${mdStyle}">${mdLabel}</span>` : ''}
+        ${tagText ? `<span class="mc-day-md" style="${tagStyle}">${tagText}</span>` : ''}
       </div>
       <div class="mc-day-events" data-date="${dateStr}">
         ${eventsHtml}
