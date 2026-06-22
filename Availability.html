@@ -186,6 +186,7 @@
   .av-matrix thead th.day .md-tag { font:600 9px/1 var(--cm-font-mono); letter-spacing:0; text-transform:uppercase; margin-top:2px; color:var(--cm-fg-faint); display:block; }
   .av-matrix thead th.day.is-today .md-tag { color:var(--cm-accent); }
   .av-matrix thead th.day.is-match .md-tag { color:var(--cm-danger); }
+  .av-matrix thead th.day.is-dayoff .md-tag { color:var(--cm-danger); }
 
   /* Sticky left columns */
   .av-matrix th.col-player,
@@ -253,6 +254,11 @@
   .av-matrix td.cell.is-off { background:repeating-linear-gradient(45deg, var(--cm-bg-soft) 0 4px, transparent 4px 8px); cursor:default; }
   .av-matrix td.cell.is-off::before { content:""; }
   .av-matrix td.cell.is-off:hover { outline:none; }
+  .av-matrix td.cell.is-dayoff {
+    background: rgba(220,38,38,0.06); cursor: default;
+    background-image: linear-gradient(to top left, transparent calc(50% - 1px), rgba(220,38,38,0.45), transparent calc(50% + 1px));
+  }
+  .av-matrix td.cell.is-dayoff:hover { outline: none; }
 
   /* Status dot in cell */
   .av-cell-dot { width:14px; height:14px; border-radius:50%; display:inline-block; box-shadow:0 0 0 2.5px var(--cm-surface); transition:transform var(--cm-dur-1); }
@@ -541,6 +547,8 @@
   // ── State ──
   let CLUB_ID    = null;
   let MC_DATES   = [];
+  let MC_RANGES  = [];              // all microcycles overlapping the window (for MD labels)
+  let DAYOFF_DATES = new Set();     // YYYY-MM-DD planned as day off — read-only
   let NON_COUNTING_DATES = new Set();  // days inside season phases with counts_availability=false (break/offseason)
   let todayIdx   = -1;
   let avMap             = {};   // player_id|date → availability row — shared across init + handlers
@@ -563,11 +571,25 @@
 
   function dotEl(s) { return `<span class="av-cell-dot ${statusKey(s)}"></span>`; }
 
+  // MD label anchored to a date's microcycle match_date (mirrors Calendar.html)
+  function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+  function mdLabelFor(date) {
+    const mc = MC_RANGES.find(m => m.match_date && m.start_date <= date && date <= m.end_date);
+    if (!mc) return '';
+    const diff = daysBetween(date, mc.match_date);
+    if (diff === 0) return 'MD';
+    if (diff > 0 && diff <= 10) return `MD−${diff}`;
+    if (diff < 0 && diff >= -3) return `MD+${Math.abs(diff)}`;
+    return '';
+  }
+
   function cellHTML(status, dayIdx, pid, date) {
     const isFuture = todayIdx >= 0 && dayIdx > todayIdx;
     let cls = 'cell';
     if (isFuture) cls += ' is-future';
     const data = pid ? ` data-pid="${pid}" data-date="${date}"` : '';
+    // Planned day off → crossed-out, empty, non-editable (blocked via isBlockedCell)
+    if (DAYOFF_DATES.has(date)) return `<td class="${cls} is-dayoff"${data}></td>`;
     // Future with no record → blank (not striped day-off pattern)
     if (!status) return isFuture ? `<td class="${cls}"${data}></td>` : `<td class="${cls} is-off"${data}></td>`;
     if (status.startsWith('match:')) {
@@ -643,13 +665,23 @@
       const num    = d.getUTCDate();
       const isToday = i === todayIdx;
       const isMatch = !!matchDates[date];
+      const isOff   = DAYOFF_DATES.has(date);
       let cls = 'day';
       if (isToday) cls += ' is-today';
       else if (isMatch) cls += ' is-match';
+      if (isOff) cls += ' is-dayoff';
+      let label = mdLabelFor(date);
+      if (isMatch && !label) label = 'MD';  // match outside any MC range still reads MD
+      let tagText;
+      if (isOff)                 tagText = 'OFF';
+      else if (isToday && label) tagText = `Today · ${label}`;
+      else if (isToday)          tagText = 'Today';
+      else                       tagText = label;
       let tag = '';
-      if (isToday && isMatch) tag = '<span class="md-tag">Today · MD</span>';
-      else if (isToday) tag = '<span class="md-tag">Today</span>';
-      else if (isMatch) tag = `<span class="md-tag" title="vs ${matchDates[date]}">MD</span>`;
+      if (tagText) {
+        const title = isMatch ? ` title="vs ${matchDates[date]}"` : '';
+        tag = `<span class="md-tag"${title}>${tagText}</span>`;
+      }
       h += `<th class="${cls}"><b>${letter}</b>${num}${tag}</th>`;
     });
     h += '<th class="col-sum">Summary · match min</th>';
@@ -938,6 +970,35 @@
     // en la evolución (misma fuente que el matrix). NO query nueva.
     window.__avMatchDates = matchDates;
 
+    // ── Microcycle ranges (for MD labels) + planned day-off dates (read-only) ──
+    MC_RANGES = [];
+    try {
+      let mq = window.sb.from('microcycles')
+        .select('start_date,end_date,match_date')
+        .eq('club_id', CLUB_ID)
+        .lte('start_date', mcEnd).gte('end_date', mcStart);
+      if (_avTeamId) mq = mq.eq('team_id', _avTeamId);
+      const { data: mcRanges } = await mq;
+      MC_RANGES = mcRanges || [];
+    } catch (e) { MC_RANGES = []; console.warn('[Availability] MD labels skipped:', e?.message); }
+
+    DAYOFF_DATES = new Set();
+    try {
+      let tq = window.sb.from('training_sessions')
+        .select('session_date')
+        .eq('club_id', CLUB_ID).eq('session_type', 'day_off').eq('is_historical', false)
+        .gte('session_date', mcStart).lte('session_date', mcEnd);
+      if (_avTeamId) tq = tq.eq('team_id', _avTeamId);
+      let cq = window.sb.from('calendar_events')
+        .select('date')
+        .eq('club_id', CLUB_ID).eq('type', 'day_off')
+        .gte('date', mcStart).lte('date', mcEnd);
+      if (_avTeamId) cq = cq.eq('team_id', _avTeamId);
+      const [{ data: offSess }, { data: offEvts }] = await Promise.all([tq, cq]);
+      (offSess || []).forEach(s => s.session_date && DAYOFF_DATES.add(String(s.session_date).slice(0, 10)));
+      (offEvts || []).forEach(e => e.date && DAYOFF_DATES.add(String(e.date).slice(0, 10)));
+    } catch (e) { DAYOFF_DATES = new Set(); console.warn('[Availability] day-off skipped:', e?.message); }
+
     renderHeader(matchDates);
 
     players    = playersData || [];
@@ -1019,7 +1080,7 @@
   }
 
   function isBlockedCell(td) {
-    return td.classList.contains('is-off') || td.classList.contains('is-future');
+    return td.classList.contains('is-off') || td.classList.contains('is-future') || td.classList.contains('is-dayoff');
   }
 
   // ── Summary tooltip ──
