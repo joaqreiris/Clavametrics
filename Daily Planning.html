@@ -1082,11 +1082,14 @@ async function addPlannerExercise(exerciseId) {
     m2_per_player:       m2,
     calc_orientation:    _dpCalcOrientFromM2(m2) || ex?.orientation || null
   });
-  if (!error) {
-    closeLibModal();
-    if (phase === 'activation') await loadActivationActivities(_dpCurrentSessionId);
-    else await loadSessionExercises(_dpCurrentSessionId);
+  if (error) {
+    console.error('addPlannerExercise insert error:', error);
+    alert('Add exercise failed:\n' + (error.message||'') + '\n' + (error.details||'') + '\n' + (error.hint||'') + '\ncode: ' + (error.code||''));
+    return;
   }
+  closeLibModal();
+  if (phase === 'activation') await loadActivationActivities(_dpCurrentSessionId);
+  else await loadSessionExercises(_dpCurrentSessionId);
 }
 
 // ── Manual exercise ──
@@ -1260,7 +1263,12 @@ async function dpActAdd() {
     club_id: _dpClubId, session_id: _dpCurrentSessionId,
     name: 'New activity', phase: 'activation', duration: 5, position: pos
   });
-  if (!error) await loadActivationActivities(_dpCurrentSessionId);
+  if (error) {
+    console.error('dpActAdd insert error:', error);
+    alert('Add activity failed:\n' + (error.message||'') + '\n' + (error.details||'') + '\n' + (error.hint||'') + '\ncode: ' + (error.code||''));
+    return;
+  }
+  await loadActivationActivities(_dpCurrentSessionId);
 }
 
 async function dpActSave(id, name) {
