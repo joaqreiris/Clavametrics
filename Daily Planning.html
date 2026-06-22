@@ -416,7 +416,27 @@ let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAda
 let _dpTeamId = null, _dpTeams = [];
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
-const _dpPngCache = {};   // planner_exercise_id -> preview_png (or null when known-absent)
+const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
+
+// Resolve preview images for a set of exercise ids → fills _dpPngCache[id] with a usable <img src> (signed URL or base64) or null.
+async function dpResolvePreviews(ids) {
+  const need = [...new Set((ids||[]).filter(id => id && !(id in _dpPngCache)))];
+  if (!need.length) return;
+  try {
+    const { data: rows } = await window.sb.from('exercises')
+      .select('id, preview_path, preview_png').eq('club_id', _dpClubId).in('id', need);
+    const paths = (rows||[]).filter(r => r.preview_path).map(r => r.preview_path);
+    let signed = {};
+    if (paths.length) {
+      const { data: urls } = await window.sb.storage.from('drill-previews').createSignedUrls(paths, 3600);
+      (urls||[]).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
+    }
+    (rows||[]).forEach(r => {
+      _dpPngCache[r.id] = r.preview_path ? (signed[r.preview_path] || null) : (r.preview_png || null);
+    });
+  } catch(_) {}
+  need.forEach(id => { if (!(id in _dpPngCache)) _dpPngCache[id] = null; });  // remember misses, don't refetch
+}
 
 // Orientation helpers for Planner exercises
 function _dpCalcOrientFromM2(m2) {
@@ -694,15 +714,11 @@ async function loadSessionExercises(sessionId) {
   const _reqSession = sessionId;
   const need = [...new Set(_dpFieldExercises.map(e => e.planner_exercise_id).filter(id => id && !(id in _dpPngCache)))];
   if (need.length) {
-    window.sb.from('exercises').select('id, preview_png').eq('club_id', _dpClubId).in('id', need)
-      .then(({ data: drills }) => {
-        (drills || []).forEach(d => { _dpPngCache[d.id] = d.preview_png || null; });
-        need.forEach(id => { if (!(id in _dpPngCache)) _dpPngCache[id] = null; });  // remember misses, don't refetch
-        if (_dpCurrentSessionId !== _reqSession) return;   // user navigated away — don't paint stale
-        _dpFieldExercises.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
-        renderExerciseList(_dpFieldExercises);             // second paint: inject the diagrams
-      })
-      .catch(() => {});
+    dpResolvePreviews(need).then(() => {
+      if (_dpCurrentSessionId !== _reqSession) return;   // user navigated away — don't paint stale
+      _dpFieldExercises.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
+      renderExerciseList(_dpFieldExercises);             // second paint: inject the diagrams
+    });
   }
   recalcTotals();
 }
@@ -1260,15 +1276,11 @@ async function loadActivationActivities(sessionId) {
   const _reqSession = sessionId;
   const need = [...new Set(acts.map(e => e.planner_exercise_id).filter(id => id && !(id in _dpPngCache)))];
   if (need.length) {
-    window.sb.from('exercises').select('id, preview_png').eq('club_id', _dpClubId).in('id', need)
-      .then(({ data: drills }) => {
-        (drills || []).forEach(d => { _dpPngCache[d.id] = d.preview_png || null; });
-        need.forEach(id => { if (!(id in _dpPngCache)) _dpPngCache[id] = null; });
-        if (_dpCurrentSessionId !== _reqSession) return;
-        acts.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
-        strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
-      })
-      .catch(() => {});
+    dpResolvePreviews(need).then(() => {
+      if (_dpCurrentSessionId !== _reqSession) return;
+      acts.forEach(e => { if (e.planner_exercise_id in _dpPngCache) e._previewPng = _dpPngCache[e.planner_exercise_id]; });
+      strip.innerHTML = acts.map(dpExerciseCardHTML).join('') + addBtn;
+    });
   }
   recalcTotals();
 }
