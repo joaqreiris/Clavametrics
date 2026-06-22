@@ -1047,6 +1047,10 @@ async function openLibModal(mode) {
     return;
   }
   _libExercises = data || [];
+  if (_libMode === 'activation') {
+    const isAct = e => (e.orientation || '').toUpperCase() === 'ACTIVATION';
+    _libExercises = [..._libExercises].sort((a,b) => (isAct(b)?1:0) - (isAct(a)?1:0));  // activation first, order otherwise preserved
+  }
   filterLib();
 }
 function closeLibModal() { document.getElementById('libBackdrop').style.display = 'none'; }
