@@ -782,28 +782,32 @@
     .eq('club_id', clubId)
     .in('status', ['available','injured','modified','unavailable']);
   if (_lmTeamId) _lmPlayersQ = _lmPlayersQ.eq('team_id', _lmTeamId);
-  const playersRes = await _lmPlayersQ.order('number');
+
+  const [playersRes, microRes, firstSessRes, wellRes] = await Promise.all([
+    _lmPlayersQ.order('number'),
+    window.sb.from('microcycles')
+      .select('start_date,end_date,name').eq('club_id', clubId)
+      .lte('start_date', todayStr).gte('end_date', todayStr)
+      .order('start_date', { ascending: false }).limit(1),
+    window.sb.from('training_sessions')
+      .select('session_date').eq('club_id', clubId).order('session_date').limit(1),
+    window.sb.from('wellness')
+      .select('id,player_id,hooper_index,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at,note,body_areas,acknowledged_at')
+      .eq('club_id', clubId)
+      .gte('submitted_at', todayStr + 'T00:00:00')
+      .lt('submitted_at', tomorrowStr + 'T00:00:00'),
+  ]);
+
   const players = playersRes.data || [];
   const total   = players.length;
   console.log('[LM] players cargados:', total, players.map(p=>`${p.first_name} ${p.last_name} (${p.status})`));
 
-  const microRes = await window.sb.from('microcycles')
-    .select('start_date,end_date,name').eq('club_id', clubId)
-    .lte('start_date', todayStr).gte('end_date', todayStr)
-    .order('start_date', { ascending: false }).limit(1);
   if (microRes.error) console.warn('[LM] microcycles error:', microRes.error);
   const microRow = (microRes.data || [])[0] || null;
 
-  const firstSessRes = await window.sb.from('training_sessions')
-    .select('session_date').eq('club_id', clubId).order('session_date').limit(1);
   if (firstSessRes.error) console.warn('[LM] firstSess error:', firstSessRes.error);
   const seasonStart = (firstSessRes.data || [])[0]?.session_date || from28dStr;
 
-  const wellRes = await window.sb.from('wellness')
-    .select('id,player_id,hooper_index,readiness,sleep_quality,fatigue,soreness,stress,mood,submitted_at,note,body_areas,acknowledged_at')
-    .eq('club_id', clubId)
-    .gte('submitted_at', todayStr + 'T00:00:00')
-    .lt('submitted_at', tomorrowStr + 'T00:00:00');
   if (wellRes.error) console.error('[LM] wellness error:', wellRes.error);
   const wellnessList = wellRes.data || [];
   console.log('[LM] wellness records (hoy):', wellnessList.length);
