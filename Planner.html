@@ -2849,7 +2849,9 @@
       // 2) pitch LINES svg from #plPitch, drawn at 0,0,W,H (its own preserveAspectRatio matches the screen)
       const pitchSvgEl = document.querySelector('#plPitch svg');
       if (pitchSvgEl) {
-        const svgStr = new XMLSerializer().serializeToString(pitchSvgEl);
+        // inline --pf-line (var() doesn't resolve in a standalone SVG drawn as an image)
+        const lineColor = (getComputedStyle(pitchSvgEl).getPropertyValue('--pf-line').trim()) || 'rgba(255,255,255,0.92)';
+        const svgStr = new XMLSerializer().serializeToString(pitchSvgEl).replace(/var\(--pf-line\)/g, lineColor);
         const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
         await new Promise((resolve) => {
           const img = new Image();
