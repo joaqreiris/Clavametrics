@@ -51,8 +51,6 @@
   .cal-zoomgrp button:hover { color:var(--cm-fg); }
   .cal-zoomgrp button + button { border-left:1px solid var(--cm-border); }
   .cal-zoomgrp .ti { font-size:15px; }
-  .cal-ribbon-body.is-grabbing { cursor:grabbing; user-select:none; }
-  .cal-ribbon-body.is-zoomed { cursor:grab; }
 
   .cal-segs { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); gap:2px; }
   .cal-seg { padding:0 12px; height:30px; display:inline-flex; align-items:center; gap:6px; border-radius:5px; font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); cursor:pointer; border:0; background:transparent; }
@@ -76,141 +74,6 @@
   .cal-ribbon-h .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
   .cal-ribbon-h .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
 
-  .cal-ribbon-body { padding:12px 16px 14px; overflow-x:auto; scroll-behavior:smooth; scrollbar-width:none; }
-  .cal-ribbon-body::-webkit-scrollbar { display:none; }
-  .cal-ribbon {
-    position:relative;
-    display:grid;
-    grid-template-rows: 14px auto 30px 24px 14px;
-    min-width:1200px;
-    gap:5px;
-  }
-  .cal-row-season {
-    font:600 9px/1 var(--cm-font-mono);
-    letter-spacing:0.12em;
-    text-transform:uppercase;
-    color:var(--cm-fg-faint);
-    display:flex;
-    align-items:center;
-    padding:0 2px;
-    gap:8px;
-    white-space:nowrap;
-    overflow:hidden;
-  }
-  .cal-row-season a { color:var(--cm-accent); text-decoration:none; }
-  .cal-row-season a:hover { text-decoration:underline; }
-
-  /* Date rail (months / weeks) */
-  .cal-row-months { display:grid; grid-template-columns:repeat(8, 1fr); position:relative; }
-  .cal-row-months .month {
-    font:500 10.5px/1 var(--cm-font-mono);
-    letter-spacing:0.08em;
-    text-transform:uppercase;
-    color:var(--cm-fg-muted);
-    padding:0 4px;
-    border-left:1px solid var(--cm-border-soft);
-  }
-  .cal-row-months .month:first-child { border-left:0; }
-  .cal-row-months .month strong { color:var(--cm-fg); font-weight:600; margin-right:6px; }
-
-  /* MC bars row */
-  .cal-row-mcs {
-    position:relative;
-    background:var(--cm-bg-soft);
-    border-radius:8px;
-    border:1px solid var(--cm-border-soft);
-  }
-  .mc-bar {
-    position:absolute;
-    top:3px; bottom:3px;
-    border-radius:5px;
-    padding:0 6px;
-    background:var(--cm-accent-soft);
-    border:1px solid var(--cm-border);
-    color:var(--cm-fg-strong);
-    display:flex; align-items:center; justify-content:center;
-    font:600 9.5px/1 var(--cm-font-mono);
-    letter-spacing:0.02em;
-    cursor:pointer;
-    overflow:hidden;
-    white-space:nowrap;
-    transition:transform 100ms, box-shadow 100ms;
-  }
-  .mc-bar:hover { box-shadow:var(--cm-shadow-2); transform:translateY(-1px); }
-  .mc-bar .lbl { overflow:hidden; text-overflow:ellipsis; }
-  .mc-bar.is-current {
-    background:var(--cm-accent);
-    color:var(--cm-fg-on-accent);
-    border-color:var(--cm-accent);
-  }
-  .mc-bar.is-past { background:var(--cm-bg-sunk); border-color:var(--cm-border-soft); color:var(--cm-fg-faint); }
-
-  /* Match markers row */
-  .cal-row-matches {
-    position:relative;
-    border-top:1px dashed var(--cm-border);
-  }
-  .match-marker {
-    position:absolute;
-    top:3px;
-    transform:translateX(-50%);
-    display:flex; align-items:center; gap:3px;
-    padding:2px 5px;
-    background:var(--cm-surface);
-    border:1px solid var(--cm-border-strong);
-    border-radius:999px;
-    font:600 9px/1 var(--cm-font-mono);
-    letter-spacing:0.03em;
-    color:var(--cm-fg-strong);
-    white-space:nowrap;
-    cursor:pointer;
-    max-width:90px;
-    overflow:hidden;
-    text-overflow:ellipsis;
-  }
-  .match-marker.is-liga     { color:var(--cm-success); border-color:var(--cm-success-bd); background:var(--cm-success-bg); }
-  .match-marker.is-copa     { color:var(--cm-warning); border-color:var(--cm-warning-bd); background:var(--cm-warning-bg); }
-  .match-marker.is-inter    { color:var(--cm-info);    border-color:var(--cm-info-bd);    background:var(--cm-info-bg); }
-  .match-marker.is-amistoso { color:var(--cm-fg-muted);border-color:var(--cm-border);     background:var(--cm-bg-soft); }
-  .match-marker .ti { font-size:9px; flex-shrink:0; }
-  .match-marker .extra { font:600 8px/1 var(--cm-font-mono); opacity:0.75; margin-left:1px; }
-
-  /* Today line — spans full ribbon height as child of .cal-ribbon */
-  .today-line {
-    position:absolute;
-    top:0; bottom:0;
-    width:0;
-    border-left:2px solid var(--cm-fg-strong);
-    z-index:5;
-    pointer-events:none;
-  }
-  .today-line::after {
-    content:"TODAY";
-    position:absolute;
-    top:0; left:-22px;
-    width:44px;
-    background:var(--cm-fg-strong);
-    color:var(--cm-bg);
-    font:600 9px/1 var(--cm-font-mono);
-    letter-spacing:0.08em;
-    padding:3px 0;
-    border-radius:0 0 4px 4px;
-    text-align:center;
-  }
-
-  /* Date ticks (day-of-month numbers: 5, 10, 15, 20, 25) */
-  .cal-row-dates {
-    position:relative;
-    font:500 9px/1 var(--cm-font-mono);
-    color:var(--cm-fg-faint);
-  }
-  .cal-row-dates .dt {
-    position:absolute;
-    transform:translateX(-50%);
-    padding-top:3px;
-    border-top:1px solid var(--cm-border-soft);
-    white-space:nowrap;
-  }
 
   /* ============================================================
      SEASON RIBBON V2 (px-por-día) — detrás de RIBBON_V2, inactivo.
@@ -1189,30 +1052,6 @@
           </div>
         </div>
 
-        <div class="cal-ribbon-body">
-          <div class="cal-ribbon" style="position:relative">
-            <!-- Season name row: rendered by renderSeasonRibbon() -->
-            <div class="cal-row-season" id="calRibbonSeasonLabel"></div>
-
-            <!-- Months: rendered dynamically by renderSeasonRibbon() -->
-            <div class="cal-row-months" id="calRibbonMonths" style="grid-template-columns: repeat(6,1fr)">
-              <span class="month" style="color:var(--cm-fg-faint);font-style:italic">Loading…</span>
-            </div>
-
-            <!-- MC bars row — rendered by renderSeasonRibbon() from Supabase microcycles data -->
-            <div class="cal-row-mcs" id="calRibbonMcs" style="position:relative; height:30px"></div>
-
-            <!-- Match markers row — rendered by renderSeasonRibbon() -->
-            <div class="cal-row-matches" id="calRibbonMatches" style="position:relative; height:24px"></div>
-
-            <!-- Date ticks: day-of-month numbers, rendered by renderSeasonRibbon() -->
-            <div class="cal-row-dates" id="calRibbonDates"></div>
-
-            <!-- Today line spans full ribbon height -->
-            <div class="today-line" id="calTodayLine" style="left:50%"></div>
-          </div>
-        </div>
-
         <!-- Season ribbon V2 (px-per-day engine, behind RIBBON_V2) -->
         <div class="season-ribbon__viewport" id="calRibbonV2" hidden>
           <div class="ribbon-track" id="calV2Track">
@@ -1781,7 +1620,6 @@ let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'al
 let _activeTeamId = null, _myTeams = [];
 let _currentUserId = null, _currentUserName = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
-let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
 let _ribbonV2Meta = null;    // { ribbonStart, ribbonEnd } — set by renderSeasonRibbonV2 for px-engine controls
 let _ribbonV2Centered = false; // V2 initial auto-scroll to today done once (don't yank scroll on re-render)
 let _calComps = [];          // competitions of the active season (from Annual Planner)
@@ -1789,8 +1627,6 @@ let _calSeasonId = null;     // id of the active/most-recent season for this tea
 let _calSeason = null;       // full active/most-recent season row
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
-let _ribbonZoom = 1;         // ribbon horizontal zoom factor (1 = fit width, >1 = wider + scroll)
-const RIBBON_V2 = true;           // flip a true en F4
 let _ribbonZoomIdx = 2;           // índice en RIBBON_ZOOM
 const RIBBON_ZOOM = [10, 13, 16, 20, 25];  // px por día
 const RIBBON_GUTTER = 28;         // padding lateral del track, px
@@ -3804,101 +3640,8 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
   }, 0);
 });
 
-// ── Ribbon pager: scroll by 2 months + live label update ─────
-(function() {
-  if (RIBBON_V2) return; // px-engine handles its own controls below
-  const rb = document.querySelector('.cal-ribbon-body');
-  if (!rb) return;
-
-  // Scroll ±3 months (or shift sub-range when active)
-  document.querySelectorAll('.cal-ribbon-h .cal-pager button').forEach((btn, i) => {
-    btn.addEventListener('click', () => {
-      if (!_ribbonMeta) return;
-      const dir = i === 0 ? -1 : 1; // -1 = back, +1 = forward
-      if (_ribbonViewRange) {
-        // Shift the sub-range by ~3 months
-        const shiftMs = 91 * 86400000 * dir;
-        const newFrom = new Date(new Date(_ribbonViewRange.from + 'T00:00:00').getTime() + shiftMs);
-        const newTo   = new Date(new Date(_ribbonViewRange.to   + 'T00:00:00').getTime() + shiftMs);
-        _ribbonViewRange = {
-          from: newFrom.toISOString().slice(0, 10),
-          to:   newTo.toISOString().slice(0, 10),
-        };
-        renderSeasonRibbon(_allMCs, _matchSessions);
-      } else {
-        const { totalMs } = _ribbonMeta;
-        const ribbonEl = rb.querySelector('.cal-ribbon');
-        const totalW = (ribbonEl ? ribbonEl.scrollWidth : rb.scrollWidth) || 1;
-        const monthPx = (91 * 86400000 / totalMs) * totalW;
-        rb.scrollBy({ left: dir * monthPx, behavior: 'smooth' });
-      }
-    });
-  });
-
-  // Update pager label on scroll
-  let _scrollTimer;
-  rb.addEventListener('scroll', () => {
-    clearTimeout(_scrollTimer);
-    _scrollTimer = setTimeout(() => {
-      if (!_ribbonMeta) return;
-      const { ribbonStart, totalMs } = _ribbonMeta;
-      const ribbonEl = rb.querySelector('.cal-ribbon');
-      const totalW = (ribbonEl ? ribbonEl.scrollWidth : rb.scrollWidth) || 1;
-      const visStart = new Date(ribbonStart.getTime() + (rb.scrollLeft / totalW) * totalMs);
-      const visEnd   = new Date(ribbonStart.getTime() + ((rb.scrollLeft + rb.clientWidth) / totalW) * totalMs);
-      const sy = visStart.getFullYear(), ey = visEnd.getFullYear();
-      const yr = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
-      const pagerLabel = document.getElementById('calRibbonPagerLabel');
-      if (pagerLabel) pagerLabel.innerHTML = `${yr}<span class="yr">${MONTHS_SHORT[visStart.getMonth()]} → ${MONTHS_SHORT[visEnd.getMonth()]}</span>`;
-    }, 40);
-  });
-
-  // ── Zoom + drag-pan ──
-  const ribbonEl = () => rb.querySelector('.cal-ribbon');
-  function applyRibbonZoom(){
-    const el = ribbonEl(); if (!el) return;
-    if (_ribbonZoom > 1){ el.style.width = (_ribbonZoom * 100) + '%'; rb.classList.add('is-zoomed'); }
-    else { el.style.width = ''; rb.classList.remove('is-zoomed'); }
-    const reset = document.getElementById('calRibbonReset');
-    if (reset) reset.style.display = (_ribbonZoom > 1 || _ribbonViewRange) ? '' : 'none';
-  }
-  window._applyRibbonZoom = applyRibbonZoom;
-  function todayPct(){
-    if (!_ribbonMeta) return 50;
-    return Math.max(0, Math.min(100, (Date.now() - _ribbonMeta.ribbonStart.getTime()) / _ribbonMeta.totalMs * 100));
-  }
-  function centerOn(pct){
-    const el = ribbonEl(); if (!el) return;
-    rb.scrollLeft = el.scrollWidth * (pct / 100) - rb.clientWidth / 2;
-  }
-  function setZoom(z){
-    _ribbonZoom = Math.max(1, Math.min(6, z));
-    applyRibbonZoom();
-    requestAnimationFrame(() => centerOn(todayPct()));
-  }
-  document.getElementById('calRibbonZoomIn')?.addEventListener('click', () => setZoom(_ribbonZoom + 1));
-  document.getElementById('calRibbonZoomOut')?.addEventListener('click', () => setZoom(_ribbonZoom - 1));
-  document.getElementById('calRibbonToday')?.addEventListener('click', () => { if (_ribbonZoom === 1) setZoom(2); else centerOn(todayPct()); });
-
-  let _drag = null, _moved = false;
-  rb.addEventListener('pointerdown', e => {
-    if (e.button !== 0) return;
-    _drag = { x: e.clientX, sl: rb.scrollLeft }; _moved = false;
-    rb.classList.add('is-grabbing');
-  });
-  window.addEventListener('pointermove', e => {
-    if (!_drag) return;
-    const dx = e.clientX - _drag.x;
-    if (Math.abs(dx) > 4) _moved = true;
-    rb.scrollLeft = _drag.sl - dx;
-  });
-  window.addEventListener('pointerup', () => { if (_drag){ _drag = null; rb.classList.remove('is-grabbing'); } });
-  rb.addEventListener('click', e => { if (_moved){ e.stopPropagation(); e.preventDefault(); _moved = false; } }, true);
-})();
-
 // ── Season ribbon V2 controls (px engine, only when RIBBON_V2) ──
 (function() {
-  if (!RIBBON_V2) return; // v1 IIFE above owns the controls otherwise
   const vp = document.getElementById('calRibbonV2');
   if (!vp) return;
 
@@ -4077,9 +3820,7 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
 // ── Ribbon Reset button ───────────────────────────────────────
 document.getElementById('calRibbonReset')?.addEventListener('click', () => {
   _ribbonViewRange = null;
-  _ribbonZoom = 1;
   renderSeasonRibbon(_allMCs, _matchSessions);
-  if (window._applyRibbonZoom) window._applyRibbonZoom();
 });
 
 // ── Filter pills ──────────────────────────────────────────────
@@ -4398,8 +4139,6 @@ async function refreshRibbonMatches() {
 function renderSeasonRibbon(mcs, extraMatches) {
   extraMatches = extraMatches || _matchSessions;
   if (!mcs.length) return;
-  const oldBody = document.querySelector('.cal-ribbon-body');
-  if (oldBody) oldBody.hidden = true;
   document.getElementById('calRibbonV2').hidden = false;
   renderSeasonRibbonV2(mcs, extraMatches);
 }
