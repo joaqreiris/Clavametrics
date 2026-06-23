@@ -335,7 +335,7 @@
       if (it._el.classList.contains('gp-c')) { ensureHandles(it._el); observeCard(it._el); }
     });
     grid.classList.add('is-canvas');
-    if (!grid.__gpCompacted) { grid.__gpCompacted = true; const anySaved = [...grid.querySelectorAll(':scope > .gp-c')].some(el => Number.isFinite(+el.dataset.y) && el.dataset.y !== ''); if (!anySaved) compact(grid); }
+    if (!grid.__gpCompacted) { grid.__gpCompacted = true; compact(grid); }
   }
   function syncEditClass() {
     const editing = !!document.querySelector('#editToggle.is-on');
@@ -372,6 +372,13 @@
     document.querySelectorAll('.gp-grid').forEach(g => obs.observe(g, { childList: true }));
     document.getElementById('sections')?.addEventListener('click', () => setTimeout(renderAll, 80));
     document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#editToggle')) setTimeout(syncEditClass, 30); });
+    const _eb = document.getElementById('editToggle');
+    if (_eb) _eb.classList.remove('is-on');
+    document.querySelectorAll('.gp-grid').forEach(g => {
+      g.classList.remove('is-edit');
+      const sg = g.querySelector(':scope > .gp-snapgrid');
+      if (sg) sg.remove();
+    });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
