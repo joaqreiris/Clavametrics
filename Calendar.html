@@ -3575,7 +3575,11 @@ async function saveEvt() {
     if (type === 'match') {
       basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
-      basePayload.competition = document.getElementById('calEvtF_competition').value || null;
+      const compId = document.getElementById('calEvtF_competition').value || null;
+      const comp   = _calComps.find(c => c.id === compId);
+      basePayload.competition_id = compId;
+      basePayload.competition    = comp ? comp.comp_type : 'friendly';
+      basePayload.season_id      = _calSeasonId;
       basePayload.location    = document.getElementById('calEvtF_location').value.trim() || null;
     }
     const rows = dates.map(d => ({ ...basePayload, date: d }));
@@ -3594,7 +3598,11 @@ async function saveEvt() {
     if (type === 'match') {
       payload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       payload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
-      payload.competition = document.getElementById('calEvtF_competition').value || null;
+      const compId = document.getElementById('calEvtF_competition').value || null;
+      const comp   = _calComps.find(c => c.id === compId);
+      payload.competition_id = compId;
+      payload.competition    = comp ? comp.comp_type : 'friendly';
+      payload.season_id      = _calSeasonId;
       payload.location    = document.getElementById('calEvtF_location').value.trim() || null;
       if (_pendingCrestUrl) payload.rival_crest_url = _pendingCrestUrl;
     }
