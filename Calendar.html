@@ -4433,16 +4433,23 @@ function renderSeasonRibbon(mcs, extraMatches) {
   const lastMcEnd    = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
 
   // Sub-range override (Punto 3: Jump to date range)
-  const ribbonStart = _ribbonViewRange?.from
+  let ribbonStart = _ribbonViewRange?.from
     ? new Date(_ribbonViewRange.from + 'T00:00:00')
     : _calSeason?.start_date
       ? new Date(_calSeason.start_date + 'T00:00:00')
       : firstMcStart;
-  const ribbonEnd = _ribbonViewRange?.to
+  let ribbonEnd = _ribbonViewRange?.to
     ? new Date(_ribbonViewRange.to + 'T00:00:00')
     : _calSeason?.end_date
       ? new Date(_calSeason.end_date + 'T00:00:00')
       : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
+  // Never crop before the real content (active season end can precede the last MC / today)
+  if (!_ribbonViewRange) {
+    const todayDate = new Date(TODAY + 'T00:00:00');
+    if (lastMcEnd > ribbonEnd)      ribbonEnd   = lastMcEnd;
+    if (todayDate > ribbonEnd)      ribbonEnd   = todayDate;
+    if (firstMcStart < ribbonStart) ribbonStart = firstMcStart;
+  }
   const totalMs = ribbonEnd - ribbonStart;
   if (totalMs <= 0) return;
 
@@ -4665,16 +4672,23 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
   const lastMcEnd    = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
 
   // Same range resolution as renderSeasonRibbon
-  const ribbonStart = _ribbonViewRange?.from
+  let ribbonStart = _ribbonViewRange?.from
     ? new Date(_ribbonViewRange.from + 'T00:00:00')
     : _calSeason?.start_date
       ? new Date(_calSeason.start_date + 'T00:00:00')
       : firstMcStart;
-  const ribbonEnd = _ribbonViewRange?.to
+  let ribbonEnd = _ribbonViewRange?.to
     ? new Date(_ribbonViewRange.to + 'T00:00:00')
     : _calSeason?.end_date
       ? new Date(_calSeason.end_date + 'T00:00:00')
       : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
+  // Never crop before the real content (active season end can precede the last MC / today)
+  if (!_ribbonViewRange) {
+    const todayDate = new Date(TODAY + 'T00:00:00');
+    if (lastMcEnd > ribbonEnd)      ribbonEnd   = lastMcEnd;
+    if (todayDate > ribbonEnd)      ribbonEnd   = todayDate;
+    if (firstMcStart < ribbonStart) ribbonStart = firstMcStart;
+  }
   if (ribbonEnd - ribbonStart <= 0) return;
 
   // Expose range for the px-engine controls IIFE
