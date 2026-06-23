@@ -2757,7 +2757,7 @@ function openEvtModal(session, defaultDate, focusTasks) {
 
   // day_off: hide duration field
   const durWrap = document.getElementById('calEvtDurationWrap');
-  if (durWrap) durWrap.style.display = evtType === 'day_off' ? 'none' : '';
+  if (durWrap) durWrap.style.display = (evtType === 'day_off' || evtType === 'match') ? 'none' : '';
 
   document.getElementById('calEvtF_notes').value = session?.notes || '';
   document.getElementById('calEvtDelete').style.display = session ? 'inline-flex' : 'none';
@@ -3506,7 +3506,9 @@ async function saveEvt() {
   const type        = document.getElementById('calEvtF_type').value;
   const title       = document.getElementById('calEvtF_title').value.trim();
   const date        = document.getElementById('calEvtF_date').value;
-  const duration    = type === 'day_off' ? null : (parseInt(document.getElementById('calEvtF_duration').value) || null);
+  const duration    = type === 'day_off' ? null
+                    : type === 'match'   ? 90
+                    : (parseInt(document.getElementById('calEvtF_duration').value) || null);
   const notes       = document.getElementById('calEvtF_notes').value.trim() || null;
   const estimatedRpe = parseInt(document.getElementById('calEvtF_rpe').value) || null;
   const startTimeVal = document.getElementById('calEvtF_starttime').value || null;
@@ -3674,7 +3676,7 @@ document.getElementById('calEvtF_type').addEventListener('change', function() {
   if (durEl && !_editEvtId) { durEl.value = DURATION_DEFAULTS[t] ?? ''; }
   // day_off: hide duration
   const durWrap = document.getElementById('calEvtDurationWrap');
-  if (durWrap) durWrap.style.display = t === 'day_off' ? 'none' : '';
+  if (durWrap) durWrap.style.display = (t === 'day_off' || t === 'match') ? 'none' : '';
   // Update visible-to defaults to match new type (only on new events)
   if (!_editEvtId) setVisibleToDefaults(t);
 });
