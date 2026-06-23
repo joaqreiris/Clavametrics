@@ -1142,6 +1142,37 @@ const POS_CFG = {
 };
 const GROUPS_ORDER = ['Goalkeepers','Defenders','Midfielders','Wingers','Forwards','Other'];
 
+// Normalize a free-text position (CSV import, etc.) to a code POS_CFG understands.
+const _POS_ALIASES = {
+  GOALKEEPER:'GK', PORTERO:'GK', ARQUERO:'GK', GUARDAMETA:'GK', GOLERO:'GK',
+  DEFENDER:'CB', DEF:'CB', DEFENSA:'CB', DEFENSOR:'CB', 'CENTRE BACK':'CB', 'CENTER BACK':'CB', 'CENTRE-BACK':'CB', CENTRAL:'CB', ZAGUERO:'CB',
+  'LEFT BACK':'LB', 'LEFT-BACK':'LB', 'LATERAL IZQUIERDO':'LB', 'LATERAL IZQ':'LB',
+  'RIGHT BACK':'RB', 'RIGHT-BACK':'RB', 'LATERAL DERECHO':'RB', 'LATERAL DER':'RB',
+  FULLBACK:'FB', 'FULL BACK':'FB', LATERAL:'FB',
+  'WING BACK':'WB', WINGBACK:'WB', CARRILERO:'WB',
+  'LEFT WING BACK':'LWB', 'RIGHT WING BACK':'RWB',
+  'DEFENSIVE MIDFIELDER':'CDM', 'DEFENSIVE MID':'CDM', DM:'CDM', PIVOTE:'CDM', 'MEDIOCENTRO DEFENSIVO':'CDM', 'VOLANTE DEFENSIVO':'CDM',
+  'CENTRAL MIDFIELDER':'CM', 'CENTRAL MID':'CM', MEDIOCENTRO:'CM', VOLANTE:'CM',
+  'ATTACKING MIDFIELDER':'CAM', 'ATTACKING MID':'CAM', AM:'CAM', MEDIAPUNTA:'CAM', ENGANCHE:'CAM',
+  MIDFIELDER:'CM', MID:'CM', MF:'CM', MEDIO:'CM', MEDIOCAMPO:'CM', MEDIOCAMPISTA:'CM',
+  'LEFT MIDFIELDER':'LM', 'LEFT MID':'LM', 'RIGHT MIDFIELDER':'RM', 'RIGHT MID':'RM',
+  WINGER:'WG', EXTREMO:'WG',
+  'LEFT WINGER':'LW', 'LEFT WING':'LW', 'EXTREMO IZQUIERDO':'LW', 'EXTREMO IZQ':'LW',
+  'RIGHT WINGER':'RW', 'RIGHT WING':'RW', 'EXTREMO DERECHO':'RW', 'EXTREMO DER':'RW',
+  STRIKER:'ST', DELANTERO:'ST', ATACANTE:'ST',
+  'CENTRE FORWARD':'CF', 'CENTER FORWARD':'CF', 'DELANTERO CENTRO':'CF',
+  'SECOND STRIKER':'SS', 'SEGUNDA PUNTA':'SS', 'SEGUNDO DELANTERO':'SS',
+  FORWARD:'ST', FW:'ST',
+};
+function normalizePosition(raw) {
+  if (raw == null) return null;
+  const k = String(raw).trim().toUpperCase().replace(/\s+/g, ' ');
+  if (!k) return null;
+  if (POS_CFG[k]) return k;               // already a valid code
+  if (_POS_ALIASES[k]) return _POS_ALIASES[k];
+  return k;                                // unknown: keep cleaned value (don't lose data)
+}
+
 function calcAge(dob) {
   if (!dob) return '—';
   const d = new Date(dob), now = new Date();
@@ -1869,7 +1900,7 @@ async function reloadPlayers() {
         first_name:    r.first_name  || null,
         last_name:     r.last_name   || null,
         number:        parseInt(r.number) || null,
-        position:      r.position    || null,
+        position:      normalizePosition(r.position),
         date_of_birth: r.date_of_birth || null,
         nationality:   r.nationality || null,
         height:        parseFloat(r.height) || null,
