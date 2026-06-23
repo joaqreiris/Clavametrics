@@ -1154,6 +1154,32 @@ function fmtDob(dob) {
   return new Date(dob).toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
+// Compress/resize an image client-side before upload (no deps).
+// Scales the longest side down to maxDim and re-encodes as JPEG under maxBytes.
+async function compressImage(file, { maxDim = 1000, maxBytes = 2 * 1024 * 1024 } = {}) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return file;
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file);
+    });
+    const img = await new Promise((res, rej) => {
+      const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = dataUrl;
+    });
+    let w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (Math.max(w, h) > maxDim) { const k = maxDim / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); // white bg so transparent PNGs don't go black
+    ctx.drawImage(img, 0, 0, w, h);
+    let q = 0.85;
+    let blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', q));
+    while (blob && blob.size > maxBytes && q > 0.4) { q -= 0.15; blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', q)); }
+    if (!blob) return file;
+    const base = (file.name || 'photo').replace(/\.[^.]+$/, '') || 'photo';
+    return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+  } catch (e) { console.warn('compressImage failed, uploading original:', e); return file; }
+}
+
 let _allPlayers = [];
 let _teams = [];
 let _currentTeamId = null;
@@ -1544,9 +1570,9 @@ async function reloadPlayers() {
 
     async function uploadPhoto(playerId, clubId) {
       if (!photoFile) return null;
-      const ext = photoFile.name.split('.').pop().toLowerCase();
-      const path = `${clubId}/${playerId}.${ext}`;
-      const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, photoFile, { upsert: true });
+      const fileToUpload = await compressImage(photoFile, { maxDim: 1000, maxBytes: 2 * 1024 * 1024 });
+      const path = `${clubId}/${playerId}.jpg`;
+      const { error: upErr } = await window.sb.storage.from('player-photos').upload(path, fileToUpload, { upsert: true, contentType: 'image/jpeg' });
       if (upErr) { console.error('Photo upload failed:', upErr); showToast('Photo upload failed: ' + upErr.message); return null; }
       const { data: urlData } = window.sb.storage.from('player-photos').getPublicUrl(path);
       return urlData?.publicUrl || null;
