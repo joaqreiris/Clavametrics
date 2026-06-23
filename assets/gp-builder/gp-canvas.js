@@ -72,8 +72,6 @@
       });
     });
   }
-  // F4: reflow a card's charts whenever its box changes (live during resize,
-  // and after move/push), so content stays well-fitted at any size.
   function observeCard(card) {
     if (card.__gpRO || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => reflowCard(card));
@@ -93,7 +91,7 @@
       .map(el => ({ el, ...readCoords(el) }));
   }
 
-  // ── F3: collision push (float mode, push DOWN only) ──────────────────────
+  // ── collision push (float mode, push DOWN only) ──────────────────────────
   function collide(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
@@ -110,8 +108,6 @@
       }
     }
   }
-  // Deterministic overlap removal (top-to-bottom): each card is pushed below
-  // any earlier-placed card it collides with. Idempotent on clean layouts.
   function resolveAll(items) {
     const placed = [];
     items.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x)).forEach(it => {
@@ -126,10 +122,10 @@
 
   // ── F5: page formats + compact ───────────────────────────────────────────
   const FORMATS = {
-    fit:  { w: null, h: null },   // responsive, fills container (default)
-    wide: { w: 1280, h: 720 },    // 16:9 presentation
-    a4l:  { w: 1123, h: 794 },    // A4 landscape (96dpi)
-    a4p:  { w: 794,  h: 1123 },   // A4 portrait
+    fit:  { w: null, h: null },
+    wide: { w: 1280, h: 720 },
+    a4l:  { w: 1123, h: 794 },
+    a4p:  { w: 794,  h: 1123 },
   };
   const PAGE_KEY = v => `cm_gp_page_${window._gpUserId || '?'}_${v || 'default'}`;
 
@@ -146,16 +142,19 @@
       grid.classList.remove('gp-paged');
     }
   }
+  function activeGrid() { return document.querySelector('.gp-view.is-on .gp-grid'); }
+  function activeView() { const v = document.querySelector('.gp-view.is-on'); return v ? v.dataset.view : null; }
+
   function applyStoredPage(grid) {
-    const view = grid.closest('.gp-view') && grid.closest('.gp-view').dataset.view;
+    const vEl = grid.closest('.gp-view');
+    const view = vEl && vEl.dataset.view;
     let key = 'fit';
     try { key = localStorage.getItem(PAGE_KEY(view)) || 'fit'; } catch (e) {}
     applyPage(grid, key);
-    const sel = grid.closest('.gp-view') && grid.closest('.gp-view').querySelector('.gp-page-sel');
-    if (sel) sel.value = key;
+    const sel = document.querySelector('.gp-page-sel');
+    if (sel && vEl && vEl.classList.contains('is-on')) sel.value = key;
   }
 
-  // Gravity: pull every card up as far as it goes without colliding.
   function compact(grid) {
     if (!grid) return;
     const items = snapshot(grid).sort((a, b) => (a.y - b.y) || (a.x - b.x));
@@ -173,11 +172,9 @@
     if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
   }
 
-  // Inject the page selector + Compactar button into the dashboard bar (once).
-  function ensureToolbar(grid) {
-    const view = grid.closest('.gp-view'); if (!view) return;
-    const right = view.querySelector('.gp-dash-bar .right'); if (!right) return;
-    if (right.querySelector('.gp-page-sel')) return;
+  function ensureToolbar() {
+    const right = document.querySelector('.gp-dash-bar .right');
+    if (!right || right.querySelector('.gp-page-sel')) return;
     const sel = document.createElement('select');
     sel.className = 'pill gp-page-sel';
     sel.innerHTML = '<option value="fit">Ajustar al ancho</option>'
@@ -185,18 +182,19 @@
                   + '<option value="a4l">A4 horizontal</option>'
                   + '<option value="a4p">A4 vertical</option>';
     sel.addEventListener('change', () => {
-      try { localStorage.setItem(PAGE_KEY(view.dataset.view), sel.value); } catch (e) {}
-      applyPage(grid, sel.value);
+      const g = activeGrid(); if (!g) return;
+      try { localStorage.setItem(PAGE_KEY(activeView()), sel.value); } catch (e) {}
+      applyPage(g, sel.value);
     });
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'pill gp-compact-btn';
     btn.innerHTML = '<i class="ti ti-arrow-bar-to-up"></i>Compactar';
-    btn.addEventListener('click', () => compact(grid));
+    btn.addEventListener('click', () => { const g = activeGrid(); if (g) compact(g); });
     right.insertBefore(btn, right.firstChild);
     right.insertBefore(sel, right.firstChild);
   }
 
-  // ── F2: resize handles ───────────────────────────────────────────────────
+  // ── resize handles ───────────────────────────────────────────────────────
   const HANDLES = [
     { k: 'n', T: 1 }, { k: 'e', R: 1 }, { k: 's', B: 1 }, { k: 'w', L: 1 },
     { k: 'nw', T: 1, L: 1 }, { k: 'ne', T: 1, R: 1 }, { k: 'sw', B: 1, L: 1 }, { k: 'se', B: 1, R: 1 },
@@ -212,8 +210,8 @@
   }
 
   // ── unified pointer interaction (resize OR move) ─────────────────────────
-  let rz = null;   // active resize
-  let mv = null;   // active move
+  let rz = null;
+  let mv = null;
 
   function canInteract(grid) {
     return grid && grid.classList.contains('is-canvas') && grid.classList.contains('is-edit')
@@ -305,7 +303,7 @@
     if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
   }
 
-  // ── render one grid in canvas mode (F1) + handles (F2) ───────────────────
+  // ── render ───────────────────────────────────────────────────────────────
   function placeCards(grid) {
     const cards = [...grid.querySelectorAll(':scope > .gp-c, :scope > .gp-add')];
     if (!cards.length) { grid.classList.remove('is-canvas'); return; }
@@ -328,7 +326,7 @@
   function renderGrid(grid) {
     if (!ENABLED || !grid) return;
     placeCards(grid);
-    ensureToolbar(grid);    // F5: page selector + Compactar in the dashboard bar
+    ensureToolbar();        // F5: page selector + Compactar in the (shared) dashboard bar
     applyStoredPage(grid);  // F5: restore the saved page format
   }
   function renderAll() { document.querySelectorAll('.gp-grid').forEach(renderGrid); }
