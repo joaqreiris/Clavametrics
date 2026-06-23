@@ -192,6 +192,14 @@
     btn.addEventListener('click', () => { const g = activeGrid(); if (g) compact(g); });
     right.insertBefore(btn, right.firstChild);
     right.insertBefore(sel, right.firstChild);
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'pill gp-addcard-btn';
+    add.innerHTML = '<i class="ti ti-plus"></i>Add card';
+    add.addEventListener('click', () => {
+      const g = activeGrid(); const tile = g && g.querySelector('.gp-add');
+      if (tile) tile.click();
+    });
+    right.insertBefore(add, right.firstChild);
   }
 
   // ── resize handles ───────────────────────────────────────────────────────
