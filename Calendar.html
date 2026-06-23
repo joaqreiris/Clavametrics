@@ -3573,6 +3573,7 @@ async function saveEvt() {
     closeEvtModal();
     showCalToast(`${rows.length} events created.`);
     await loadSessions();
+    await refreshRibbonMatches();
     return;
   }
 
@@ -3637,6 +3638,7 @@ async function saveEvt() {
   closeEvtModal();
   showCalToast(_editEvtId ? 'Event updated.' : 'Event added.');
   await loadSessions();
+  await refreshRibbonMatches();
 }
 
 async function deleteEvt() {
@@ -3646,6 +3648,7 @@ async function deleteEvt() {
   if (error) { showCalToast('Error: ' + error.message); return; }
   closeEvtModal(); showCalToast('Event deleted.');
   await loadSessions();
+  await refreshRibbonMatches();
 }
 
 async function deleteEvtSeries() {
@@ -3656,6 +3659,7 @@ async function deleteEvtSeries() {
   if (error) { showCalToast('Error: ' + error.message); return; }
   closeEvtModal(); showCalToast('Series deleted.');
   await loadSessions();
+  await refreshRibbonMatches();
 }
 
 document.getElementById('calEvtClose').addEventListener('click', closeEvtModal);
@@ -4436,6 +4440,22 @@ async function loadSeasonSettings() {
     .eq('module_key', 'season')
     .maybeSingle();
   _seasonSettings = data || null;
+}
+
+// Refetch match events + re-render ribbon/KPIs/upcoming (after event CRUD)
+async function refreshRibbonMatches() {
+  const { data: ms } = await window.sb.from('calendar_events')
+    .select('id,title,date,opponent,home_away,competition,rival_crest_url')
+    .eq('club_id', _clubId).eq('team_id', _activeTeamId)
+    .eq('type', 'match').order('date');
+  _matchSessions = (ms || []).map(s => ({
+    ...s,
+    session_date: (s.date || '').split('T')[0],
+    title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')
+  }));
+  renderSeasonRibbon(_allMCs, _matchSessions);
+  renderCalKPIs(_allMCs);
+  renderUpcoming();
 }
 
 function renderSeasonRibbon(mcs, extraMatches) {
@@ -5399,12 +5419,7 @@ async function showImportPreview(fixtures) {
     closeImport();
     showCalToast(`${_importParsed.length} fixture${_importParsed.length>1?'s':''} imported.`);
     // Reload match events and re-render ribbon + KPIs
-    const { data: ms } = await window.sb.from('calendar_events')
-      .select('id,title,date,opponent,home_away,competition').eq('club_id',_clubId).eq('team_id',_activeTeamId).eq('type','match').order('date');
-    _matchSessions = (ms||[]).map(s => ({...s, session_date: (s.date||'').split('T')[0], title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')}));
-    renderSeasonRibbon(_allMCs, _matchSessions);
-    renderCalKPIs(_allMCs);
-    renderUpcoming();
+    await refreshRibbonMatches();
   });
 })();
 
