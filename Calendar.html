@@ -4168,15 +4168,6 @@ async function renderMonthView() {
     sessMap[d].push(s);
     _monthEvts.push(s);
   });
-  _allMCs.forEach(mc => {
-    if (!mc.match_date || mc.match_date < monthStart || mc.match_date > monthEnd) return;
-    if (!sessMap[mc.match_date]) sessMap[mc.match_date] = [];
-    if (!sessMap[mc.match_date].find(s => s.session_type === 'match')) {
-      const evt = { id:'mc-'+mc.id, title:`vs ${mc.rival||'Match'}`, session_type:'match', session_date:mc.match_date, source:'mc', _mc:mc };
-      sessMap[mc.match_date].push(evt);
-      _monthEvts.push(evt);
-    }
-  });
 
   const firstDay = new Date(y, m, 1).getDay();
   const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -4283,11 +4274,6 @@ async function renderListView() {
   const items = (sessions || []).map(s => ({
     date: s.session_date, title: s.title, type: s.session_type, duration: s.duration
   }));
-  _allMCs.forEach(mc => {
-    if (!mc.match_date || mc.match_date < TODAY) return;
-    if (!items.find(i => i.date === mc.match_date && i.type === 'match'))
-      items.push({ date: mc.match_date, title:`vs ${mc.rival||'Match'}`, type:'match', isAway: mc.home_away === 'away' });
-  });
   items.sort((a, b) => a.date > b.date ? 1 : -1);
 
   const sub = document.getElementById('calListSub');
@@ -5097,12 +5083,6 @@ async function renderUpcoming() {
   _upcomingAllItems = [];
   (sessions || []).forEach(s => {
     _upcomingAllItems.push({ id: s.id || null, source: s.source || null, date: s.session_date, title: s.title, type: s.session_type, start_time: s.start_time || null, rival_crest_url: s.rival_crest_url || null });
-  });
-  _allMCs.forEach(mc => {
-    if (!mc.match_date || mc.match_date < TODAY || mc.match_date > in14d) return;
-    if (!_upcomingAllItems.find(i => i.date === mc.match_date && i.type === 'match')) {
-      _upcomingAllItems.push({ date: mc.match_date, title: `vs ${mc.rival || 'Match'}`, type: 'match', isAway: mc.home_away === 'away' });
-    }
   });
   _upcomingAllItems.sort((a, b) => a.date > b.date ? 1 : -1);
 
