@@ -1937,10 +1937,11 @@ async function applyGrpDefaultLayout() {
     _stashAbsentCards('grp', activeIds);
 
     // Restore metric_key / config per card (delegates to applyLayoutToView logic)
-    for (const { card_id, size, config } of layout) {
+    for (const { card_id, size, config, x, y, w, h } of layout) {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
       _applyCardSize(card, size);
+      if ([x, y, w, h].every(Number.isFinite)) { card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h; }
       if (!config) continue;
       if (config.metric_key) card.dataset.metricKey = config.metric_key;
       if ((card_id === 'sc-zscore-temporal' || card_id === 'sc-vs-session' || card_id === 'outliers') && config.metrics?.length) {
@@ -1949,6 +1950,7 @@ async function applyGrpDefaultLayout() {
       }
     }
     _reorderGrid(grid, layout);
+    if (window.gpCanvas && window.gpCanvas.renderGrid) window.gpCanvas.renderGrid(grid);
   } catch (e) { console.warn('applyGrpDefaultLayout:', e); }
 }
 
@@ -1981,12 +1983,14 @@ async function applyMcDefaultLayout() {
     const activeIds = new Set(layout.map(c => c.card_id));
     _stashAbsentCards('mc', activeIds);
 
-    for (const { card_id, size } of layout) {
+    for (const { card_id, size, x, y, w, h } of layout) {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
       _applyCardSize(card, size);
+      if ([x, y, w, h].every(Number.isFinite)) { card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h; }
     }
     _reorderGrid(grid, layout);
+    if (window.gpCanvas && window.gpCanvas.renderGrid) window.gpCanvas.renderGrid(grid);
   } catch (e) { console.warn('applyMcDefaultLayout:', e); }
 }
 
@@ -2017,13 +2021,15 @@ async function applyDefaultLayoutGeneric(viewKey, defaultsSet) {
     // Subsequent loads — stash absent, apply size/metric_key, reorder
     const activeIds = new Set(layout.map(c => c.card_id));
     _stashAbsentCards(viewKey, activeIds);
-    for (const { card_id, size, config } of layout) {
+    for (const { card_id, size, config, x, y, w, h } of layout) {
       const card = grid.querySelector(`[data-card-id="${card_id}"]`);
       if (!card) continue;
       _applyCardSize(card, size);
       if (config?.metric_key) card.dataset.metricKey = config.metric_key;
+      if ([x, y, w, h].every(Number.isFinite)) { card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h; }
     }
     _reorderGrid(grid, layout);
+    if (window.gpCanvas && window.gpCanvas.renderGrid) window.gpCanvas.renderGrid(grid);
   } catch (e) { console.warn(`applyDefaultLayoutGeneric(${viewKey}):`, e); }
 }
 
