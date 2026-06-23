@@ -2184,6 +2184,9 @@ function renderGrid() {
           const icon = EVT_ICONS[cat] || 'ti-calendar';
           const dur = s.duration ? ` ${s.duration}′` : '';
           const timeStr = s.start_time ? s.start_time.slice(0, 5) : '';
+          // Training: generic "Training" label + no minutes (MD tag already in the day header)
+          const evtName   = cat === 'training' ? 'Training' : (s.title || s.session_type || cat);
+          const durSuffix = cat === 'training' ? '' : dur;
           // AU hidden in player view (staff-only metric)
           const au = (!isPlayerView && s.duration && s.estimated_rpe)
             ? `<span class="mc-evt-au" style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint);margin-left:auto">${s.duration * s.estimated_rpe} AU</span>`
@@ -2194,7 +2197,7 @@ function renderGrid() {
           return `<div class="mc-evt ${cat}" data-id="${s.id}" data-date="${dateStr}" data-has-time="${s.start_time ? '1' : '0'}" draggable="true">
             ${leadEl}
             ${timeStr ? `<span class="time">${timeStr}</span>` : ''}
-            <span class="name" title="${(s.title || s.session_type || cat) + dur}">${s.title || s.session_type || cat}${dur}</span>${au}
+            <span class="name" title="${evtName + durSuffix}">${evtName}${durSuffix}</span>${au}
           </div>`;
         }).join('') || '<div class="mc-evt day-off" style="font-style:italic;opacity:0.6">Hidden by filter</div>';
 
@@ -2844,7 +2847,7 @@ function openEvtModal(session, defaultDate, focusTasks) {
     document.getElementById('calEvtF_title').focus();
   }
 }
-function closeEvtModal() { document.getElementById('calEvtBackdrop').classList.remove('is-open'); _editEvtId = null; }
+function closeEvtModal() { document.getElementById('calEvtBackdrop').classList.remove('is-open'); _editEvtId = null; _editEvtSource = null; }
 
 // ── Unified event popover ─────────────────────────────────────
 let _evtPop = null;
@@ -3048,6 +3051,7 @@ async function deleteEvt(id, source) {
   if (error) { showCalToast('Error: ' + error.message); return; }
   showCalToast('Event deleted.');
   await loadSessions();
+  await refreshRibbonMatches();
 }
 
 async function deleteEvtSeries(recurrenceGroupId) {
@@ -3055,6 +3059,7 @@ async function deleteEvtSeries(recurrenceGroupId) {
   if (error) { showCalToast('Error: ' + error.message); return; }
   showCalToast('Series deleted.');
   await loadSessions();
+  await refreshRibbonMatches();
 }
 
 // ── Tasks shared helpers ──────────────────────────────────────
@@ -3559,7 +3564,7 @@ async function saveEvt() {
     const dates = generateRecurrenceDates(date, pattern, until, customDates);
     if (!dates.length) { showCalToast('No dates generated — check recurrence settings.'); saving.style.display='none'; saveBtn.disabled=false; return; }
     const groupId = crypto.randomUUID();
-    const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, recurrence_group_id: groupId, visible_to: visibleTo };
+    const basePayload = { title, type, duration_minutes: duration, notes, estimated_rpe: estimatedRpe, start_time: startTimeVal, club_id: clubId, team_id: _activeTeamId, recurrence_group_id: groupId, visible_to: visibleTo };
     if (type === 'match') {
       basePayload.opponent    = document.getElementById('calEvtF_opponent').value.trim() || null;
       basePayload.home_away   = document.getElementById('calEvtF_homeaway').value || null;
@@ -3641,32 +3646,23 @@ async function saveEvt() {
   await refreshRibbonMatches();
 }
 
-async function deleteEvt() {
-  if (!_editEvtId || !confirm('Delete this event?')) return;
-  const table = _editEvtSource === 'event' ? 'calendar_events' : 'training_sessions';
-  const { error } = await window.sb.from(table).delete().eq('id', _editEvtId);
-  if (error) { showCalToast('Error: ' + error.message); return; }
-  closeEvtModal(); showCalToast('Event deleted.');
-  await loadSessions();
-  await refreshRibbonMatches();
-}
-
-async function deleteEvtSeries() {
-  const s = _sessions.find(x => x.id === _editEvtId);
-  if (!s?.recurrence_group_id) return;
-  if (!confirm('Delete ALL events in this series?')) return;
-  const { error } = await window.sb.from('calendar_events').delete().eq('recurrence_group_id', s.recurrence_group_id);
-  if (error) { showCalToast('Error: ' + error.message); return; }
-  closeEvtModal(); showCalToast('Series deleted.');
-  await loadSessions();
-  await refreshRibbonMatches();
-}
-
 document.getElementById('calEvtClose').addEventListener('click', closeEvtModal);
 document.getElementById('calEvtCancel').addEventListener('click', closeEvtModal);
 document.getElementById('calEvtSave').addEventListener('click', saveEvt);
-document.getElementById('calEvtDelete').addEventListener('click', deleteEvt);
-document.getElementById('calEvtDeleteSeries').addEventListener('click', deleteEvtSeries);
+document.getElementById('calEvtDelete').addEventListener('click', () => {
+  if (!_editEvtId) return;
+  if (!confirm('Delete this event?')) return;
+  const id = _editEvtId, src = _editEvtSource;
+  closeEvtModal();
+  deleteEvt(id, src);
+});
+document.getElementById('calEvtDeleteSeries').addEventListener('click', () => {
+  const s = _sessions.find(x => x.id === _editEvtId);
+  if (!s?.recurrence_group_id) return;
+  if (!confirm('Delete all events in this series?')) return;
+  closeEvtModal();
+  deleteEvtSeries(s.recurrence_group_id);
+});
 document.getElementById('calEvtBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeEvtModal(); });
 document.getElementById('calEvtF_type').addEventListener('change', function() {
   const t = this.value;
@@ -5388,7 +5384,7 @@ async function showImportPreview(fixtures) {
 
     if (_importParsed.length) {
       const rows = _importParsed.map(f => ({
-        id: crypto.randomUUID(), club_id: _clubId,
+        id: crypto.randomUUID(), club_id: _clubId, team_id: _activeTeamId,
         title: `vs ${f.rival}`, type: 'match',
         date: f.date,
         opponent: f.rival,
