@@ -4840,7 +4840,7 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
           compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
         }
         const rival = s.opponent || (s.title || 'Match').replace(/^vs\s+/i, '');
-        rawMarkers.push({ date: d, isAway, comp: compClass(compStr), rival, isFromMc: false, mcData: null, crestUrl: s.rival_crest_url || null });
+        rawMarkers.push({ date: d, id: s.id, isAway, comp: compClass(compStr), rival, isFromMc: false, mcData: null, crestUrl: s.rival_crest_url || null });
       }
     });
 
@@ -4922,10 +4922,9 @@ function showMatchPopover(anchor, items) {
     const dateFmt = _fmtDateStr(item.date);
     const timeStr = item.mcData?.match_time ? ' · ' + item.mcData.match_time.slice(0,5) : '';
     const border  = i > 0 ? 'border-top:1px solid var(--cm-border-soft);' : '';
-    // Find matching calendar_event for this match date (to allow Edit event)
-    const matchEvt = _sessions.find(s => s.session_date === item.date && s.session_type === 'match');
-    const editEvtBtn = matchEvt
-      ? `<button class="cm-btn is-primary is-sm" style="height:26px;font-size:11.5px" data-pop-edit-evt="${matchEvt.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit event</button>`
+    // Extra calendar_event markers carry their own id → allow Edit event (even in distant MCs)
+    const editEvtBtn = (!item.isFromMc && item.id)
+      ? `<button class="cm-btn is-primary is-sm" style="height:26px;font-size:11.5px" data-pop-edit-evt="${item.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit event</button>`
       : '';
     return `<div style="padding:10px 12px;${border}">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
