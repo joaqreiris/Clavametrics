@@ -6,7 +6,8 @@
        pushed DOWN (float mode: untouched cards stay put, gaps allowed). Native
        HTML5 reorder is suppressed in canvas mode. Persists on drop.
    F3.1: collision push on RESIZE + overlaps auto-resolved on render.
-   F4: charts reflow on box change (ResizeObserver); content CSS in GPS Analysis.html. */
+   F4: charts reflow on box change (ResizeObserver); content CSS in GPS Analysis.html.
+   F5: page formats (fit/16:9/A4) + Compactar (gravity-up); controls injected in the bar. */
 (function () {
   'use strict';
   if (window.gpCanvas) return;
@@ -123,6 +124,78 @@
     });
   }
 
+  // ── F5: page formats + compact ───────────────────────────────────────────
+  const FORMATS = {
+    fit:  { w: null, h: null },   // responsive, fills container (default)
+    wide: { w: 1280, h: 720 },    // 16:9 presentation
+    a4l:  { w: 1123, h: 794 },    // A4 landscape (96dpi)
+    a4p:  { w: 794,  h: 1123 },   // A4 portrait
+  };
+  const PAGE_KEY = v => `cm_gp_page_${window._gpUserId || '?'}_${v || 'default'}`;
+
+  function applyPage(grid, key) {
+    const f = FORMATS[key] || FORMATS.fit;
+    if (f.w) {
+      grid.style.maxWidth = f.w + 'px';
+      grid.style.marginLeft = 'auto'; grid.style.marginRight = 'auto';
+      grid.style.setProperty('--gp-page-h', f.h + 'px');
+      grid.classList.add('gp-paged');
+    } else {
+      grid.style.maxWidth = ''; grid.style.marginLeft = ''; grid.style.marginRight = '';
+      grid.style.removeProperty('--gp-page-h');
+      grid.classList.remove('gp-paged');
+    }
+  }
+  function applyStoredPage(grid) {
+    const view = grid.closest('.gp-view') && grid.closest('.gp-view').dataset.view;
+    let key = 'fit';
+    try { key = localStorage.getItem(PAGE_KEY(view)) || 'fit'; } catch (e) {}
+    applyPage(grid, key);
+    const sel = grid.closest('.gp-view') && grid.closest('.gp-view').querySelector('.gp-page-sel');
+    if (sel) sel.value = key;
+  }
+
+  // Gravity: pull every card up as far as it goes without colliding.
+  function compact(grid) {
+    if (!grid) return;
+    const items = snapshot(grid).sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const placed = [];
+    for (const it of items) {
+      let ny = it.y;
+      while (ny > 0) {
+        const test = { ...it, y: ny - 1 };
+        if (placed.some(p => collide(test, p))) break;
+        ny--;
+      }
+      it.y = ny; placed.push(it); applyCoords(it.el, it);
+    }
+    const view = grid.closest('.gp-view') && grid.closest('.gp-view').dataset.view;
+    if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
+  }
+
+  // Inject the page selector + Compactar button into the dashboard bar (once).
+  function ensureToolbar(grid) {
+    const view = grid.closest('.gp-view'); if (!view) return;
+    const right = view.querySelector('.gp-dash-bar .right'); if (!right) return;
+    if (right.querySelector('.gp-page-sel')) return;
+    const sel = document.createElement('select');
+    sel.className = 'pill gp-page-sel';
+    sel.innerHTML = '<option value="fit">Ajustar al ancho</option>'
+                  + '<option value="wide">16:9</option>'
+                  + '<option value="a4l">A4 horizontal</option>'
+                  + '<option value="a4p">A4 vertical</option>';
+    sel.addEventListener('change', () => {
+      try { localStorage.setItem(PAGE_KEY(view.dataset.view), sel.value); } catch (e) {}
+      applyPage(grid, sel.value);
+    });
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'pill gp-compact-btn';
+    btn.innerHTML = '<i class="ti ti-arrow-bar-to-up"></i>Compactar';
+    btn.addEventListener('click', () => compact(grid));
+    right.insertBefore(btn, right.firstChild);
+    right.insertBefore(sel, right.firstChild);
+  }
+
   // ── F2: resize handles ───────────────────────────────────────────────────
   const HANDLES = [
     { k: 'n', T: 1 }, { k: 'e', R: 1 }, { k: 's', B: 1 }, { k: 'w', L: 1 },
@@ -149,7 +222,6 @@
 
   function onDown(e) {
     if (e.button !== 0 || !e.target.closest) return;
-    // resize handle?
     const handle = e.target.closest('.gp-rh');
     if (handle) {
       const card = handle.closest('.gp-c'); const grid = card && card.closest('.gp-grid');
@@ -163,7 +235,6 @@
       try { handle.setPointerCapture(e.pointerId); } catch (_) {}
       resizeMove(e); return;
     }
-    // move (drag the header, but not its buttons/controls)?
     const head = e.target.closest('.gp-c-h');
     if (head && !e.target.closest('button, a, select, input, [role=button], .gp-c-pick')) {
       const card = head.closest('.gp-c'); const grid = card && card.closest('.gp-grid');
@@ -235,8 +306,7 @@
   }
 
   // ── render one grid in canvas mode (F1) + handles (F2) ───────────────────
-  function renderGrid(grid) {
-    if (!ENABLED || !grid) return;
+  function placeCards(grid) {
     const cards = [...grid.querySelectorAll(':scope > .gp-c, :scope > .gp-add')];
     if (!cards.length) { grid.classList.remove('is-canvas'); return; }
     const items = cards.map((el, idx) => {
@@ -255,6 +325,12 @@
     });
     grid.classList.add('is-canvas');
   }
+  function renderGrid(grid) {
+    if (!ENABLED || !grid) return;
+    placeCards(grid);
+    ensureToolbar(grid);    // F5: page selector + Compactar in the dashboard bar
+    applyStoredPage(grid);  // F5: restore the saved page format
+  }
   function renderAll() { document.querySelectorAll('.gp-grid').forEach(renderGrid); }
 
   // ── self-boot (only when enabled) ────────────────────────────────────────
@@ -265,7 +341,6 @@
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
     document.addEventListener('pointercancel', onUp);
-    // suppress native HTML5 reorder while in canvas mode
     document.addEventListener('dragstart', e => {
       if (e.target.closest && e.target.closest('.gp-grid.is-canvas')) e.preventDefault();
     }, true);
@@ -285,6 +360,6 @@
   window.gpCanvas = {
     get enabled() { return ENABLED; },
     COLS, ROW_PX, MINW, MINH,
-    hasCoords, toCanvasLayout, syncLegacyFields, applyCoords, renderGrid, renderAll,
+    hasCoords, toCanvasLayout, syncLegacyFields, applyCoords, renderGrid, renderAll, compact, applyPage,
   };
 })();
