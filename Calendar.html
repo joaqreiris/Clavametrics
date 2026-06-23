@@ -4522,11 +4522,15 @@ function renderSeasonRibbon(mcs, extraMatches) {
   // Sub-range override (Punto 3: Jump to date range)
   const ribbonStart = _ribbonViewRange?.from
     ? new Date(_ribbonViewRange.from + 'T00:00:00')
+    : _calSeason?.start_date
+      ? new Date(_calSeason.start_date + 'T00:00:00')
     : _seasonSettings?.season_start
       ? new Date(_seasonSettings.season_start + 'T00:00:00')
       : firstMcStart;
   const ribbonEnd = _ribbonViewRange?.to
     ? new Date(_ribbonViewRange.to + 'T00:00:00')
+    : _calSeason?.end_date
+      ? new Date(_calSeason.end_date + 'T00:00:00')
     : _seasonSettings?.season_end
       ? new Date(_seasonSettings.season_end + 'T00:00:00')
       : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
@@ -4578,7 +4582,7 @@ function renderSeasonRibbon(mcs, extraMatches) {
   if (seasonLabelEl) {
     const sy = ribbonStart.getFullYear(), ey = ribbonEnd.getFullYear();
     const autoSeason = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
-    const sName = _seasonSettings?.season_name || `Season ${autoSeason}`;
+    const sName = _calSeason?.name || _seasonSettings?.season_name || `Season ${autoSeason}`;
     const compPart = _seasonSettings?.competition ? ` · ${_seasonSettings.competition}` : '';
     seasonLabelEl.textContent = sName + compPart;
   }
@@ -4610,7 +4614,7 @@ function renderSeasonRibbon(mcs, extraMatches) {
   if (pagerLabel) {
     const sy = ribbonStart.getFullYear(), ey = ribbonEnd.getFullYear();
     const autoLabel = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
-    const seasonLabel = _seasonSettings?.season_name || autoLabel;
+    const seasonLabel = _calSeason?.name || _seasonSettings?.season_name || autoLabel;
     const sMo = MONTHS_SHORT[ribbonStart.getMonth()], eMo = MONTHS_SHORT[ribbonEnd.getMonth()];
     pagerLabel.innerHTML = `${seasonLabel}<span class="yr">${sMo} → ${eMo}</span>`;
   }
@@ -4756,11 +4760,15 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
   // Same range resolution as renderSeasonRibbon
   const ribbonStart = _ribbonViewRange?.from
     ? new Date(_ribbonViewRange.from + 'T00:00:00')
+    : _calSeason?.start_date
+      ? new Date(_calSeason.start_date + 'T00:00:00')
     : _seasonSettings?.season_start
       ? new Date(_seasonSettings.season_start + 'T00:00:00')
       : firstMcStart;
   const ribbonEnd = _ribbonViewRange?.to
     ? new Date(_ribbonViewRange.to + 'T00:00:00')
+    : _calSeason?.end_date
+      ? new Date(_calSeason.end_date + 'T00:00:00')
     : _seasonSettings?.season_end
       ? new Date(_seasonSettings.season_end + 'T00:00:00')
       : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
