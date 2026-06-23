@@ -4434,7 +4434,7 @@ async function loadCalCompetitions() {
 // Refetch match events + re-render ribbon/KPIs/upcoming (after event CRUD)
 async function refreshRibbonMatches() {
   const { data: ms } = await window.sb.from('calendar_events')
-    .select('id,title,date,opponent,home_away,competition,rival_crest_url')
+    .select('id,title,date,opponent,home_away,competition,rival_crest_url,start_time,location')
     .eq('club_id', _clubId).eq('team_id', _activeTeamId)
     .eq('type', 'match').order('date');
   _matchSessions = (ms || []).map(s => ({
@@ -4788,7 +4788,7 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
     cyclesEl.innerHTML = '';
     ordered.forEach((mc, ordIdx) => {
       const { left, width } = chipGeom(mc);
-      const hasMatch = !!mc.match_date;
+      const hasMatch = !!mcMatch(mc);
       const isToday  = mc.start_date <= TODAY && mc.end_date >= TODAY;
       const chip = document.createElement('div');
       chip.className = 'mc-chip' + (hasMatch ? '' : ' mc-chip--rest') + (isToday ? ' mc-chip--today' : '');
@@ -4832,12 +4832,6 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
     matchesEl.innerHTML = '';
     const seenDates = new Set();
     const rawMarkers = [];
-    ordered.filter(mc => mc.match_date).forEach(mc => {
-      if (!seenDates.has(mc.match_date)) {
-        seenDates.add(mc.match_date);
-        rawMarkers.push({ date: mc.match_date, isAway: mc.home_away === 'away', comp: compClass(mc.color || ''), rival: mc.rival || 'Match', isFromMc: true, mcData: mc, crestUrl: null });
-      }
-    });
     (extraMatches || []).forEach(s => {
       const d = s.session_date;
       if (!seenDates.has(d)) {
@@ -4852,7 +4846,7 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
           compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
         }
         const rival = s.opponent || (s.title || 'Match').replace(/^vs\s+/i, '');
-        rawMarkers.push({ date: d, id: s.id, isAway, comp: compClass(compStr), rival, isFromMc: false, mcData: null, crestUrl: s.rival_crest_url || null });
+        rawMarkers.push({ date: d, id: s.id, isAway, comp: compClass(compStr), rival, isFromMc: false, mcData: null, crestUrl: s.rival_crest_url || null, start_time: s.start_time || null, location: s.location || null });
       }
     });
 
@@ -4932,10 +4926,10 @@ function showMatchPopover(anchor, items) {
     const haClr   = item.isAway ? 'var(--cm-info)'       : 'var(--cm-success)';
     const haBd    = item.isAway ? 'var(--cm-info-bd)'    : 'var(--cm-success-bd)';
     const dateFmt = _fmtDateStr(item.date);
-    const timeStr = item.mcData?.match_time ? ' · ' + item.mcData.match_time.slice(0,5) : '';
+    const timeStr = item.start_time ? ' · ' + item.start_time.slice(0,5) : '';
     const border  = i > 0 ? 'border-top:1px solid var(--cm-border-soft);' : '';
-    // Extra calendar_event markers carry their own id → allow Edit event (even in distant MCs)
-    const editEvtBtn = (!item.isFromMc && item.id)
+    // All markers come from calendar_events → editable by their own id
+    const editEvtBtn = item.id
       ? `<button class="cm-btn is-primary is-sm" style="height:26px;font-size:11.5px" data-pop-edit-evt="${item.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit event</button>`
       : '';
     return `<div style="padding:10px 12px;${border}">
@@ -4944,7 +4938,7 @@ function showMatchPopover(anchor, items) {
         <span style="display:inline-flex;align-items:center;gap:3px;height:17px;padding:0 5px;border-radius:3px;font:600 9px/1 var(--cm-font-mono);background:${haBg};color:${haClr};border:1px solid ${haBd}"><i class="ti ${haIcon}" style="font-size:9px"></i>${haLbl}</span>
       </div>
       <div class="cal-epop-row"><i class="ti ${compIcon(cc)}"></i><span>${compLabel(cc)} · ${dateFmt}${timeStr}</span></div>
-      ${item.mcData?.stadium ? `<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(item.mcData.stadium)}</span></div>` : ''}
+      ${item.location ? `<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(item.location)}</span></div>` : ''}
       ${editEvtBtn ? `<div style="display:flex;gap:5px;margin-top:6px">${editEvtBtn}</div>` : ''}
     </div>`;
   }).join('');
@@ -5526,7 +5520,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load match events from calendar_events for ribbon
   const { data: matchSess } = await window.sb.from('calendar_events')
-    .select('id,title,date,opponent,home_away,competition,rival_crest_url')
+    .select('id,title,date,opponent,home_away,competition,rival_crest_url,start_time,location')
     .eq('club_id', _clubId).eq('team_id', _activeTeamId)
     .eq('type', 'match')
     .order('date');
