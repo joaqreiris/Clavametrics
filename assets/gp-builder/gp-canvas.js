@@ -87,7 +87,7 @@
     return { rect, colStep: colW + colGap, rowStep: ROW_PX + rowGap };
   }
   function snapshot(grid) {
-    return [...grid.querySelectorAll(':scope > .gp-c, :scope > .gp-add')]
+    return [...grid.querySelectorAll(':scope > .gp-c')]
       .map(el => ({ el, ...readCoords(el) }));
   }
 
@@ -299,7 +299,7 @@
 
   // ── render ───────────────────────────────────────────────────────────────
   function placeCards(grid) {
-    const cards = [...grid.querySelectorAll(':scope > .gp-c, :scope > .gp-add')];
+    const cards = [...grid.querySelectorAll(':scope > .gp-c')];
     if (!cards.length) { grid.classList.remove('is-canvas'); return; }
     const items = cards.map((el, idx) => {
       const span = window.gpSpanOf ? window.gpSpanOf(el)
