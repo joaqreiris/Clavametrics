@@ -5,7 +5,8 @@
    F3: free move — drag the card header to reposition; colliding cards get
        pushed DOWN (float mode: untouched cards stay put, gaps allowed). Native
        HTML5 reorder is suppressed in canvas mode. Persists on drop.
-   F3.1: collision push also applied on RESIZE + overlaps auto-resolved on render. */
+   F3.1: collision push on RESIZE + overlaps auto-resolved on render.
+   F4: charts reflow on box change (ResizeObserver); content CSS in GPS Analysis.html. */
 (function () {
   'use strict';
   if (window.gpCanvas) return;
@@ -70,6 +71,14 @@
       });
     });
   }
+  // F4: reflow a card's charts whenever its box changes (live during resize,
+  // and after move/push), so content stays well-fitted at any size.
+  function observeCard(card) {
+    if (card.__gpRO || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => reflowCard(card));
+    ro.observe(card);
+    card.__gpRO = ro;
+  }
   function gridMetrics(grid) {
     const cs = getComputedStyle(grid);
     const colGap = parseFloat(cs.columnGap || cs.gap) || 14;
@@ -83,7 +92,7 @@
       .map(el => ({ el, ...readCoords(el) }));
   }
 
-  // ── collision push (float mode, push DOWN only) ──────────────────────────
+  // ── F3: collision push (float mode, push DOWN only) ──────────────────────
   function collide(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
@@ -114,7 +123,7 @@
     });
   }
 
-  // ── resize handles ───────────────────────────────────────────────────────
+  // ── F2: resize handles ───────────────────────────────────────────────────
   const HANDLES = [
     { k: 'n', T: 1 }, { k: 'e', R: 1 }, { k: 's', B: 1 }, { k: 'w', L: 1 },
     { k: 'nw', T: 1, L: 1 }, { k: 'ne', T: 1, R: 1 }, { k: 'sw', B: 1, L: 1 }, { k: 'se', B: 1, R: 1 },
@@ -130,8 +139,8 @@
   }
 
   // ── unified pointer interaction (resize OR move) ─────────────────────────
-  let rz = null;
-  let mv = null;
+  let rz = null;   // active resize
+  let mv = null;   // active move
 
   function canInteract(grid) {
     return grid && grid.classList.contains('is-canvas') && grid.classList.contains('is-edit')
@@ -140,6 +149,7 @@
 
   function onDown(e) {
     if (e.button !== 0 || !e.target.closest) return;
+    // resize handle?
     const handle = e.target.closest('.gp-rh');
     if (handle) {
       const card = handle.closest('.gp-c'); const grid = card && card.closest('.gp-grid');
@@ -153,6 +163,7 @@
       try { handle.setPointerCapture(e.pointerId); } catch (_) {}
       resizeMove(e); return;
     }
+    // move (drag the header, but not its buttons/controls)?
     const head = e.target.closest('.gp-c-h');
     if (head && !e.target.closest('button, a, select, input, [role=button], .gp-c-pick')) {
       const card = head.closest('.gp-c'); const grid = card && card.closest('.gp-grid');
@@ -223,7 +234,7 @@
     if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
   }
 
-  // ── render one grid in canvas mode (F1) + handles (F2) + de-overlap ──────
+  // ── render one grid in canvas mode (F1) + handles (F2) ───────────────────
   function renderGrid(grid) {
     if (!ENABLED || !grid) return;
     const cards = [...grid.querySelectorAll(':scope > .gp-c, :scope > .gp-add')];
@@ -240,7 +251,7 @@
     resolveAll(placed);
     placed.forEach(it => {
       applyCoords(it._el, it);
-      if (it._el.classList.contains('gp-c')) ensureHandles(it._el);
+      if (it._el.classList.contains('gp-c')) { ensureHandles(it._el); observeCard(it._el); }
     });
     grid.classList.add('is-canvas');
   }
@@ -254,6 +265,7 @@
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
     document.addEventListener('pointercancel', onUp);
+    // suppress native HTML5 reorder while in canvas mode
     document.addEventListener('dragstart', e => {
       if (e.target.closest && e.target.closest('.gp-grid.is-canvas')) e.preventDefault();
     }, true);
