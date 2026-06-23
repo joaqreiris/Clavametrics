@@ -1841,6 +1841,7 @@
   </div>
 </div>
 
+<script src="lib/fixtures-import.js"></script>
 <script>
 // ── State ──────────────────────────────────────────────────────
 let _allMCs = [], _mcIdx = 0, _sessions = [], _weekOffset = 0, _filterType = 'all', _clubId = null, _editEvtId = null, _editEvtSource = null, _editMcId = null;
@@ -5293,50 +5294,6 @@ function renderCalKPIs(mcs) {
 // ── Import Fixtures ───────────────────────────────────────────
 let _importParsed = []; // currently parsed fixtures
 
-function parseFixtureLine(line) {
-  line = line.trim();
-  if (!line || line.startsWith('#')) return null;
-  // Find date (YYYY-MM-DD or DD/MM/YYYY or "Jun 28 2026" etc.)
-  const isoRe   = /(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/;
-  const euroRe  = /(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/;
-  const monRe   = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+(\d{1,2})(?:[,\s]+(\d{4}))?/i;
-  let dateStr = null;
-  let m;
-  if ((m = line.match(isoRe)))    dateStr = `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-  else if ((m = line.match(euroRe))) dateStr = `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  else if ((m = line.match(monRe))) {
-    const MONS = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
-    const yr = m[3] || String(new Date().getFullYear());
-    dateStr = `${yr}-${MONS[m[1].slice(0,3).toLowerCase()]}-${m[2].padStart(2,'0')}`;
-  }
-  if (!dateStr) return null;
-
-  const rest = line.replace(isoRe,'').replace(euroRe,'').replace(monRe,'').trim();
-  const parts = rest.split(/\s*[·|;,\t]\s*/).map(p=>p.trim()).filter(Boolean);
-  const haMatch = rest.match(/\b(home|away|local|visitante)\b/i);
-  const ha = haMatch ? (/(local|home)/i.test(haMatch[1]) ? 'home' : 'away') : 'home';
-  const rival = parts.find(p => !/^(home|away|local|visitante)$/i.test(p)) || 'Unknown';
-  const comp  = parts.filter(p => !/^(home|away|local|visitante)$/i.test(p) && p !== rival)[0] || '';
-  return { date: dateStr, rival, home_away: ha, competition: comp };
-}
-
-function parseCSVText(text) {
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g,''));
-  const dateKey = headers.find(h => /date/.test(h)) || headers[0];
-  const rivalKey = headers.find(h => /opp|rival|team|opponent/.test(h)) || headers[1];
-  const haKey   = headers.find(h => /home|away|ha|location/.test(h)) || headers[2];
-  const compKey = headers.find(h => /comp|league|cup|liga/.test(h)) || headers[3];
-  return lines.slice(1).map(line => {
-    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g,''));
-    const obj = {}; headers.forEach((h,i) => obj[h] = cols[i]||'');
-    const raw = parseFixtureLine(`${obj[dateKey]} ${obj[rivalKey]||''} ${obj[haKey]||''}`);
-    if (!raw) return null;
-    return { ...raw, rival: obj[rivalKey]||raw.rival, home_away: obj[haKey]||raw.home_away, competition: obj[compKey]||'' };
-  }).filter(Boolean);
-}
-
 async function showImportPreview(fixtures) {
   _importParsed = fixtures;
   if (!fixtures.length) {
@@ -5362,7 +5319,7 @@ async function showImportPreview(fixtures) {
     const isConflict = conflictDates.has(f.date);
     return `<tr class="${isConflict?'conflict':''}">
       <td>${f.date}</td>
-      <td>${f.rival}</td>
+      <td>${f.opponent}</td>
       <td><span class="badge-ha ${f.home_away}">${f.home_away==='home'?'<i class="ti ti-home" style="font-size:9px"></i> Home':'<i class="ti ti-plane" style="font-size:9px"></i> Away'}</span></td>
       <td style="color:var(--cm-fg-muted)">${f.competition||'—'}</td>
       <td>${isConflict?'<span class="badge-conflict">conflict</span>':''}</td>
@@ -5405,7 +5362,7 @@ async function showImportPreview(fixtures) {
   // Parse paste
   document.getElementById('calImportParseBtn').addEventListener('click', () => {
     const text = document.getElementById('calImportPasteArea').value;
-    const fixtures = text.trim().split('\n').map(parseFixtureLine).filter(Boolean);
+    const fixtures = CMFixtures.parseDelimited(text).filter(r => r.valid);
     showImportPreview(fixtures);
   });
 
@@ -5414,47 +5371,25 @@ async function showImportPreview(fixtures) {
     if (!this.files[0]) return;
     document.getElementById('calImportFileLabel').textContent = this.files[0].name;
     const text = await this.files[0].text();
-    const fixtures = parseCSVText(text);
+    const fixtures = CMFixtures.parseDelimited(text).filter(r => r.valid);
     showImportPreview(fixtures);
   });
 
   // Confirm import
   document.getElementById('calImportConfirm').addEventListener('click', async () => {
     if (!_importParsed.length) return;
-    const overwrite = document.getElementById('calImportOverwrite').checked;
     const saving = document.getElementById('calImportSaving');
     const confBtn = document.getElementById('calImportConfirm');
     saving.style.display = 'inline'; confBtn.disabled = true;
 
-    if (overwrite) {
-      const conflictDates = _importParsed.map(f => f.date);
-      await window.sb.from('calendar_events')
-        .delete().eq('club_id',_clubId).eq('type','match').in('date', conflictDates);
-    } else {
-      // Check existing dates and skip
-      const dates = _importParsed.map(f => f.date);
-      const { data: ex } = await window.sb.from('calendar_events')
-        .select('date').eq('club_id',_clubId).eq('type','match').in('date',dates);
-      const existSet = new Set((ex||[]).map(s => (s.date||'').split('T')[0]));
-      _importParsed = _importParsed.filter(f => !existSet.has(f.date));
-    }
-
-    if (_importParsed.length) {
-      const rows = _importParsed.map(f => ({
-        id: crypto.randomUUID(), club_id: _clubId, team_id: _activeTeamId,
-        title: `vs ${f.rival}`, type: 'match',
-        date: f.date,
-        opponent: f.rival,
-        home_away: f.home_away || 'home',
-        competition: f.competition || null,
-        duration_minutes: null,
-      }));
-      const { error } = await window.sb.from('calendar_events').insert(rows);
-      saving.style.display = 'none'; confBtn.disabled = false;
-      if (error) { showCalToast('Error: ' + error.message); return; }
-    }
-
+    const newComps = CMFixtures.detectNewCompetitions(_importParsed, _calComps);
+    const res = await CMFixtures.confirmImport({
+      sb: window.sb, clubId: _clubId, teamId: _activeTeamId, seasonId: _calSeasonId,
+      existingComps: _calComps, rows: _importParsed,
+      newCompNames: newComps, overwrite: document.getElementById('calImportOverwrite').checked,
+      newCompColor: '#64748b' });
     saving.style.display = 'none'; confBtn.disabled = false;
+    if (res.error) { showCalToast('Error: ' + res.error.message); return; }
     // Save season dates if filled in
     const importSeasonName  = document.getElementById('calImportSeasonName')?.value.trim();
     const importSeasonStart = document.getElementById('calImportSeasonStart')?.value;
@@ -5470,7 +5405,7 @@ async function showImportPreview(fixtures) {
     }
 
     closeImport();
-    showCalToast(`${_importParsed.length} fixture${_importParsed.length>1?'s':''} imported.`);
+    showCalToast(`${res.inserted} fixture${res.inserted>1?'s':''} imported.`);
     // Reload match events and re-render ribbon + KPIs
     await refreshRibbonMatches();
   });
