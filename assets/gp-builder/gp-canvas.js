@@ -224,6 +224,7 @@
     if (handle) {
       const card = handle.closest('.gp-c'); const grid = card && card.closest('.gp-grid');
       if (!canInteract(grid)) return;
+      card.style.zIndex = 2000 + (window.__gpZ = (window.__gpZ || 0) + 1);
       e.preventDefault(); e.stopPropagation();
       const dir = HANDLES.find(h => h.k === handle.dataset.dir) || {};
       const badge = document.createElement('div'); badge.className = 'gp-rh-badge'; card.appendChild(badge);
@@ -237,6 +238,7 @@
     if (head && !e.target.closest('button, a, select, input, [role=button], .gp-c-pick')) {
       const card = head.closest('.gp-c'); const grid = card && card.closest('.gp-grid');
       if (!canInteract(grid)) return;
+      card.style.zIndex = 2000 + (window.__gpZ = (window.__gpZ || 0) + 1);
       e.preventDefault();
       const base = snapshot(grid);
       const mover = base.find(b => b.el === card);
@@ -260,24 +262,16 @@
     if (dir.B) h = Math.max(MINH, row - y);
     if (dir.L) { const right = x + w; const nx = clamp(col, 0, right - MINW); x = nx; w = right - nx; }
     if (dir.T) { const bot = y + h;   const ny = clamp(row, 0, bot - MINH);   y = ny; h = bot - ny; }
-    const work = base.map(b => ({ ...b }));
-    const m2 = work.find(b => b.el === card); m2.x = x; m2.y = y; m2.w = w; m2.h = h;
-    pushAway(work, m2);
-    work.forEach(b => applyCoords(b.el, b));
+    applyCoords(card, { x, y, w, h });
     badge.textContent = `${w} × ${h}`;
   }
 
   function moveMove(e) {
     if (!mv) return;
-    const { m, base, mover, startX, startY, startPX, startPY, card } = mv;
-    const dCol = Math.round((e.clientX - startPX) / m.colStep);
-    const dRow = Math.round((e.clientY - startPY) / m.rowStep);
-    const tx = clamp(startX + dCol, 0, COLS - mover.w);
-    const ty = Math.max(0, startY + dRow);
-    const work = base.map(b => ({ ...b }));
-    const m2 = work.find(b => b.el === card); m2.x = tx; m2.y = ty;
-    pushAway(work, m2);
-    work.forEach(b => applyCoords(b.el, b));
+    const { m, mover, startX, startY, startPX, startPY, card } = mv;
+    const tx = clamp(startX + Math.round((e.clientX - startPX) / m.colStep), 0, COLS - mover.w);
+    const ty = Math.max(0, startY + Math.round((e.clientY - startPY) / m.rowStep));
+    applyCoords(card, { x: tx, y: ty, w: mover.w, h: mover.h });
   }
 
   function onMove(e) { if (rz) resizeMove(e); else if (mv) moveMove(e); }
@@ -316,7 +310,6 @@
       return it;
     });
     const placed = toCanvasLayout(items);
-    resolveAll(placed);
     placed.forEach(it => {
       applyCoords(it._el, it);
       if (it._el.classList.contains('gp-c')) { ensureHandles(it._el); observeCard(it._el); }
