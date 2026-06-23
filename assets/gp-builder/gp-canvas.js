@@ -314,7 +314,7 @@
     const m = gridMetrics(grid);
     let html = '';
     for (let i = 0; i <= COLS; i++) { html += '<i style="left:' + Math.round(i * m.colStep) + 'px"></i>'; }
-    ov.style.setProperty('--row-step', m.rowStep + 'px');
+    grid.style.setProperty('--row-step', m.rowStep + 'px');
     ov.innerHTML = html;
   }
 
@@ -337,12 +337,17 @@
     grid.classList.add('is-canvas');
     if (!grid.__gpCompacted) { grid.__gpCompacted = true; const anySaved = [...grid.querySelectorAll(':scope > .gp-c')].some(el => Number.isFinite(+el.dataset.y) && el.dataset.y !== ''); if (!anySaved) compact(grid); }
   }
+  function syncEditClass() {
+    const editing = !!document.querySelector('#editToggle.is-on');
+    document.querySelectorAll('.gp-grid').forEach(g => g.classList.toggle('is-edit', editing));
+    document.querySelectorAll('.gp-grid.is-canvas').forEach(drawSnapGrid);
+  }
   function renderGrid(grid) {
     if (!ENABLED || !grid) return;
     placeCards(grid);
     ensureToolbar();        // F5: page selector + Compactar in the (shared) dashboard bar
     applyStoredPage(grid);  // F5: restore the saved page format
-    drawSnapGrid(grid);
+    syncEditClass();
   }
   function renderAll() { document.querySelectorAll('.gp-grid').forEach(renderGrid); }
 
@@ -366,7 +371,7 @@
     });
     document.querySelectorAll('.gp-grid').forEach(g => obs.observe(g, { childList: true }));
     document.getElementById('sections')?.addEventListener('click', () => setTimeout(renderAll, 80));
-    document.addEventListener('click', function(e){ if (e.target.closest && e.target.closest('#editToggle')) setTimeout(function(){ document.querySelectorAll('.gp-grid.is-canvas').forEach(drawSnapGrid); }, 30); });
+    document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#editToggle')) setTimeout(syncEditClass, 30); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
