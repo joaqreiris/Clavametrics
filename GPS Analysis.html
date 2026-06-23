@@ -1875,10 +1875,14 @@ async function applyLayoutToView(viewKey) {
   if (!grid) return;
   const activeIds = new Set(layout.map(c => c.card_id));
   _stashAbsentCards(viewKey, activeIds);
-  for (const { card_id, size, span, config } of layout) {
+  for (const { card_id, size, span, config, x, y, w, h } of layout) {
     const card = grid.querySelector(`[data-card-id="${card_id}"]`);
     if (!card) continue;
     _applyCardSize(card, size, span);
+    // Canvas: restore free-placement coords so the editor reopens exactly as left.
+    if ([x, y, w, h].every(Number.isFinite)) {
+      card.dataset.x = x; card.dataset.y = y; card.dataset.w = w; card.dataset.h = h;
+    }
     if (!config) continue;
     if (config.metric_key) card.dataset.metricKey = config.metric_key;
     if (card_id === 'weekly-bars' && (config.wkok_yellow != null || config.wkok_red != null)) {
