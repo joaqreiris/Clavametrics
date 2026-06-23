@@ -1701,24 +1701,6 @@
       </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
-          <label for="calMcF_match">Match date (MD reference)</label>
-          <input type="date" id="calMcF_match">
-        </div>
-        <div class="sq-modal-field">
-          <label for="calMcF_rival">Rival</label>
-          <input type="text" id="calMcF_rival" placeholder="Opponent name">
-        </div>
-      </div>
-      <div class="sq-modal-row">
-        <div class="sq-modal-field">
-          <label for="calMcF_homeaway">Home / Away</label>
-          <select id="calMcF_homeaway">
-            <option value="">—</option>
-            <option value="home">Home</option>
-            <option value="away">Away</option>
-          </select>
-        </div>
-        <div class="sq-modal-field">
           <label for="calMcF_comp">Competition</label>
           <select id="calMcF_comp">
             <option value="">Liga (default)</option>
@@ -1726,16 +1708,6 @@
             <option value="inter">Internacional</option>
             <option value="amistoso">Amistoso</option>
           </select>
-        </div>
-      </div>
-      <div class="sq-modal-row">
-        <div class="sq-modal-field">
-          <label for="calMcF_time">Match time</label>
-          <input type="time" id="calMcF_time">
-        </div>
-        <div class="sq-modal-field">
-          <label for="calMcF_stadium">Stadium / venue</label>
-          <input type="text" id="calMcF_stadium" placeholder="e.g. Estadio Centenario">
         </div>
       </div>
     </div>
@@ -3697,12 +3669,7 @@ function openMcModal(existingMc) {
   document.getElementById('calMcF_name').value     = existingMc?.name       || '';
   document.getElementById('calMcF_start').value    = existingMc?.start_date || '';
   document.getElementById('calMcF_end').value      = existingMc?.end_date   || '';
-  document.getElementById('calMcF_match').value    = existingMc?.match_date || '';
-  document.getElementById('calMcF_rival').value    = existingMc?.rival      || '';
-  document.getElementById('calMcF_homeaway').value = existingMc?.home_away   || '';
   document.getElementById('calMcF_comp').value     = existingMc?.color       || '';
-  document.getElementById('calMcF_time').value     = existingMc?.match_time  || '';
-  document.getElementById('calMcF_stadium').value  = existingMc?.stadium     || '';
   document.getElementById('calMcSaving').style.display = 'none';
   document.getElementById('calMcSave').disabled = false;
   document.getElementById('calMcBackdrop').classList.add('is-open');
@@ -3735,12 +3702,7 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
     name,
     start_date: start,
     end_date:   end,
-    match_date: document.getElementById('calMcF_match').value || null,
-    rival:      document.getElementById('calMcF_rival').value.trim() || null,
-    home_away:  document.getElementById('calMcF_homeaway').value || null,
     color:      document.getElementById('calMcF_comp').value     || null,
-    match_time: document.getElementById('calMcF_time').value     || null,
-    stadium:    document.getElementById('calMcF_stadium').value.trim() || null,
   };
 
   let error;
