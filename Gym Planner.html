@@ -121,60 +121,14 @@
 
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 
-  /* ===== PRINT — usa assets/print-system.css (shell-hide / .no-print / light / breaks / exact-color) ===== */
-  /* Letterhead solo-impresión: oculto en pantalla, visible en print + export PDF */
-  .print-only{ display:none !important }
-
-  /* Export PDF (html2canvas captura el DOM en vivo; @media print no aplica) — mismo look claro */
-  body.gp-print{
-    --cm-bg:#fff; --cm-bg-soft:#f6f6f6; --cm-bg-sunk:#f0f0f0; --cm-surface:#fff; --cm-surface-2:#fafafa;
-    --cm-fg:#16181D; --cm-fg-strong:#000; --cm-fg-muted:#454a52; --cm-fg-faint:#7b818b;
-    --cm-border:#cfcfcf; --cm-border-soft:#e2e2e2; --cm-border-strong:#bdbdbd;
-  }
-  body.gp-print .print-only{ display:flex !important }
-  body.gp-print .gp-head{ display:none !important }
-  body.gp-print .no-print, body.gp-print [data-noprint],
-  body.gp-print .gp-tbl .btn-x, body.gp-print .gp-tbl .btn-lib{ display:none !important }
-  body.gp-print .gp-doc{ background:#fff !important; padding:0 }
-  body.gp-print .gp-card{ border:1px solid var(--ph-line,#e2e4e8) !important; border-radius:9px; margin-bottom:10px; background:#fff !important }
-  body.gp-print .gp-card-h{ background:var(--ph-surface,#fafafa) !important; border-bottom:1px solid #e6e6e6 }
-  body.gp-print .gp-card-h h3{ color:#16181D }
-  body.gp-print .gp-tbl thead th{ background:var(--ph-surface,#fafafa) !important; color:#7b818b }
-  body.gp-print .gp-tbl tbody td{ color:#16181D }
-  body.gp-print .gp-tbl input, body.gp-print .gp-tbl select,
-  body.gp-print .gp-doc input, body.gp-print .gp-doc select, body.gp-print .gp-doc textarea{
-    background:transparent !important; color:#16181D !important; border:none !important; -webkit-appearance:none; appearance:none }
-  body.gp-print .gp-doc select{ background-image:none !important }
-  body.gp-print .gp-totals .t{ border:1px solid #e6e6e6 }
-
-  @media print{
-    @page{ size:A4; margin:12mm }
-    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; box-shadow:none !important }
-    /* re-map de tokens para que todo lo basado en --cm-* imprima claro, incluso en tema oscuro */
-    :root, [data-theme="dark"], [data-theme="hybrid"]{
-      --cm-bg:#fff; --cm-bg-soft:#f6f6f6; --cm-bg-sunk:#f0f0f0; --cm-surface:#fff; --cm-surface-2:#fafafa;
-      --cm-fg:#16181D; --cm-fg-strong:#000; --cm-fg-muted:#454a52; --cm-fg-faint:#7b818b;
-      --cm-border:#cfcfcf; --cm-border-soft:#e2e2e2; --cm-border-strong:#bdbdbd;
-    }
-    html, body, body.cm{ background:#fff !important; color:#16181D !important }
-    .print-only{ display:flex !important }
-    /* el letterhead .ph-head reemplaza el header del editor */
-    .gp-doc{ padding:0 }
-    .gp-head{ display:none !important }
-    .gp-card{ border:1px solid var(--ph-line,#e2e4e8) !important; border-radius:9px; margin-bottom:10px; break-inside:avoid; page-break-inside:avoid; background:#fff !important }
-    .gp-card-h{ background:var(--ph-surface,#fafafa) !important; border-bottom:1px solid #e6e6e6; padding:6px 12px }
-    .gp-card-h h3{ color:#16181D; font-size:11px }
-    .gp-card-b{ padding:6px 12px }
-    .gp-tbl thead th{ background:var(--ph-surface,#fafafa) !important; color:#7b818b; padding:4px 6px; font-size:9px }
-    .gp-tbl tbody td{ color:#16181D; padding:3px 6px }
-    .gp-tbl input, .gp-tbl select, .gp-doc input, .gp-doc select, .gp-doc textarea{
-      background:transparent !important; color:#16181D !important; border:none !important; -webkit-appearance:none; appearance:none }
-    .gp-doc select{ background-image:none !important }
-    .gp-totals .t{ border:1px solid #e6e6e6; padding:6px 10px } .gp-totals .t .v{ font-size:16px } .gp-totals .t .l{ font-size:9px }
-    body.cm{ font-size:11px }
-    /* ocultar afordances de edición (gp-head ya está oculto) */
-    .gp-head .meta, .no-print, [data-noprint]{ display:none !important }
-    .gp-tbl .btn-x, .gp-tbl .btn-lib{ display:none !important }  /* per-row delete + LIB handles */
+  /* ===== PRINT — dedicated Gym Session Plan sheet (#gpPrintSheet) ===== */
+  #gpPrintSheet{ display:none; }
+  @media print {
+    @page { size:A4; margin:0; }
+    .hub-shell, #hub-side-root, .hub-topbar, main, .no-print, .cm-sidebar-overlay, .cm-sidebar-toggle { display:none !important; }
+    #gpPrintSheet{ display:block !important; }
+    .gsp-sheet{ box-shadow:none !important; margin:0 auto !important; }
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
 </head>
@@ -381,6 +335,8 @@
     </section>
   </main>
 </div>
+
+<div id="gpPrintSheet" aria-hidden="true"></div>
 
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
@@ -1216,7 +1172,6 @@ async function gpLoadDay(dateStr) {
   const fmt = _gpFmt(dateStr);
   document.getElementById('gpCrumbDate').textContent = fmt;
   document.getElementById('gpDateInput').value = dateStr;
-  const _phDate = document.getElementById('gpPhDate'); if (_phDate) _phDate.textContent = fmt;
 
   const mc    = _gpMicrocycles.find(m => m.start_date <= dateStr && dateStr <= m.end_date);
   const mcSel = document.getElementById('gpMicrocycle');
@@ -1264,6 +1219,7 @@ async function gpLoadDay(dateStr) {
   _gpUpdatePublishBtn();
   gpRecalcTotals();
   await gpLoadAthletes(dateStr);
+  gpRenderPrintSheet();
 }
 
 let _gpSaveTimer = null;
@@ -1317,14 +1273,180 @@ async function gpPublish() {
 
 function gpPrint() { window.print(); }
 
+// ── Dedicated print sheet (ClavaMetrics "Gym Session Plan") — built from live data ──
+function gpRenderPrintSheet() {
+  const host = document.getElementById('gpPrintSheet');
+  if (!host) return;
+  try {
+    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
+    const initials = name => { const w=(name||'').trim().split(/\s+/).filter(Boolean); return (((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(name||'?').slice(0,2)).toUpperCase()) || '—'; };
+    const val = id => (document.getElementById(id)?.value || '').trim();
+    const g = id => document.getElementById(id);
+    const kv = el => { const t=(el?.textContent||'').trim(); return (!t || t.startsWith('—')) ? '—' : t; };
+    const FONT = "'Geist',system-ui,sans-serif", MONO = "'Geist Mono',ui-monospace,monospace";
+
+    const club = window._gpClub || {};
+    let accent = club.primary_color || club.accent_color || '';
+    accent = /^#?[0-9a-fA-F]{6}$/.test(accent) ? (accent[0]==='#'?accent:'#'+accent) : '#15803D';
+    const clubName = club.name || 'Club';
+    const teamName = (_gpTeams||[]).find(t=>t.id===_gpTeamId)?.name || '';
+    const today = new Date().toISOString().split('T')[0];
+    const dateLabel = _gpFmt(_gpCurrentDate || today);
+
+    // read block rows: cell[1] name, cell[3], cell[4], cell[5] (span.pct), cell[7]
+    const readRows = tbodyId => {
+      const tb = document.getElementById(tbodyId);
+      if (!tb) return [];
+      return [...tb.querySelectorAll('tr')].map(tr => {
+        const tds = tr.children;
+        const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
+        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7) };
+      });
+    };
+
+    const sectionTitle = txt => `<div style="display:flex;align-items:center;gap:10px;margin:0 0 9px"><span style="font:700 11px ${FONT};letter-spacing:.07em;text-transform:uppercase;color:#15181D">${esc(txt)}</span><span style="flex:1;height:1px;background:#E7E7E4"></span></div>`;
+
+    // 1) Letterhead
+    const crest = club.logo_url
+      ? `<img src="${esc(club.logo_url)}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;display:block">`
+      : `<div style="width:46px;height:46px;border-radius:50%;background:var(--club-accent);color:#fff;display:flex;align-items:center;justify-content:center;font:700 17px ${FONT}">${esc(mono(clubName))}</div>`;
+    const head = `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+      <div style="display:flex;align-items:center;gap:12px">${crest}
+        <div><div style="font:700 17px ${FONT};color:#15181D">${esc(clubName)}</div>
+        ${teamName?`<div style="font:500 11px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-top:2px">${esc(teamName)}</div>`:''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font:800 13px ${FONT};letter-spacing:.1em;text-transform:uppercase;color:var(--club-accent)">Gym session</div>
+        <div style="font:500 12px ${MONO};color:#5B6470;margin-top:3px">${esc(dateLabel)}</div>
+      </div>
+    </div><div style="height:2px;background:#15181D;margin:12px 0 14px"></div>`;
+
+    // 2) Session line (title + MD + orientation chips) + meta grid
+    const title = val('gpTitle');
+    const md = val('gpMatchDay');
+    const chipColor = txt => { const t=(txt||'').toLowerCase();
+      if (t.startsWith('activation')) return '#10B981';
+      if (t.startsWith('hypertrophy')) return '#2563EB';
+      if (t.startsWith('max')) return '#B91C1C';
+      if (t.startsWith('power')) return '#7C3AED';
+      if (t.startsWith('rsi')) return '#F59E0B';
+      if (t.startsWith('recovery')) return '#0D9488';
+      return accent; };
+    const chips = [...document.querySelectorAll('.gp-or-pill.is-on')].map(el => (el.textContent||'').trim()).filter(Boolean);
+    const chipHtml = txt => `<span style="display:inline-flex;align-items:center;gap:5px;border:1px solid #E7E7E4;border-radius:999px;padding:3px 9px;font:600 10.5px ${FONT};color:#15181D"><span style="width:7px;height:7px;border-radius:50%;background:${chipColor(txt)}"></span>${esc(txt)}</span>`;
+
+    const cells = [];
+    const loc = val('gpLocation'); if (loc) cells.push({l:'Location · equipment', v:esc(loc), span:2});
+    const focus = val('gpFocus');  if (focus) cells.push({l:'Focus', v:esc(focus), span:1});
+    const wuMin = val('gpWarmupMin'); if (wuMin) cells.push({l:'Warm-up', v:esc(wuMin)+' min', span:1});
+
+    const sessionLine = (title || md || chips.length) ? `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:${cells.length?'10px':'0'}">
+      <div>${title?`<span style="font:700 16px ${FONT};color:#15181D">${esc(title)}</span>`:''}${md?`<span style="font:700 11px ${MONO};color:var(--club-accent);margin-left:${title?'8px':'0'}">${esc(md)}</span>`:''}</div>
+      ${chips.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end">${chips.map(chipHtml).join('')}</div>`:''}
+    </div>` : '';
+
+    const metaGrid = cells.length ? `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:14px">
+      ${cells.map(c=>`<div style="grid-column:span ${c.span};background:#fff;padding:8px 11px">
+        <div style="font:600 8.5px ${MONO};letter-spacing:.07em;text-transform:uppercase;color:#9CA3AF">${esc(c.l)}</div>
+        <div style="font:600 13px ${FONT};color:#15181D;margin-top:3px">${c.v}</div>
+      </div>`).join('')}
+    </div>` : '';
+
+    // 3) KPI strip
+    const kpis = [['Warm-up',kv(g('gpTotWarmup'))],['Contacts',kv(g('gpTotPlyo'))],['Main sets',kv(g('gpTotMain'))],['Tonnage',kv(g('gpTotTonnage'))],['Athletes',kv(g('gpTotAthletes'))],['Planned AU',kv(g('gpTotAu')),true]];
+    const kpiStrip = `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:16px">
+      ${kpis.map(([l,v,acc])=>`<div style="background:#fff;padding:10px 6px;text-align:center">
+        <div style="font:700 18px ${MONO};color:${acc?'var(--club-accent)':'#15181D'}">${esc(v)}</div>
+        <div style="font:600 8px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-top:3px">${esc(l)}</div>
+      </div>`).join('')}
+    </div>`;
+
+    // 4) Notes band
+    const notes = val('gpNotes');
+    const notesBand = notes ? `<div style="border:1px solid #E7E7E4;border-radius:10px;background:#FBFBFA;padding:9px 13px;margin-bottom:14px">
+      <div style="font:600 8.5px/1.2 ${MONO};letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:3px">Notes</div>
+      <div style="font:500 11.5px/1.45 ${FONT};color:#3C4149">${esc(notes).replace(/\n/g,'<br>')}</div>
+    </div>` : '';
+
+    // 5) Athletes
+    const roster = (_gpPlayers||[]).filter(p => _gpRoster.has(p.id));
+    const lastName = p => (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '';
+    const athletesBlock = roster.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`Athletes · ${roster.length}`)}
+      <div style="font:400 12px ${FONT};color:#15181D;line-height:1.7">${roster.map(p=>`<span style="white-space:nowrap;margin-right:12px"><span style="color:#9CA3AF;font-family:${MONO};font-size:10.5px">${esc(p.number??'—')}</span> <b style="font-weight:600">${esc(lastName(p))}</b></span>`).join('')}</div>
+    </div>` : '';
+
+    // 6) Work blocks — exercise card (initials thumbnail, tag chip, params, note)
+    const exCard = ({name, params, note, tag, tagColor}) => `<div style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
+      <div style="position:relative;aspect-ratio:16/10;background:#1A1D22;display:flex;align-items:center;justify-content:center">
+        <span style="font:700 26px ${FONT};color:#fff;letter-spacing:.04em">${esc(initials(name))}</span>
+        ${tag?`<span style="position:absolute;top:6px;left:6px;background:${tagColor};color:#fff;font:700 8.5px ${MONO};letter-spacing:.05em;padding:2px 6px;border-radius:4px;line-height:1.2">${esc(tag)}</span>`:''}
+      </div>
+      <div style="padding:8px 10px 9px">
+        <div style="font:600 12.5px ${FONT};color:#15181D">${esc(name||'—')}</div>
+        ${params.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${params.map(p=>`<span><span style="font:600 8px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF">${esc(p.l)}</span> <span style="font:600 11px ${MONO};color:#15181D">${esc(p.v)}</span></span>`).join('')}</div>`:''}
+        ${note?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:4px">${esc(note)}</div>`:''}
+      </div>
+    </div>`;
+
+    // WARM-UP — pills
+    const wuRows = readRows('gpWarmupBody').filter(r=>r.name);
+    const warmupBlock = wuRows.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`Warm-up${wuMin?` · ${wuMin} min`:''}`)}
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${wuRows.map(r=>`<span style="border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(r.name)}</span>`).join('')}</div>
+    </div>` : '';
+
+    // PLYOMETRICS — cards
+    const plyoRows = readRows('gpPlyoBody').filter(r=>r.name);
+    const plyContacts = kv(g('gpTotPlyo'));
+    const plyoBlock = plyoRows.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`Plyometrics · ${plyoRows.length}${plyContacts!=='—'?` · ${plyContacts} contacts`:''}`)}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${plyoRows.map(r=>{
+        const params=[]; if(r.c3)params.push({l:'Sets×reps',v:r.c3}); if(r.c4)params.push({l:'Contacts',v:r.c4});
+        return exCard({name:r.name, params, note:r.c7, tag:'POW', tagColor:'#7C3AED'});
+      }).join('')}</div>
+    </div>` : '';
+
+    // MAIN WORK — cards
+    const mainRows = readRows('gpMainBody').filter(r=>r.name);
+    const mSets = kv(g('gpTotMain')), mTon = kv(g('gpTotTonnage'));
+    const mainBlock = mainRows.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle(`Main work · ${mainRows.length}${mSets!=='—'?` · ${mSets} sets`:''}${mTon!=='—'?` · ${mTon}`:''}`)}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${mainRows.map(r=>{
+        const params=[]; if(r.c3)params.push({l:'Sets×reps',v:r.c3}); if(r.c4)params.push({l:'Load',v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
+        const note = r.c7 ? `Tempo ${r.c7}` : '';
+        return exCard({name:r.name, params, note, tag:'STR', tagColor:'#B91C1C'});
+      }).join('')}</div>
+    </div>` : '';
+
+    // 7) Footer
+    const footMid = [...chips]; if (md) footMid.push(md);
+    const footer = `<div style="margin-top:auto;display:flex;justify-content:space-between;gap:10px;padding-top:9px;border-top:1px solid #E7E7E4;font:500 9.5px ${MONO};color:#A3AAB3">
+      <span>ClavaMetrics · Gym Session Plan</span>
+      <span>${esc(footMid.join(' · '))}</span>
+      <span>${esc(clubName)}${teamName?' · '+esc(teamName):''}</span>
+    </div>`;
+
+    host.innerHTML = `<div class="gsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
+      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${athletesBlock}${warmupBlock}${plyoBlock}${mainBlock}${footer}
+    </div>`;
+  } catch (e) {
+    console.warn('gpRenderPrintSheet failed', e);
+  }
+}
+window.addEventListener('beforeprint', gpRenderPrintSheet);
+
 async function gpExportPDF() {
   const btn = document.querySelector('[onclick="gpExportPDF()"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  const host = document.getElementById('gpPrintSheet');
   try {
     const { default: html2canvas } = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.min.js');
     const { jsPDF } = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
-    const el = document.querySelector('.gp-doc');
-    document.body.classList.add('gp-print');
+    gpRenderPrintSheet();
+    if (host) host.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;z-index:-1';
+    const el = document.querySelector('#gpPrintSheet .gsp-sheet') || host;
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1340,7 +1462,7 @@ async function gpExportPDF() {
   } catch(e) {
     alert('PDF export failed. Use Print → Save as PDF instead.');
   } finally {
-    document.body.classList.remove('gp-print');
+    if (host) host.style.cssText = '';
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF'; }
   }
 }
@@ -1350,29 +1472,10 @@ async function gpExportPDF() {
   const clubId = await window.getClubId();
   _gpClubId = clubId;
   const [profile, club] = await Promise.all([window.getProfile(), window.getClub()]);
+  window._gpClub = club;
   if (club) window.applyClubTheme();
 
   await gpInitTeamSwitch();
-
-  // ── Print-only letterhead (paper system: crest + club + "Gym session" + session date) ──
-  (function gpBuildLetterhead(){
-    const doc = document.querySelector('.gp-doc');
-    if (!doc || doc.querySelector('.ph-head.print-only')) return;
-    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const mono = n => { const w=(n||'').trim().split(/\s+/).filter(Boolean); return ((((w[0]||'')[0]||'')+((w[1]||'')[0]||''))||(n||'?').slice(0,2)).toUpperCase(); };
-    const clubName = (club && club.name) ? club.name : '—';
-    const teamName = (_gpTeams||[]).find(t=>t.id===_gpTeamId)?.name || '';
-    const crest = (club && club.logo_url) ? `<img src="${esc(club.logo_url)}" alt="">` : esc(mono(club&&club.name));
-    const brand = club && (club.primary_color || club.accent_color);
-    if (brand && /^#?[0-9a-fA-F]{6}$/.test(brand)) document.documentElement.style.setProperty('--accent', brand[0]==='#'?brand:'#'+brand);
-    const today = new Date().toISOString().split('T')[0];
-    const head = document.createElement('header');
-    head.className = 'ph-head print-only';
-    head.innerHTML = `<div class="ph-crest">${crest}</div>`
-      + `<div><div class="ph-club">${esc(clubName)}</div>${teamName?`<div class="ph-sub">${esc(teamName)}</div>`:''}</div>`
-      + `<div class="ph-right"><div class="ph-doc">Gym session</div><div class="ph-date" id="gpPhDate">${esc(_gpFmt(_gpCurrentDate || today))}</div></div>`;
-    doc.insertBefore(head, doc.firstChild);
-  })();
 
   const nameEl = document.getElementById('gpUserName');
   if (nameEl && profile?.full_name) nameEl.textContent = profile.full_name;
