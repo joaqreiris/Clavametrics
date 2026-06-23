@@ -940,17 +940,32 @@
           <label for="sqF_position">Position</label>
           <select id="sqF_position">
             <option value="">— Select —</option>
-            <option value="GK">GK — Goalkeeper</option>
-            <option value="CB">CB — Centre back</option>
-            <option value="LB">LB — Left back</option>
-            <option value="RB">RB — Right back</option>
-            <option value="FB">FB — Fullback</option>
-            <option value="DM">DM — Defensive mid</option>
-            <option value="CM">CM — Central mid</option>
-            <option value="MF">MF — Midfielder</option>
-            <option value="WG">WG — Winger</option>
-            <option value="ST">ST — Striker</option>
-            <option value="CF">CF — Centre forward</option>
+            <optgroup label="Goalkeeper">
+              <option value="GK">GK — Goalkeeper</option>
+            </optgroup>
+            <optgroup label="Defenders">
+              <option value="CB">CB — Centre back</option>
+              <option value="LB">LB — Left back</option>
+              <option value="RB">RB — Right back</option>
+              <option value="LWB">LWB — Left wing back</option>
+              <option value="RWB">RWB — Right wing back</option>
+            </optgroup>
+            <optgroup label="Midfielders">
+              <option value="CDM">CDM — Defensive mid</option>
+              <option value="CM">CM — Central mid</option>
+              <option value="CAM">CAM — Attacking mid</option>
+            </optgroup>
+            <optgroup label="Wide">
+              <option value="LM">LM — Left mid</option>
+              <option value="RM">RM — Right mid</option>
+              <option value="LW">LW — Left winger</option>
+              <option value="RW">RW — Right winger</option>
+            </optgroup>
+            <optgroup label="Forwards">
+              <option value="SS">SS — Second striker</option>
+              <option value="CF">CF — Centre forward</option>
+              <option value="ST">ST — Striker</option>
+            </optgroup>
           </select>
         </div>
       </div>
@@ -1455,7 +1470,14 @@ async function reloadPlayers() {
     document.getElementById('sqF_first_name').value  = player?.first_name    || '';
     document.getElementById('sqF_last_name').value   = player?.last_name     || '';
     document.getElementById('sqF_number').value      = player?.number          || '';
-    document.getElementById('sqF_position').value    = player?.position        || '';
+    (() => {
+      const selP = document.getElementById('sqF_position');
+      const pv = player?.position || '';
+      if (pv && !Array.from(selP.options).some(o => o.value === pv)) {
+        const o = document.createElement('option'); o.value = pv; o.textContent = pv + ' (legacy)'; selP.appendChild(o);
+      }
+      selP.value = pv;
+    })();
     document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
     document.getElementById('sqF_nationality').value = player?.nationality     || '';
     document.getElementById('sqF_height_cm').value   = player?.height          || '';
@@ -1506,6 +1528,13 @@ async function reloadPlayers() {
 
     if (!payload.first_name) {
       showToast('First name is required.');
+      saving.style.display = 'none';
+      saveBtn.disabled = false;
+      return;
+    }
+
+    if (!payload.position) {
+      showToast('Position is required.');
       saving.style.display = 'none';
       saveBtn.disabled = false;
       return;
