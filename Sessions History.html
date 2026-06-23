@@ -96,6 +96,7 @@
   .sh-tag.technical{background:rgba(155,89,182,0.14);color:#5B21B6}
   .sh-tag.individual{background:rgba(29,158,117,0.14);color:#15803D}
   .sh-tag.positional{background:rgba(20,184,166,0.14);color:#0F766E}
+  .sh-tag.sectorial{background:rgba(20,184,166,0.14);color:#0F766E}
   .sh-orient{display:inline-flex;align-items:center;gap:4px;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
   .sh-orient .d{width:7px;height:7px;border-radius:50%}
   .sh-orient .d.act{background:#FCD34D}
@@ -283,11 +284,10 @@
 
           <h4>Focus</h4>
           <div class="sh-chips" id="focusChips">
-            <button class="sh-chip" data-focus="Tactical">Tactical</button>
-            <button class="sh-chip" data-focus="Physical">Physical</button>
-            <button class="sh-chip" data-focus="Technical">Technical</button>
-            <button class="sh-chip" data-focus="Individual">Individual</button>
-            <button class="sh-chip" data-focus="Positional">Positional</button>
+            <button class="sh-chip" data-focus="tactical">Tactical</button>
+            <button class="sh-chip" data-focus="individual">Individual</button>
+            <button class="sh-chip" data-focus="physical">Physical</button>
+            <button class="sh-chip" data-focus="sectorial">Sectorial</button>
           </div>
 
 <!-- Type (SSG/MSG/LSG) removed — no DB column in training_sessions -->
@@ -432,7 +432,7 @@
   const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DAYS_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  const FOCUS_MAP = { tactical:'tactical', match:'tactical', recovery:'individual', conditioning:'physical', gym:'physical', technical:'technical', other:'positional' };
+  const FOCUS_MAP = { tactical:'Tactical', individual:'Individual', physical:'Physical', sectorial:'Sectorial' };
   const ORIENTATION_MAP = {
     introductory:   { cls:'intro', label:'Introductory'   },
     activation:     { cls:'act',   label:'Activation'      },
@@ -440,13 +440,6 @@
     speed:          { cls:'spd',   label:'Speed'           },
     duration:       { cls:'dur',   label:'Duration'        },
     recovery:       { cls:'rec',   label:'Recovery'        },
-  };
-  const FOCUS_TYPES = {
-    Tactical:   ['tactical','match'],
-    Physical:   ['conditioning','gym'],
-    Technical:  ['technical'],
-    Individual: ['recovery'],
-    Positional: ['other'],
   };
   const BAND_RANGES = { low:[0,300], moderate:[300,600], high:[600,900], peak:[900,Infinity] };
 
@@ -510,7 +503,7 @@
   async function loadSessions(clubId) {
     let q = window.sb
       .from('training_sessions')
-      .select('id,club_id,session_date,title,notes,session_type,orientation,duration,estimated_rpe,is_historical,rpe(rpe,duration,load)')
+      .select('id,club_id,session_date,title,notes,session_type,orientation,focus,duration,estimated_rpe,is_historical,rpe(rpe,duration,load)')
       .eq('club_id', clubId);
     if (shTeamId) q = q.eq('team_id', shTeamId);
     if (!_showHistorical) q = q.eq('is_historical', false);
@@ -559,8 +552,7 @@
       if (q && !`${s.title||''} ${s.notes||''}`.toLowerCase().includes(q)) return false;
       if (activeOrients.size > 0 && !activeOrients.has(s.orientation || '—')) return false;
       if (activeFocusSet.size > 0) {
-        const st = (s.session_type||'').toLowerCase();
-        if (![...activeFocusSet].some(f => (FOCUS_TYPES[f]||[]).includes(st))) return false;
+        if (!activeFocusSet.has((s.focus||'').toLowerCase())) return false;
       }
       if (activeBandSet.size > 0) {
         const band = getBand(avgLoad(s));
@@ -617,7 +609,7 @@
     const allTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt')];
     if (onTypes.length && onTypes.length < allTypes.length)
       chips.push({ label: onTypes.map(e => ORIENTATION_MAP[e.dataset.st]?.label || '—').join(' · '), key:'orientation' });
-    if (activeFocusSet.size > 0 && activeFocusSet.size < 5) chips.push({ label:[...activeFocusSet].join(' · '), key:'focus' });
+    if (activeFocusSet.size > 0 && activeFocusSet.size < 4) chips.push({ label:[...activeFocusSet].map(f => FOCUS_MAP[f] || f).join(' · '), key:'focus' });
     if (activeBandSet.size  > 0 && activeBandSet.size  < 4) chips.push({ label:[...activeBandSet].join(' · '), key:'band' });
     if (activeMdPos.size    > 0) chips.push({ label:[...activeMdPos].join(' · '), key:'md' });
     el.innerHTML = chips.map(c =>
@@ -653,7 +645,8 @@
     const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
     const dayStr  = DAYS_SHORT[dt.getDay()];
     const type    = s.session_type || 'Other';
-    const focusCls = FOCUS_MAP[type] || 'tactical';
+    const focus    = (s.focus||'').toLowerCase();
+    const focusCls = focus || '';
     const orient   = ORIENTATION_MAP[s.orientation] || { cls:'', label:'—' };
     const load  = avgLoad(s);
     const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
@@ -677,7 +670,7 @@
         <div class="sh-title">${s.title || '(untitled)'}</div>
         ${s.notes ? `<div class="sh-sub">${s.notes}</div>` : ''}
       </td>
-      <td><span class="sh-tag ${focusCls}">${type}</span></td>
+      <td><span class="sh-tag ${focusCls}">${FOCUS_MAP[focus] || '—'}</span></td>
       <td><span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orient.label}</span></td>
       <td>${durHTML}</td>
       <td>${loadHTML}</td>
@@ -716,7 +709,8 @@
       const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
       const dayStr  = DAYS_SHORT[dt.getDay()];
       const type    = s.session_type || 'Other';
-      const focusCls = FOCUS_MAP[type] || 'tactical';
+      const focus    = (s.focus||'').toLowerCase();
+      const focusCls = focus || '';
       const orient   = ORIENTATION_MAP[s.orientation] || { cls:'', label:'—' };
       const load  = avgLoad(s);
       const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
@@ -726,7 +720,7 @@
       return `<div class="sh-card" data-id="${s.id}">
         <div class="sh-card-top">
           <span class="sh-card-date">${dayStr}, ${dateStr}</span>
-          <span class="sh-tag ${focusCls}" style="margin-left:auto">${type}</span>
+          <span class="sh-tag ${focusCls}" style="margin-left:auto">${FOCUS_MAP[focus] || '—'}</span>
         </div>
         <div class="sh-card-title">${s.title || '(untitled)'}</div>
         <div class="sh-card-meta">
@@ -776,7 +770,7 @@
       html += `<div class="sh-cal-day${!inMonth?' other-month':''}${isToday?' today':''}">
         <span class="sh-cal-dn">${displayDay}</span>`;
       sessions.forEach(s => {
-        const focusCls = FOCUS_MAP[s.session_type] || 'tactical';
+        const focusCls = (s.focus||'').toLowerCase() || 'tactical';
         html += `<div class="sh-cal-evt sh-tag ${focusCls}" data-id="${s.id}" title="${s.title||s.session_type||'Session'}">${s.title||s.session_type||'Session'}</div>`;
       });
       html += '</div>';
@@ -846,7 +840,7 @@
       const orient = ORIENTATION_MAP[s.orientation]?.label || s.orientation || '';
       return [
         s.session_date, s._mdPos||'',
-        (s.title||'').replace(/,/g,';'), s.session_type||'',
+        (s.title||'').replace(/,/g,';'), FOCUS_MAP[(s.focus||'').toLowerCase()] || s.focus || '',
         orient, s.duration||'', load!=null?load:'', s.rpe?.length||''
       ].join(',');
     });
