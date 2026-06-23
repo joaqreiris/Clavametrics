@@ -311,10 +311,11 @@
   .sq-modal-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .sq-modal-field { display:flex; flex-direction:column; gap:5px; }
   .sq-modal-field label { font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
-  .sq-poschips { display:flex; flex-wrap:wrap; gap:6px; }
-  .sq-poschip { font:600 11px/1 var(--cm-font-mono); padding:6px 9px; border-radius:7px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); cursor:pointer; transition:all .12s; }
-  .sq-poschip:hover { border-color:var(--cm-border-strong); color:var(--cm-fg); }
-  .sq-poschip.is-on { background:var(--cm-accent-soft); border-color:var(--cm-accent); color:var(--cm-fg-strong); }
+  .sq-pos-sec { display:inline-block; font:600 9.5px/1 var(--cm-font-mono); padding:3px 5px; border-radius:5px; border:1px solid var(--cm-border-strong); color:var(--cm-fg-faint); vertical-align:middle; margin-left:3px; }
+  .sq-postags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .sq-postag { display:inline-flex; align-items:center; gap:4px; font:600 11px/1 var(--cm-font-mono); padding:5px 6px 5px 9px; border-radius:7px; background:var(--cm-accent-soft); border:1px solid var(--cm-accent); color:var(--cm-fg-strong); }
+  .sq-postag-x { border:0; background:transparent; color:var(--cm-fg-muted); cursor:pointer; font-size:14px; line-height:1; padding:0 2px; }
+  .sq-postag-x:hover { color:var(--cm-fg-strong); }
   .sq-modal-field input,
   .sq-modal-field select {
     height:36px; padding:0 10px; border-radius:var(--cm-r-3);
@@ -976,7 +977,36 @@
       <div class="sq-modal-row">
         <div class="sq-modal-field" style="flex:1">
           <label>Also plays (optional)</label>
-          <div id="sqF_positionsChips" class="sq-poschips"></div>
+          <select id="sqF_positionsAdd">
+            <option value="">— Add position —</option>
+            <optgroup label="Goalkeeper">
+              <option value="GK">GK — Goalkeeper</option>
+            </optgroup>
+            <optgroup label="Defenders">
+              <option value="CB">CB — Centre back</option>
+              <option value="LB">LB — Left back</option>
+              <option value="RB">RB — Right back</option>
+              <option value="LWB">LWB — Left wing back</option>
+              <option value="RWB">RWB — Right wing back</option>
+            </optgroup>
+            <optgroup label="Midfielders">
+              <option value="CDM">CDM — Defensive mid</option>
+              <option value="CM">CM — Central mid</option>
+              <option value="CAM">CAM — Attacking mid</option>
+            </optgroup>
+            <optgroup label="Wide">
+              <option value="LM">LM — Left mid</option>
+              <option value="RM">RM — Right mid</option>
+              <option value="LW">LW — Left winger</option>
+              <option value="RW">RW — Right winger</option>
+            </optgroup>
+            <optgroup label="Forwards">
+              <option value="SS">SS — Second striker</option>
+              <option value="CF">CF — Centre forward</option>
+              <option value="ST">ST — Striker</option>
+            </optgroup>
+          </select>
+          <div id="sqF_positionsTags" class="sq-postags"></div>
         </div>
       </div>
       <div class="sq-modal-row">
@@ -1184,15 +1214,21 @@ function normalizePosition(raw) {
 }
 
 // Multi-position chips for the player modal (PR2). positions[] = full set incl. primary.
-const _POS_CHIP_CODES = ['GK','CB','LB','RB','LWB','RWB','CDM','CM','CAM','LM','RM','LW','RW','SS','CF','ST'];
-function renderPositionChips(selected) {
-  const box = document.getElementById('sqF_positionsChips');
+let _secPositions = [];
+function renderSecPositions() {
+  const box = document.getElementById('sqF_positionsTags');
   if (!box) return;
-  const sel = selected instanceof Set ? selected : new Set(selected || []);
-  box.innerHTML = _POS_CHIP_CODES.map(code =>
-    `<button type="button" class="sq-poschip${sel.has(code) ? ' is-on' : ''}" data-pos="${code}">${code}</button>`
-  ).join('');
-  box.querySelectorAll('.sq-poschip').forEach(b => b.addEventListener('click', () => b.classList.toggle('is-on')));
+  box.innerHTML = _secPositions.map(code =>
+    `<span class="sq-postag">${code}<button type="button" class="sq-postag-x" data-rm="${code}" aria-label="Remove ${code}">&times;</button></span>`).join('');
+  box.querySelectorAll('.sq-postag-x').forEach(b => b.addEventListener('click', () => {
+    _secPositions = _secPositions.filter(c => c !== b.dataset.rm); renderSecPositions();
+  }));
+}
+function setSecPositions(arr) { _secPositions = [...new Set((arr || []).filter(Boolean))]; renderSecPositions(); }
+// Secondary-position tags shown next to the primary pill in lists.
+function secPosTags(p) {
+  const sec = (p.positions || []).filter(x => x && x !== p.position);
+  return sec.length ? ' ' + sec.map(x => `<span class="sq-pos-sec">${x}</span>`).join('') : '';
 }
 
 function calcAge(dob) {
@@ -1339,7 +1375,7 @@ function renderTable() {
           <div><div class="sq-name-row"><span class="sq-name">${fullName || '—'}</span></div>
           <div class="sq-sub">${fmtDob(p.date_of_birth)}</div></div>
         </div></td>
-        <td><span class="sq-pos ${pcfg.css}">${p.position || '—'}</span></td>
+        <td><span class="sq-pos ${pcfg.css}">${p.position || '—'}</span>${secPosTags(p)}</td>
         <td class="sq-mono">${age}</td>
         <td class="sq-mono">${foot}</td>
         <td><span class="sq-anthro">${h}${w}</span></td>
@@ -1560,7 +1596,7 @@ async function reloadPlayers() {
       }
       selP.value = pv;
     })();
-    renderPositionChips((player?.positions || []).filter(p => p && p !== (player?.position || '')));
+    setSecPositions((player?.positions || []).filter(p => p && p !== (player?.position || '')));
     document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
     document.getElementById('sqF_nationality').value = player?.nationality     || '';
     document.getElementById('sqF_height_cm').value   = player?.height          || '';
@@ -1603,8 +1639,7 @@ async function reloadPlayers() {
       position:      document.getElementById('sqF_position').value || null,
       positions:     (() => {
         const primary = document.getElementById('sqF_position').value || '';
-        const chips = [...document.querySelectorAll('#sqF_positionsChips .sq-poschip.is-on')].map(c => c.dataset.pos);
-        const all = [primary, ...chips].filter((v, i, a) => v && a.indexOf(v) === i);
+        const all = [primary, ..._secPositions].filter((v, i, a) => v && a.indexOf(v) === i);
         return all.length ? all : null;
       })(),
       date_of_birth: document.getElementById('sqF_dob').value || null,
@@ -1754,7 +1789,7 @@ async function reloadPlayers() {
         <div class="sq-card-av">${cardAvInner}<span class="sq-card-num">${p.number||'—'}</span></div>
         <div class="sq-card-name">${fullName||'—'}</div>
         <div class="sq-card-meta">
-          <span class="sq-pos ${pcfg.css}">${p.position||'—'}</span>
+          <span class="sq-pos ${pcfg.css}">${p.position||'—'}</span>${secPosTags(p)}
           ${age !== '—' ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${age}y</span>` : ''}
           ${p.dominant_foot ? `<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${p.dominant_foot[0]}</span>` : ''}
         </div>
@@ -1839,6 +1874,12 @@ async function reloadPlayers() {
   });
 
   // ── Photo preview in modal ─────────────────────────────────────
+  document.getElementById('sqF_positionsAdd')?.addEventListener('change', e => {
+    const v = e.target.value;
+    const primary = document.getElementById('sqF_position').value;
+    if (v && v !== primary && !_secPositions.includes(v)) { _secPositions.push(v); renderSecPositions(); }
+    e.target.value = '';
+  });
   document.getElementById('sqF_photoBtn')?.addEventListener('click', () => document.getElementById('sqF_photo').click());
   document.getElementById('sqF_photo')?.addEventListener('change', e => {
     const file = e.target.files?.[0];
