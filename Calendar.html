@@ -2750,7 +2750,19 @@ function openEvtModal(session, defaultDate, focusTasks) {
   document.getElementById('calEvtId').value = session?.id || '';
   document.getElementById('calEvtF_title').value = session?.title || '';
   const evtType = session?.session_type || 'tactical';
-  document.getElementById('calEvtF_type').value  = evtType;
+  const typeSel = document.getElementById('calEvtF_type');
+  // Drop any temp option injected on a previous open (avoid accumulation)
+  typeSel.querySelectorAll('option[data-temp="1"]').forEach(o => o.remove());
+  typeSel.value = evtType;
+  // If the real type isn't a static option, inject a temp one so it's preserved on re-save
+  if (typeSel.selectedIndex === -1) {
+    const opt = document.createElement('option');
+    opt.value = evtType;
+    opt.dataset.temp = '1';
+    opt.textContent = evtType.charAt(0).toUpperCase() + evtType.slice(1);
+    typeSel.appendChild(opt);
+    typeSel.value = evtType;
+  }
   document.getElementById('calEvtF_date').value  = session?.session_date || defaultDate || TODAY;
 
   // Duration: use saved value, or apply default for new events
@@ -3518,6 +3530,7 @@ async function saveEvt() {
   const estimatedRpe = parseInt(document.getElementById('calEvtF_rpe').value) || null;
   const startTimeVal = document.getElementById('calEvtF_starttime').value || null;
 
+  if (!type) { showCalToast('Pick an event type'); saving.style.display='none'; saveBtn.disabled=false; return; }
   if (!title) { showCalToast('Title is required.'); saving.style.display='none'; saveBtn.disabled=false; return; }
 
   // Validation: day_off conflict (soft)
