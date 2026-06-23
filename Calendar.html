@@ -2778,7 +2778,10 @@ function openEvtModal(session, defaultDate, focusTasks) {
   // Match extra fields
   document.getElementById('calEvtF_opponent').value    = session?.opponent    || '';
   document.getElementById('calEvtF_homeaway').value    = session?.home_away   || '';
-  document.getElementById('calEvtF_competition').value = session?.competition || '';
+  const compSel = document.getElementById('calEvtF_competition');
+  compSel.innerHTML = '<option value="">— No competition</option>' +
+    _calComps.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  compSel.value = session?.competition_id || '';
   document.getElementById('calEvtF_starttime').value   = session?.start_time  ? session.start_time.slice(0,5) : '';
   document.getElementById('calEvtF_location').value    = session?.location    || '';
   document.getElementById('calEvtF_rpe').value = session?.estimated_rpe || '';
