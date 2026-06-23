@@ -379,6 +379,39 @@
     border-right: 4px solid transparent;
     border-top: 4px solid var(--cm-accent-press);
   }
+  .ribbon-track__season-bound {
+    position: absolute;
+    top: calc(var(--cm-s-4) + 40px + var(--cm-s-3) - 6px);
+    bottom: var(--cm-s-5);
+    width: 0;
+    border-left: 2px dashed var(--cm-border-strong);
+    z-index: 4;
+    pointer-events: none;
+  }
+  .season-flag {
+    position: absolute;
+    top: -22px;
+    background: var(--cm-surface);
+    color: var(--cm-fg-muted);
+    border: 1px solid var(--cm-border-strong);
+    font: 600 9px/1 var(--cm-font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 6px;
+    border-radius: var(--cm-r-1);
+    white-space: nowrap;
+    box-shadow: var(--cm-shadow-1);
+  }
+  .ribbon-track__season-bound.is-start .season-flag { left: 6px; }
+  .ribbon-track__season-bound.is-end   .season-flag { right: 6px; }
+  .ribbon-track__season-shade {
+    position: absolute;
+    top: calc(var(--cm-s-4) + 40px + var(--cm-s-3) - 6px);
+    bottom: var(--cm-s-5);
+    background: color-mix(in srgb, var(--cm-fg) 5%, transparent);
+    z-index: 3;
+    pointer-events: none;
+  }
 
   /* ── LIST VIEW ── */
   .season-ribbon__list { padding: var(--cm-s-4) var(--cm-s-6) var(--cm-s-6); }
@@ -1058,6 +1091,10 @@
             <div class="ribbon-track__months" id="calV2Months"></div>
             <div class="ribbon-track__cycles" id="calV2Cycles"></div>
             <div class="ribbon-track__matches" id="calV2Matches"></div>
+            <div class="ribbon-track__season-shade" id="calV2SeasonShadeBefore" hidden></div>
+            <div class="ribbon-track__season-shade" id="calV2SeasonShadeAfter" hidden></div>
+            <div class="ribbon-track__season-bound is-start" id="calV2SeasonStart" hidden><span class="season-flag">Season start</span></div>
+            <div class="ribbon-track__season-bound is-end" id="calV2SeasonEnd" hidden><span class="season-flag">Season end</span></div>
             <div class="ribbon-track__today" id="calV2Today"><span class="today-flag">Today</span></div>
           </div>
         </div>
@@ -4342,6 +4379,23 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
   // ── Today marker ──
   const todayEl = document.getElementById('calV2Today');
   if (todayEl) todayEl.style.left = (dayOffset(TODAY) * ppd + RIBBON_GUTTER) + 'px';
+
+  // ── Season start/end markers + out-of-season shading ──
+  const sStart = document.getElementById('calV2SeasonStart');
+  const sEnd   = document.getElementById('calV2SeasonEnd');
+  const shB = document.getElementById('calV2SeasonShadeBefore');
+  const shA = document.getElementById('calV2SeasonShadeAfter');
+  if (_calSeason?.start_date && _calSeason?.end_date) {
+    const trackWidth = totalDays * ppd + RIBBON_GUTTER * 2;
+    const startX = dayOffset(_calSeason.start_date) * ppd + RIBBON_GUTTER;
+    const endX   = dayOffset(_calSeason.end_date)   * ppd + RIBBON_GUTTER;
+    sStart.style.left = startX + 'px'; sStart.hidden = false;
+    sEnd.style.left   = endX   + 'px'; sEnd.hidden   = false;
+    shB.style.left = '0px';       shB.style.width = Math.max(0, startX) + 'px';             shB.hidden = false;
+    shA.style.left = endX + 'px'; shA.style.width = Math.max(0, trackWidth - endX) + 'px';  shA.hidden = false;
+  } else {
+    [sStart, sEnd, shB, shA].forEach(el => el && (el.hidden = true));
+  }
 
   // Initial auto-scroll to today — once (so a later re-render doesn't yank the scroll)
   if (!_ribbonV2Centered && !_ribbonViewRange) {
