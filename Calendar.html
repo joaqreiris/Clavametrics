@@ -4400,6 +4400,18 @@ function compLabel(cls) {
 }
 
 // ── Season Ribbon ─────────────────────────────────────────────
+// Resolve a microcycle's match from calendar_events (via _matchSessions),
+// to replace reads of mc.match_date/rival/etc.
+function mcMatch(mc) {
+  if (!mc) return null;
+  const inRange = (_matchSessions || []).filter(
+    s => s.session_date >= mc.start_date && s.session_date <= mc.end_date);
+  if (!inRange.length) return null;
+  inRange.sort((a, b) => a.session_date > b.session_date ? 1 : -1);
+  return inRange[inRange.length - 1]; // el último del MC = el partido "target"
+}
+function mcMatchDate(mc) { return mcMatch(mc)?.session_date || null; }
+
 // Load the active season + its competitions (from Annual Planner model)
 async function loadCalCompetitions() {
   _calComps = []; _calSeasonId = null; _calSeason = null;
