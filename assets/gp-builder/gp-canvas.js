@@ -4,7 +4,8 @@
    F2: free resize — drag any of the 8 handles to change w/h (and x/y on N/W).
    F3: free move — drag the card header to reposition; colliding cards get
        pushed DOWN (float mode: untouched cards stay put, gaps allowed). Native
-       HTML5 reorder is suppressed in canvas mode. Persists on drop. */
+       HTML5 reorder is suppressed in canvas mode. Persists on drop.
+   F3.1: collision push also applied on RESIZE + overlaps auto-resolved on render. */
 (function () {
   'use strict';
   if (window.gpCanvas) return;
@@ -82,7 +83,7 @@
       .map(el => ({ el, ...readCoords(el) }));
   }
 
-  // ── F3: collision push (float mode, push DOWN only) ──────────────────────
+  // ── collision push (float mode, push DOWN only) ──────────────────────────
   function collide(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
@@ -99,8 +100,21 @@
       }
     }
   }
+  // Deterministic overlap removal (top-to-bottom): each card is pushed below
+  // any earlier-placed card it collides with. Idempotent on clean layouts.
+  function resolveAll(items) {
+    const placed = [];
+    items.slice().sort((a, b) => (a.y - b.y) || (a.x - b.x)).forEach(it => {
+      let moved = true, g = 0;
+      while (moved && g++ < 200) {
+        moved = false;
+        for (const p of placed) { if (collide(it, p)) { it.y = p.y + p.h; moved = true; } }
+      }
+      placed.push(it);
+    });
+  }
 
-  // ── F2: resize handles ───────────────────────────────────────────────────
+  // ── resize handles ───────────────────────────────────────────────────────
   const HANDLES = [
     { k: 'n', T: 1 }, { k: 'e', R: 1 }, { k: 's', B: 1 }, { k: 'w', L: 1 },
     { k: 'nw', T: 1, L: 1 }, { k: 'ne', T: 1, R: 1 }, { k: 'sw', B: 1, L: 1 }, { k: 'se', B: 1, R: 1 },
@@ -157,15 +171,19 @@
 
   function resizeMove(e) {
     if (!rz) return;
-    const { card, dir, m, badge } = rz;
-    let { x, y, w, h } = readCoords(card);
+    const { card, dir, m, badge, base } = rz;
+    const mb = base.find(b => b.el === card) || readCoords(card);
+    let { x, y, w, h } = { x: mb.x, y: mb.y, w: mb.w, h: mb.h };
     const col = clamp(Math.round((e.clientX - m.rect.left) / m.colStep), 0, COLS);
     const row = Math.max(0, Math.round((e.clientY - m.rect.top) / m.rowStep));
     if (dir.R) w = clamp(col - x, MINW, COLS - x);
     if (dir.B) h = Math.max(MINH, row - y);
     if (dir.L) { const right = x + w; const nx = clamp(col, 0, right - MINW); x = nx; w = right - nx; }
     if (dir.T) { const bot = y + h;   const ny = clamp(row, 0, bot - MINH);   y = ny; h = bot - ny; }
-    applyCoords(card, { x, y, w, h });
+    const work = base.map(b => ({ ...b }));
+    const m2 = work.find(b => b.el === card); m2.x = x; m2.y = y; m2.w = w; m2.h = h;
+    pushAway(work, m2);
+    work.forEach(b => applyCoords(b.el, b));
     badge.textContent = `${w} × ${h}`;
   }
 
@@ -205,7 +223,7 @@
     if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
   }
 
-  // ── render one grid in canvas mode (F1) + handles (F2) ───────────────────
+  // ── render one grid in canvas mode (F1) + handles (F2) + de-overlap ──────
   function renderGrid(grid) {
     if (!ENABLED || !grid) return;
     const cards = [...grid.querySelectorAll(':scope > .gp-c, :scope > .gp-add')];
@@ -218,7 +236,9 @@
       if (hasCoords(c)) Object.assign(it, c);
       return it;
     });
-    toCanvasLayout(items).forEach(it => {
+    const placed = toCanvasLayout(items);
+    resolveAll(placed);
+    placed.forEach(it => {
       applyCoords(it._el, it);
       if (it._el.classList.contains('gp-c')) ensureHandles(it._el);
     });
