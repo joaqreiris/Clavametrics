@@ -239,16 +239,6 @@
             <div class="dp-f"><label>Microcycle</label>
               <select id="dpMicrocycle"><option value="">— Loading… —</option></select>
             </div>
-            <div class="dp-f"><label>Type</label>
-              <select id="dpSessionType">
-                <option value="tactical">Tactical</option>
-                <option value="conditioning">Conditioning</option>
-                <option value="gym">Gym</option>
-                <option value="match">Match</option>
-                <option value="recovery">Recovery</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
             <div class="dp-f"><label>Orientation</label>
               <select id="dpOrientation"><option value="">—</option><option value="introductory">Introductory</option><option value="activation">Activation</option><option value="muscle_tension">Muscle tension</option><option value="speed">Speed</option><option value="duration">Duration</option><option value="recovery">Recovery</option></select>
             </div>
@@ -619,7 +609,6 @@ async function loadDay(dateStr) {
     if (titleInput) titleInput.value = sess.title || '';
     const st = document.getElementById('dpStartTime'); if (st) st.value = sess.session_time || '';
     const et = document.getElementById('dpEndTime'); if (et) et.value = sess.end_time || '';
-    const stype = document.getElementById('dpSessionType'); if (stype) stype.value = sess.session_type || '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = sess.notes || '';
     const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = sess.estimated_rpe || '';
     const so = document.getElementById('dpOrientation'); if (so) so.value = sess.orientation || '';
@@ -630,7 +619,6 @@ async function loadDay(dateStr) {
     if (titleInput) titleInput.value = '';
     const st = document.getElementById('dpStartTime'); if (st) st.value = '';
     const et = document.getElementById('dpEndTime'); if (et) et.value = '';
-    const stype = document.getElementById('dpSessionType'); if (stype) stype.value = '';
     const sn = document.getElementById('dpNotes'); if (sn) sn.value = '';
     const sr = document.getElementById('dpEstRpe'); if (sr) sr.value = '';
     const so = document.getElementById('dpOrientation'); if (so) so.value = '';
@@ -892,9 +880,9 @@ async function dpRenderPrintSheet() {
     </div><div style="height:2px;background:#15181D;margin:12px 0 14px"></div>`;
 
     // 2) Session line + meta grid
-    const title = val('dpSessionTitle'), stype = val('dpSessionType'), rpe = val('dpEstRpe');
-    const sessionLine = (title || stype || rpe) ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:${(title||stype)?'10px':'0'}">
-      <div>${title?`<span style="font:700 16px ${FONT};color:#15181D">${esc(title)}</span>`:''}${stype?`<span style="font:500 12px ${FONT};color:#5B6470;margin-left:${title?'8px':'0'}">${esc(cap(stype))}</span>`:''}</div>
+    const title = val('dpSessionTitle'), rpe = val('dpEstRpe');
+    const sessionLine = (title || rpe) ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:${title?'10px':'0'}">
+      <div>${title?`<span style="font:700 16px ${FONT};color:#15181D">${esc(title)}</span>`:''}</div>
       ${rpe?`<div style="font:700 11px ${MONO};color:var(--club-accent);border:1px solid var(--club-accent);padding:3px 9px;border-radius:999px;white-space:nowrap">RPE ${esc(rpe)}</div>`:''}
     </div>` : '';
 
@@ -1166,10 +1154,9 @@ async function dpAutoSaveSession() {
   if (dotEl)  dotEl.style.background = 'var(--cm-warning)';
   if (statEl) statEl.textContent = 'Saving…';
 
-  const TYPE_DEFAULTS = { tactical:'Tactical', conditioning:'Conditioning', gym:'Gym', match:'Match', recovery:'Recovery', other:'Training' };
-  const typeVal = document.getElementById('dpSessionType')?.value || 'tactical';
+  const typeVal = 'training';
   const nameVal = document.getElementById('dpSessionTitle')?.value?.trim();
-  const title   = nameVal || TYPE_DEFAULTS[typeVal] || 'Training';
+  const title   = nameVal || 'Training';
   const startVal = document.getElementById('dpStartTime')?.value || null;
   const endVal   = document.getElementById('dpEndTime')?.value   || null;
   let duration = null;
@@ -1487,7 +1474,7 @@ async function dpExportPDF() {
   document.getElementById('dpDateInput').addEventListener('change', e => { if (e.target.value) loadDay(e.target.value); });
 
   // Autosave session info with debounce on field changes
-  ['dpSessionTitle','dpStartTime','dpEndTime','dpSessionType','dpOrientation','dpFocus','dpMatchDay','dpNotes','dpEstRpe'].forEach(id => {
+  ['dpSessionTitle','dpStartTime','dpEndTime','dpOrientation','dpFocus','dpMatchDay','dpNotes','dpEstRpe'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('change', dpQueueSave);
