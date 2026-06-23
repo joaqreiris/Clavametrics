@@ -2072,12 +2072,10 @@ function renderGrid() {
   document.getElementById('calWeekLabel').innerHTML =
     `<i class="ti ti-calendar-event"></i>${totalDays}<span class="yr" style="margin-left:4px">days</span>`;
 
-  // Summary row — rival: use MC's own, or fall back to a calendar_event match in this MC's date range
-  const _calEvtInMc = !mc.rival
-    ? _matchSessions.find(s => s.session_date >= mc.start_date && s.session_date <= mc.end_date)
-    : null;
-  const _targetRival = mc.rival || (_calEvtInMc ? (_calEvtInMc.opponent || (_calEvtInMc.title||'').replace(/^vs\s*/i,'')) : null);
-  const _targetHa    = mc.home_away || _calEvtInMc?.home_away || '';
+  // Summary row — rival: resolve the MC's match from calendar_events
+  const _mcMatch = mcMatch(mc);
+  const _targetRival = _mcMatch ? (_mcMatch.opponent || (_mcMatch.title||'').replace(/^vs\s*/i,'')) : null;
+  const _targetHa    = _mcMatch?.home_away || '';
   const _calMcTargetEl = document.getElementById('calMcTarget');
   if (_calMcTargetEl) _calMcTargetEl.innerHTML = _targetRival ? `${_targetRival}<small>${_targetHa ? ' · '+_targetHa : ''}</small>` : '—';
   const trainCt = _sessions.filter(s => focusToClass(s.session_type) === 'training').length;
@@ -2093,11 +2091,11 @@ function renderGrid() {
   // Top bar MC heading
   const mcName = mc.name || 'Microcycle';
   let headMdLabel = '';
-  if (mc.match_date) {
-    const diff = daysBetween(TODAY, mc.match_date);
+  if (_mcMatch) {
+    const diff = daysBetween(TODAY, _mcMatch.session_date);
     headMdLabel = diff === 0 ? ' · MD' : diff > 0 ? ` · MD−${diff}` : ` · MD+${Math.abs(diff)}`;
   }
-  const headTarget = mc.rival ? ` · <strong>${mc.rival}</strong>` : '';
+  const headTarget = _mcMatch ? ` · <strong>${_targetRival}</strong>` : '';
   const headEl = document.getElementById('calHeadCtx');
   if (headEl) headEl.innerHTML = `<strong>${mcName}</strong>${headMdLabel}${headTarget}`;
 
@@ -2117,6 +2115,7 @@ function renderGrid() {
   }
 
   // Build all day columns
+  const _md = mcMatchDate(mc);
   let html = '';
   for (let i = 0; i < totalDays; i++) {
     const dateStr = addDays(start, i);
@@ -2131,8 +2130,8 @@ function renderGrid() {
     const isOff = daySessions.length === 0;
 
     let mdLabel = '';
-    if (mc.match_date) {
-      const diff = daysBetween(dateStr, mc.match_date);
+    if (_md) {
+      const diff = daysBetween(dateStr, _md);
       if (diff === 0) mdLabel = 'MD';
       else if (diff > 0 && diff <= 10) mdLabel = `MD−${diff}`;
       else if (diff < 0 && diff >= -3) mdLabel = `MD+${Math.abs(diff)}`;
@@ -5154,22 +5153,11 @@ function renderCalKPIs(mcs) {
   const today = new Date();
   const in21d = new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0];
 
-  // Next match: check microcycles AND imported match sessions
-  const upcomingFromMc = mcs
-    .filter(mc => mc.match_date && mc.match_date >= TODAY)
-    .map(mc => ({ date: mc.match_date, label: (mc.rival||'Match') + (mc.home_away ? ' · '+mc.home_away : '') }))
-    .sort((a,b) => a.date > b.date ? 1 : -1);
-  const upcomingFromSess = _matchSessions
+  // Next match: nearest calendar_event match from today onward
+  const nextMatch = _matchSessions
     .filter(s => s.session_date >= TODAY)
-    .map(s => ({ date: s.session_date, label: s.title + (s.notes ? ' · '+s.notes : '') }))
-    .sort((a,b) => a.date > b.date ? 1 : -1);
-
-  // Merge & dedupe
-  const allUpcoming = [...upcomingFromMc, ...upcomingFromSess]
-    .sort((a,b) => a.date > b.date ? 1 : -1)
-    .filter((v, i, arr) => arr.findIndex(x => x.date === v.date) === i);
-
-  const nextMatch = allUpcoming[0];
+    .map(s => ({ date: s.session_date, label: (s.opponent || (s.title||'Match').replace(/^vs\s*/i,'')) + (s.home_away ? ' · '+s.home_away : '') }))
+    .sort((a,b) => a.date > b.date ? 1 : -1)[0];
   const kpiNext  = document.querySelector('.cal-kpi:nth-child(1) .cal-kpi-v');
   const kpiNextT = document.querySelector('.cal-kpi:nth-child(1) .cal-kpi-t');
   if (kpiNext && nextMatch) {
@@ -5219,12 +5207,9 @@ function renderCalKPIs(mcs) {
     }
   })();
 
-  // Match density: dedupe dates from both sources
-  const matchDates21 = new Set([
-    ...mcs.filter(mc => mc.match_date && mc.match_date >= TODAY && mc.match_date <= in21d).map(mc => mc.match_date),
-    ..._matchSessions.filter(s => s.session_date >= TODAY && s.session_date <= in21d).map(s => s.session_date),
-  ]);
-  const matchCount = matchDates21.size;
+  // Match density: matches from calendar_events in the next 21 days
+  const matchCount = _matchSessions
+    .filter(s => s.session_date >= TODAY && s.session_date <= in21d).length;
   const kpiDV = document.getElementById('calDensityV');
   const kpiDT = document.getElementById('calDensityT');
   if (kpiDV) kpiDV.innerHTML = matchCount ? `${matchCount} <sub>in 21d</sub>` : `— <sub>in 21d</sub>`;
