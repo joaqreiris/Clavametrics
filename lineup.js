@@ -539,7 +539,7 @@
   async function loadSquadPlayers (clubId) {
     let _luPlQ = window.sb
       .from('players')
-      .select('id,first_name,last_name,number,position,nationality')
+      .select('id,first_name,last_name,number,position,positions,nationality')
       .eq('club_id', clubId)
       .neq('status', 'inactive');
     if (_luTeamId) _luPlQ = _luPlQ.eq('team_id', _luTeamId);
@@ -584,9 +584,9 @@
     // Sort once on open; only filter by text on each keystroke
     const baseList = _allPlayers
       .filter(p => !assignedIds.has(p.id))
-      .map(p => ({ ...p, _pos: mapPosition(p.position) }))
+      .map(p => ({ ...p, _pos: mapPosition(p.position), _posAll: [p.position, ...(p.positions || [])].filter(Boolean).map(mapPosition) }))
       .sort((a, b) => {
-        const am = a._pos === posHint, bm = b._pos === posHint;
+        const am = a._posAll.includes(posHint), bm = b._posAll.includes(posHint);
         if (am !== bm) return am ? -1 : 1;
         return (a.last_name || '').localeCompare(b.last_name || '');
       });
@@ -602,7 +602,7 @@
         return;
       }
       list.innerHTML = players.map(p => `
-        <div class="lu-picker-row${p._pos === posHint ? ' is-match' : ''}" data-id="${p.id}">
+        <div class="lu-picker-row${p._posAll.includes(posHint) ? ' is-match' : ''}" data-id="${p.id}">
           <span class="lu-pr-num">${p.number || '?'}</span>
           <span class="lu-pr-name">${p.last_name}, ${(p.first_name || '')[0] || ''}.</span>
           <span class="role-tag ${p._pos.toLowerCase()}">${p._pos}</span>
