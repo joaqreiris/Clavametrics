@@ -408,6 +408,7 @@
     </main>
   </div>
 
+<script src="lib/fixtures-import.js"></script>
 <script>
 let _apClubId = null, _apTeamId = null;
 let _apSeasons = [];
@@ -1129,67 +1130,11 @@ function apToggleImport(){
   }
 }
 
-function apParseDate(s){
-  s = (s || '').trim();
-  let m;
-  if (m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-  if (m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  return null;
-}
-function apNormHA(s){
-  s = (s || '').trim().toLowerCase();
-  return ['away','a','visitante','v','fuera'].includes(s) ? 'away' : 'home';
-}
-function apNormTime(s){
-  const m = (s || '').trim().match(/^(\d{1,2}):(\d{2})/);
-  return m ? `${m[1].padStart(2,'0')}:${m[2]}` : '';
-}
-
-function apParseDelimited(text){
-  const lines = (text || '').replace(/\r/g,'').split('\n').map(l => l.trim()).filter(Boolean);
-  if (!lines.length) return [];
-  const delim = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') ? ';' : ',');
-  const head = lines[0].split(delim).map(s => s.trim().toLowerCase());
-  const KNOWN = ['date','opponent','rival','home_away','home/away','h/a','ha','competition','comp','time','kickoff'];
-  const hasHeader = head.some(h => KNOWN.includes(h));
-  let cols = { date:0, opp:1, ha:2, comp:3, time:4 }, start = 0;
-  if (hasHeader) {
-    cols = {};
-    head.forEach((h,i) => {
-      if (h==='date') cols.date=i;
-      else if (h==='opponent'||h==='rival') cols.opp=i;
-      else if (h==='home_away'||h==='home/away'||h==='h/a'||h==='ha') cols.ha=i;
-      else if (h==='competition'||h==='comp') cols.comp=i;
-      else if (h==='time'||h==='kickoff') cols.time=i;
-    });
-    start = 1;
-  }
-  const rows = [];
-  for (let i = start; i < lines.length; i++){
-    const p = lines[i].split(delim).map(s => s.trim());
-    const date = apParseDate(p[cols.date] ?? '');
-    const opponent = (cols.opp != null ? (p[cols.opp] ?? '') : '').trim();
-    rows.push({
-      raw: lines[i],
-      rawDate: (p[cols.date] ?? '').trim(),
-      date, opponent,
-      home_away: apNormHA(cols.ha != null ? p[cols.ha] : ''),
-      competition: (cols.comp != null ? (p[cols.comp] ?? '') : '').trim(),
-      time: (cols.time != null ? apNormTime(p[cols.time] ?? '') : ''),
-      valid: !!date && !!opponent
-    });
-  }
-  return rows;
-}
 
 function apImportParse(){
   const text = document.getElementById('apImpPaste').value;
-  _apImportRows = apParseDelimited(text);
-  const existing = new Set(_apComps.map(c => (c.name || '').toLowerCase()));
-  _apImportNewComps = [...new Set(
-    _apImportRows.filter(r => r.competition).map(r => r.competition)
-      .filter(n => !existing.has(n.toLowerCase()))
-  )];
+  _apImportRows = CMFixtures.parseDelimited(text);
+  _apImportNewComps = CMFixtures.detectNewCompetitions(_apImportRows, _apComps);
   apRenderImportPreview();
 }
 
@@ -1227,37 +1172,13 @@ async function apImportConfirm(){
   const btn = document.getElementById('apImpConfirm');
   btn.disabled = true;
 
-  const compByName = {}, compTypeByName = {};
-  _apComps.forEach(c => { compByName[(c.name || '').toLowerCase()] = c.id; compTypeByName[(c.name || '').toLowerCase()] = c.comp_type; });
-  for (const name of _apImportNewComps){
-    const { data, error } = await window.sb.from('competitions')
-      .insert({ season_id: _apSeasonId, name, comp_type: 'league', color: COMP_TYPES.league.color })
-      .select('id').single();
-    if (error) { btn.disabled = false; alert(`Could not create competition "${name}": ${error.message}`); return; }
-    compByName[name.toLowerCase()] = data.id;
-    compTypeByName[name.toLowerCase()] = 'league';
-  }
-
-  // calendar_events.competition is a constrained CLASS (league/cup/international/friendly), not the name.
-  // The real competition (name + color) lives in competition_id.
-  const LEGACY_COMP = { league:'league', cup:'cup', international:'international', friendly:'friendly', supercup:'cup' };
-  const legacyComp = (f) => {
-    const ct = f.competition ? compTypeByName[f.competition.toLowerCase()] : null;
-    return ct ? (LEGACY_COMP[ct] || null) : null;
-  };
-
-  const rows = valid.map(f => ({
-    id: crypto.randomUUID(),
-    club_id: _apClubId, team_id: _apTeamId, season_id: _apSeasonId,
-    competition_id: f.competition ? (compByName[f.competition.toLowerCase()] || null) : null,
-    title: `vs ${f.opponent}`, type: 'match', date: f.date,
-    opponent: f.opponent, home_away: f.home_away,
-    competition: legacyComp(f), start_time: f.time || null,
-    duration_minutes: null
-  }));
-  const { error } = await window.sb.from('calendar_events').insert(rows);
+  const res = await CMFixtures.confirmImport({
+    sb: window.sb, clubId: _apClubId, teamId: _apTeamId, seasonId: _apSeasonId,
+    existingComps: _apComps, rows: _apImportRows,
+    newCompNames: _apImportNewComps, overwrite: false,
+    newCompColor: COMP_TYPES.league.color });
   btn.disabled = false;
-  if (error) { alert('Could not import: ' + error.message); return; }
+  if (res.error) { alert('Could not import: ' + res.error.message); return; }
 
   apToggleImport();
   await apLoadComps();
