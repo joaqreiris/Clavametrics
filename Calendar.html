@@ -1725,6 +1725,7 @@
       </div>
     </div>
     <div class="sq-modal-foot">
+      <button class="cm-btn is-ghost is-sm" id="calMcDelete" style="display:none;color:var(--cm-danger,#dc2626)"><i class="ti ti-trash" style="font-size:13px"></i>Delete microcycle</button>
       <div class="grow"></div>
       <span id="calMcSaving" style="display:none;font:var(--cm-meta);color:var(--cm-fg-muted)">Saving…</span>
       <button class="cm-btn is-ghost is-sm" id="calMcCancel">Cancel</button>
@@ -3678,6 +3679,7 @@ function openMcModal(existingMc) {
   _editMcId = existingMc?.id || null;
   document.getElementById('calMcModalTitle').textContent = existingMc ? 'Edit microcycle' : 'New microcycle';
   document.getElementById('calMcSave').textContent       = existingMc ? 'Save changes'    : 'Create';
+  document.getElementById('calMcDelete').style.display   = existingMc ? 'inline-flex'     : 'none';
   document.getElementById('calMcF_name').value     = existingMc?.name       || '';
   document.getElementById('calMcF_start').value    = existingMc?.start_date || '';
   document.getElementById('calMcF_end').value      = existingMc?.end_date   || '';
@@ -3753,6 +3755,32 @@ document.getElementById('calMcSave').addEventListener('click', async () => {
     if (newIdx >= 0) { _mcIdx = newIdx; _weekOffset = 0; }
     await loadSessions();
   }
+});
+
+document.getElementById('calMcDelete').addEventListener('click', async () => {
+  if (!_editMcId) return;
+  if (!confirm('Delete this microcycle? Sessions in its dates are kept.')) return;
+  const delBtn = document.getElementById('calMcDelete');
+  delBtn.disabled = true;
+  const { error } = await window.sb.from('microcycles').delete().eq('id', _editMcId);
+  delBtn.disabled = false;
+  if (error) { showCalToast('Error: ' + error.message); return; }
+
+  closeMcModal();
+  showCalToast('Microcycle deleted.');
+
+  let { data: mcs, error: mcRefetchErr } = await window.sb.from('microcycles')
+    .select(MC_FULL_SELECT).eq('club_id', _clubId).eq('team_id', _activeTeamId).order('start_date', { ascending: false });
+  if (mcRefetchErr) {
+    const { data: mcsBase } = await window.sb.from('microcycles')
+      .select(MC_BASE_SELECT).eq('club_id', _clubId).eq('team_id', _activeTeamId).order('start_date', { ascending: false });
+    mcs = mcsBase;
+  }
+  _allMCs = mcs || [];
+  if (_mcIdx >= _allMCs.length) _mcIdx = Math.max(0, _allMCs.length - 1);
+  renderSeasonRibbon(_allMCs);
+  renderCalKPIs(_allMCs);
+  await loadSessions();
 });
 
 // ── Week navigation ───────────────────────────────────────────
