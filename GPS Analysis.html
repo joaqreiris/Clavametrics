@@ -3862,7 +3862,7 @@ async function _fetchReports(state) {
   let allReports = [];
   for (let i = 0; i < sessionIds.length; i += CHUNK) {
     const { data: chunk } = await _scopeTeam(window.sb.from('gps_reports')
-      .select('player_id,session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,accelerations,decelerations,max_speed,avg_speed,player_load,hmld,time_played,distance_per_minute,players(first_name,last_name,number,position)')
+      .select('player_id,session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,accelerations,decelerations,max_speed,avg_speed,player_load,hmld,time_played,distance_per_minute,players(first_name,last_name,number,position,positions)')
       .in('session_id', sessionIds.slice(i, i + CHUNK)).eq('club_id', clubId))
       .order('total_distance', { ascending: false });
     if (chunk?.length) allReports = allReports.concat(chunk);

@@ -1910,7 +1910,14 @@
     if (!FB) return rows;
     let out = rows;
     if (FB.playerIds?.length) { const s = new Set(FB.playerIds); out = out.filter(r => s.has(r.player_id)); }
-    if (FB.positions?.length) { const s = new Set(FB.positions); out = out.filter(r => s.has(r.players?.position)); }
+    if (FB.positions?.length) {
+      const s = new Set(FB.positions);
+      out = out.filter(r => {
+        const pl = r.players; if (!pl) return false;
+        if (pl.position && s.has(pl.position)) return true;
+        return Array.isArray(pl.positions) && pl.positions.some(x => s.has(x));
+      });
+    }
     if (FB.microcycleIds?.length) { const s = new Set(FB.microcycleIds.map(String)); out = out.filter(r => s.has(String(r.training_sessions?.microcycle_id ?? ''))); }
     return out;
   }

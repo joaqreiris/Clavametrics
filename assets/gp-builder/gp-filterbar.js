@@ -634,7 +634,7 @@
     if (!clubId || !window.sb) return;
 
     const _gpTeam = window._gpTeamId || null;
-    const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position')
+    const _plQ = window.sb.from('players').select('id,first_name,last_name,number,position,positions')
       .eq('club_id', clubId).neq('status', 'inactive');
     const _seQ = window.sb.from('training_sessions').select('session_attributes')
       .eq('club_id', clubId).limit(3000);
@@ -658,7 +658,10 @@
 
     // Posiciones reales (distintas, no vacías)
     const posSet = new Set();
-    (players || []).forEach(p => { if (p.position) posSet.add(p.position); });
+    (players || []).forEach(p => {
+      if (p.position) posSet.add(p.position);
+      if (Array.isArray(p.positions)) p.positions.forEach(x => x && posSet.add(x));
+    });
     options.position = Array.from(posSet).sort().map(v => ({ value: v, label: v }));
 
     // MD codes reales desde session_attributes.md_code
