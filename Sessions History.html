@@ -225,7 +225,7 @@
     <section class="sh-page">
 
       <header class="sh-head">
-        <div><h1>Sessions history</h1><div class="ctx"><strong id="shTotalCount">—</strong> sessions logged · filtered by date, type, search</div></div>
+        <div><h1>Sessions history</h1><div class="ctx"><strong id="shTotalCount">—</strong> sessions logged · filtered by date, orientation, search</div></div>
         <div class="meta">
           <button class="cm-btn is-outline is-sm" onclick="exportCSV()"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
           <button class="cm-btn is-outline is-sm" data-compare onclick="openCompare()"><i class="ti ti-chart-bar" style="font-size:14px"></i>Compare sessions</button>
@@ -270,7 +270,7 @@
             <button class="sh-chip" data-md="MD+2">MD+2</button>
           </div>
 
-          <h4>Session type</h4>
+          <h4>Orientation <span class="clear">Clear</span></h4>
           <div id="shOrientFilters"><!-- populated by renderOrientFilters() --></div>
 
           <h4 style="margin-top:16px">Data source</h4>
@@ -433,14 +433,13 @@
   const DAYS_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   const FOCUS_MAP = { tactical:'tactical', match:'tactical', recovery:'individual', conditioning:'physical', gym:'physical', technical:'technical', other:'positional' };
-  const ORIENT_MAP = {
-    tactical:    { cls:'dur',  label:'Tactical'      },
-    conditioning:{ cls:'act',  label:'Conditioning'  },
-    match:       { cls:'ten',  label:'Match'         },
-    recovery:    { cls:'rec',  label:'Recovery'      },
-    gym:         { cls:'ten',  label:'Gym'           },
-    technical:   { cls:'intro',label:'Technical'     },
-    other:       { cls:'spd',  label:'Other'         },
+  const ORIENTATION_MAP = {
+    introductory:   { cls:'intro', label:'Introductory'   },
+    activation:     { cls:'act',   label:'Activation'      },
+    muscle_tension: { cls:'ten',   label:'Muscle tension'  },
+    speed:          { cls:'spd',   label:'Speed'           },
+    duration:       { cls:'dur',   label:'Duration'        },
+    recovery:       { cls:'rec',   label:'Recovery'        },
   };
   const FOCUS_TYPES = {
     Tactical:   ['tactical','match'],
@@ -511,7 +510,7 @@
   async function loadSessions(clubId) {
     let q = window.sb
       .from('training_sessions')
-      .select('id,club_id,session_date,title,notes,session_type,duration,estimated_rpe,is_historical,rpe(rpe,duration,load)')
+      .select('id,club_id,session_date,title,notes,session_type,orientation,duration,estimated_rpe,is_historical,rpe(rpe,duration,load)')
       .eq('club_id', clubId);
     if (shTeamId) q = q.eq('team_id', shTeamId);
     if (!_showHistorical) q = q.eq('is_historical', false);
@@ -530,16 +529,16 @@
     const container = document.getElementById('shOrientFilters');
     if (!container) return;
     const counts = {};
-    allSessions.forEach(s => { const t = s.session_type || 'Other'; counts[t] = (counts[t]||0)+1; });
+    allSessions.forEach(s => { const t = s.orientation || '—'; counts[t] = (counts[t]||0)+1; });
     if (!Object.keys(counts).length) {
       container.innerHTML = '<span style="color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">No sessions yet</span>';
       return;
     }
-    container.innerHTML = Object.entries(counts).map(([type, n]) => {
-      const o = ORIENT_MAP[type] || { cls:'act', label: type };
-      return `<div class="sh-opt is-on" data-st="${type}">
+    container.innerHTML = Object.entries(counts).map(([orient, n]) => {
+      const o = ORIENTATION_MAP[orient] || { cls:'', label:'—' };
+      return `<div class="sh-opt is-on" data-st="${orient}">
         <span class="cb"></span>
-        <span class="sh-orient" style="margin-right:2px"><span class="d ${o.cls}"></span></span>
+        ${o.cls ? `<span class="sh-orient" style="margin-right:2px"><span class="d ${o.cls}"></span></span>` : ''}
         ${o.label} <span class="ct">${n}</span>
       </div>`;
     }).join('');
@@ -553,12 +552,12 @@
     if (activeDays === -1) startDate = getSeasonStart();
     else if (activeDays > 0) startDate = new Date(Date.now() - activeDays * 864e5);
 
-    const activeTypes = new Set([...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')].map(el => el.dataset.st).filter(Boolean));
+    const activeOrients = new Set([...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')].map(el => el.dataset.st).filter(Boolean));
 
     filteredSessions = allSessions.filter(s => {
       if (startDate && new Date(s.session_date + 'T00:00:00') < startDate) return false;
       if (q && !`${s.title||''} ${s.notes||''}`.toLowerCase().includes(q)) return false;
-      if (activeTypes.size > 0 && !activeTypes.has(s.session_type || 'Other')) return false;
+      if (activeOrients.size > 0 && !activeOrients.has(s.orientation || '—')) return false;
       if (activeFocusSet.size > 0) {
         const st = (s.session_type||'').toLowerCase();
         if (![...activeFocusSet].some(f => (FOCUS_TYPES[f]||[]).includes(st))) return false;
@@ -617,7 +616,7 @@
     const onTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')];
     const allTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt')];
     if (onTypes.length && onTypes.length < allTypes.length)
-      chips.push({ label: onTypes.map(e => ORIENT_MAP[e.dataset.st]?.label || e.dataset.st).join(' · '), key:'type' });
+      chips.push({ label: onTypes.map(e => ORIENTATION_MAP[e.dataset.st]?.label || '—').join(' · '), key:'orientation' });
     if (activeFocusSet.size > 0 && activeFocusSet.size < 5) chips.push({ label:[...activeFocusSet].join(' · '), key:'focus' });
     if (activeBandSet.size  > 0 && activeBandSet.size  < 4) chips.push({ label:[...activeBandSet].join(' · '), key:'band' });
     if (activeMdPos.size    > 0) chips.push({ label:[...activeMdPos].join(' · '), key:'md' });
@@ -628,7 +627,7 @@
       chip.addEventListener('click', () => {
         const k = chip.dataset.key;
         if (k === 'date')  { activeDays = 30; document.querySelectorAll('#dateChips .sh-chip').forEach(c => c.classList.remove('is-on')); document.querySelector('#dateChips [data-days="30"]')?.classList.add('is-on'); }
-        if (k === 'type')  document.querySelectorAll('#shOrientFilters .sh-opt').forEach(e => e.classList.add('is-on'));
+        if (k === 'orientation') document.querySelectorAll('#shOrientFilters .sh-opt').forEach(e => e.classList.add('is-on'));
         if (k === 'focus') { activeFocusSet.clear(); document.querySelectorAll('[data-focus]').forEach(c => c.classList.remove('is-on')); }
         if (k === 'band')  { activeBandSet.clear();  document.querySelectorAll('[data-band]').forEach(c => c.classList.remove('is-on')); }
         if (k === 'md')    { activeMdPos.clear();    document.querySelectorAll('[data-md]').forEach(c => c.classList.remove('is-on')); }
@@ -655,7 +654,7 @@
     const dayStr  = DAYS_SHORT[dt.getDay()];
     const type    = s.session_type || 'Other';
     const focusCls = FOCUS_MAP[type] || 'tactical';
-    const orient   = ORIENT_MAP[type] || { cls:'act', label: type };
+    const orient   = ORIENTATION_MAP[s.orientation] || { cls:'', label:'—' };
     const load  = avgLoad(s);
     const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
     const band  = getBand(load);
@@ -679,7 +678,7 @@
         ${s.notes ? `<div class="sh-sub">${s.notes}</div>` : ''}
       </td>
       <td><span class="sh-tag ${focusCls}">${type}</span></td>
-      <td><span class="sh-orient"><span class="d ${orient.cls}"></span>${orient.label}</span></td>
+      <td><span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orient.label}</span></td>
       <td>${durHTML}</td>
       <td>${loadHTML}</td>
       <td>${attHTML}</td>
@@ -718,7 +717,7 @@
       const dayStr  = DAYS_SHORT[dt.getDay()];
       const type    = s.session_type || 'Other';
       const focusCls = FOCUS_MAP[type] || 'tactical';
-      const orient   = ORIENT_MAP[type] || { cls:'act', label: type };
+      const orient   = ORIENTATION_MAP[s.orientation] || { cls:'', label:'—' };
       const load  = avgLoad(s);
       const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
       const band  = getBand(load);
@@ -731,7 +730,7 @@
         </div>
         <div class="sh-card-title">${s.title || '(untitled)'}</div>
         <div class="sh-card-meta">
-          <span class="sh-orient"><span class="d ${orient.cls}"></span>${orient.label}</span>
+          <span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orient.label}</span>
           ${s._mdPos ? `<span class="sh-md" style="font-size:10px">${s._mdPos}</span>` : ''}
         </div>
         <div class="sh-card-row">
@@ -844,7 +843,7 @@
     const headers = ['date','md_position','session_name','focus','orientation','duration_min','load_au','rpe_entries'];
     const rows = filteredSessions.map(s => {
       const load = avgLoad(s);
-      const orient = ORIENT_MAP[s.session_type]?.label || s.session_type || '';
+      const orient = ORIENTATION_MAP[s.orientation]?.label || s.orientation || '';
       return [
         s.session_date, s._mdPos||'',
         (s.title||'').replace(/,/g,';'), s.session_type||'',
@@ -894,7 +893,7 @@
       ['MD Position', s => s._mdPos||'—'],
       ['Type',        s => s.session_type||'—'],
       ['Duration',    s => s.duration!=null ? `${s.duration} min` : '—'],
-      ['Orientation', s => ORIENT_MAP[s.session_type]?.label||s.session_type||'—'],
+      ['Orientation', s => ORIENTATION_MAP[s.orientation]?.label||s.orientation||'—'],
       ['Load (AU)',   s => { const l=avgLoad(s); return l!=null?`${l} AU`:'—'; }],
       ['RPE entries', s => s.rpe?.length||'—'],
       ['Notes',       s => s.notes||'—'],
@@ -1089,7 +1088,7 @@
     const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
     const dayStr  = DAYS_SHORT[dt.getDay()];
     const type    = sess.session_type || '—';
-    const orient  = ORIENT_MAP[type] || { label: type };
+    const orient  = ORIENTATION_MAP[sess.orientation] || { label:'—' };
     const attCount = sess.rpe?.length;
     const attPct  = (attCount && totalActivePlayers) ? ` (${Math.round(attCount/totalActivePlayers*100)}%)` : '';
     const row3 = isGym
