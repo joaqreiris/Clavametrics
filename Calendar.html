@@ -1853,7 +1853,7 @@ let _seasonSettings = null;  // { season_start, season_end, season_name, competi
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
 let _ribbonZoom = 1;         // ribbon horizontal zoom factor (1 = fit width, >1 = wider + scroll)
-const RIBBON_V2 = false;          // flip a true en F4
+const RIBBON_V2 = true;           // flip a true en F4
 let _ribbonZoomIdx = 2;           // índice en RIBBON_ZOOM
 const RIBBON_ZOOM = [10, 13, 16, 20, 25];  // px por día
 const RIBBON_GUTTER = 28;         // padding lateral del track, px
@@ -4785,6 +4785,15 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
           `<div class="mc-chip__top"><span class="mc-chip__no">${mcNo}</span></div>` +
           `<div class="mc-chip__rest-tag"><i class="ti ti-zzz"></i>Rest</div>`;
       }
+      chip.addEventListener('click', async () => {
+        const realIdx = _allMCs.findIndex(m => m.id === mc.id);
+        if (realIdx >= 0) {
+          _mcIdx = realIdx; _weekOffset = 0;
+          document.querySelectorAll('.cal-segs .cal-seg').forEach(s => s.classList.toggle('is-on', s.textContent.trim() === 'Microcycle'));
+          switchView('microcycle');
+          await loadSessions();
+        }
+      });
       cyclesEl.appendChild(chip);
     });
   }
@@ -4798,7 +4807,7 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
     ordered.filter(mc => mc.match_date).forEach(mc => {
       if (!seenDates.has(mc.match_date)) {
         seenDates.add(mc.match_date);
-        rawMarkers.push({ date: mc.match_date, isAway: mc.home_away === 'away', comp: compClass(mc.color || ''), rival: mc.rival || 'Match', mcData: mc });
+        rawMarkers.push({ date: mc.match_date, isAway: mc.home_away === 'away', comp: compClass(mc.color || ''), rival: mc.rival || 'Match', isFromMc: true, mcData: mc, crestUrl: null });
       }
     });
     (extraMatches || []).forEach(s => {
@@ -4815,29 +4824,45 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
           compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
         }
         const rival = s.opponent || (s.title || 'Match').replace(/^vs\s+/i, '');
-        rawMarkers.push({ date: d, isAway, comp: compClass(compStr), rival, mcData: null });
+        rawMarkers.push({ date: d, isAway, comp: compClass(compStr), rival, isFromMc: false, mcData: null, crestUrl: s.rival_crest_url || null });
       }
     });
 
+    // Resolve each marker's MC and group by week (one pill per MC; "+N" when 2+)
+    const groups = [];
+    const byKey = new Map();
     rawMarkers
       .filter(m => m.date >= ordered[0].start_date && m.date <= ordered[ordered.length - 1].end_date)
       .sort((a, b) => a.date > b.date ? 1 : -1)
       .forEach(m => {
         const mc = m.mcData || ordered.find(x => x.start_date <= m.date && x.end_date >= m.date);
-        const geom = mc
-          ? chipGeom(mc)
-          : { left: dayOffset(m.date) * ppd, width: Math.max(30, 7 * ppd - RIBBON_GAP) };
-        const pill = document.createElement('div');
-        pill.className = 'match-pill ' + (m.isAway ? 'match-pill--away' : 'match-pill--home') + ' is-' + (m.comp || 'liga');
-        pill.style.left = geom.left + 'px';
-        pill.style.width = geom.width + 'px';
-        pill.title = `${m.rival} · ${m.isAway ? 'Away' : 'Home'}`;
-        pill.innerHTML =
-          `<span class="match-pill__ha">${m.isAway ? 'A' : 'H'}</span>` +
-          `<span class="match-pill__opp">${m.rival}</span>` +
-          `<span class="match-pill__slot">vs</span>`;
-        matchesEl.appendChild(pill);
+        const key = mc ? 'mc:' + mc.id : 'd:' + m.date;
+        let g = byKey.get(key);
+        if (!g) { g = { mc, items: [] }; byKey.set(key, g); groups.push(g); }
+        g.items.push(m);
       });
+
+    groups.forEach(g => {
+      const first = g.items[0];
+      const extra = g.items.length - 1;
+      const geom = g.mc
+        ? chipGeom(g.mc)
+        : { left: dayOffset(first.date) * ppd, width: Math.max(30, 7 * ppd - RIBBON_GAP) };
+      const pill = document.createElement('div');
+      pill.className = 'match-pill ' + (first.isAway ? 'match-pill--away' : 'match-pill--home') + ' is-' + (first.comp || 'liga');
+      pill.style.left = geom.left + 'px';
+      pill.style.width = geom.width + 'px';
+      pill.title = g.items.map(i => `${i.rival} · ${i.isAway ? 'Away' : 'Home'}`).join(' | ');
+      const lead = first.crestUrl
+        ? `<img src="${first.crestUrl}" style="width:14px;height:14px;border-radius:50%;object-fit:contain;flex-shrink:0" onerror="this.style.display='none'" alt="">`
+        : `<span class="match-pill__ha">${first.isAway ? 'A' : 'H'}</span>`;
+      pill.innerHTML =
+        lead +
+        `<span class="match-pill__opp">${first.rival}</span>` +
+        `<span class="match-pill__slot">${extra ? '+' + extra : 'vs'}</span>`;
+      pill.addEventListener('click', e => { e.stopPropagation(); showMatchPopover(pill, g.items); });
+      matchesEl.appendChild(pill);
+    });
   }
 
   // ── Today marker ──
