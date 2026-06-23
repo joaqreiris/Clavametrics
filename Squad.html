@@ -311,6 +311,10 @@
   .sq-modal-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .sq-modal-field { display:flex; flex-direction:column; gap:5px; }
   .sq-modal-field label { font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .sq-poschips { display:flex; flex-wrap:wrap; gap:6px; }
+  .sq-poschip { font:600 11px/1 var(--cm-font-mono); padding:6px 9px; border-radius:7px; border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); cursor:pointer; transition:all .12s; }
+  .sq-poschip:hover { border-color:var(--cm-border-strong); color:var(--cm-fg); }
+  .sq-poschip.is-on { background:var(--cm-accent-soft); border-color:var(--cm-accent); color:var(--cm-fg-strong); }
   .sq-modal-field input,
   .sq-modal-field select {
     height:36px; padding:0 10px; border-radius:var(--cm-r-3);
@@ -970,6 +974,12 @@
         </div>
       </div>
       <div class="sq-modal-row">
+        <div class="sq-modal-field" style="flex:1">
+          <label>Also plays (optional)</label>
+          <div id="sqF_positionsChips" class="sq-poschips"></div>
+        </div>
+      </div>
+      <div class="sq-modal-row">
         <div class="sq-modal-field">
           <label for="sqF_dob">Date of birth</label>
           <input type="date" id="sqF_dob">
@@ -1173,6 +1183,18 @@ function normalizePosition(raw) {
   return k;                                // unknown: keep cleaned value (don't lose data)
 }
 
+// Multi-position chips for the player modal (PR2). positions[] = full set incl. primary.
+const _POS_CHIP_CODES = ['GK','CB','LB','RB','LWB','RWB','CDM','CM','CAM','LM','RM','LW','RW','SS','CF','ST'];
+function renderPositionChips(selected) {
+  const box = document.getElementById('sqF_positionsChips');
+  if (!box) return;
+  const sel = selected instanceof Set ? selected : new Set(selected || []);
+  box.innerHTML = _POS_CHIP_CODES.map(code =>
+    `<button type="button" class="sq-poschip${sel.has(code) ? ' is-on' : ''}" data-pos="${code}">${code}</button>`
+  ).join('');
+  box.querySelectorAll('.sq-poschip').forEach(b => b.addEventListener('click', () => b.classList.toggle('is-on')));
+}
+
 function calcAge(dob) {
   if (!dob) return '—';
   const d = new Date(dob), now = new Date();
@@ -1363,7 +1385,7 @@ function renderTable() {
 
 async function reloadPlayers() {
   let q = window.sb.from('players')
-    .select('id,first_name,last_name,number,position,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
+    .select('id,first_name,last_name,number,position,positions,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
     .eq('club_id', _currentClubId)
     .order('number', { ascending: true, nullsFirst: false });
   if (_currentTeamId) q = q.eq('team_id', _currentTeamId);
@@ -1535,6 +1557,7 @@ async function reloadPlayers() {
       }
       selP.value = pv;
     })();
+    renderPositionChips((player?.positions || []).filter(p => p && p !== (player?.position || '')));
     document.getElementById('sqF_dob').value         = player?.date_of_birth   || '';
     document.getElementById('sqF_nationality').value = player?.nationality     || '';
     document.getElementById('sqF_height_cm').value   = player?.height          || '';
@@ -1575,6 +1598,12 @@ async function reloadPlayers() {
       last_name:     document.getElementById('sqF_last_name').value.trim(),
       number:        parseInt(document.getElementById('sqF_number').value) || null,
       position:      document.getElementById('sqF_position').value || null,
+      positions:     (() => {
+        const primary = document.getElementById('sqF_position').value || '';
+        const chips = [...document.querySelectorAll('#sqF_positionsChips .sq-poschip.is-on')].map(c => c.dataset.pos);
+        const all = [primary, ...chips].filter((v, i, a) => v && a.indexOf(v) === i);
+        return all.length ? all : null;
+      })(),
       date_of_birth: document.getElementById('sqF_dob').value || null,
       nationality:   document.getElementById('sqF_nationality').value.trim() || null,
       height:        parseFloat(document.getElementById('sqF_height_cm').value) || null,
