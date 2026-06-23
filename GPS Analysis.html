@@ -1707,13 +1707,21 @@ async function saveLayout(viewKey, overrideDid) {
     if (!uid || !cid) { console.warn(`saveLayout(${viewKey}): uid=${uid} cid=${cid} — skipping`); return; }
     const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
     if (!grid) { console.warn(`saveLayout(${viewKey}): grid not found`); return; }
-    const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => ({
-      card_id: _deriveCardId(el, idx),
-      size: el.dataset.size || 'md',
-      span: window.gpSpanOf ? window.gpSpanOf(el) : (parseInt(el.dataset.span, 10) || undefined),
-      position: idx,
-      config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
-    }));
+    const layout = [...grid.querySelectorAll('.gp-c')].map((el, idx) => {
+      const item = {
+        card_id: _deriveCardId(el, idx),
+        size: el.dataset.size || 'md',
+        span: window.gpSpanOf ? window.gpSpanOf(el) : (parseInt(el.dataset.span, 10) || undefined),
+        position: idx,
+        config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
+      };
+      // F0: carry canvas coordinates when the engine has set them. Non-destructive —
+      // in the current (non-canvas) build no card has these, so the payload is unchanged.
+      const x = parseInt(el.dataset.x, 10), y = parseInt(el.dataset.y, 10),
+            w = parseInt(el.dataset.w, 10), h = parseInt(el.dataset.h, 10);
+      if ([x, y, w, h].every(Number.isFinite)) Object.assign(item, { x, y, w, h });
+      return item;
+    });
     const { error } = await window.sb.from('gps_dashboard_layouts').upsert(
       { user_id: uid, club_id: cid, dashboard_id: did, layout, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,club_id,dashboard_id' }
@@ -7494,6 +7502,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 <script defer src="settings-drawer.js"></script>
 <script defer src="tweaks-panel.js"></script>
 <script defer src="theme-tweaks.js"></script>
+<script src="assets/gp-builder/gp-canvas.js" defer></script>
 <script src="assets/gp-builder/gp-persist.js" defer></script>
 <script src="assets/gp-builder/gp-builder.js" defer></script>
 <script src="assets/gp-builder/gp-tabs.js" defer></script>
