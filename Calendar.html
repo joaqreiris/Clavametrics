@@ -1850,6 +1850,8 @@ let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new D
 let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
 let _ribbonV2Meta = null;    // { ribbonStart, ribbonEnd } — set by renderSeasonRibbonV2 for px-engine controls
 let _seasonSettings = null;  // { season_start, season_end, season_name, competition } from club_settings
+let _calComps = [];          // competitions of the active season (from Annual Planner)
+let _calSeasonId = null;     // id of the active/most-recent season for this team
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
 let _ribbonZoom = 1;         // ribbon horizontal zoom factor (1 = fit width, >1 = wider + scroll)
@@ -4440,6 +4442,24 @@ async function loadSeasonSettings() {
   _seasonSettings = data || null;
 }
 
+// Load the active season + its competitions (from Annual Planner model)
+async function loadCalCompetitions() {
+  _calComps = []; _calSeasonId = null;
+  if (!_clubId || !_activeTeamId) return;
+  const { data: seasons } = await window.sb
+    .from('seasons').select('*')
+    .eq('club_id', _clubId).eq('team_id', _activeTeamId)
+    .neq('status', 'archived')
+    .order('start_date', { ascending: false });
+  if (!seasons || !seasons.length) return;
+  const current = seasons.find(s => s.start_date <= TODAY && s.end_date >= TODAY);
+  _calSeasonId = (current || seasons[0]).id;
+  const { data: comps } = await window.sb
+    .from('competitions').select('id,name,comp_type,color')
+    .eq('season_id', _calSeasonId).order('created_at');
+  _calComps = comps || [];
+}
+
 // Refetch match events + re-render ribbon/KPIs/upcoming (after event CRUD)
 async function refreshRibbonMatches() {
   const { data: ms } = await window.sb.from('calendar_events')
@@ -5610,6 +5630,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load season config, then render ribbon and KPIs
   await loadSeasonSettings();
+  await loadCalCompetitions();
   renderSeasonRibbon(_allMCs, _matchSessions);
   renderCalKPIs(_allMCs);
   _initUpcomingFilter();
