@@ -206,6 +206,38 @@
       var(--cm-border-soft) calc(var(--gp-page-h) - 1px), var(--cm-border-soft) var(--gp-page-h));
   }
   .gp-dash-bar .gp-page-sel { appearance:none; -webkit-appearance:none; height:26px; padding:0 9px; }
+  /* ── F6: edit-mode skin (Claude Design language) ───────────────────────── */
+  .gp-grid.is-canvas.is-edit .gp-c { overflow:visible; transition:box-shadow .18s ease, border-color .18s ease, transform .18s ease; }
+  .gp-grid.is-canvas.is-edit .gp-c:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); }
+  .gp-grid.is-canvas .gp-c.gp-mv-active,
+  .gp-grid.is-canvas .gp-c.gp-rh-active { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring), var(--cm-shadow-2); outline:none; }
+  .gp-grid.is-canvas .gp-c.gp-mv-active { box-shadow:var(--cm-shadow-3); transform:scale(1.02) rotate(-1deg); }
+  /* header chrome: drag cursor + reveal action buttons on hover/active */
+  .gp-grid.is-canvas.is-edit .gp-c .gp-c-h { cursor:grab; }
+  .gp-grid.is-canvas .gp-c.gp-mv-active .gp-c-h { cursor:grabbing; }
+  .gp-grid.is-canvas.is-edit .gp-c .gp-c-h .right { opacity:0; transform:translateX(4px); transition:opacity .15s, transform .15s; }
+  .gp-grid.is-canvas.is-edit .gp-c:hover .gp-c-h .right,
+  .gp-grid.is-canvas .gp-c.gp-mv-active .gp-c-h .right,
+  .gp-grid.is-canvas .gp-c.gp-rh-active .gp-c-h .right { opacity:1; transform:none; }
+  .gp-grid.is-canvas.is-edit .gp-c .gp-c-h .right > button { border-color:transparent; background:transparent; border-radius:7px; }
+  .gp-grid.is-canvas.is-edit .gp-c .gp-c-h .right > button:hover { background:var(--cm-bg-sunk); color:var(--cm-fg-strong); }
+  /* handles: design squares straddling the border */
+  .gp-grid.is-canvas .gp-rh::after { display:none; }
+  .gp-grid.is-canvas.is-edit .gp-c .gp-rh { width:11px; height:11px; background:var(--cm-surface);
+    border:1.5px solid var(--cm-accent); border-radius:3px; box-shadow:var(--cm-shadow-1);
+    transition:background .12s, transform .12s, box-shadow .12s; }
+  .gp-grid.is-canvas .gp-rh-nw { top:-6px; left:-6px; }
+  .gp-grid.is-canvas .gp-rh-ne { top:-6px; right:-6px; }
+  .gp-grid.is-canvas .gp-rh-sw { bottom:-6px; left:-6px; }
+  .gp-grid.is-canvas .gp-rh-se { bottom:-6px; right:-6px; }
+  .gp-grid.is-canvas .gp-rh-n { top:-6px; left:calc(50% - 5.5px); right:auto; width:11px; height:11px; }
+  .gp-grid.is-canvas .gp-rh-s { bottom:-6px; left:calc(50% - 5.5px); right:auto; width:11px; height:11px; }
+  .gp-grid.is-canvas .gp-rh-w { left:-6px; top:calc(50% - 5.5px); bottom:auto; width:11px; height:11px; }
+  .gp-grid.is-canvas .gp-rh-e { right:-6px; top:calc(50% - 5.5px); bottom:auto; width:11px; height:11px; }
+  .gp-grid.is-canvas.is-edit .gp-c .gp-rh:hover,
+  .gp-grid.is-canvas .gp-c.gp-rh-active .gp-rh { background:var(--cm-accent); transform:scale(1.25); box-shadow:0 0 0 4px var(--cm-focus-ring); }
+  /* size badge: design's dark pill */
+  .gp-grid.is-canvas .gp-rh-badge { background:var(--cm-fg-strong); color:var(--cm-bg); }
   .gp-grid.is-canvas > .gp-c {
     grid-column: calc(var(--gp-x, 0) + 1) / span var(--gp-w, 6);
     grid-row:    calc(var(--gp-y, 0) + 1) / span var(--gp-h, 11);
