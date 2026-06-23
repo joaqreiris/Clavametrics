@@ -20,7 +20,7 @@
   const MINW   = 2;
   const MINH   = 3;
   const MOBILE = 1000;
-  const SIZE_ROWS = { sm: 7, md: 11, lg: 15, full: 19 };
+  const SIZE_ROWS = { sm: 5, md: 7, lg: 10, full: 13 };
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
   function spanOf(item) { const s = parseInt(item.span, 10); return (s >= 1 && s <= COLS) ? s : 6; }
@@ -306,6 +306,18 @@
   }
 
   // ── render ───────────────────────────────────────────────────────────────
+  function drawSnapGrid(grid) {
+    if (!grid) return;
+    let ov = grid.querySelector(':scope > .gp-snapgrid');
+    if (!grid.classList.contains('is-edit')) { if (ov) ov.remove(); return; }
+    if (!ov) { ov = document.createElement('div'); ov.className = 'gp-snapgrid'; ov.setAttribute('aria-hidden', 'true'); grid.prepend(ov); }
+    const m = gridMetrics(grid);
+    let html = '';
+    for (let i = 0; i <= COLS; i++) { html += '<i style="left:' + Math.round(i * m.colStep) + 'px"></i>'; }
+    ov.style.setProperty('--row-step', m.rowStep + 'px');
+    ov.innerHTML = html;
+  }
+
   function placeCards(grid) {
     const cards = [...grid.querySelectorAll(':scope > .gp-c')];
     if (!cards.length) { grid.classList.remove('is-canvas'); return; }
@@ -323,12 +335,14 @@
       if (it._el.classList.contains('gp-c')) { ensureHandles(it._el); observeCard(it._el); }
     });
     grid.classList.add('is-canvas');
+    if (!grid.__gpCompacted) { grid.__gpCompacted = true; const anySaved = [...grid.querySelectorAll(':scope > .gp-c')].some(el => Number.isFinite(+el.dataset.y) && el.dataset.y !== ''); if (!anySaved) compact(grid); }
   }
   function renderGrid(grid) {
     if (!ENABLED || !grid) return;
     placeCards(grid);
     ensureToolbar();        // F5: page selector + Compactar in the (shared) dashboard bar
     applyStoredPage(grid);  // F5: restore the saved page format
+    drawSnapGrid(grid);
   }
   function renderAll() { document.querySelectorAll('.gp-grid').forEach(renderGrid); }
 
@@ -352,6 +366,7 @@
     });
     document.querySelectorAll('.gp-grid').forEach(g => obs.observe(g, { childList: true }));
     document.getElementById('sections')?.addEventListener('click', () => setTimeout(renderAll, 80));
+    document.addEventListener('click', function(e){ if (e.target.closest && e.target.closest('#editToggle')) setTimeout(function(){ document.querySelectorAll('.gp-grid.is-canvas').forEach(drawSnapGrid); }, 30); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
