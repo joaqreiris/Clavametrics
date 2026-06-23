@@ -13,7 +13,7 @@
   if (window.gpCanvas) return;
 
   // ── Master switch. KEEP FALSE in the repo. Flip to true to see/develop F1+.
-  const ENABLED = false;
+  const ENABLED = true;
 
   const COLS   = 12;
   const ROW_PX = 36;
