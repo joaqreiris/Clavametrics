@@ -2493,7 +2493,8 @@ async function handleCrossDayMove(evt, newDate) {
       const { error } = await window.sb.from('calendar_events')
         .update({ date: newDate })
         .eq('recurrence_group_id', evt.recurrence_group_id)
-        .eq('club_id', _clubId);
+        .eq('club_id', _clubId)
+        .eq('team_id', _activeTeamId);
       if (error) { showCalToast('Error: ' + error.message); return; }
       showCalToast('Series moved.');
       await loadSessions();
@@ -5313,7 +5314,7 @@ async function showImportPreview(fixtures) {
   // Check conflicts
   const dates = fixtures.map(f => f.date);
   const { data: existing } = await window.sb.from('calendar_events')
-    .select('date').eq('club_id', _clubId).eq('type','match').in('date', dates);
+    .select('date').eq('club_id', _clubId).eq('team_id', _activeTeamId).eq('type','match').in('date', dates);
   const conflictDates = new Set((existing||[]).map(s => (s.date||'').split('T')[0]));
 
   const previewEl = document.getElementById('calImportPreview');
