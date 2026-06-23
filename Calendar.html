@@ -1854,6 +1854,7 @@ let _ribbonV2Centered = false; // V2 initial auto-scroll to today done once (don
 let _seasonSettings = null;  // { season_start, season_end, season_name, competition } from club_settings
 let _calComps = [];          // competitions of the active season (from Annual Planner)
 let _calSeasonId = null;     // id of the active/most-recent season for this team
+let _calSeason = null;       // full active/most-recent season row
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
 let _ribbonZoom = 1;         // ribbon horizontal zoom factor (1 = fit width, >1 = wider + scroll)
@@ -4470,7 +4471,7 @@ async function loadSeasonSettings() {
 
 // Load the active season + its competitions (from Annual Planner model)
 async function loadCalCompetitions() {
-  _calComps = []; _calSeasonId = null;
+  _calComps = []; _calSeasonId = null; _calSeason = null;
   if (!_clubId || !_activeTeamId) return;
   const { data: seasons } = await window.sb
     .from('seasons').select('*')
@@ -4479,7 +4480,8 @@ async function loadCalCompetitions() {
     .order('start_date', { ascending: false });
   if (!seasons || !seasons.length) return;
   const current = seasons.find(s => s.start_date <= TODAY && s.end_date >= TODAY);
-  _calSeasonId = (current || seasons[0]).id;
+  _calSeason = current || seasons[0];
+  _calSeasonId = _calSeason.id;
   const { data: comps } = await window.sb
     .from('competitions').select('id,name,comp_type,color')
     .eq('season_id', _calSeasonId).order('created_at');
