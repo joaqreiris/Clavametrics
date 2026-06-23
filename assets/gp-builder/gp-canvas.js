@@ -1,8 +1,9 @@
 /* gp-canvas.js — Free-canvas dashboard engine.
    F0: feature flag + legacy<->canvas schema bridge.
    F1: render cards from {x,y,w,h} via explicit CSS-grid placement (flag-gated).
-       No move/resize interaction yet — that's F2/F3. With the flag OFF nothing
-       changes; with it ON the active grids switch to canvas placement. */
+   F2: free resize — drag any of the 8 handles to change w/h (and x/y on the
+       N/W edges), snapped to the grid, with a live size badge; persists on drop.
+       Move (F3) still pending; overlap between cards is allowed until then. */
 (function () {
   'use strict';
   if (window.gpCanvas) return;
@@ -12,6 +13,9 @@
 
   const COLS   = 12;   // grid columns (same scale as the current --gp-span)
   const ROW_PX = 36;   // px height of one row unit (must match the CSS auto-rows)
+  const MINW   = 2;    // smallest card width  (cols)
+  const MINH   = 3;    // smallest card height (rows)
+  const MOBILE = 1000; // below this the grid collapses to 1 column
   const SIZE_ROWS = { sm: 7, md: 11, lg: 15, full: 19 };
 
   function spanOf(item) {
@@ -26,10 +30,10 @@
       && Number.isFinite(item.x) && Number.isFinite(item.y)
       && Number.isFinite(item.w) && Number.isFinite(item.h);
   }
+  const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
   /* Derive {x,y,w,h} for a legacy layout by flowing cards left->right into a
-     COLS-wide grid, wrapping to a new row when a card doesn't fit. Order via
-     `position`. Items that already have coords are kept as-is (stable). */
+     COLS-wide grid, wrapping to a new row when a card doesn't fit. */
   function toCanvasLayout(layout) {
     if (!Array.isArray(layout)) return [];
     const ordered = layout.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -56,7 +60,7 @@
     return { ...item, span, size };
   }
 
-  // ── F1: apply coords to a card (dataset + CSS vars) ──────────────────────
+  // ── apply coords to a card (dataset + CSS vars) ──────────────────────────
   function applyCoords(card, item) {
     if (!card) return;
     card.dataset.x = item.x; card.dataset.y = item.y;
@@ -66,8 +70,95 @@
     card.style.setProperty('--gp-w', item.w);
     card.style.setProperty('--gp-h', item.h);
   }
+  function readCoords(card) {
+    return { x: +card.dataset.x || 0, y: +card.dataset.y || 0,
+             w: +card.dataset.w || MINW, h: +card.dataset.h || MINH };
+  }
+  function reflowCard(card) {
+    requestAnimationFrame(() => {
+      card.querySelectorAll('canvas').forEach(cv => {
+        try { window.Chart && window.Chart.getChart && window.Chart.getChart(cv)?.resize(); } catch (e) {}
+      });
+    });
+  }
 
-  // ── F1: render one grid in canvas mode ───────────────────────────────────
+  // ── F2: resize handles ───────────────────────────────────────────────────
+  // Each handle drags some combination of edges (L/R/T/B).
+  const HANDLES = [
+    { k: 'n',  T: 1 }, { k: 'e',  R: 1 }, { k: 's',  B: 1 }, { k: 'w',  L: 1 },
+    { k: 'nw', T: 1, L: 1 }, { k: 'ne', T: 1, R: 1 },
+    { k: 'sw', B: 1, L: 1 }, { k: 'se', B: 1, R: 1 },
+  ];
+  function ensureHandles(card) {
+    if (card.querySelector(':scope > .gp-rh')) return;
+    HANDLES.forEach(h => {
+      const el = document.createElement('span');
+      el.className = `gp-rh gp-rh-${h.k}`;
+      el.dataset.dir = h.k;
+      card.appendChild(el);
+    });
+  }
+
+  function gridMetrics(grid) {
+    const cs = getComputedStyle(grid);
+    const colGap = parseFloat(cs.columnGap || cs.gap) || 14;
+    const rowGap = parseFloat(cs.rowGap || cs.gap) || 14;
+    const rect = grid.getBoundingClientRect();
+    const colW = (grid.clientWidth - colGap * (COLS - 1)) / COLS;
+    return { rect, colStep: colW + colGap, rowStep: ROW_PX + rowGap };
+  }
+
+  let rz = null; // active resize drag
+  function onDown(e) {
+    const handle = e.target.closest && e.target.closest('.gp-rh');
+    if (!handle || e.button !== 0) return;
+    const card = handle.closest('.gp-c');
+    const grid = card && card.closest('.gp-grid');
+    if (!card || !grid) return;
+    if (!grid.classList.contains('is-canvas') || !grid.classList.contains('is-edit')) return;
+    if (window.innerWidth <= MOBILE) return;
+
+    e.preventDefault(); e.stopPropagation();
+    const dir = HANDLES.find(h => h.k === handle.dataset.dir) || {};
+    const badge = document.createElement('div');
+    badge.className = 'gp-rh-badge';
+    card.appendChild(badge);
+    card.classList.add('gp-rh-active');
+    const prevDraggable = card.getAttribute('draggable');
+    card.setAttribute('draggable', 'false');
+
+    rz = { card, grid, dir, badge, prevDraggable, m: gridMetrics(grid) };
+    try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+    rz.handle = handle; rz.pointerId = e.pointerId;
+    onMove(e);
+  }
+  function onMove(e) {
+    if (!rz) return;
+    const { card, dir, m, badge } = rz;
+    let { x, y, w, h } = readCoords(card);
+    const col = clamp(Math.round((e.clientX - m.rect.left) / m.colStep), 0, COLS);
+    const row = Math.max(0, Math.round((e.clientY - m.rect.top) / m.rowStep));
+    if (dir.R) w = clamp(col - x, MINW, COLS - x);
+    if (dir.B) h = Math.max(MINH, row - y);
+    if (dir.L) { const right = x + w; const nx = clamp(col, 0, right - MINW); x = nx; w = right - nx; }
+    if (dir.T) { const bot = y + h;   const ny = clamp(row, 0, bot - MINH);   y = ny; h = bot - ny; }
+    applyCoords(card, { x, y, w, h });
+    badge.textContent = `${w} × ${h}`;
+  }
+  function onUp() {
+    if (!rz) return;
+    const { card, grid, badge, prevDraggable } = rz;
+    badge.remove();
+    card.classList.remove('gp-rh-active');
+    if (prevDraggable == null) card.removeAttribute('draggable');
+    else card.setAttribute('draggable', prevDraggable);
+    reflowCard(card);
+    const view = card.closest('.gp-view') && card.closest('.gp-view').dataset.view;
+    if (view && typeof window.saveLayout === 'function') window.saveLayout(view).catch(() => {});
+    rz = null;
+  }
+
+  // ── render one grid in canvas mode (F1) + decorate with handles (F2) ─────
   function renderGrid(grid) {
     if (!ENABLED || !grid) return;
     const cards = [...grid.querySelectorAll(':scope > .gp-c, :scope > .gp-add')];
@@ -80,7 +171,10 @@
       if (hasCoords(c)) Object.assign(it, c);
       return it;
     });
-    toCanvasLayout(items).forEach(it => applyCoords(it._el, it));
+    toCanvasLayout(items).forEach(it => {
+      applyCoords(it._el, it);
+      if (it._el.classList.contains('gp-c')) ensureHandles(it._el);
+    });
     grid.classList.add('is-canvas');
   }
 
@@ -88,10 +182,14 @@
     document.querySelectorAll('.gp-grid').forEach(renderGrid);
   }
 
-  // ── self-boot (only when enabled): render + re-render on card add/remove ──
+  // ── self-boot (only when enabled) ────────────────────────────────────────
   function boot() {
     if (!ENABLED) return;
     renderAll();
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
     const obs = new MutationObserver(muts => {
       for (const m of muts) {
         const touched = [...m.addedNodes, ...m.removedNodes].some(
@@ -107,7 +205,7 @@
 
   window.gpCanvas = {
     get enabled() { return ENABLED; },
-    COLS, ROW_PX,
+    COLS, ROW_PX, MINW, MINH,
     hasCoords, toCanvasLayout, syncLegacyFields,
     applyCoords, renderGrid, renderAll,
   };
