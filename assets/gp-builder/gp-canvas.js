@@ -335,7 +335,6 @@
       if (it._el.classList.contains('gp-c')) { ensureHandles(it._el); observeCard(it._el); }
     });
     grid.classList.add('is-canvas');
-    if (!grid.__gpCompacted) { grid.__gpCompacted = true; compact(grid); }
   }
   function syncEditClass() {
     const editing = !!document.querySelector('#editToggle.is-on');
