@@ -1289,7 +1289,10 @@ function renderTable() {
   const filtered = _allPlayers.filter(p => {
     const pos = (p.position || '').toUpperCase();
     const cfg = POS_CFG[pos];
-    if (_activeFilter !== 'All' && cfg?.pill !== posUpper) return false;
+    if (_activeFilter !== 'All') {
+      const allPos = [p.position, ...(p.positions || [])].filter(Boolean).map(x => x.toUpperCase());
+      if (!allPos.some(x => POS_CFG[x]?.pill === posUpper)) return false;
+    }
     if (_searchQ) {
       const q = _searchQ.toLowerCase();
       const name = ((p.first_name || '') + ' ' + (p.last_name || '')).toLowerCase();
@@ -1719,7 +1722,10 @@ async function reloadPlayers() {
     return _allPlayers.filter(p => {
       const pos = (p.position || '').toUpperCase();
       const cfg = POS_CFG[pos];
-      if (_activeFilter !== 'All' && cfg?.pill !== posUpper) return false;
+      if (_activeFilter !== 'All') {
+        const allPos = [p.position, ...(p.positions || [])].filter(Boolean).map(x => x.toUpperCase());
+        if (!allPos.some(x => POS_CFG[x]?.pill === posUpper)) return false;
+      }
       if (_searchQ) {
         const q = _searchQ.toLowerCase();
         const name = ((p.first_name||'') + ' ' + (p.last_name||'')).toLowerCase();
