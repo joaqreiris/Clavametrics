@@ -1198,6 +1198,16 @@
             <div class="today-line" id="calTodayLine" style="left:50%"></div>
           </div>
         </div>
+
+        <!-- Season ribbon V2 (px-per-day engine, behind RIBBON_V2) -->
+        <div class="season-ribbon__viewport" id="calRibbonV2" hidden>
+          <div class="ribbon-track" id="calV2Track">
+            <div class="ribbon-track__months" id="calV2Months"></div>
+            <div class="ribbon-track__cycles" id="calV2Cycles"></div>
+            <div class="ribbon-track__matches" id="calV2Matches"></div>
+            <div class="ribbon-track__today" id="calV2Today"><span class="today-flag">Today</span></div>
+          </div>
+        </div>
       </div>
 
       <!-- Current MC detail + side rails -->
@@ -1838,6 +1848,7 @@ let _activeTeamId = null, _myTeams = [];
 let _currentUserId = null, _currentUserName = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
+let _ribbonV2Meta = null;    // { ribbonStart, ribbonEnd } — set by renderSeasonRibbonV2 for px-engine controls
 let _seasonSettings = null;  // { season_start, season_end, season_name, competition } from club_settings
 let _matchSessions = [];     // calendar_events with type='match'
 let _ribbonViewRange = null; // { from, to } when sub-range active; null = full season
@@ -3811,6 +3822,7 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
 
 // ── Ribbon pager: scroll by 2 months + live label update ─────
 (function() {
+  if (RIBBON_V2) return; // px-engine handles its own controls below
   const rb = document.querySelector('.cal-ribbon-body');
   if (!rb) return;
 
@@ -3898,6 +3910,86 @@ document.getElementById('calMcNav').addEventListener('click', function(e) {
   });
   window.addEventListener('pointerup', () => { if (_drag){ _drag = null; rb.classList.remove('is-grabbing'); } });
   rb.addEventListener('click', e => { if (_moved){ e.stopPropagation(); e.preventDefault(); _moved = false; } }, true);
+})();
+
+// ── Season ribbon V2 controls (px engine, only when RIBBON_V2) ──
+(function() {
+  if (!RIBBON_V2) return; // v1 IIFE above owns the controls otherwise
+  const vp = document.getElementById('calRibbonV2');
+  if (!vp) return;
+
+  const ppd = () => RIBBON_ZOOM[_ribbonZoomIdx];
+  const dayOffset = d => Math.round((new Date(d + 'T00:00:00') - _ribbonV2Meta.ribbonStart) / 86400000);
+
+  function centerToday() {
+    if (!_ribbonV2Meta) return;
+    const target = dayOffset(TODAY) * ppd() + RIBBON_GUTTER - vp.clientWidth / 2;
+    vp.scrollTo({ left: Math.max(0, target), behavior: 'smooth' });
+  }
+  function rerender(recentre) {
+    renderSeasonRibbonV2(_allMCs, _matchSessions);
+    if (recentre) requestAnimationFrame(centerToday);
+  }
+
+  // Zoom (px-per-day steps via _ribbonZoomIdx)
+  document.getElementById('calRibbonZoomIn')?.addEventListener('click', () => {
+    if (_ribbonZoomIdx < RIBBON_ZOOM.length - 1) { _ribbonZoomIdx++; rerender(true); }
+  });
+  document.getElementById('calRibbonZoomOut')?.addEventListener('click', () => {
+    if (_ribbonZoomIdx > 0) { _ribbonZoomIdx--; rerender(true); }
+  });
+
+  // Today → re-centre
+  document.getElementById('calRibbonToday')?.addEventListener('click', centerToday);
+
+  // Pager ±~3 months (scroll, or shift sub-range when active)
+  document.querySelectorAll('.cal-ribbon-h .cal-pager button').forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      const dir = i === 0 ? -1 : 1; // -1 = back, +1 = forward
+      if (_ribbonViewRange) {
+        const shiftMs = 91 * 86400000 * dir;
+        const newFrom = new Date(new Date(_ribbonViewRange.from + 'T00:00:00').getTime() + shiftMs);
+        const newTo   = new Date(new Date(_ribbonViewRange.to   + 'T00:00:00').getTime() + shiftMs);
+        _ribbonViewRange = { from: newFrom.toISOString().slice(0, 10), to: newTo.toISOString().slice(0, 10) };
+        rerender(false);
+      } else {
+        vp.scrollBy({ left: dir * 91 * ppd(), behavior: 'smooth' });
+      }
+    });
+  });
+
+  // Live pager label on scroll
+  let _scrollTimer;
+  vp.addEventListener('scroll', () => {
+    if (!_ribbonV2Meta) return;
+    clearTimeout(_scrollTimer);
+    _scrollTimer = setTimeout(() => {
+      const p = ppd();
+      const base = _ribbonV2Meta.ribbonStart.getTime();
+      const visStart = new Date(base + ((vp.scrollLeft - RIBBON_GUTTER) / p) * 86400000);
+      const visEnd   = new Date(base + ((vp.scrollLeft + vp.clientWidth - RIBBON_GUTTER) / p) * 86400000);
+      const sy = visStart.getFullYear(), ey = visEnd.getFullYear();
+      const yr = sy === ey ? String(sy) : `${sy}/${String(ey).slice(2)}`;
+      const pagerLabel = document.getElementById('calRibbonPagerLabel');
+      if (pagerLabel) pagerLabel.innerHTML = `${yr}<span class="yr">${MONTHS_SHORT[visStart.getMonth()]} → ${MONTHS_SHORT[visEnd.getMonth()]}</span>`;
+    }, 40);
+  });
+
+  // Drag-pan (reused as-is; works on any scrollable viewport)
+  let _drag = null, _moved = false;
+  vp.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    _drag = { x: e.clientX, sl: vp.scrollLeft }; _moved = false;
+    vp.classList.add('is-grabbing');
+  });
+  window.addEventListener('pointermove', e => {
+    if (!_drag) return;
+    const dx = e.clientX - _drag.x;
+    if (Math.abs(dx) > 4) _moved = true;
+    vp.scrollLeft = _drag.sl - dx;
+  });
+  window.addEventListener('pointerup', () => { if (_drag){ _drag = null; vp.classList.remove('is-grabbing'); } });
+  vp.addEventListener('click', e => { if (_moved){ e.stopPropagation(); e.preventDefault(); _moved = false; } }, true);
 })();
 
 // ── Season Settings modal ─────────────────────────────────────
@@ -4350,6 +4442,13 @@ function renderSeasonRibbon(mcs, extraMatches) {
   extraMatches = extraMatches || _matchSessions;
   if (!mcs.length) return;
 
+  if (RIBBON_V2) {
+    document.querySelector('.cal-ribbon-body').hidden = true;
+    document.getElementById('calRibbonV2').hidden = false;
+    renderSeasonRibbonV2(mcs, extraMatches);
+    return;
+  }
+
   const ordered = mcs.slice().sort((a, b) => a.start_date > b.start_date ? 1 : -1);
   const firstMcStart = new Date(ordered[0].start_date + 'T00:00:00');
   const lastMcEnd    = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
@@ -4575,6 +4674,175 @@ function renderSeasonRibbon(mcs, extraMatches) {
     const totalW = rb.querySelector('.cal-ribbon')?.scrollWidth || rb.scrollWidth;
     rb.scrollLeft = Math.max(0, parseFloat(todayPct) / 100 * totalW - rb.clientWidth / 2);
   });
+}
+
+// ── Season ribbon V2 (px-per-day engine, behind RIBBON_V2) ─────
+// Reuses the v1 range/marker logic; only the geometry differs (px-per-day
+// instead of percentages). Toggled by the RIBBON_V2 guard in renderSeasonRibbon.
+function renderSeasonRibbonV2(mcs, extraMatches) {
+  extraMatches = extraMatches || _matchSessions;
+  if (!mcs.length) return;
+
+  const ordered = mcs.slice().sort((a, b) => a.start_date > b.start_date ? 1 : -1);
+  const firstMcStart = new Date(ordered[0].start_date + 'T00:00:00');
+  const lastMcEnd    = new Date(ordered[ordered.length - 1].end_date + 'T00:00:00');
+
+  // Same range resolution as renderSeasonRibbon
+  const ribbonStart = _ribbonViewRange?.from
+    ? new Date(_ribbonViewRange.from + 'T00:00:00')
+    : _seasonSettings?.season_start
+      ? new Date(_seasonSettings.season_start + 'T00:00:00')
+      : firstMcStart;
+  const ribbonEnd = _ribbonViewRange?.to
+    ? new Date(_ribbonViewRange.to + 'T00:00:00')
+    : _seasonSettings?.season_end
+      ? new Date(_seasonSettings.season_end + 'T00:00:00')
+      : new Date(lastMcEnd.getFullYear(), lastMcEnd.getMonth() + 1, 0);
+  if (ribbonEnd - ribbonStart <= 0) return;
+
+  // Expose range for the px-engine controls IIFE
+  _ribbonV2Meta = { ribbonStart, ribbonEnd };
+
+  // Reset button visibility (same behaviour as v1)
+  const resetBtn = document.getElementById('calRibbonReset');
+  if (resetBtn) resetBtn.style.display = _ribbonViewRange ? '' : 'none';
+
+  // ── px-per-day geometry ──
+  const ppd = RIBBON_ZOOM[_ribbonZoomIdx];
+  document.documentElement.style.setProperty('--cm-px-day', ppd + 'px');
+  // accepts a 'YYYY-MM-DD' string or a Date (ribbonEnd is a Date)
+  const dayOffset = d => Math.round(((d instanceof Date ? d : new Date(d + 'T00:00:00')) - ribbonStart) / 86400000);
+  const totalDays = dayOffset(ribbonEnd) + 1;
+
+  const track = document.getElementById('calV2Track');
+  if (track) track.style.width = (totalDays * ppd + RIBBON_GUTTER * 2) + 'px';
+
+  const fmtDay = ds => {
+    const d = new Date(ds + 'T00:00:00');
+    return String(d.getDate()).padStart(2, '0') + ' ' + MONTHS_SHORT[d.getMonth()];
+  };
+  const chipGeom = mc => {
+    const left = dayOffset(mc.start_date) * ppd;
+    const lenDays = dayOffset(mc.end_date) - dayOffset(mc.start_date) + 1;
+    return { left, width: Math.max(30, lenDays * ppd - RIBBON_GAP) };
+  };
+
+  // ── Months (sticky) ──
+  const monthsEl = document.getElementById('calV2Months');
+  if (monthsEl) {
+    monthsEl.innerHTML = '';
+    const TICK_DAYS = [5, 10, 15, 20, 25];
+    let cur = new Date(ribbonStart.getFullYear(), ribbonStart.getMonth(), 1);
+    while (cur <= ribbonEnd) {
+      const mo = new Date(cur);
+      const daysInMonth = new Date(mo.getFullYear(), mo.getMonth() + 1, 0).getDate();
+      const cell = document.createElement('div');
+      cell.className = 'month';
+      cell.style.left = (dayOffset(mo) * ppd) + 'px';
+      cell.style.width = (daysInMonth * ppd) + 'px';
+      cell.style.cursor = 'pointer';
+      const yr = String(mo.getFullYear()).slice(2);
+      const ticks = TICK_DAYS
+        .filter(day => day <= daysInMonth)
+        .map(day => `<span class="tick" style="left:${(day - 1) * ppd}px"><span class="tick__n">${day}</span></span>`)
+        .join('');
+      cell.innerHTML =
+        `<span class="month__label">${MONTHS_SHORT[mo.getMonth()]} '${yr}</span>` +
+        `<span class="month__ticks">${ticks}</span>`;
+      cell.addEventListener('click', () => {
+        _monthY = mo.getFullYear(); _monthM = mo.getMonth();
+        document.querySelectorAll('.cal-segs .cal-seg').forEach(s => s.classList.toggle('is-on', s.textContent.trim() === 'Month'));
+        switchView('month');
+      });
+      monthsEl.appendChild(cell);
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    }
+  }
+
+  // ── Microcycles ──
+  const cyclesEl = document.getElementById('calV2Cycles');
+  let mdCounter = 0;
+  if (cyclesEl) {
+    cyclesEl.innerHTML = '';
+    ordered.forEach((mc, ordIdx) => {
+      const { left, width } = chipGeom(mc);
+      const hasMatch = !!mc.match_date;
+      const isToday  = mc.start_date <= TODAY && mc.end_date >= TODAY;
+      const chip = document.createElement('div');
+      chip.className = 'mc-chip' + (hasMatch ? '' : ' mc-chip--rest') + (isToday ? ' mc-chip--today' : '');
+      chip.style.left = left + 'px';
+      chip.style.width = width + 'px';
+      const mcNo = 'MC' + (ordIdx + 1);
+      if (hasMatch) {
+        mdCounter++;
+        chip.innerHTML =
+          `<div class="mc-chip__top"><span class="mc-chip__no">${mcNo}</span>` +
+          `<span class="mc-chip__md">MD ${mdCounter}</span></div>` +
+          `<div class="mc-chip__foot"><span class="mc-chip__dot"></span>` +
+          `<span class="mc-chip__date">${fmtDay(mc.start_date)}</span></div>`;
+      } else {
+        chip.innerHTML =
+          `<div class="mc-chip__top"><span class="mc-chip__no">${mcNo}</span></div>` +
+          `<div class="mc-chip__rest-tag"><i class="ti ti-zzz"></i>Rest</div>`;
+      }
+      cyclesEl.appendChild(chip);
+    });
+  }
+
+  // ── Match pills (same dedupe/resolution as v1, aligned to each match's MC) ──
+  const matchesEl = document.getElementById('calV2Matches');
+  if (matchesEl) {
+    matchesEl.innerHTML = '';
+    const seenDates = new Set();
+    const rawMarkers = [];
+    ordered.filter(mc => mc.match_date).forEach(mc => {
+      if (!seenDates.has(mc.match_date)) {
+        seenDates.add(mc.match_date);
+        rawMarkers.push({ date: mc.match_date, isAway: mc.home_away === 'away', comp: compClass(mc.color || ''), rival: mc.rival || 'Match', mcData: mc });
+      }
+    });
+    (extraMatches || []).forEach(s => {
+      const d = s.session_date;
+      if (!seenDates.has(d)) {
+        seenDates.add(d);
+        let isAway, compStr;
+        if (s.home_away !== undefined) {
+          isAway  = s.home_away === 'away';
+          compStr = s.competition || '';
+        } else {
+          const noteParts = (s.notes || '').split(' · ');
+          isAway  = /away/i.test(noteParts.find(p => /^(home|away)$/i.test(p)) || '');
+          compStr = noteParts.find(p => !/^(home|away)$/i.test(p)) || '';
+        }
+        const rival = s.opponent || (s.title || 'Match').replace(/^vs\s+/i, '');
+        rawMarkers.push({ date: d, isAway, comp: compClass(compStr), rival, mcData: null });
+      }
+    });
+
+    rawMarkers
+      .filter(m => m.date >= ordered[0].start_date && m.date <= ordered[ordered.length - 1].end_date)
+      .sort((a, b) => a.date > b.date ? 1 : -1)
+      .forEach(m => {
+        const mc = m.mcData || ordered.find(x => x.start_date <= m.date && x.end_date >= m.date);
+        const geom = mc
+          ? chipGeom(mc)
+          : { left: dayOffset(m.date) * ppd, width: Math.max(30, 7 * ppd - RIBBON_GAP) };
+        const pill = document.createElement('div');
+        pill.className = 'match-pill ' + (m.isAway ? 'match-pill--away' : 'match-pill--home') + ' is-' + (m.comp || 'liga');
+        pill.style.left = geom.left + 'px';
+        pill.style.width = geom.width + 'px';
+        pill.title = `${m.rival} · ${m.isAway ? 'Away' : 'Home'}`;
+        pill.innerHTML =
+          `<span class="match-pill__ha">${m.isAway ? 'A' : 'H'}</span>` +
+          `<span class="match-pill__opp">${m.rival}</span>` +
+          `<span class="match-pill__slot">vs</span>`;
+        matchesEl.appendChild(pill);
+      });
+  }
+
+  // ── Today marker ──
+  const todayEl = document.getElementById('calV2Today');
+  if (todayEl) todayEl.style.left = (dayOffset(TODAY) * ppd + RIBBON_GUTTER) + 'px';
 }
 
 // ── Match chip popover (uses unified .cal-epop) ───────────────
