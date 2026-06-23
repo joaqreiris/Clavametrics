@@ -1849,6 +1849,7 @@ let _currentUserId = null, _currentUserName = null;
 let _calView = 'microcycle', _monthY = new Date().getFullYear(), _monthM = new Date().getMonth();
 let _ribbonMeta = null;      // { ribbonStart, totalMs } — set by renderSeasonRibbon for pager
 let _ribbonV2Meta = null;    // { ribbonStart, ribbonEnd } — set by renderSeasonRibbonV2 for px-engine controls
+let _ribbonV2Centered = false; // V2 initial auto-scroll to today done once (don't yank scroll on re-render)
 let _seasonSettings = null;  // { season_start, season_end, season_name, competition } from club_settings
 let _calComps = [];          // competitions of the active season (from Annual Planner)
 let _calSeasonId = null;     // id of the active/most-recent season for this team
@@ -4930,6 +4931,16 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
   // ── Today marker ──
   const todayEl = document.getElementById('calV2Today');
   if (todayEl) todayEl.style.left = (dayOffset(TODAY) * ppd + RIBBON_GUTTER) + 'px';
+
+  // Initial auto-scroll to today — once (so a later re-render doesn't yank the scroll)
+  if (!_ribbonV2Centered && !_ribbonViewRange) {
+    const vp = document.getElementById('calRibbonV2');
+    requestAnimationFrame(() => {
+      const target = dayOffset(TODAY) * ppd + RIBBON_GUTTER - vp.clientWidth / 2;
+      vp.scrollLeft = Math.max(0, target);
+      _ribbonV2Centered = true;
+    });
+  }
 }
 
 // ── Match chip popover (uses unified .cal-epop) ───────────────
@@ -5719,6 +5730,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function onTeamChange() {
     _activeTeamId = document.getElementById('calTeamSelect').value;
+    _ribbonV2Centered = false; // re-center ribbon on the new team
     sessionStorage.setItem('cal_active_team', _activeTeamId);
     location.reload();
   }
