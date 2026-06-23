@@ -355,6 +355,20 @@
     flex: none;
   }
   .mc-chip__date { font: 400 10px/1.2 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .mc-chip__edit {
+    position: absolute;
+    bottom: 6px; right: 6px;
+    width: 19px; height: 19px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0;
+    border: 1px solid var(--cm-border); border-radius: var(--cm-r-1);
+    background: var(--cm-surface); color: var(--cm-fg-muted);
+    cursor: pointer; opacity: 0;
+    transition: opacity var(--cm-dur-1) var(--cm-ease), color var(--cm-dur-1) var(--cm-ease), border-color var(--cm-dur-1) var(--cm-ease);
+  }
+  .mc-chip__edit .ti { font-size: 12px; }
+  .mc-chip:hover .mc-chip__edit, .mc-chip__edit:focus-visible { opacity: 1; }
+  .mc-chip__edit:hover { color: var(--cm-fg-strong); border-color: var(--cm-border-strong); }
 
   .mc-chip--rest {
     background: var(--cm-bg-sunk);
@@ -1224,6 +1238,7 @@
                 <span class="label" id="calWeekLabel"><i class="ti ti-calendar-event"></i>Week 1</span>
                 <button id="calWeekNext" title="Next week"><i class="ti ti-chevron-right"></i></button>
               </div>
+              <button class="cm-icon-btn" id="calMcEditBtn" title="Edit / delete microcycle"><i class="ti ti-pencil"></i></button>
               <button class="cm-icon-btn" id="calMcNav" title="Other microcycles"><i class="ti ti-dots"></i></button>
             </div>
           </div>
@@ -3697,6 +3712,10 @@ function openMcModal(existingMc) {
 function closeMcModal() { document.getElementById('calMcBackdrop').classList.remove('is-open'); _editMcId = null; }
 
 document.getElementById('calNewMcBtn').addEventListener('click', () => openMcModal());
+document.getElementById('calMcEditBtn').addEventListener('click', () => {
+  const mc = _allMCs[_mcIdx];
+  if (mc) openMcModal(mc);
+});
 document.getElementById('calMcClose').addEventListener('click', closeMcModal);
 document.getElementById('calMcCancel').addEventListener('click', closeMcModal);
 document.getElementById('calMcBackdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeMcModal(); });
@@ -4785,6 +4804,12 @@ function renderSeasonRibbonV2(mcs, extraMatches) {
           await loadSessions();
         }
       });
+      const editBtn = document.createElement('button');
+      editBtn.className = 'mc-chip__edit';
+      editBtn.title = 'Edit microcycle';
+      editBtn.innerHTML = '<i class="ti ti-pencil"></i>';
+      editBtn.addEventListener('click', e => { e.stopPropagation(); openMcModal(mc); });
+      chip.appendChild(editBtn);
       cyclesEl.appendChild(chip);
     });
   }
@@ -4897,9 +4922,6 @@ function showMatchPopover(anchor, items) {
     const dateFmt = _fmtDateStr(item.date);
     const timeStr = item.mcData?.match_time ? ' · ' + item.mcData.match_time.slice(0,5) : '';
     const border  = i > 0 ? 'border-top:1px solid var(--cm-border-soft);' : '';
-    const editMcBtn = item.isFromMc && item.mcData
-      ? `<button class="cm-btn is-ghost is-sm" style="height:26px;margin-top:6px;font-size:11.5px" data-pop-edit="${item.mcData.id}"><i class="ti ti-edit" style="font-size:11px"></i>Edit microcycle</button>`
-      : '';
     // Find matching calendar_event for this match date (to allow Edit event)
     const matchEvt = _sessions.find(s => s.session_date === item.date && s.session_type === 'match');
     const editEvtBtn = matchEvt
@@ -4912,7 +4934,7 @@ function showMatchPopover(anchor, items) {
       </div>
       <div class="cal-epop-row"><i class="ti ${compIcon(cc)}"></i><span>${compLabel(cc)} · ${dateFmt}${timeStr}</span></div>
       ${item.mcData?.stadium ? `<div class="cal-epop-row"><i class="ti ti-map-pin"></i><span>${_esc(item.mcData.stadium)}</span></div>` : ''}
-      ${(editMcBtn || editEvtBtn) ? `<div style="display:flex;gap:5px;margin-top:6px">${editMcBtn}${editEvtBtn}</div>` : ''}
+      ${editEvtBtn ? `<div style="display:flex;gap:5px;margin-top:6px">${editEvtBtn}</div>` : ''}
     </div>`;
   }).join('');
 
@@ -4930,13 +4952,6 @@ function showMatchPopover(anchor, items) {
   document.body.appendChild(pop);
   _matchPop = pop;
   _evtPop   = pop; // share slot so click-outside logic in _positionPop closes it
-
-  pop.querySelectorAll('[data-pop-edit]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const mc = items.find(i => i.mcData && i.mcData.id === btn.dataset.popEdit);
-      if (mc?.mcData) { closeMatchPopover(); openMcModal(mc.mcData); }
-    });
-  });
 
   pop.querySelectorAll('[data-pop-edit-evt]').forEach(btn => {
     btn.addEventListener('click', async () => {
