@@ -4380,6 +4380,7 @@ async function refreshRibbonMatches() {
     .eq('type', 'match').order('date');
   _matchSessions = (ms || []).map(s => ({
     ...s,
+    source: 'event', session_type: 'match',
     session_date: (s.date || '').split('T')[0],
     title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')
   }));
@@ -4896,10 +4897,12 @@ function showMatchPopover(anchor, items) {
   });
 
   pop.querySelectorAll('[data-pop-edit-evt]').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const evtId = btn.dataset.popEditEvt;
-      const s = _sessions.find(x => x.id === evtId);
-      if (s) { closeMatchPopover(); openEvtModal(s); }
+      closeMatchPopover();
+      const { data } = await window.sb.from('calendar_events').select('*').eq('id', evtId).single();
+      if (data) openEvtModal({ ...data, source: 'event', session_type: 'match',
+                               session_date: (data.date || '').split('T')[0] });
     });
   });
 
@@ -5461,6 +5464,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .order('date');
   _matchSessions = (matchSess||[]).map(s => ({
     ...s,
+    source: 'event', session_type: 'match',
     session_date: (s.date||'').split('T')[0],
     title: s.title || (s.opponent ? `vs ${s.opponent}` : 'Match')
   }));
