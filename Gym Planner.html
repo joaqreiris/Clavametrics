@@ -492,11 +492,12 @@ function gpDeleteRow(btn) {
 function gpCollectRows(tbodyId, withMode) {
   return [...document.getElementById(tbodyId).querySelectorAll('tr')].map(tr => {
     const v = [...tr.querySelectorAll('input')].map(i => i.value);
+    const exId = tr.dataset.exId || null;
     if (withMode) {
       const on = tr.querySelector('.gp-mode button.is-on');
-      return { v, mode: on ? on.textContent.trim() : 'SR' };
+      return { v, exId, mode: on ? on.textContent.trim() : 'SR' };
     }
-    return v;
+    return { v, exId };
   });
 }
 function gpCollectContent() {
@@ -509,23 +510,29 @@ function gpCollectContent() {
     roster: [..._gpRoster]
   };
 }
-function gpFillRow(tr, vals) {
+// Backward-compatible row accessors (old saves stored bare arrays; new saves store {v, exId, mode?})
+const gpRowVals = r => Array.isArray(r) ? r : (r?.v || []);
+const gpRowEx   = r => Array.isArray(r) ? null : (r?.exId || null);
+const gpRowMode = r => Array.isArray(r) ? null : (r?.mode || null);
+function gpFillRow(tr, vals, exId) {
   const inputs = tr.querySelectorAll('input');
   (vals || []).forEach((val, i) => { if (inputs[i]) inputs[i].value = val; });
+  if (exId) tr.dataset.exId = exId;
 }
 function gpApplyContent(content) {
   content = content || {};
   const setMin = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
   const wb = document.getElementById('gpWarmupBody'); wb.innerHTML = '';
-  (content.warmup?.rows || []).forEach(v => { gpAddWarmupRow(); gpFillRow(wb.lastElementChild, v); });
+  (content.warmup?.rows || []).forEach(r => { gpAddWarmupRow(); gpFillRow(wb.lastElementChild, gpRowVals(r), gpRowEx(r)); });
   setMin('gpWarmupMin', content.warmup?.min);
   const pb = document.getElementById('gpPlyoBody'); pb.innerHTML = '';
-  (content.plyo?.rows || []).forEach(v => { gpAddPlyoRow(); gpFillRow(pb.lastElementChild, v); });
+  (content.plyo?.rows || []).forEach(r => { gpAddPlyoRow(); gpFillRow(pb.lastElementChild, gpRowVals(r), gpRowEx(r)); });
   setMin('gpPlyoMin', content.plyo?.min);
   const mb = document.getElementById('gpMainBody'); mb.innerHTML = '';
   (content.main?.rows || []).forEach(r => {
-    gpAddMainRow(); const tr = mb.lastElementChild; gpFillRow(tr, r.v);
-    if (r.mode) tr.querySelectorAll('.gp-mode button').forEach(b => b.classList.toggle('is-on', b.textContent.trim() === r.mode));
+    gpAddMainRow(); const tr = mb.lastElementChild; gpFillRow(tr, gpRowVals(r), gpRowEx(r));
+    const mode = gpRowMode(r);
+    if (mode) tr.querySelectorAll('.gp-mode button').forEach(b => b.classList.toggle('is-on', b.textContent.trim() === mode));
   });
   setMin('gpMainMin', content.main?.min);
   gpRecalcTotals();
@@ -536,7 +543,7 @@ let _gpLib = null, _gpLibCtx = null, _gpLibBuilt = false, _gpLibCat = 'strength'
 async function gpEnsureLib() {
   if (_gpLib) return _gpLib;
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,muscle_group,category,complexity,equipment')
+    .select('id,name,muscle_group,category,complexity,equipment,media_type,media_ref,video_url')
     .eq('club_id', _gpClubId).order('name');
   _gpLib = data || [];
   return _gpLib;
@@ -592,7 +599,7 @@ function gpRenderLibList() {
   if (!items.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises found.</div>`; foot.textContent = '0 exercises'; return; }
   list.innerHTML = items.map(e => {
     const meta = [e.muscle_group, e.category, e.complexity].filter(Boolean).join(' · ');
-    return `<button class="gp-lib-item" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
+    return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
       <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e.name||'—'}</div>
       ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
     </button>`;
@@ -601,7 +608,7 @@ function gpRenderLibList() {
   list.querySelectorAll('.gp-lib-item').forEach(b => {
     b.onmouseenter = () => b.style.background = 'var(--cm-bg-soft)';
     b.onmouseleave = () => b.style.background = 'transparent';
-    b.onclick = () => gpPickLib(b.dataset.name);
+    b.onclick = () => gpPickLib(b.dataset.id, b.dataset.name);
   });
 }
 async function gpOpenLib(ctx) {
@@ -616,14 +623,21 @@ async function gpOpenLib(ctx) {
   gpRenderLibChips(); gpRenderLibList();
 }
 function gpCloseLib() { const ov = document.getElementById('gpLibOv'); if (ov) ov.style.display = 'none'; }
-function gpPickLib(name) {
+function gpPickLib(id, name) {
   const ctx = _gpLibCtx || {};
   const fill = inp => { if (inp) { inp.value = name; inp.dispatchEvent(new Event('input', { bubbles: true })); } };
-  if (ctx.input) { fill(ctx.input); }
+  if (ctx.input) {
+    const tr = ctx.input.closest('tr'); if (tr) tr.dataset.exId = id || '';
+    fill(ctx.input);
+  }
   else if (ctx.section) {
     const fn = { warmup: gpAddWarmupRow, plyo: gpAddPlyoRow, main: gpAddMainRow }[ctx.section];
     const bodyId = { warmup: 'gpWarmupBody', plyo: 'gpPlyoBody', main: 'gpMainBody' }[ctx.section];
-    if (fn) { fn(); fill(document.getElementById(bodyId).lastElementChild?.querySelector('input')); }
+    if (fn) {
+      fn();
+      fill(document.getElementById(bodyId).lastElementChild?.querySelector('input'));
+      const tr = document.getElementById(bodyId).lastElementChild; if (tr) tr.dataset.exId = id || '';
+    }
   }
   gpCloseLib();
 }
