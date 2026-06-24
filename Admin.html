@@ -1856,7 +1856,8 @@
                    <option value="eu" ${rg==='eu'?'selected':''}>Europe / MEA / LATAM (EU)</option>
                  </select>
                  <button class="gps-int-btn" data-act="verify" data-prov="${p.slug}">Verify connection</button>
-                 ${status==='connected' ? `<button class="gps-int-btn ghost" data-act="map" data-prov="${p.slug}">Map athletes</button>` : ''}
+                 ${status==='connected' ? `<button class="gps-int-btn ghost" data-act="map" data-prov="${p.slug}">Map athletes</button>
+                 <button class="gps-int-btn" data-act="sync" data-prov="${p.slug}">Sync now</button>` : ''}
                </div>` })() : ''}
              <button class="gps-int-btn ghost" data-act="disconnect" data-prov="${p.slug}">Disconnect</button>
              ${p.slug==='catapult' ? '' : '<div style="font-size:11.5px;color:var(--cm-fg-muted);margin-top:8px">Credentials saved · verification pending</div>'}`
@@ -1871,6 +1872,7 @@
     host.querySelectorAll('[data-act="disconnect"]').forEach(b=>b.addEventListener('click',()=>disconnect(b.dataset.prov)));
     host.querySelectorAll('[data-act="verify"]').forEach(b=>b.addEventListener('click',()=>verify(b.dataset.prov)));
     host.querySelectorAll('[data-act="map"]').forEach(b=>b.addEventListener('click',()=>mapAthletes(b.dataset.prov)));
+    host.querySelectorAll('[data-act="sync"]').forEach(b=>b.addEventListener('click',()=>syncNow(b.dataset.prov)));
     host.querySelectorAll('[data-field="region"]').forEach(s=>s.addEventListener('change',()=>setRegion(s.dataset.prov,s.value)));
   }
   async function setRegion(prov,region){
@@ -1915,6 +1917,22 @@
       msg(prov,'Connected ✓'); await load();
     }catch(e){ msg(prov,'Failed: '+(e.message||e),true); }
   }
+  // ── Sync now (Catapult activities → gps_reports, last 30 days) ────────────
+  async function syncNow(prov){
+    const intId=INTS[prov]?.id; if(!intId) return;
+    const to=new Date().toISOString().slice(0,10);
+    const from=new Date(Date.now()-30*86400*1000).toISOString().slice(0,10);
+    msg(prov,`Syncing ${from} → ${to}…`);
+    try{
+      const { data, error }=await window.sb.functions.invoke('gps-sync',{ body:{ integration_id:intId, from, to } });
+      if(error) throw error;
+      if(!data?.ok){ msg(prov, data?.message || (data?.http_status?`Provider error (HTTP ${data.http_status})`:'Sync failed'), true); return; }
+      const errs=(data.errors||[]).length;
+      msg(prov, `Synced ${data.synced_activities} session${data.synced_activities!==1?'s':''} · ${data.synced_rows} report${data.synced_rows!==1?'s':''} · ${data.skipped_unmapped} unmapped${errs?` · ${errs} error${errs!==1?'s':''}`:''}.`, errs>0);
+      await load();
+    }catch(e){ msg(prov,'Failed: '+(e.message||e),true); }
+  }
+
   // ── Map athletes (Catapult → players.external_gps_id) ─────────────────────
   // Reuses the shared matcher (window.CMGpsMatch) and the matched/verify/
   // unmatched + Add/Confirm pattern from GPS Analysis step 3. Self-contained
