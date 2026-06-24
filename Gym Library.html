@@ -563,7 +563,9 @@ function renderGrid(exercises) {
 function renderByMuscle(exercises, grid) {
   const groups = {};
   for (const e of exercises) {
-    const g = e.muscle_group || 'Other';
+    const g = (e.muscle_groups && e.muscle_groups.length)
+      ? CMTaxonomy.label('muscle_group', e.muscle_groups[0])
+      : (e.muscle_group || 'Other');
     if (!groups[g]) groups[g] = [];
     groups[g].push(e);
   }
@@ -593,11 +595,21 @@ function appendAddCard(grid) {
   grid.appendChild(btn);
 }
 
+function labelsFor(e, dimension, col, legacy) {
+  const toks = e[col] || [];
+  if (toks.length) return toks.map(t => CMTaxonomy.label(dimension, t));
+  return legacy ? [legacy] : [];
+}
+function purposeLabel(e) {
+  if (e.primary_purpose) return CMTaxonomy.label('purpose', e.primary_purpose);
+  return e.category ? cap(e.category) : '';
+}
+
 function cardHTML(e) {
   const initials = (e.name||'').split(' ').map(w => w[0]||'').join('').slice(0,2).toUpperCase();
   const cplxCss = CPLX_CSS[e.complexity] || 'med';
   const hasVideo = !!e.video_url;
-  const muscle = e.muscle_group || '';
+  const muscleLabels = labelsFor(e, 'muscle_group', 'muscle_groups', e.muscle_group);
   const videoEsc = hasVideo ? esc(e.video_url) : '';
   const vidId = hasVideo ? youtubeId(e.video_url) : null;
 
@@ -614,11 +626,11 @@ function cardHTML(e) {
     </div>
     <div class="gl-body">
       <div class="gl-name">${esc(e.name||'Unnamed')}</div>
-      <div class="gl-muscles-row">${muscle ? `<span class="gl-muscle">${esc(muscle)}</span>` : ''}</div>
+      <div class="gl-muscles-row">${muscleLabels.map(m => `<span class="gl-muscle">${esc(m)}</span>`).join('')}</div>
       <div class="gl-desc">${esc(e.description||'')}</div>
       <div class="gl-foot">
-        ${e.category ? `<span class="gl-tag">${esc(cap(e.category))}</span>` : ''}
-        ${e.equipment ? `<span class="gl-tag">${esc(e.equipment)}</span>` : ''}
+        ${purposeLabel(e) ? `<span class="gl-tag">${esc(purposeLabel(e))}</span>` : ''}
+        ${labelsFor(e, 'equipment', 'equipment_tags', e.equipment).filter(x => x !== 'Bodyweight').map(q => `<span class="gl-tag">${esc(q)}</span>`).join('')}
         <span class="grow"></span>
         <button class="btn-add-plan" title="Add to plan"><i class="ti ti-plus"></i></button>
         <button class="btn-edit" data-id="${esc(e.id)}" title="Edit exercise"><i class="ti ti-edit"></i></button>
