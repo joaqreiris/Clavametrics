@@ -174,7 +174,8 @@
       <div class="gp-card">
         <div class="gp-card-h">
           <h3>Session info</h3>
-          <div class="right no-print"><button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
+          <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpOpenAi()"><i class="ti ti-sparkles" style="font-size:13px"></i>Generate with AI</button>
+    <button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
         </div>
         <div class="gp-card-b">
           <div class="gp-fg">
@@ -675,6 +676,84 @@ function gpPickLib(id, name) {
 
 // ── Session templates (Load template) ──
 let _gpTplBuilt = false, _gpTpls = [];
+let _gpAiBuilt = false;
+function gpBuildAiModal() {
+  if (_gpAiBuilt) return;
+  const ov = document.createElement('div');
+  ov.id = 'gpAiOv';
+  ov.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:flex-start;justify-content:center;padding-top:60px';
+  ov.innerHTML = `
+    <div style="width:560px;max-width:92vw;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-3);padding:18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <i class="ti ti-sparkles" style="font-size:16px;color:var(--cm-accent)"></i>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Generate session with AI</div>
+      </div>
+      <textarea id="gpAiObjective" placeholder="e.g. Hamstring strength with bands, eccentric emphasis, 12 players" style="width:100%;min-height:74px;padding:10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;resize:vertical"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="gpAiPlayers" type="number" min="1" placeholder="Players" style="width:90px;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+        <input id="gpAiEmphasis" placeholder="Emphasis (optional)" style="flex:1;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+      </div>
+      <div id="gpAiStatus" style="margin-top:8px;font:var(--cm-body-sm);color:var(--cm-fg-muted);min-height:16px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <button class="cm-btn is-ghost is-sm" onclick="gpCloseAi()">Cancel</button>
+        <button class="cm-btn is-primary is-sm" id="gpAiGenBtn" onclick="gpRunAi()">Generate draft</button>
+      </div>
+    </div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) gpCloseAi(); });
+  document.body.appendChild(ov);
+  _gpAiBuilt = true;
+}
+function gpOpenAi() { gpBuildAiModal(); document.getElementById('gpAiOv').style.display = 'flex'; document.getElementById('gpAiObjective').focus(); }
+function gpCloseAi() { const ov = document.getElementById('gpAiOv'); if (ov) ov.style.display = 'none'; }
+function _gpSR(it) { const s = String(it.sets||'').trim(), r = String(it.reps||'').trim(); return (s&&r) ? `${s} × ${r}` : (r||s||''); }
+
+async function gpRunAi() {
+  const objective = document.getElementById('gpAiObjective').value.trim();
+  const status = document.getElementById('gpAiStatus');
+  const btn = document.getElementById('gpAiGenBtn');
+  if (!objective) { status.textContent = 'Describe the session objective first.'; return; }
+  btn.disabled = true; status.textContent = 'Loading candidates…';
+  try {
+    const { data: cands, error: cErr } = await window.sb.from('gym_exercises')
+      .select('id,name,primary_purpose,purposes,muscle_groups,movement_patterns,equipment_tags')
+      .eq('club_id', _gpClubId).not('muscle_groups', 'is', null).limit(150);
+    if (cErr) throw cErr;
+    if (!cands || !cands.length) { status.textContent = 'No tagged exercises yet. Tag some in the Gym Library first.'; btn.disabled = false; return; }
+
+    status.textContent = 'Generating draft…';
+    const constraints = {};
+    const players = parseInt(document.getElementById('gpAiPlayers').value, 10);
+    if (players) constraints.players = players;
+    const emphasis = document.getElementById('gpAiEmphasis').value.trim();
+    if (emphasis) constraints.emphasis = emphasis;
+
+    const { data, error } = await window.sb.functions.invoke('generate-gym-plan', { body: { objective, constraints, candidates: cands } });
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error);
+    const plan = data && data.plan;
+    if (!plan) throw new Error('Empty plan');
+
+    const cur = gpCollectContent();
+    const hasWork = (cur.warmup.rows.length + cur.plyo.rows.length + cur.main.rows.length) > 0;
+    if (hasWork && !confirm('Replace the current session with the AI draft?')) { btn.disabled = false; status.textContent = ''; return; }
+
+    const content = {
+      warmup: { min: plan.warmup?.min || '', rows: (plan.warmup?.items||[]).map(it => [it.name, it.sets||'', it.reps||'', '', it.notes||'']) },
+      plyo:   { min: plan.plyo?.min || '',   rows: (plan.plyo?.items||[]).map(it => [it.name, _gpSR(it), '', '', it.rest||'', it.notes||'']) },
+      main:   { min: plan.main?.min || '',   rows: (plan.main?.items||[]).map(it => ({ v:[it.name, _gpSR(it), it.load||'', it.rest||'', '', ''], mode: it.mode||'SR' })) },
+    };
+    gpApplyContent(content);
+    const mainNotes = (plan.main?.items||[]).filter(it => it.notes).map(it => `${it.name}: ${it.notes}`);
+    const noteParts = [plan.notes, ...mainNotes].filter(Boolean);
+    if (noteParts.length) { const n = document.getElementById('gpNotes'); if (n) n.value = (n.value ? n.value + '\n' : '') + noteParts.join('\n'); }
+    if (plan.title) { const t = document.getElementById('gpTitle'); if (t && !t.value) t.value = plan.title; }
+    gpCloseAi();
+  } catch (err) {
+    status.textContent = 'Error: ' + (err.message || err);
+    btn.disabled = false;
+  }
+}
+
 function gpBuildTplModal() {
   if (_gpTplBuilt) return; _gpTplBuilt = true;
   const ov = document.createElement('div');
