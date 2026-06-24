@@ -267,6 +267,14 @@
           <label>Video URL</label>
           <input id="gm-video" placeholder="https://youtube.com/…" maxlength="500">
         </div>
+        <div class="gm-field">
+          <label>Image / GIF</label>
+          <div class="gm-media-row" style="display:flex;align-items:center;gap:10px">
+            <input id="gm-media" type="file" accept="image/png,image/gif,image/jpeg,image/webp" style="flex:1;min-width:0">
+            <img id="gm-media-preview" alt="" style="display:none;width:48px;height:48px;border-radius:6px;object-fit:cover;background:var(--cm-bg-subtle)">
+            <button type="button" class="cm-btn is-ghost is-sm" id="gm-media-remove" style="display:none">Remove image</button>
+          </div>
+        </div>
       </div>
     </form>
     <div class="gm-actions">
@@ -315,6 +323,8 @@ let CLUB_ID = null;
 let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', usableIn:'', view:'grid' };
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 let editingId = null;
+let _gmMediaFile = null;
+let _gmMediaRemove = false;
 
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -358,10 +368,19 @@ async function boot() {
 
 async function reloadExercises(rebuild = true) {
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default')
+    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref')
     .eq('club_id', CLUB_ID)
     .order('name');
   ALL_EXERCISES = data || [];
+  try {
+    const paths = ALL_EXERCISES.filter(e => e.media_type === 'image' && e.media_ref).map(e => e.media_ref);
+    let signed = {};
+    if (paths.length) {
+      const { data: urls } = await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths, 3600);
+      (urls || []).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
+    }
+    ALL_EXERCISES.forEach(e => { e._mediaImg = (e.media_type === 'image' && e.media_ref) ? (signed[e.media_ref] || null) : null; });
+  } catch (_) {}
   if (rebuild) {
     renderStats();
     renderCategoryChips();
@@ -544,9 +563,11 @@ function cardHTML(e) {
 
   return `<div class="gl-card" data-id="${esc(e.id)}">
     <div class="gl-thumb">
-      ${vidId
-        ? `<img src="https://img.youtube.com/vi/${vidId}/hqdefault.jpg" alt="" loading="lazy">`
-        : `<div class="gl-thumb-ph"><span>${initials}</span></div>`}
+      ${e._mediaImg
+        ? `<img src="${esc(e._mediaImg)}" alt="" loading="lazy">`
+        : vidId
+          ? `<img src="https://img.youtube.com/vi/${vidId}/hqdefault.jpg" alt="" loading="lazy">`
+          : `<div class="gl-thumb-ph"><span>${initials}</span></div>`}
       ${e.complexity ? `<span class="gl-cplx-badge ${cplxCss}">${esc(e.complexity)}</span>` : ''}
       ${e.is_default ? `<span class="gl-default-pill">Default</span>` : ''}
       ${hasVideo ? `<span class="gl-video-tag"><i class="ti ti-brand-youtube"></i>Video</span><button class="gl-thumb-play btn-play" data-video="${videoEsc}"><i class="ti ti-player-play"></i></button>` : ''}
@@ -598,8 +619,18 @@ function updateCount(visible, total) {
 
 // ── Modal helpers ──────────────────────────────────────────────────
 
+function setMediaPreview(url) {
+  const img = document.getElementById('gm-media-preview');
+  const rm = document.getElementById('gm-media-remove');
+  if (url) { img.src = url; img.style.display = ''; rm.style.display = ''; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; rm.style.display = 'none'; }
+}
+
 function openModal(id) {
   editingId = id || null;
+  _gmMediaFile = null;
+  _gmMediaRemove = false;
+  document.getElementById('gm-media').value = '';
   const titleEl = document.getElementById('gl-modal-title');
   const saveBtn = document.getElementById('gm-save');
 
@@ -615,12 +646,14 @@ function openModal(id) {
     document.getElementById('gm-equipment').value = ex.equipment || '';
     document.getElementById('gm-desc').value = ex.description || '';
     document.getElementById('gm-video').value = ex.video_url || '';
+    setMediaPreview(ex._mediaImg || null);
     const usable = ex.usable_in || [];
     document.querySelectorAll('.gm-usable-cb').forEach(cb => { cb.checked = usable.includes(cb.value); });
   } else {
     titleEl.textContent = 'New exercise';
     saveBtn.textContent = 'Create';
     document.getElementById('gm-form').reset();
+    setMediaPreview(null);
   }
 
   document.getElementById('gl-modal').classList.add('is-open');
@@ -630,6 +663,8 @@ function openModal(id) {
 function closeModal() {
   document.getElementById('gl-modal').classList.remove('is-open');
   editingId = null;
+  _gmMediaFile = null;
+  _gmMediaRemove = false;
 }
 
 async function saveExercise() {
@@ -655,17 +690,38 @@ async function saveExercise() {
   saveBtn.disabled = true;
   saveBtn.textContent = editingId ? 'Saving…' : 'Creating…';
 
-  let error;
+  let error, insertedId = null;
   if (editingId) {
     ({ error } = await window.sb.from('gym_exercises').update(payload).eq('id', editingId).eq('club_id', CLUB_ID));
   } else {
-    ({ error } = await window.sb.from('gym_exercises').insert(payload));
+    const { data: row, error: insErr } = await window.sb.from('gym_exercises').insert(payload).select('id').single();
+    error = insErr;
+    insertedId = row ? row.id : null;
+  }
+
+  if (error) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = editingId ? 'Save' : 'Create';
+    alert('Error saving exercise: ' + error.message);
+    return;
+  }
+
+  // Media: upload new image/GIF, or clear it. Row stays saved even if upload fails.
+  const exId = editingId || insertedId;
+  if (_gmMediaFile && exId) {
+    try {
+      const ext = (_gmMediaFile.name.split('.').pop() || 'png').toLowerCase();
+      const path = `${CLUB_ID}/${exId}.${ext}`;
+      const up = await window.sb.storage.from('gym-exercise-media').upload(path, _gmMediaFile, { upsert: true, contentType: _gmMediaFile.type });
+      if (!up.error) await window.sb.from('gym_exercises').update({ media_type: 'image', media_ref: path }).eq('id', exId).eq('club_id', CLUB_ID);
+      else alert('Image upload failed: ' + up.error.message);
+    } catch (err) { alert('Image upload failed: ' + (err && err.message || err)); }
+  } else if (_gmMediaRemove && exId) {
+    await window.sb.from('gym_exercises').update({ media_type: null, media_ref: null }).eq('id', exId).eq('club_id', CLUB_ID);
   }
 
   saveBtn.disabled = false;
   saveBtn.textContent = editingId ? 'Save' : 'Create';
-
-  if (error) { alert('Error saving exercise: ' + error.message); return; }
   closeModal();
   await reloadExercises();
 }
@@ -747,6 +803,20 @@ function attachListeners() {
 
   document.getElementById('gm-save').addEventListener('click', saveExercise);
   document.getElementById('gm-cancel').addEventListener('click', closeModal);
+
+  document.getElementById('gm-media').addEventListener('change', e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    _gmMediaFile = file;
+    _gmMediaRemove = false;
+    setMediaPreview(URL.createObjectURL(file));
+  });
+  document.getElementById('gm-media-remove').addEventListener('click', () => {
+    _gmMediaFile = null;
+    _gmMediaRemove = true;
+    document.getElementById('gm-media').value = '';
+    setMediaPreview(null);
+  });
   document.getElementById('gl-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeVideo(); document.getElementById('gl-del-modal').classList.remove('is-open'); } });
 
