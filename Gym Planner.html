@@ -13,6 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -59,6 +60,8 @@
   .gp-f input,.gp-f select,.gp-f textarea{width:100%;padding:9px 11px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none}
   .gp-f input:focus,.gp-f select:focus,.gp-f textarea:focus{border-color:var(--cm-accent)}
   .gp-f textarea{resize:vertical;min-height:60px}
+  /* Calendar-sourced fields: subtle left accent bar */
+  .is-cal-sourced{box-shadow:inset 2px 0 0 var(--cm-accent)}
 
   /* Orientation pills */
   .gp-orient-pills{display:flex;gap:6px;flex-wrap:wrap}
@@ -346,6 +349,7 @@ let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
 let _gpTeamId = null, _gpTeams = [];
 let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [];
 let _gpRoster = new Set(), _gpSavedRoster = null, _gpAvailMap = {}, _gpAdaptNotes = {}, _gpSquadBuilt = false, _gpSquadSel = null;
+let _gpCalFields = new Set();
 let _gpGrpBuilt = false, _gpGrpRows = [], _gpGrpMode = 'rm', _gpGrpVariant = '', _gpGrpK = 'auto', _gpGrpPct = 80;
 
 const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'DM', WG:'WG', ST:'ST', CM:'MF', CF:'CF' };
@@ -1230,10 +1234,43 @@ async function gpLoadDay(dateStr) {
   _gpSavedAdapt = sess?.gym_content?.adaptations || [];
   _gpSavedRoster = sess?.gym_content?.roster || null;
 
+  // Calendar is the source of truth: authoritatively overlay micro/MD/time/duration/RPE after the session fill.
+  try {
+    const ctx = await window.cmResolveDayContext(dateStr, _gpTeamId, _gpClubId);
+    _gpCalFields = new Set();
+    if (ctx.microcycle && mcSel && [...mcSel.options].some(o => o.value === String(ctx.microcycle.id))) { mcSel.value = String(ctx.microcycle.id); _gpCalFields.add('gpMicrocycle'); }
+    if (ctx.md && mdSel && [...mdSel.options].some(o => o.value === ctx.md)) { mdSel.value = ctx.md; _gpCalFields.add('gpMatchDay'); }
+    if (ctx.hasEvent) {
+      if (ctx.start_time)    { setVal('gpStartTime', String(ctx.start_time).slice(0,5)); _gpCalFields.add('gpStartTime'); }
+      if (ctx.duration)      { setVal('gpDuration', ctx.duration); _gpCalFields.add('gpDuration'); }
+      if (ctx.estimated_rpe) { setVal('gpEstRpe', ctx.estimated_rpe); _gpCalFields.add('gpEstRpe'); }
+    }
+    gpMarkCalFields();
+  } catch(_) {}
+
   _gpUpdatePublishBtn();
   gpRecalcTotals();
   await gpLoadAthletes(dateStr);
   gpRenderPrintSheet();
+}
+
+function gpMarkCalFields() {
+  ['gpMicrocycle','gpMatchDay','gpStartTime','gpDuration','gpEstRpe'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.classList.toggle('is-cal-sourced', _gpCalFields.has(id));
+    if (_gpCalFields.has(id) && !el.dataset.calWarn) {
+      el.dataset.calWarn = '1';
+      el.addEventListener('change', () => { if (_gpCalFields.has(id)) gpToast('This value comes from the Calendar — change it there to keep things in sync.'); });
+    }
+  });
+}
+function gpToast(msg) {
+  let t = document.getElementById('gpToast');
+  if (!t) { t = document.createElement('div'); t.id = 'gpToast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:1200;background:#15181D;color:#fff;font:500 13px/1.4 var(--cm-font-sans);padding:10px 16px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;max-width:80vw;text-align:center';
+    document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._timer); t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3200);
 }
 
 let _gpSaveTimer = null;
