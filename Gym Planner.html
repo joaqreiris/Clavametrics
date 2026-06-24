@@ -1237,7 +1237,9 @@ async function gpLoadDay(dateStr) {
 }
 
 let _gpSaveTimer = null;
+let _gpSaveDirty = false;
 function gpScheduleSave() {
+  _gpSaveDirty = true;
   clearTimeout(_gpSaveTimer);
   _gpSaveTimer = setTimeout(gpAutoSave, 800);
 }
@@ -1258,13 +1260,21 @@ async function gpAutoSave() {
     gym_content:   gpCollectContent(),
   };
   if (_gpCurrentSessionId) {
-    await window.sb.from('training_sessions').update(payload).eq('id', _gpCurrentSessionId).eq('club_id', _gpClubId);
+    const { error } = await window.sb.from('training_sessions').update(payload).eq('id', _gpCurrentSessionId).eq('club_id', _gpClubId);
+    if (error) { console.error('gym autosave failed:', error); _gpSaveDirty = true; return; }
   } else {
     payload.team_id = _gpTeamId;
-    const { data } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+    const { data, error } = await window.sb.from('training_sessions').insert(payload).select('id').single();
+    if (error) { console.error('gym autosave failed:', error); _gpSaveDirty = true; return; }
     if (data?.id) { _gpCurrentSessionId = data.id; _gpUpdatePublishBtn(); }
   }
+  _gpSaveDirty = false;
 }
+
+async function gpFlushSave() { clearTimeout(_gpSaveTimer); if (_gpSaveDirty) { try { await gpAutoSave(); } catch(_){} } }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') gpFlushSave(); });
+window.addEventListener('pagehide', gpFlushSave);
+window.addEventListener('beforeunload', () => { clearTimeout(_gpSaveTimer); if (_gpSaveDirty) { try { gpAutoSave(); } catch(_){} } });
 
 function _gpUpdatePublishBtn() {
   const btn = document.getElementById('gpPublishBtn');
