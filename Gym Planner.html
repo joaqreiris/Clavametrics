@@ -1392,7 +1392,7 @@ function gpRenderPrintSheet() {
       return [...tb.querySelectorAll('tr')].map(tr => {
         const tds = tr.children;
         const cell = i => { const td=tds[i]; if(!td) return ''; const inp=td.querySelector('input'); return inp ? (inp.value||'').trim() : (td.textContent||'').trim(); };
-        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7) };
+        return { name: cell(1), c3: cell(3), c4: cell(4), c5: cell(5), c7: cell(7), exId: tr.dataset.exId || '' };
       });
     };
 
@@ -1469,9 +1469,13 @@ function gpRenderPrintSheet() {
     </div>` : '';
 
     // 6) Work blocks — exercise card (initials thumbnail, tag chip, params, note)
-    const exCard = ({name, params, note, tag, tagColor}) => `<div style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
+    const exCard = ({name, params, note, tag, tagColor, exId}) => {
+      const thumb = (typeof gpExThumbSrc==='function') ? gpExThumbSrc(exId) : null;
+      return `<div style="border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;break-inside:avoid">
       <div style="position:relative;aspect-ratio:16/10;background:#1A1D22;display:flex;align-items:center;justify-content:center">
-        <span style="font:700 26px ${FONT};color:#fff;letter-spacing:.04em">${esc(initials(name))}</span>
+        ${thumb
+          ? `<img src="${esc(thumb)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`
+          : `<span style="font:700 26px ${FONT};color:#fff;letter-spacing:.04em">${esc(initials(name))}</span>`}
         ${tag?`<span style="position:absolute;top:6px;left:6px;background:${tagColor};color:#fff;font:700 8.5px ${MONO};letter-spacing:.05em;padding:2px 6px;border-radius:4px;line-height:1.2">${esc(tag)}</span>`:''}
       </div>
       <div style="padding:8px 10px 9px">
@@ -1480,6 +1484,7 @@ function gpRenderPrintSheet() {
         ${note?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:4px">${esc(note)}</div>`:''}
       </div>
     </div>`;
+    };
 
     // WARM-UP — pills
     const wuRows = readRows('gpWarmupBody').filter(r=>r.name);
@@ -1495,7 +1500,7 @@ function gpRenderPrintSheet() {
       ${sectionTitle(`Plyometrics · ${plyoRows.length}${plyContacts!=='—'?` · ${plyContacts} contacts`:''}`)}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${plyoRows.map(r=>{
         const params=[]; if(r.c3)params.push({l:'Sets×reps',v:r.c3}); if(r.c4)params.push({l:'Contacts',v:r.c4});
-        return exCard({name:r.name, params, note:r.c7, tag:'POW', tagColor:'#7C3AED'});
+        return exCard({name:r.name, params, note:r.c7, tag:'POW', tagColor:'#7C3AED', exId:r.exId});
       }).join('')}</div>
     </div>` : '';
 
@@ -1507,7 +1512,7 @@ function gpRenderPrintSheet() {
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${mainRows.map(r=>{
         const params=[]; if(r.c3)params.push({l:'Sets×reps',v:r.c3}); if(r.c4)params.push({l:'Load',v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
         const note = r.c7 ? `Tempo ${r.c7}` : '';
-        return exCard({name:r.name, params, note, tag:'STR', tagColor:'#B91C1C'});
+        return exCard({name:r.name, params, note, tag:'STR', tagColor:'#B91C1C', exId:r.exId});
       }).join('')}</div>
     </div>` : '';
 
