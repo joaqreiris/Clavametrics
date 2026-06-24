@@ -139,6 +139,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
+<script src="lib/exercise-taxonomy.js"></script>
 <script src="assets/global-search.js" defer></script>
 </head>
 <body class="cm">
@@ -180,6 +181,8 @@
           <option value="High">High</option>
         </select>
         <select class="gl-sel" id="gl-sel-equipment"><option value="">All equipment</option></select>
+        <select class="gl-sel" id="gl-sel-purpose"><option value="">All purposes</option></select>
+        <select class="gl-sel" id="gl-sel-pattern"><option value="">All patterns</option></select>
         <select class="gl-sel" id="gl-sel-usable">
           <option value="">All modules</option>
           <option value="gym">Gym</option>
@@ -320,7 +323,7 @@ const CPLX_CSS = { Low:'low', Medium:'med', High:'high' };
 const CATEGORY_ORDER = ['strength','power','olympic','mobility','activation','core','balance','conditioning','prehab','speed','cooldown'];
 let ALL_EXERCISES = [];
 let CLUB_ID = null;
-let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', usableIn:'', view:'grid' };
+let activeFilters = { search:'', muscle:'', complexity:'', category:'', equipment:'', purpose:'', pattern:'', usableIn:'', view:'grid' };
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 let editingId = null;
 let _gmMediaFile = null;
@@ -368,7 +371,7 @@ async function boot() {
 
 async function reloadExercises(rebuild = true) {
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref')
+    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref,primary_purpose,purposes,equipment_tags,muscle_groups,movement_patterns')
     .eq('club_id', CLUB_ID)
     .order('name');
   ALL_EXERCISES = data || [];
@@ -386,6 +389,7 @@ async function reloadExercises(rebuild = true) {
     renderCategoryChips();
     renderMuscleSelect();
     renderEquipmentSelect();
+    renderPurposeSelect(); renderPatternSelect();
     applyFilters();
   } else {
     buildUI();
@@ -397,6 +401,7 @@ function buildUI() {
   renderCategoryChips();
   renderMuscleSelect();
   renderEquipmentSelect();
+  renderPurposeSelect(); renderPatternSelect();
   applyFilters();
 }
 
@@ -446,24 +451,22 @@ function renderCategoryChips() {
   }));
 }
 
-function renderMuscleSelect() {
-  const counts = muscleCounts();
-  const groupCount = Object.keys(counts).length;
-  const sel = document.getElementById('gl-sel-muscle');
-  const cur = activeFilters.muscle;
-  sel.innerHTML = `<option value="">All muscles · ${groupCount}</option>` +
-    Object.keys(counts).sort().map(m =>
-      `<option value="${esc(m)}"${cur===m?' selected':''}>${esc(m)}</option>`
-    ).join('');
+function tokenCounts(col) {
+  const counts = {};
+  for (const e of ALL_EXERCISES) for (const t of (e[col] || [])) counts[t] = (counts[t]||0)+1;
+  return counts;
 }
-
-function renderEquipmentSelect() {
-  const eq = [...new Set(ALL_EXERCISES.map(e => e.equipment).filter(Boolean))].sort();
-  const sel = document.getElementById('gl-sel-equipment');
-  const cur = activeFilters.equipment;
-  sel.innerHTML = `<option value="">All equipment</option>` +
-    eq.map(q => `<option value="${esc(q)}"${cur===q?' selected':''}>${esc(cap(q))}</option>`).join('');
+function fillCanonSelect(selId, dimension, col, curVal, allLabel) {
+  const counts = tokenCounts(col);
+  const order = CMTaxonomy.tokens(dimension).filter(t => counts[t] != null);
+  const sel = document.getElementById(selId);
+  sel.innerHTML = `<option value="">${allLabel} · ${order.length}</option>` +
+    order.map(t => `<option value="${esc(t)}"${curVal===t?' selected':''}>${esc(CMTaxonomy.label(dimension,t))} · ${counts[t]}</option>`).join('');
 }
+function renderMuscleSelect()    { fillCanonSelect('gl-sel-muscle','muscle_group','muscle_groups',activeFilters.muscle,'All muscles'); }
+function renderEquipmentSelect() { fillCanonSelect('gl-sel-equipment','equipment','equipment_tags',activeFilters.equipment,'All equipment'); }
+function renderPurposeSelect()   { fillCanonSelect('gl-sel-purpose','purpose','purposes',activeFilters.purpose,'All purposes'); }
+function renderPatternSelect()   { fillCanonSelect('gl-sel-pattern','movement_pattern','movement_patterns',activeFilters.pattern,'All patterns'); }
 
 function syncChips() {
   document.getElementById('gl-muscles-strip').querySelectorAll('.gl-m-chip').forEach(c => {
@@ -477,13 +480,17 @@ function applyFilters() {
   const complexity = activeFilters.complexity;
   const category = activeFilters.category;
   const equipment = activeFilters.equipment;
+  const purpose = activeFilters.purpose;
+  const pattern = activeFilters.pattern;
   const usableIn = activeFilters.usableIn;
 
   const visible = ALL_EXERCISES.filter(e => {
-    if (muscle && e.muscle_group !== muscle) return false;
+    if (muscle && !(e.muscle_groups || []).includes(muscle)) return false;
     if (complexity && e.complexity !== complexity) return false;
     if (category && e.category !== category) return false;
-    if (equipment && e.equipment !== equipment) return false;
+    if (equipment && !(e.equipment_tags || []).includes(equipment)) return false;
+    if (purpose && !(e.purposes || []).includes(purpose)) return false;
+    if (pattern && !(e.movement_patterns || []).includes(pattern)) return false;
     if (usableIn && !(e.usable_in || []).includes(usableIn)) return false;
     if (search) {
       const hay = `${e.name||''} ${e.description||''} ${e.muscle_group||''}`.toLowerCase();
@@ -754,11 +761,15 @@ function clearFilters() {
   activeFilters.complexity = '';
   activeFilters.category = '';
   activeFilters.equipment = '';
+  activeFilters.purpose = '';
+  activeFilters.pattern = '';
   activeFilters.usableIn = '';
   document.getElementById('gl-search-input').value = '';
   document.getElementById('gl-sel-muscle').value = '';
   document.getElementById('gl-sel-complexity').value = '';
   document.getElementById('gl-sel-equipment').value = '';
+  document.getElementById('gl-sel-purpose').value = '';
+  document.getElementById('gl-sel-pattern').value = '';
   document.getElementById('gl-sel-usable').value = '';
   syncChips();
   applyFilters();
@@ -782,6 +793,16 @@ function attachListeners() {
 
   document.getElementById('gl-sel-equipment').addEventListener('change', e => {
     activeFilters.equipment = e.target.value;
+    applyFilters();
+  });
+
+  document.getElementById('gl-sel-purpose').addEventListener('change', e => {
+    activeFilters.purpose = e.target.value;
+    applyFilters();
+  });
+
+  document.getElementById('gl-sel-pattern').addEventListener('change', e => {
+    activeFilters.pattern = e.target.value;
     applyFilters();
   });
 
