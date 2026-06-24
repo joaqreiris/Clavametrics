@@ -946,11 +946,48 @@ async function ytFetch() {
     fb.disabled = false;
   }
 }
+function buildVocab() {
+  const dims = ['purpose','muscle_group','movement_pattern','equipment','contraction_type','movement_speed','plane','myofascial_chain'];
+  const v = {};
+  for (const d of dims) v[d] = CMTaxonomy.LISTS[d].map(i => ({ token: i.token, label: i.label }));
+  return v;
+}
+async function aiTagItems(items) {
+  // items: [{ idx, name, description }] → returns { idx: suggestion }
+  const vocabulary = buildVocab();
+  const out = {};
+  for (let i = 0; i < items.length; i += 30) {
+    const chunk = items.slice(i, i + 30);
+    try {
+      const { data, error } = await window.sb.functions.invoke('tag-exercise', { body: { exercises: chunk, vocabulary } });
+      if (error || !data || data.error) continue;
+      for (const r of (data.results || [])) out[r.idx] = r;
+    } catch (_) { /* skip chunk on failure */ }
+  }
+  return out;
+}
+function applyTags(row, t) {
+  if (!t) return row;
+  if (t.primary_purpose) row.primary_purpose = t.primary_purpose;
+  const setIf = (col, arr) => { if (arr && arr.length) row[col] = arr; };
+  setIf('purposes', t.purposes);
+  setIf('muscle_groups', t.muscle_groups);
+  setIf('movement_patterns', t.movement_patterns);
+  setIf('equipment_tags', t.equipment_tags);
+  setIf('contraction_types', t.contraction_types);
+  setIf('movement_speeds', t.movement_speeds);
+  setIf('planes', t.planes);
+  setIf('myofascial_chains', t.myofascial_chains);
+  return row;
+}
+
 async function ytImport() {
   const checked = [...document.querySelectorAll('#yt-list .yt-cb:checked')].map(cb => ytVideos[+cb.dataset.i]);
   if (!checked.length) return;
   const btn = document.getElementById('yt-import-btn');
-  btn.disabled = true; btn.textContent = 'Importing…';
+  const status = document.getElementById('yt-status');
+  btn.disabled = true;
+
   const rows = checked.map(v => ({
     club_id: CLUB_ID,
     name: v.title,
@@ -961,10 +998,22 @@ async function ytImport() {
     usable_in: ['gym'],
     is_default: false,
   }));
+
+  // AI pre-tagging (graceful: import proceeds even if this fails)
+  btn.textContent = 'Tagging…';
+  status.textContent = 'Auto-tagging with AI…';
+  try {
+    const items = checked.map((v, i) => ({ idx: i, name: v.title, description: v.description || '' }));
+    const tags = await aiTagItems(items);
+    rows.forEach((row, i) => applyTags(row, tags[i]));
+  } catch (_) { /* proceed untagged */ }
+
+  btn.textContent = 'Importing…';
+  status.textContent = 'Saving…';
   const { error } = await window.sb.from('gym_exercises')
     .upsert(rows, { onConflict: 'club_id,video_id', ignoreDuplicates: true });
   if (error) {
-    document.getElementById('yt-status').textContent = 'Error: ' + error.message;
+    status.textContent = 'Error: ' + error.message;
     btn.disabled = false; btn.textContent = 'Import';
     return;
   }
