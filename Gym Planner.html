@@ -95,6 +95,7 @@
   .gp-tbl input:hover,.gp-tbl select:hover{border-color:var(--cm-border-soft)}
   .gp-tbl input:focus,.gp-tbl select:focus{border-color:var(--cm-accent);background:var(--cm-bg-soft)}
   .gp-tbl .name-cell{display:flex;align-items:center;gap:6px;min-width:200px}
+  .gp-row-thumb{width:30px;height:22px;border-radius:4px;overflow:hidden;flex:0 0 auto;background:#1A1D22}
   .gp-tbl .btn-lib{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:5px;border:1px solid var(--cm-border);background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 10px/1 var(--cm-font-mono);letter-spacing:0.04em;cursor:pointer;flex-shrink:0}
   .gp-tbl .btn-lib:hover:not(:disabled){background:var(--cm-accent-soft);color:var(--cm-accent);border-color:var(--cm-border-strong)}
   .gp-tbl .btn-lib:disabled{opacity:0.45;cursor:not-allowed}
@@ -552,6 +553,30 @@ async function gpEnsureLib() {
   _gpLib = data || [];
   return _gpLib;
 }
+
+// ── Per-row exercise thumbnails (image/GIF signed URL > YouTube > none) ──
+function gpYoutubeId(url){ if(!url) return null; const m=String(url).match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/); return m?m[1]:null; }
+const _gpMediaCache = {};  // exId -> { type, src } | null
+async function gpResolveSessionMedia(){
+  const ids=[...new Set([...document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr')].map(tr=>tr.dataset.exId).filter(Boolean))];
+  const lib=await gpEnsureLib(); const byId={}; (lib||[]).forEach(e=>byId[e.id]=e);
+  const paths=[], exByPath={};
+  ids.forEach(id=>{ const e=byId[id]; if(e&&e.media_type==='image'&&e.media_ref&&!(id in _gpMediaCache)){ paths.push(e.media_ref); exByPath[e.media_ref]=id; } });
+  if(paths.length){ try{ const {data:urls}=await window.sb.storage.from('gym-exercise-media').createSignedUrls(paths,3600);
+    (urls||[]).forEach(u=>{ if(u&&u.path&&u.signedUrl) _gpMediaCache[exByPath[u.path]]={type:'image',src:u.signedUrl}; }); }catch(_){} }
+  ids.forEach(id=>{ if(id in _gpMediaCache) return; const e=byId[id]; const yt=e&&gpYoutubeId(e.video_url);
+    _gpMediaCache[id]= yt ? {type:'youtube',src:`https://img.youtube.com/vi/${yt}/mqdefault.jpg`} : null; });
+}
+function gpExThumbSrc(exId){ const m=exId&&_gpMediaCache[exId]; return m?m.src:null; }
+function gpRenderRowThumb(tr){
+  const cell=tr&&tr.querySelector('.name-cell'); if(!cell) return;
+  const src=gpExThumbSrc(tr.dataset.exId);
+  let thumb=cell.querySelector('.gp-row-thumb');
+  if(!src){ if(thumb) thumb.remove(); return; }
+  if(!thumb){ thumb=document.createElement('span'); thumb.className='gp-row-thumb'; cell.insertBefore(thumb, cell.firstChild); }
+  thumb.innerHTML=`<img src="${src}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`;
+}
+
 function gpBuildLibModal() {
   if (_gpLibBuilt) return; _gpLibBuilt = true;
   const ov = document.createElement('div');
@@ -633,6 +658,7 @@ function gpPickLib(id, name) {
   if (ctx.input) {
     const tr = ctx.input.closest('tr'); if (tr) tr.dataset.exId = id || '';
     fill(ctx.input);
+    if (tr) gpResolveSessionMedia().then(() => gpRenderRowThumb(tr));
   }
   else if (ctx.section) {
     const fn = { warmup: gpAddWarmupRow, plyo: gpAddPlyoRow, main: gpAddMainRow }[ctx.section];
@@ -641,6 +667,7 @@ function gpPickLib(id, name) {
       fn();
       fill(document.getElementById(bodyId).lastElementChild?.querySelector('input'));
       const tr = document.getElementById(bodyId).lastElementChild; if (tr) tr.dataset.exId = id || '';
+      if (tr) gpResolveSessionMedia().then(() => gpRenderRowThumb(tr));
     }
   }
   gpCloseLib();
@@ -1233,6 +1260,9 @@ async function gpLoadDay(dateStr) {
   gpApplyContent(sess?.gym_content);
   _gpSavedAdapt = sess?.gym_content?.adaptations || [];
   _gpSavedRoster = sess?.gym_content?.roster || null;
+
+  await gpResolveSessionMedia();
+  document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
 
   // Calendar is the source of truth: authoritatively overlay micro/MD/time/duration/RPE after the session fill.
   try {
