@@ -1,0 +1,181 @@
+/**
+ * Supabase Edge Function — generate-gym-plan
+ *
+ * Builds a gym session DRAFT from a natural-language objective, selecting ONLY
+ * from the candidate exercises the client passes (by exercise_id — never
+ * invents). Output maps to the Gym Planner's three blocks (warmup / plyo /
+ * main) so the client can render it as an editable draft via gpApplyContent().
+ * The manual planner is untouched; this is an alternative source of `content`.
+ *
+ * Request  (POST JSON):
+ *   { objective: string,
+ *     constraints?: { players?:number, emphasis?:string,
+ *                     available_equipment?:string[], duration_min?:number },
+ *     candidates:  [{ id, name, primary_purpose, purposes, muscle_groups,
+ *                     movement_patterns, equipment_tags }],   // capped, pre-filtered
+ *     sequence?:   string[] }   // coach's purpose order (optional)
+ * Response (200 JSON):
+ *   { plan: { title, notes,
+ *             warmup:{ min, items:[{ exercise_id, name, sets, reps, load, rest, notes }] },
+ *             plyo:  { min, items:[…] },
+ *             main:  { min, items:[{ …, mode }] } } }
+ *
+ * Required secrets: ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY
+ * Deploy: supabase functions deploy generate-gym-plan
+ */
+
+import Anthropic from 'npm:@anthropic-ai/sdk@0.36.3';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
+const CORS = {
+  'Access-Control-Allow-Origin':  '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+
+const MODEL          = 'claude-sonnet-4-6';
+const MAX_CANDIDATES = 150;
+
+interface Candidate {
+  id: string; name: string;
+  primary_purpose?: string; purposes?: string[];
+  muscle_groups?: string[]; movement_patterns?: string[]; equipment_tags?: string[];
+}
+
+function candidateLine(c: Candidate): string {
+  const parts = [
+    `id=${c.id}`,
+    `name="${(c.name || '').slice(0, 120)}"`,
+    c.primary_purpose ? `purpose=${c.primary_purpose}` : '',
+    c.muscle_groups?.length ? `muscles=${c.muscle_groups.join('|')}` : '',
+    c.movement_patterns?.length ? `patterns=${c.movement_patterns.join('|')}` : '',
+    c.equipment_tags?.length ? `equipment=${c.equipment_tags.join('|')}` : '',
+  ].filter(Boolean);
+  return parts.join('  ');
+}
+
+const SYSTEM = `You are a strength & conditioning session planner for ClavaMetrics.
+Build a single gym session as a DRAFT for a coach to review and edit. You map
+the work into three fixed blocks that mirror the planner:
+
+- warmup: rise_temperature / release / activation / mobility purposes
+- plyo:   power / plyometric work (jumps, landings, throws)
+- main:   the main work — strength / conditioning / prevention
+
+Hard rules:
+- Choose exercises ONLY from the CANDIDATES list, by their exact id. NEVER
+  invent an exercise or use an id that is not in the list. Echo the exact name.
+- Honor the objective: target muscles, available equipment, emphasis. Do not
+  include exercises that contradict it (e.g. wrong muscle or unavailable gear).
+- Dose realistically for the stated goal:
+    strength → low reps / higher load / longer rest;
+    hypertrophy → moderate reps; power → low reps, high intent;
+    prevention/activation → controlled tempo, moderate volume.
+  Fields sets (number as string), reps (e.g. "8", "6-8", "5x3"), load
+  (e.g. "RPE 8", "75%", "moderate", "bodyweight"), rest (e.g. "90s"), notes.
+- main items also get a "mode" field: "SR" (sets x reps) by default.
+- Keep it sensible: warmup 2-4 items, plyo 0-3, main 3-6. Set each block's
+  "min" (estimated minutes). Leave a block's items [] if not appropriate.
+- Put coaching rationale in the top-level "notes" (one or two short lines).
+- Output STRICT JSON only — no prose, no markdown fences.
+
+# Output schema
+{"title":"","notes":"","warmup":{"min":0,"items":[{"exercise_id":"","name":"","sets":"","reps":"","load":"","rest":"","notes":""}]},"plyo":{"min":0,"items":[]},"main":{"min":0,"items":[{"exercise_id":"","name":"","sets":"","reps":"","load":"","rest":"","mode":"SR","notes":""}]}}`;
+
+function parseJSON(raw: string): any {
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  return JSON.parse(cleaned);
+}
+
+// Keep only items whose exercise_id is a real candidate; re-stamp the name.
+function sanitizeBlock(block: any, byId: Map<string, Candidate>, withMode: boolean) {
+  const items = Array.isArray(block?.items) ? block.items : [];
+  const clean = items
+    .filter((it: any) => it && byId.has(it.exercise_id))
+    .map((it: any) => {
+      const c = byId.get(it.exercise_id)!;
+      const row: any = {
+        exercise_id: it.exercise_id,
+        name: c.name,
+        sets: String(it.sets ?? ''),
+        reps: String(it.reps ?? ''),
+        load: String(it.load ?? ''),
+        rest: String(it.rest ?? ''),
+        notes: String(it.notes ?? ''),
+      };
+      if (withMode) row.mode = it.mode || 'SR';
+      return row;
+    });
+  return { min: Number(block?.min) || 0, items: clean };
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  if (req.method !== 'POST')   return json({ error: 'Method not allowed' }, 405);
+
+  try {
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return json({ error: 'Not authenticated' }, 401);
+
+    const { objective, constraints, candidates, sequence } = await req.json().catch(() => ({}));
+    if (!objective || typeof objective !== 'string') return json({ error: 'objective required' }, 400);
+    if (!Array.isArray(candidates) || !candidates.length) return json({ error: 'candidates[] required' }, 400);
+
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!apiKey) return json({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
+
+    const list: Candidate[] = candidates.slice(0, MAX_CANDIDATES);
+    const byId = new Map(list.map((c) => [c.id, c]));
+
+    const userPrompt = [
+      `OBJECTIVE: ${objective.trim()}`,
+      constraints?.players ? `PLAYERS: ${constraints.players}` : '',
+      constraints?.emphasis ? `EMPHASIS: ${constraints.emphasis}` : '',
+      constraints?.duration_min ? `TARGET DURATION (min): ${constraints.duration_min}` : '',
+      constraints?.available_equipment?.length ? `AVAILABLE EQUIPMENT: ${constraints.available_equipment.join(', ')}` : '',
+      sequence?.length ? `COACH PURPOSE ORDER: ${sequence.join(' > ')}` : '',
+      '',
+      `CANDIDATES (${list.length}) — pick only from these ids:`,
+      ...list.map(candidateLine),
+    ].filter(Boolean).join('\n');
+
+    const anthropic = new Anthropic({ apiKey });
+    const resp = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      system: SYSTEM,
+      messages: [{ role: 'user', content: userPrompt }],
+    });
+    const textBlock = resp.content.find((b: any) => b.type === 'text');
+    const raw = (textBlock as any)?.text ?? '';
+
+    let parsed: any;
+    try { parsed = parseJSON(raw); }
+    catch { return json({ error: 'AI output was not valid JSON' }, 502); }
+
+    const plan = {
+      title: String(parsed?.title || '').slice(0, 120),
+      notes: String(parsed?.notes || '').slice(0, 500),
+      warmup: sanitizeBlock(parsed?.warmup, byId, false),
+      plyo:   sanitizeBlock(parsed?.plyo,   byId, false),
+      main:   sanitizeBlock(parsed?.main,   byId, true),
+    };
+
+    if (!plan.warmup.items.length && !plan.plyo.items.length && !plan.main.items.length) {
+      return json({ error: 'No valid exercises selected from candidates. Loosen the filters and retry.' }, 422);
+    }
+
+    return json({ plan });
+  } catch (err) {
+    console.error('generate-gym-plan error:', err);
+    return json({ error: String((err as Error)?.message || err) }, 500);
+  }
+});
