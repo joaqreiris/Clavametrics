@@ -15,6 +15,7 @@
 <script src="assets/supabase-init.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
+<script src="assets/gps-matcher.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -1855,6 +1856,7 @@
                    <option value="eu" ${rg==='eu'?'selected':''}>Europe / MEA / LATAM (EU)</option>
                  </select>
                  <button class="gps-int-btn" data-act="verify" data-prov="${p.slug}">Verify connection</button>
+                 ${status==='connected' ? `<button class="gps-int-btn ghost" data-act="map" data-prov="${p.slug}">Map athletes</button>` : ''}
                </div>` })() : ''}
              <button class="gps-int-btn ghost" data-act="disconnect" data-prov="${p.slug}">Disconnect</button>
              ${p.slug==='catapult' ? '' : '<div style="font-size:11.5px;color:var(--cm-fg-muted);margin-top:8px">Credentials saved · verification pending</div>'}`
@@ -1868,6 +1870,7 @@
     host.querySelectorAll('[data-act="connect"]').forEach(b=>b.addEventListener('click',()=>connect(b.dataset.prov)));
     host.querySelectorAll('[data-act="disconnect"]').forEach(b=>b.addEventListener('click',()=>disconnect(b.dataset.prov)));
     host.querySelectorAll('[data-act="verify"]').forEach(b=>b.addEventListener('click',()=>verify(b.dataset.prov)));
+    host.querySelectorAll('[data-act="map"]').forEach(b=>b.addEventListener('click',()=>mapAthletes(b.dataset.prov)));
     host.querySelectorAll('[data-field="region"]').forEach(s=>s.addEventListener('change',()=>setRegion(s.dataset.prov,s.value)));
   }
   async function setRegion(prov,region){
@@ -1912,6 +1915,140 @@
       msg(prov,'Connected ✓'); await load();
     }catch(e){ msg(prov,'Failed: '+(e.message||e),true); }
   }
+  // ── Map athletes (Catapult → players.external_gps_id) ─────────────────────
+  // Reuses the shared matcher (window.CMGpsMatch) and the matched/verify/
+  // unmatched + Add/Confirm pattern from GPS Analysis step 3. Self-contained
+  // modal — the CSV wizard is untouched.
+  const _MAP_POS = ['GK','CB','FB','MF','WG','ST'];
+  function _athleteName(a){ return [a.first_name, a.last_name].filter(Boolean).join(' ').trim(); }
+  function _mapPos(raw){
+    if(!raw) return 'MF';
+    return _MAP_POS.find(p=>p.toLowerCase()===String(raw).toLowerCase().slice(0,2)) || 'MF';
+  }
+  function _esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  async function mapAthletes(prov){
+    const intId=INTS[prov]?.id; if(!intId) return;
+    msg(prov,'Loading athletes…');
+    let athletes, squad;
+    try{
+      const { data, error }=await window.sb.functions.invoke('gps-athletes',{ body:{ integration_id:intId } });
+      if(error) throw error;
+      if(!data?.ok){ msg(prov, data?.message || (data?.http_status?`Provider error (HTTP ${data.http_status})`:'Could not load athletes'), true); return; }
+      athletes=data.athletes||[];
+      const { data:sq, error:e2 }=await window.sb.from('players')
+        .select('id,first_name,last_name,number,position,external_gps_id');
+      if(e2) throw e2;
+      squad=sq||[];
+    }catch(e){ msg(prov,'Failed: '+(e.message||e),true); return; }
+    msg(prov,'');
+    if(!athletes.length){ msg(prov,'No athletes found in the Catapult account.'); return; }
+    _openMapModal(prov, athletes, squad);
+  }
+
+  function _openMapModal(prov, athletes, squad){
+    // Build match rows up-front. external_gps_id is fed as rawExtGpsId so an
+    // already-mapped athlete scores an exact (idempotent) match.
+    const rows=athletes.map((a,i)=>{
+      const name=_athleteName(a);
+      const m=window.CMGpsMatch.findBestMatch(name, a.jersey||'', a.athlete_id, squad);
+      return { i, a, name, match:m, cat:window.CMGpsMatch.categorize(m), done:false,
+               already:!!(m.player && m.player.external_gps_id===a.athlete_id) };
+    });
+    let mapped=0, added=0, filter='all';
+
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:14px;width:min(760px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+        <h3 style="margin:0;font-size:16px">Map athletes — Catapult</h3>
+        <button data-x="1" style="background:none;border:0;font-size:20px;line-height:1;color:var(--cm-fg-muted);cursor:pointer">&times;</button>
+      </div>
+      <div style="display:flex;gap:6px;padding:12px 18px;border-bottom:1px solid var(--cm-border);flex-wrap:wrap">
+        <button class="map-tab" data-f="all">All <span data-c="all">0</span></button>
+        <button class="map-tab" data-f="unmatched">Unmatched <span data-c="unmatched">0</span></button>
+        <button class="map-tab" data-f="verify">Verify <span data-c="verify">0</span></button>
+        <button class="map-tab" data-f="matched">Matched <span data-c="matched">0</span></button>
+        <div style="flex:1"></div>
+        <button class="gps-int-btn" data-bulk="confirm" style="display:none">Confirm all verify</button>
+        <button class="gps-int-btn ghost" data-bulk="add" style="display:none">Add all unmatched</button>
+      </div>
+      <div data-list style="overflow:auto;padding:8px 18px"></div>
+      <div style="padding:12px 18px;border-top:1px solid var(--cm-border);display:flex;justify-content:space-between;align-items:center">
+        <span data-summary style="font-size:12px;color:var(--cm-fg-muted)"></span>
+        <button class="gps-int-btn" data-x="1">Done</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+
+    // minimal tab styling
+    ov.querySelectorAll('.map-tab').forEach(t=>{ t.style.cssText='padding:4px 11px;border:1px solid var(--cm-border);border-radius:999px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 11px var(--cm-font-sans);cursor:pointer'; });
+
+    const listEl=ov.querySelector('[data-list]');
+    const sumEl=ov.querySelector('[data-summary]');
+
+    function counts(){ const c={all:rows.length,unmatched:0,verify:0,matched:0}; rows.forEach(r=>{ c[r.cat]++; }); return c; }
+    function rowHtml(r){
+      const p=r.match.player, pct=Math.round((r.match.score||0)*100)+'%';
+      const pLabel=p?`${_esc(p.first_name)} ${_esc(p.last_name)} · #${_esc(p.number||'?')} · ${_esc(p.position||'—')}`:'No match in squad';
+      let action;
+      if(r.done){ action=`<span style="font:600 11px var(--cm-font-sans);color:var(--cm-accent)">${r.wasAdded?'Added':'Mapped'} ✓</span>`; }
+      else if(r.already){ action=`<span style="font:600 11px var(--cm-font-sans);color:var(--cm-fg-muted)">Already mapped</span>`; }
+      else if(r.cat==='unmatched'){ action=`<button class="gps-int-btn" data-add="${r.i}">Add to squad</button>`; }
+      else { action=`<button class="gps-int-btn" data-confirm="${r.i}">Confirm</button>`+(r.cat==='verify'?`<button class="gps-int-btn ghost" data-add="${r.i}">Add new</button>`:''); }
+      return `<div data-row="${r.i}" data-cat="${r.cat}" style="display:grid;grid-template-columns:1.4fr 56px 1.6fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--cm-border)">
+        <div><div style="font:600 12px var(--cm-font-sans);color:var(--cm-fg)">${_esc(r.name||r.a.athlete_id)}</div>
+          <div style="font:400 11px var(--cm-font-sans);color:var(--cm-fg-muted)">${[r.a.jersey?'#'+_esc(r.a.jersey):'',_esc(r.a.position||'')].filter(Boolean).join(' · ')}</div></div>
+        <div style="font:600 10px var(--cm-font-mono);color:var(--cm-fg-muted);text-align:center">${pct}</div>
+        <div style="font:500 11.5px var(--cm-font-sans);color:var(--cm-fg-muted)">${pLabel}</div>
+        <div style="display:flex;gap:6px;justify-content:flex-end">${action}</div></div>`;
+    }
+    function paint(){
+      listEl.innerHTML=rows.filter(r=>filter==='all'||r.cat===filter).map(rowHtml).join('') ||
+        `<div style="padding:18px;color:var(--cm-fg-muted);font-size:12px">Nothing here.</div>`;
+      const c=counts();
+      ov.querySelectorAll('[data-c]').forEach(s=>{ s.textContent=c[s.dataset.c]; });
+      ov.querySelectorAll('.map-tab').forEach(t=>{ const on=t.dataset.f===filter; t.style.background=on?'var(--cm-accent-soft)':'var(--cm-bg-soft)'; t.style.color=on?'var(--cm-accent)':'var(--cm-fg-muted)'; t.style.borderColor=on?'var(--cm-accent)':'var(--cm-border)'; });
+      ov.querySelector('[data-bulk="confirm"]').style.display=c.verify>0?'':'none';
+      ov.querySelector('[data-bulk="add"]').style.display=c.unmatched>0?'':'none';
+      sumEl.textContent=`${mapped} mapped · ${added} added`;
+      bind();
+    }
+    async function doConfirm(r){
+      const p=r.match.player; if(!p) return;
+      const { error }=await window.sb.from('players').update({ external_gps_id:r.a.athlete_id }).eq('id',p.id);
+      if(error){ alert('Failed to map: '+error.message); return; }
+      r.done=true; r.wasAdded=false; r.cat='matched'; mapped++;
+    }
+    async function doAdd(r){
+      const clubId=await getClubId(); if(!clubId){ alert('No club found'); return; }
+      const parts=(r.name||'').trim().split(/\s+/);
+      const fn=parts.slice(0,-1).join(' ')||parts[0]||r.a.first_name||'';
+      const ln=parts.length>1?parts.slice(-1)[0]:(r.a.last_name||parts[0]||'');
+      const rec={ club_id:clubId, first_name:fn, last_name:ln, position:_mapPos(r.a.position),
+                  number:r.a.jersey||null, status:'available', external_gps_id:r.a.athlete_id };
+      const { data, error }=await window.sb.from('players').insert(rec).select('id').single();
+      if(error){ alert('Failed to add: '+error.message); return; }
+      squad.push({ id:data.id, first_name:fn, last_name:ln, number:rec.number, position:rec.position, external_gps_id:r.a.athlete_id });
+      r.done=true; r.wasAdded=true; r.cat='matched'; added++;
+    }
+    function bind(){
+      listEl.querySelectorAll('[data-confirm]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true; await doConfirm(rows[+b.dataset.confirm]); paint(); }));
+      listEl.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',async()=>{ b.disabled=true; await doAdd(rows[+b.dataset.add]); paint(); }));
+    }
+    ov.querySelectorAll('.map-tab').forEach(t=>t.addEventListener('click',()=>{ filter=t.dataset.f; paint(); }));
+    ov.querySelector('[data-bulk="confirm"]').addEventListener('click',async()=>{
+      for(const r of rows){ if(!r.done && !r.already && r.cat==='verify') await doConfirm(r); } paint();
+    });
+    ov.querySelector('[data-bulk="add"]').addEventListener('click',async()=>{
+      for(const r of rows){ if(!r.done && r.cat==='unmatched') await doAdd(r); } paint();
+    });
+    ov.querySelectorAll('[data-x]').forEach(b=>b.addEventListener('click',()=>{
+      ov.remove();
+      msg(prov, `Mapping done — ${mapped} mapped, ${added} added.`);
+    }));
+    paint();
+  }
+
   async function disconnect(prov){
     const intId=INTS[prov]?.id; if(!intId) return;
     if(!confirm('Disconnect this GPS provider? Synced data stays; only the credential is removed.')) return;

@@ -25,6 +25,7 @@
 <script defer src="assets/gps-aliases.js"></script>
 <script defer src="assets/gps-reader.js"></script>
 <script defer src="assets/gps-acwr.js"></script>
+<script defer src="assets/gps-matcher.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -4269,28 +4270,11 @@ window.renderView = async function () {
   }
 
   // ── Fuzzy string similarity (normalised Levenshtein) ───────
-  function _norm(s) {
-    return (s || '').toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
-  }
-
-  function _lev(a, b) {
-    const m = a.length, n = b.length;
-    const dp = Array.from({ length: m + 1 }, (_, i) =>
-      Array.from({ length: n + 1 }, (_, j) => i ? (j ? 0 : i) : j));
-    for (let i = 1; i <= m; i++)
-      for (let j = 1; j <= n; j++)
-        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
-          : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
-    return dp[m][n];
-  }
-
-  function _sim(a, b) {
-    a = _norm(a); b = _norm(b);
-    const mx = Math.max(a.length, b.length);
-    return mx ? 1 - _lev(a, b) / mx : 1;
-  }
+  // String helpers delegate to the shared matcher core (assets/gps-matcher.js)
+  // so CSV and Catapult mapping score names identically. Behavior unchanged.
+  function _norm(s)    { return window.CMGpsMatch.normName(s); }
+  function _lev(a, b)  { return window.CMGpsMatch.lev(a, b); }
+  function _sim(a, b)  { return window.CMGpsMatch.sim(a, b); }
 
   // ── Category hint — infer expected category from column name ─
   function _categoryHint(nc) {
@@ -5355,42 +5339,20 @@ window.renderView = async function () {
     _wizState.confirmedMap  = {}; // key → player_id
   }
 
+  // Matcher delegates to the shared core (assets/gps-matcher.js). Behavior unchanged.
   function findBestMatch(rawName, rawJersey, rawExtGpsId, squad) {
-    let best = null, bestScore = 0;
-    squad.forEach(p => {
-      let score = 0;
-
-      // 1. External GPS ID — exact
-      if (rawExtGpsId && p.external_gps_id && p.external_gps_id === rawExtGpsId) {
-        score = 1.1;
-      } else {
-        // 2. Jersey number — exact
-        const jerseyOk = rawJersey && p.number &&
-          String(p.number) === rawJersey.replace(/\D/g, '');
-        if (jerseyOk) {
-          score = 1.0;
-        } else if (rawName) {
-          // 3. Name fuzzy
-          const full1  = _norm(p.first_name + ' ' + p.last_name);
-          const full2  = _norm(p.last_name  + ' ' + p.first_name);
-          const full3  = _norm((p.first_name?.[0] || '') + ' ' + p.last_name);
-          score = Math.max(_sim(_norm(rawName), full1), _sim(_norm(rawName), full2), _sim(_norm(rawName), full3));
-        }
-      }
-      if (score > bestScore) { bestScore = score; best = p; }
-    });
-    const confidence = bestScore >= 1.0 ? 'high' : bestScore > 0.65 ? 'medium' : 'low';
-    return { player: best, score: bestScore, confidence };
+    return window.CMGpsMatch.findBestMatch(rawName, rawJersey, rawExtGpsId, squad);
   }
 
   // ── Step 3 UX helpers ──────────────────────────────────────
+  // Badge-color thresholds (presentation). Bucketing decision lives in
+  // CMGpsMatch.categorize — keep these in sync with CMGpsMatch.S3_HIGH/S3_MED.
   const _S3_HIGH = 0.85;
   const _S3_MED  = 0.60;
 
   // Category based on score (independent of match.confidence)
   function _s3Cat(match) {
-    const s = match.score || 0;
-    return s > _S3_HIGH ? 'matched' : s >= _S3_MED ? 'verify' : 'unmatched';
+    return window.CMGpsMatch.categorize(match);
   }
 
   // Read current counts from live DOM (data-cat is updated as user confirms/adds)
