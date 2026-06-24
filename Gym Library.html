@@ -140,6 +140,13 @@
   .gl-video-close .ti{font-size:18px}
 
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
+  .yt-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)}
+  .yt-list{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-top:4px}
+  .yt-row{display:flex;align-items:center;gap:10px;padding:6px;border:1px solid var(--cm-border);border-radius:var(--cm-r-3);cursor:pointer}
+  .yt-row img{width:72px;height:40px;object-fit:cover;border-radius:4px;background:var(--cm-bg-soft);flex:none}
+  .yt-row .yt-title{font:500 13px/1.3 var(--cm-font-sans);color:var(--cm-fg)}
+  .yt-row.is-dup{opacity:.5}
+  .yt-row input{accent-color:var(--cm-accent);flex:none}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
@@ -172,6 +179,7 @@
         <div class="meta">
           <button class="cm-btn is-outline is-sm" disabled title="Próximamente"><i class="ti ti-file-import" style="font-size:14px"></i>Import CSV</button>
           <button class="cm-btn is-outline is-sm" disabled title="Próximamente"><i class="ti ti-template" style="font-size:14px"></i>Templates</button>
+          <button class="cm-btn is-outline is-sm" id="btn-import-yt"><i class="ti ti-brand-youtube" style="font-size:14px"></i>Import YouTube</button>
           <button class="cm-btn is-primary is-sm" id="btn-new-exercise"><i class="ti ti-plus" style="font-size:14px"></i>New exercise</button>
         </div>
       </header>
@@ -320,6 +328,26 @@
   </div>
 </div>
 
+<!-- YouTube import modal -->
+<div class="gl-overlay" id="yt-modal">
+  <div class="gl-modal-box">
+    <h2>Import from YouTube</h2>
+    <div class="gm-field">
+      <label>Playlist URL</label>
+      <div style="display:flex;gap:8px">
+        <input id="yt-url" placeholder="https://www.youtube.com/playlist?list=…" style="flex:1">
+        <button class="cm-btn is-outline is-sm" id="yt-fetch-btn">Fetch</button>
+      </div>
+    </div>
+    <div class="yt-bar"><label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="yt-all" checked> Select all</label><span id="yt-status"></span></div>
+    <div class="yt-list" id="yt-list"></div>
+    <div class="gm-actions">
+      <button class="cm-btn is-ghost is-sm" id="yt-cancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="yt-import-btn" disabled>Import</button>
+    </div>
+  </div>
+</div>
+
 <!-- Delete confirmation modal -->
 <div class="gl-overlay" id="gl-del-modal">
   <div class="gm-del-box">
@@ -404,7 +432,7 @@ async function boot() {
 
 async function reloadExercises(rebuild = true) {
   const { data } = await window.sb.from('gym_exercises')
-    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref,primary_purpose,purposes,equipment_tags,muscle_groups,movement_patterns')
+    .select('id,name,description,muscle_group,category,complexity,equipment,usable_in,video_url,is_default,media_type,media_ref,primary_purpose,purposes,equipment_tags,muscle_groups,movement_patterns,video_id,source')
     .eq('club_id', CLUB_ID)
     .order('name');
   ALL_EXERCISES = data || [];
@@ -872,6 +900,78 @@ function clearFilters() {
   applyFilters();
 }
 
+let ytVideos = [];
+function openYtModal() {
+  document.getElementById('yt-url').value = '';
+  document.getElementById('yt-list').innerHTML = '';
+  document.getElementById('yt-status').textContent = '';
+  document.getElementById('yt-all').checked = true;
+  const ib = document.getElementById('yt-import-btn');
+  ib.disabled = true; ib.textContent = 'Import';
+  ytVideos = [];
+  document.getElementById('yt-modal').classList.add('is-open');
+  document.getElementById('yt-url').focus();
+}
+function closeYtModal() { document.getElementById('yt-modal').classList.remove('is-open'); }
+function renderYtList(existing) {
+  document.getElementById('yt-list').innerHTML = ytVideos.map((v, i) => {
+    const dup = existing.has(v.videoId);
+    return `<label class="yt-row${dup?' is-dup':''}">
+      <input type="checkbox" class="yt-cb" data-i="${i}" ${dup?'disabled':'checked'}>
+      ${v.thumbnail ? `<img src="${esc(v.thumbnail)}" alt="" loading="lazy">` : ''}
+      <span class="yt-title">${esc(v.title)}${dup?' · already imported':''}</span>
+    </label>`;
+  }).join('');
+}
+async function ytFetch() {
+  const url = document.getElementById('yt-url').value.trim();
+  if (!url) return;
+  const status = document.getElementById('yt-status');
+  const fb = document.getElementById('yt-fetch-btn');
+  fb.disabled = true; status.textContent = 'Fetching playlist…';
+  document.getElementById('yt-list').innerHTML = '';
+  try {
+    const { data, error } = await window.sb.functions.invoke('youtube-import', { body: { playlistUrl: url } });
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error);
+    ytVideos = (data && data.videos) || [];
+    const existing = new Set(ALL_EXERCISES.map(e => e.video_id).filter(Boolean));
+    renderYtList(existing);
+    const importable = ytVideos.filter(v => !existing.has(v.videoId)).length;
+    status.textContent = `${ytVideos.length} videos · ${importable} new`;
+    document.getElementById('yt-import-btn').disabled = importable === 0;
+  } catch (err) {
+    status.textContent = 'Error: ' + (err.message || err);
+  } finally {
+    fb.disabled = false;
+  }
+}
+async function ytImport() {
+  const checked = [...document.querySelectorAll('#yt-list .yt-cb:checked')].map(cb => ytVideos[+cb.dataset.i]);
+  if (!checked.length) return;
+  const btn = document.getElementById('yt-import-btn');
+  btn.disabled = true; btn.textContent = 'Importing…';
+  const rows = checked.map(v => ({
+    club_id: CLUB_ID,
+    name: v.title,
+    description: v.description || null,
+    video_url: `https://www.youtube.com/watch?v=${v.videoId}`,
+    video_id: v.videoId,
+    source: 'youtube',
+    usable_in: ['gym'],
+    is_default: false,
+  }));
+  const { error } = await window.sb.from('gym_exercises')
+    .upsert(rows, { onConflict: 'club_id,video_id', ignoreDuplicates: true });
+  if (error) {
+    document.getElementById('yt-status').textContent = 'Error: ' + error.message;
+    btn.disabled = false; btn.textContent = 'Import';
+    return;
+  }
+  closeYtModal();
+  await reloadExercises();
+}
+
 function attachListeners() {
   populatePurposeSelect();
   document.getElementById('gm-form').addEventListener('click', e => {
@@ -923,6 +1023,16 @@ function attachListeners() {
   document.querySelector('.clear').addEventListener('click', clearFilters);
 
   document.getElementById('btn-new-exercise').addEventListener('click', () => openModal());
+
+  document.getElementById('btn-import-yt').addEventListener('click', openYtModal);
+  document.getElementById('yt-fetch-btn').addEventListener('click', ytFetch);
+  document.getElementById('yt-import-btn').addEventListener('click', ytImport);
+  document.getElementById('yt-cancel').addEventListener('click', closeYtModal);
+  document.getElementById('yt-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeYtModal(); });
+  document.getElementById('yt-all').addEventListener('change', e => {
+    document.querySelectorAll('#yt-list .yt-cb:not(:disabled)').forEach(cb => cb.checked = e.target.checked);
+  });
+  document.getElementById('yt-url').addEventListener('keydown', e => { if (e.key === 'Enter') ytFetch(); });
 
   document.getElementById('gm-save').addEventListener('click', saveExercise);
   document.getElementById('gm-cancel').addEventListener('click', closeModal);
