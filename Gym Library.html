@@ -120,6 +120,11 @@
   .gm-usable label{display:inline-flex;align-items:center;gap:5px;font:500 12.5px/1 var(--cm-font-sans);color:var(--cm-fg);cursor:pointer}
   .gm-usable input{width:auto;height:auto;accent-color:var(--cm-accent)}
   .gm-field input:focus,.gm-field select:focus,.gm-field textarea:focus{border-color:var(--cm-border-strong)}
+  .gm-chips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0;max-height:150px;overflow-y:auto}
+  .gm-chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:var(--cm-surface);border:1px solid var(--cm-border);color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans);cursor:pointer}
+  .gm-chip:hover{color:var(--cm-fg);border-color:var(--cm-border-strong)}
+  .gm-chip.is-on{background:var(--cm-accent-soft);color:var(--cm-fg-strong);border-color:var(--cm-border-strong)}
+  .gm-opt{font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-faint)}
   .gm-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:4px}
   .gm-del-box{background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);padding:24px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--cm-shadow-3)}
   .gm-del-box p{font:var(--cm-body);color:var(--cm-fg-muted);margin:0}
@@ -222,11 +227,19 @@
           <input id="gm-name" placeholder="e.g. Back squat" maxlength="120">
         </div>
         <div class="gm-field">
-          <label>Muscle group</label>
-          <input id="gm-muscle" placeholder="e.g. Quadriceps" maxlength="80">
+          <label>Primary purpose <span style="color:var(--cm-danger)">*</span></label>
+          <select id="gm-primary-purpose"><option value="">Select…</option></select>
         </div>
         <div class="gm-field">
-          <label>Category</label>
+          <label>Muscle groups <span style="color:var(--cm-danger)">*</span></label>
+          <div class="gm-chips" id="gm-muscle-chips"></div>
+        </div>
+        <div class="gm-field">
+          <label>Movement patterns</label>
+          <div class="gm-chips" id="gm-pattern-chips"></div>
+        </div>
+        <div class="gm-field">
+          <label>Type</label>
           <select id="gm-category-type">
             <option value="strength">Strength</option>
             <option value="power">Power</option>
@@ -250,8 +263,28 @@
           </select>
         </div>
         <div class="gm-field">
-          <label>Equipment</label>
-          <input id="gm-equipment" placeholder="e.g. Barbell (optional)" maxlength="80">
+          <label>Equipment <span class="gm-opt">· empty = bodyweight</span></label>
+          <div class="gm-chips" id="gm-equipment-chips"></div>
+        </div>
+        <div class="gm-field">
+          <label>Purpose — additional <span class="gm-opt">(optional)</span></label>
+          <div class="gm-chips" id="gm-purpose-chips"></div>
+        </div>
+        <div class="gm-field">
+          <label>Contraction type <span class="gm-opt">(optional)</span></label>
+          <div class="gm-chips" id="gm-contraction-chips"></div>
+        </div>
+        <div class="gm-field">
+          <label>Movement speed <span class="gm-opt">(optional)</span></label>
+          <div class="gm-chips" id="gm-speed-chips"></div>
+        </div>
+        <div class="gm-field">
+          <label>Plane <span class="gm-opt">(optional)</span></label>
+          <div class="gm-chips" id="gm-plane-chips"></div>
+        </div>
+        <div class="gm-field">
+          <label>Myofascial chains <span class="gm-opt">(optional)</span></label>
+          <div class="gm-chips" id="gm-chain-chips"></div>
         </div>
         <div class="gm-field">
           <label>Usable in</label>
@@ -633,6 +666,33 @@ function setMediaPreview(url) {
   else { img.removeAttribute('src'); img.style.display = 'none'; rm.style.display = 'none'; }
 }
 
+function populatePurposeSelect() {
+  document.getElementById('gm-primary-purpose').innerHTML =
+    `<option value="">Select…</option>` +
+    CMTaxonomy.PURPOSE.map(p => `<option value="${esc(p.token)}">${esc(p.label)}</option>`).join('');
+}
+function renderChipCloud(containerId, dimension, selected) {
+  const sel = new Set(selected || []);
+  document.getElementById(containerId).innerHTML =
+    CMTaxonomy.LISTS[dimension].map(it =>
+      `<button type="button" class="gm-chip${sel.has(it.token)?' is-on':''}" data-token="${esc(it.token)}">${esc(it.label)}</button>`
+    ).join('');
+}
+function readChipCloud(containerId) {
+  return [...document.querySelectorAll(`#${containerId} .gm-chip.is-on`)].map(b => b.dataset.token);
+}
+function renderAllChips(ex) {
+  const pp = ex ? ex.primary_purpose : '';
+  renderChipCloud('gm-muscle-chips','muscle_group', ex && ex.muscle_groups);
+  renderChipCloud('gm-pattern-chips','movement_pattern', ex && ex.movement_patterns);
+  renderChipCloud('gm-equipment-chips','equipment', ex && ex.equipment_tags);
+  renderChipCloud('gm-purpose-chips','purpose', ex ? (ex.purposes||[]).filter(p=>p!==pp) : []);
+  renderChipCloud('gm-contraction-chips','contraction_type', ex && ex.contraction_types);
+  renderChipCloud('gm-speed-chips','movement_speed', ex && ex.movement_speeds);
+  renderChipCloud('gm-plane-chips','plane', ex && ex.planes);
+  renderChipCloud('gm-chain-chips','myofascial_chain', ex && ex.myofascial_chains);
+}
+
 function openModal(id) {
   editingId = id || null;
   _gmMediaFile = null;
@@ -647,20 +707,22 @@ function openModal(id) {
     titleEl.textContent = 'Edit exercise';
     saveBtn.textContent = 'Save';
     document.getElementById('gm-name').value = ex.name || '';
-    document.getElementById('gm-muscle').value = ex.muscle_group || '';
+    document.getElementById('gm-primary-purpose').value = ex.primary_purpose || '';
     document.getElementById('gm-category-type').value = ex.category || 'strength';
     document.getElementById('gm-complexity').value = ex.complexity || 'Low';
-    document.getElementById('gm-equipment').value = ex.equipment || '';
     document.getElementById('gm-desc').value = ex.description || '';
     document.getElementById('gm-video').value = ex.video_url || '';
     setMediaPreview(ex._mediaImg || null);
     const usable = ex.usable_in || [];
     document.querySelectorAll('.gm-usable-cb').forEach(cb => { cb.checked = usable.includes(cb.value); });
+    renderAllChips(ex);
   } else {
     titleEl.textContent = 'New exercise';
     saveBtn.textContent = 'Create';
     document.getElementById('gm-form').reset();
+    document.getElementById('gm-primary-purpose').value = '';
     setMediaPreview(null);
+    renderAllChips(null);
   }
 
   document.getElementById('gl-modal').classList.add('is-open');
@@ -678,19 +740,42 @@ async function saveExercise() {
   const name = document.getElementById('gm-name').value.trim();
   if (!name) { document.getElementById('gm-name').focus(); return; }
 
+  const primaryPurpose = document.getElementById('gm-primary-purpose').value;
+  const muscleGroups = readChipCloud('gm-muscle-chips');
+  if (!primaryPurpose) { alert('Pick a primary purpose.'); return; }
+  if (!muscleGroups.length) { alert('Pick at least one muscle group.'); return; }
+
   let usableIn = [...document.querySelectorAll('.gm-usable-cb')].filter(cb => cb.checked).map(cb => cb.value);
   if (!usableIn.length) usableIn = ['gym'];
+
+  const eqTags = (readChipCloud('gm-equipment-chips').length ? readChipCloud('gm-equipment-chips') : ['bodyweight']);
+  const patterns = readChipCloud('gm-pattern-chips');
+  const purposes = [...new Set([primaryPurpose, ...readChipCloud('gm-purpose-chips')])];
+  const contraction = readChipCloud('gm-contraction-chips');
+  const speeds = readChipCloud('gm-speed-chips');
+  const planesSel = readChipCloud('gm-plane-chips');
+  const chains = readChipCloud('gm-chain-chips');
+  const lbl = (dim, toks) => toks.map(t => CMTaxonomy.label(dim, t));
 
   const payload = {
     club_id: CLUB_ID,
     name,
-    muscle_group: document.getElementById('gm-muscle').value.trim() || null,
     category: document.getElementById('gm-category-type').value,
     complexity: document.getElementById('gm-complexity').value,
-    equipment: document.getElementById('gm-equipment').value.trim() || null,
     usable_in: usableIn,
     description: document.getElementById('gm-desc').value.trim() || null,
     video_url: document.getElementById('gm-video').value.trim() || null,
+    primary_purpose: primaryPurpose,
+    purposes,
+    muscle_groups: muscleGroups,
+    movement_patterns: patterns.length ? patterns : null,
+    equipment_tags: eqTags,
+    contraction_types: contraction.length ? contraction : null,
+    movement_speeds: speeds.length ? speeds : null,
+    planes: planesSel.length ? planesSel : null,
+    myofascial_chains: chains.length ? chains : null,
+    muscle_group: lbl('muscle_group', muscleGroups).join(' / ') || null,
+    equipment: lbl('equipment', eqTags.filter(t => t !== 'bodyweight')).join(' / ') || null,
   };
 
   const saveBtn = document.getElementById('gm-save');
@@ -776,6 +861,11 @@ function clearFilters() {
 }
 
 function attachListeners() {
+  populatePurposeSelect();
+  document.getElementById('gm-form').addEventListener('click', e => {
+    const chip = e.target.closest('.gm-chip');
+    if (chip) chip.classList.toggle('is-on');
+  });
   document.getElementById('gl-search-input').addEventListener('input', e => {
     activeFilters.search = e.target.value;
     applyFilters();
