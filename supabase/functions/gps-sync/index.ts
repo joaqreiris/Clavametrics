@@ -1,17 +1,24 @@
 /**
- * Supabase Edge Function — gps-sync (Ladrillo 2b-i, SESSION-level sync)
+ * Supabase Edge Function — gps-sync (Ladrillo 2b-i + 2b-map, SESSION-level sync)
  *
  * Pulls Catapult activities in a date range, finds-or-creates one
  * training_session per activity (idempotent via external_activity_id), fetches
- * per-athlete stats, normalizes them to our canonical units, and writes
- * gps_reports (+ gps_report_metrics for non-core params known to the club).
+ * per-athlete stats, normalizes them and writes gps_reports
+ * (+ gps_report_metrics for non-core metrics).
+ *
+ * DATA-DRIVEN MAPPING: parameter→target resolution comes from gps_column_mappings
+ * (source_label='catapult'), the SAME table/vocabulary the CSV wizard uses.
+ * SLUG_MAP below is ONLY the auto-seed for the 13 core columns — once seeded,
+ * the club edits everything (incl. any extra Catapult metric) via "Map metrics".
+ * Stats requests ALL mapped slugs, not a fixed list; unmapped slugs are reported
+ * (unmapped_params), never silently dropped.
  *
  * Mirror of gps-verify: CORS, userClient for per-club authz, adminClient
  * (service role) for all reads/writes, CATAPULT_BASE per region.
  *
  * Request  (POST JSON): { integration_id, from?, to? }   (ISO; default last 30d)
  * Response (200 JSON):
- *   { ok:true, synced_activities, synced_rows, skipped_unmapped, errors:[] }
+ *   { ok:true, synced_activities, synced_rows, skipped_unmapped, unmapped_params:[], errors:[] }
  *
  * NOTE: period/rollup metrics are NOT computed here — that is Ladrillo 2b-ii.
  *
@@ -40,11 +47,26 @@ const CATAPULT_BASE: Record<string, string> = {
 // INT columns are rounded; the rest are stored toFixed(4).
 const GPS_INT_COLS = new Set(['accelerations', 'decelerations', 'sprint_count', 'time_played']);
 
-// SLUG_MAP — Catapult OpenField parameter slug → { col: canonical gps_reports
-// column, conv: multiplier to reach our unit }. Catapult returns SI units.
-// ⚠️ Slugs VARY across OpenField versions — VERIFY each against GET /parameters
-// and adjust. Anything not here but present in gps_metric_definitions goes to
-// gps_report_metrics; anything else is ignored.
+// Canonical gps_reports columns (the 13 core). target_metric values NOT in this
+// set are treated as gps_metric_definitions keys → gps_report_metrics (EAV).
+const GPS_REPORT_COLS = new Set([
+  'total_distance', 'high_speed_distance', 'very_high_speed_distance',
+  'sprint_distance', 'accelerations', 'decelerations', 'max_speed',
+  'player_load', 'avg_speed', 'hmld', 'time_played', 'sprint_count', 'distance_per_minute',
+]);
+
+// Stats-row keys that are athlete/activity metadata, not metric parameters.
+const METADATA_KEYS = new Set([
+  'athlete_id', 'athlete', 'id', 'name', 'athlete_name', 'first_name', 'last_name',
+  'jersey', 'jersey_number', 'number', 'position', 'activity_id', 'activity',
+  'date', 'start_time', 'startTime', 'start', 'player_id', 'parameters',
+]);
+
+// SLUG_MAP — AUTO-SEED ONLY. Catapult OpenField parameter slug → { col: canonical
+// gps_reports column, conv: unit multiplier (Catapult returns SI) }. On first
+// sync these 13 rows are seeded into gps_column_mappings so the core columns work
+// with zero setup; afterwards the club owns the mapping via "Map metrics".
+// ⚠️ Slugs VARY across OpenField versions — VERIFY against GET /parameters.
 const SLUG_MAP: Record<string, { col: string; conv: number }> = {
   // distances
   total_distance:                     { col: 'total_distance',           conv: 1 / 1000 }, // m → km
@@ -65,7 +87,6 @@ const SLUG_MAP: Record<string, { col: string; conv: number }> = {
   // time (s → min)
   duration:                           { col: 'time_played',              conv: 1 / 60 },    // (VERIFY slug: total_duration?)
 };
-const DEFAULT_PARAMS = Object.keys(SLUG_MAP);
 
 // activity.start_time may be epoch seconds, ms, or an ISO string. → ms.
 function toMs(v: unknown): number {
@@ -150,10 +171,37 @@ Deno.serve(async (req: Request) => {
     const playerByExt = new Map<string, string>();
     for (const p of (players || [])) if (p.external_gps_id) playerByExt.set(String(p.external_gps_id), p.id as string);
 
-    // Club's non-core metric definitions (EAV passthrough for unmapped params).
-    const { data: defs } = await adminClient
-      .from('gps_metric_definitions').select('key').eq('club_id', clubId).eq('is_core', false);
-    const customKeys = new Set((defs || []).map(d => String(d.key)));
+    // ── Data-driven resolveMap: slug → { target_metric, unit_conversion } ───
+    // Read the club's Catapult mappings (same table/vocabulary as the CSV).
+    const { data: mappings } = await adminClient
+      .from('gps_column_mappings')
+      .select('source_column_name, target_metric, unit_conversion')
+      .eq('club_id', clubId).eq('source_label', 'catapult');
+    const resolveMap = new Map<string, { target: string; conv: number }>();
+    for (const m of (mappings || [])) {
+      resolveMap.set(String(m.source_column_name), {
+        target: String(m.target_metric),
+        conv: m.unit_conversion == null ? 1 : Number(m.unit_conversion),
+      });
+    }
+
+    // AUTO-SEED the 13 core columns the first time (idempotent). Any SLUG_MAP
+    // slug not yet mapped for this club is inserted; existing rows are untouched.
+    const seedRows = Object.entries(SLUG_MAP)
+      .filter(([slug]) => !resolveMap.has(slug))
+      .map(([slug, { col, conv }]) => ({
+        club_id: clubId, source_label: 'catapult', source_column_name: slug,
+        target_metric: col, unit_conversion: conv,
+      }));
+    if (seedRows.length) {
+      await adminClient.from('gps_column_mappings')
+        .upsert(seedRows, { onConflict: 'club_id,source_label,source_column_name', ignoreDuplicates: true });
+      for (const r of seedRows) resolveMap.set(r.source_column_name, { target: r.target_metric, conv: r.unit_conversion });
+    }
+
+    // Slugs we actually request from /stats: every mapped slug except ignored.
+    const mappedSlugs = [...resolveMap.entries()].filter(([, v]) => v.target && v.target !== '__ignore__').map(([s]) => s);
+    const unmappedParams = new Set<string>();
 
     // ── 1. Fetch activities and filter to the range by start_time ───────────
     const actRes = await fetch(`${baseUrl}/activities`, { headers: authH });
@@ -207,7 +255,7 @@ Deno.serve(async (req: Request) => {
           headers: { ...authH, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }],
-            parameters: DEFAULT_PARAMS,           // VERIFY: some versions want [{parameter: slug}]
+            parameters: mappedSlugs,              // VERIFY: some versions want [{parameter: slug}]
             group_by: ['athlete'],
           }),
         });
@@ -225,22 +273,25 @@ Deno.serve(async (req: Request) => {
           const rec: Record<string, unknown> = { club_id: clubId, session_id: sessionId, player_id: playerId };
           const extras: { metric_key: string; value: number }[] = [];
 
-          // iterate every slug the stats row offers
-          const slugs = new Set<string>([...DEFAULT_PARAMS, ...Object.keys(row)]);
+          // Resolve every slug the stats row offers via the data-driven map.
+          const slugs = new Set<string>([...mappedSlugs, ...Object.keys(row)]);
           for (const slug of slugs) {
-            const map = SLUG_MAP[slug];
-            if (map) {
-              const raw = readParam(row, slug);
-              if (raw == null) continue;
-              const num = raw * map.conv;
-              if (!isFinite(num)) continue;
-              rec[map.col] = GPS_INT_COLS.has(map.col) ? Math.round(num) : +num.toFixed(4);
-            } else if (customKeys.has(slug)) {
-              const raw = readParam(row, slug);
-              if (raw == null) continue;
-              extras.push({ metric_key: slug, value: +raw.toFixed(4) });
+            const map = resolveMap.get(slug);
+            if (!map || !map.target || map.target === '__ignore__') {
+              // A real parameter value with no mapping → report, don't drop.
+              if (!METADATA_KEYS.has(slug) && readParam(row, slug) != null) unmappedParams.add(slug);
+              continue;
             }
-            // unknown slug → ignore
+            const raw = readParam(row, slug);
+            if (raw == null) continue;
+            const num = raw * map.conv;
+            if (!isFinite(num)) continue;
+            if (GPS_REPORT_COLS.has(map.target)) {
+              rec[map.target] = GPS_INT_COLS.has(map.target) ? Math.round(num) : +num.toFixed(4);
+            } else {
+              // target is a gps_metric_definitions key → EAV
+              extras.push({ metric_key: map.target, value: +num.toFixed(4) });
+            }
           }
           recs.push(rec);
           if (extras.length) extrasByPlayer.set(playerId, extras);
@@ -281,7 +332,7 @@ Deno.serve(async (req: Request) => {
     await adminClient.from('gps_integrations')
       .update({ last_sync_at: new Date().toISOString(), last_error: null }).eq('id', integration_id);
 
-    return json({ ok: true, synced_activities: syncedActivities, synced_rows: syncedRows, skipped_unmapped: skippedUnmapped, errors });
+    return json({ ok: true, synced_activities: syncedActivities, synced_rows: syncedRows, skipped_unmapped: skippedUnmapped, unmapped_params: [...unmappedParams], errors });
 
   } catch (err) {
     const message = String((err as Error)?.message || err);
