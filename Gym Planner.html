@@ -1214,11 +1214,11 @@ async function gpLoadDay(dateStr) {
   const mcLabel = mc ? mc.name : '';
   document.getElementById('gpPagerLabel').innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mcLabel ? `<span class="sub">${mcLabel}</span>` : ''}`;
 
-  const { data: sess } = await window.sb.from('training_sessions')
+  const { data: _rows } = await window.sb.from('training_sessions')
     .select('id,title,session_time,duration,session_type,notes,location,published,estimated_rpe,gym_content')
     .eq('club_id', _gpClubId).eq('team_id', _gpTeamId).eq('session_date', dateStr)
-    .in('session_type', ['gym'])
-    .maybeSingle().catch(() => ({ data: null }));
+    .in('session_type', ['gym']).order('created_at', { ascending: false }).limit(1);
+  const sess = (_rows && _rows[0]) || null;
 
   _gpCurrentSessionId = sess?.id || null;
   _gpPublished = sess?.published || false;
