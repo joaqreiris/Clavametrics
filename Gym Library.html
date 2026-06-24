@@ -322,6 +322,7 @@
       </div>
     </form>
     <div class="gm-actions">
+      <button type="button" class="cm-btn is-outline is-sm" id="gm-ai-tag" style="margin-right:auto">Auto-tag with AI</button>
       <button class="cm-btn is-ghost is-sm" id="gm-cancel">Cancel</button>
       <button class="cm-btn is-primary is-sm" id="gm-save">Create</button>
     </div>
@@ -776,6 +777,39 @@ function closeModal() {
   _gmMediaRemove = false;
 }
 
+async function aiTagOpenExercise() {
+  const name = document.getElementById('gm-name').value.trim();
+  if (!name) { document.getElementById('gm-name').focus(); return; }
+  const btn = document.getElementById('gm-ai-tag');
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Tagging…';
+  try {
+    const desc = document.getElementById('gm-desc').value.trim();
+    const tags = await aiTagItems([{ idx: 0, name, description: desc }]);
+    const t = tags[0];
+    if (!t) { btn.textContent = 'No suggestion'; }
+    else {
+      if (t.primary_purpose) document.getElementById('gm-primary-purpose').value = t.primary_purpose;
+      renderAllChips({
+        primary_purpose:   t.primary_purpose,
+        purposes:          t.purposes,
+        muscle_groups:     t.muscle_groups,
+        movement_patterns: t.movement_patterns,
+        equipment_tags:    t.equipment_tags,
+        contraction_types: t.contraction_types,
+        movement_speeds:   t.movement_speeds,
+        planes:            t.planes,
+        myofascial_chains: t.myofascial_chains,
+      });
+      btn.textContent = 'Applied ✓';
+    }
+  } catch (_) {
+    btn.textContent = 'Failed';
+  } finally {
+    setTimeout(() => { btn.disabled = false; btn.textContent = original; }, 1400);
+  }
+}
+
 async function saveExercise() {
   const name = document.getElementById('gm-name').value.trim();
   if (!name) { document.getElementById('gm-name').focus(); return; }
@@ -1072,6 +1106,7 @@ function attachListeners() {
   document.querySelector('.clear').addEventListener('click', clearFilters);
 
   document.getElementById('btn-new-exercise').addEventListener('click', () => openModal());
+  document.getElementById('gm-ai-tag').addEventListener('click', aiTagOpenExercise);
 
   document.getElementById('btn-import-yt').addEventListener('click', openYtModal);
   document.getElementById('yt-fetch-btn').addEventListener('click', ytFetch);
