@@ -165,6 +165,11 @@
   .sl-preview-cell .v { font:600 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
   .sl-preview-tags { display:flex; gap:4px; flex-wrap:wrap; }
   .sl-preview-open { width:100%; margin-top:10px; }
+  .sl-gps { margin-top:12px; padding-top:10px; border-top:1px solid var(--cm-border-soft); }
+  .sl-gps-h { font:600 9px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:7px; display:flex; align-items:center; gap:5px; }
+  .sl-gps-h span { font-weight:500; color:var(--cm-fg-faint); }
+  .sl-gps-ctx { font:500 9.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); margin-top:6px; }
+  .sl-gps-empty { font:500 11px/1.3 var(--cm-font-sans); color:var(--cm-fg-faint); padding:2px 0; }
 
   .sl-acc { border-bottom:1px solid var(--cm-border-soft); }
   .sl-acc:last-child { border-bottom:0; }
@@ -280,6 +285,7 @@
             </div>
             <div class="sl-preview-grid" id="prevGrid"></div>
             <div class="sl-preview-tags" id="prevTags"></div>
+            <div class="sl-gps" id="prevGps" style="display:none"></div>
             <button class="cm-btn is-outline is-sm sl-preview-open" onclick="window.location.href='Planner.html'">
               <i class="ti ti-edit" style="font-size:13px"></i>Open in Planner
             </button>
@@ -707,9 +713,39 @@
     if (ex.intensity) tags += `<span class="sl-tag ${INT_CLS[ex.intensity]}">${INT_LABEL[ex.intensity]}</span>`;
     (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${f}</span>`; });
     document.getElementById('prevTags').innerHTML = tags;
+    renderExGpsProfile(ex.id);
 
     document.getElementById('slPreview').classList.add('is-visible');
     document.getElementById('slPreview').scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  // GPS per-minute profile — read-only from the SSOT view v_exercise_gps_profile.
+  // total_distance_per_min comes in KM/min (TD stored in km) → ×1000 to show m/min.
+  // The other distances (HSR/VHSR/sprint) are already m/min; player load is AU/min.
+  async function renderExGpsProfile(exId) {
+    const host = document.getElementById('prevGps');
+    if (!host) return;
+    const header = `<div class="sl-gps-h">GPS profile <span>per minute</span></div>`;
+    host.style.display = '';
+    host.innerHTML = header + `<div class="sl-gps-empty">Loading…</div>`;
+    const { data } = await window.sb.from('v_exercise_gps_profile').select('*').eq('exercise_id', exId).maybeSingle();
+    if (selectedId !== exId) return;   // guard: another card was selected meanwhile
+    const num = x => (x == null || x === '') ? null : Number(x);
+    const n = data ? num(data.n_instances) : 0;
+    if (!data || !n) { host.innerHTML = header + `<div class="sl-gps-empty">No GPS data yet</div>`; return; }
+    const td = num(data.total_distance_per_min);
+    const fmt = (x, u, d = 1) => x == null ? '—' : `${x.toFixed(d)} ${u}`;
+    const cells = [
+      { l:'Total dist',  v: td == null ? '—' : `${Math.round(td * 1000)} m/min` },
+      { l:'HSR',         v: fmt(num(data.high_speed_distance_per_min), 'm/min') },
+      { l:'VHSR',        v: fmt(num(data.very_high_speed_distance_per_min), 'm/min') },
+      { l:'Sprint',      v: fmt(num(data.sprint_distance_per_min), 'm/min') },
+      { l:'Player load', v: fmt(num(data.player_load_per_min), 'AU/min') },
+    ];
+    const mins = num(data.total_minutes);
+    host.innerHTML = header +
+      `<div class="sl-preview-grid">${cells.map(c => `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('')}</div>` +
+      `<div class="sl-gps-ctx">Avg of ${n} instance${n !== 1 ? 's' : ''}${mins != null ? ` · ~${Math.round(mins)} min total` : ''}</div>`;
   }
 
   function hidePreview() {
