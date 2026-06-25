@@ -1214,7 +1214,7 @@
     }
     document.getElementById('mtModalSave').style.display = '';
     const [{ data: teams }, { data: assigned }] = await Promise.all([
-      window.sb.from('teams').select('id,name').eq('club_id', clubId).order('name'),
+      window.sb.from('teams').select('id,name').eq('club_id', clubId).is('archived_at', null).order('name'),
       window.sb.from('member_teams').select('team_id').eq('club_id', clubId).eq('profile_id', id),
     ]);
     _mtTeams = teams || [];
@@ -1676,15 +1676,23 @@
     const cid = await window.getClubId();
     host.innerHTML = `<div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:4px 0">Loading…</div>`;
     const { data, error } = await window.sb.from('teams')
-      .select('id, name').eq('club_id', cid).order('name');
+      .select('id, name, archived_at').eq('club_id', cid)
+      .order('archived_at', { nullsFirst: true }).order('name');
     if (error) { host.innerHTML = `<div style="font:500 12px/1.3 var(--cm-font-sans);color:var(--cm-danger,#DC2626)">${error.message}</div>`; return; }
     if (!data.length) { host.innerHTML = `<div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);padding:4px 0">No teams yet.</div>`; return; }
-    host.innerHTML = data.map(c => `
-      <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px">
-        <i class="ti ti-users-group" style="font-size:14px;color:var(--cm-fg-muted)"></i>
-        <span style="flex:1;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg)">${c.name}</span>
-        <button onclick="deleteClubCategory('${c.id}','${c.name.replace(/'/g,"\\'")}')" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:15px" title="Eliminar"><i class="ti ti-trash"></i></button>
-      </div>`).join('');
+    host.innerHTML = data.map(c => {
+      const archived = !!c.archived_at;
+      const nameEsc = c.name.replace(/'/g,"\\'");
+      return `
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;${archived ? 'opacity:0.55' : ''}">
+          <i class="ti ti-users-group" style="font-size:14px;color:var(--cm-fg-muted)"></i>
+          <span style="flex:1;font:500 13px/1 var(--cm-font-sans);color:var(--cm-fg)">${c.name}</span>
+          ${archived
+            ? `<span style="font:600 10px/1 var(--cm-font-sans);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.04em">Archived</span>
+               <button onclick="restoreClubCategory('${c.id}','${nameEsc}')" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:15px" title="Restore"><i class="ti ti-arrow-back-up"></i></button>`
+            : `<button onclick="archiveClubCategory('${c.id}','${nameEsc}')" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:15px" title="Archive"><i class="ti ti-archive"></i></button>`}
+        </div>`;
+    }).join('');
   }
 
   async function addClubCategory() {
@@ -1699,12 +1707,20 @@
     renderClubCategories();
   }
 
-  async function deleteClubCategory(id, name) {
-    if (!confirm(`¿Eliminar la categoría "${name}"?`)) return;
+  async function archiveClubCategory(id, name) {
+    if (!confirm(`Archive "${name}"? It will be hidden everywhere, but its data is kept — you can restore it here.`)) return;
     const cid = await window.getClubId();
-    const { error } = await window.sb.from('teams').delete().eq('id', id);
+    const { error } = await window.sb.from('teams').update({ archived_at: new Date().toISOString() }).eq('id', id);
     if (error) { alert(error.message); return; }
-    window.sb.rpc('log_audit', { p_table: 'teams', p_op: 'DELETE', p_changes: { name }, p_club_id: cid });
+    window.sb.rpc('log_audit', { p_table: 'teams', p_op: 'UPDATE', p_changes: { name, archived: true }, p_club_id: cid });
+    renderClubCategories();
+  }
+
+  async function restoreClubCategory(id, name) {
+    const cid = await window.getClubId();
+    const { error } = await window.sb.from('teams').update({ archived_at: null }).eq('id', id);
+    if (error) { alert(error.message); return; }
+    window.sb.rpc('log_audit', { p_table: 'teams', p_op: 'UPDATE', p_changes: { name, archived: false }, p_club_id: cid });
     renderClubCategories();
   }
 
