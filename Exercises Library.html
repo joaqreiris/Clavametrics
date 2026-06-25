@@ -862,13 +862,17 @@
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   // Normalización para auto-cluster de variantes del mismo drill.
-  // uppercase, trim, quitar medidas de cancha entre paréntesis "(40X40M)",
-  // normalizar guiones, colapsar espacios.
+  // El TAMAÑO DE CANCHA define la demanda → se conserva, pero se normaliza su
+  // FORMATO: variantes de la MISMA medida agrupan, medidas DISTINTAS no.
+  //   "GAME 40X20M" ≡ "GAME 40x20" ≡ "GAME (40 X 20)"  → mismo grupo
+  //   "GAME 40X20"  ≢  "GAME 50X70"                     → grupos distintos
   function normName(raw){
     return String(raw || '')
       .toUpperCase()
-      .replace(/\([^)]*\d[^)]*\)/g, ' ')   // medidas de cancha: paréntesis con dígitos
-      .replace(/[\-–—_]+/g, ' ')           // guiones/underscores → espacio
+      .replace(/[()]/g, ' ')                                   // quitar paréntesis (no su contenido)
+      .replace(/(\d+)\s*[X×]\s*(\d+)/g, '$1X$2')               // unificar separador: "40 × 20"/"40x20" → "40X20"
+      .replace(/(\d+X\d+)\s*M\b/g, '$1')                       // quitar unidad redundante "40X20M" → "40X20"
+      .replace(/[\-–—_]+/g, ' ')                               // guiones/underscores → espacio
       .replace(/\s+/g, ' ')
       .trim();
   }
