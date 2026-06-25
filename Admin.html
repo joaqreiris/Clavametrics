@@ -2164,23 +2164,32 @@
   async function mapAthletes(prov){
     const intId=INTS[prov]?.id; if(!intId) return;
     msg(prov,'Loading athletes…');
-    let athletes, squad;
+    let athletes, squad, teams;
     try{
       const { data, error }=await window.sb.functions.invoke('gps-athletes',{ body:{ integration_id:intId } });
       if(error) throw error;
       if(!data?.ok){ msg(prov, data?.message || (data?.http_status?`Provider error (HTTP ${data.http_status})`:'Could not load athletes'), true); return; }
       athletes=data.athletes||[];
+      const clubId=await getClubId();
       const { data:sq, error:e2 }=await window.sb.from('players')
         .select('id,first_name,last_name,number,position,external_gps_id');
       if(e2) throw e2;
       squad=sq||[];
+      // Active teams of the club — new players MUST get a team_id or they go
+      // orphaned (Squad filters by team). Mirror the manual "Add player" path.
+      const { data:tm, error:e3 }=await window.sb.from('teams')
+        .select('id,name').eq('club_id',clubId).is('archived_at',null).order('name');
+      if(e3) throw e3;
+      teams=tm||[];
     }catch(e){ msg(prov,'Failed: '+(e.message||e),true); return; }
     msg(prov,'');
     if(!athletes.length){ msg(prov,'No athletes found in the Catapult account.'); return; }
-    _openMapModal(prov, athletes, squad);
+    _openMapModal(prov, athletes, squad, teams);
   }
 
-  function _openMapModal(prov, athletes, squad){
+  function _openMapModal(prov, athletes, squad, teams){
+    teams=teams||[];
+    let teamId=teams[0]?.id||null;   // default destination team (first/only)
     // Build match rows up-front. external_gps_id is fed as rawExtGpsId so an
     // already-mapped athlete scores an exact (idempotent) match.
     const rows=athletes.map((a,i)=>{
@@ -2198,6 +2207,11 @@
         <h3 style="margin:0;font-size:16px">Map athletes — Catapult</h3>
         <button data-x="1" style="background:none;border:0;font-size:20px;line-height:1;color:var(--cm-fg-muted);cursor:pointer">&times;</button>
       </div>
+      ${teams.length>1?`<div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-bottom:1px solid var(--cm-border)">
+        <label style="font-size:12px;color:var(--cm-fg-muted)">Add new players to team</label>
+        <select data-team style="padding:6px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
+          ${teams.map(t=>`<option value="${_esc(t.id)}">${_esc(t.name)}</option>`).join('')}
+        </select></div>`:''}
       <div style="display:flex;gap:6px;padding:12px 18px;border-bottom:1px solid var(--cm-border);flex-wrap:wrap">
         <button class="map-tab" data-f="all">All <span data-c="all">0</span></button>
         <button class="map-tab" data-f="unmatched">Unmatched <span data-c="unmatched">0</span></button>
@@ -2216,6 +2230,7 @@
 
     // minimal tab styling
     ov.querySelectorAll('.map-tab').forEach(t=>{ t.style.cssText='padding:4px 11px;border:1px solid var(--cm-border);border-radius:999px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 11px var(--cm-font-sans);cursor:pointer'; });
+    const _teamSel=ov.querySelector('[data-team]'); if(_teamSel) _teamSel.addEventListener('change',()=>{ teamId=_teamSel.value; });
 
     const listEl=ov.querySelector('[data-list]');
     const sumEl=ov.querySelector('[data-summary]');
@@ -2255,12 +2270,14 @@
     }
     async function doAdd(r){
       const clubId=await getClubId(); if(!clubId){ alert('No club found'); return; }
+      if(!teamId){ alert('This club has no team yet — create one in Teams before adding players.'); return; }
       const parts=(r.name||'').trim().split(/\s+/);
       const fn=parts.slice(0,-1).join(' ')||parts[0]||r.a.first_name||'';
       const ln=parts.length>1?parts.slice(-1)[0]:(r.a.last_name||parts[0]||'');
       const _jn=parseInt(String(r.a.jersey??'').trim(),10);
       const number=Number.isFinite(_jn)?_jn:null;   // non-numeric jersey (e.g. "IKD") → null, don't break
-      const rec={ club_id:clubId, first_name:fn, last_name:ln, position:_mapPos(r.a.position),
+      // team_id required — without it the player is orphaned/invisible in Squad.
+      const rec={ club_id:clubId, team_id:teamId, first_name:fn, last_name:ln, position:_mapPos(r.a.position),
                   number, status:'available', external_gps_id:r.a.athlete_id };
       const { data, error }=await window.sb.from('players').insert(rec).select('id').single();
       if(error){ alert('Failed to add: '+error.message); return; }
