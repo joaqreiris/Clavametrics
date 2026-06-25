@@ -232,6 +232,7 @@
           <div class="ctx"><strong id="slExCount">—</strong> exercises · <span id="slFilteredCount" style="display:none"><strong id="slFilteredNum">—</strong> matching filters · </span>this club</div>
         </div>
         <div class="meta">
+          <button class="cm-btn is-outline is-sm" id="slMapDrillsBtn" style="display:none"><i class="ti ti-route" style="font-size:14px"></i>Map drills (GPS)</button>
           <button class="cm-btn is-primary is-sm" onclick="window.location.href='Planner.html'"><i class="ti ti-plus" style="font-size:14px"></i>New exercise</button>
         </div>
       </header>
@@ -806,6 +807,189 @@
   renderCards();
 })();
 </script>
+
+<!-- ── Map drills (GPS): period_name (Catapult) ↔ exercise (canonical) ───────── -->
+<script>
+(async function slMapDrillsWizard(){
+  const btn = document.getElementById('slMapDrillsBtn');
+  if (!btn) return;
+
+  // Gating: solo admin/owner/super edita el mapeo (mismo criterio que la RLS de gps_drill_map).
+  const prof = await window.getProfile();
+  const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
+  let fullAccess = bucket === 'admin' || bucket === 'owner';
+  if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
+  if (!fullAccess) return;                // no-admin: el botón queda oculto
+  btn.style.display = '';
+
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // Normalización para auto-cluster de variantes del mismo drill.
+  // uppercase, trim, quitar medidas de cancha entre paréntesis "(40X40M)",
+  // normalizar guiones, colapsar espacios.
+  function normName(raw){
+    return String(raw || '')
+      .toUpperCase()
+      .replace(/\([^)]*\d[^)]*\)/g, ' ')   // medidas de cancha: paréntesis con dígitos
+      .replace(/[\-–—_]+/g, ' ')           // guiones/underscores → espacio
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  btn.addEventListener('click', openMapDrills);
+
+  async function openMapDrills(){
+    const clubId = await window.getClubId();
+    if (!clubId) return;
+
+    // 1) period_names distintos con conteo + minutos promedio (vista agregada)
+    // 2) mapeos existentes  3) catálogo de exercises del club
+    const [pnRes, mapRes, exRes] = await Promise.all([
+      window.sb.from('v_gps_period_names').select('period_name,n_instances,avg_minutes').eq('club_id', clubId),
+      window.sb.from('gps_drill_map').select('period_name,exercise_id,ignored').eq('club_id', clubId),
+      window.sb.from('exercises').select('id,name').eq('club_id', clubId).order('name'),
+    ]);
+    const periodNames = pnRes.data || [];
+    const existingMap = {};
+    (mapRes.data || []).forEach(m => { existingMap[m.period_name] = m; });
+    let exercises = exRes.data || [];
+
+    // Auto-cluster por nombre normalizado.
+    const byKey = new Map();
+    periodNames.forEach(p => {
+      const key = normName(p.period_name);
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(p);
+    });
+
+    const groups = [];
+    byKey.forEach((names, key) => {
+      // Representante = variante con más instancias (la más reconocible para el coach).
+      const rep = names.slice().sort((a,b) => (b.n_instances||0) - (a.n_instances||0))[0];
+      const nInst = names.reduce((s,n) => s + (n.n_instances||0), 0);
+      const totMin = names.reduce((s,n) => s + (+n.avg_minutes||0) * (n.n_instances||0), 0);
+      const avgMin = nInst ? totMin / nInst : 0;
+      // Pre-fill desde mapeos existentes: exercise gana sobre ignore.
+      let choice = '', mapped = false;
+      for (const n of names) {
+        const ex = existingMap[n.period_name];
+        if (ex) { mapped = true; if (ex.exercise_id) { choice = ex.exercise_id; break; } if (ex.ignored) choice = '__ignore__'; }
+      }
+      groups.push({ key, names, repName: rep.period_name, nInst, avgMin, choice, mapped });
+    });
+    // Unmapped primero.
+    groups.sort((a,b) => (a.mapped===b.mapped) ? (b.nInst - a.nInst) : (a.mapped ? 1 : -1));
+
+    let createdCount = 0;
+
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML = `<div style="background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:14px;width:min(860px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+        <h3 style="margin:0;font-size:16px">Map drills — GPS periods</h3>
+        <button data-x="1" style="background:none;border:0;font-size:20px;line-height:1;color:var(--cm-fg-muted);cursor:pointer">&times;</button>
+      </div>
+      <div style="padding:10px 18px;border-bottom:1px solid var(--cm-border);font-size:12px;color:var(--cm-fg-muted)">
+        Each card groups Catapult period names that look like the same drill. Map each to an exercise, create one, or ignore it. Unmapped groups are shown first.
+      </div>
+      <div style="padding:10px 18px 0">
+        <input data-search type="text" placeholder="Search drills…" style="width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
+      </div>
+      <div data-list style="overflow:auto;padding:6px 18px"></div>
+      <div style="padding:12px 18px;border-top:1px solid var(--cm-border);display:flex;justify-content:space-between;align-items:center">
+        <span data-msg style="font-size:12px;color:var(--cm-fg-muted)"></span>
+        <div style="display:flex;gap:8px">
+          <button class="cm-btn is-ghost is-sm" data-x="1">Cancel</button>
+          <button class="cm-btn is-primary is-sm" data-save="1">Save mappings</button>
+        </div>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const listEl = ov.querySelector('[data-list]');
+    const modalMsg = ov.querySelector('[data-msg]');
+
+    function exOptions(sel){
+      return `<option value="">— Unmapped —</option>
+        <option value="__ignore__"${sel==='__ignore__'?' selected':''}>Ignore</option>
+        <optgroup label="Exercises">${exercises.map(e => `<option value="${e.id}"${sel===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</optgroup>`;
+    }
+
+    function paint(){
+      if (!groups.length) {
+        listEl.innerHTML = `<div style="padding:36px;text-align:center;color:var(--cm-fg-muted)">No GPS period data yet. Sync from Catapult first.</div>`;
+        return;
+      }
+      listEl.innerHTML = groups.map((g,i) => {
+        const variants = g.names.length > 1
+          ? `<div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${g.names.length} variants · ${g.names.map(n=>esc(n.period_name)).join(' · ')}</div>`
+          : '';
+        return `<div data-search-row="${esc((g.key+' '+g.names.map(n=>n.period_name).join(' ')).toLowerCase())}" style="padding:10px 0;border-bottom:1px solid var(--cm-border)${g.mapped?'':';background:var(--cm-warning-bg,rgba(245,158,11,.06))'}">
+          <div style="display:grid;grid-template-columns:1.5fr 1.5fr auto;gap:10px;align-items:center">
+            <div>
+              <div style="font:600 12.5px var(--cm-font-sans);color:var(--cm-fg)">${esc(g.repName)}${g.mapped?'':' · <span style="color:var(--cm-warning,#b45309)">unmapped</span>'}</div>
+              <div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted)">${g.nInst} instance${g.nInst!==1?'s':''} · ~${g.avgMin.toFixed(1)} min avg</div>
+            </div>
+            <select data-choice="${i}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${exOptions(g.choice)}</select>
+            <button class="cm-btn is-outline is-sm" data-create="${i}" title="Create an exercise named &quot;${esc(g.repName)}&quot; and map to it">Create exercise</button>
+          </div>${variants}
+        </div>`;
+      }).join('');
+      listEl.querySelectorAll('[data-choice]').forEach(s => s.addEventListener('change', () => { groups[+s.dataset.choice].choice = s.value; }));
+      listEl.querySelectorAll('[data-create]').forEach(b => b.addEventListener('click', () => createForGroup(+b.dataset.create)));
+      applyFilter();
+    }
+
+    function applyFilter(){
+      const q = (ov.querySelector('[data-search]').value || '').trim().toLowerCase();
+      listEl.querySelectorAll('[data-search-row]').forEach(el => {
+        el.style.display = (!q || el.dataset.searchRow.includes(q)) ? '' : 'none';
+      });
+    }
+    ov.querySelector('[data-search]').addEventListener('input', applyFilter);
+
+    async function createForGroup(i){
+      const g = groups[i];
+      modalMsg.style.color = 'var(--cm-fg-muted)'; modalMsg.textContent = 'Creating exercise…';
+      const { data, error } = await window.sb.from('exercises')
+        .insert({ club_id: clubId, name: g.repName }).select('id,name').single();
+      if (error) { modalMsg.style.color = 'var(--cm-danger)'; modalMsg.textContent = 'Error: ' + error.message; return; }
+      exercises.push({ id: data.id, name: data.name });
+      exercises.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+      createdCount++;
+      g.choice = data.id;
+      modalMsg.textContent = `Created "${data.name}".`;
+      paint();
+    }
+
+    async function save(){
+      const ups = [];
+      let mappedN = 0, ignoredN = 0;
+      groups.forEach(g => {
+        if (g.choice === '') return;                       // sin elección → queda unmapped (no se pierde)
+        const ignored = g.choice === '__ignore__';
+        g.names.forEach(n => {
+          ups.push({ club_id: clubId, period_name: n.period_name, exercise_id: ignored ? null : g.choice, ignored });
+          if (ignored) ignoredN++; else mappedN++;
+        });
+      });
+      const saveBtn = ov.querySelector('[data-save]');
+      saveBtn.disabled = true; modalMsg.style.color = 'var(--cm-fg-muted)'; modalMsg.textContent = 'Saving…';
+      if (ups.length) {
+        const { error } = await window.sb.from('gps_drill_map').upsert(ups, { onConflict: 'club_id,period_name' });
+        if (error) { modalMsg.style.color = 'var(--cm-danger)'; modalMsg.textContent = 'Error: ' + error.message; saveBtn.disabled = false; return; }
+      }
+      modalMsg.style.color = 'var(--cm-success,#16a34a)';
+      modalMsg.textContent = `${mappedN} mapped · ${createdCount} created · ${ignoredN} ignored.`;
+      saveBtn.textContent = 'Done'; saveBtn.disabled = false;
+      saveBtn.onclick = () => ov.remove();
+    }
+
+    ov.querySelectorAll('[data-x]').forEach(b => b.addEventListener('click', () => ov.remove()));
+    ov.querySelector('[data-save]').addEventListener('click', save);
+    paint();
+  }
+})();
+</script>
+
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
