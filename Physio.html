@@ -759,7 +759,7 @@ let _editingTreatmentId = null;
   let _phPlQ = window.sb
     .from('players')
     .select('id,first_name,last_name,number,position,status')
-    .eq('club_id', _clubId);
+    .eq('club_id', _clubId).is('archived_at', null);
   if (_phTeamId) _phPlQ = _phPlQ.eq('team_id', _phTeamId);
   const { data: players, error: playersErr } = await _phPlQ.order('last_name');
   console.log('players result:', players, playersErr);

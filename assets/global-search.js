@@ -96,6 +96,7 @@
       window.sb.from('players')
         .select('id,first_name,last_name,number,position')
         .eq('club_id', clubId)
+        .is('archived_at', null)
         .or(`first_name.ilike.${like},last_name.ilike.${like}`)
         .limit(5),
       window.sb.from('training_sessions')

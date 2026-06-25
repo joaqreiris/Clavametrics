@@ -1408,7 +1408,7 @@
       _teamId = (saved && teams.some(function(t){ return t.id===saved; })) ? saved : teams[0].id;
       sel.innerHTML = teams.map(function(t){ return '<option value="'+t.id+'"'+(t.id===_teamId?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
       // resolve players for the active team (evaluations are scoped via player, not team_id)
-      var pr = await window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId).eq('team_id', _teamId);
+      var pr = await window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId).eq('team_id', _teamId).is('archived_at', null);
       _ftPlayers = pr.data || [];
       _teamPlayerIds = _ftPlayers.map(function(r){ return r.id; });
     } catch(e){ console.warn('[ev2] team scope failed', e); }
@@ -4845,11 +4845,11 @@
   async function loadForceRoster() {
     if (!_clubId) return [];
     // external_force_id may not exist yet (migration 051) — fall back to name-only roster.
-    let q = window.sb.from('players').select('id, first_name, last_name, external_force_id').eq('club_id', _clubId);
+    let q = window.sb.from('players').select('id, first_name, last_name, external_force_id').eq('club_id', _clubId).is('archived_at', null);
     if (_teamId) q = q.eq('team_id', _teamId);
     let res = await q;
     if (res.error) {
-      let q2 = window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId);
+      let q2 = window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId).is('archived_at', null);
       if (_teamId) q2 = q2.eq('team_id', _teamId);
       res = await q2;
     }

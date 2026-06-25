@@ -494,7 +494,8 @@
   let _nuPlQ = window.sb.from('players')
     .select('id,first_name,last_name,number,position,weight,height,date_of_birth')
     .eq('club_id', clubId)
-    .neq('status', 'inactive');
+    .neq('status', 'inactive')
+    .is('archived_at', null);
   if (_nuTeamId) _nuPlQ = _nuPlQ.eq('team_id', _nuTeamId);
   const { data: players } = await _nuPlQ.order('last_name');
 

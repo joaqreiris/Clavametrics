@@ -1474,7 +1474,7 @@ async function dpExportPDF() {
   const yesterday  = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   const [playersRes, injuriesRes, mcRes, adaptRes] = await Promise.all([
-    window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).eq('team_id', _dpTeamId).neq('status','inactive').order('number'),
+    window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).eq('team_id', _dpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
     window.sb.from('injuries').select('player_id,body_area,injury_type').eq('club_id', clubId).eq('status','active'),
     window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,publish_players,publish_medical,published_at').eq('club_id', clubId).eq('team_id', _dpTeamId).order('start_date'),
     window.sb.from('treatments')

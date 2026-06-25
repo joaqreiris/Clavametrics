@@ -319,6 +319,7 @@
       .select('id,first_name,last_name,number,position,status,team_id')
       .eq('club_id', clubId)
       .neq('status', 'inactive')
+      .is('archived_at', null)
       .order('number');
     if (teamId) q = q.eq('team_id', teamId);
     const { data } = await q;
@@ -335,6 +336,7 @@
     let q = window.sb.from('players').select(sel);
     if (teamId) q = q.eq('player_teams.team_id', teamId);
     else q = q.eq('club_id', _clubId);   // sin team → todo el club (club del contexto)
+    q = q.is('archived_at', null);       // ocultar players archivados (soft-delete)
     return q;
   };
 

@@ -479,7 +479,7 @@
     _rpvTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_rpvTeamId?'selected':''}>${t.name}</option>`).join('');
     if (_rpvTeamId) {
-      const { data } = await window.sb.from('players').select('id').eq('club_id', clubId).eq('team_id', _rpvTeamId);
+      const { data } = await window.sb.from('players').select('id').eq('club_id', clubId).eq('team_id', _rpvTeamId).is('archived_at', null);
       _rpvPlayerIds = (data||[]).map(r => r.id);
     }
   }

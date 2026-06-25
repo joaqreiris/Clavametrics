@@ -274,7 +274,7 @@
   async function fetchPlayers(){
     if (_players) return _players;
     try {
-      let q = window.sb.from('players').select('id, first_name, last_name, number').eq('club_id', _clubId);
+      let q = window.sb.from('players').select('id, first_name, last_name, number').eq('club_id', _clubId).is('archived_at', null);
       if (_teamId) q = q.eq('team_id', _teamId);
       const { data } = await q;
       _players = data || [];

@@ -1504,6 +1504,7 @@ async function reloadPlayers() {
   let q = window.sb.from('players')
     .select(_currentTeamId ? `${_cols},player_teams!inner(team_id)` : _cols)
     .eq('club_id', _currentClubId)
+    .is('archived_at', null)
     .order('number', { ascending: true, nullsFirst: false });
   if (_currentTeamId) q = q.eq('player_teams.team_id', _currentTeamId);
   const { data, error } = await q;

@@ -8,7 +8,7 @@
 (function(){
   const sb = () => window.sb;
   async function _latestByPlayerType({ clubId, teamId, types, physicalOnly }){
-    const { data: players } = await sb().from('players').select('id').eq('club_id',clubId).eq('team_id',teamId);
+    const { data: players } = await sb().from('players').select('id').eq('club_id',clubId).eq('team_id',teamId).is('archived_at', null);
     const ids = (players||[]).map(p=>p.id);
     if (!ids.length) return {};
     let q = sb().from('evaluations').select('player_id, evaluation_type, value, test_date, unit')

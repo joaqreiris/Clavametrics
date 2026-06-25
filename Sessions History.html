@@ -490,7 +490,7 @@
     shClubId = clubId;
     const [mcRes, plRes] = await Promise.all([
       window.sb.from('microcycles').select('id,start_date,end_date,match_date').eq('club_id', clubId).order('start_date'),
-      window.sb.from('players').select('id', { count:'exact', head:true }).eq('club_id', clubId).neq('status','inactive')
+      window.sb.from('players').select('id', { count:'exact', head:true }).eq('club_id', clubId).neq('status','inactive').is('archived_at', null)
     ]);
     microcycles = mcRes.data || [];
     totalActivePlayers = plRes.count || 0;

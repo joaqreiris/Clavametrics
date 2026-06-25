@@ -590,7 +590,8 @@ async function loadPlayers(clubId) {
   let _rpePlQ = window.sb.from('players')
     .select('id, first_name, last_name, position')
     .eq('club_id', clubId)
-    .eq('status', 'available');
+    .eq('status', 'available')
+    .is('archived_at', null);
   if (activeTeam) _rpePlQ = _rpePlQ.eq('team_id', activeTeam);
   const { data } = await _rpePlQ.order('last_name');
   players = data || [];

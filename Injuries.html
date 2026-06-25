@@ -1526,7 +1526,7 @@ async function savePhaseStatus(status) {
   // Load players
   let _injPlQ = window.sb.from('players')
     .select('id,first_name,last_name,position,number')
-    .eq('club_id', _clubId).neq('status','inactive');
+    .eq('club_id', _clubId).neq('status','inactive').is('archived_at', null);
   if (_injTeamId) _injPlQ = _injPlQ.eq('team_id', _injTeamId);
   const { data: pData } = await _injPlQ.order('last_name');
   _players = pData || [];

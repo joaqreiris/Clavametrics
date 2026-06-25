@@ -2950,7 +2950,7 @@ window.refreshDashboard = async function (opts = {}) {
   // Count consistente con el roster por membresía (junction) cuando hay categoría activa.
   let _pcQ = window.sb.from('players')
     .select(window._gpTeamId ? 'id, player_teams!inner(team_id)' : 'id', { count: 'exact', head: true })
-    .neq('status', 'inactive');
+    .neq('status', 'inactive').is('archived_at', null);
   if (window._gpTeamId) _pcQ = _pcQ.eq('player_teams.team_id', window._gpTeamId);
   else _pcQ = _pcQ.eq('club_id', clubId);
   const { count: playerCount } = await _pcQ;

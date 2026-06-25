@@ -1476,7 +1476,7 @@ function renderTasks(tasks, view = 'my') {
 
   const [squadRes, injuriesRes, wellnessRes, tasksRes, availRes, playersStatusRes, rpeRes, gpsActRes, mcRes, todaySessionRes] = await Promise.all([
     window.sb.from('players').select('id', { count: 'exact', head: true })
-      .eq('club_id', clubId).match(_teamEq),
+      .eq('club_id', clubId).match(_teamEq).is('archived_at', null),
     // expected_return needed for injury_returns_week KPI; include 'recovery' (schema) + 'returning' (legacy)
     _pidFilter(window.sb.from('injuries').select('status, start_date, expected_return')
       .eq('club_id', clubId).in('status', ['active', 'returning', 'recovery'])),
@@ -1495,7 +1495,7 @@ function renderTasks(tasks, view = 'my') {
     (_hubPlayerIds ? window.sb.from('availability').select('status').eq('club_id', clubId).eq('date', today).in('player_id', _hubPlayerIds.map(String))
                    : window.sb.from('availability').select('status').eq('club_id', clubId).eq('date', today)),
     window.sb.from('players').select('status')
-      .eq('club_id', clubId).match(_teamEq),
+      .eq('club_id', clubId).match(_teamEq).is('archived_at', null),
     window.sb.from('training_sessions')
       .select('session_date, rpe(player_id, load)')
       .eq('club_id', clubId).match(_teamEq).eq('is_historical', false)

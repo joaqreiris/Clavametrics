@@ -4980,7 +4980,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Counts
   const [playersRes, injRes, medRes, boardRes] = await Promise.all([
-    window.sb.from('players').select('id', { count: 'exact', head: true }).eq('club_id', _clubId).eq('team_id', _activeTeamId),
+    window.sb.from('players').select('id', { count: 'exact', head: true }).eq('club_id', _clubId).eq('team_id', _activeTeamId).is('archived_at', null),
     window.sb.from('injuries').select('id', { count: 'exact', head: true }).eq('club_id', _clubId),
     window.sb.from('profiles').select('id', { count: 'exact', head: true }).eq('club_id', _clubId).eq('role', 'medical'),
     window.sb.from('profiles').select('id', { count: 'exact', head: true }).eq('club_id', _clubId).eq('role', 'board'),
