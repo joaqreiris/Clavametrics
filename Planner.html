@@ -839,8 +839,8 @@
 
           <div class="pl-form-row cols-2" style="margin-bottom:10px">
             <div class="pl-form-field">
-              <label class="pl-form-label">Duration (min)</label>
-              <input type="number" class="pl-form-input" id="plExDuration" placeholder="—" min="1" max="180">
+              <label class="pl-form-label">Duration (min) · work / GPS load</label>
+              <input type="number" class="pl-form-input" id="plExDuration" placeholder="auto" min="1" max="180">
             </div>
             <div class="pl-form-field">
               <label class="pl-form-label">Series</label>
@@ -850,12 +850,20 @@
 
           <div class="pl-form-row cols-2" style="margin-bottom:10px">
             <div class="pl-form-field">
-              <label class="pl-form-label">Work time</label>
+              <label class="pl-form-label">Work time (mm:ss)</label>
               <input type="text" class="pl-form-input" id="plExWorkTime" placeholder="3:00">
             </div>
             <div class="pl-form-field">
-              <label class="pl-form-label">Rest time</label>
+              <label class="pl-form-label">Rest time (mm:ss)</label>
               <input type="text" class="pl-form-input" id="plExRestTime" placeholder="1:30">
+            </div>
+          </div>
+
+          <div class="pl-form-row" style="margin-bottom:10px">
+            <div class="pl-form-field" style="background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px">
+              <div style="font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)">Time breakdown</div>
+              <div id="plTotalInfo" style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg);margin-top:4px">Total time incl. rest: —</div>
+              <div style="font:400 10.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">Duration (work) = GPS load · Total = session time incl. rest. 3:00 = 3 min 0 sec.</div>
             </div>
           </div>
 
@@ -2650,6 +2658,38 @@
   document.getElementById('plExName')?.addEventListener('input', updateSummaryCard);
   document.getElementById('plExMatchDay')?.addEventListener('input', updateSummaryCard);
 
+  // ── Auto-calc Duration from Series × Work time (work only = GPS load) ──────
+  // Same convention as Daily Planning (dpWorkMin): "mm:ss" or plain number
+  // (seconds if ≥20, else minutes). Manual edits to Duration win until reload.
+  let _plDurManual = false;
+  function plWorkMin(wt){
+    if (wt == null || wt === '') return 0;
+    const s = String(wt).trim();
+    if (s.includes(':')) { const [m, sec] = s.split(':'); return (Number(m)||0) + (Number(sec)||0)/60; }
+    const n = Number(s); if (!isFinite(n)) return 0;
+    return n >= 20 ? n/60 : n;
+  }
+  const plMinToClock = min => { const m = Math.floor(min), s = Math.round((min - m)*60); return `${m}:${String(s).padStart(2,'0')}`; };
+  function plRecalcDuration(){
+    const series = parseInt(document.getElementById('plExSeries')?.value) || 0;
+    const wMin = plWorkMin(document.getElementById('plExWorkTime')?.value);
+    const rMin = plWorkMin(document.getElementById('plExRestTime')?.value);
+    const durEl = document.getElementById('plExDuration');
+    const totEl = document.getElementById('plTotalInfo');
+    if (series && wMin) {
+      if (!_plDurManual && durEl) { durEl.value = Math.round(series * wMin); updateSpaceOrientation?.(); }
+      if (totEl) totEl.textContent = `Total time incl. rest: ${plMinToClock(series*(wMin+rMin))} (work ${plMinToClock(series*wMin)} · rest ${plMinToClock(series*rMin)})`;
+    } else if (totEl) {
+      totEl.textContent = 'Total time incl. rest: —';
+    }
+  }
+  // Recompute when series/work/rest change; manual Duration edit disables autocalc.
+  ['plExSeries','plExWorkTime','plExRestTime'].forEach(id =>
+    document.getElementById(id)?.addEventListener('input', plRecalcDuration));
+  document.getElementById('plExDuration')?.addEventListener('input', () => { _plDurManual = true; });
+  window.plRecalcDuration = plRecalcDuration;
+  window._plSetDurManual = v => { _plDurManual = v; };
+
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
@@ -2776,6 +2816,12 @@
     document.getElementById('plExSeries').value    = ex.series        || '';
     document.getElementById('plExWorkTime').value  = ex.work_time     || '';
     document.getElementById('plExRestTime').value  = ex.rest_time     || '';
+    // Duration autocalc: treat a stored duration that differs from series×work
+    // as a manual override (keep it); otherwise let it auto-calc. Refresh total.
+    { const _s = parseInt(ex.series) || 0, _w = plWorkMin(ex.work_time);
+      const _computed = (_s && _w) ? Math.round(_s * _w) : null;
+      _plDurManual = !!(ex.duration && _computed != null && Number(ex.duration) !== _computed);
+      plRecalcDuration(); }
     document.getElementById('plExMatchDay').value    = ex.match_day != null ? ex.match_day : '';
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
