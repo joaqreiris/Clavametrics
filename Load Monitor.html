@@ -782,11 +782,9 @@
 
   await lmInitTeamSwitch();
 
-  let _lmPlayersQ = window.sb.from('players')
-    .select('id,first_name,last_name,number,position,status')
-    .eq('club_id', clubId)
+  // Roster por membresía (junction): incluye players multi-categoría en su categoría secundaria.
+  const _lmPlayersQ = window.cmTeamPlayers(_lmTeamId, 'id,first_name,last_name,number,position,status')
     .in('status', ['available','injured','modified','unavailable']);
-  if (_lmTeamId) _lmPlayersQ = _lmPlayersQ.eq('team_id', _lmTeamId);
 
   const [playersRes, microRes, firstSessRes, wellRes] = await Promise.all([
     _lmPlayersQ.order('number'),

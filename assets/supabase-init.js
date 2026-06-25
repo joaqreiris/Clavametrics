@@ -325,6 +325,19 @@
     return data || [];
   };
 
+  // Roster de players por MEMBRESÍA (junction player_teams), no por players.team_id.
+  // Así un player multi-categoría aparece también en sus categorías secundarias.
+  // Devuelve un query builder de PostgREST (encadenable: .order, .in, .neq, etc.).
+  // Pasar teamId para restringir a una categoría; sin teamId → todo el club.
+  // El campo anidado player_teams en los resultados es inofensivo (se ignora).
+  window.cmTeamPlayers = function (teamId, selectFields) {
+    const sel = (selectFields || 'id') + ', player_teams!inner(team_id)';
+    let q = window.sb.from('players').select(sel);
+    if (teamId) q = q.eq('player_teams.team_id', teamId);
+    else q = q.eq('club_id', _clubId);   // sin team → todo el club (club del contexto)
+    return q;
+  };
+
   // Returns all teams for a club, ordered by name.
   window.getTeams = async function (clubId) {
     const { data } = await window.sb.from('teams')

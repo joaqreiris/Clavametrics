@@ -939,9 +939,8 @@
     todayIdx = MC_DATES.indexOf(todayStr);
 
     // Fetch all data
-    const { data: playersData, error: playersErr } = await window.sb
-      .from('players').select('id, first_name, last_name, position, number')
-      .eq('club_id', CLUB_ID).match(_avTeamId ? { team_id: _avTeamId } : {}).order('last_name');
+    const { data: playersData, error: playersErr } = await window
+      .cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number').order('last_name');
 
     console.log('[Availability] currentClubId en Availability:', CLUB_ID);
     console.log('[Availability] players:', playersData, '| error:', playersErr?.message || null);
@@ -1414,8 +1413,7 @@
     const from = MC_DATES[0], to = MC_DATES[MC_DATES.length - 1];
     if (!from || !to) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No range selected.</div>'; return; }
 
-    let pq = window.sb.from('players').select('id, first_name, last_name, position, number').eq('club_id', CLUB_ID);
-    if (_avTeamId) pq = pq.eq('team_id', _avTeamId);
+    const pq = window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number');
     const { data: players } = await pq.order('last_name');
     if (!players || !players.length) { host.innerHTML = '<div style="padding:40px;text-align:center;color:var(--cm-fg-muted)">No players in this team.</div>'; return; }
     const pids = players.map(p => p.id);

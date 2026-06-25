@@ -2896,10 +2896,9 @@ window._gpRosterCache = window._gpRosterCache || new Map();
 function _gpRoster(clubId, teamId) {
   const key = `${clubId}|${teamId || '_all'}`;
   if (window._gpRosterCache.has(key)) return window._gpRosterCache.get(key);
-  let q = window.sb.from('players')
-    .select('id,first_name,last_name,number,position')
-    .eq('club_id', clubId).neq('status', 'inactive');
-  if (teamId) q = q.eq('team_id', teamId);
+  // Roster por membresía (junction player_teams), no por players.team_id primario.
+  const q = window.cmTeamPlayers(teamId, 'id,first_name,last_name,number,position')
+    .neq('status', 'inactive');
   const p = q.order('last_name').then(res => {
     if (res.error) window._gpRosterCache.delete(key); // permití reintento si falló
     return res;
@@ -2948,10 +2947,12 @@ window.refreshDashboard = async function (opts = {}) {
   if (!window.gpState.includeHistorical) sessQry = sessQry.eq('is_historical', false);
   const { count: sessionCount } = await sessQry;
 
+  // Count consistente con el roster por membresía (junction) cuando hay categoría activa.
   let _pcQ = window.sb.from('players')
-    .select('id', { count: 'exact', head: true })
-    .eq('club_id', clubId).neq('status', 'inactive');
-  if (window._gpTeamId) _pcQ = _pcQ.eq('team_id', window._gpTeamId);
+    .select(window._gpTeamId ? 'id, player_teams!inner(team_id)' : 'id', { count: 'exact', head: true })
+    .neq('status', 'inactive');
+  if (window._gpTeamId) _pcQ = _pcQ.eq('player_teams.team_id', window._gpTeamId);
+  else _pcQ = _pcQ.eq('club_id', clubId);
   const { count: playerCount } = await _pcQ;
 
   _updateGpSub(playerCount, sessionCount);
@@ -3238,7 +3239,8 @@ async function _detectSmartDefault(clubId, userId) {
   window.gpsResolvePlayerIds = async function gpsResolvePlayerIds() {
     if (!window._gpTeamId) { window._gpPlayerIds = null; return; }
     try {
-      const { data } = await window.sb.from('players').select('id').eq('club_id', window._gpClubId || await window.getClubId()).eq('team_id', window._gpTeamId);
+      // Player IDs de la categoría activa por membresía (incluye secundarias).
+      const { data } = await window.cmTeamPlayers(window._gpTeamId, 'id');
       window._gpPlayerIds = (data||[]).map(r => r.id);
     } catch { window._gpPlayerIds = null; }
   }
