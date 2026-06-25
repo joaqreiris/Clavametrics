@@ -488,6 +488,7 @@ function apRenderSeasonsList(){
       <span class="ap-badge" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)">${(PLAN_MODELS[s.planning_model]||PLAN_MODELS.tactical).label}</span>
       <span class="ap-pill ${st}" style="margin-left:auto">${st}</span>
       <button class="ap-iconbtn is-edit" onclick="event.stopPropagation(); apEditSeason('${s.id}')" title="Edit"><i class="ti ti-pencil" style="font-size:14px"></i></button>
+      <button class="ap-iconbtn" onclick="event.stopPropagation(); apDeleteSeason('${s.id}')" title="Delete"><i class="ti ti-trash" style="font-size:14px"></i></button>
     </div>`;
   }).join('');
   if (_apEditingSeason){ apSyncDateBtn('apSeasonEd_start'); apSyncDateBtn('apSeasonEd_end'); }
@@ -523,6 +524,17 @@ async function apSaveSeasonEdit(id){
   await apLoadSeasons();
   if (id === _apSeasonId) await apSelectSeason(id);
   else apRenderSeasonsList();
+}
+
+async function apDeleteSeason(id){
+  const s = _apSeasons.find(x => x.id === id);
+  const label = s ? s.name : 'this season';
+  if (!confirm(`Delete "${label}"? This also deletes its phases, competitions, macrocycles and the season's calendar events. This can't be undone.`)) return;
+  const { error } = await window.sb.from('seasons').delete().eq('id', id);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  if (id === _apSeasonId){ _apSeasonId = null; _apSeasonStart = null; _apSeasonEnd = null; }
+  await apLoadSeasons();
+  if (!_apSeasonId && _apSeasons.length){ apSelectSeason(_apSeasons[0].id); }
 }
 
 async function apSelectSeason(id){
