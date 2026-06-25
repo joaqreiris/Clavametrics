@@ -2694,6 +2694,7 @@
       list.innerHTML = `<div style="color:var(--cm-fg-faint);font:var(--cm-body-sm);padding:8px 0">No exercises match.</div>`;
       return;
     }
+    document.getElementById('plExHover')?.classList.remove('is-on'); // clear stuck hover preview on re-render
     list.innerHTML = items.map((ex, i) => {
       const area  = (ex.players_count > 0 && ex.field_width > 0 && ex.field_height > 0)
         ? Math.round((ex.field_width * ex.field_height) / ex.players_count) : null;
@@ -2719,6 +2720,10 @@
 
     // Hover preview popover (preview only — never loads into the canvas)
     const hv = document.getElementById('plExHover');
+    if (hv && !list.dataset.hvBound) {
+      list.dataset.hvBound = '1';
+      list.addEventListener('mouseleave', () => hv.classList.remove('is-on'));
+    }
     list.querySelectorAll('.pl-ex').forEach(el => {
       el.addEventListener('mouseenter', () => {
         const ex = exercises.find(e => e.id === el.dataset.exId);
