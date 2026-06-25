@@ -61,7 +61,8 @@ const GPS_REPORT_COLS = new Set([
 const METADATA_KEYS = new Set([
   'athlete_id', 'athlete', 'id', 'name', 'athlete_name', 'first_name', 'last_name',
   'jersey', 'jersey_number', 'number', 'position', 'activity_id', 'activity',
-  'date', 'start_time', 'startTime', 'start', 'player_id', 'parameters',
+  'date', 'start_time', 'startTime', 'start', 'end_time', 'endTime', 'end',
+  'period_id', 'period_name', 'period', 'player_id', 'parameters',
 ]);
 
 // SLUG_MAP — AUTO-SEED ONLY. Catapult OpenField parameter slug → { col: canonical
@@ -338,8 +339,10 @@ Deno.serve(async (req: Request) => {
             headers: { ...authH, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }],
-              parameters: mappedSlugs,
-              group_by: ['period', 'athlete'],   // VERIFY group_by vocabulary per OpenField version
+              // Connect API: period rows carry start_time/end_time (epoch seconds,
+              // floats) — request them so we can compute duration_seconds.
+              parameters: [...mappedSlugs, 'start_time', 'end_time'],
+              group_by: ['period', 'athlete'],
             }),
           });
           if (!perRes.ok) {
@@ -352,21 +355,17 @@ Deno.serve(async (req: Request) => {
               const playerId = ext ? playerByExt.get(ext) : undefined;
               if (!playerId) { skippedUnmapped++; continue; }
 
-              // Period identity (field names vary across versions → defensive)
-              const period = (row.period ?? {}) as Record<string, unknown>;
-              const periodId   = String(row.period_id ?? period.id ?? period.name ?? row.period_name ?? row.period ?? '');
+              // Period identity (Connect API): period_id is a UUID; period_name
+              // may come back as a number or string → cast to text on save.
+              const periodId = String(row.period_id ?? '');
               if (!periodId) continue;   // can't form the unique key without it
-              const periodName = String(row.period_name ?? period.name ?? row.period ?? periodId);
+              const periodName = row.period_name == null ? null : String(row.period_name);
 
-              // Raw duration in SECONDS (denominator for per-minute, computed in 2c).
-              // Read 'duration' raw (independent of its mapping to time_played);
-              // fall back to start/end delta.
-              let durationSeconds = readParam(row, 'duration') ?? readParam(row, 'total_duration') ?? readParam(row, 'period_duration');
-              if (durationSeconds == null) {
-                const s = toMs(row.start_time ?? period.start_time ?? row.start);
-                const e = toMs(row.end_time   ?? period.end_time   ?? row.end);
-                if (!isNaN(s) && !isNaN(e) && e >= s) durationSeconds = (e - s) / 1000;
-              }
+              // duration_seconds: the Connect API has NO period duration field —
+              // compute it from end_time - start_time (epoch seconds, floats).
+              const startS = readParam(row, 'start_time');
+              const endS   = readParam(row, 'end_time');
+              const durationSeconds = (startS != null && endS != null && endS >= startS) ? (endS - startS) : null;
 
               const { core, extras } = normalizeMetrics(row);
               const extra_metrics: Record<string, number> = {};
