@@ -77,6 +77,8 @@ function _apply(s) {
   Object.entries(_DENSITY[s.density] || {}).forEach(([k,v]) => root.style.setProperty(k,v));
 }
 
+const NOTIF_DEFAULTS = { alertInjury: true, alertTask: true, alertSession: true, emailWeekly: true, emailInjury: true };
+
 /* --- Apply persisted (or default) settings immediately --- */
 function initSettings() {
   const persisted = loadSettings();
@@ -86,6 +88,7 @@ function initSettings() {
     defaults,
     persisted
   );
+  s.notif = { ...NOTIF_DEFAULTS, ...(s.notif || {}) };
   _apply(s);
   return s;
 }
@@ -165,11 +168,20 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
   const [resetConfirm, setResetConfirm] = React.useState(false);
 
   // Apply locally + persist localStorage + notify host for Supabase save
-  React.useEffect(() => { _apply(s); saveSettings(s); onSettingsChange && onSettingsChange(s); }, [s]);
+  const didMount = React.useRef(false);
+  React.useEffect(() => {
+    _apply(s); saveSettings(s);
+    if (!didMount.current) { didMount.current = true; return; }
+    onSettingsChange && onSettingsChange(s);
+  }, [s]);
   // Merge Supabase settings when received from host (e.g. after cross-device change)
   React.useEffect(() => {
     if (!supabaseSettings) return;
-    setS(prev => { const m = { ...prev, ...supabaseSettings }; _apply(m); saveSettings(m); return m; });
+    setS(prev => {
+      const { notif: sbNotif, ...sbRest } = supabaseSettings;
+      const m = { ...prev, ...sbRest, notif: { ...prev.notif, ...(sbNotif || {}) } };
+      _apply(m); saveSettings(m); return m;
+    });
   }, [supabaseSettings]);
   // ESC to close
   React.useEffect(() => {
