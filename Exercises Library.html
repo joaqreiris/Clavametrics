@@ -728,7 +728,8 @@
   async function renderExGpsProfile(exId) {
     const host = document.getElementById('prevGps');
     if (!host) return;
-    const header = `<div class="sl-gps-h">GPS profile <span>per minute</span><button type="button" class="sl-gps-gear" title="Choose metrics" data-gps-gear><i class="ti ti-adjustments-horizontal"></i></button></div>`;
+    const header = `<div class="sl-gps-h">GPS profile <span>per session + /min</span><button type="button" class="sl-gps-gear" title="Choose metrics" data-gps-gear><i class="ti ti-adjustments-horizontal"></i></button></div>`;
+    const sub = t => `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:10px 2px 6px">${t}</div>`;
     const wireGear = () => host.querySelector('[data-gps-gear]')?.addEventListener('click', e => {
       e.stopPropagation();
       window.cmOpenGpsMetricPicker(e.currentTarget, () => renderExGpsProfile(exId));
@@ -739,10 +740,11 @@
     if (selectedId !== exId) return;   // guard: another card was selected meanwhile
     const n = data ? Number(data.n_instances) : 0;
     if (!data || !n) { host.innerHTML = header + `<div class="sl-gps-empty">No GPS data yet</div>`; wireGear(); return; }
-    const cells = window.cmFormatGpsCells(data);
     const mins = data.total_minutes == null ? null : Number(data.total_minutes);
+    const grid = cells => `<div class="sl-preview-grid">${cells.map(c => `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('')}</div>`;
     host.innerHTML = header +
-      `<div class="sl-preview-grid">${cells.map(c => `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('')}</div>` +
+      sub('Avg total · per session') + grid(window.cmFormatGpsCells(data, 'avg')) +
+      sub('Per minute · intensity')  + grid(window.cmFormatGpsCells(data, 'permin')) +
       `<div class="sl-gps-ctx">Avg of ${n} instance${n !== 1 ? 's' : ''}${mins != null ? ` · ~${Math.round(mins)} min total` : ''}</div>`;
     wireGear();
   }

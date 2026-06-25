@@ -342,16 +342,19 @@
   // Las columnas vienen de v_exercise_gps_profile. `mult` lleva total_distance de
   // km/min → m/min (×1000); el resto ya está en su unidad. Preferencia compartida
   // entre pantallas (Exercises Library + Drill Designer) vía localStorage.
+  // Each metric carries two reads of the same drill: PER MINUTE (intensity, key)
+  // and AVG TOTAL per session (volume, avgKey). Same `mult` convention: total
+  // distance is stored in km → ×1000 to show metres in both reads.
   window.CM_GPS_METRICS = [
-    { key:'total_distance_per_min',           label:'Total dist',  unit:'m/min',  mult:1000, dec:0 },
-    { key:'high_speed_distance_per_min',      label:'HSR',         unit:'m/min',  mult:1,    dec:1 },
-    { key:'very_high_speed_distance_per_min', label:'VHSR',        unit:'m/min',  mult:1,    dec:1 },
-    { key:'sprint_distance_per_min',          label:'Sprint dist', unit:'m/min',  mult:1,    dec:1 },
-    { key:'hmld_per_min',                     label:'HMLD',        unit:'m/min',  mult:1,    dec:1 },
-    { key:'sprint_count_per_min',             label:'Sprints',     unit:'/min',   mult:1,    dec:2 },
-    { key:'accelerations_per_min',            label:'Accel',       unit:'/min',   mult:1,    dec:2 },
-    { key:'decelerations_per_min',            label:'Decel',       unit:'/min',   mult:1,    dec:2 },
-    { key:'player_load_per_min',              label:'Player load', unit:'AU/min', mult:1,    dec:1 },
+    { key:'total_distance_per_min',           label:'Total dist',  unit:'m/min',  mult:1000, dec:0,  avgKey:'total_distance_avg',           avgUnit:'m',  avgMult:1000, avgDec:0 },
+    { key:'high_speed_distance_per_min',      label:'HSR',         unit:'m/min',  mult:1,    dec:1,  avgKey:'high_speed_distance_avg',      avgUnit:'m',  avgMult:1,    avgDec:0 },
+    { key:'very_high_speed_distance_per_min', label:'VHSR',        unit:'m/min',  mult:1,    dec:1,  avgKey:'very_high_speed_distance_avg', avgUnit:'m',  avgMult:1,    avgDec:0 },
+    { key:'sprint_distance_per_min',          label:'Sprint dist', unit:'m/min',  mult:1,    dec:1,  avgKey:'sprint_distance_avg',          avgUnit:'m',  avgMult:1,    avgDec:0 },
+    { key:'hmld_per_min',                     label:'HMLD',        unit:'m/min',  mult:1,    dec:1,  avgKey:'hmld_avg',                     avgUnit:'m',  avgMult:1,    avgDec:0 },
+    { key:'sprint_count_per_min',             label:'Sprints',     unit:'/min',   mult:1,    dec:2,  avgKey:'sprint_count_avg',             avgUnit:'',   avgMult:1,    avgDec:1 },
+    { key:'accelerations_per_min',            label:'Accel',       unit:'/min',   mult:1,    dec:2,  avgKey:'accelerations_avg',            avgUnit:'',   avgMult:1,    avgDec:1 },
+    { key:'decelerations_per_min',            label:'Decel',       unit:'/min',   mult:1,    dec:2,  avgKey:'decelerations_avg',            avgUnit:'',   avgMult:1,    avgDec:1 },
+    { key:'player_load_per_min',              label:'Player load', unit:'AU/min', mult:1,    dec:1,  avgKey:'player_load_avg',              avgUnit:'AU', avgMult:1,    avgDec:1 },
   ];
   const _GPS_DEFAULT = ['total_distance_per_min','high_speed_distance_per_min','very_high_speed_distance_per_min','sprint_distance_per_min','player_load_per_min'];
   const _GPS_LS_KEY  = 'cm_gps_profile_metrics';
@@ -369,13 +372,19 @@
   };
   window.cmSetGpsMetrics = function (keys) { try { localStorage.setItem(_GPS_LS_KEY, JSON.stringify(keys)); } catch (_) {} };
 
-  // Convierte una fila de v_exercise_gps_profile en celdas {l,v} de las métricas elegidas.
-  window.cmFormatGpsCells = function (row) {
+  // Convierte una fila de v_exercise_gps_profile en celdas {l,v} de las métricas
+  // elegidas. mode='avg' → AVG TOTAL (volume); cualquier otro → PER MINUTE.
+  window.cmFormatGpsCells = function (row, mode) {
     const num = x => (x == null || x === '') ? null : Number(x);
+    const avg = mode === 'avg';
     return window.cmGetGpsMetrics().map(k => {
       const m = window.CM_GPS_METRICS.find(x => x.key === k); if (!m) return null;
-      const raw = num(row[k]);
-      return { l: m.label, v: raw == null ? '—' : `${(raw * m.mult).toFixed(m.dec)} ${m.unit}` };
+      const col  = avg ? m.avgKey  : m.key;
+      const unit = avg ? m.avgUnit : m.unit;
+      const mult = avg ? m.avgMult : m.mult;
+      const dec  = avg ? m.avgDec  : m.dec;
+      const raw = num(row[col]);
+      return { l: m.label, v: raw == null ? '—' : `${(raw * mult).toFixed(dec)} ${unit}`.trim() };
     }).filter(Boolean);
   };
 
