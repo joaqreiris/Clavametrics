@@ -364,15 +364,7 @@
 
       <div class="cm-field">
         <label class="cm-label" for="club-country">Country</label>
-        <select id="club-country" class="cm-select">
-          <option value="Argentina">Argentina</option>
-          <option value="Brasil">Brasil</option>
-          <option value="Uruguay">Uruguay</option>
-          <option value="Chile">Chile</option>
-          <option value="Colombia">Colombia</option>
-          <option value="México">México</option>
-          <option value="España">España</option>
-        </select>
+        <select id="club-country" class="cm-select"></select>
       </div>
 
       <div class="cm-field">
@@ -511,6 +503,8 @@
       window.resetSupabaseCache();
     }
 
+    window.fillCountrySelect(document.getElementById('club-country'));
+
     // Load existing club data to pre-populate form
     clubId = await window.getClubId();
     if (clubId) {
@@ -520,7 +514,7 @@
         .eq('id', clubId)
         .single();
       if (club?.name)    document.getElementById('club-name').value = club.name;
-      if (club?.country) document.getElementById('club-country').value = club.country;
+      window.fillCountrySelect(document.getElementById('club-country'), club?.country || '');
     }
     const { data: { user: _meUser } } = await window.sb.auth.getUser();
     const _emailEl = document.getElementById('ob-account-email');
