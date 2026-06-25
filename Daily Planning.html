@@ -754,7 +754,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,series,work_time,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
@@ -785,13 +785,14 @@ function renderExerciseList(exercises) {
     if (ct) ct.textContent = '0';
     return;
   }
-  const totalMin = exercises.reduce((s, e) => s + (e.duration || 0), 0);
+  const totalMin = Math.round(exercises.reduce((s, e) => s + dpEffMin(e), 0));
   if (ct) ct.textContent = `${exercises.length} · ${totalMin} min`;
   grid.innerHTML = exercises.map(dpExerciseCardHTML).join('') + '<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
 }
 
 function dpExerciseCardHTML(e) {
-    const dur = e.duration ? `${e.duration}′` : '—';
+    const _eff = Math.round(dpEffMin(e));
+    const dur = _eff ? `${_eff}′` : '—';
     if (e.planner_exercise_id) {
       // Planner (field) exercise
       const orient  = e.calc_orientation || null;
@@ -827,6 +828,19 @@ function dpExerciseCardHTML(e) {
             ${m2 ? `<span class="it"><i class="ti ti-layout-navbar"></i>${m2} m²/p</span>` : ''}
             ${fieldStr ? `<span class="it"><i class="ti ti-rectangle"></i>${fieldStr}</span>` : ''}
           </div>
+          ${(() => {
+            if (e.phase !== 'main') return '';   // editor only for field tasks (live in _dpFieldExercises)
+            const EI = 'padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px';
+            const seriesMode = (e.series || e.work_time) && (e.duration == null || e.duration === '');
+            return `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">${
+              seriesMode
+                ? `<input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="Series" style="${EI};width:44px">
+                   <span>×</span>
+                   <input type="text" value="${e.work_time ?? ''}" placeholder="3:00" oninput="dpEditWork('${e.id}',this.value)" title="Work time (m:ss)" style="${EI};width:56px">
+                   <span data-eff="${e.id}">= ${Math.round(dpEffMin(e))}′</span>`
+                : `<input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="min" oninput="dpEditDur('${e.id}',this.value)" title="Duration (min)" style="${EI};width:54px"><span>min</span>`
+            }</div>`;
+          })()}
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">PLANNER</span>
             <span class="grow"></span>
@@ -855,6 +869,9 @@ function dpExerciseCardHTML(e) {
           <div class="dp-ex-name">${nm}</div>
           <div class="dp-ex-meta">${intensity ? `<span class="it"><i class="ti ti-flame"></i>${intensity}</span>` : ''}</div>
           ${desc ? `<div class="dp-ex-desc">${desc}</div>` : ''}
+          ${e.phase === 'main' ? `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">
+            <input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="min" oninput="dpEditDur('${e.id}',this.value)" title="Duration (min)" style="padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px;width:54px"><span>min</span>
+          </div>` : ''}
           <div class="dp-ex-foot">
             <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">${e.gym_exercises ? 'LIBRARY' : 'MANUAL'}</span>
             <span class="grow"></span>
@@ -867,9 +884,58 @@ function dpExerciseCardHTML(e) {
 
 let _dpSessionTotalMin = 0;
 
+// work_time is text, usually "M:SS" (UI placeholder "3:00"); may also be a plain
+// number (seconds if ≥20, else minutes). Returns minutes.
+function dpWorkMin(wt) {
+  if (wt == null || wt === '') return 0;
+  const s = String(wt).trim();
+  if (s.includes(':')) { const [m, sec] = s.split(':'); return (Number(m) || 0) + (Number(sec) || 0) / 60; }
+  const n = Number(s); if (!isFinite(n)) return 0;
+  return n >= 20 ? n / 60 : n;
+}
+// Single source of truth for a block's effective minutes — used by totals AND
+// the GPS projection so the whole planner counts identically.
+function dpEffMin(e) {
+  if (e && e.duration != null && e.duration !== '') return Number(e.duration) || 0;
+  if (e && e.series && e.work_time) return (Number(e.series) || 0) * dpWorkMin(e.work_time);
+  return 0;
+}
+
+// ── Per-task duration / series×work_time editing (BUG C) ──────────────────
+let _dpEditTimers = {};
+function _dpEditSave(seid, patch){
+  clearTimeout(_dpEditTimers[seid]);
+  _dpEditTimers[seid] = setTimeout(() => {
+    window.sb.from('session_exercises').update(patch).eq('id', seid).eq('club_id', _dpClubId);
+  }, 500);
+}
+function _dpEffLabel(seid){
+  const e = _dpFieldExercises.find(x => x.id === seid);
+  const el = document.querySelector(`[data-eff="${seid}"]`);
+  if (e && el) el.textContent = '= ' + Math.round(dpEffMin(e)) + '′';
+}
+function dpEditDur(seid, val){
+  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  e.duration = val === '' ? null : (parseInt(val) || 0);
+  recalcTotals();                       // live totals + GPS projection
+  _dpEditSave(seid, { duration: e.duration });
+}
+function dpEditSeries(seid, val){
+  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  e.series = val === '' ? null : (parseInt(val) || null);
+  _dpEffLabel(seid); recalcTotals();
+  _dpEditSave(seid, { series: e.series });
+}
+function dpEditWork(seid, val){
+  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  e.work_time = val === '' ? null : val;
+  _dpEffLabel(seid); recalcTotals();
+  _dpEditSave(seid, { work_time: e.work_time });
+}
+
 function recalcTotals() {
   const actMin   = _dpActTotalMin;
-  const fieldMin = _dpFieldExercises.reduce((s, e) => s + (e.duration || 0), 0);
+  const fieldMin = Math.round(_dpFieldExercises.reduce((s, e) => s + dpEffMin(e), 0));
   const fieldCt  = _dpFieldExercises.length;
   const total    = actMin + fieldMin;
   _dpSessionTotalMin = total;
@@ -897,16 +963,19 @@ function dpProjMetricKeys(){
 }
 let _dpProjSaveTimer = null;
 function dpSaveTargets(){
-  if (!_dpCurrentSessionId) return;
   clearTimeout(_dpProjSaveTimer);
-  _dpProjSaveTimer = setTimeout(() => {
+  _dpProjSaveTimer = setTimeout(async () => {
+    // Ensure the session exists in DB first (same as adding the first task),
+    // otherwise targets have nowhere to persist.
+    if (!_dpCurrentSessionId) { try { await dpEnsureSession(); } catch(_){} }
+    if (!_dpCurrentSessionId) return;
     window.sb.from('training_sessions').update({ gps_targets: _dpGpsTargets }).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
   }, 500);
 }
 async function renderGpsProjection(){
   const card = document.getElementById('dpGpsProj'); if (!card) return;
   const blocks = (_dpFieldExercises||[]);
-  const withId = blocks.filter(e => e.exercise_id && (e.duration||0) > 0);
+  const withId = blocks.filter(e => e.exercise_id && dpEffMin(e) > 0);
   // Fetch any profiles we don't have cached yet.
   const need = [...new Set(withId.map(e => e.exercise_id).filter(id => !(id in _dpGpsProfiles)))];
   if (need.length) {
@@ -933,7 +1002,7 @@ async function renderGpsProjection(){
     const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); if (!m) return '';
     // Σ per_min × minutes, then to display unit (TD km→m ×1000); totals shown as integers.
     let proj = 0;
-    covered.forEach(e => { proj += num(_dpGpsProfiles[e.exercise_id][k]) * (e.duration||0); });
+    covered.forEach(e => { proj += num(_dpGpsProfiles[e.exercise_id][k]) * dpEffMin(e); });
     proj = Math.round(proj * m.mult);
     projVals[k] = proj;
     const unit = m.avgUnit || '';
@@ -1086,7 +1155,7 @@ async function dpRenderPrintSheet() {
 
     // 3) KPI strip
     const actMin = _dpActTotalMin || 0;
-    const fieldMin = (_dpFieldExercises||[]).reduce((s,e)=>s+(e.duration||0),0);
+    const fieldMin = Math.round((_dpFieldExercises||[]).reduce((s,e)=>s+dpEffMin(e),0));
     const total = actMin + fieldMin;
     const au = (parseInt(rpe)||0) * total || 0;
     const kpis = [['Activation', actMin?actMin+'′':'—'], ['Field', fieldMin?fieldMin+'′':'—'], ['Total', total?total+'′':'—'], ['Duration', total?total+'′':'—'], ['Planned AU', au?String(au):'—', true]];
@@ -1286,6 +1355,8 @@ async function addPlannerExercise(exerciseId) {
     name:                ex?.name        || null,
     phase,
     duration:            ex?.duration    || null,
+    series:              ex?.series      || null,
+    work_time:           ex?.work_time   || null,
     position:            pos,
     field_width:         ex?.field_width  || null,
     field_height:        ex?.field_height || null,
