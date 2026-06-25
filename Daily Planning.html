@@ -273,6 +273,16 @@
         <div class="t"><span class="l">Planned AU</span><span class="v" id="dpTotAu">—<sub>AU</sub></span><span class="delta" id="dpTotAuNote" style="color:var(--cm-fg-muted)"></span></div>
       </div>
 
+      <!-- ===== PROJECTED GPS LOAD (2d) ===== -->
+      <div class="dp-card" id="dpGpsProj" style="display:none">
+        <div class="dp-card-h" style="display:flex;align-items:center;justify-content:space-between">
+          <h3 style="margin:0">Projected GPS load</h3>
+          <button type="button" id="dpProjGear" title="Choose metrics" style="background:none;border:1px solid var(--cm-border);border-radius:7px;width:28px;height:28px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-adjustments-horizontal"></i></button>
+        </div>
+        <div id="dpProjBody" style="padding:6px 2px"></div>
+        <div id="dpProjNote" style="font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted);padding:2px 2px 4px"></div>
+      </div>
+
       <!-- ===== PHYSIO ADAPTATIONS ===== -->
       <div class="dp-card dp-physio-card">
         <div class="dp-card-h">
@@ -409,6 +419,8 @@
 <script>
 let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpDayAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 let _dpTeamId = null, _dpTeams = [];
+let _dpGpsTargets = {};        // metric_key → session target (display units), persisted in training_sessions.gps_targets
+let _dpGpsProfiles = {};       // exercise_id → v_exercise_gps_profile row (null = fetched, no GPS profile)
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
 let _dpCalFields = new Set();
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
@@ -601,12 +613,13 @@ async function loadDay(dateStr) {
   const [avResult, adaptResult, sessResult] = await Promise.all([
     window.sb.from('availability').select('player_id,status,notes').eq('club_id', _dpClubId).eq('date', dateStr),
     window.sb.from('treatments').select('id,player_id,date,type,treatment_type,modalities,notes,adaptation_notes,adaptation_sent_at,notify_coaches,players(first_name,last_name,number,position)').eq('club_id', _dpClubId).eq('date', dateStr),
-    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
+    window.sb.from('training_sessions').select('id,title,session_time,end_time,duration,session_type,notes,published,estimated_rpe,orientation,focus,match_day_offset,microcycle_id,gps_targets').eq('club_id', _dpClubId).eq('team_id', _dpTeamId).eq('session_date', dateStr).eq('is_historical', false).order('created_at', { ascending: true }).limit(1)
   ]);
   if (sessResult.error) console.warn('Session query error:', sessResult.error.message);
   const sess = sessResult.data?.[0] || null;
   _dpCurrentSessionId = sess?.id || null;
   _dpPublished = sess?.published || false;
+  _dpGpsTargets = (sess && sess.gps_targets && typeof sess.gps_targets === 'object') ? sess.gps_targets : {};
   const titleInput = document.getElementById('dpSessionTitle');
   if (sess) {
     if (titleInput) titleInput.value = sess.title || '';
@@ -859,7 +872,114 @@ function recalcTotals() {
   const elSN = document.getElementById('dpTotSessionNote');
   if (elSN) elSN.textContent = (actMin && fieldMin) ? `${actMin}′ activation + ${fieldMin}′ field` : '';
   dpUpdateAu();
+  renderGpsProjection();   // live: re-project whenever blocks/durations change
 }
+
+// ── Projected GPS load (2d) ────────────────────────────────────────────────
+// projected(metric) = Σ over field blocks with a GPS profile:
+//   profile[ex].<metric>_per_min × block.duration(min)  × display mult.
+// Blocks without exercise_id or without a profile row are excluded (honest).
+const _DP_PROJ_DEFAULT = ['total_distance_per_min','high_speed_distance_per_min','sprint_distance_per_min','player_load_per_min','accelerations_per_min','decelerations_per_min'];
+const _DP_PROJ_LS = 'cm_dp_proj_metrics';
+function dpProjMetricKeys(){
+  try { const v = JSON.parse(localStorage.getItem(_DP_PROJ_LS)); if (Array.isArray(v) && v.length) return (window.CM_GPS_METRICS||[]).map(m=>m.key).filter(k=>v.includes(k)); } catch(_){}
+  return _DP_PROJ_DEFAULT.slice();
+}
+let _dpProjSaveTimer = null;
+function dpSaveTargets(){
+  if (!_dpCurrentSessionId) return;
+  clearTimeout(_dpProjSaveTimer);
+  _dpProjSaveTimer = setTimeout(() => {
+    window.sb.from('training_sessions').update({ gps_targets: _dpGpsTargets }).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
+  }, 500);
+}
+async function renderGpsProjection(){
+  const card = document.getElementById('dpGpsProj'); if (!card) return;
+  const blocks = (_dpFieldExercises||[]);
+  const withId = blocks.filter(e => e.exercise_id && (e.duration||0) > 0);
+  // Fetch any profiles we don't have cached yet.
+  const need = [...new Set(withId.map(e => e.exercise_id).filter(id => !(id in _dpGpsProfiles)))];
+  if (need.length) {
+    const { data } = await window.sb.from('v_exercise_gps_profile').select('*').in('exercise_id', need);
+    const found = {}; (data||[]).forEach(r => { found[r.exercise_id] = r; });
+    need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; });   // null = known to have no profile
+  }
+  const covered = withId.filter(e => _dpGpsProfiles[e.exercise_id]);
+  if (!blocks.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  const keys = dpProjMetricKeys();
+  const num = x => (x == null || x === '') ? 0 : Number(x);
+  const projVals = {};   // metric_key → projected value (display units)
+  // Bar zone: <90% under (neutral), ±10% on (green), >110% over (amber).
+  const barFor = (proj, tgt) => {
+    if (!tgt || tgt <= 0) return { w: 0, c: 'var(--cm-fg-faint)' };
+    const ratio = proj / tgt;
+    return { w: ratio > 1.1 ? 100 : Math.min(ratio, 1) * 100,
+             c: ratio < 0.9 ? 'var(--cm-fg-muted)' : ratio <= 1.1 ? 'var(--cm-success,#16a34a)' : 'var(--cm-warning,#d97706)' };
+  };
+  const body = document.getElementById('dpProjBody');
+  body.innerHTML = keys.map(k => {
+    const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); if (!m) return '';
+    // Σ per_min × minutes, then to display unit (TD km→m ×1000); totals shown as integers.
+    let proj = 0;
+    covered.forEach(e => { proj += num(_dpGpsProfiles[e.exercise_id][k]) * (e.duration||0); });
+    proj = Math.round(proj * m.mult);
+    projVals[k] = proj;
+    const unit = m.avgUnit || '';
+    const tgt = _dpGpsTargets[k] != null && _dpGpsTargets[k] !== '' ? Number(_dpGpsTargets[k]) : null;
+    const bar = barFor(proj, tgt);
+    return `<div style="display:grid;grid-template-columns:108px 1fr 92px;gap:10px;align-items:center;padding:6px 2px">
+      <div style="font:600 12px var(--cm-font-sans);color:var(--cm-fg)">${m.label}</div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font:500 11px var(--cm-font-mono);color:var(--cm-fg-muted);margin-bottom:3px">
+          <span style="color:var(--cm-fg-strong);font-weight:600">${proj.toLocaleString()} ${unit}</span>
+          <span data-tgtlabel="${k}">${tgt ? `target ${tgt.toLocaleString()} ${unit}` : 'no target'}</span>
+        </div>
+        <div style="height:6px;border-radius:999px;background:var(--cm-bg-soft);overflow:hidden"><div data-bar="${k}" style="height:100%;width:${bar.w}%;background:${bar.c};border-radius:999px"></div></div>
+      </div>
+      <input type="number" step="any" min="0" data-proj-target="${k}" value="${tgt != null ? tgt : ''}" placeholder="Target" style="padding:6px 8px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;width:100%">
+    </div>`;
+  }).join('');
+  // Update only the bar/label on target edits (no full re-render → input keeps focus).
+  body.querySelectorAll('[data-proj-target]').forEach(inp => inp.addEventListener('input', () => {
+    const k = inp.dataset.projTarget;
+    if (inp.value === '') delete _dpGpsTargets[k]; else _dpGpsTargets[k] = Number(inp.value);
+    dpSaveTargets();
+    const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); const unit = m?.avgUnit || '';
+    const tgt = inp.value === '' ? null : Number(inp.value);
+    const bar = barFor(projVals[k] || 0, tgt);
+    const barEl = body.querySelector(`[data-bar="${k}"]`); if (barEl) { barEl.style.width = bar.w + '%'; barEl.style.background = bar.c; }
+    const lblEl = body.querySelector(`[data-tgtlabel="${k}"]`); if (lblEl) lblEl.textContent = tgt ? `target ${tgt.toLocaleString()} ${unit}` : 'no target';
+  }));
+
+  const Y = withId.length, X = covered.length, Z = Y - X;
+  const note = document.getElementById('dpProjNote');
+  if (note) note.textContent = Y
+    ? `Projection covers ${X} of ${Y} drill${Y!==1?'s':''}${Z ? ` (${Z} have no GPS profile yet)` : ''}.`
+    : 'No mapped drills with a GPS profile yet.';
+}
+
+document.getElementById('dpProjGear')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const sel = new Set(dpProjMetricKeys());
+  document.getElementById('dpProjPickerPop')?.remove();
+  const pop = document.createElement('div');
+  pop.id = 'dpProjPickerPop';
+  pop.style.cssText = 'position:fixed;z-index:10000;background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px;min-width:200px;max-height:320px;overflow:auto';
+  pop.innerHTML = `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);padding:6px 9px 7px">Metrics to project</div>` +
+    (window.CM_GPS_METRICS||[]).map(m => `<label style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:6px;cursor:pointer;font:500 12px var(--cm-font-sans);color:var(--cm-fg)"><input type="checkbox" value="${m.key}" ${sel.has(m.key)?'checked':''} style="width:15px;height:15px;accent-color:var(--cm-accent)"><span>${m.label}</span></label>`).join('');
+  document.body.appendChild(pop);
+  const r = e.currentTarget.getBoundingClientRect();
+  pop.style.top = Math.min(r.bottom + 4, window.innerHeight - pop.offsetHeight - 8) + 'px';
+  pop.style.left = Math.max(8, r.right - pop.offsetWidth) + 'px';
+  pop.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+    if (cb.checked) sel.add(cb.value); else sel.delete(cb.value);
+    try { localStorage.setItem(_DP_PROJ_LS, JSON.stringify((window.CM_GPS_METRICS||[]).map(m=>m.key).filter(k=>sel.has(k)))); } catch(_){}
+    renderGpsProjection();
+  }));
+  setTimeout(() => { const close = ev => { if (!pop.contains(ev.target) && ev.target !== e.currentTarget) { pop.remove(); document.removeEventListener('mousedown', close); } }; document.addEventListener('mousedown', close); }, 0);
+});
 
 function dpUpdateAu() {
   const rpe = parseInt(document.getElementById('dpEstRpe')?.value) || 0;
