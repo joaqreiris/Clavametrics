@@ -338,6 +338,75 @@
     return q;
   };
 
+  // ── GPS per-minute profile: catálogo de métricas + preferencia del usuario ──
+  // Las columnas vienen de v_exercise_gps_profile. `mult` lleva total_distance de
+  // km/min → m/min (×1000); el resto ya está en su unidad. Preferencia compartida
+  // entre pantallas (Exercises Library + Drill Designer) vía localStorage.
+  window.CM_GPS_METRICS = [
+    { key:'total_distance_per_min',           label:'Total dist',  unit:'m/min',  mult:1000, dec:0 },
+    { key:'high_speed_distance_per_min',      label:'HSR',         unit:'m/min',  mult:1,    dec:1 },
+    { key:'very_high_speed_distance_per_min', label:'VHSR',        unit:'m/min',  mult:1,    dec:1 },
+    { key:'sprint_distance_per_min',          label:'Sprint dist', unit:'m/min',  mult:1,    dec:1 },
+    { key:'hmld_per_min',                     label:'HMLD',        unit:'m/min',  mult:1,    dec:1 },
+    { key:'sprint_count_per_min',             label:'Sprints',     unit:'/min',   mult:1,    dec:2 },
+    { key:'accelerations_per_min',            label:'Accel',       unit:'/min',   mult:1,    dec:2 },
+    { key:'decelerations_per_min',            label:'Decel',       unit:'/min',   mult:1,    dec:2 },
+    { key:'player_load_per_min',              label:'Player load', unit:'AU/min', mult:1,    dec:1 },
+  ];
+  const _GPS_DEFAULT = ['total_distance_per_min','high_speed_distance_per_min','very_high_speed_distance_per_min','sprint_distance_per_min','player_load_per_min'];
+  const _GPS_LS_KEY  = 'cm_gps_profile_metrics';
+
+  // Claves seleccionadas (orden del catálogo). Fallback al default si vacío/inválido.
+  window.cmGetGpsMetrics = function () {
+    try {
+      const v = JSON.parse(localStorage.getItem(_GPS_LS_KEY));
+      if (Array.isArray(v)) {
+        const valid = v.filter(k => window.CM_GPS_METRICS.some(m => m.key === k));
+        if (valid.length) return window.CM_GPS_METRICS.map(m => m.key).filter(k => valid.includes(k));
+      }
+    } catch (_) {}
+    return _GPS_DEFAULT.slice();
+  };
+  window.cmSetGpsMetrics = function (keys) { try { localStorage.setItem(_GPS_LS_KEY, JSON.stringify(keys)); } catch (_) {} };
+
+  // Convierte una fila de v_exercise_gps_profile en celdas {l,v} de las métricas elegidas.
+  window.cmFormatGpsCells = function (row) {
+    const num = x => (x == null || x === '') ? null : Number(x);
+    return window.cmGetGpsMetrics().map(k => {
+      const m = window.CM_GPS_METRICS.find(x => x.key === k); if (!m) return null;
+      const raw = num(row[k]);
+      return { l: m.label, v: raw == null ? '—' : `${(raw * m.mult).toFixed(m.dec)} ${m.unit}` };
+    }).filter(Boolean);
+  };
+
+  // Popover de selección de métricas (compartido). onSaved() corre tras cada cambio.
+  window.cmOpenGpsMetricPicker = function (anchorEl, onSaved) {
+    document.getElementById('cmGpsPickerPop')?.remove();
+    const sel = new Set(window.cmGetGpsMetrics());
+    const pop = document.createElement('div');
+    pop.id = 'cmGpsPickerPop';
+    pop.style.cssText = 'position:fixed;z-index:10000;background:var(--cm-bg);border:1px solid var(--cm-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px;min-width:210px;max-height:340px;overflow:auto';
+    pop.innerHTML = `<div style="font:600 9px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);padding:6px 9px 7px">Metrics to show</div>` +
+      window.CM_GPS_METRICS.map(m =>
+        `<label style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:6px;cursor:pointer;font:500 12px var(--cm-font-sans);color:var(--cm-fg)">
+          <input type="checkbox" value="${m.key}" ${sel.has(m.key) ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--cm-accent)">
+          <span>${m.label} <span style="color:var(--cm-fg-faint);font:500 10px var(--cm-font-mono)">${m.unit}</span></span>
+        </label>`).join('');
+    document.body.appendChild(pop);
+    const r = anchorEl.getBoundingClientRect();
+    pop.style.top  = Math.max(8, Math.min(r.bottom + 4, window.innerHeight - pop.offsetHeight - 8)) + 'px';
+    pop.style.left = Math.max(8, Math.min(r.right - pop.offsetWidth, window.innerWidth - pop.offsetWidth - 8)) + 'px';
+    pop.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+      if (cb.checked) sel.add(cb.value); else sel.delete(cb.value);
+      window.cmSetGpsMetrics(window.CM_GPS_METRICS.map(m => m.key).filter(k => sel.has(k)));
+      if (onSaved) onSaved();
+    }));
+    setTimeout(() => {
+      const close = e => { if (!pop.contains(e.target) && e.target !== anchorEl) { pop.remove(); document.removeEventListener('mousedown', close); } };
+      document.addEventListener('mousedown', close);
+    }, 0);
+  };
+
   // Returns all teams for a club, ordered by name.
   window.getTeams = async function (clubId) {
     const { data } = await window.sb.from('teams')

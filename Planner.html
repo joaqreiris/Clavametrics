@@ -90,6 +90,8 @@
   .pl-gps { margin-top:10px; border:1px solid var(--cm-border-soft); border-radius:8px; overflow:hidden; }
   .pl-gps-h { font:600 9.5px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-muted); padding:9px 12px 0; display:flex; align-items:center; gap:5px; }
   .pl-gps-h span { font-weight:500; color:var(--cm-fg-faint); }
+  .pl-gps-gear { margin-left:auto; border:0; background:none; color:var(--cm-fg-muted); cursor:pointer; padding:0 2px; font-size:14px; line-height:1; display:inline-flex; }
+  .pl-gps-gear:hover { color:var(--cm-fg); }
   .pl-gps-grid { display:grid; grid-template-columns:1fr 1fr; padding:8px 0 0; }
   .pl-gps-cell { padding:6px 12px; }
   .pl-gps-cell .l { font:500 9px/1 var(--cm-font-mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:3px; }
@@ -2817,30 +2819,27 @@
   async function renderPlGpsProfile(exId) {
     const host = document.getElementById('plGpsProfile');
     if (!host) return;
-    const header = `<div class="pl-gps-h">GPS profile <span>per minute</span></div>`;
+    const header = `<div class="pl-gps-h">GPS profile <span>per minute</span><button type="button" class="pl-gps-gear" title="Choose metrics" data-gps-gear><i class="ti ti-adjustments-horizontal"></i></button></div>`;
+    const wireGear = () => host.querySelector('[data-gps-gear]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      window.cmOpenGpsMetricPicker(e.currentTarget, () => renderPlGpsProfile(exId));
+    });
     host.style.display = '';
     host.innerHTML = header + `<div class="pl-gps-empty">Loading…</div>`;
     const { data } = await window.sb.from('v_exercise_gps_profile').select('*').eq('exercise_id', exId).maybeSingle();
     if (currentExerciseId !== exId) return;   // guard: another drill was opened meanwhile
-    const num = x => (x == null || x === '') ? null : Number(x);
-    const n = data ? num(data.n_instances) : 0;
+    const n = data ? Number(data.n_instances) : 0;
     if (!data || !n) {
       host.innerHTML = header + `<div class="pl-gps-empty">No GPS data yet · map drills in Exercises Library</div>`;
+      wireGear();
       return;
     }
-    const td = num(data.total_distance_per_min);
-    const fmt = (x, u, d = 1) => x == null ? '—' : `${x.toFixed(d)} ${u}`;
-    const cells = [
-      { l:'Total dist',  v: td == null ? '—' : `${Math.round(td * 1000)} m/min` },
-      { l:'HSR',         v: fmt(num(data.high_speed_distance_per_min), 'm/min') },
-      { l:'VHSR',        v: fmt(num(data.very_high_speed_distance_per_min), 'm/min') },
-      { l:'Sprint',      v: fmt(num(data.sprint_distance_per_min), 'm/min') },
-      { l:'Player load', v: fmt(num(data.player_load_per_min), 'AU/min') },
-    ];
-    const mins = num(data.total_minutes);
+    const cells = window.cmFormatGpsCells(data);
+    const mins = data.total_minutes == null ? null : Number(data.total_minutes);
     host.innerHTML = header +
       `<div class="pl-gps-grid">${cells.map(c => `<div class="pl-gps-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('')}</div>` +
       `<div class="pl-gps-ctx">Avg of ${n} instance${n !== 1 ? 's' : ''}${mins != null ? ` · ~${Math.round(mins)} min total` : ''}</div>`;
+    wireGear();
   }
 
   // ── New exercise ────────────────────────────────────────────────
