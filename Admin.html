@@ -16,6 +16,7 @@
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="assets/gps-matcher.js"></script>
+<script src="assets/cm-daterange.js"></script>
 <style>
   body.cm { background: var(--cm-bg); }
 
@@ -1857,8 +1858,6 @@
     host.innerHTML = PROVIDERS.map(p=>{
       const row=INTS[p.slug], status=row?.status||'not_connected';
       const isSet=(status==='configured'||status==='connected');  // hay credencial guardada
-      const _today=new Date().toISOString().slice(0,10);
-      const _ago30=new Date(Date.now()-30*86400*1000).toISOString().slice(0,10);
       const bc=status==='connected'?'s-connected':(status==='configured'?'s-pending':(status==='error'?'s-error':(status==='disabled'?'s-disabled':'s-pending')));
       const bt=status==='connected'?'Connected':(status==='configured'?'Configured':(status==='error'?'Error':(status==='disabled'?'Disabled':'Not connected')));
       return `<div class="gps-int-card">
@@ -1876,15 +1875,9 @@
                  <button class="gps-int-btn" data-act="verify" data-prov="${p.slug}">Verify connection</button>
                  ${status==='connected' ? `<button class="gps-int-btn ghost" data-act="map" data-prov="${p.slug}">Map athletes</button>
                  <button class="gps-int-btn ghost" data-act="mapmetrics" data-prov="${p.slug}">Map metrics</button>
-                 <div style="display:flex;gap:8px;align-items:flex-end;margin-top:6px;flex-wrap:wrap">
-                   <div style="display:flex;flex-direction:column;gap:3px">
-                     <label style="font-size:11.5px;color:var(--cm-fg-muted)">From</label>
-                     <input type="date" data-field="from" data-prov="${p.slug}" value="${_ago30}" max="${_today}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
-                   </div>
-                   <div style="display:flex;flex-direction:column;gap:3px">
-                     <label style="font-size:11.5px;color:var(--cm-fg-muted)">To</label>
-                     <input type="date" data-field="to" data-prov="${p.slug}" value="${_today}" max="${_today}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
-                   </div>
+                 <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+                   <span style="font-size:11.5px;color:var(--cm-fg-muted)">Range</span>
+                   <span data-daterange data-prov="${p.slug}"></span>
                    <button class="gps-int-btn" data-act="sync" data-prov="${p.slug}">Sync now</button>
                  </div>` : ''}
                </div>` })() : ''}
@@ -1904,7 +1897,15 @@
     host.querySelectorAll('[data-act="sync"]').forEach(b=>b.addEventListener('click',()=>syncNow(b.dataset.prov)));
     host.querySelectorAll('[data-act="mapmetrics"]').forEach(b=>b.addEventListener('click',()=>mapMetrics(b.dataset.prov)));
     host.querySelectorAll('[data-field="region"]').forEach(s=>s.addEventListener('change',()=>setRegion(s.dataset.prov,s.value)));
+    // Mount the reusable date-range picker per provider (default last 30 days).
+    _dr={};
+    host.querySelectorAll('[data-daterange]').forEach(el=>{
+      const _today=new Date(), _ago30=new Date(Date.now()-30*86400*1000);
+      const isoD=d=>d.toISOString().slice(0,10);
+      _dr[el.dataset.prov]=window.CMDateRange.mount(el,{ from:isoD(_ago30), to:isoD(_today), presets:true });
+    });
   }
+  let _dr={};
   async function setRegion(prov,region){
     const intId=INTS[prov]?.id; if(!intId||!region) return;
     msg(prov,'Saving region…');
@@ -2124,8 +2125,10 @@
   }
   async function syncNow(prov){
     const intId=INTS[prov]?.id; if(!intId) return;
-    const from=document.querySelector(`[data-field="from"][data-prov="${prov}"]`)?.value || new Date(Date.now()-30*86400*1000).toISOString().slice(0,10);
-    const to  =document.querySelector(`[data-field="to"][data-prov="${prov}"]`)?.value   || new Date().toISOString().slice(0,10);
+    const r=_dr[prov]?.getRange?.()||{};
+    // "All" (unbounded) → cover all-time; gps-sync filters activities by date.
+    const from=r.from || '2010-01-01';
+    const to  =r.to   || new Date().toISOString().slice(0,10);
     if(from>to){ msg(prov,'"From" must be before "To".',true); return; }
     // For large ranges (> ~6 months) split into monthly chunks to avoid rate limits.
     const SIX_MONTHS=183*86400*1000;
