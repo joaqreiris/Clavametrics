@@ -182,6 +182,13 @@
 
   #tweaks-root{position:fixed;bottom:16px;right:16px;z-index:1000}
 
+  /* ===== Collapsible dropdown — same pattern as Evaluations (.ev-cat) ===== */
+  .dp-coll-h{ display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+  .dp-coll-h .chev{ margin-left:auto; color:var(--cm-fg-muted); transition:transform .15s ease; }
+  .dp-coll-h .chev .ti{ font-size:18px; }
+  .dp-coll.is-collapsed .chev{ transform:rotate(-90deg); }
+  .dp-coll.is-collapsed .dp-coll-body{ display:none; }
+
   /* ===== PRINT — dedicated Daily Session Plan sheet (#dpPrintSheet) ===== */
   #dpPrintSheet{ display:none; }
   @media print {
@@ -273,14 +280,17 @@
         <div class="t"><span class="l">Planned AU</span><span class="v" id="dpTotAu">—<sub>AU</sub></span><span class="delta" id="dpTotAuNote" style="color:var(--cm-fg-muted)"></span></div>
       </div>
 
-      <!-- ===== PROJECTED GPS LOAD (2d) ===== -->
-      <div class="dp-card" id="dpGpsProj" style="display:none">
-        <div class="dp-card-h" style="display:flex;align-items:center;justify-content:space-between">
+      <!-- ===== PROJECTED GPS LOAD (2d) — collapsible (Evaluations dropdown pattern) ===== -->
+      <div class="dp-card dp-coll is-collapsed no-print" id="dpGpsProj" style="display:none">
+        <div class="dp-card-h dp-coll-h" id="dpProjHead">
           <h3 style="margin:0">Projected GPS load</h3>
-          <button type="button" id="dpProjGear" title="Choose metrics" style="background:none;border:1px solid var(--cm-border);border-radius:7px;width:28px;height:28px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-adjustments-horizontal"></i></button>
+          <button type="button" id="dpProjGear" title="Choose metrics" style="margin-left:auto;background:none;border:1px solid var(--cm-border);border-radius:7px;width:28px;height:28px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-adjustments-horizontal"></i></button>
+          <span class="chev" style="margin-left:6px"><i class="ti ti-chevron-down"></i></span>
         </div>
-        <div id="dpProjBody" style="padding:6px 2px"></div>
-        <div id="dpProjNote" style="font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted);padding:2px 2px 4px"></div>
+        <div class="dp-coll-body">
+          <div id="dpProjBody" style="padding:6px 2px"></div>
+          <div id="dpProjNote" style="font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted);padding:2px 2px 4px"></div>
+        </div>
       </div>
 
       <!-- ===== PHYSIO ADAPTATIONS ===== -->
@@ -960,6 +970,11 @@ async function renderGpsProjection(){
     : 'No mapped drills with a GPS profile yet.';
 }
 
+// Collapse/expand the panel (Evaluations dropdown pattern). Gear stops
+// propagation so opening the metric picker never toggles the panel.
+document.getElementById('dpProjHead')?.addEventListener('click', () => {
+  document.getElementById('dpGpsProj')?.classList.toggle('is-collapsed');
+});
 document.getElementById('dpProjGear')?.addEventListener('click', (e) => {
   e.stopPropagation();
   const sel = new Set(dpProjMetricKeys());
@@ -1082,6 +1097,13 @@ async function dpRenderPrintSheet() {
       </div>`).join('')}
     </div>`;
 
+    // GPS targets → ONE simple line only (the interactive panel is never printed).
+    const _tgtKeys = Object.keys(_dpGpsTargets||{}).filter(k => _dpGpsTargets[k] != null && _dpGpsTargets[k] !== '');
+    const targetLine = _tgtKeys.length ? `<div style="font:600 10.5px ${MONO};color:#5B6470;margin:-6px 0 14px">Target: ${
+      _tgtKeys.map(k => { const m=(window.CM_GPS_METRICS||[]).find(x=>x.key===k); const lab=m?m.label:k; const unit=m?(m.avgUnit||''):'';
+        return `${esc(lab)} ${Number(_dpGpsTargets[k]).toLocaleString()}${unit?esc(unit):''}`; }).join(' · ')
+    }</div>` : '';
+
     // section title helper
     const sectionTitle = txt => `<div style="display:flex;align-items:center;gap:10px;margin:0 0 9px"><span style="font:700 11px ${FONT};letter-spacing:.07em;text-transform:uppercase;color:#15181D">${esc(txt)}</span><span style="flex:1;height:1px;background:#E7E7E4"></span></div>`;
 
@@ -1174,7 +1196,7 @@ async function dpRenderPrintSheet() {
     </div>`;
 
     host.innerHTML = `<div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
+      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${targetLine}${squadBlock}${actBlock}${fieldBlock}${footer}
     </div>`;
   } catch (e) {
     console.warn('dpRenderPrintSheet failed', e);
