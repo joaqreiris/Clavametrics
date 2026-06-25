@@ -1500,13 +1500,15 @@ function updateTeamsBtnLabel() {
 async function reloadPlayers() {
   // Roster por categoría vía la junction player_teams (un player puede pertenecer a varios equipos).
   // Sin filtro de equipo ("All teams") seguimos listando todos los players del club tal cual.
-  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id';
+  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id,archived_at';
+  const _archivedView = _currentTeamId === '__archived__';
   let q = window.sb.from('players')
-    .select(_currentTeamId ? `${_cols},player_teams!inner(team_id)` : _cols)
+    .select((_currentTeamId && !_archivedView) ? `${_cols},player_teams!inner(team_id)` : _cols)
     .eq('club_id', _currentClubId)
-    .is('archived_at', null)
     .order('number', { ascending: true, nullsFirst: false });
-  if (_currentTeamId) q = q.eq('player_teams.team_id', _currentTeamId);
+  if (_archivedView) q = q.not('archived_at', 'is', null);
+  else q = q.is('archived_at', null);
+  if (_currentTeamId && !_archivedView) q = q.eq('player_teams.team_id', _currentTeamId);
   const { data, error } = await q;
   if (error) console.error('[Squad] players query error:', error);
 
@@ -1514,9 +1516,11 @@ async function reloadPlayers() {
   const total = _allPlayers.length;
   const headP  = document.getElementById('sqHeadP');
   const listCt = document.getElementById('sqListCt');
-  const teamLabel = _currentTeamId
-    ? (_teams.find(t => t.id === _currentTeamId)?.name || 'Team')
-    : 'All teams';
+  const teamLabel = _currentTeamId === '__archived__'
+    ? 'Archived'
+    : _currentTeamId
+      ? (_teams.find(t => t.id === _currentTeamId)?.name || 'Team')
+      : 'All teams';
   if (headP)  headP.textContent = `${total} players · ${teamLabel}`;
   if (listCt) listCt.textContent = total;
 
@@ -1581,6 +1585,8 @@ async function reloadPlayers() {
     _filterTeams.forEach(t => {
       teamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
     });
+    // Vista de archivados (players con archived_at): siempre al final del selector
+    teamSel?.insertAdjacentHTML('beforeend', `<option value="__archived__">Archived</option>`);
     // Modal: checkboxes multi-select con las categorías permitidas según rol
     renderTeamCheckboxes();
     teamSel?.addEventListener('change', async () => {
@@ -1689,7 +1695,15 @@ async function reloadPlayers() {
           if (memberships && _editingId === _pid) setSelectedTeamIds(memberships.map(m => m.team_id));
         });
     }
-    document.getElementById('sqModalDelete').style.display = player ? 'inline-flex' : 'none';
+    const _arBtn = document.getElementById('sqModalDelete');
+    _arBtn.style.display = player ? 'inline-flex' : 'none';
+    if (player && player.archived_at) {
+      _arBtn.className = 'cm-btn is-sm';
+      _arBtn.innerHTML = '<i class="ti ti-arrow-back-up" style="font-size:13px"></i>Restore';
+    } else {
+      _arBtn.className = 'cm-btn is-danger is-sm';
+      _arBtn.innerHTML = '<i class="ti ti-archive" style="font-size:13px"></i>Archive';
+    }
     document.getElementById('sqModalSaving').style.display = 'none';
     // Photo preview
     const photoInput = document.getElementById('sqF_photo');
@@ -1843,23 +1857,29 @@ async function reloadPlayers() {
     await reloadPlayers();
   }
 
-  async function deletePlayer() {
+  async function archivePlayer() {
     if (!_editingId) return;
-    if (!confirm('Delete this player permanently?')) return;
-    const { error } = await window.sb.from('players')
-      .delete()
-      .eq('id', _editingId);
+    if (!confirm("Archive this player? They'll be hidden from rosters, but their data is kept and you can restore them anytime.")) return;
+    const { error } = await window.sb.from('players').update({ archived_at: new Date().toISOString() }).eq('id', _editingId);
     if (error) { showToast('Error: ' + error.message); return; }
-    closeModal();
-    showToast('Player removed.');
-    await reloadPlayers();
+    closeModal(); showToast('Player archived.'); await reloadPlayers();
+  }
+  async function restorePlayer() {
+    if (!_editingId) return;
+    const { error } = await window.sb.from('players').update({ archived_at: null }).eq('id', _editingId);
+    if (error) { showToast('Error: ' + error.message); return; }
+    closeModal(); showToast('Player restored.'); await reloadPlayers();
+  }
+  function onArchiveRestoreClick() {
+    const p = _allPlayers.find(x => x.id === _editingId);
+    if (p && p.archived_at) restorePlayer(); else archivePlayer();
   }
 
   // Modal event wiring
   document.getElementById('sqModalClose').addEventListener('click', closeModal);
   document.getElementById('sqModalCancel').addEventListener('click', closeModal);
   document.getElementById('sqModalSave').addEventListener('click', saveModal);
-  document.getElementById('sqModalDelete').addEventListener('click', deletePlayer);
+  document.getElementById('sqModalDelete').addEventListener('click', onArchiveRestoreClick);
   document.getElementById('sqModalBackdrop').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeModal();
   });
