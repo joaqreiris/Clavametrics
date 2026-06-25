@@ -324,6 +324,30 @@
   }
   .sq-modal-field input:focus,
   .sq-modal-field select:focus { border-color:var(--cm-accent); }
+  /* Teams / Categories multi-select */
+  .sq-multi { position:relative; }
+  .sq-multi-btn {
+    width:100%; min-height:36px; padding:0 28px 0 10px; text-align:left;
+    border-radius:var(--cm-r-3); border:1px solid var(--cm-border); background:var(--cm-bg-soft);
+    color:var(--cm-fg); font:var(--cm-body-sm); cursor:pointer; outline:none;
+    display:flex; align-items:center; gap:5px; flex-wrap:wrap; padding-block:5px;
+  }
+  .sq-multi-btn:focus { border-color:var(--cm-accent); }
+  .sq-multi-btn::after { content:'⌄'; position:absolute; right:10px; top:50%; transform:translateY(-60%); color:var(--cm-fg-muted); pointer-events:none; }
+  .sq-multi.is-ro .sq-multi-btn { opacity:.6; cursor:default; }
+  .sq-multi-tag { display:inline-flex; font:600 11px/1 var(--cm-font-mono); padding:4px 6px; border-radius:6px; background:var(--cm-accent-soft); border:1px solid var(--cm-accent); color:var(--cm-fg-strong); }
+  .sq-multi-ph { color:var(--cm-fg-faint); }
+  .sq-multi-menu {
+    display:none; position:absolute; z-index:30; top:calc(100% + 4px); left:0; right:0;
+    max-height:220px; overflow-y:auto; padding:4px;
+    background:var(--cm-bg); border:1px solid var(--cm-border); border-radius:var(--cm-r-3);
+    box-shadow:0 8px 24px rgba(0,0,0,.25);
+  }
+  .sq-multi.is-open .sq-multi-menu { display:block; }
+  .sq-multi-opt { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:6px; cursor:pointer; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .sq-multi-opt:hover { background:var(--cm-bg-soft); }
+  .sq-multi-opt input { width:15px; height:15px; accent-color:var(--cm-accent); cursor:pointer; }
+  .sq-multi-empty { padding:8px; color:var(--cm-fg-faint); font:var(--cm-body-sm); }
   .sq-modal-foot {
     display:flex; align-items:center; gap:8px;
     padding:14px 20px 18px; border-top:1px solid var(--cm-border);
@@ -1051,10 +1075,11 @@
       </div>
       <div class="sq-modal-row">
         <div class="sq-modal-field">
-          <label for="sqF_team">Team / Category</label>
-          <select id="sqF_team">
-            <option value="">— Unassigned —</option>
-          </select>
+          <label for="sqF_teamsBtn">Teams / Categories</label>
+          <div class="sq-multi" id="sqF_teamsWrap">
+            <button type="button" class="sq-multi-btn" id="sqF_teamsBtn" aria-haspopup="listbox" aria-expanded="false"></button>
+            <div class="sq-multi-menu" id="sqF_teamsMenu" role="listbox" aria-multiselectable="true"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1278,6 +1303,8 @@ let _editingId = null;
 let _currentClubId = null;
 let _currentClubName = '';
 let _currentClubLogoUrl = '';
+let _fullAccess = false;   // admin/owner/super: única que puede editar membresías player↔team
+let _modalTeams = [];      // categorías que el rol puede asignar en el modal
 
 // ── Row actions kebab menu (shared popover; state + actions bound once) ──
 let _menuPid = null;
@@ -1422,12 +1449,63 @@ function renderTable() {
   }
 }
 
+// ── Teams / Categories multi-select (modal) ───────────────────────────────
+function renderTeamCheckboxes() {
+  const menu = document.getElementById('sqF_teamsMenu');
+  if (!menu) return;
+  if (!_modalTeams.length) {
+    menu.innerHTML = '<div class="sq-multi-empty">No categories available.</div>';
+    return;
+  }
+  menu.innerHTML = _modalTeams.map(t =>
+    `<label class="sq-multi-opt"><input type="checkbox" value="${t.id}" ${_fullAccess ? '' : 'disabled'}><span>${t.name}</span></label>`
+  ).join('');
+  menu.querySelectorAll('input[type=checkbox]').forEach(cb =>
+    cb.addEventListener('change', updateTeamsBtnLabel));
+}
+function getSelectedTeamIds() {
+  // En orden de _modalTeams (estable) → el primero es candidato a primario.
+  return Array.from(document.querySelectorAll('#sqF_teamsMenu input:checked')).map(cb => cb.value);
+}
+function setSelectedTeamIds(ids) {
+  const set = new Set(ids || []);
+  document.querySelectorAll('#sqF_teamsMenu input[type=checkbox]').forEach(cb => { cb.checked = set.has(cb.value); });
+  updateTeamsBtnLabel();
+}
+function updateTeamsBtnLabel() {
+  const btn = document.getElementById('sqF_teamsBtn');
+  if (!btn) return;
+  const ids = getSelectedTeamIds();
+  if (!ids.length) { btn.innerHTML = '<span class="sq-multi-ph">— Select teams —</span>'; return; }
+  btn.innerHTML = ids.map(id => {
+    const t = _modalTeams.find(x => x.id === id);
+    return `<span class="sq-multi-tag">${t ? t.name : '—'}</span>`;
+  }).join('');
+}
+(function wireTeamsMultiSelect() {
+  const wrap = document.getElementById('sqF_teamsWrap');
+  const btn  = document.getElementById('sqF_teamsBtn');
+  if (!wrap || !btn) return;
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!_fullAccess) return;            // read-only para no-admins
+    wrap.classList.toggle('is-open');
+    btn.setAttribute('aria-expanded', wrap.classList.contains('is-open'));
+  });
+  document.addEventListener('click', e => {
+    if (!wrap.contains(e.target)) { wrap.classList.remove('is-open'); btn.setAttribute('aria-expanded', 'false'); }
+  });
+})();
+
 async function reloadPlayers() {
+  // Roster por categoría vía la junction player_teams (un player puede pertenecer a varios equipos).
+  // Sin filtro de equipo ("All teams") seguimos listando todos los players del club tal cual.
+  const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id';
   let q = window.sb.from('players')
-    .select('id,first_name,last_name,number,position,positions,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id')
+    .select(_currentTeamId ? `${_cols},player_teams!inner(team_id)` : _cols)
     .eq('club_id', _currentClubId)
     .order('number', { ascending: true, nullsFirst: false });
-  if (_currentTeamId) q = q.eq('team_id', _currentTeamId);
+  if (_currentTeamId) q = q.eq('player_teams.team_id', _currentTeamId);
   const { data, error } = await q;
   if (error) console.error('[Squad] players query error:', error);
 
@@ -1482,23 +1560,19 @@ async function reloadPlayers() {
   if (clubId) {
     _teams = await window.getTeams(clubId);
     const teamSel = document.getElementById('sqTeamSelect');
-    const modalTeamSel = document.getElementById('sqF_team');
 
-    // ¿El usuario es admin/owner/super-admin? (ven todas las categorías + Unassigned)
+    // ¿El usuario es admin/owner/super-admin? (ven todas las categorías; única que edita membresías)
     const _bucket = (profile?.role || profile?.club_role || '').toLowerCase();
-    let _fullAccess = _bucket === 'admin' || _bucket === 'owner';
+    _fullAccess = _bucket === 'admin' || _bucket === 'owner';
     if (!_fullAccess && window.isSuperAdmin) { try { _fullAccess = await window.isSuperAdmin(); } catch {} }
 
     // Categorías permitidas para el MODAL (crear/editar jugador)
-    let _modalTeams = _teams;
+    _modalTeams = _teams;
     if (!_fullAccess) {
       let mine = [];
       try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
       const mineSet = new Set(mine);
       _modalTeams = _teams.filter(t => mineSet.has(t.id));
-      // Coach: quitar la opción "Unassigned" del modal (no puede crear sin categoría)
-      const un = modalTeamSel?.querySelector('option[value=""]');
-      if (un) un.remove();
     }
 
     // Filtro de arriba: mismas categorías permitidas que el modal (coach solo las suyas)
@@ -1506,10 +1580,8 @@ async function reloadPlayers() {
     _filterTeams.forEach(t => {
       teamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
     });
-    // Modal: solo las categorías permitidas según rol
-    _modalTeams.forEach(t => {
-      modalTeamSel?.insertAdjacentHTML('beforeend', `<option value="${t.id}">${t.name}</option>`);
-    });
+    // Modal: checkboxes multi-select con las categorías permitidas según rol
+    renderTeamCheckboxes();
     teamSel?.addEventListener('change', async () => {
       _currentTeamId = teamSel.value || null;
       if (_currentTeamId) sessionStorage.setItem('cal_active_team', _currentTeamId);
@@ -1580,7 +1652,7 @@ async function reloadPlayers() {
     setTimeout(() => t.classList.remove('is-show'), 2800);
   }
 
-  function openModal(player) {
+  async function openModal(player) {
     _editingId = player ? player.id : null;
     const backdrop = document.getElementById('sqModalBackdrop');
     document.getElementById('sqModalTitle').textContent = player ? 'Edit player' : 'Add player';
@@ -1603,7 +1675,19 @@ async function reloadPlayers() {
     document.getElementById('sqF_weight_kg').value   = player?.weight          || '';
     document.getElementById('sqF_dominant_foot').value = player?.dominant_foot || '';
     document.getElementById('sqF_status').value      = player?.status          || 'available';
-    document.getElementById('sqF_team').value         = player?.team_id || _currentTeamId || '';
+    // Teams / Categories multi-select: pre-seleccionar las membresías del player.
+    document.getElementById('sqF_teamsWrap')?.classList.toggle('is-ro', !_fullAccess);
+    // Pre-selección inmediata (sincrónica) para que el modal no parpadee vacío.
+    setSelectedTeamIds(player?.team_id ? [player.team_id] : (_editingId ? [] : (_currentTeamId ? [_currentTeamId] : [])));
+    // Carga real de todas las membresías desde la junction (puede ser >1 equipo).
+    // Fire-and-forget para no demorar la apertura del modal; scoped al player editado.
+    if (_editingId) {
+      const _pid = _editingId;
+      window.sb.from('player_teams').select('team_id').eq('player_id', _pid)
+        .then(({ data: memberships }) => {
+          if (memberships && _editingId === _pid) setSelectedTeamIds(memberships.map(m => m.team_id));
+        });
+    }
     document.getElementById('sqModalDelete').style.display = player ? 'inline-flex' : 'none';
     document.getElementById('sqModalSaving').style.display = 'none';
     // Photo preview
@@ -1624,6 +1708,43 @@ async function reloadPlayers() {
   function closeModal() {
     document.getElementById('sqModalBackdrop').classList.remove('is-open');
     _editingId = null;
+  }
+
+  // Sincroniza player_teams al set elegido: inserta nuevas, borra quitadas, fija el primario.
+  // Devuelve un error (o null). Scoped al club. Solo lo invoca un admin (RLS lo exige igual).
+  async function syncPlayerTeams(playerId, clubId, selectedIds, primaryId) {
+    const { data: existing, error: readErr } = await window.sb.from('player_teams')
+      .select('team_id').eq('player_id', playerId);
+    if (readErr) return readErr;
+    const have = new Set((existing || []).map(r => r.team_id));
+    const want = new Set(selectedIds);
+    const toAdd    = selectedIds.filter(id => !have.has(id));
+    const toRemove = [...have].filter(id => !want.has(id));
+
+    if (toRemove.length) {
+      const { error } = await window.sb.from('player_teams')
+        .delete().eq('player_id', playerId).in('team_id', toRemove);
+      if (error) return error;
+    }
+    if (toAdd.length) {
+      const rows = toAdd.map(team_id => ({ club_id: clubId, player_id: playerId, team_id, is_primary: team_id === primaryId }));
+      const { error } = await window.sb.from('player_teams').insert(rows);
+      if (error) return error;
+    }
+    // Fijar is_primary: true solo en el primario, false en el resto.
+    if (primaryId) {
+      let { error } = await window.sb.from('player_teams')
+        .update({ is_primary: false }).eq('player_id', playerId).neq('team_id', primaryId);
+      if (error) return error;
+      ({ error } = await window.sb.from('player_teams')
+        .update({ is_primary: true }).eq('player_id', playerId).eq('team_id', primaryId));
+      if (error) return error;
+    } else {
+      const { error } = await window.sb.from('player_teams')
+        .update({ is_primary: false }).eq('player_id', playerId);
+      if (error) return error;
+    }
+    return null;
   }
 
   async function saveModal() {
@@ -1647,8 +1768,17 @@ async function reloadPlayers() {
       height:        parseFloat(document.getElementById('sqF_height_cm').value) || null,
       weight:        parseFloat(document.getElementById('sqF_weight_kg').value) || null,
       dominant_foot: document.getElementById('sqF_dominant_foot').value || null,
-      team_id:       document.getElementById('sqF_team').value || null,
     };
+
+    // Teams / Categories: el set elegido en el multi-select.
+    const selectedTeamIds = getSelectedTeamIds();
+    // PRIMARIO = el actual si sigue elegido; si no, el primero seleccionado (orden de la lista).
+    const curPrimary = _editingId ? (_allPlayers.find(p => p.id === _editingId)?.team_id || null) : null;
+    const primaryTeamId = (curPrimary && selectedTeamIds.includes(curPrimary))
+      ? curPrimary
+      : (selectedTeamIds[0] || null);
+    // players.team_id queda como el equipo PRIMARIO (denormalizado, no rompe el resto de la app).
+    payload.team_id = primaryTeamId;
 
     if (!payload.first_name) {
       showToast('First name is required.');
@@ -1676,11 +1806,13 @@ async function reloadPlayers() {
       return urlData?.publicUrl || null;
     }
 
-    let error;
+    let error, savedPlayerId, savedClubId;
     if (_editingId) {
       const photoUrl = await uploadPhoto(_editingId, _currentClubId);
       if (photoUrl) payload.photo_url = photoUrl;
       ({ error } = await window.sb.from('players').update(payload).eq('id', _editingId));
+      savedPlayerId = _editingId;
+      savedClubId = _currentClubId;
     } else {
       const clubId = _currentClubId || await window.getClubId();
       if (!clubId) { showToast('Error: no club found for your account.'); saving.style.display = 'none'; saveBtn.disabled = false; return; }
@@ -1688,9 +1820,17 @@ async function reloadPlayers() {
       const { data: inserted, error: insertErr } = await window.sb.from('players').insert(payload).select('id');
       error = insertErr;
       if (!insertErr && inserted?.length) {
+        savedPlayerId = inserted[0].id;
+        savedClubId = clubId;
         const photoUrl = await uploadPhoto(inserted[0].id, clubId);
         if (photoUrl) await window.sb.from('players').update({ photo_url: photoUrl }).eq('id', inserted[0].id);
       }
+    }
+
+    // Sincronizar membresías player_teams (solo admin/owner/super — RLS lo refuerza igual).
+    if (!error && savedPlayerId && _fullAccess) {
+      const syncErr = await syncPlayerTeams(savedPlayerId, savedClubId, selectedTeamIds, primaryTeamId);
+      if (syncErr) console.error('[Squad] player_teams sync error:', syncErr);
     }
 
     saving.style.display = 'none';
@@ -1984,7 +2124,13 @@ async function reloadPlayers() {
         dominant_foot: r.dominant_foot || null,
       }))
       .filter(r => r.first_name || r.last_name);
-    const { error } = await window.sb.from('players').insert(rows);
+    const { data: insertedPlayers, error } = await window.sb.from('players').insert(rows).select('id');
+    // Membresía primaria en la junction para los importados (solo admin; RLS lo refuerza).
+    if (!error && _currentTeamId && _fullAccess && insertedPlayers?.length) {
+      const ptRows = insertedPlayers.map(p => ({ club_id: _currentClubId, player_id: p.id, team_id: _currentTeamId, is_primary: true }));
+      const { error: ptErr } = await window.sb.from('player_teams').insert(ptRows);
+      if (ptErr) console.error('[Squad] import player_teams error:', ptErr);
+    }
     saving.style.display = 'none'; btn.disabled = false;
     if (error) { showToast('Import failed: ' + error.message); return; }
     closeImportModal();
