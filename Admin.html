@@ -2075,8 +2075,8 @@
       const { data, error }=await window.sb.functions.invoke('gps-sync',{ body:{ integration_id:intId, from, to } });
       if(error) throw error;
       if(!data?.ok){ msg(prov, data?.message || (data?.http_status?`Provider error (HTTP ${data.http_status})`:'Sync failed'), true); return; }
-      const errs=(data.errors||[]).length, unm=(data.unmapped_params||[]).length;
-      msg(prov, `Synced ${data.synced_activities} session${data.synced_activities!==1?'s':''} · ${data.synced_rows} report${data.synced_rows!==1?'s':''} · ${data.skipped_unmapped} unmapped athlete${data.skipped_unmapped!==1?'s':''}${unm?` · ${unm} unmapped metric${unm!==1?'s':''} (use Map metrics)`:''}${errs?` · ${errs} error${errs!==1?'s':''}`:''}.`, (errs>0||unm>0));
+      const errs=(data.errors||[]).length, unm=(data.unmapped_params||[]).length, per=data.synced_periods||0;
+      msg(prov, `Synced ${data.synced_activities} session${data.synced_activities!==1?'s':''} · ${data.synced_rows} report${data.synced_rows!==1?'s':''} · ${per} period${per!==1?'s':''} · ${data.skipped_unmapped} unmapped athlete${data.skipped_unmapped!==1?'s':''}${unm?` · ${unm} unmapped metric${unm!==1?'s':''} (use Map metrics)`:''}${errs?` · ${errs} error${errs!==1?'s':''}`:''}.`, (errs>0||unm>0));
       await load();
     }catch(e){ msg(prov,'Failed: '+(e.message||e),true); }
   }

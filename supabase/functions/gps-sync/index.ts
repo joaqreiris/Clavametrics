@@ -18,9 +18,11 @@
  *
  * Request  (POST JSON): { integration_id, from?, to? }   (ISO; default last 30d)
  * Response (200 JSON):
- *   { ok:true, synced_activities, synced_rows, skipped_unmapped, unmapped_params:[], errors:[] }
+ *   { ok:true, synced_activities, synced_rows, synced_periods, skipped_unmapped,
+ *     unmapped_params:[], errors:[] }
  *
- * NOTE: period/rollup metrics are NOT computed here — that is Ladrillo 2b-ii.
+ * Session grain → gps_reports. Period grain (per drill/task) → gps_period_reports
+ * (totals + duration_seconds; per-minute & period↔drill link are Ladrillo 2c).
  *
  * Deploy: supabase functions deploy gps-sync
  */
@@ -203,6 +205,32 @@ Deno.serve(async (req: Request) => {
     const mappedSlugs = [...resolveMap.entries()].filter(([, v]) => v.target && v.target !== '__ignore__').map(([s]) => s);
     const unmappedParams = new Set<string>();
 
+    // Shared normalizer — turns a /stats row into { core, extras } via the same
+    // resolveMap + unit_conversion, for BOTH session and period grains.
+    const normalizeMetrics = (row: Record<string, unknown>) => {
+      const core: Record<string, number> = {};
+      const extras: { metric_key: string; value: number }[] = [];
+      const slugs = new Set<string>([...mappedSlugs, ...Object.keys(row)]);
+      for (const slug of slugs) {
+        const map = resolveMap.get(slug);
+        if (!map || !map.target || map.target === '__ignore__') {
+          // A real parameter value with no mapping → report, don't drop.
+          if (!METADATA_KEYS.has(slug) && readParam(row, slug) != null) unmappedParams.add(slug);
+          continue;
+        }
+        const raw = readParam(row, slug);
+        if (raw == null) continue;
+        const num = raw * map.conv;
+        if (!isFinite(num)) continue;
+        if (GPS_REPORT_COLS.has(map.target)) {
+          core[map.target] = GPS_INT_COLS.has(map.target) ? Math.round(num) : +num.toFixed(4);
+        } else {
+          extras.push({ metric_key: map.target, value: +num.toFixed(4) });
+        }
+      }
+      return { core, extras };
+    };
+
     // ── 1. Fetch activities and filter to the range by start_time ───────────
     const actRes = await fetch(`${baseUrl}/activities`, { headers: authH });
     if (!actRes.ok) {
@@ -215,7 +243,7 @@ Deno.serve(async (req: Request) => {
       return !isNaN(ms) && ms >= fromMsRange && ms <= toMsRange;
     });
 
-    let syncedActivities = 0, syncedRows = 0, skippedUnmapped = 0;
+    let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0;
     const errors: string[] = [];
 
     for (const act of activities) {
@@ -270,30 +298,8 @@ Deno.serve(async (req: Request) => {
           const playerId = ext ? playerByExt.get(ext) : undefined;
           if (!playerId) { skippedUnmapped++; continue; }
 
-          const rec: Record<string, unknown> = { club_id: clubId, session_id: sessionId, player_id: playerId };
-          const extras: { metric_key: string; value: number }[] = [];
-
-          // Resolve every slug the stats row offers via the data-driven map.
-          const slugs = new Set<string>([...mappedSlugs, ...Object.keys(row)]);
-          for (const slug of slugs) {
-            const map = resolveMap.get(slug);
-            if (!map || !map.target || map.target === '__ignore__') {
-              // A real parameter value with no mapping → report, don't drop.
-              if (!METADATA_KEYS.has(slug) && readParam(row, slug) != null) unmappedParams.add(slug);
-              continue;
-            }
-            const raw = readParam(row, slug);
-            if (raw == null) continue;
-            const num = raw * map.conv;
-            if (!isFinite(num)) continue;
-            if (GPS_REPORT_COLS.has(map.target)) {
-              rec[map.target] = GPS_INT_COLS.has(map.target) ? Math.round(num) : +num.toFixed(4);
-            } else {
-              // target is a gps_metric_definitions key → EAV
-              extras.push({ metric_key: map.target, value: +num.toFixed(4) });
-            }
-          }
-          recs.push(rec);
+          const { core, extras } = normalizeMetrics(row);
+          recs.push({ club_id: clubId, session_id: sessionId, player_id: playerId, ...core });
           if (extras.length) extrasByPlayer.set(playerId, extras);
         }
 
@@ -323,6 +329,67 @@ Deno.serve(async (req: Request) => {
           if (mErr) errors.push(`metrics ${activityId}: ${mErr.message}`);
         }
 
+        // ── 7. PERIOD-level stats (Ladrillo 2b-ii) ──────────────────────────
+        // Second /stats for the same activity, broken down by period. Failure
+        // here must NOT break the session-level result already written above.
+        try {
+          const perRes = await fetch(`${baseUrl}/stats`, {
+            method: 'POST',
+            headers: { ...authH, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filters: [{ name: 'activity_id', comparison: '=', values: [activityId] }],
+              parameters: mappedSlugs,
+              group_by: ['period', 'athlete'],   // VERIFY group_by vocabulary per OpenField version
+            }),
+          });
+          if (!perRes.ok) {
+            errors.push(`periods ${activityId}: HTTP ${perRes.status}`);   // unsupported / no breakdown → skip, don't break
+          } else {
+            const perRows = (await perRes.json().catch(() => [])) as Record<string, unknown>[];
+            const periodRecs: Record<string, unknown>[] = [];
+            for (const row of (Array.isArray(perRows) ? perRows : [])) {
+              const ext = String(row.athlete_id ?? (row.athlete as Record<string, unknown>)?.id ?? row.id ?? '');
+              const playerId = ext ? playerByExt.get(ext) : undefined;
+              if (!playerId) { skippedUnmapped++; continue; }
+
+              // Period identity (field names vary across versions → defensive)
+              const period = (row.period ?? {}) as Record<string, unknown>;
+              const periodId   = String(row.period_id ?? period.id ?? period.name ?? row.period_name ?? row.period ?? '');
+              if (!periodId) continue;   // can't form the unique key without it
+              const periodName = String(row.period_name ?? period.name ?? row.period ?? periodId);
+
+              // Raw duration in SECONDS (denominator for per-minute, computed in 2c).
+              // Read 'duration' raw (independent of its mapping to time_played);
+              // fall back to start/end delta.
+              let durationSeconds = readParam(row, 'duration') ?? readParam(row, 'total_duration') ?? readParam(row, 'period_duration');
+              if (durationSeconds == null) {
+                const s = toMs(row.start_time ?? period.start_time ?? row.start);
+                const e = toMs(row.end_time   ?? period.end_time   ?? row.end);
+                if (!isNaN(s) && !isNaN(e) && e >= s) durationSeconds = (e - s) / 1000;
+              }
+
+              const { core, extras } = normalizeMetrics(row);
+              const extra_metrics: Record<string, number> = {};
+              for (const ex of extras) extra_metrics[ex.metric_key] = ex.value;
+
+              periodRecs.push({
+                club_id: clubId, session_id: sessionId, player_id: playerId,
+                period_id: periodId, period_name: periodName,
+                duration_seconds: durationSeconds ?? null,
+                ...core, extra_metrics,
+              });
+            }
+            if (periodRecs.length) {
+              const { error: pErr } = await adminClient.from('gps_period_reports')
+                .upsert(periodRecs, { onConflict: 'club_id,session_id,period_id,player_id' });
+              if (pErr) errors.push(`periods ${activityId}: ${pErr.message}`);
+              else syncedPeriods += periodRecs.length;
+            }
+          }
+        } catch (pe) {
+          errors.push(`periods ${activityId}: ${String((pe as Error)?.message || pe)}`);
+        }
+
         syncedActivities++;
       } catch (e) {
         errors.push(`activity ${activityId}: ${String((e as Error)?.message || e)}`);
@@ -332,7 +399,7 @@ Deno.serve(async (req: Request) => {
     await adminClient.from('gps_integrations')
       .update({ last_sync_at: new Date().toISOString(), last_error: null }).eq('id', integration_id);
 
-    return json({ ok: true, synced_activities: syncedActivities, synced_rows: syncedRows, skipped_unmapped: skippedUnmapped, unmapped_params: [...unmappedParams], errors });
+    return json({ ok: true, synced_activities: syncedActivities, synced_rows: syncedRows, synced_periods: syncedPeriods, skipped_unmapped: skippedUnmapped, unmapped_params: [...unmappedParams], errors });
 
   } catch (err) {
     const message = String((err as Error)?.message || err);
