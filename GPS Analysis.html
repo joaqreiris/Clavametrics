@@ -5496,7 +5496,9 @@ window.renderView = async function () {
       const pos   = match.rawPosition
         ? POSITIONS.find(p => p.toLowerCase() === (match.rawPosition || '').toLowerCase().slice(0, 2)) || 'MF'
         : 'MF';
-      const rec = { club_id: _wizState.clubId, first_name: fn, last_name: ln, position: pos, number: match.rawJersey || null, status: 'available' };
+      const _jn   = parseInt(String(match.rawJersey ?? '').trim(), 10);
+      const number = Number.isFinite(_jn) ? _jn : null;   // non-numeric jersey → null (players.number is integer)
+      const rec = { club_id: _wizState.clubId, first_name: fn, last_name: ln, position: pos, number, status: 'available' };
       if (window._gpTeamId) rec.team_id = window._gpTeamId;
       if (match.rawExtGpsId) rec.external_gps_id = match.rawExtGpsId;
       rowData.push({ rowEl, key, match, fn, ln });
@@ -5544,7 +5546,7 @@ window.renderView = async function () {
           if (!rowData[i]) return;
           const { rowEl, key, match, fn, ln } = rowData[i];
           confirmedMap[key] = rec.id;
-          _wizState.squadPlayers.push({ id: rec.id, first_name: fn, last_name: ln, position: insertArr[i].position, number: match.rawJersey || null, external_gps_id: match.rawExtGpsId || null });
+          _wizState.squadPlayers.push({ id: rec.id, first_name: fn, last_name: ln, position: insertArr[i].position, number: insertArr[i].number, external_gps_id: match.rawExtGpsId || null });
           rowEl.setAttribute('data-cat', 'matched');
           const actEl = rowEl.querySelector('.gp-match-actions');
           if (actEl) actEl.innerHTML = `<span class="gp-match-badge high">Created</span>`;
@@ -5807,7 +5809,8 @@ window.renderView = async function () {
       const fn     = ov.querySelector('.cp-fn').value.trim();
       const ln     = ov.querySelector('.cp-ln').value.trim();
       const pos    = ov.querySelector('.cp-pos').value;
-      const num    = ov.querySelector('.cp-num').value;
+      const _jn    = parseInt(String(ov.querySelector('.cp-num').value ?? '').trim(), 10);
+      const num    = Number.isFinite(_jn) ? _jn : null;   // non-numeric jersey → null (players.number is integer)
       const errDiv = ov.querySelector('#cpErr');
       const saveBtn = ov.querySelector('#cpSave');
 
@@ -5821,7 +5824,7 @@ window.renderView = async function () {
 
       const insertObj = {
         club_id: _wizState.clubId, first_name: fn, last_name: ln,
-        position: pos, number: num || null, status: 'available',
+        position: pos, number: num, status: 'available',
       };
       if (matchData?.rawExtGpsId) insertObj.external_gps_id = matchData.rawExtGpsId;
 
@@ -5835,7 +5838,7 @@ window.renderView = async function () {
       }
 
       _wizState.confirmedMap[key] = data.id;
-      _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num || null, external_gps_id: matchData?.rawExtGpsId || null });
+      _wizState.squadPlayers.push({ id: data.id, first_name: fn, last_name: ln, position: pos, number: num, external_gps_id: matchData?.rawExtGpsId || null });
 
       // Update row UI
       const rowEl = [...document.querySelectorAll('.gp-match-row')].find(r => r.dataset.key === key);

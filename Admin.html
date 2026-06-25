@@ -2206,8 +2206,10 @@
       const parts=(r.name||'').trim().split(/\s+/);
       const fn=parts.slice(0,-1).join(' ')||parts[0]||r.a.first_name||'';
       const ln=parts.length>1?parts.slice(-1)[0]:(r.a.last_name||parts[0]||'');
+      const _jn=parseInt(String(r.a.jersey??'').trim(),10);
+      const number=Number.isFinite(_jn)?_jn:null;   // non-numeric jersey (e.g. "IKD") → null, don't break
       const rec={ club_id:clubId, first_name:fn, last_name:ln, position:_mapPos(r.a.position),
-                  number:r.a.jersey||null, status:'available', external_gps_id:r.a.athlete_id };
+                  number, status:'available', external_gps_id:r.a.athlete_id };
       const { data, error }=await window.sb.from('players').insert(rec).select('id').single();
       if(error){ alert('Failed to add: '+error.message); return; }
       squad.push({ id:data.id, first_name:fn, last_name:ln, number:rec.number, position:rec.position, external_gps_id:r.a.athlete_id });
