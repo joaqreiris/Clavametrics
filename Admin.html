@@ -2078,8 +2078,12 @@
     }
     async function save(){
       const clubId=await getClubId(); if(!clubId){ modalMsg.textContent='No club found.'; modalMsg.style.color='var(--cm-danger)'; return; }
-      const ups=rows.map(r=>({ club_id:clubId, source_label:'catapult', source_column_name:r.p.slug,
+      // Dedup by slug (Catapult can return duplicate slugs) — keep the user's
+      // last selection. A repeated conflict key in one upsert breaks Postgres.
+      const _byCol=new Map();
+      rows.forEach(r=>_byCol.set(r.p.slug,{ club_id:clubId, source_label:'catapult', source_column_name:r.p.slug,
         target_metric:(r.target===''?'__ignore__':r.target), unit_conversion:(+r.conv||1) }));
+      const ups=[..._byCol.values()];
       ov.querySelector('[data-save]').disabled=true; modalMsg.style.color='var(--cm-fg-muted)'; modalMsg.textContent='Saving…';
       const { error }=await window.sb.from('gps_column_mappings').upsert(ups,{ onConflict:'club_id,source_label,source_column_name' });
       if(error){ modalMsg.textContent='Error: '+error.message; modalMsg.style.color='var(--cm-danger)'; ov.querySelector('[data-save]').disabled=false; return; }
