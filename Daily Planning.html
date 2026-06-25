@@ -12,6 +12,7 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
@@ -52,6 +53,7 @@
   .dp-f label{font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)}
   .dp-f input,.dp-f select,.dp-f textarea{width:100%;padding:9px 11px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none}
   .dp-f input:focus,.dp-f select:focus,.dp-f textarea:focus{border-color:var(--cm-accent)}
+  .is-cal-sourced{box-shadow:inset 2px 0 0 var(--cm-accent)}
   .dp-f textarea{resize:vertical;min-height:64px}
 
   /* Totals bar */
@@ -408,6 +410,7 @@
 let _dpClubId = null, _dpProfile = null, _dpPlayers = [], _dpInjMap = {}, _dpAdaptMap = {}, _dpDayAdaptMap = {}, _dpCurrentDate = null, _dpCurrentSessionId = null;
 let _dpTeamId = null, _dpTeams = [];
 let _libExercises = [], _dpMicrocycles = [], _dpPublished = false;
+let _dpCalFields = new Set();
 let _dpAvMap = {}, _dpActTotalMin = 0, _dpFieldExercises = [], _libMode = 'main', _dpSaveTimer = null;
 const _dpPngCache = {};   // planner_exercise_id -> preview <img src> (signed URL or base64), or null when known-absent
 
@@ -625,6 +628,24 @@ async function loadDay(dateStr) {
     const sf = document.getElementById('dpFocus'); if (sf) sf.value = '';
     const sm = document.getElementById('dpMatchDay'); if (sm) sm.value = '';
   }
+
+  // Calendar is the source of truth: authoritatively overlay micro/MD/time/RPE after the session fill.
+  try {
+    const ctx = await window.cmResolveDayContext(dateStr, _dpTeamId, _dpClubId);
+    _dpCalFields = new Set();
+    const mdMap = m => m === 'MD' ? 'MD0' : (m || '').replace('−','-');   // resolver label → option value
+    const mcSelN = document.getElementById('dpMicrocycle');
+    if (ctx.microcycle && mcSelN && [...mcSelN.options].some(o => o.value === String(ctx.microcycle.id))) { mcSelN.value = String(ctx.microcycle.id); _dpCalFields.add('dpMicrocycle'); }
+    const mdSel = document.getElementById('dpMatchDay');
+    const mdVal = ctx.md ? mdMap(ctx.md) : '';
+    if (mdVal && mdSel && [...mdSel.options].some(o => o.value === mdVal)) { mdSel.value = mdVal; _dpCalFields.add('dpMatchDay'); }
+    if (ctx.hasEvent) {
+      const st = document.getElementById('dpStartTime'); if (ctx.start_time && st) { st.value = String(ctx.start_time).slice(0,5); _dpCalFields.add('dpStartTime'); }
+      const sr = document.getElementById('dpEstRpe');   if (ctx.estimated_rpe && sr) { sr.value = ctx.estimated_rpe; _dpCalFields.add('dpEstRpe'); }
+    }
+    dpMarkCalFields();
+  } catch(_) {}
+
   _dpUpdatePublishBtn();
 
   await Promise.all([loadSessionExercises(_dpCurrentSessionId), loadActivationActivities(_dpCurrentSessionId)]);
@@ -671,6 +692,25 @@ async function loadDay(dateStr) {
   }
 
   await dpRenderPrintSheet();
+}
+
+function dpMarkCalFields() {
+  ['dpMicrocycle','dpMatchDay','dpStartTime','dpEstRpe'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.classList.toggle('is-cal-sourced', _dpCalFields.has(id));
+    if (_dpCalFields.has(id) && !el.dataset.calWarn) {
+      el.dataset.calWarn = '1';
+      el.addEventListener('change', () => { if (_dpCalFields.has(id)) dpToast('This value comes from the Calendar — change it there to keep things in sync.'); });
+    }
+  });
+}
+function dpToast(msg) {
+  let t = document.getElementById('dpToast');
+  if (!t) { t = document.createElement('div'); t.id = 'dpToast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:1200;background:#15181D;color:#fff;font:500 13px/1.4 var(--cm-font-sans);padding:10px 16px;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.25);opacity:0;transition:opacity .2s;max-width:80vw;text-align:center';
+    document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._timer); t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3200);
 }
 window.addEventListener('beforeprint', dpRenderPrintSheet);
 
