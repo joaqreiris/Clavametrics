@@ -712,12 +712,13 @@ function SettingsHost() {
   function handleSettingsChange(s) {
     if (!userId || !window.sb) return;
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
+    saveTimer.current = setTimeout(async () => {
       const { notif, ...appearance } = s;
-      window.sb.from('profiles').update({
+      const { error } = await window.sb.from('profiles').update({
         settings: appearance,
         notification_settings: notif || {},
       }).eq('id', userId);
+      if (error) console.warn('[settings] cloud save failed:', error.message);
     }, 800);
   }
 
