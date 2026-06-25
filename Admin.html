@@ -1994,6 +1994,9 @@
       <div style="padding:10px 18px;border-bottom:1px solid var(--cm-border);font-size:12px;color:var(--cm-fg-muted)">
         Map each Catapult parameter to a core metric or a custom one. Unmapped parameters are shown first.
       </div>
+      <div style="padding:10px 18px 0">
+        <input data-search type="text" placeholder="Search metrics…" style="width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
+      </div>
       <div data-list style="overflow:auto;padding:6px 18px"></div>
       <div data-newpanel style="display:none;padding:12px 18px;border-top:1px solid var(--cm-border);background:var(--cm-bg-soft)"></div>
       <div style="padding:12px 18px;border-top:1px solid var(--cm-border);display:flex;justify-content:space-between;align-items:center">
@@ -2015,9 +2018,15 @@
         ${cust?`<optgroup label="Custom metrics">${cust}</optgroup>`:''}
         <option value="__new__">+ Create new metric…</option>`;
     }
+    function _applyFilter(){
+      const q=(ov.querySelector('[data-search]').value||'').trim().toLowerCase();
+      listEl.querySelectorAll('[data-search-row]').forEach(el=>{
+        el.style.display=(!q||el.dataset.searchRow.includes(q))?'':'none';
+      });
+    }
     function paint(){
       listEl.innerHTML=rows.map((r,i)=>`
-        <div style="display:grid;grid-template-columns:1.5fr 1.6fr 90px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--cm-border)${r.mapped?'':';background:var(--cm-warning-bg,rgba(245,158,11,.06))'}">
+        <div data-search-row="${_esc(((r.p.name||'')+' '+(r.p.slug||'')).toLowerCase())}" style="display:grid;grid-template-columns:1.5fr 1.6fr 90px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--cm-border)${r.mapped?'':';background:var(--cm-warning-bg,rgba(245,158,11,.06))'}">
           <div><div style="font:600 12px var(--cm-font-sans);color:var(--cm-fg)">${_esc(r.p.name||r.p.slug)}</div>
             <div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted)">${_esc(r.p.slug)}${r.mapped?'':' · unmapped'}</div></div>
           <select data-t="${i}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${targetOptions(r.target)}</select>
@@ -2029,7 +2038,9 @@
         rows[i].target=s.value;
       }));
       listEl.querySelectorAll('[data-c]').forEach(inp=>inp.addEventListener('input',()=>{ rows[+inp.dataset.c].conv=inp.value; }));
+      _applyFilter();   // keep the current search applied across re-paints
     }
+    ov.querySelector('[data-search]').addEventListener('input',_applyFilter);
     function _showNewMetric(rowIdx){
       const np=ov.querySelector('[data-newpanel]');
       np.style.display='';
