@@ -330,6 +330,7 @@
     const { data } = await window.sb.from('teams')
       .select('id,name,season')
       .eq('club_id', clubId)
+      .is('archived_at', null)
       .order('name');
     return data || [];
   };

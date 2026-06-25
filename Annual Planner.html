@@ -426,7 +426,7 @@ async function apInitTeam(){
   const sel = document.getElementById('apTeamSelect');
   let teams = [];
   try {
-    const { data } = await window.sb.from('teams').select('id,name').eq('club_id', _apClubId).order('name');
+    const { data } = await window.sb.from('teams').select('id,name').eq('club_id', _apClubId).is('archived_at', null).order('name');
     teams = data || [];
   } catch(_) {}
 
