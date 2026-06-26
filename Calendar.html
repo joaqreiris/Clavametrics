@@ -849,11 +849,14 @@
   #calPrintSheet { display:none; }
   @media print {
     @page { size: A4 landscape; margin: 0; }
-    #hub-side-root, .hub-topbar, .cal-page, .cal-head, .cal-kpis, .cal-ribbon-card, .cal-rail, .cal-filters,
-    .mc-info-row, .cal-grid, #calViewMonth, #calViewList, .sq-modal-backdrop, #tweaks-root, #settings-host,
-    .cm-sidebar-overlay, .cm-sidebar-toggle { display:none !important; }
-    #calPrintSheet { display:block !important; }
-    * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    html, body {
+      height: auto !important; min-height: 0 !important;
+      margin: 0 !important; padding: 0 !important; background: #fff !important;
+    }
+    body > *:not(#calPrintSheet) { display: none !important; }
+    #calPrintSheet { display: block !important; position: static !important; }
+    #calPrintSheet .cal-sheet { box-shadow: none !important; margin: 0 !important; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 
   /* === Unified event popover === */
