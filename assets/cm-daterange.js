@@ -8,8 +8,10 @@
  * Usage:
  *   const dr = window.CMDateRange.mount(containerEl, {
  *     from: '2024-01-01', to: '2024-12-31',   // optional initial range (ISO|null)
- *     presets: true,                          // show Last 30 / This season / All
+ *     presets: true,                          // show Last 30 / <real seasons> / All
  *     allLabel: 'All dates',                  // label when range is unbounded
+ *     clubId: '…', teamId: '…',               // optional → load real seasons from `seasons` table
+ *     seasons: [{name,start_date,end_date}],  // optional → use this pre-loaded list instead of querying
  *     onChange: ({from,to}) => { ... },       // fires when a range is picked
  *   });
  *   dr.getRange();           // → { from, to }  (ISO strings or null)
@@ -29,6 +31,7 @@
   const atMid = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   // Monday-first weekday index (0=Mon … 6=Sun)
   const dowMon = d => (d.getDay() + 6) % 7;
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   window.CMDateRange = {
     mount(container, opts = {}) {
@@ -42,6 +45,27 @@
       let view = (to || from || today);
       let vY = view.getFullYear(), vM = view.getMonth();
       let open = false;
+
+      // Real seasons (from the `seasons` table) shown as preset chips. Either a
+      // pre-loaded array is passed, or we query by club_id (+ optional team_id).
+      let seasons = Array.isArray(opts.seasons)
+        ? opts.seasons.filter(s => s && s.start_date && s.end_date)
+        : [];
+      async function loadSeasons() {
+        if (seasons.length || !opts.clubId || !window.sb) return;
+        try {
+          let q = window.sb.from('seasons').select('name,start_date,end_date,status').eq('club_id', opts.clubId);
+          if (opts.teamId) q = q.eq('team_id', opts.teamId);
+          const { data } = await q.order('start_date', { ascending: false });
+          // Keep dated rows; dedupe by name (a club may repeat a season per team).
+          const seen = new Set();
+          seasons = (data || []).filter(s => {
+            if (!s.start_date || !s.end_date || seen.has(s.name)) return false;
+            seen.add(s.name); return true;
+          });
+          if (open) renderCal();
+        } catch (_) { /* leave empty → seasons block hidden (never a hardcoded fallback) */ }
+      }
 
       container.classList.add('cmdr');
       container.style.position = 'relative';
@@ -94,9 +118,9 @@
         }
         popEl.innerHTML = `
           ${showPresets ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <button type="button" data-preset="30"   style="${PRESET_CSS}">Last 30 days</button>
-            <button type="button" data-preset="year" style="${PRESET_CSS}">This year</button>
-            <button type="button" data-preset="all"  style="${PRESET_CSS}">All</button>
+            <button type="button" data-preset="30"  style="${PRESET_CSS}">Last 30 days</button>
+            ${seasons.map((s,i) => `<button type="button" data-season="${i}" style="${SEASON_CSS}">${esc(s.name || 'Season')}</button>`).join('')}
+            <button type="button" data-preset="all" style="${PRESET_CSS}">All</button>
           </div>` : ''}
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
             <button type="button" data-nav="-1" style="${NAV_CSS}">‹</button>
@@ -128,7 +152,14 @@
       function applyPreset(kind) {
         if (kind === 'all')  { from = null; to = null; }
         if (kind === '30')   { to = today; from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29); }
-        if (kind === 'year') { from = new Date(today.getFullYear(), 0, 1); to = today; }   // calendar year, honest (no seasons table)
+        vY = (to || today).getFullYear(); vM = (to || today).getMonth();
+        onChange(api.getRange());
+        refreshLabel(); renderCal();
+      }
+
+      function applySeason(i) {
+        const s = seasons[i]; if (!s) return;
+        from = parse(s.start_date); to = parse(s.end_date);
         vY = (to || today).getFullYear(); vM = (to || today).getMonth();
         onChange(api.getRange());
         refreshLabel(); renderCal();
@@ -140,6 +171,7 @@
       function wireCal() {
         popEl.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); pickDay(b.dataset.day); }));
         popEl.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); applyPreset(b.dataset.preset); }));
+        popEl.querySelectorAll('[data-season]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); applySeason(+b.dataset.season); }));
         popEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', e => {
           e.stopPropagation();
           vM += (+b.dataset.nav); if (vM < 0) { vM = 11; vY--; } if (vM > 11) { vM = 0; vY++; } renderCal();
@@ -160,6 +192,7 @@
       triggerEl.addEventListener('click', e => { e.stopPropagation(); setOpen(!open); });
       document.addEventListener('click', onDocClick);
       refreshLabel();
+      loadSeasons();   // fire-and-forget; re-renders the popover if open when it lands
 
       const api = {
         getRange() { return { from: iso(from), to: iso(to) }; },
@@ -173,6 +206,8 @@
   };
 
   const PRESET_CSS = 'padding:4px 9px;border:1px solid var(--cm-border);border-radius:999px;background:var(--cm-bg-soft);color:var(--cm-fg-muted);font:600 10.5px var(--cm-font-sans);cursor:pointer';
+  // Real seasons read as actionable chips → accent-tinted to stand apart from generic presets.
+  const SEASON_CSS = 'padding:4px 9px;border:1px solid var(--cm-accent);border-radius:999px;background:var(--cm-accent-soft);color:var(--cm-accent);font:600 10.5px var(--cm-font-sans);cursor:pointer';
   const NAV_CSS    = 'width:26px;height:26px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg);font-size:15px;line-height:1;cursor:pointer';
   const DONE_CSS   = 'padding:5px 12px;border:0;border-radius:7px;background:var(--cm-accent);color:var(--cm-fg-on-accent,#fff);font:600 11.5px var(--cm-font-sans);cursor:pointer';
 })();

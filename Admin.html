@@ -1898,11 +1898,14 @@
     host.querySelectorAll('[data-act="mapmetrics"]').forEach(b=>b.addEventListener('click',()=>mapMetrics(b.dataset.prov)));
     host.querySelectorAll('[data-field="region"]').forEach(s=>s.addEventListener('change',()=>setRegion(s.dataset.prov,s.value)));
     // Mount the reusable date-range picker per provider (default last 30 days).
+    // Pass the active club so the picker offers this club's real seasons.
     _dr={};
-    host.querySelectorAll('[data-daterange]').forEach(el=>{
-      const _today=new Date(), _ago30=new Date(Date.now()-30*86400*1000);
-      const isoD=d=>d.toISOString().slice(0,10);
-      _dr[el.dataset.prov]=window.CMDateRange.mount(el,{ from:isoD(_ago30), to:isoD(_today), presets:true });
+    window.getClubId().then(cid=>{
+      host.querySelectorAll('[data-daterange]').forEach(el=>{
+        const _today=new Date(), _ago30=new Date(Date.now()-30*86400*1000);
+        const isoD=d=>d.toISOString().slice(0,10);
+        _dr[el.dataset.prov]=window.CMDateRange.mount(el,{ from:isoD(_ago30), to:isoD(_today), presets:true, clubId:cid });
+      });
     });
   }
   let _dr={};
