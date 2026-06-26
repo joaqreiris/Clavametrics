@@ -1029,15 +1029,15 @@ function dpFlushTargets(){
 async function renderGpsProjection(){
   const card = document.getElementById('dpGpsProj'); if (!card) return;
   const blocks = (_dpFieldExercises||[]);
-  const withId = blocks.filter(e => e.exercise_id && dpBlockMins(e).work_min > 0);
-  // Fetch any profiles we don't have cached yet.
-  const need = [...new Set(withId.map(e => e.exercise_id).filter(id => !(id in _dpGpsProfiles)))];
+  const withId = blocks.filter(e => e.planner_exercise_id && dpBlockMins(e).work_min > 0);
+  // Fetch any profiles we don't have cached yet. planner_exercise_id IS exercises.id (= the view key).
+  const need = [...new Set(withId.map(e => e.planner_exercise_id).filter(id => !(id in _dpGpsProfiles)))];
   if (need.length) {
     const { data } = await window.sb.from('v_exercise_gps_profile').select('*').in('exercise_id', need);
     const found = {}; (data||[]).forEach(r => { found[r.exercise_id] = r; });
     need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; });   // null = known to have no profile
   }
-  const covered = withId.filter(e => _dpGpsProfiles[e.exercise_id]);
+  const covered = withId.filter(e => _dpGpsProfiles[e.planner_exercise_id]);
   // Visible whenever a day session is loaded (same criterion as the totals strip).
   // No static display:none — only hide on an empty day with no session at all.
   if (!_dpCurrentSessionId && !blocks.length) { card.style.display = 'none'; return; }
@@ -1058,7 +1058,7 @@ async function renderGpsProjection(){
     const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); if (!m) return '';
     // Σ per_min × minutes, then to display unit (TD km→m ×1000); totals shown as integers.
     let proj = 0;
-    covered.forEach(e => { proj += num(_dpGpsProfiles[e.exercise_id][k]) * dpBlockMins(e).work_min; });
+    covered.forEach(e => { proj += num(_dpGpsProfiles[e.planner_exercise_id][k]) * dpBlockMins(e).work_min; });
     proj = Math.round(proj * m.mult);
     projVals[k] = proj;
     const unit = m.avgUnit || '';
