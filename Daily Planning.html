@@ -281,7 +281,7 @@
       </div>
 
       <!-- ===== PROJECTED GPS LOAD (2d) — collapsible (Evaluations dropdown pattern) ===== -->
-      <div class="dp-card dp-coll is-collapsed no-print" id="dpGpsProj" style="display:none">
+      <div class="dp-card dp-coll is-collapsed no-print" id="dpGpsProj">
         <div class="dp-card-h dp-coll-h" id="dpProjHead">
           <h3 style="margin:0">Projected GPS load</h3>
           <button type="button" id="dpProjGear" title="Choose metrics" style="margin-left:auto;background:none;border:1px solid var(--cm-border);border-radius:7px;width:28px;height:28px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-adjustments-horizontal"></i></button>
@@ -989,7 +989,9 @@ async function renderGpsProjection(){
     need.forEach(id => { _dpGpsProfiles[id] = found[id] || null; });   // null = known to have no profile
   }
   const covered = withId.filter(e => _dpGpsProfiles[e.exercise_id]);
-  if (!blocks.length) { card.style.display = 'none'; return; }
+  // Visible whenever a day session is loaded (same criterion as the totals strip).
+  // No static display:none — only hide on an empty day with no session at all.
+  if (!_dpCurrentSessionId && !blocks.length) { card.style.display = 'none'; return; }
   card.style.display = '';
 
   const keys = dpProjMetricKeys();
