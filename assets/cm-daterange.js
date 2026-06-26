@@ -30,12 +30,6 @@
   // Monday-first weekday index (0=Mon … 6=Sun)
   const dowMon = d => (d.getDay() + 6) % 7;
 
-  function seasonStart(today) {
-    // Football season: Aug 1 of the current (or previous) season year.
-    const y = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
-    return new Date(y, 7, 1);
-  }
-
   window.CMDateRange = {
     mount(container, opts = {}) {
       const onChange = typeof opts.onChange === 'function' ? opts.onChange : () => {};
@@ -100,9 +94,9 @@
         }
         popEl.innerHTML = `
           ${showPresets ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-            <button type="button" data-preset="30"     style="${PRESET_CSS}">Last 30 days</button>
-            <button type="button" data-preset="season" style="${PRESET_CSS}">This season</button>
-            <button type="button" data-preset="all"    style="${PRESET_CSS}">All</button>
+            <button type="button" data-preset="30"   style="${PRESET_CSS}">Last 30 days</button>
+            <button type="button" data-preset="year" style="${PRESET_CSS}">This year</button>
+            <button type="button" data-preset="all"  style="${PRESET_CSS}">All</button>
           </div>` : ''}
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
             <button type="button" data-nav="-1" style="${NAV_CSS}">‹</button>
@@ -125,32 +119,35 @@
 
       function pickDay(isoStr) {
         const d = parse(isoStr);
-        if (!from || (from && to)) { from = d; to = null; }   // start a new range
-        else if (d < from) { to = from; from = d; }            // clicked before start → swap
-        else { to = d; }
-        if (from && to) { onChange(api.getRange()); }
+        if (!from || (from && to)) { from = d; to = null; }    // 1st click → start range
+        else if (d < from)         { from = d; to = null; }    // before start → restart from here
+        else                       { to = d; }                 // after start → close range
         refreshLabel(); renderCal();
       }
 
       function applyPreset(kind) {
-        if (kind === 'all')    { from = null; to = null; }
-        if (kind === '30')     { to = today; from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29); }
-        if (kind === 'season') { from = seasonStart(today); to = today; }
+        if (kind === 'all')  { from = null; to = null; }
+        if (kind === '30')   { to = today; from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29); }
+        if (kind === 'year') { from = new Date(today.getFullYear(), 0, 1); to = today; }   // calendar year, honest (no seasons table)
         vY = (to || today).getFullYear(); vM = (to || today).getMonth();
         onChange(api.getRange());
         refreshLabel(); renderCal();
       }
 
+      // stopPropagation on every in-popover click: renderCal() rebuilds the DOM,
+      // detaching the clicked node, so a bubbling document-click would otherwise
+      // see it as "outside" and close the popover (breaking 2nd-day selection).
       function wireCal() {
-        popEl.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => pickDay(b.dataset.day)));
-        popEl.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
-        popEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => {
+        popEl.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); pickDay(b.dataset.day); }));
+        popEl.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); applyPreset(b.dataset.preset); }));
+        popEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', e => {
+          e.stopPropagation();
           vM += (+b.dataset.nav); if (vM < 0) { vM = 11; vY--; } if (vM > 11) { vM = 0; vY++; } renderCal();
         }));
         const ys = popEl.querySelector('[data-year]');
-        if (ys) ys.addEventListener('change', () => { vY = +ys.value; renderCal(); });
+        if (ys) { ys.addEventListener('click', e => e.stopPropagation()); ys.addEventListener('change', e => { e.stopPropagation(); vY = +ys.value; renderCal(); }); }
         const done = popEl.querySelector('[data-done]');
-        if (done) done.addEventListener('click', () => setOpen(false));
+        if (done) done.addEventListener('click', e => { e.stopPropagation(); onChange(api.getRange()); setOpen(false); });
       }
 
       function setOpen(v) {
@@ -160,7 +157,7 @@
 
       function onDocClick(e) { if (open && !container.contains(e.target)) setOpen(false); }
 
-      triggerEl.addEventListener('click', () => setOpen(!open));
+      triggerEl.addEventListener('click', e => { e.stopPropagation(); setOpen(!open); });
       document.addEventListener('click', onDocClick);
       refreshLabel();
 
