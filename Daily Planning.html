@@ -1028,7 +1028,7 @@ function dpFlushTargets(){
 }
 async function renderGpsProjection(){
   const card = document.getElementById('dpGpsProj'); if (!card) return;
-  const blocks = (_dpFieldExercises||[]);
+  const blocks = [ ...(_dpFieldExercises||[]), ...((window._dpActItems)||[]) ];  // field + activation; phase no longer gates the projection
   const withId = blocks.filter(e => e.planner_exercise_id && dpBlockMins(e).work_min > 0);
   // Fetch any profiles we don't have cached yet. planner_exercise_id IS exercises.id (= the view key).
   const need = [...new Set(withId.map(e => e.planner_exercise_id).filter(id => !(id in _dpGpsProfiles)))];
@@ -1076,6 +1076,7 @@ async function renderGpsProjection(){
       <input type="number" step="any" min="0" data-proj-target="${k}" value="${tgt != null ? tgt : ''}" placeholder="Target" style="padding:6px 8px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;width:100%">
     </div>`;
   }).join('');
+  window._dpProjVals = { ...projVals };   // expose for the print sheet's GPS strip
   // Update only the bar/label on target edits (no full re-render → input keeps focus).
   body.querySelectorAll('[data-proj-target]').forEach(inp => inp.addEventListener('input', () => {
     const k = inp.dataset.projTarget;
