@@ -935,10 +935,11 @@
         <button data-x="1" style="background:none;border:0;font-size:20px;line-height:1;color:var(--cm-fg-muted);cursor:pointer">&times;</button>
       </div>
       <div style="padding:10px 18px;border-bottom:1px solid var(--cm-border);font-size:12px;color:var(--cm-fg-muted)">
-        Each card groups Catapult period names that look like the same drill. Map each to an exercise, create one, or ignore it. Unmapped groups are shown first.
+        Each card groups Catapult period names that look like the same drill. Map each to an exercise, create one, or ignore it. Tick cards to <b>merge</b> them, or <b>Edit names</b> to split out / move individual period names. Unmapped groups are shown first.
       </div>
       <div style="padding:10px 18px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <input data-search type="text" placeholder="Search drills…" style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">
+        <button data-merge class="cm-btn is-outline is-sm" style="display:none">Merge selected</button>
         <span style="font-size:11.5px;color:var(--cm-fg-muted)">Dates</span>
         <span data-daterange></span>
       </div>
@@ -959,29 +960,124 @@
         <option value="__ignore__"${sel==='__ignore__'?' selected':''}>Ignore</option>
         <optgroup label="Exercises">${exercises.map(e => `<option value="${e.id}"${sel===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</optgroup>`;
     }
+    function moveOptions(){
+      return `<option value="">Move to…</option>
+        <option value="__ignore__">Ignore</option>
+        <optgroup label="Exercises">${exercises.map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}</optgroup>`;
+    }
+
+    // ── Capa 2: manual regrouping. Groups are a VIEW; only period_name→choice
+    // matters at save time, so merge/split/move just shuffle names between groups.
+    const MINIBTN_CSS = 'padding:2px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-muted);font:600 10px var(--cm-font-sans);cursor:pointer';
+    let reassignedCount = 0;
+
+    function recompute(g){
+      if (!g.names.length) { g.repName=''; g.nInst=0; g.avgMin=0; g.key=''; return g; }
+      const rep = g.names.slice().sort((a,b)=>(b.n_instances||0)-(a.n_instances||0))[0];
+      g.repName = rep.period_name;
+      g.nInst = g.names.reduce((s,n)=>s+(n.n_instances||0),0);
+      const totMin = g.names.reduce((s,n)=>s+(+n.avg_minutes||0)*(n.n_instances||0),0);
+      g.avgMin = g.nInst ? totMin/g.nInst : 0;
+      g.key = normName(rep.period_name);
+      return g;
+    }
+    function makeGroup(names, choice){
+      return recompute({ names, repName:'', nInst:0, avgMin:0, choice: choice||'', mapped:false, expanded:false, msel:false });
+    }
+    function updateMergeBar(){
+      const n = groups.filter(g=>g.msel).length;
+      const btn = ov.querySelector('[data-merge]');
+      if (!btn) return;
+      btn.style.display = n>=2 ? '' : 'none';
+      btn.textContent = `Merge selected (${n})`;
+    }
+    // A) Merge ticked cards into one; destination = first explicit choice among them.
+    function mergeSelected(){
+      const idx = groups.map((g,i)=>g.msel?i:-1).filter(i=>i>=0);
+      if (idx.length < 2) return;
+      const target = groups[idx[0]];
+      let chosen = '';
+      for (const i of idx){ const c=groups[i].choice; if (c && c!=='__ignore__'){ chosen=c; break; } }
+      if (!chosen && idx.some(i=>groups[i].choice==='__ignore__')) chosen='__ignore__';
+      for (let k=1;k<idx.length;k++) target.names.push(...groups[idx[k]].names);
+      target.choice = chosen; target.msel = false; target.expanded = true;
+      recompute(target);
+      idx.slice(1).sort((a,b)=>b-a).forEach(i=>groups.splice(i,1));
+      modalMsg.style.color='var(--cm-fg-muted)'; modalMsg.textContent=`Merged ${idx.length} groups into "${target.repName}" — confirm the variants below.`;
+      paint();
+    }
+    // B) Split ticked names out of a group into a new, unassigned card.
+    function splitOut(gi){
+      const g = groups[gi];
+      const checked = [...listEl.querySelectorAll(`[data-namesel="${gi}"]:checked`)].map(c=>c.value);
+      if (!checked.length) { modalMsg.style.color='var(--cm-fg-muted)'; modalMsg.textContent='Tick at least one name to split out.'; return; }
+      if (checked.length === g.names.length) { modalMsg.style.color='var(--cm-fg-muted)'; modalMsg.textContent='Can’t split out the whole group — leave at least one name.'; return; }
+      const moving = g.names.filter(n=>checked.includes(n.period_name));
+      g.names = g.names.filter(n=>!checked.includes(n.period_name));
+      recompute(g);
+      const ng = makeGroup(moving, ''); ng.expanded = true;
+      groups.splice(gi+1, 0, ng);
+      reassignedCount += moving.length;
+      modalMsg.style.color='var(--cm-fg-muted)'; modalMsg.textContent=`Split out ${moving.length} name${moving.length!==1?'s':''} — assign them below.`;
+      paint();
+    }
+    // C) Move a single period_name to another exercise (its own new card).
+    function moveName(gi, periodName, value){
+      if (!value) return;
+      const g = groups[gi];
+      const n = g.names.find(x=>x.period_name===periodName);
+      if (!n) return;
+      reassignedCount += 1;
+      if (g.names.length === 1) { g.choice = value; recompute(g); modalMsg.style.color='var(--cm-fg-muted)'; modalMsg.textContent=`Moved "${periodName}".`; paint(); return; }
+      g.names = g.names.filter(x=>x.period_name!==periodName);
+      recompute(g);
+      groups.splice(gi+1, 0, makeGroup([n], value));
+      modalMsg.style.color='var(--cm-fg-muted)'; modalMsg.textContent=`Moved "${periodName}".`;
+      paint();
+    }
 
     function paint(){
       if (!groups.length) {
         listEl.innerHTML = `<div style="padding:36px;text-align:center;color:var(--cm-fg-muted)">No GPS period data yet. Sync from Catapult first.</div>`;
+        updateMergeBar();
         return;
       }
       listEl.innerHTML = groups.map((g,i) => {
-        const variants = g.names.length > 1
-          ? `<div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${g.names.length} variants · ${g.names.map(n=>esc(n.period_name)).join(' · ')}</div>`
-          : '';
-        return `<div data-search-row="${esc((g.key+' '+g.names.map(n=>n.period_name).join(' ')).toLowerCase())}" data-gi="${i}" style="padding:10px 0;border-bottom:1px solid var(--cm-border)${g.mapped?'':';background:var(--cm-warning-bg,rgba(245,158,11,.06))'}">
-          <div style="display:grid;grid-template-columns:1.5fr 1.5fr auto;gap:10px;align-items:center">
+        const resolved = g.choice !== '';
+        const single = g.names.length === 1;
+        const variantsLine = `<div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>${g.names.length} variant${g.names.length!==1?'s':''}${single?' · '+esc(g.names[0].period_name):''}</span>
+          <button type="button" data-expand="${i}" style="${MINIBTN_CSS}">${g.expanded?'Hide names':'Edit names'}</button>
+        </div>`;
+        const panel = g.expanded ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft,rgba(0,0,0,.02))">
+          ${g.names.map(n => `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:3px 0">
+            <input type="checkbox" data-namesel="${i}" value="${esc(n.period_name)}">
+            <span style="font:500 11px var(--cm-font-mono);color:var(--cm-fg)">${esc(n.period_name)} <span style="color:var(--cm-fg-muted)">· ${n.n_instances||0}×</span></span>
+            <select data-moveone="${i}" data-pn="${esc(n.period_name)}" style="padding:4px 7px;border:1px solid var(--cm-border);border-radius:7px;background:var(--cm-bg);color:var(--cm-fg-strong);font:600 10.5px var(--cm-font-sans)">${moveOptions()}</select>
+          </div>`).join('')}
+          <div style="margin-top:6px;display:flex;justify-content:flex-end">
+            <button type="button" data-splitout="${i}" style="${MINIBTN_CSS}">Split out selected →</button>
+          </div>
+        </div>` : '';
+        return `<div data-search-row="${esc((g.key+' '+g.names.map(n=>n.period_name).join(' ')).toLowerCase())}" data-gi="${i}" style="padding:10px 0;border-bottom:1px solid var(--cm-border)${resolved?'':';background:var(--cm-warning-bg,rgba(245,158,11,.06))'}">
+          <div style="display:grid;grid-template-columns:auto 1.4fr 1.4fr auto;gap:10px;align-items:center">
+            <input type="checkbox" data-mergesel="${i}" ${g.msel?'checked':''} title="Select to merge">
             <div>
-              <div style="font:600 12.5px var(--cm-font-sans);color:var(--cm-fg)">${esc(g.repName)}${g.mapped?'':' · <span style="color:var(--cm-warning,#b45309)">unmapped</span>'}</div>
+              <div style="font:600 12.5px var(--cm-font-sans);color:var(--cm-fg)">${esc(g.repName)}${resolved?'':' · <span style="color:var(--cm-warning,#b45309)">unmapped</span>'}</div>
               <div style="font:400 10.5px var(--cm-font-mono);color:var(--cm-fg-muted)">${g.nInst} instance${g.nInst!==1?'s':''} · ~${g.avgMin.toFixed(1)} min avg</div>
             </div>
             <select data-choice="${i}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${exOptions(g.choice)}</select>
             <button class="cm-btn is-outline is-sm" data-create="${i}" title="Create an exercise named &quot;${esc(g.repName)}&quot; and map to it">Create exercise</button>
-          </div>${variants}
+          </div>${variantsLine}${panel}
         </div>`;
       }).join('');
-      listEl.querySelectorAll('[data-choice]').forEach(s => s.addEventListener('change', () => { groups[+s.dataset.choice].choice = s.value; }));
+      listEl.querySelectorAll('[data-choice]').forEach(s => s.addEventListener('change', () => { groups[+s.dataset.choice].choice = s.value; paint(); }));
       listEl.querySelectorAll('[data-create]').forEach(b => b.addEventListener('click', () => createForGroup(+b.dataset.create)));
+      listEl.querySelectorAll('[data-expand]').forEach(b => b.addEventListener('click', () => { const g=groups[+b.dataset.expand]; g.expanded=!g.expanded; paint(); }));
+      listEl.querySelectorAll('[data-mergesel]').forEach(c => c.addEventListener('change', () => { groups[+c.dataset.mergesel].msel = c.checked; updateMergeBar(); }));
+      listEl.querySelectorAll('[data-splitout]').forEach(b => b.addEventListener('click', () => splitOut(+b.dataset.splitout)));
+      listEl.querySelectorAll('[data-moveone]').forEach(s => s.addEventListener('change', () => moveName(+s.dataset.moveone, s.dataset.pn, s.value)));
+      updateMergeBar();
       applyFilter();
     }
 
@@ -1058,13 +1154,14 @@
         if (error) { modalMsg.style.color = 'var(--cm-danger)'; modalMsg.textContent = 'Error: ' + error.message; saveBtn.disabled = false; return; }
       }
       modalMsg.style.color = 'var(--cm-success,#16a34a)';
-      modalMsg.textContent = `${mappedN} mapped · ${createdCount} created · ${ignoredN} ignored.`;
+      modalMsg.textContent = `${mappedN} mapped · ${createdCount} created · ${ignoredN} ignored · ${reassignedCount} reassigned.`;
       saveBtn.textContent = 'Done'; saveBtn.disabled = false;
       saveBtn.onclick = () => ov.remove();
     }
 
     ov.querySelectorAll('[data-x]').forEach(b => b.addEventListener('click', () => ov.remove()));
     ov.querySelector('[data-save]').addEventListener('click', save);
+    ov.querySelector('[data-merge]').addEventListener('click', mergeSelected);
     paint();
   }
 })();
