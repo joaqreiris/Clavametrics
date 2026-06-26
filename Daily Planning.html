@@ -599,6 +599,7 @@ async function dpChangeStatus(playerId, newStatus) {
 }
 
 async function loadDay(dateStr) {
+  dpFlushTargets();   // persist any pending gps_targets to the OLD day before switching
   _dpCurrentDate = dateStr;
   const fmt = _dpFmt(dateStr);
   const today = new Date().toISOString().split('T')[0];
@@ -967,15 +968,36 @@ function dpProjMetricKeys(){
   return _DP_PROJ_DEFAULT.slice();
 }
 let _dpProjSaveTimer = null;
-function dpSaveTargets(){
+let _dpProjPending = null;   // { sid, snap } captured when a save is scheduled
+function _dpWriteTargets(sid, snap){
+  if (!sid) return Promise.resolve();
+  return window.sb.from('training_sessions')
+    .update({ gps_targets: snap }).eq('id', sid).eq('club_id', _dpClubId)
+    .then(({ error }) => { if (error) console.warn('[gps_targets] save failed:', error.message); });
+}
+// Capture session id + a SNAPSHOT of targets NOW (not at fire time) so navigating
+// to another day before the debounce can't write to the wrong/empty session.
+async function dpSaveTargets(){
   clearTimeout(_dpProjSaveTimer);
-  _dpProjSaveTimer = setTimeout(async () => {
-    // Ensure the session exists in DB first (same as adding the first task),
-    // otherwise targets have nowhere to persist.
-    if (!_dpCurrentSessionId) { try { await dpEnsureSession(); } catch(_){} }
-    if (!_dpCurrentSessionId) return;
-    window.sb.from('training_sessions').update({ gps_targets: _dpGpsTargets }).eq('id', _dpCurrentSessionId).eq('club_id', _dpClubId);
-  }, 500);
+  const snap = { ..._dpGpsTargets };
+  const day = _dpCurrentDate;
+  let sid = _dpCurrentSessionId;
+  if (!sid) {
+    try { await dpEnsureSession(); } catch(_){}
+    if (_dpCurrentDate !== day) return;  // navigated during ensure → don't write to the new day
+    sid = _dpCurrentSessionId;
+  }
+  if (!sid) return;                      // still no session → nothing to write
+  _dpProjPending = { sid, snap };
+  _dpProjSaveTimer = setTimeout(() => { _dpProjPending = null; _dpWriteTargets(sid, snap); }, 500);
+}
+// Write any pending save immediately (call before navigating days).
+function dpFlushTargets(){
+  if (!_dpProjPending) return;
+  clearTimeout(_dpProjSaveTimer);
+  const { sid, snap } = _dpProjPending;
+  _dpProjPending = null;
+  _dpWriteTargets(sid, snap);
 }
 async function renderGpsProjection(){
   const card = document.getElementById('dpGpsProj'); if (!card) return;
@@ -1038,6 +1060,8 @@ async function renderGpsProjection(){
     const barEl = body.querySelector(`[data-bar="${k}"]`); if (barEl) { barEl.style.width = bar.w + '%'; barEl.style.background = bar.c; }
     const lblEl = body.querySelector(`[data-tgtlabel="${k}"]`); if (lblEl) lblEl.textContent = tgt ? `target ${tgt.toLocaleString()} ${unit}` : 'no target';
   }));
+  // Save on blur too (not only on the debounce).
+  body.querySelectorAll('[data-proj-target]').forEach(inp => inp.addEventListener('change', async () => { await dpSaveTargets(); dpFlushTargets(); }));
 
   const Y = withId.length, X = covered.length, Z = Y - X;
   const note = document.getElementById('dpProjNote');
