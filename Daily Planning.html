@@ -602,6 +602,7 @@ async function dpChangeStatus(playerId, newStatus) {
 
 async function loadDay(dateStr) {
   dpFlushTargets();   // persist any pending gps_targets to the OLD day before switching
+  dpFlushEdits();     // persist any pending per-task edits (notes/series/work/rest) to the OLD day
   _dpCurrentDate = dateStr;
   const fmt = _dpFmt(dateStr);
   const today = new Date().toISOString().split('T')[0];
@@ -739,6 +740,10 @@ function dpToast(msg) {
   clearTimeout(t._timer); t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3200);
 }
 window.addEventListener('beforeprint', dpRenderPrintSheet);
+// Persist any pending edits/targets if the tab is closed or reloaded before the debounce fires.
+window.addEventListener('beforeunload', () => { dpFlushEdits(); dpFlushTargets(); });
+// Flush as soon as a task input/textarea loses focus (belt-and-suspenders over the debounce).
+['dpExGrid','dpActStrip'].forEach(id => document.getElementById(id)?.addEventListener('focusout', dpFlushEdits));
 
 // ── Session exercises ──
 const CAT_CLS = { physical:'fis', tactical:'tac', technical:'tec', strength:'str', mobility:'mob', other:'oth' };
@@ -925,11 +930,25 @@ function dpBlockMins(e) {
 
 // ── Per-task duration / series×work_time editing (BUG C) ──────────────────
 let _dpEditTimers = {};
+let _dpEditPending = {};   // seid -> accumulated patch not yet written (merge, don't clobber)
 function _dpEditSave(seid, patch){
+  _dpEditPending[seid] = { ...(_dpEditPending[seid] || {}), ...patch };   // merge so editing several fields fast doesn't lose any
   clearTimeout(_dpEditTimers[seid]);
-  _dpEditTimers[seid] = setTimeout(() => {
-    window.sb.from('session_exercises').update(patch).eq('id', seid).eq('club_id', _dpClubId);
-  }, 500);
+  _dpEditTimers[seid] = setTimeout(() => { _dpEditFlushOne(seid); }, 500);
+}
+async function _dpEditFlushOne(seid){
+  clearTimeout(_dpEditTimers[seid]); delete _dpEditTimers[seid];
+  const patch = _dpEditPending[seid];
+  if (!patch) return;
+  delete _dpEditPending[seid];
+  const { error } = await window.sb.from('session_exercises').update(patch).eq('id', seid).eq('club_id', _dpClubId);
+  if (error) console.warn('[dp-edit] save failed:', error.message);
+}
+// Flush ALL pending task edits NOW (call before switching day / on unload / on blur).
+function dpFlushEdits(){ Object.keys(_dpEditPending).forEach(seid => _dpEditFlushOne(seid)); }
+// A task may live in field exercises OR activation activities (both render the notes field).
+function _dpFindTask(seid){
+  return _dpFieldExercises.find(x => x.id === seid) || (window._dpActItems||[]).find(x => x.id === seid) || null;
 }
 function _dpEffLabel(seid){
   const e = _dpFieldExercises.find(x => x.id === seid);
@@ -961,7 +980,7 @@ function dpEditRest(seid, val){
   _dpEditSave(seid, { rest_time: e.rest_time });
 }
 function dpEditNotes(seid, val){
-  const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
+  const e = _dpFindTask(seid); if (!e) return;   // field OR activation task
   e.notes = val === '' ? null : val;       // per-session only — never written to the Designer exercise
   _dpEditSave(seid, { notes: e.notes });
 }
@@ -1602,7 +1621,7 @@ async function loadActivationActivities(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,duration,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase')
+    .select('id,name,duration,notes,planner_exercise_id,calc_orientation,m2_per_player,players_count,field_width,field_height,phase')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','activation').order('position');
   const acts = data || [];
   window._dpActItems = acts;
