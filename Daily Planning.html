@@ -1225,15 +1225,27 @@ async function dpRenderPrintSheet() {
       </div>`).join('')}
     </div>`;
 
-    // GPS targets → ONE simple line only (the interactive panel is never printed).
-    const _tgtKeys = Object.keys(_dpGpsTargets||{}).filter(k => _dpGpsTargets[k] != null && _dpGpsTargets[k] !== '');
-    const targetLine = _tgtKeys.length ? `<div style="font:600 10.5px ${MONO};color:#5B6470;margin:-6px 0 14px">Target: ${
-      _tgtKeys.map(k => { const m=(window.CM_GPS_METRICS||[]).find(x=>x.key===k); const lab=m?m.label:k; const unit=m?(m.avgUnit||''):'';
-        return `${esc(lab)} ${Number(_dpGpsTargets[k]).toLocaleString()}${unit?esc(unit):''}`; }).join(' · ')
-    }</div>` : '';
-
     // section title helper
     const sectionTitle = txt => `<div style="display:flex;align-items:center;gap:10px;margin:0 0 9px"><span style="font:700 11px ${FONT};letter-spacing:.07em;text-transform:uppercase;color:#15181D">${esc(txt)}</span><span style="flex:1;height:1px;background:#E7E7E4"></span></div>`;
+
+    // Conditional load (GPS) — print-only strip: projected value + target per active metric (interactive panel stays no-print)
+    const _gpsKeys = (typeof dpProjMetricKeys === 'function') ? dpProjMetricKeys() : [];
+    const _gpsVals = window._dpProjVals || {};
+    const _gpsCells = _gpsKeys.map(k => {
+      const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); if (!m) return '';
+      const proj = _gpsVals[k]; const tgtRaw = _dpGpsTargets[k];
+      const tgt = (tgtRaw != null && tgtRaw !== '') ? Number(tgtRaw) : null;
+      if ((proj == null || proj === 0) && tgt == null) return '';   // skip empty metrics
+      const unit = m.avgUnit || '';
+      return `<div style="border:1px solid #E7E7E4;border-radius:8px;padding:6px 9px">
+        <div style="font:600 8px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF">${esc(m.label)}</div>
+        <div style="font:700 12px ${MONO};color:#15181D;margin-top:2px">${(proj||0).toLocaleString()}${tgt!=null?` <span style="color:#9CA3AF;font-weight:500">/ ${tgt.toLocaleString()}</span>`:''}${unit?` <span style="font-size:8.5px;color:#8A93A0;font-weight:500">${esc(unit)}</span>`:''}</div>
+      </div>`;
+    }).filter(Boolean);
+    const gpsStrip = _gpsCells.length ? `<div style="margin-bottom:16px">
+      ${sectionTitle('Conditional load · GPS')}
+      <div style="display:grid;grid-template-columns:repeat(${Math.min(_gpsCells.length,6)},1fr);gap:8px">${_gpsCells.join('')}</div>
+    </div>` : '';
 
     // 4) Squad — recompute status like dpRenderSquad
     const avMap = window._dpAvMap || {};
@@ -1333,7 +1345,7 @@ async function dpRenderPrintSheet() {
     </div>`;
 
     host.innerHTML = `<div class="dsp-sheet" style="--club-accent:${accent}; width:794px; min-height:1123px; background:#fff; padding:38px 42px 30px; box-sizing:border-box; font:400 13px/1.5 ${FONT}; color:#15181D; display:flex; flex-direction:column; margin:0 auto">
-      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${targetLine}${squadBlock}${actBlock}${fieldBlock}${footer}
+      ${head}${sessionLine}${metaGrid}${notesBand}${kpiStrip}${gpsStrip}${squadBlock}${actBlock}${fieldBlock}${footer}
     </div>`;
   } catch (e) {
     console.warn('dpRenderPrintSheet failed', e);
