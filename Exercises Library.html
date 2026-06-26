@@ -653,6 +653,7 @@
       // Meta row
       const metaParts = [];
       if (ex.players_count) metaParts.push(`<span class="it"><i class="ti ti-users"></i>${ex.players_count} players</span>`);
+      if (ex.field_width && ex.field_height) metaParts.push(`<span class="it"><i class="ti ti-dimensions"></i>${ex.field_width}×${ex.field_height} m</span>`);
       if (m2) metaParts.push(`<span class="it"><i class="ti ti-ruler-measure"></i>${m2} m²/p</span>`);
       if (ex.series) metaParts.push(`<span class="it"><i class="ti ti-repeat"></i>${ex.series}×</span>`);
 
@@ -916,7 +917,7 @@
     const [pnRes, mapRes, exRes] = await Promise.all([
       window.sb.from('v_gps_period_names').select('period_name,n_instances,avg_minutes').eq('club_id', clubId),
       window.sb.from('gps_drill_map').select('period_name,exercise_id,ignored').eq('club_id', clubId),
-      window.sb.from('exercises').select('id,name').eq('club_id', clubId).order('name'),
+      window.sb.from('exercises').select('id,name,field_width,field_height,players_count').eq('club_id', clubId).order('name'),
     ]);
     const periodNames = pnRes.data || [];
     const existingMap = {};
@@ -1024,7 +1025,47 @@
     // ── Capa 2: manual regrouping. Groups are a VIEW; only period_name→choice
     // matters at save time, so merge/split/move just shuffle names between groups.
     const MINIBTN_CSS = 'padding:2px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-muted);font:600 10px var(--cm-font-sans);cursor:pointer';
+    const DIMINPUT_CSS = 'width:52px;padding:3px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:600 10.5px var(--cm-font-mono)';
     let reassignedCount = 0;
+
+    // ── Capa 3: structured identity — edit width/height/players of the target exercise.
+    const dimsTouched = new Set();          // exercise_ids whose dims were edited → persisted on save
+    const numOrNull = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
+    // Where the dims editor writes: the target exercise (mapped) or a transient
+    // object on the group (used by "Create exercise" to seed dims at creation).
+    function dimTarget(g){
+      if (g.choice && g.choice !== '__ignore__') return exercises.find(e => e.id === g.choice) || null;
+      if (g.choice === '') return (g.newDims ||= { field_width:null, field_height:null, players_count:null });
+      return null;
+    }
+    function m2text(t){
+      const w = +t.field_width, h = +t.field_height, p = +t.players_count;
+      return (w > 0 && h > 0 && p > 0) ? Math.round(w*h/p) : '—';
+    }
+    // Optional, non-forced hint parsed from the period names (e.g. "40X20", "4V4").
+    function parseDimHints(g){
+      const txt = ' ' + g.names.map(n => n.period_name).join('  ').toUpperCase() + ' ';
+      let w=null, h=null, players=null;
+      const pitchRe = /(\d{1,3})\s*[X×]\s*(\d{1,3})/g; let m;
+      while ((m = pitchRe.exec(txt))) { const a=+m[1], b=+m[2]; if (a>12 || b>12) { w=a; h=b; break; } }   // pitch: a value > 12
+      const pv = txt.match(/(\d{1,2})\s*(?:VS|V|-)\s*(\d{1,2})/);
+      if (pv) players = (+pv[1]) + (+pv[2]);
+      else { const xm = txt.match(/(\d{1,2})\s*[X×]\s*(\d{1,2})/); if (xm && +xm[1]<=12 && +xm[2]<=12) players = (+xm[1]) + (+xm[2]); }
+      return (w != null || players != null) ? { w, h, players } : null;
+    }
+    function dimsEditorHtml(g, i){
+      const t = dimTarget(g);
+      if (!t) return '';
+      const h = parseDimHints(g);
+      const hintBtn = h ? `<button type="button" data-dimhint="${i}" style="${MINIBTN_CSS}">Use ${h.w!=null?`${h.w}×${h.h}`:''}${(h.w!=null&&h.players!=null)?' · ':''}${h.players!=null?`${h.players}p`:''} from name</button>` : '';
+      return `<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font:500 10.5px var(--cm-font-sans);color:var(--cm-fg-muted)">
+        <label style="display:flex;align-items:center;gap:4px">W <input data-dim="field_width"   data-gi="${i}" type="number" min="0" value="${t.field_width ?? ''}"   style="${DIMINPUT_CSS}"></label>
+        <label style="display:flex;align-items:center;gap:4px">H <input data-dim="field_height"  data-gi="${i}" type="number" min="0" value="${t.field_height ?? ''}"  style="${DIMINPUT_CSS}"></label>
+        <label style="display:flex;align-items:center;gap:4px">Players <input data-dim="players_count" data-gi="${i}" type="number" min="0" value="${t.players_count ?? ''}" style="${DIMINPUT_CSS}"></label>
+        <span data-m2="${i}">${m2text(t)} m²/p</span>
+        ${hintBtn}
+      </div>`;
+    }
 
     function recompute(g){
       if (!g.names.length) { g.repName=''; g.nInst=0; g.avgMin=0; g.key=''; return g; }
@@ -1127,7 +1168,7 @@
             </div>
             <select data-choice="${i}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${exOptions(g.choice)}</select>
             <button class="cm-btn is-outline is-sm" data-create="${i}" title="Create an exercise named &quot;${esc(g.repName)}&quot; and map to it">Create exercise</button>
-          </div>${gpsLine}${variantsLine}${panel}
+          </div>${dimsEditorHtml(g, i)}${gpsLine}${variantsLine}${panel}
         </div>`;
       }).join('');
       listEl.querySelectorAll('[data-choice]').forEach(s => s.addEventListener('change', () => { groups[+s.dataset.choice].choice = s.value; paint(); }));
@@ -1136,6 +1177,20 @@
       listEl.querySelectorAll('[data-mergesel]').forEach(c => c.addEventListener('change', () => { groups[+c.dataset.mergesel].msel = c.checked; updateMergeBar(); }));
       listEl.querySelectorAll('[data-splitout]').forEach(b => b.addEventListener('click', () => splitOut(+b.dataset.splitout)));
       listEl.querySelectorAll('[data-moveone]').forEach(s => s.addEventListener('change', () => moveName(+s.dataset.moveone, s.dataset.pn, s.value)));
+      // Capa 3: structured dims — write live to the target, persist on save.
+      listEl.querySelectorAll('[data-dim]').forEach(inp => inp.addEventListener('input', () => {
+        const gi = +inp.dataset.gi, g = groups[gi], t = dimTarget(g); if (!t) return;
+        t[inp.dataset.dim] = inp.value === '' ? null : Number(inp.value);
+        if (g.choice && g.choice !== '__ignore__') dimsTouched.add(g.choice);
+        const span = listEl.querySelector(`[data-m2="${gi}"]`); if (span) span.textContent = `${m2text(t)} m²/p`;
+      }));
+      listEl.querySelectorAll('[data-dimhint]').forEach(b => b.addEventListener('click', () => {
+        const gi = +b.dataset.dimhint, g = groups[gi], t = dimTarget(g), h = parseDimHints(g); if (!t || !h) return;
+        if (h.w != null) { t.field_width = h.w; t.field_height = h.h; }
+        if (h.players != null) t.players_count = h.players;
+        if (g.choice && g.choice !== '__ignore__') dimsTouched.add(g.choice);
+        paint();
+      }));
       updateMergeBar();
       applyFilter();
     }
@@ -1184,10 +1239,16 @@
     async function createForGroup(i){
       const g = groups[i];
       modalMsg.style.color = 'var(--cm-fg-muted)'; modalMsg.textContent = 'Creating exercise…';
+      const d = g.newDims || {};               // dims seeded in the editor before creating
+      const ins = { club_id: clubId, name: g.repName };
+      if (numOrNull(d.field_width)   != null) ins.field_width   = numOrNull(d.field_width);
+      if (numOrNull(d.field_height)  != null) ins.field_height  = numOrNull(d.field_height);
+      if (numOrNull(d.players_count) != null) ins.players_count = numOrNull(d.players_count);
       const { data, error } = await window.sb.from('exercises')
-        .insert({ club_id: clubId, name: g.repName }).select('id,name').single();
+        .insert(ins).select('id,name,field_width,field_height,players_count').single();
       if (error) { modalMsg.style.color = 'var(--cm-danger)'; modalMsg.textContent = 'Error: ' + error.message; return; }
-      exercises.push({ id: data.id, name: data.name });
+      exercises.push({ id: data.id, name: data.name, field_width: data.field_width, field_height: data.field_height, players_count: data.players_count });
+      g.newDims = null;
       exercises.sort((a,b) => (a.name||'').localeCompare(b.name||''));
       createdCount++;
       g.choice = data.id;
@@ -1212,8 +1273,18 @@
         const { error } = await window.sb.from('gps_drill_map').upsert(ups, { onConflict: 'club_id,period_name' });
         if (error) { modalMsg.style.color = 'var(--cm-danger)'; modalMsg.textContent = 'Error: ' + error.message; saveBtn.disabled = false; return; }
       }
+      // Capa 3: persist edited structured dimensions onto the target exercises.
+      let dimsN = 0;
+      for (const exId of dimsTouched) {
+        const ex = exercises.find(e => e.id === exId); if (!ex) continue;
+        const { error } = await window.sb.from('exercises')
+          .update({ field_width: numOrNull(ex.field_width), field_height: numOrNull(ex.field_height), players_count: numOrNull(ex.players_count) })
+          .eq('id', exId).eq('club_id', clubId);
+        if (error) { modalMsg.style.color = 'var(--cm-danger)'; modalMsg.textContent = 'Error saving dimensions: ' + error.message; saveBtn.disabled = false; return; }
+        dimsN++;
+      }
       modalMsg.style.color = 'var(--cm-success,#16a34a)';
-      modalMsg.textContent = `${mappedN} mapped · ${createdCount} created · ${ignoredN} ignored · ${reassignedCount} reassigned.`;
+      modalMsg.textContent = `${mappedN} mapped · ${createdCount} created · ${ignoredN} ignored · ${reassignedCount} reassigned${dimsN ? ` · ${dimsN} dims saved` : ''}.`;
       saveBtn.textContent = 'Done'; saveBtn.disabled = false;
       saveBtn.onclick = () => ov.remove();
     }
