@@ -44,6 +44,10 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 .tb-btn{height:34px;padding:0 14px;border-radius:var(--r-3);border:1px solid var(--cm-border-strong);background:var(--cm-surface);color:var(--cm-fg);font:500 13px var(--cm-font-sans);cursor:pointer;display:inline-flex;align-items:center;gap:7px}
 .tb-btn:hover{background:var(--cm-bg-soft)}
 .tb-btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.dossier-cfg{width:100%;max-width:840px;display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-bottom:18px;padding:10px 14px;border:1px solid var(--cm-border);border-radius:var(--r-3);background:var(--cm-surface)}
+.dossier-cfg .cfg-ttl{font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg)}
+.dossier-cfg label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--cm-fg);cursor:pointer}
+.dossier-cfg input{accent-color:var(--accent);cursor:pointer}
 .swatch{display:flex;gap:6px;align-items:center}
 .sw{width:18px;height:18px;border-radius:5px;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--cm-border)}
 .sw.on{box-shadow:0 0 0 2px var(--cm-fg-strong)}
@@ -158,10 +162,23 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
     </div>
   </div>
 
+  <div class="dossier-cfg no-print" id="dossierCfg">
+    <span class="cfg-ttl">Build dossier</span>
+    <label><input type="checkbox" data-block="technical" checked> Technical</label>
+    <label><input type="checkbox" data-block="athletic" checked> Athletic</label>
+    <label><input type="checkbox" data-block="production" checked> Production</label>
+    <label><input type="checkbox" data-block="scouting" checked> Scouting</label>
+  </div>
+
   <div id="sheetHost"></div>
 </div>
 
 <script>
+// ── dossier config (Phase 1: which BLOCKS render — profile/hero always shown) ──
+const DOSSIER_CFG = { blocks: { technical:true, scouting:true, athletic:true, production:true } };
+// assigned inside boot() once data is fetched; calling it repaints the sheet live.
+let renderSheet = ()=>{};
+
 // ── i18n (light) — only static labels; proper nouns are not translated ──
 const LABELS = {
   en: { dossier:'Player Dossier', playerDossier:'Player Dossier', season:'Season', appearances:'Appearances', minutes:'Minutes',
@@ -464,6 +481,7 @@ async function boot(){
     radarHTML = `<div class="empty-note">${esc(L.noTechEval)}</div>`;
   }
 
+  renderSheet = ()=>{
   host.innerHTML = `<div class="ph-page">
     <header class="ph-head">
       <div class="ph-crest">${crestInner}</div>
@@ -498,20 +516,20 @@ async function boot(){
       <div class="ph-kpi"><div class="k">${esc(L.distMatch)}</div><div class="v">${distPerMatch!=null?num1(distPerMatch/1000):'—'}<span class="u">${distPerMatch!=null?'km':''}</span></div><div class="x">${distPerMatch!=null?esc(L.matchAvg):''}</div></div>
     </section>
 
-    <!-- Technical -->
+    ${DOSSIER_CFG.blocks.technical ? `<!-- Technical -->
     <div class="ph-block">
       <div class="ph-sec"><h2>${esc(L.technicalProfile||'Technical profile')}</h2><div class="rule"></div><span class="tag">${esc(L.coachScored||'Coach-scored')}</span></div>
       ${hasRadar ? radarHTML : `<div class="ph-note">${esc(L.noTechEval||'No technical evaluation yet.')}</div>`}
-    </div>
+    </div>` : ''}
 
-    <!-- Scouting (editable + Save, save button is .no-print) -->
+    ${DOSSIER_CFG.blocks.scouting ? `<!-- Scouting (editable + Save, save button is .no-print) -->
     <div class="ph-block">
       <div class="ph-sec"><h2>${esc(L.scoutingSummary||'Scouting summary')}</h2><div class="rule"></div></div>
       <div class="ph-note scout" contenteditable="true" data-ph="${esc(L.scoutPlaceholder||'')}"></div>
       <div class="scout-save no-print"><button id="scoutSaveBtn" class="scout-save-btn">${esc(L.saveNote)}</button><span id="scoutSaveMsg"></span></div>
-    </div>
+    </div>` : ''}
 
-    <!-- Athletic profile (percentile bars) -->
+    ${DOSSIER_CFG.blocks.athletic ? `<!-- Athletic profile (percentile bars) -->
     <div class="ph-block">
       <div class="ph-sec"><h2>${esc(L.athleticProfile||'Athletic profile')}</h2><div class="rule"></div><span class="tag">${esc(L.vsCategory)}</span></div>
       ${phMetric(L.topSpeed, topSpeed, 'km/h', pctTopSpeed, false)}
@@ -519,10 +537,10 @@ async function boot(){
       ${phMetric(L.cmj||'CMJ', cmj, 'cm', pctCmj, false)}
       ${phMetric(L.hsrMatch, hsrPerMatch, 'm', pctHsr, false)}
       ${phMetric(L.sprint30, sprint, 's', pctSprint, true)}
-    </div>
+    </div>` : ''}
 
     <!-- Season production (only if prod) -->
-    ${prod ? `<div class="ph-block"><div class="ph-sec"><h2>${esc(L.seasonProduction)}</h2><div class="rule"></div></div>
+    ${(DOSSIER_CFG.blocks.production && prod) ? `<div class="ph-block"><div class="ph-sec"><h2>${esc(L.seasonProduction)}</h2><div class="rule"></div></div>
       <section class="ph-kpis">
         <div class="ph-kpi"><div class="k">${esc(L.goals)}</div><div class="v">${prod.goals}</div></div>
         <div class="ph-kpi"><div class="k">${esc(L.assists)}</div><div class="v">${prod.assists}</div></div>
@@ -552,7 +570,15 @@ async function boot(){
       msg.textContent = '✓ ' + L.saved; setTimeout(() => { msg.textContent = ''; }, 3000);
     } catch (e) { msg.style.color = 'var(--cm-danger)'; msg.textContent = 'Error'; }
   });
+  };
+  renderSheet();
 }
+
+// config panel (no-print) — toggle which blocks render, repaint live
+document.querySelectorAll('#dossierCfg input[data-block]').forEach(cb=>cb.addEventListener('change',()=>{
+  DOSSIER_CFG.blocks[cb.dataset.block] = cb.checked;
+  renderSheet();
+}));
 
 // accent swatches (no-print toolbar)
 document.querySelectorAll('.sw').forEach(s=>s.addEventListener('click',()=>{
