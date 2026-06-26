@@ -1,15 +1,18 @@
 -- =====================================================================
--- ClavaMetrics — BASELINE del esquema public (fuente de verdad)
--- Reconstruido por introspeccion en vivo de la DB de Supabase via
--- Management API (proyecto xesrumijvdmqjrufgeka / Kime-app, pg 17.6).
+-- ClavaMetrics — ESQUEMA COMPLETO de la DB (fuente de verdad unica)
+-- Reconstruido por introspeccion en vivo via Supabase Management API
+-- (proyecto xesrumijvdmqjrufgeka / Kime-app, PostgreSQL 17.6).
 -- Generado: 2026-06-26.  NO editar a mano: regenerar desde la DB.
 --
--- 104 tablas | 205 FKs | 4 vistas | 60 funciones
--- Captura: columnas+tipos, PK, FK, UNIQUE, CHECK, indices, vistas, funciones.
--- NO incluye: politicas RLS, triggers, grants, seeds (ver migrations/ historicas).
+-- 104 tablas | 220 FKs | 4 vistas | 60 funciones
+-- | 29 triggers | 209 politicas RLS
+-- Incluye: tablas, tipos, PK/UNIQUE/CHECK, FK (con ON DELETE), indices,
+--          vistas, funciones (cuerpos reales), triggers, RLS + politicas.
+-- No incluye: GRANTs por rol, datos/seeds, objetos de schemas auth/storage.
 -- =====================================================================
 
--- ---------------------------------------------------------------------
+-- ============================ TABLAS ============================
+
 create table if not exists public.activity_log (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -28,7 +31,6 @@ CREATE UNIQUE INDEX activity_log_gps_session_day_uidx ON public.activity_log USI
 CREATE INDEX activity_log_team_idx ON public.activity_log USING btree (team_id);
 CREATE INDEX activity_log_club_created_idx ON public.activity_log USING btree (club_id, created_at DESC);
 
--- ---------------------------------------------------------------------
 create table if not exists public.ai_card_generations (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -39,11 +41,9 @@ create table if not exists public.ai_card_generations (
   valid boolean,
   accepted boolean,
   created_at timestamp with time zone default now(),
-  constraint ai_card_generations_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id)
+  constraint ai_card_generations_pkey primary key (id)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.audit_log (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -53,13 +53,10 @@ create table if not exists public.audit_log (
   changes jsonb,
   created_at timestamp with time zone default now() not null,
   constraint audit_log_pkey primary key (id),
-  constraint audit_log_operation_check CHECK ((operation = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text]))),
-  foreign key (actor_id) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint audit_log_operation_check CHECK ((operation = ANY (ARRAY['INSERT'::text, 'UPDATE'::text, 'DELETE'::text])))
 );
 CREATE INDEX audit_log_club_created_idx ON public.audit_log USING btree (club_id, created_at DESC);
 
--- ---------------------------------------------------------------------
 create table if not exists public.availability (
   player_id text not null,
   date date not null,
@@ -71,9 +68,7 @@ create table if not exists public.availability (
   constraint availability_player_date_unique UNIQUE (player_id, date),
   constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text])))
 );
-CREATE UNIQUE INDEX availability_player_date_unique ON public.availability USING btree (player_id, date);
 
--- ---------------------------------------------------------------------
 create table if not exists public.body_composition (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -87,15 +82,11 @@ create table if not exists public.body_composition (
   created_by uuid,
   created_at timestamp with time zone default now(),
   constraint body_composition_pkey primary key (id),
-  constraint body_composition_method_check CHECK ((method = ANY (ARRAY['skinfold'::text, 'bia'::text, 'dexa'::text, 'scale'::text]))),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (player_id) references public.players(id),
-  foreign key (created_by) references public.profiles(id)
+  constraint body_composition_method_check CHECK ((method = ANY (ARRAY['skinfold'::text, 'bia'::text, 'dexa'::text, 'scale'::text])))
 );
 CREATE INDEX idx_body_composition_player_date ON public.body_composition USING btree (player_id, measured_date DESC);
 CREATE INDEX idx_body_composition_club ON public.body_composition USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.calendar_events (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -126,17 +117,12 @@ create table if not exists public.calendar_events (
   constraint calendar_events_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
   constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text]))),
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
-  constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
-  foreign key (season_id) references public.seasons(id),
-  foreign key (competition_id) references public.competitions(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (team_id) references public.teams(id)
+  constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10)))
 );
 CREATE INDEX idx_calendar_events_competition ON public.calendar_events USING btree (competition_id);
 CREATE INDEX idx_calendar_events_recurrence_group ON public.calendar_events USING btree (recurrence_group_id) WHERE (recurrence_group_id IS NOT NULL);
 CREATE UNIQUE INDEX calendar_events_match_uniq ON public.calendar_events USING btree (team_id, date, opponent) WHERE (type = 'match'::text);
 
--- ---------------------------------------------------------------------
 create table if not exists public.card_accumulations (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -146,16 +132,10 @@ create table if not exists public.card_accumulations (
   updated_at timestamp with time zone default now(),
   player_uuid uuid,
   constraint card_accumulations_pkey primary key (id),
-  constraint card_accumulations_club_id_player_id_league_config_id_key UNIQUE (club_id, player_id, league_config_id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (player_id) references public.players(id),
-  foreign key (league_config_id) references public.league_configs(id),
-  foreign key (player_uuid) references public.players(id)
+  constraint card_accumulations_club_id_player_id_league_config_id_key UNIQUE (club_id, player_id, league_config_id)
 );
 CREATE INDEX card_acc_club_player_idx ON public.card_accumulations USING btree (club_id, player_id);
-CREATE UNIQUE INDEX card_accumulations_club_id_player_id_league_config_id_key ON public.card_accumulations USING btree (club_id, player_id, league_config_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.card_templates (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -165,24 +145,19 @@ create table if not exists public.card_templates (
   created_by uuid,
   created_at timestamp with time zone default now(),
   constraint card_templates_pkey primary key (id),
-  constraint cfg_schema CHECK (((config ->> 'schema'::text) = 'gp.card/v1'::text)),
-  foreign key (club_id) references public.clubs(id)
+  constraint cfg_schema CHECK (((config ->> 'schema'::text) = 'gp.card/v1'::text))
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.channel_reads (
   user_id uuid not null,
   channel_key text not null,
   club_id uuid not null,
   last_read_at timestamp with time zone default now() not null,
   team_id uuid,
-  constraint channel_reads_pkey primary key (channel_key, user_id, club_id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (team_id) references public.teams(id)
+  constraint channel_reads_pkey primary key (channel_key, user_id, club_id)
 );
 CREATE INDEX idx_channel_reads_team ON public.channel_reads USING btree (team_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.club_branding (
   club_id uuid not null,
   crest_url text,
@@ -191,11 +166,9 @@ create table if not exists public.club_branding (
   accent_color text,
   hashtag text default '#Clava'::text,
   updated_at timestamp with time zone default now(),
-  constraint club_branding_pkey primary key (club_id),
-  foreign key (club_id) references public.clubs(id)
+  constraint club_branding_pkey primary key (club_id)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.club_gps_settings (
   club_id uuid not null,
   baseline_n integer default 5 not null,
@@ -205,21 +178,17 @@ create table if not exists public.club_gps_settings (
   gps_builder_enabled boolean default true not null,
   constraint club_gps_settings_pkey primary key (club_id),
   constraint club_gps_settings_baseline_n_check CHECK (((baseline_n >= 3) AND (baseline_n <= 10))),
-  constraint club_gps_settings_baseline_mode_check CHECK ((baseline_mode = ANY (ARRAY['personal'::text, 'position'::text]))),
-  foreign key (club_id) references public.clubs(id)
+  constraint club_gps_settings_baseline_mode_check CHECK ((baseline_mode = ANY (ARRAY['personal'::text, 'position'::text])))
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.club_modules (
   club_id uuid not null,
   module_key text not null,
   enabled boolean default true not null,
   updated_at timestamp with time zone default now() not null,
-  constraint club_modules_pkey primary key (club_id, module_key),
-  foreign key (club_id) references public.clubs(id)
+  constraint club_modules_pkey primary key (club_id, module_key)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.club_settings (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -231,12 +200,9 @@ create table if not exists public.club_settings (
   season_name text,
   competition text,
   constraint club_settings_pkey primary key (id),
-  constraint club_settings_club_id_module_key_key UNIQUE (club_id, module_key),
-  foreign key (club_id) references public.clubs(id)
+  constraint club_settings_club_id_module_key_key UNIQUE (club_id, module_key)
 );
-CREATE UNIQUE INDEX club_settings_club_id_module_key_key ON public.club_settings USING btree (club_id, module_key);
 
--- ---------------------------------------------------------------------
 create table if not exists public.clubs (
   id uuid default gen_random_uuid() not null,
   name text not null,
@@ -266,7 +232,6 @@ create table if not exists public.clubs (
 CREATE INDEX clubs_id_idx ON public.clubs USING btree (id);
 CREATE UNIQUE INDEX idx_clubs_provider_customer ON public.clubs USING btree (billing_provider_customer_id) WHERE (billing_provider_customer_id IS NOT NULL);
 
--- ---------------------------------------------------------------------
 create table if not exists public.competitions (
   id uuid default gen_random_uuid() not null,
   season_id uuid not null,
@@ -275,12 +240,10 @@ create table if not exists public.competitions (
   color text default '#534AB7'::text not null,
   created_at timestamp with time zone default now(),
   constraint competitions_pkey primary key (id),
-  constraint competitions_comp_type_check CHECK ((comp_type = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text, 'supercup'::text]))),
-  foreign key (season_id) references public.seasons(id)
+  constraint competitions_comp_type_check CHECK ((comp_type = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text, 'supercup'::text])))
 );
 CREATE INDEX idx_competitions_season ON public.competitions USING btree (season_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.dashboard_cards (
   id uuid default gen_random_uuid() not null,
   dashboard_id uuid not null,
@@ -294,12 +257,10 @@ create table if not exists public.dashboard_cards (
   constraint dashboard_cards_pkey primary key (id),
   constraint cfg_schema CHECK (((config ->> 'schema'::text) = 'gp.card/v1'::text)),
   constraint dashboard_cards_source_check CHECK ((source = ANY (ARRAY['catalog'::text, 'builder'::text, 'ai'::text]))),
-  constraint dashboard_cards_size_check CHECK ((size = ANY (ARRAY['sm'::text, 'md'::text, 'lg'::text, 'full'::text]))),
-  foreign key (dashboard_id) references public.dashboards(id)
+  constraint dashboard_cards_size_check CHECK ((size = ANY (ARRAY['sm'::text, 'md'::text, 'lg'::text, 'full'::text])))
 );
 CREATE INDEX idx_dashboard_cards_pos ON public.dashboard_cards USING btree (dashboard_id, "position");
 
--- ---------------------------------------------------------------------
 create table if not exists public.dashboards (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -313,12 +274,10 @@ create table if not exists public.dashboards (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint dashboards_pkey primary key (id),
-  constraint dashboards_scope_check CHECK ((scope = ANY (ARRAY['player'::text, 'squad'::text]))),
-  foreign key (club_id) references public.clubs(id)
+  constraint dashboards_scope_check CHECK ((scope = ANY (ARRAY['player'::text, 'squad'::text])))
 );
 CREATE INDEX idx_dashboards_club ON public.dashboards USING btree (club_id, sort_order);
 
--- ---------------------------------------------------------------------
 create table if not exists public.default_exercises (
   default_key text not null,
   name text not null,
@@ -341,7 +300,6 @@ create table if not exists public.default_exercises (
   constraint default_exercises_complexity_check CHECK ((complexity = ANY (ARRAY['Low'::text, 'Medium'::text, 'High'::text])))
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.drills (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -352,15 +310,11 @@ create table if not exists public.drills (
   created_by uuid,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  constraint drills_pkey primary key (id),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (created_by) references public.profiles(id)
+  constraint drills_pkey primary key (id)
 );
 CREATE INDEX drills_session_id_idx ON public.drills USING btree (session_id);
 CREATE INDEX drills_club_id_idx ON public.drills USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.evaluations (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -375,16 +329,13 @@ create table if not exists public.evaluations (
   test_name text,
   test_type text,
   title text,
-  constraint evaluations_pkey primary key (id),
-  foreign key (player_id) references public.players(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint evaluations_pkey primary key (id)
 );
 CREATE INDEX evaluations_date_idx ON public.evaluations USING btree (test_date DESC);
 CREATE INDEX evaluations_type_idx ON public.evaluations USING btree (club_id, evaluation_type);
 CREATE INDEX evaluations_club_id_idx ON public.evaluations USING btree (club_id);
 CREATE INDEX evaluations_player_id_idx ON public.evaluations USING btree (player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.exercise_drills (
   id uuid default gen_random_uuid() not null,
   exercise_id uuid not null,
@@ -394,11 +345,9 @@ create table if not exists public.exercise_drills (
   notes text,
   position integer default 0,
   created_at timestamp with time zone default now(),
-  constraint exercise_drills_pkey primary key (id),
-  foreign key (exercise_id) references public.exercises(id)
+  constraint exercise_drills_pkey primary key (id)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.exercises (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -428,12 +377,9 @@ create table if not exists public.exercises (
   constraint exercises_pkey primary key (id),
   constraint exercises_game_type_check CHECK ((game_type = ANY (ARRAY['SSG'::text, 'MSG'::text, 'LSG'::text]))),
   constraint exercises_intensity_check CHECK ((intensity = ANY (ARRAY['LOW'::text, 'MEDIUM'::text, 'HIGH'::text, 'VERY_HIGH'::text]))),
-  constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text]))),
-  foreign key (created_by) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text])))
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.foods (
   id uuid default gen_random_uuid() not null,
   name text not null,
@@ -455,7 +401,6 @@ create table if not exists public.foods (
 CREATE INDEX idx_foods_name ON public.foods USING btree (lower(name));
 CREATE INDEX idx_foods_category ON public.foods USING btree (category);
 
--- ---------------------------------------------------------------------
 create table if not exists public.force_column_mappings (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -465,13 +410,10 @@ create table if not exists public.force_column_mappings (
   unit_conversion numeric default 1.0,
   updated_at timestamp with time zone default now() not null,
   constraint force_column_mappings_pkey primary key (id),
-  constraint force_column_mappings_club_id_source_label_source_column_na_key UNIQUE (club_id, source_label, source_column_name),
-  foreign key (club_id) references public.clubs(id)
+  constraint force_column_mappings_club_id_source_label_source_column_na_key UNIQUE (club_id, source_label, source_column_name)
 );
 CREATE INDEX idx_force_col_map_club ON public.force_column_mappings USING btree (club_id);
-CREATE UNIQUE INDEX force_column_mappings_club_id_source_label_source_column_na_key ON public.force_column_mappings USING btree (club_id, source_label, source_column_name);
 
--- ---------------------------------------------------------------------
 create table if not exists public.force_metric_definitions (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -482,13 +424,11 @@ create table if not exists public.force_metric_definitions (
   created_at timestamp with time zone default now() not null,
   constraint force_metric_definitions_pkey primary key (id),
   constraint force_metric_definitions_category_check CHECK ((category = ANY (ARRAY['jump'::text, 'force'::text, 'power'::text, 'velocity'::text, 'time'::text, 'asymmetry'::text, 'count'::text, 'custom'::text]))),
-  constraint force_metric_definitions_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text)),
-  foreign key (club_id) references public.clubs(id)
+  constraint force_metric_definitions_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text))
 );
 CREATE UNIQUE INDEX uq_force_metric_club ON public.force_metric_definitions USING btree (club_id, key) WHERE (club_id IS NOT NULL);
 CREATE UNIQUE INDEX uq_force_metric_global ON public.force_metric_definitions USING btree (key) WHERE (club_id IS NULL);
 
--- ---------------------------------------------------------------------
 create table if not exists public.force_test_metrics (
   id uuid default gen_random_uuid() not null,
   test_id uuid not null,
@@ -498,15 +438,12 @@ create table if not exists public.force_test_metrics (
   side text,
   unit text,
   constraint force_test_metrics_pkey primary key (id),
-  constraint force_test_metrics_side_check CHECK ((side = ANY (ARRAY['L'::text, 'R'::text]))),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (test_id) references public.force_tests(id)
+  constraint force_test_metrics_side_check CHECK ((side = ANY (ARRAY['L'::text, 'R'::text])))
 );
 CREATE UNIQUE INDEX uq_force_test_metric ON public.force_test_metrics USING btree (test_id, metric_key, COALESCE(side, ''::text));
 CREATE INDEX idx_force_test_metrics_key ON public.force_test_metrics USING btree (club_id, metric_key);
 CREATE INDEX idx_force_test_metrics_test ON public.force_test_metrics USING btree (test_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.force_tests (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -525,17 +462,13 @@ create table if not exists public.force_tests (
   uploaded_by_name text,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  constraint force_tests_pkey primary key (id),
-  foreign key (team_id) references public.teams(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (player_id) references public.players(id)
+  constraint force_tests_pkey primary key (id)
 );
 CREATE INDEX idx_force_tests_club ON public.force_tests USING btree (club_id);
 CREATE INDEX idx_force_tests_type_date ON public.force_tests USING btree (club_id, test_type, test_date);
 CREATE INDEX idx_force_tests_player ON public.force_tests USING btree (player_id);
 CREATE INDEX idx_force_tests_team ON public.force_tests USING btree (team_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_column_mappings (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -549,13 +482,10 @@ create table if not exists public.gps_column_mappings (
   column_type text,
   excluded boolean default false,
   constraint gps_column_mappings_pkey primary key (id),
-  constraint gps_column_mappings_club_id_source_label_source_column_name_key UNIQUE (club_id, source_label, source_column_name),
-  foreign key (club_id) references public.clubs(id)
+  constraint gps_column_mappings_club_id_source_label_source_column_name_key UNIQUE (club_id, source_label, source_column_name)
 );
-CREATE UNIQUE INDEX gps_column_mappings_club_id_source_label_source_column_name_key ON public.gps_column_mappings USING btree (club_id, source_label, source_column_name);
 CREATE INDEX idx_gps_mappings_club ON public.gps_column_mappings USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_dashboard_layouts (
   id uuid default gen_random_uuid() not null,
   user_id uuid not null,
@@ -565,13 +495,9 @@ create table if not exists public.gps_dashboard_layouts (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint gps_dashboard_layouts_pkey primary key (id),
-  constraint gps_dashboard_layouts_user_id_club_id_dashboard_id_key UNIQUE (user_id, club_id, dashboard_id),
-  foreign key (user_id) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint gps_dashboard_layouts_user_id_club_id_dashboard_id_key UNIQUE (user_id, club_id, dashboard_id)
 );
-CREATE UNIQUE INDEX gps_dashboard_layouts_user_id_club_id_dashboard_id_key ON public.gps_dashboard_layouts USING btree (user_id, club_id, dashboard_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_drill_map (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -580,24 +506,18 @@ create table if not exists public.gps_drill_map (
   ignored boolean default false not null,
   created_at timestamp with time zone default now() not null,
   constraint gps_drill_map_pkey primary key (id),
-  constraint gps_drill_map_club_id_period_name_key UNIQUE (club_id, period_name),
-  foreign key (exercise_id) references public.exercises(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint gps_drill_map_club_id_period_name_key UNIQUE (club_id, period_name)
 );
 CREATE INDEX idx_gps_drill_map_club ON public.gps_drill_map USING btree (club_id);
-CREATE UNIQUE INDEX gps_drill_map_club_id_period_name_key ON public.gps_drill_map USING btree (club_id, period_name);
 CREATE INDEX idx_gps_drill_map_exercise ON public.gps_drill_map USING btree (club_id, exercise_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_integration_secrets (
   integration_id uuid not null,
   credential text not null,
   set_at timestamp with time zone default now(),
-  constraint gps_integration_secrets_pkey primary key (integration_id),
-  foreign key (integration_id) references public.gps_integrations(id)
+  constraint gps_integration_secrets_pkey primary key (integration_id)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_integrations (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -613,13 +533,10 @@ create table if not exists public.gps_integrations (
   constraint gps_integrations_pkey primary key (id),
   constraint gps_integrations_club_id_provider_key UNIQUE (club_id, provider),
   constraint gps_integrations_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'configured'::text, 'connected'::text, 'error'::text, 'disabled'::text]))),
-  constraint gps_integrations_provider_check CHECK ((provider = ANY (ARRAY['catapult'::text, 'statsports'::text]))),
-  foreign key (club_id) references public.clubs(id)
+  constraint gps_integrations_provider_check CHECK ((provider = ANY (ARRAY['catapult'::text, 'statsports'::text])))
 );
 CREATE INDEX idx_gps_integrations_club ON public.gps_integrations USING btree (club_id);
-CREATE UNIQUE INDEX gps_integrations_club_id_provider_key ON public.gps_integrations USING btree (club_id, provider);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_metric_definitions (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -641,13 +558,10 @@ create table if not exists public.gps_metric_definitions (
   constraint gps_metric_definitions_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text)),
   constraint gps_metric_definitions_decimals_check CHECK (((decimals >= 0) AND (decimals <= 4))),
   constraint gps_metric_definitions_club_id_key_key UNIQUE (club_id, key),
-  constraint gps_metric_definitions_category_check CHECK ((category = ANY (ARRAY['distance'::text, 'speed'::text, 'acceleration'::text, 'load'::text, 'time'::text, 'count'::text, 'custom'::text]))),
-  foreign key (club_id) references public.clubs(id)
+  constraint gps_metric_definitions_category_check CHECK ((category = ANY (ARRAY['distance'::text, 'speed'::text, 'acceleration'::text, 'load'::text, 'time'::text, 'count'::text, 'custom'::text])))
 );
 CREATE INDEX idx_gps_metric_def_club ON public.gps_metric_definitions USING btree (club_id);
-CREATE UNIQUE INDEX gps_metric_definitions_club_id_key_key ON public.gps_metric_definitions USING btree (club_id, key);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_period_reports (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -673,17 +587,12 @@ create table if not exists public.gps_period_reports (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   constraint gps_period_reports_pkey primary key (id),
-  constraint gps_period_reports_club_id_session_id_period_id_player_id_key UNIQUE (club_id, session_id, period_id, player_id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (player_id) references public.players(id)
+  constraint gps_period_reports_club_id_session_id_period_id_player_id_key UNIQUE (club_id, session_id, period_id, player_id)
 );
 CREATE INDEX idx_gps_period_reports_player ON public.gps_period_reports USING btree (club_id, player_id);
 CREATE INDEX idx_gps_period_reports_session ON public.gps_period_reports USING btree (club_id, session_id);
 CREATE INDEX idx_gps_period_reports_period ON public.gps_period_reports USING btree (club_id, period_id);
-CREATE UNIQUE INDEX gps_period_reports_club_id_session_id_period_id_player_id_key ON public.gps_period_reports USING btree (club_id, session_id, period_id, player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_report_metrics (
   id uuid default gen_random_uuid() not null,
   report_id uuid not null,
@@ -692,16 +601,12 @@ create table if not exists public.gps_report_metrics (
   value numeric,
   created_at timestamp with time zone default now(),
   constraint gps_report_metrics_pkey primary key (id),
-  constraint gps_report_metrics_report_id_metric_key_key UNIQUE (report_id, metric_key),
-  foreign key (report_id) references public.gps_reports(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint gps_report_metrics_report_id_metric_key_key UNIQUE (report_id, metric_key)
 );
 CREATE INDEX idx_gps_rm_club_metric ON public.gps_report_metrics USING btree (club_id, metric_key);
-CREATE UNIQUE INDEX gps_report_metrics_report_id_metric_key_key ON public.gps_report_metrics USING btree (report_id, metric_key);
 CREATE INDEX idx_gps_rm_club_key_report ON public.gps_report_metrics USING btree (club_id, metric_key, report_id);
 CREATE INDEX idx_gps_rm_report ON public.gps_report_metrics USING btree (report_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gps_reports (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -723,10 +628,7 @@ create table if not exists public.gps_reports (
   distance_per_minute numeric,
   updated_at timestamp with time zone default now(),
   constraint gps_reports_pkey primary key (id),
-  constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id),
-  foreign key (player_id) references public.players(id),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id)
 );
 CREATE INDEX gps_reports_created_idx ON public.gps_reports USING btree (created_at DESC);
 CREATE INDEX idx_gps_reports_session ON public.gps_reports USING btree (session_id, player_id);
@@ -734,9 +636,7 @@ CREATE INDEX idx_gps_reports_club_session ON public.gps_reports USING btree (clu
 CREATE INDEX gps_reports_player_id_idx ON public.gps_reports USING btree (player_id);
 CREATE INDEX gps_reports_session_id_idx ON public.gps_reports USING btree (session_id);
 CREATE INDEX gps_reports_club_id_idx ON public.gps_reports USING btree (club_id);
-CREATE UNIQUE INDEX gps_reports_player_id_session_id_key ON public.gps_reports USING btree (player_id, session_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gym_exercises (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -766,8 +666,7 @@ create table if not exists public.gym_exercises (
   source text,
   constraint gym_exercises_pkey primary key (id),
   constraint gym_exercises_complexity_check CHECK ((complexity = ANY (ARRAY['Low'::text, 'Medium'::text, 'High'::text]))),
-  constraint gym_exercises_media_type_check CHECK (((media_type IS NULL) OR (media_type = ANY (ARRAY['image'::text, 'youtube'::text])))),
-  foreign key (club_id) references public.clubs(id)
+  constraint gym_exercises_media_type_check CHECK (((media_type IS NULL) OR (media_type = ANY (ARRAY['image'::text, 'youtube'::text]))))
 );
 CREATE INDEX gym_exercises_speeds_gin ON public.gym_exercises USING gin (movement_speeds);
 CREATE INDEX gym_exercises_contraction_gin ON public.gym_exercises USING gin (contraction_types);
@@ -781,7 +680,6 @@ CREATE INDEX gym_exercises_muscle_groups_gin ON public.gym_exercises USING gin (
 CREATE INDEX gym_exercises_movement_patterns_gin ON public.gym_exercises USING gin (movement_patterns);
 CREATE INDEX gym_exercises_myofascial_gin ON public.gym_exercises USING gin (myofascial_chains);
 
--- ---------------------------------------------------------------------
 create table if not exists public.gym_session_templates (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -789,12 +687,10 @@ create table if not exists public.gym_session_templates (
   content jsonb,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  constraint gym_session_templates_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id)
+  constraint gym_session_templates_pkey primary key (id)
 );
 CREATE INDEX idx_gym_templates_club ON public.gym_session_templates USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.individual_block_completions (
   id uuid default gen_random_uuid() not null,
   block_id uuid not null,
@@ -805,14 +701,10 @@ create table if not exists public.individual_block_completions (
   notes text,
   constraint individual_block_completions_pkey primary key (id),
   constraint individual_block_completions_block_id_player_id_scheduled_d_key UNIQUE (block_id, player_id, scheduled_date),
-  constraint individual_block_completions_rpe_check CHECK (((rpe >= 1) AND (rpe <= 10))),
-  foreign key (player_id) references public.players(id),
-  foreign key (block_id) references public.individual_plan_blocks(id)
+  constraint individual_block_completions_rpe_check CHECK (((rpe >= 1) AND (rpe <= 10)))
 );
 CREATE INDEX idx_ibc_player_date ON public.individual_block_completions USING btree (player_id, scheduled_date DESC);
-CREATE UNIQUE INDEX individual_block_completions_block_id_player_id_scheduled_d_key ON public.individual_block_completions USING btree (block_id, player_id, scheduled_date);
 
--- ---------------------------------------------------------------------
 create table if not exists public.individual_plan_blocks (
   id uuid default gen_random_uuid() not null,
   plan_id uuid not null,
@@ -829,13 +721,11 @@ create table if not exists public.individual_plan_blocks (
   constraint individual_plan_blocks_pkey primary key (id),
   constraint individual_plan_blocks_day_of_week_check CHECK (((day_of_week >= 0) AND (day_of_week <= 6))),
   constraint individual_plan_blocks_intensity_check CHECK ((intensity = ANY (ARRAY['low'::text, 'moderate'::text, 'high'::text, 'max'::text]))),
-  constraint individual_plan_blocks_block_type_check CHECK ((block_type = ANY (ARRAY['warmup'::text, 'strength'::text, 'power'::text, 'plyo'::text, 'speed'::text, 'mobility'::text, 'cardio'::text, 'cooldown'::text, 'technical'::text]))),
-  foreign key (plan_id) references public.individual_plans(id)
+  constraint individual_plan_blocks_block_type_check CHECK ((block_type = ANY (ARRAY['warmup'::text, 'strength'::text, 'power'::text, 'plyo'::text, 'speed'::text, 'mobility'::text, 'cardio'::text, 'cooldown'::text, 'technical'::text])))
 );
 CREATE INDEX idx_ipb_plan_week ON public.individual_plan_blocks USING btree (plan_id, week_index, day_of_week, sort_order);
 CREATE INDEX idx_ipb_plan ON public.individual_plan_blocks USING btree (plan_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.individual_plans (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -851,16 +741,12 @@ create table if not exists public.individual_plans (
   updated_at timestamp with time zone default now(),
   constraint individual_plans_pkey primary key (id),
   constraint individual_plans_focus_check CHECK ((focus = ANY (ARRAY['strength'::text, 'power'::text, 'speed'::text, 'endurance'::text, 'mobility'::text, 'return_to_play'::text, 'general'::text]))),
-  constraint individual_plans_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'paused'::text, 'completed'::text, 'archived'::text]))),
-  foreign key (player_id) references public.players(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (created_by) references public.profiles(id)
+  constraint individual_plans_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'paused'::text, 'completed'::text, 'archived'::text])))
 );
 CREATE INDEX idx_individual_plans_player ON public.individual_plans USING btree (player_id);
 CREATE INDEX idx_individual_plans_status ON public.individual_plans USING btree (status);
 CREATE INDEX idx_individual_plans_club ON public.individual_plans USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.injuries (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -886,17 +772,13 @@ create table if not exists public.injuries (
   constraint injuries_injury_mechanism_check CHECK ((injury_mechanism = ANY (ARRAY['contact'::text, 'non_contact'::text, 'overuse'::text, 'unknown'::text]))),
   constraint injuries_injury_category_check CHECK ((injury_category = ANY (ARRAY['muscular'::text, 'acl'::text, 'ligament'::text, 'tendon'::text, 'bone'::text, 'other'::text]))),
   constraint injuries_severity_check CHECK ((severity = ANY (ARRAY['minor'::text, 'moderate'::text, 'severe'::text]))),
-  constraint injuries_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cleared'::text, 'returning'::text]))),
-  foreign key (created_by) references public.profiles(id),
-  foreign key (player_id) references public.players(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint injuries_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cleared'::text, 'returning'::text])))
 );
 CREATE INDEX injuries_status_idx ON public.injuries USING btree (club_id, status);
 CREATE INDEX injuries_date_idx ON public.injuries USING btree (start_date DESC);
 CREATE INDEX injuries_club_id_idx ON public.injuries USING btree (club_id);
 CREATE INDEX injuries_player_id_idx ON public.injuries USING btree (player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.injury_phases (
   id uuid default gen_random_uuid() not null,
   injury_id uuid not null,
@@ -919,15 +801,11 @@ create table if not exists public.injury_phases (
   duration_days integer default (end_date - start_date),
   club_id uuid,
   constraint injury_phases_pkey primary key (id),
-  constraint injury_phases_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'done'::text, 'skipped'::text]))),
-  foreign key (completed_by) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (injury_id) references public.injuries(id)
+  constraint injury_phases_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'done'::text, 'skipped'::text])))
 );
 CREATE INDEX injury_phases_injury_id_idx ON public.injury_phases USING btree (injury_id);
 CREATE INDEX idx_injury_phases_injury ON public.injury_phases USING btree (injury_id, phase_number);
 
--- ---------------------------------------------------------------------
 create table if not exists public.invitations (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -937,13 +815,9 @@ create table if not exists public.invitations (
   invited_by uuid,
   created_at timestamp with time zone default now() not null,
   constraint invitations_pkey primary key (id),
-  constraint invitations_club_id_email_key UNIQUE (club_id, email),
-  foreign key (invited_by) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint invitations_club_id_email_key UNIQUE (club_id, email)
 );
-CREATE UNIQUE INDEX invitations_club_id_email_key ON public.invitations USING btree (club_id, email);
 
--- ---------------------------------------------------------------------
 create table if not exists public.invoices (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -960,16 +834,12 @@ create table if not exists public.invoices (
   created_at timestamp with time zone default now(),
   constraint invoices_pkey primary key (id),
   constraint invoices_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text, 'refunded'::text, 'void'::text]))),
-  constraint invoices_provider_invoice_id_key UNIQUE (provider_invoice_id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (subscription_id) references public.subscriptions(id)
+  constraint invoices_provider_invoice_id_key UNIQUE (provider_invoice_id)
 );
-CREATE UNIQUE INDEX invoices_provider_invoice_id_key ON public.invoices USING btree (provider_invoice_id);
 CREATE INDEX idx_invoices_club ON public.invoices USING btree (club_id);
 CREATE INDEX idx_invoices_status ON public.invoices USING btree (status);
 CREATE INDEX idx_invoices_created ON public.invoices USING btree (created_at DESC);
 
--- ---------------------------------------------------------------------
 create table if not exists public.league_configs (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -982,12 +852,10 @@ create table if not exists public.league_configs (
   reset_date date,
   active boolean default true,
   created_at timestamp with time zone default now(),
-  constraint league_configs_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id)
+  constraint league_configs_pkey primary key (id)
 );
 CREATE INDEX league_configs_club_idx ON public.league_configs USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.lineup_players (
   id uuid default gen_random_uuid() not null,
   lineup_id uuid not null,
@@ -1005,16 +873,11 @@ create table if not exists public.lineup_players (
   constraint lineup_players_x_pct_check CHECK (((x_pct IS NULL) OR ((x_pct >= (0)::numeric) AND (x_pct <= (100)::numeric)))),
   constraint lineup_players_y_pct_check CHECK (((y_pct IS NULL) OR ((y_pct >= (0)::numeric) AND (y_pct <= (100)::numeric)))),
   constraint uq_lineup_players_slot UNIQUE (lineup_id, role, slot_index),
-  constraint lineup_players_lineup_id_player_id_role_key UNIQUE (lineup_id, player_id, role),
-  foreign key (player_id) references public.players(id),
-  foreign key (lineup_id) references public.lineups(id)
+  constraint lineup_players_lineup_id_player_id_role_key UNIQUE (lineup_id, player_id, role)
 );
-CREATE UNIQUE INDEX lineup_players_lineup_id_player_id_role_key ON public.lineup_players USING btree (lineup_id, player_id, role);
 CREATE INDEX idx_lineup_players_role ON public.lineup_players USING btree (lineup_id, role, slot_index);
 CREATE UNIQUE INDEX uq_lineup_players_captain ON public.lineup_players USING btree (lineup_id) WHERE (is_captain = true);
-CREATE UNIQUE INDEX uq_lineup_players_slot ON public.lineup_players USING btree (lineup_id, role, slot_index);
 
--- ---------------------------------------------------------------------
 create table if not exists public.lineup_staff (
   id uuid default gen_random_uuid() not null,
   lineup_id uuid not null,
@@ -1024,13 +887,10 @@ create table if not exists public.lineup_staff (
   sort_order integer default 0,
   created_at timestamp with time zone default now(),
   constraint lineup_staff_pkey primary key (id),
-  constraint lineup_staff_role_code_check CHECK ((role_code = ANY (ARRAY['head'::text, 'assistant'::text, 'gk_coach'::text, 'fitness'::text, 'physio'::text, 'analyst'::text, 'other'::text]))),
-  foreign key (lineup_id) references public.lineups(id),
-  foreign key (profile_id) references public.profiles(id)
+  constraint lineup_staff_role_code_check CHECK ((role_code = ANY (ARRAY['head'::text, 'assistant'::text, 'gk_coach'::text, 'fitness'::text, 'physio'::text, 'analyst'::text, 'other'::text])))
 );
 CREATE INDEX idx_lineup_staff_lineup ON public.lineup_staff USING btree (lineup_id, sort_order);
 
--- ---------------------------------------------------------------------
 create table if not exists public.lineups (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -1053,18 +913,13 @@ create table if not exists public.lineups (
   constraint lineups_pkey primary key (id),
   constraint lineups_poster_style_check CHECK ((poster_style = ANY (ARRAY['editorial'::text, 'stadium'::text, 'magazine'::text, 'ticket'::text]))),
   constraint lineups_language_check CHECK ((language = ANY (ARRAY['es'::text, 'en'::text, 'pt'::text]))),
-  constraint lineups_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text, 'archived'::text]))),
-  foreign key (microcycle_id) references public.microcycles(id),
-  foreign key (published_by) references public.profiles(id),
-  foreign key (match_id) references public.calendar_events(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint lineups_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text, 'archived'::text])))
 );
 CREATE INDEX lineups_club_created_idx ON public.lineups USING btree (club_id, created_at DESC);
 CREATE INDEX idx_lineups_microcycle ON public.lineups USING btree (microcycle_id);
 CREATE INDEX idx_lineups_match_st ON public.lineups USING btree (match_id, status);
 CREATE INDEX idx_lineups_status ON public.lineups USING btree (status);
 
--- ---------------------------------------------------------------------
 create table if not exists public.load_templates (
   id uuid default gen_random_uuid() not null,
   mesocycle_id uuid not null,
@@ -1073,13 +928,10 @@ create table if not exists public.load_templates (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint load_templates_pkey primary key (id),
-  constraint load_templates_mesocycle_id_key UNIQUE (mesocycle_id),
-  foreign key (mesocycle_id) references public.mesocycles(id)
+  constraint load_templates_mesocycle_id_key UNIQUE (mesocycle_id)
 );
 CREATE INDEX idx_load_templates_meso ON public.load_templates USING btree (mesocycle_id);
-CREATE UNIQUE INDEX load_templates_mesocycle_id_key ON public.load_templates USING btree (mesocycle_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.macrocycles (
   id uuid default gen_random_uuid() not null,
   season_id uuid not null,
@@ -1090,12 +942,10 @@ create table if not exists public.macrocycles (
   color text,
   sort_order integer default 0,
   created_at timestamp with time zone default now(),
-  constraint macrocycles_pkey primary key (id),
-  foreign key (season_id) references public.seasons(id)
+  constraint macrocycles_pkey primary key (id)
 );
 CREATE INDEX idx_macrocycles_season ON public.macrocycles USING btree (season_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.match_reports (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -1136,15 +986,11 @@ create table if not exists public.match_reports (
   positions jsonb default '[]'::jsonb,
   constraint match_reports_pkey primary key (id),
   constraint match_reports_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'wyscout'::text, 'tracab'::text, 'other'::text]))),
-  constraint match_reports_venue_check CHECK ((venue = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (league_config_id) references public.league_configs(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint match_reports_venue_check CHECK ((venue = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text])))
 );
 CREATE INDEX match_reports_club_date_idx ON public.match_reports USING btree (club_id, match_date DESC);
 CREATE INDEX match_reports_session_idx ON public.match_reports USING btree (session_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.match_results (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1163,15 +1009,11 @@ create table if not exists public.match_results (
   created_by uuid,
   created_at timestamp with time zone default now(),
   constraint match_results_pkey primary key (id),
-  constraint match_results_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text]))),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (team_id) references public.teams(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint match_results_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text])))
 );
 CREATE INDEX idx_match_results_club_team_date ON public.match_results USING btree (club_id, team_id, match_date);
 CREATE UNIQUE INDEX ux_match_results_session ON public.match_results USING btree (session_id) WHERE (session_id IS NOT NULL);
 
--- ---------------------------------------------------------------------
 create table if not exists public.match_shots (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -1187,41 +1029,32 @@ create table if not exists public.match_shots (
   created_at timestamp with time zone default now(),
   constraint match_shots_pkey primary key (id),
   constraint match_shots_team_check CHECK ((team = ANY (ARRAY['us'::text, 'them'::text]))),
-  constraint match_shots_outcome_check CHECK ((outcome = ANY (ARRAY['goal'::text, 'on_target'::text, 'off_target'::text, 'blocked'::text]))),
-  foreign key (match_id) references public.match_reports(id),
-  foreign key (player_id) references public.players(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint match_shots_outcome_check CHECK ((outcome = ANY (ARRAY['goal'::text, 'on_target'::text, 'off_target'::text, 'blocked'::text])))
 );
 CREATE INDEX match_shots_club_idx ON public.match_shots USING btree (club_id);
 CREATE INDEX match_shots_match_idx ON public.match_shots USING btree (match_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.meal_plan_items (
   id uuid default gen_random_uuid() not null,
   meal_id uuid not null,
   food_id uuid not null,
   quantity_g numeric not null,
   note text,
-  constraint meal_plan_items_pkey primary key (id),
-  foreign key (meal_id) references public.meal_plan_meals(id),
-  foreign key (food_id) references public.foods(id)
+  constraint meal_plan_items_pkey primary key (id)
 );
 CREATE INDEX idx_meal_plan_items_food ON public.meal_plan_items USING btree (food_id);
 CREATE INDEX idx_meal_plan_items_meal ON public.meal_plan_items USING btree (meal_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.meal_plan_meals (
   id uuid default gen_random_uuid() not null,
   template_id uuid not null,
   meal_order integer default 0 not null,
   name text not null,
   time_hint text,
-  constraint meal_plan_meals_pkey primary key (id),
-  foreign key (template_id) references public.meal_plan_templates(id)
+  constraint meal_plan_meals_pkey primary key (id)
 );
 CREATE INDEX idx_meal_plan_meals_template ON public.meal_plan_meals USING btree (template_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.meal_plan_templates (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1232,37 +1065,27 @@ create table if not exists public.meal_plan_templates (
   created_by uuid,
   created_at timestamp with time zone default now(),
   constraint meal_plan_templates_pkey primary key (id),
-  constraint meal_plan_templates_day_type_check CHECK ((day_type = ANY (ARRAY['MD'::text, 'MD-1'::text, 'MD-2'::text, 'MD-3'::text, 'MD+1'::text, 'rest'::text, 'custom'::text]))),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (created_by) references public.profiles(id)
+  constraint meal_plan_templates_day_type_check CHECK ((day_type = ANY (ARRAY['MD'::text, 'MD-1'::text, 'MD-2'::text, 'MD-3'::text, 'MD+1'::text, 'rest'::text, 'custom'::text])))
 );
 CREATE INDEX idx_meal_plan_templates_club ON public.meal_plan_templates USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.member_modules (
   club_id uuid not null,
   profile_id uuid not null,
   module_key text not null,
-  constraint member_modules_pkey primary key (profile_id, module_key),
-  foreign key (profile_id) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint member_modules_pkey primary key (profile_id, module_key)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.member_teams (
   profile_id uuid not null,
   team_id uuid not null,
   club_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint member_teams_pkey primary key (team_id, profile_id),
-  foreign key (team_id) references public.teams(id),
-  foreign key (profile_id) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint member_teams_pkey primary key (team_id, profile_id)
 );
 CREATE INDEX idx_member_teams_team ON public.member_teams USING btree (team_id);
 CREATE INDEX idx_member_teams_profile ON public.member_teams USING btree (profile_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.mesocycles (
   id uuid default gen_random_uuid() not null,
   macrocycle_id uuid not null,
@@ -1274,12 +1097,10 @@ create table if not exists public.mesocycles (
   sort_order integer default 0,
   created_at timestamp with time zone default now(),
   constraint mesocycles_pkey primary key (id),
-  constraint mesocycles_load_model_check CHECK ((load_model = ANY (ARRAY['structured'::text, 'tactical'::text, 'verheijen'::text, 'atr'::text, 'integral'::text]))),
-  foreign key (macrocycle_id) references public.macrocycles(id)
+  constraint mesocycles_load_model_check CHECK ((load_model = ANY (ARRAY['structured'::text, 'tactical'::text, 'verheijen'::text, 'atr'::text, 'integral'::text])))
 );
 CREATE INDEX idx_mesocycles_macro ON public.mesocycles USING btree (macrocycle_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.messages (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1297,14 +1118,12 @@ create table if not exists public.messages (
   link_preview jsonb,
   team_id uuid,
   constraint messages_pkey primary key (id, inserted_at, id),
-  constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'task_ref'::text, 'report_share'::text, 'system'::text]))),
-  foreign key (team_id) references public.teams(id)
+  constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'task_ref'::text, 'report_share'::text, 'system'::text])))
 );
 CREATE INDEX idx_messages_recipient ON public.messages USING btree (club_id, recipient_id) WHERE (recipient_id IS NOT NULL);
 CREATE INDEX messages_club_created_idx ON public.messages USING btree (club_id, created_at DESC);
 CREATE INDEX idx_messages_team ON public.messages USING btree (team_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.microcycles (
   id text not null,
   name text not null,
@@ -1334,17 +1153,12 @@ create table if not exists public.microcycles (
   day_plan jsonb,
   micro_type text,
   md_overrides jsonb default '{}'::jsonb not null,
-  constraint microcycles_pkey primary key (id),
-  foreign key (team_id) references public.teams(id),
-  foreign key (season_id) references public.seasons(id),
-  foreign key (mesocycle_id) references public.mesocycles(id),
-  foreign key (published_by) references public.profiles(id)
+  constraint microcycles_pkey primary key (id)
 );
 CREATE INDEX idx_microcycles_meso ON public.microcycles USING btree (mesocycle_id);
 CREATE INDEX microcycles_club_id_idx ON public.microcycles USING btree (club_id);
 CREATE INDEX microcycles_dates_idx ON public.microcycles USING btree (club_id, start_date DESC);
 
--- ---------------------------------------------------------------------
 create table if not exists public.notification_settings (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1354,12 +1168,9 @@ create table if not exists public.notification_settings (
   scope text default 'team'::text not null,
   created_at timestamp with time zone default now(),
   constraint notification_settings_pkey primary key (id),
-  constraint notification_settings_club_id_alert_type_role_key UNIQUE (club_id, alert_type, role),
-  foreign key (club_id) references public.clubs(id)
+  constraint notification_settings_club_id_alert_type_role_key UNIQUE (club_id, alert_type, role)
 );
-CREATE UNIQUE INDEX notification_settings_club_id_alert_type_role_key ON public.notification_settings USING btree (club_id, alert_type, role);
 
--- ---------------------------------------------------------------------
 create table if not exists public.notifications (
   id uuid default gen_random_uuid() not null,
   user_id uuid not null,
@@ -1370,11 +1181,9 @@ create table if not exists public.notifications (
   read boolean default false not null,
   link text,
   created_at timestamp with time zone default now() not null,
-  constraint notifications_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id)
+  constraint notifications_pkey primary key (id)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.nutrition (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -1388,15 +1197,12 @@ create table if not exists public.nutrition (
   notes text,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
-  constraint nutrition_pkey primary key (id),
-  foreign key (player_id) references public.players(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint nutrition_pkey primary key (id)
 );
 CREATE INDEX nutrition_player_id_idx ON public.nutrition USING btree (player_id);
 CREATE INDEX nutrition_date_idx ON public.nutrition USING btree (club_id, log_date DESC);
 CREATE INDEX nutrition_club_player_idx ON public.nutrition USING btree (club_id, player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.nutrition_targets (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -1421,15 +1227,10 @@ create table if not exists public.nutrition_targets (
   constraint nutrition_targets_pkey primary key (id),
   constraint nutrition_targets_rmr_model_check CHECK ((rmr_model = ANY (ARRAY['ten_haaf'::text, 'cunningham'::text, 'de_lorenzo'::text, 'harris_benedict'::text, 'mifflin'::text]))),
   constraint nutrition_targets_sex_check CHECK ((sex = ANY (ARRAY['male'::text, 'female'::text]))),
-  constraint nutrition_targets_player_id_key UNIQUE (player_id),
-  foreign key (player_id) references public.players(id),
-  foreign key (updated_by) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint nutrition_targets_player_id_key UNIQUE (player_id)
 );
 CREATE INDEX idx_nutrition_targets_club ON public.nutrition_targets USING btree (club_id);
-CREATE UNIQUE INDEX nutrition_targets_player_id_key ON public.nutrition_targets USING btree (player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.opponent_branding (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1438,13 +1239,10 @@ create table if not exists public.opponent_branding (
   primary_color text,
   created_at timestamp with time zone default now(),
   constraint opponent_branding_pkey primary key (id),
-  constraint opponent_branding_club_id_opponent_name_key UNIQUE (club_id, opponent_name),
-  foreign key (club_id) references public.clubs(id)
+  constraint opponent_branding_club_id_opponent_name_key UNIQUE (club_id, opponent_name)
 );
-CREATE UNIQUE INDEX opponent_branding_club_id_opponent_name_key ON public.opponent_branding USING btree (club_id, opponent_name);
 CREATE INDEX idx_opp_branding_club ON public.opponent_branding USING btree (club_id, opponent_name);
 
--- ---------------------------------------------------------------------
 create table if not exists public.payment_methods (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1458,13 +1256,10 @@ create table if not exists public.payment_methods (
   created_at timestamp with time zone default now(),
   constraint payment_methods_pkey primary key (id),
   constraint payment_methods_type_check CHECK ((type = ANY (ARRAY['card'::text, 'paypal'::text, 'other'::text]))),
-  constraint payment_methods_provider_payment_method_id_key UNIQUE (provider_payment_method_id),
-  foreign key (club_id) references public.clubs(id)
+  constraint payment_methods_provider_payment_method_id_key UNIQUE (provider_payment_method_id)
 );
 CREATE INDEX idx_payment_methods_club ON public.payment_methods USING btree (club_id);
-CREATE UNIQUE INDEX payment_methods_provider_payment_method_id_key ON public.payment_methods USING btree (provider_payment_method_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.phase_types (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -1473,12 +1268,10 @@ create table if not exists public.phase_types (
   default_counts_availability boolean default true not null,
   is_preset boolean default false not null,
   created_at timestamp with time zone default now(),
-  constraint phase_types_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id)
+  constraint phase_types_pkey primary key (id)
 );
 CREATE INDEX idx_phase_types_club ON public.phase_types USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.pinned_files (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1490,13 +1283,10 @@ create table if not exists public.pinned_files (
   pinned_by uuid,
   pinned_at timestamp with time zone default now(),
   team_id uuid,
-  constraint pinned_files_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (team_id) references public.teams(id)
+  constraint pinned_files_pkey primary key (id)
 );
 CREATE INDEX idx_pinned_files_team ON public.pinned_files USING btree (team_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.plans (
   id uuid default gen_random_uuid() not null,
   slug text not null,
@@ -1517,17 +1307,13 @@ create table if not exists public.plans (
   constraint plans_slug_key UNIQUE (slug)
 );
 CREATE INDEX idx_plans_active ON public.plans USING btree (is_active) WHERE (is_active = true);
-CREATE UNIQUE INDEX plans_slug_key ON public.plans USING btree (slug);
 
--- ---------------------------------------------------------------------
 create table if not exists public.platform_admins (
   user_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint platform_admins_pkey primary key (user_id),
-  foreign key (user_id) references public.profiles(id)
+  constraint platform_admins_pkey primary key (user_id)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.player_anthropometrics (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -1539,14 +1325,11 @@ create table if not exists public.player_anthropometrics (
   muscle_mass numeric(5,2),
   notes text,
   created_at timestamp with time zone default now(),
-  constraint player_anthropometrics_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (player_id) references public.players(id)
+  constraint player_anthropometrics_pkey primary key (id)
 );
 CREATE INDEX anthropometrics_player_idx ON public.player_anthropometrics USING btree (player_id);
 CREATE INDEX anthropometrics_date_idx ON public.player_anthropometrics USING btree (measurement_date DESC);
 
--- ---------------------------------------------------------------------
 create table if not exists public.player_individual_assignments (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -1555,15 +1338,11 @@ create table if not exists public.player_individual_assignments (
   assigned_by uuid,
   unassigned_at timestamp with time zone,
   active boolean default true,
-  constraint player_individual_assignments_pkey primary key (id),
-  foreign key (assigned_by) references public.profiles(id),
-  foreign key (player_id) references public.players(id),
-  foreign key (plan_id) references public.individual_plans(id)
+  constraint player_individual_assignments_pkey primary key (id)
 );
 CREATE INDEX idx_pia_plan ON public.player_individual_assignments USING btree (plan_id);
 CREATE INDEX idx_pia_player_active ON public.player_individual_assignments USING btree (player_id) WHERE (active = true);
 
--- ---------------------------------------------------------------------
 create table if not exists public.player_match_stats (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1578,15 +1357,11 @@ create table if not exists public.player_match_stats (
   position text,
   extra jsonb default '{}'::jsonb not null,
   created_at timestamp with time zone default now(),
-  constraint player_match_stats_pkey primary key (id),
-  foreign key (player_id) references public.players(id),
-  foreign key (match_id) references public.match_results(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint player_match_stats_pkey primary key (id)
 );
 CREATE INDEX idx_player_match_stats_club_player ON public.player_match_stats USING btree (club_id, player_id);
 CREATE UNIQUE INDEX ux_player_match_stats_match_player ON public.player_match_stats USING btree (match_id, player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.player_meal_assignments (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -1597,16 +1372,12 @@ create table if not exists public.player_meal_assignments (
   scale_factor numeric default 1.0,
   custom_overrides jsonb,
   created_at timestamp with time zone default now(),
-  constraint player_meal_assignments_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (player_id) references public.players(id),
-  foreign key (template_id) references public.meal_plan_templates(id)
+  constraint player_meal_assignments_pkey primary key (id)
 );
 CREATE INDEX idx_pma_template ON public.player_meal_assignments USING btree (template_id);
 CREATE INDEX idx_pma_player ON public.player_meal_assignments USING btree (player_id);
 CREATE INDEX idx_pma_club ON public.player_meal_assignments USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.player_preventive_assignments (
   id uuid default gen_random_uuid() not null,
   routine_id uuid not null,
@@ -1615,15 +1386,10 @@ create table if not exists public.player_preventive_assignments (
   assigned_by uuid,
   active boolean default true,
   constraint player_preventive_assignments_pkey primary key (id),
-  constraint player_preventive_assignments_routine_id_player_id_key UNIQUE (routine_id, player_id),
-  foreign key (player_id) references public.players(id),
-  foreign key (assigned_by) references public.profiles(id),
-  foreign key (routine_id) references public.preventive_routines(id)
+  constraint player_preventive_assignments_routine_id_player_id_key UNIQUE (routine_id, player_id)
 );
-CREATE UNIQUE INDEX player_preventive_assignments_routine_id_player_id_key ON public.player_preventive_assignments USING btree (routine_id, player_id);
 CREATE INDEX idx_ppa_player ON public.player_preventive_assignments USING btree (player_id) WHERE (active = true);
 
--- ---------------------------------------------------------------------
 create table if not exists public.player_teams (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1632,16 +1398,11 @@ create table if not exists public.player_teams (
   is_primary boolean default false not null,
   created_at timestamp with time zone default now(),
   constraint player_teams_pkey primary key (id),
-  constraint player_teams_player_id_team_id_key UNIQUE (player_id, team_id),
-  foreign key (player_id) references public.players(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (team_id) references public.teams(id)
+  constraint player_teams_player_id_team_id_key UNIQUE (player_id, team_id)
 );
-CREATE UNIQUE INDEX player_teams_player_id_team_id_key ON public.player_teams USING btree (player_id, team_id);
 CREATE INDEX player_teams_club_team_idx ON public.player_teams USING btree (club_id, team_id);
 CREATE INDEX player_teams_player_idx ON public.player_teams USING btree (player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.players (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1667,9 +1428,7 @@ create table if not exists public.players (
   archived_at timestamp with time zone,
   constraint players_pkey primary key (id),
   constraint players_dominant_foot_check CHECK ((dominant_foot = ANY (ARRAY['left'::text, 'right'::text, 'both'::text, NULL::text]))),
-  constraint players_status_check CHECK ((status = ANY (ARRAY['available'::text, 'injured'::text, 'modified'::text, 'unavailable'::text]))),
-  foreign key (team_id) references public.teams(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint players_status_check CHECK ((status = ANY (ARRAY['available'::text, 'injured'::text, 'modified'::text, 'unavailable'::text])))
 );
 CREATE INDEX players_club_id_idx ON public.players USING btree (club_id);
 CREATE INDEX idx_players_external_force ON public.players USING btree (club_id, external_force_id);
@@ -1680,7 +1439,6 @@ CREATE INDEX players_name_idx ON public.players USING btree (club_id, first_name
 CREATE INDEX players_team_id_idx ON public.players USING btree (team_id);
 CREATE INDEX players_status_idx ON public.players USING btree (club_id, status);
 
--- ---------------------------------------------------------------------
 create table if not exists public.preventive_routines (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1697,14 +1455,11 @@ create table if not exists public.preventive_routines (
   constraint preventive_routines_pkey primary key (id),
   constraint preventive_routines_focus_area_check CHECK ((focus_area = ANY (ARRAY['hamstring'::text, 'knee'::text, 'ankle'::text, 'core'::text, 'shoulder'::text, 'hip'::text, 'general'::text]))),
   constraint preventive_routines_target_type_check CHECK ((target_type = ANY (ARRAY['individual'::text, 'position'::text, 'squad'::text]))),
-  constraint preventive_routines_frequency_check CHECK ((frequency = ANY (ARRAY['daily'::text, 'weekly'::text, 'pre_session'::text, 'post_session'::text]))),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (created_by) references public.profiles(id)
+  constraint preventive_routines_frequency_check CHECK ((frequency = ANY (ARRAY['daily'::text, 'weekly'::text, 'pre_session'::text, 'post_session'::text])))
 );
 CREATE INDEX idx_preventive_routines_active ON public.preventive_routines USING btree (is_active) WHERE (is_active = true);
 CREATE INDEX idx_preventive_routines_club ON public.preventive_routines USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.profiles (
   id uuid not null,
   club_id uuid not null,
@@ -1719,14 +1474,12 @@ create table if not exists public.profiles (
   settings jsonb default '{}'::jsonb,
   notification_settings jsonb default '{}'::jsonb,
   constraint profiles_pkey primary key (id),
-  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text]))),
-  foreign key (club_id) references public.clubs(id)
+  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text])))
 );
 CREATE INDEX profiles_club_id_idx ON public.profiles USING btree (club_id);
 CREATE INDEX profiles_email_idx ON public.profiles USING btree (email);
 CREATE INDEX profiles_role_idx ON public.profiles USING btree (club_id, role);
 
--- ---------------------------------------------------------------------
 create table if not exists public.programme_phases (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1740,14 +1493,11 @@ create table if not exists public.programme_phases (
   phase_order integer default 0 not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
-  constraint programme_phases_pkey primary key (id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (plan_id) references public.rehab_plans(id)
+  constraint programme_phases_pkey primary key (id)
 );
 CREATE INDEX idx_programme_phases_club ON public.programme_phases USING btree (club_id);
 CREATE INDEX idx_programme_phases_plan ON public.programme_phases USING btree (plan_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.protocol_blocks (
   id uuid default gen_random_uuid() not null,
   protocol_id uuid not null,
@@ -1766,15 +1516,12 @@ create table if not exists public.protocol_blocks (
   created_at timestamp with time zone default now(),
   constraint protocol_blocks_pkey primary key (id),
   constraint protocol_blocks_block_type_check CHECK ((block_type = ANY (ARRAY['warmup'::text, 'strength'::text, 'mobility'::text, 'cardio'::text, 'plyo'::text, 'sport'::text, 'cooldown'::text, 'assessment'::text]))),
-  constraint protocol_blocks_intensity_check CHECK ((intensity = ANY (ARRAY['low'::text, 'moderate'::text, 'high'::text, 'max'::text]))),
-  foreign key (phase_id) references public.injury_phases(id),
-  foreign key (protocol_id) references public.rehab_protocols(id)
+  constraint protocol_blocks_intensity_check CHECK ((intensity = ANY (ARRAY['low'::text, 'moderate'::text, 'high'::text, 'max'::text])))
 );
 CREATE INDEX idx_protocol_blocks_phase ON public.protocol_blocks USING btree (phase_id);
 CREATE INDEX idx_protocol_blocks_protocol ON public.protocol_blocks USING btree (protocol_id);
 CREATE INDEX idx_protocol_blocks_day ON public.protocol_blocks USING btree (protocol_id, day_index, sort_order);
 
--- ---------------------------------------------------------------------
 create table if not exists public.rehab_plan_owners (
   id uuid default gen_random_uuid() not null,
   plan_id uuid not null,
@@ -1783,14 +1530,10 @@ create table if not exists public.rehab_plan_owners (
   created_at timestamp with time zone default now(),
   constraint rehab_plan_owners_pkey primary key (id),
   constraint rehab_plan_owners_plan_id_profile_id_key UNIQUE (plan_id, profile_id),
-  constraint rehab_plan_owners_role_check CHECK ((role = ANY (ARRAY['physio'::text, 'sc'::text, 'coach'::text]))),
-  foreign key (profile_id) references public.profiles(id),
-  foreign key (plan_id) references public.rehab_plans(id)
+  constraint rehab_plan_owners_role_check CHECK ((role = ANY (ARRAY['physio'::text, 'sc'::text, 'coach'::text])))
 );
 CREATE INDEX idx_rehab_owners_plan ON public.rehab_plan_owners USING btree (plan_id);
-CREATE UNIQUE INDEX rehab_plan_owners_plan_id_profile_id_key ON public.rehab_plan_owners USING btree (plan_id, profile_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.rehab_plans (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1816,15 +1559,11 @@ create table if not exists public.rehab_plans (
   constraint rehab_plans_status_check CHECK ((status = ANY (ARRAY['on_track'::text, 'near_rtp'::text, 'blocked'::text, 'cleared'::text, 'archived'::text]))),
   constraint rehab_plans_source_check CHECK ((source = ANY (ARRAY['injury'::text, 'evaluation'::text, 'gps'::text, 'manual'::text]))),
   constraint rehab_plans_phase_type_check CHECK ((phase_type = ANY (ARRAY['acute'::text, 'subacute'::text, 'strength'::text, 'field'::text, 'foundation'::text, 'capacity'::text, 'neuromuscular'::text, 'running'::text, 'training'::text, 'competition'::text]))),
-  constraint rehab_plans_kind_check CHECK ((kind = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
-  foreign key (player_id) references public.players(id),
-  foreign key (injury_id) references public.injuries(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint rehab_plans_kind_check CHECK ((kind = ANY (ARRAY['rehab'::text, 'preventive'::text])))
 );
 CREATE INDEX idx_rehab_plans_club_status ON public.rehab_plans USING btree (club_id, status);
 CREATE INDEX idx_rehab_plans_club ON public.rehab_plans USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.rehab_protocols (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1837,16 +1576,12 @@ create table if not exists public.rehab_protocols (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint rehab_protocols_pkey primary key (id),
-  constraint rehab_protocols_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'completed'::text, 'archived'::text]))),
-  foreign key (created_by) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (injury_id) references public.injuries(id)
+  constraint rehab_protocols_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'completed'::text, 'archived'::text])))
 );
 CREATE INDEX idx_rehab_protocols_club ON public.rehab_protocols USING btree (club_id);
 CREATE INDEX idx_rehab_protocols_status ON public.rehab_protocols USING btree (status);
 CREATE INDEX idx_rehab_protocols_injury ON public.rehab_protocols USING btree (injury_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.rehab_sessions (
   id uuid default gen_random_uuid() not null,
   plan_id uuid not null,
@@ -1867,13 +1602,11 @@ create table if not exists public.rehab_sessions (
   au integer,
   context_note text,
   exercises jsonb,
-  constraint rehab_sessions_pkey primary key (id),
-  foreign key (plan_id) references public.rehab_plans(id)
+  constraint rehab_sessions_pkey primary key (id)
 );
 CREATE INDEX idx_rehab_sessions_club_date ON public.rehab_sessions USING btree (club_id, date);
 CREATE INDEX idx_rehab_sessions_plan_date ON public.rehab_sessions USING btree (plan_id, date);
 
--- ---------------------------------------------------------------------
 create table if not exists public.rpe (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -1889,18 +1622,13 @@ create table if not exists public.rpe (
   session_date date default CURRENT_DATE,
   constraint rpe_pkey primary key (id),
   constraint rpe_player_id_session_id_key UNIQUE (player_id, session_id),
-  constraint rpe_rpe_check CHECK (((rpe >= (0)::numeric) AND (rpe <= (10)::numeric))),
-  foreign key (player_id) references public.players(id),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint rpe_rpe_check CHECK (((rpe >= (0)::numeric) AND (rpe <= (10)::numeric)))
 );
-CREATE UNIQUE INDEX rpe_player_id_session_id_key ON public.rpe USING btree (player_id, session_id);
 CREATE INDEX rpe_session_id_idx ON public.rpe USING btree (session_id);
 CREATE INDEX rpe_created_idx ON public.rpe USING btree (created_at DESC);
 CREATE INDEX rpe_club_id_idx ON public.rpe USING btree (club_id);
 CREATE INDEX rpe_player_id_idx ON public.rpe USING btree (player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.season_phases (
   id uuid default gen_random_uuid() not null,
   season_id uuid not null,
@@ -1912,13 +1640,10 @@ create table if not exists public.season_phases (
   counts_availability boolean default true not null,
   sort_order integer default 0,
   created_at timestamp with time zone default now(),
-  constraint season_phases_pkey primary key (id),
-  foreign key (season_id) references public.seasons(id),
-  foreign key (phase_type_id) references public.phase_types(id)
+  constraint season_phases_pkey primary key (id)
 );
 CREATE INDEX idx_season_phases_season ON public.season_phases USING btree (season_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.seasons (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1931,14 +1656,11 @@ create table if not exists public.seasons (
   updated_at timestamp with time zone default now(),
   planning_model text default 'tactical'::text,
   constraint seasons_pkey primary key (id),
-  constraint seasons_status_check CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text]))),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (team_id) references public.teams(id)
+  constraint seasons_status_check CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))
 );
 CREATE INDEX idx_seasons_club ON public.seasons USING btree (club_id);
 CREATE INDEX idx_seasons_club_team ON public.seasons USING btree (club_id, team_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.session_exercises (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1961,16 +1683,11 @@ create table if not exists public.session_exercises (
   work_time text,
   rest_time text,
   constraint session_exercises_pkey primary key (id),
-  constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text]))),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (exercise_id) references public.gym_exercises(id),
-  foreign key (planner_exercise_id) references public.exercises(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text])))
 );
 CREATE INDEX idx_session_exercises_club ON public.session_exercises USING btree (club_id);
 CREATE INDEX idx_session_exercises_session ON public.session_exercises USING btree (session_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.share_links (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1986,20 +1703,12 @@ create table if not exists public.share_links (
   session_id uuid,
   player_id uuid,
   constraint share_links_pkey primary key (id),
-  constraint share_links_token_key UNIQUE (token),
-  foreign key (mc_id) references public.microcycles(id),
-  foreign key (team_id) references public.teams(id),
-  foreign key (session_id) references public.training_sessions(id),
-  foreign key (created_by) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (player_id) references public.players(id)
+  constraint share_links_token_key UNIQUE (token)
 );
 CREATE UNIQUE INDEX share_links_token_idx ON public.share_links USING btree (token);
-CREATE UNIQUE INDEX share_links_token_key ON public.share_links USING btree (token);
 CREATE INDEX share_links_club_idx ON public.share_links USING btree (club_id);
 CREATE INDEX share_links_player_idx ON public.share_links USING btree (player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.subscriptions (
   id uuid default gen_random_uuid() not null,
   team_id uuid not null,
@@ -2018,18 +1727,13 @@ create table if not exists public.subscriptions (
   constraint subscriptions_pkey primary key (id),
   constraint subscriptions_provider_subscription_id_key UNIQUE (provider_subscription_id),
   constraint subscriptions_billing_cycle_check CHECK ((billing_cycle = ANY (ARRAY['monthly'::text, 'yearly'::text]))),
-  constraint subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text]))),
-  foreign key (team_id) references public.teams(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (plan_id) references public.plans(id)
+  constraint subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text])))
 );
 CREATE UNIQUE INDEX uniq_sub_active_per_team ON public.subscriptions USING btree (team_id) WHERE (status = ANY (ARRAY['active'::text, 'trialing'::text, 'past_due'::text, 'paused'::text]));
 CREATE INDEX idx_subscriptions_status ON public.subscriptions USING btree (status);
 CREATE INDEX idx_subscriptions_club ON public.subscriptions USING btree (club_id);
-CREATE UNIQUE INDEX subscriptions_provider_subscription_id_key ON public.subscriptions USING btree (provider_subscription_id);
 CREATE INDEX idx_subscriptions_team ON public.subscriptions USING btree (team_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.tasks (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2050,12 +1754,7 @@ create table if not exists public.tasks (
   constraint tasks_pkey primary key (id),
   constraint tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'done'::text, 'cancelled'::text]))),
   constraint tasks_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'urgent'::text]))),
-  constraint tasks_category_check CHECK ((category = ANY (ARRAY['general'::text, 'match_day'::text, 'medical'::text, 'routine'::text, 'event'::text]))),
-  foreign key (event_id) references public.calendar_events(id),
-  foreign key (team_id) references public.teams(id),
-  foreign key (created_by) references public.profiles(id),
-  foreign key (assigned_to) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint tasks_category_check CHECK ((category = ANY (ARRAY['general'::text, 'match_day'::text, 'medical'::text, 'routine'::text, 'event'::text])))
 );
 CREATE INDEX idx_tasks_team ON public.tasks USING btree (team_id);
 CREATE INDEX tasks_event_id_idx ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
@@ -2068,7 +1767,6 @@ CREATE INDEX tasks_status_idx ON public.tasks USING btree (club_id, status);
 CREATE INDEX tasks_due_idx ON public.tasks USING btree (due_date);
 CREATE INDEX idx_tasks_team_id ON public.tasks USING btree (team_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.taxonomy_aliases (
   dimension text not null,
   alias text not null,
@@ -2076,7 +1774,6 @@ create table if not exists public.taxonomy_aliases (
   constraint taxonomy_aliases_pkey primary key (alias, dimension)
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.teams (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2086,13 +1783,10 @@ create table if not exists public.teams (
   is_primary boolean default false not null,
   archived_at timestamp with time zone,
   constraint teams_pkey primary key (id),
-  constraint teams_club_id_name_key UNIQUE (club_id, name),
-  foreign key (club_id) references public.clubs(id)
+  constraint teams_club_id_name_key UNIQUE (club_id, name)
 );
-CREATE UNIQUE INDEX teams_club_id_name_key ON public.teams USING btree (club_id, name);
 CREATE INDEX teams_club_id_idx ON public.teams USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.training_sessions (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2125,11 +1819,7 @@ create table if not exists public.training_sessions (
   gps_targets jsonb default '{}'::jsonb not null,
   constraint training_sessions_pkey primary key (id),
   constraint training_sessions_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
-  constraint training_sessions_session_type_check CHECK ((session_type = ANY (ARRAY['training'::text, 'match'::text, 'rehab'::text, 'conditioning'::text, 'recovery'::text, 'tactical'::text, 'gym'::text, 'other'::text]))),
-  foreign key (team_id) references public.teams(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (microcycle_id) references public.microcycles(id),
-  foreign key (coach_id) references public.profiles(id)
+  constraint training_sessions_session_type_check CHECK ((session_type = ANY (ARRAY['training'::text, 'match'::text, 'rehab'::text, 'conditioning'::text, 'recovery'::text, 'tactical'::text, 'gym'::text, 'other'::text])))
 );
 CREATE INDEX training_sessions_type_idx ON public.training_sessions USING btree (club_id, session_type);
 CREATE INDEX training_sessions_coach_idx ON public.training_sessions USING btree (coach_id);
@@ -2140,7 +1830,6 @@ CREATE INDEX idx_training_sessions_historical ON public.training_sessions USING 
 CREATE INDEX idx_training_sessions_club_date ON public.training_sessions USING btree (club_id, session_date);
 CREATE INDEX training_sessions_club_id_idx ON public.training_sessions USING btree (club_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.treatment_templates (
   id uuid default gen_random_uuid() not null,
   club_id uuid,
@@ -2153,11 +1842,9 @@ create table if not exists public.treatment_templates (
   created_by uuid,
   created_at timestamp with time zone default now(),
   constraint treatment_templates_pkey primary key (id),
-  constraint treatment_templates_treatment_type_check CHECK ((treatment_type = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
-  foreign key (club_id) references public.clubs(id)
+  constraint treatment_templates_treatment_type_check CHECK ((treatment_type = ANY (ARRAY['rehab'::text, 'preventive'::text])))
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.treatments (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2188,49 +1875,33 @@ create table if not exists public.treatments (
   constraint treatments_treatment_type_check CHECK ((treatment_type = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
   constraint treatments_player_status_check CHECK ((player_status = ANY (ARRAY['improving'::text, 'stable'::text, 'worsening'::text]))),
   constraint treatments_pain_pre_check CHECK (((pain_pre >= 0) AND (pain_pre <= 10))),
-  constraint treatments_pain_post_check CHECK (((pain_post >= 0) AND (pain_post <= 10))),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (physio_id) references public.profiles(id),
-  foreign key (indicated_by) references public.profiles(id),
-  foreign key (player_id) references public.players(id),
-  foreign key (injury_id) references public.injuries(id),
-  foreign key (performed_by) references public.profiles(id)
+  constraint treatments_pain_post_check CHECK (((pain_post >= 0) AND (pain_post <= 10)))
 );
 
--- ---------------------------------------------------------------------
 create table if not exists public.video_matches (
   video_id uuid not null,
   event_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint video_matches_pkey primary key (event_id, video_id),
-  foreign key (event_id) references public.calendar_events(id),
-  foreign key (video_id) references public.videos(id)
+  constraint video_matches_pkey primary key (event_id, video_id)
 );
 CREATE INDEX idx_video_matches_event ON public.video_matches USING btree (event_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.video_players (
   video_id uuid not null,
   player_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint video_players_pkey primary key (video_id, player_id),
-  foreign key (player_id) references public.players(id),
-  foreign key (video_id) references public.videos(id)
+  constraint video_players_pkey primary key (video_id, player_id)
 );
 CREATE INDEX idx_video_players_player ON public.video_players USING btree (player_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.video_sessions (
   video_id uuid not null,
   session_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint video_sessions_pkey primary key (video_id, session_id),
-  foreign key (video_id) references public.videos(id),
-  foreign key (session_id) references public.training_sessions(id)
+  constraint video_sessions_pkey primary key (video_id, session_id)
 );
 CREATE INDEX idx_video_sessions_session ON public.video_sessions USING btree (session_id);
 
--- ---------------------------------------------------------------------
 create table if not exists public.videos (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -2249,15 +1920,12 @@ create table if not exists public.videos (
   kind text default 'video'::text not null,
   constraint videos_pkey primary key (id),
   constraint videos_provider_check CHECK ((provider = ANY (ARRAY['google_drive'::text, 'dropbox'::text, 'other'::text]))),
-  constraint videos_kind_check CHECK ((kind = ANY (ARRAY['video'::text, 'folder'::text]))),
-  foreign key (team_id) references public.teams(id),
-  foreign key (club_id) references public.clubs(id)
+  constraint videos_kind_check CHECK ((kind = ANY (ARRAY['video'::text, 'folder'::text])))
 );
 CREATE INDEX idx_videos_club ON public.videos USING btree (club_id);
 CREATE INDEX idx_videos_team ON public.videos USING btree (team_id);
 CREATE INDEX idx_videos_uploaded_by ON public.videos USING btree (uploaded_by);
 
--- ---------------------------------------------------------------------
 create table if not exists public.wellness (
   id uuid default gen_random_uuid() not null,
   player_id uuid not null,
@@ -2282,91 +1950,237 @@ create table if not exists public.wellness (
   constraint wellness_sleep_quality_check CHECK (((sleep_quality >= (1)::numeric) AND (sleep_quality <= (10)::numeric))),
   constraint wellness_soreness_check CHECK (((soreness >= (1)::numeric) AND (soreness <= (10)::numeric))),
   constraint wellness_stress_check CHECK (((stress >= (1)::numeric) AND (stress <= (10)::numeric))),
-  constraint wellness_fatigue_check CHECK (((fatigue >= (1)::numeric) AND (fatigue <= (10)::numeric))),
-  foreign key (acknowledged_by) references public.profiles(id),
-  foreign key (club_id) references public.clubs(id),
-  foreign key (player_id) references public.players(id)
+  constraint wellness_fatigue_check CHECK (((fatigue >= (1)::numeric) AND (fatigue <= (10)::numeric)))
 );
 CREATE INDEX wellness_player_id_idx ON public.wellness USING btree (player_id);
 CREATE INDEX wellness_date_idx ON public.wellness USING btree (club_id, submitted_at DESC);
 CREATE INDEX wellness_club_player_idx ON public.wellness USING btree (club_id, player_id);
 
--- =====================================================================
--- VIEWS
--- =====================================================================
-create or replace view public.v_exercise_gps_profile as
- SELECT r.club_id,
-    m.exercise_id,
-    count(*) AS n_instances,
-    (sum(r.duration_seconds) / 60.0) AS total_minutes,
-    avg((r.total_distance / (r.duration_seconds / 60.0))) AS total_distance_per_min,
-    avg((r.high_speed_distance / (r.duration_seconds / 60.0))) AS high_speed_distance_per_min,
-    avg((r.very_high_speed_distance / (r.duration_seconds / 60.0))) AS very_high_speed_distance_per_min,
-    avg((r.sprint_distance / (r.duration_seconds / 60.0))) AS sprint_distance_per_min,
-    avg((r.sprint_count / (r.duration_seconds / 60.0))) AS sprint_count_per_min,
-    avg((r.accelerations / (r.duration_seconds / 60.0))) AS accelerations_per_min,
-    avg((r.decelerations / (r.duration_seconds / 60.0))) AS decelerations_per_min,
-    avg((r.player_load / (r.duration_seconds / 60.0))) AS player_load_per_min,
-    avg((r.hmld / (r.duration_seconds / 60.0))) AS hmld_per_min,
-    avg(r.total_distance) AS total_distance_avg,
-    avg(r.high_speed_distance) AS high_speed_distance_avg,
-    avg(r.very_high_speed_distance) AS very_high_speed_distance_avg,
-    avg(r.sprint_distance) AS sprint_distance_avg,
-    avg(r.sprint_count) AS sprint_count_avg,
-    avg(r.accelerations) AS accelerations_avg,
-    avg(r.decelerations) AS decelerations_avg,
-    avg(r.player_load) AS player_load_avg,
-    avg(r.hmld) AS hmld_avg
-   FROM (gps_period_reports r
-     JOIN gps_drill_map m ON (((m.club_id = r.club_id) AND (m.period_name = r.period_name))))
-  WHERE ((m.exercise_id IS NOT NULL) AND (m.ignored = false) AND (r.duration_seconds > (0)::numeric))
-  GROUP BY r.club_id, m.exercise_id;
+-- ======================= FOREIGN KEYS =======================
 
-create or replace view public.v_gps_period_names as
- SELECT club_id,
-    period_name,
-    count(*) AS n_instances,
-    (avg(duration_seconds) FILTER (WHERE (duration_seconds > (0)::numeric)) / 60.0) AS avg_minutes
-   FROM gps_period_reports
-  WHERE ((period_name IS NOT NULL) AND (period_name <> ''::text))
-  GROUP BY club_id, period_name;
+alter table public.ai_card_generations add constraint ai_card_generations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
+alter table public.ai_card_generations add constraint ai_card_generations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.audit_log add constraint audit_log_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.audit_log add constraint audit_log_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.body_composition add constraint body_composition_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.body_composition add constraint body_composition_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.body_composition add constraint body_composition_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.calendar_events add constraint calendar_events_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.calendar_events add constraint calendar_events_competition_id_fkey FOREIGN KEY (competition_id) REFERENCES competitions(id);
+alter table public.calendar_events add constraint calendar_events_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+alter table public.calendar_events add constraint calendar_events_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE;
+alter table public.calendar_events add constraint calendar_events_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.card_accumulations add constraint card_accumulations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.card_accumulations add constraint card_accumulations_league_config_id_fkey FOREIGN KEY (league_config_id) REFERENCES league_configs(id) ON DELETE CASCADE;
+alter table public.card_accumulations add constraint card_accumulations_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.card_accumulations add constraint card_accumulations_player_uuid_fkey FOREIGN KEY (player_uuid) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.card_templates add constraint card_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.card_templates add constraint card_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.channel_reads add constraint channel_reads_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.channel_reads add constraint channel_reads_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.channel_reads add constraint channel_reads_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.club_branding add constraint club_branding_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.club_gps_settings add constraint club_gps_settings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.club_modules add constraint club_modules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.club_settings add constraint club_settings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.competitions add constraint competitions_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE;
+alter table public.dashboard_cards add constraint dashboard_cards_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.dashboard_cards add constraint dashboard_cards_dashboard_id_fkey FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE;
+alter table public.dashboards add constraint dashboards_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.dashboards add constraint dashboards_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.dashboards add constraint dashboards_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.drills add constraint drills_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.drills add constraint drills_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.drills add constraint drills_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE SET NULL;
+alter table public.evaluations add constraint evaluations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.evaluations add constraint evaluations_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.exercise_drills add constraint exercise_drills_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE;
+alter table public.exercises add constraint exercises_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.exercises add constraint exercises_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.force_column_mappings add constraint force_column_mappings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.force_metric_definitions add constraint force_metric_definitions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.force_test_metrics add constraint force_test_metrics_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.force_test_metrics add constraint force_test_metrics_test_id_fkey FOREIGN KEY (test_id) REFERENCES force_tests(id) ON DELETE CASCADE;
+alter table public.force_tests add constraint force_tests_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.force_tests add constraint force_tests_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.force_tests add constraint force_tests_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.gps_column_mappings add constraint gps_column_mappings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_dashboard_layouts add constraint gps_dashboard_layouts_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_dashboard_layouts add constraint gps_dashboard_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.gps_drill_map add constraint gps_drill_map_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_drill_map add constraint gps_drill_map_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE SET NULL;
+alter table public.gps_integration_secrets add constraint gps_integration_secrets_integration_id_fkey FOREIGN KEY (integration_id) REFERENCES gps_integrations(id) ON DELETE CASCADE;
+alter table public.gps_integrations add constraint gps_integrations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_metric_definitions add constraint gps_metric_definitions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_metric_definitions add constraint gps_metric_definitions_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.gps_period_reports add constraint gps_period_reports_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_period_reports add constraint gps_period_reports_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.gps_period_reports add constraint gps_period_reports_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
+alter table public.gps_report_metrics add constraint gps_report_metrics_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_report_metrics add constraint gps_report_metrics_report_id_fkey FOREIGN KEY (report_id) REFERENCES gps_reports(id) ON DELETE CASCADE;
+alter table public.gps_reports add constraint gps_reports_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gps_reports add constraint gps_reports_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.gps_reports add constraint gps_reports_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
+alter table public.gym_exercises add constraint gym_exercises_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.gym_session_templates add constraint gym_session_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.individual_block_completions add constraint individual_block_completions_block_id_fkey FOREIGN KEY (block_id) REFERENCES individual_plan_blocks(id) ON DELETE CASCADE;
+alter table public.individual_block_completions add constraint individual_block_completions_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.individual_plan_blocks add constraint individual_plan_blocks_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES individual_plans(id) ON DELETE CASCADE;
+alter table public.individual_plans add constraint individual_plans_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.individual_plans add constraint individual_plans_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.individual_plans add constraint individual_plans_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.injuries add constraint injuries_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.injuries add constraint injuries_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.injuries add constraint injuries_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.injury_phases add constraint injury_phases_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
+alter table public.injury_phases add constraint injury_phases_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.injury_phases add constraint injury_phases_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id) ON DELETE CASCADE;
+alter table public.invitations add constraint invitations_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.invitations add constraint invitations_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.invoices add constraint invoices_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.invoices add constraint invoices_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL;
+alter table public.league_configs add constraint league_configs_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.lineup_players add constraint lineup_players_lineup_id_fkey FOREIGN KEY (lineup_id) REFERENCES lineups(id) ON DELETE CASCADE;
+alter table public.lineup_players add constraint lineup_players_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.lineup_staff add constraint lineup_staff_lineup_id_fkey FOREIGN KEY (lineup_id) REFERENCES lineups(id) ON DELETE CASCADE;
+alter table public.lineup_staff add constraint lineup_staff_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.lineups add constraint lineups_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.lineups add constraint lineups_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.lineups add constraint lineups_match_id_fkey FOREIGN KEY (match_id) REFERENCES calendar_events(id) ON DELETE SET NULL;
+alter table public.lineups add constraint lineups_microcycle_id_fkey FOREIGN KEY (microcycle_id) REFERENCES microcycles(id) ON DELETE SET NULL;
+alter table public.lineups add constraint lineups_published_by_fkey FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.load_templates add constraint load_templates_mesocycle_id_fkey FOREIGN KEY (mesocycle_id) REFERENCES mesocycles(id) ON DELETE CASCADE;
+alter table public.macrocycles add constraint macrocycles_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE;
+alter table public.match_reports add constraint match_reports_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.match_reports add constraint match_reports_league_config_id_fkey FOREIGN KEY (league_config_id) REFERENCES league_configs(id) ON DELETE SET NULL;
+alter table public.match_reports add constraint match_reports_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE SET NULL;
+alter table public.match_results add constraint match_results_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.match_results add constraint match_results_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.match_results add constraint match_results_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE SET NULL;
+alter table public.match_results add constraint match_results_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.match_shots add constraint match_shots_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.match_shots add constraint match_shots_match_id_fkey FOREIGN KEY (match_id) REFERENCES match_reports(id) ON DELETE CASCADE;
+alter table public.match_shots add constraint match_shots_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL;
+alter table public.meal_plan_items add constraint meal_plan_items_food_id_fkey FOREIGN KEY (food_id) REFERENCES foods(id);
+alter table public.meal_plan_items add constraint meal_plan_items_meal_id_fkey FOREIGN KEY (meal_id) REFERENCES meal_plan_meals(id) ON DELETE CASCADE;
+alter table public.meal_plan_meals add constraint meal_plan_meals_template_id_fkey FOREIGN KEY (template_id) REFERENCES meal_plan_templates(id) ON DELETE CASCADE;
+alter table public.meal_plan_templates add constraint meal_plan_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.meal_plan_templates add constraint meal_plan_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.member_modules add constraint member_modules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.member_modules add constraint member_modules_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.member_teams add constraint member_teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.member_teams add constraint member_teams_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.member_teams add constraint member_teams_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.mesocycles add constraint mesocycles_macrocycle_id_fkey FOREIGN KEY (macrocycle_id) REFERENCES macrocycles(id) ON DELETE CASCADE;
+alter table public.messages add constraint messages_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.messages add constraint messages_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.microcycles add constraint microcycles_mesocycle_id_fkey FOREIGN KEY (mesocycle_id) REFERENCES mesocycles(id) ON DELETE SET NULL;
+alter table public.microcycles add constraint microcycles_published_by_fkey FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.microcycles add constraint microcycles_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE SET NULL;
+alter table public.microcycles add constraint microcycles_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.notification_settings add constraint notification_settings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.notifications add constraint notifications_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.notifications add constraint notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.nutrition add constraint nutrition_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.nutrition add constraint nutrition_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.nutrition_targets add constraint nutrition_targets_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.nutrition_targets add constraint nutrition_targets_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.nutrition_targets add constraint nutrition_targets_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.opponent_branding add constraint opponent_branding_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.payment_methods add constraint payment_methods_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.phase_types add constraint phase_types_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
+alter table public.pinned_files add constraint pinned_files_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.pinned_files add constraint pinned_files_pinned_by_fkey FOREIGN KEY (pinned_by) REFERENCES auth.users(id);
+alter table public.pinned_files add constraint pinned_files_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.platform_admins add constraint platform_admins_user_id_fkey FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.player_anthropometrics add constraint player_anthropometrics_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.player_anthropometrics add constraint player_anthropometrics_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_individual_assignments add constraint player_individual_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.player_individual_assignments add constraint player_individual_assignments_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES individual_plans(id) ON DELETE CASCADE;
+alter table public.player_individual_assignments add constraint player_individual_assignments_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_match_stats add constraint player_match_stats_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.player_match_stats add constraint player_match_stats_match_id_fkey FOREIGN KEY (match_id) REFERENCES match_results(id) ON DELETE CASCADE;
+alter table public.player_match_stats add constraint player_match_stats_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_meal_assignments add constraint player_meal_assignments_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.player_meal_assignments add constraint player_meal_assignments_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_meal_assignments add constraint player_meal_assignments_template_id_fkey FOREIGN KEY (template_id) REFERENCES meal_plan_templates(id) ON DELETE CASCADE;
+alter table public.player_preventive_assignments add constraint player_preventive_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.player_preventive_assignments add constraint player_preventive_assignments_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_preventive_assignments add constraint player_preventive_assignments_routine_id_fkey FOREIGN KEY (routine_id) REFERENCES preventive_routines(id) ON DELETE CASCADE;
+alter table public.player_teams add constraint player_teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.player_teams add constraint player_teams_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_teams add constraint player_teams_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.players add constraint players_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.players add constraint players_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.preventive_routines add constraint preventive_routines_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.preventive_routines add constraint preventive_routines_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.profiles add constraint profiles_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.profiles add constraint profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.programme_phases add constraint programme_phases_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.programme_phases add constraint programme_phases_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES rehab_plans(id) ON DELETE CASCADE;
+alter table public.protocol_blocks add constraint protocol_blocks_phase_id_fkey FOREIGN KEY (phase_id) REFERENCES injury_phases(id) ON DELETE SET NULL;
+alter table public.protocol_blocks add constraint protocol_blocks_protocol_id_fkey FOREIGN KEY (protocol_id) REFERENCES rehab_protocols(id) ON DELETE CASCADE;
+alter table public.rehab_plan_owners add constraint rehab_plan_owners_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES rehab_plans(id) ON DELETE CASCADE;
+alter table public.rehab_plan_owners add constraint rehab_plan_owners_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+alter table public.rehab_plans add constraint rehab_plans_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
+alter table public.rehab_plans add constraint rehab_plans_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id);
+alter table public.rehab_plans add constraint rehab_plans_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id);
+alter table public.rehab_protocols add constraint rehab_protocols_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.rehab_protocols add constraint rehab_protocols_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.rehab_protocols add constraint rehab_protocols_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id) ON DELETE CASCADE;
+alter table public.rehab_sessions add constraint rehab_sessions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES rehab_plans(id) ON DELETE CASCADE;
+alter table public.rpe add constraint rpe_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.rpe add constraint rpe_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.rpe add constraint rpe_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
+alter table public.season_phases add constraint season_phases_phase_type_id_fkey FOREIGN KEY (phase_type_id) REFERENCES phase_types(id);
+alter table public.season_phases add constraint season_phases_season_id_fkey FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE;
+alter table public.seasons add constraint seasons_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id);
+alter table public.seasons add constraint seasons_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id);
+alter table public.session_exercises add constraint session_exercises_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.session_exercises add constraint session_exercises_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES gym_exercises(id) ON DELETE SET NULL;
+alter table public.session_exercises add constraint session_exercises_planner_exercise_id_fkey FOREIGN KEY (planner_exercise_id) REFERENCES exercises(id);
+alter table public.session_exercises add constraint session_exercises_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
+alter table public.share_links add constraint share_links_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.share_links add constraint share_links_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.share_links add constraint share_links_mc_id_fkey FOREIGN KEY (mc_id) REFERENCES microcycles(id) ON DELETE SET NULL;
+alter table public.share_links add constraint share_links_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.share_links add constraint share_links_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE SET NULL;
+alter table public.share_links add constraint share_links_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.subscriptions add constraint subscriptions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.subscriptions add constraint subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES plans(id);
+alter table public.subscriptions add constraint subscriptions_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.tasks add constraint tasks_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.tasks add constraint tasks_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.tasks add constraint tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.tasks add constraint tasks_event_id_fkey FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE SET NULL;
+alter table public.tasks add constraint tasks_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.teams add constraint teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.training_sessions add constraint training_sessions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.training_sessions add constraint training_sessions_coach_id_fkey FOREIGN KEY (coach_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.training_sessions add constraint training_sessions_microcycle_id_fkey FOREIGN KEY (microcycle_id) REFERENCES microcycles(id) ON DELETE SET NULL;
+alter table public.training_sessions add constraint training_sessions_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.treatment_templates add constraint treatment_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.treatment_templates add constraint treatment_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.treatments add constraint treatments_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.treatments add constraint treatments_indicated_by_fkey FOREIGN KEY (indicated_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.treatments add constraint treatments_injury_id_fkey FOREIGN KEY (injury_id) REFERENCES injuries(id) ON DELETE SET NULL;
+alter table public.treatments add constraint treatments_performed_by_fkey FOREIGN KEY (performed_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.treatments add constraint treatments_physio_id_fkey FOREIGN KEY (physio_id) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.treatments add constraint treatments_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.video_matches add constraint video_matches_event_id_fkey FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE;
+alter table public.video_matches add constraint video_matches_video_id_fkey FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE;
+alter table public.video_players add constraint video_players_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.video_players add constraint video_players_video_id_fkey FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE;
+alter table public.video_sessions add constraint video_sessions_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE CASCADE;
+alter table public.video_sessions add constraint video_sessions_video_id_fkey FOREIGN KEY (video_id) REFERENCES videos(id) ON DELETE CASCADE;
+alter table public.videos add constraint videos_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.videos add constraint videos_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+alter table public.wellness add constraint wellness_acknowledged_by_fkey FOREIGN KEY (acknowledged_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.wellness add constraint wellness_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.wellness add constraint wellness_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 
-create or replace view public.v_next_match_lineup as
- SELECT DISTINCT ON (mc.club_id) mc.club_id,
-    mc.id AS microcycle_id,
-    mc.name AS microcycle_name,
-    mc.match_date AS kickoff_date,
-    mc.match_time AS kickoff_time,
-    mc.rival AS opponent_name,
-    mc.home_away,
-    mc.stadium AS venue,
-    l.id AS lineup_id,
-    l.formation,
-    l.status AS lineup_status,
-    l.poster_style,
-    l.language
-   FROM (microcycles mc
-     LEFT JOIN lineups l ON (((l.microcycle_id = mc.id) AND (l.status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text])))))
-  WHERE (mc.match_date >= CURRENT_DATE)
-  ORDER BY mc.club_id, mc.match_date;
+-- ========================= FUNCIONES =========================
 
-create or replace view public.wellness_latest as
- SELECT DISTINCT ON (player_id) id,
-    player_id,
-    club_id,
-    sleep_quality,
-    fatigue,
-    soreness,
-    stress,
-    mood,
-    readiness,
-    submitted_at
-   FROM wellness
-  ORDER BY player_id, submitted_at DESC;
-
--- =====================================================================
--- FUNCTIONS  (cuerpos reales; incluyen SECURITY DEFINER donde aplica)
--- =====================================================================
 CREATE OR REPLACE FUNCTION public.accept_invitation()
  RETURNS void
  LANGUAGE plpgsql
@@ -3706,3 +3520,1146 @@ begin
     ) q
     order by q.responded, q.ln nulls last, q.fn nulls last;
 end; $function$;
+
+-- =========================== VISTAS ===========================
+
+create or replace view public.v_exercise_gps_profile as
+ SELECT r.club_id,
+    m.exercise_id,
+    count(*) AS n_instances,
+    (sum(r.duration_seconds) / 60.0) AS total_minutes,
+    avg((r.total_distance / (r.duration_seconds / 60.0))) AS total_distance_per_min,
+    avg((r.high_speed_distance / (r.duration_seconds / 60.0))) AS high_speed_distance_per_min,
+    avg((r.very_high_speed_distance / (r.duration_seconds / 60.0))) AS very_high_speed_distance_per_min,
+    avg((r.sprint_distance / (r.duration_seconds / 60.0))) AS sprint_distance_per_min,
+    avg((r.sprint_count / (r.duration_seconds / 60.0))) AS sprint_count_per_min,
+    avg((r.accelerations / (r.duration_seconds / 60.0))) AS accelerations_per_min,
+    avg((r.decelerations / (r.duration_seconds / 60.0))) AS decelerations_per_min,
+    avg((r.player_load / (r.duration_seconds / 60.0))) AS player_load_per_min,
+    avg((r.hmld / (r.duration_seconds / 60.0))) AS hmld_per_min,
+    avg(r.total_distance) AS total_distance_avg,
+    avg(r.high_speed_distance) AS high_speed_distance_avg,
+    avg(r.very_high_speed_distance) AS very_high_speed_distance_avg,
+    avg(r.sprint_distance) AS sprint_distance_avg,
+    avg(r.sprint_count) AS sprint_count_avg,
+    avg(r.accelerations) AS accelerations_avg,
+    avg(r.decelerations) AS decelerations_avg,
+    avg(r.player_load) AS player_load_avg,
+    avg(r.hmld) AS hmld_avg
+   FROM (gps_period_reports r
+     JOIN gps_drill_map m ON (((m.club_id = r.club_id) AND (m.period_name = r.period_name))))
+  WHERE ((m.exercise_id IS NOT NULL) AND (m.ignored = false) AND (r.duration_seconds > (0)::numeric))
+  GROUP BY r.club_id, m.exercise_id;
+
+create or replace view public.v_gps_period_names as
+ SELECT club_id,
+    period_name,
+    count(*) AS n_instances,
+    (avg(duration_seconds) FILTER (WHERE (duration_seconds > (0)::numeric)) / 60.0) AS avg_minutes
+   FROM gps_period_reports
+  WHERE ((period_name IS NOT NULL) AND (period_name <> ''::text))
+  GROUP BY club_id, period_name;
+
+create or replace view public.v_next_match_lineup as
+ SELECT DISTINCT ON (mc.club_id) mc.club_id,
+    mc.id AS microcycle_id,
+    mc.name AS microcycle_name,
+    mc.match_date AS kickoff_date,
+    mc.match_time AS kickoff_time,
+    mc.rival AS opponent_name,
+    mc.home_away,
+    mc.stadium AS venue,
+    l.id AS lineup_id,
+    l.formation,
+    l.status AS lineup_status,
+    l.poster_style,
+    l.language
+   FROM (microcycles mc
+     LEFT JOIN lineups l ON (((l.microcycle_id = mc.id) AND (l.status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text])))))
+  WHERE (mc.match_date >= CURRENT_DATE)
+  ORDER BY mc.club_id, mc.match_date;
+
+create or replace view public.wellness_latest as
+ SELECT DISTINCT ON (player_id) id,
+    player_id,
+    club_id,
+    sleep_quality,
+    fatigue,
+    soreness,
+    stress,
+    mood,
+    readiness,
+    submitted_at
+   FROM wellness
+  ORDER BY player_id, submitted_at DESC;
+
+-- ========================== TRIGGERS ==========================
+
+CREATE TRIGGER club_branding_updated_at BEFORE UPDATE ON public.club_branding FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER club_settings_updated_at BEFORE UPDATE ON public.club_settings FOR EACH ROW EXECUTE FUNCTION set_club_settings_updated_at();
+CREATE TRIGGER trg_seed_core_metrics AFTER INSERT ON public.clubs FOR EACH ROW EXECUTE FUNCTION seed_core_metrics_for_club();
+CREATE TRIGGER trg_seed_default_exercises AFTER INSERT ON public.clubs FOR EACH ROW EXECUTE FUNCTION seed_default_exercises_for_club();
+CREATE TRIGGER drills_updated_at BEFORE UPDATE ON public.drills FOR EACH ROW EXECUTE FUNCTION set_drills_updated_at();
+CREATE TRIGGER trg_gps_int_updated BEFORE UPDATE ON public.gps_integrations FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_gps_metric_def_updated_at BEFORE UPDATE ON public.gps_metric_definitions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_gps_period_reports_updated BEFORE UPDATE ON public.gps_period_reports FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER act_gps AFTER INSERT ON public.gps_reports FOR EACH ROW EXECUTE FUNCTION trg_act_gps();
+CREATE TRIGGER trg_gym_templates_updated_at BEFORE UPDATE ON public.gym_session_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER individual_plans_updated_at BEFORE UPDATE ON public.individual_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER act_injury AFTER INSERT OR UPDATE ON public.injuries FOR EACH ROW EXECUTE FUNCTION trg_act_injury();
+CREATE TRIGGER lineups_stamp_publish BEFORE UPDATE ON public.lineups FOR EACH ROW EXECUTE FUNCTION stamp_lineup_publish();
+CREATE TRIGGER load_templates_updated_at BEFORE UPDATE ON public.load_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER match_reports_updated_at BEFORE UPDATE ON public.match_reports FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_nutrition_targets_updated_at BEFORE UPDATE ON public.nutrition_targets FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER plans_updated_at BEFORE UPDATE ON public.plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_sync_player_primary_team AFTER INSERT OR DELETE OR UPDATE ON public.player_teams FOR EACH ROW EXECUTE FUNCTION sync_player_primary_team();
+CREATE TRIGGER preventive_routines_updated_at BEFORE UPDATE ON public.preventive_routines FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER rehab_plans_updated_at BEFORE UPDATE ON public.rehab_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER rehab_protocols_updated_at BEFORE UPDATE ON public.rehab_protocols FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER act_rpe AFTER INSERT ON public.rpe FOR EACH ROW EXECUTE FUNCTION trg_act_rpe();
+CREATE TRIGGER rpe_calculate_load_trigger BEFORE INSERT OR UPDATE ON public.rpe FOR EACH ROW EXECUTE FUNCTION calculate_rpe_load();
+CREATE TRIGGER seasons_updated_at BEFORE UPDATE ON public.seasons FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER subscriptions_updated_at BEFORE UPDATE ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_single_primary BEFORE INSERT OR UPDATE OF is_primary ON public.teams FOR EACH ROW WHEN (new.is_primary) EXECUTE FUNCTION enforce_single_primary_team();
+CREATE TRIGGER act_session AFTER INSERT OR UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session();
+CREATE TRIGGER act_treatment AFTER INSERT OR UPDATE ON public.treatments FOR EACH ROW EXECUTE FUNCTION trg_act_treatment();
+CREATE TRIGGER act_wellness AFTER INSERT ON public.wellness FOR EACH ROW EXECUTE FUNCTION trg_act_wellness();
+
+-- ===================== RLS Y POLITICAS =====================
+
+alter table public.activity_log enable row level security;
+create policy "activity_log_select" on public.activity_log as permissive for select to authenticated
+  using (((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND ((EXISTS ( SELECT 1
+   FROM profiles pr
+  WHERE ((pr.id = auth.uid()) AND ((pr.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (pr.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IS NULL) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+alter table public.ai_card_generations enable row level security;
+create policy "club members manage ai generations" on public.ai_card_generations as permissive for all to authenticated
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.audit_log enable row level security;
+create policy "audit_log_insert" on public.audit_log as permissive for insert to public
+  with check (((actor_id = auth.uid()) AND (club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+create policy "audit_log_select" on public.audit_log as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "audit_log_super_select" on public.audit_log as permissive for select to public
+  using (is_super_admin());
+
+alter table public.availability enable row level security;
+create policy "availability_cud" on public.availability as permissive for all to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT (my_player_ids())::text AS my_player_ids))))
+  with check ((is_super_admin() OR (player_id IN ( SELECT (my_player_ids())::text AS my_player_ids))));
+create policy "availability_scoped_select" on public.availability as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT (my_player_ids())::text AS my_player_ids))));
+
+alter table public.body_composition enable row level security;
+create policy "body_composition_rw" on public.body_composition as permissive for all to authenticated
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.calendar_events enable row level security;
+create policy "ce_scoped_cud" on public.calendar_events as permissive for all to public
+  using (((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "ce_scoped_select" on public.calendar_events as permissive for select to public
+  using (((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+alter table public.card_accumulations enable row level security;
+create policy "club_card_accumulations" on public.card_accumulations as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.card_templates enable row level security;
+create policy "club members manage card templates" on public.card_templates as permissive for all to authenticated
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.channel_reads enable row level security;
+create policy "Users manage their own reads" on public.channel_reads as permissive for all to public
+  using ((auth.uid() = user_id))
+  with check ((auth.uid() = user_id));
+
+alter table public.club_branding enable row level security;
+create policy "club_branding_modify" on public.club_branding as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'staff'::text]))))));
+create policy "club_branding_select" on public.club_branding as permissive for select to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.club_gps_settings enable row level security;
+create policy "club members manage gps settings" on public.club_gps_settings as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.club_modules enable row level security;
+create policy "club_modules_select" on public.club_modules as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "club_modules_super_all" on public.club_modules as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "club_modules_write" on public.club_modules as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
+
+alter table public.club_settings enable row level security;
+create policy "club_settings_select" on public.club_settings as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "club_settings_upsert" on public.club_settings as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'owner'::text]))))));
+
+alter table public.clubs enable row level security;
+create policy "Authenticated users can create clubs" on public.clubs as permissive for insert to public
+  with check ((auth.uid() IS NOT NULL));
+create policy "Club admins can delete their club" on public.clubs as permissive for delete to public
+  using (((id = get_user_club_id()) AND (( SELECT profiles.role
+   FROM profiles
+  WHERE (profiles.id = auth.uid())) = 'admin'::text)));
+create policy "Users can view their club" on public.clubs as permissive for select to public
+  using ((id = get_user_club_id()));
+create policy "admin can update own club" on public.clubs as permissive for update to public
+  using ((id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'owner'::text]))))));
+create policy "clubs_insert_authenticated" on public.clubs as permissive for insert to authenticated
+  with check (true);
+create policy "clubs_super_select" on public.clubs as permissive for select to public
+  using (is_super_admin());
+create policy "clubs_super_update" on public.clubs as permissive for update to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "clubs_superadmin_read" on public.clubs as permissive for select to authenticated
+  using (is_super_admin());
+create policy "clubs_update_member" on public.clubs as permissive for update to authenticated
+  using ((id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.competitions enable row level security;
+create policy "competitions_all" on public.competitions as permissive for all to authenticated
+  using ((season_id IN ( SELECT seasons.id
+   FROM seasons
+  WHERE (seasons.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.dashboard_cards enable row level security;
+create policy "club members manage dashboard cards" on public.dashboard_cards as permissive for all to authenticated
+  using ((dashboard_id IN ( SELECT dashboards.id
+   FROM dashboards
+  WHERE (dashboards.club_id = ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.dashboards enable row level security;
+create policy "club members create dashboards" on public.dashboards as permissive for insert to authenticated
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "club members view dashboards" on public.dashboards as permissive for select to authenticated
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "creator or staff delete dashboards" on public.dashboards as permissive for delete to authenticated
+  using (((created_by = auth.uid()) OR (( SELECT profiles.role
+   FROM profiles
+  WHERE (profiles.id = auth.uid())) = ANY (ARRAY['admin'::text, 'coach'::text]))));
+create policy "creator or staff update dashboards" on public.dashboards as permissive for update to authenticated
+  using (((created_by = auth.uid()) OR (( SELECT profiles.role
+   FROM profiles
+  WHERE (profiles.id = auth.uid())) = ANY (ARRAY['admin'::text, 'coach'::text]))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.default_exercises enable row level security;
+create policy "Anyone authenticated can read default_exercises" on public.default_exercises as permissive for select to authenticated
+  using (true);
+
+alter table public.drills enable row level security;
+create policy "drills_delete" on public.drills as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'owner'::text, 'coach'::text, 'head_coach'::text]))))));
+create policy "drills_insert" on public.drills as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "drills_select" on public.drills as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "drills_update" on public.drills as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.evaluations enable row level security;
+create policy "evaluations_scoped_insert" on public.evaluations as permissive for insert to authenticated
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "evaluations_scoped_select" on public.evaluations as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "evaluations_scoped_update" on public.evaluations as permissive for update to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+
+alter table public.exercise_drills enable row level security;
+create policy "Club members can manage exercise_drills" on public.exercise_drills as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.exercises enable row level security;
+create policy "exercises_cud" on public.exercises as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "exercises_scoped_select" on public.exercises as permissive for select to public
+  using (((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (visible_teams IS NULL) OR (cardinality(visible_teams) = 0) OR (visible_teams && ( SELECT ARRAY( SELECT my_team_ids() AS my_team_ids) AS "array")))));
+
+alter table public.foods enable row level security;
+create policy "foods_read" on public.foods as permissive for select to authenticated
+  using (true);
+create policy "foods_write" on public.foods as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.force_column_mappings enable row level security;
+create policy "force_col_map club" on public.force_column_mappings as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.force_metric_definitions enable row level security;
+create policy "force_metric_defs select" on public.force_metric_definitions as permissive for select to public
+  using (((club_id IS NULL) OR (club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+create policy "force_metric_defs write club" on public.force_metric_definitions as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.force_test_metrics enable row level security;
+create policy "force_test_metrics via test" on public.force_test_metrics as permissive for all to public
+  using ((EXISTS ( SELECT 1
+   FROM force_tests t
+  WHERE (t.id = force_test_metrics.test_id))))
+  with check ((EXISTS ( SELECT 1
+   FROM force_tests t
+  WHERE (t.id = force_test_metrics.test_id))));
+
+alter table public.force_tests enable row level security;
+create policy "force_tests select team-scoped" on public.force_tests as permissive for select to public
+  using (((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (uploaded_by = auth.uid()))));
+create policy "force_tests write club" on public.force_tests as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.gps_column_mappings enable row level security;
+create policy "club members can manage their column mappings" on public.gps_column_mappings as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.gps_dashboard_layouts enable row level security;
+create policy "Users insert own layouts" on public.gps_dashboard_layouts as permissive for insert to public
+  with check (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
+create policy "Users read own layouts" on public.gps_dashboard_layouts as permissive for select to public
+  using (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
+create policy "Users update own layouts" on public.gps_dashboard_layouts as permissive for update to public
+  using (((user_id = auth.uid()) AND (club_id = get_user_club_id())))
+  with check (((user_id = auth.uid()) AND (club_id = get_user_club_id())));
+
+alter table public.gps_drill_map enable row level security;
+create policy "gps_drill_map_select" on public.gps_drill_map as permissive for select to authenticated
+  using ((club_id = get_user_club_id()));
+create policy "gps_drill_map_write" on public.gps_drill_map as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_full_planning_access()))
+  with check (((club_id = get_user_club_id()) AND has_full_planning_access()));
+
+alter table public.gps_integration_secrets enable row level security;
+alter table public.gps_integrations enable row level security;
+create policy "gps_int_club_all" on public.gps_integrations as permissive for all to authenticated
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.gps_metric_definitions enable row level security;
+create policy "club members can manage metric definitions" on public.gps_metric_definitions as permissive for all to authenticated
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.gps_period_reports enable row level security;
+create policy "gps_period_reports_club_all" on public.gps_period_reports as permissive for all to public
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.gps_report_metrics enable row level security;
+create policy "gps_report_metrics_del" on public.gps_report_metrics as permissive for delete to authenticated
+  using (((club_id = get_user_club_id()) OR is_super_admin()));
+create policy "gps_report_metrics_ins" on public.gps_report_metrics as permissive for insert to authenticated
+  with check (((club_id = get_user_club_id()) OR is_super_admin()));
+create policy "gps_report_metrics_scoped_select" on public.gps_report_metrics as permissive for select to public
+  using ((is_super_admin() OR (report_id IN ( SELECT gps_reports.id
+   FROM gps_reports
+  WHERE (gps_reports.player_id IN ( SELECT my_player_ids() AS my_player_ids))))));
+create policy "gps_report_metrics_upd" on public.gps_report_metrics as permissive for update to authenticated
+  using (((club_id = get_user_club_id()) OR is_super_admin()));
+
+alter table public.gps_reports enable row level security;
+create policy "gps_reports_scoped_insert" on public.gps_reports as permissive for insert to authenticated
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "gps_reports_scoped_select" on public.gps_reports as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "gps_reports_scoped_update" on public.gps_reports as permissive for update to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+
+alter table public.gym_exercises enable row level security;
+create policy "Club members can manage gym_exercises" on public.gym_exercises as permissive for all to public
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.gym_session_templates enable row level security;
+create policy "gym_session_templates_rw" on public.gym_session_templates as permissive for all to authenticated
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.individual_block_completions enable row level security;
+create policy "individual_block_completions_all" on public.individual_block_completions as permissive for all to authenticated
+  using ((player_id IN ( SELECT players.id
+   FROM players
+  WHERE (players.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.individual_plan_blocks enable row level security;
+create policy "individual_plan_blocks_all" on public.individual_plan_blocks as permissive for all to authenticated
+  using ((plan_id IN ( SELECT individual_plans.id
+   FROM individual_plans
+  WHERE (individual_plans.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.individual_plans enable row level security;
+create policy "individual_plans_all" on public.individual_plans as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.injuries enable row level security;
+create policy "injuries_scoped_insert" on public.injuries as permissive for insert to authenticated
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "injuries_scoped_select" on public.injuries as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "injuries_scoped_update" on public.injuries as permissive for update to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+
+alter table public.injury_phases enable row level security;
+create policy "injury_phases_delete" on public.injury_phases as permissive for delete to public
+  using ((injury_id IN ( SELECT injuries.id
+   FROM injuries
+  WHERE (injuries.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+create policy "injury_phases_insert" on public.injury_phases as permissive for insert to public
+  with check ((injury_id IN ( SELECT injuries.id
+   FROM injuries
+  WHERE (injuries.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+create policy "injury_phases_rw" on public.injury_phases as permissive for all to public
+  using ((EXISTS ( SELECT 1
+   FROM injuries i
+  WHERE ((i.id = injury_phases.injury_id) AND (i.club_id = ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid())))))))
+  with check ((EXISTS ( SELECT 1
+   FROM injuries i
+  WHERE ((i.id = injury_phases.injury_id) AND (i.club_id = ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid())))))));
+create policy "injury_phases_select" on public.injury_phases as permissive for select to public
+  using ((injury_id IN ( SELECT injuries.id
+   FROM injuries
+  WHERE (injuries.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+create policy "injury_phases_update" on public.injury_phases as permissive for update to public
+  using ((injury_id IN ( SELECT injuries.id
+   FROM injuries
+  WHERE (injuries.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.invitations enable row level security;
+create policy "invitations_select" on public.invitations as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "invitations_super_all" on public.invitations as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "invitations_write" on public.invitations as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
+
+alter table public.invoices enable row level security;
+create policy "invoices_select" on public.invoices as permissive for select to authenticated
+  using ((club_id = get_user_club_id()));
+
+alter table public.league_configs enable row level security;
+create policy "club_league_configs" on public.league_configs as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.lineup_players enable row level security;
+create policy "lineup_players_all" on public.lineup_players as permissive for all to authenticated
+  using ((lineup_id IN ( SELECT lineups.id
+   FROM lineups
+  WHERE (lineups.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.lineup_staff enable row level security;
+create policy "lineup_staff_all" on public.lineup_staff as permissive for all to authenticated
+  using ((lineup_id IN ( SELECT lineups.id
+   FROM lineups
+  WHERE (lineups.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.lineups enable row level security;
+create policy "Club members can delete lineups" on public.lineups as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Club members can insert lineups" on public.lineups as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Club members can read lineups" on public.lineups as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Club members can update lineups" on public.lineups as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.load_templates enable row level security;
+create policy "load_templates_all" on public.load_templates as permissive for all to authenticated
+  using ((mesocycle_id IN ( SELECT m.id
+   FROM ((mesocycles m
+     JOIN macrocycles mc ON ((mc.id = m.macrocycle_id)))
+     JOIN seasons s ON ((s.id = mc.season_id)))
+  WHERE (s.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.macrocycles enable row level security;
+create policy "macrocycles_all" on public.macrocycles as permissive for all to authenticated
+  using ((season_id IN ( SELECT seasons.id
+   FROM seasons
+  WHERE (seasons.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.match_reports enable row level security;
+create policy "club_match_reports" on public.match_reports as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.match_results enable row level security;
+create policy "match_results_delete" on public.match_results as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "match_results_insert" on public.match_results as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "match_results_select" on public.match_results as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "match_results_update" on public.match_results as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.match_shots enable row level security;
+create policy "club_match_shots" on public.match_shots as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.meal_plan_items enable row level security;
+create policy "meal_plan_items_rw" on public.meal_plan_items as permissive for all to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM (meal_plan_meals m
+     JOIN meal_plan_templates t ON ((t.id = m.template_id)))
+  WHERE ((m.id = meal_plan_items.meal_id) AND (t.club_id = get_user_club_id())))))
+  with check ((EXISTS ( SELECT 1
+   FROM (meal_plan_meals m
+     JOIN meal_plan_templates t ON ((t.id = m.template_id)))
+  WHERE ((m.id = meal_plan_items.meal_id) AND (t.club_id = get_user_club_id())))));
+
+alter table public.meal_plan_meals enable row level security;
+create policy "meal_plan_meals_rw" on public.meal_plan_meals as permissive for all to authenticated
+  using ((EXISTS ( SELECT 1
+   FROM meal_plan_templates t
+  WHERE ((t.id = meal_plan_meals.template_id) AND (t.club_id = get_user_club_id())))))
+  with check ((EXISTS ( SELECT 1
+   FROM meal_plan_templates t
+  WHERE ((t.id = meal_plan_meals.template_id) AND (t.club_id = get_user_club_id())))));
+
+alter table public.meal_plan_templates enable row level security;
+create policy "meal_plan_templates_rw" on public.meal_plan_templates as permissive for all to authenticated
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.member_modules enable row level security;
+create policy "member_modules_select" on public.member_modules as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "member_modules_super_all" on public.member_modules as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "member_modules_write" on public.member_modules as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
+
+alter table public.member_teams enable row level security;
+create policy "member_teams_member_all" on public.member_teams as permissive for all to authenticated
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "member_teams_super_all" on public.member_teams as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.mesocycles enable row level security;
+create policy "mesocycles_all" on public.mesocycles as permissive for all to authenticated
+  using ((macrocycle_id IN ( SELECT mc.id
+   FROM (macrocycles mc
+     JOIN seasons s ON ((s.id = mc.season_id)))
+  WHERE (s.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.messages enable row level security;
+create policy "messages_insert" on public.messages as permissive for insert to public
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "messages_select" on public.messages as permissive for select to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "messages_update" on public.messages as permissive for update to public
+  using ((sender_id = auth.uid()));
+
+alter table public.microcycles enable row level security;
+create policy "mc_scoped_cud" on public.microcycles as permissive for all to public
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "mc_scoped_select" on public.microcycles as permissive for select to public
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+alter table public.notification_settings enable row level security;
+create policy "notif_settings_staff" on public.notification_settings as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "notif_settings_super" on public.notification_settings as permissive for all to public
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.notifications enable row level security;
+create policy "notifications_insert_service" on public.notifications as permissive for insert to public
+  with check (true);
+create policy "notifications_select_own" on public.notifications as permissive for select to public
+  using ((user_id = auth.uid()));
+create policy "notifications_update_own" on public.notifications as permissive for update to public
+  using ((user_id = auth.uid()));
+
+alter table public.nutrition enable row level security;
+create policy "Club members can insert nutrition" on public.nutrition as permissive for insert to public
+  with check ((club_id = get_user_club_id()));
+create policy "Club members can update nutrition" on public.nutrition as permissive for update to public
+  using ((club_id = get_user_club_id()));
+create policy "Club members can view nutrition from their club" on public.nutrition as permissive for select to public
+  using ((club_id = get_user_club_id()));
+
+alter table public.nutrition_targets enable row level security;
+create policy "nutrition_targets_rw" on public.nutrition_targets as permissive for all to authenticated
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.opponent_branding enable row level security;
+create policy "opponent_branding_all" on public.opponent_branding as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.payment_methods enable row level security;
+create policy "payment_methods_select" on public.payment_methods as permissive for select to authenticated
+  using ((club_id = get_user_club_id()));
+
+alter table public.phase_types enable row level security;
+create policy "phase_types_read" on public.phase_types as permissive for select to authenticated
+  using (((club_id IS NULL) OR (club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid())))));
+create policy "phase_types_write" on public.phase_types as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.pinned_files enable row level security;
+create policy "Club members can pin files" on public.pinned_files as permissive for insert to authenticated
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Club members can unpin files" on public.pinned_files as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Club members can view pinned files" on public.pinned_files as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.plans enable row level security;
+create policy "plans_select" on public.plans as permissive for select to anon, authenticated
+  using (true);
+create policy "plans_write_platform" on public.plans as permissive for all to authenticated
+  using (is_platform_admin())
+  with check (is_platform_admin());
+
+alter table public.platform_admins enable row level security;
+create policy "platform_admins_self_select" on public.platform_admins as permissive for select to public
+  using ((user_id = auth.uid()));
+
+alter table public.player_anthropometrics enable row level security;
+create policy "Club members can insert anthropometrics" on public.player_anthropometrics as permissive for insert to public
+  with check ((club_id = get_user_club_id()));
+create policy "Club members can view anthropometrics" on public.player_anthropometrics as permissive for select to public
+  using ((club_id = get_user_club_id()));
+
+alter table public.player_individual_assignments enable row level security;
+create policy "player_individual_assignments_all" on public.player_individual_assignments as permissive for all to authenticated
+  using ((player_id IN ( SELECT players.id
+   FROM players
+  WHERE (players.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.player_match_stats enable row level security;
+create policy "player_match_stats_delete" on public.player_match_stats as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "player_match_stats_insert" on public.player_match_stats as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "player_match_stats_select" on public.player_match_stats as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "player_match_stats_update" on public.player_match_stats as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.player_meal_assignments enable row level security;
+create policy "player_meal_assignments_rw" on public.player_meal_assignments as permissive for all to authenticated
+  using ((club_id = get_user_club_id()))
+  with check ((club_id = get_user_club_id()));
+
+alter table public.player_preventive_assignments enable row level security;
+create policy "player_preventive_assignments_all" on public.player_preventive_assignments as permissive for all to authenticated
+  using ((player_id IN ( SELECT players.id
+   FROM players
+  WHERE (players.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.player_teams enable row level security;
+create policy "player_teams_select" on public.player_teams as permissive for select to authenticated
+  using ((club_id = get_user_club_id()));
+create policy "player_teams_write" on public.player_teams as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_full_planning_access()))
+  with check (((club_id = get_user_club_id()) AND has_full_planning_access()));
+
+alter table public.players enable row level security;
+create policy "players_scoped_delete" on public.players as permissive for delete to public
+  using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "players_scoped_insert" on public.players as permissive for insert to authenticated
+  with check (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "players_scoped_select" on public.players as permissive for select to public
+  using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "players_scoped_update" on public.players as permissive for update to public
+  using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
+   FROM profiles p
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "players_super_select" on public.players as permissive for select to public
+  using (is_super_admin());
+create policy "players_super_write" on public.players as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.preventive_routines enable row level security;
+create policy "preventive_routines_all" on public.preventive_routines as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.profiles enable row level security;
+create policy "Club admins can update club profiles" on public.profiles as permissive for update to public
+  using (((club_id = get_user_club_id()) AND (( SELECT profiles_1.role
+   FROM profiles profiles_1
+  WHERE (profiles_1.id = auth.uid())) = 'admin'::text)));
+create policy "Users can insert own profile" on public.profiles as permissive for insert to public
+  with check ((id = auth.uid()));
+create policy "Users can update own profile" on public.profiles as permissive for update to public
+  using ((id = auth.uid()));
+create policy "Users can update own profile (self)" on public.profiles as permissive for update to public
+  using ((id = auth.uid()))
+  with check ((id = auth.uid()));
+create policy "Users can view profiles from their club" on public.profiles as permissive for select to public
+  using ((club_id = get_user_club_id()));
+create policy "profiles_insert_self" on public.profiles as permissive for insert to authenticated
+  with check ((id = auth.uid()));
+create policy "profiles_super_select" on public.profiles as permissive for select to public
+  using (is_super_admin());
+
+alter table public.programme_phases enable row level security;
+create policy "programme_phases delete club" on public.programme_phases as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "programme_phases insert club" on public.programme_phases as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "programme_phases select club" on public.programme_phases as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "programme_phases update club" on public.programme_phases as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.protocol_blocks enable row level security;
+create policy "protocol_blocks_all" on public.protocol_blocks as permissive for all to authenticated
+  using ((protocol_id IN ( SELECT rehab_protocols.id
+   FROM rehab_protocols
+  WHERE (rehab_protocols.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.rehab_plan_owners enable row level security;
+create policy "rehab_plan_owners_all" on public.rehab_plan_owners as permissive for all to authenticated
+  using ((plan_id IN ( SELECT rehab_plans.id
+   FROM rehab_plans
+  WHERE (rehab_plans.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.rehab_plans enable row level security;
+create policy "rehab_plans_cud" on public.rehab_plans as permissive for all to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "rehab_plans_scoped_select" on public.rehab_plans as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+
+alter table public.rehab_protocols enable row level security;
+create policy "rehab_protocols_all" on public.rehab_protocols as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.rehab_sessions enable row level security;
+create policy "rehab_sessions_all" on public.rehab_sessions as permissive for all to authenticated
+  using ((plan_id IN ( SELECT rehab_plans.id
+   FROM rehab_plans
+  WHERE (rehab_plans.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+create policy "rehab_sessions_rw" on public.rehab_sessions as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.rpe enable row level security;
+create policy "rpe_scoped_insert" on public.rpe as permissive for insert to authenticated
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "rpe_scoped_select" on public.rpe as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+
+alter table public.season_phases enable row level security;
+create policy "season_phases_all" on public.season_phases as permissive for all to authenticated
+  using ((season_id IN ( SELECT seasons.id
+   FROM seasons
+  WHERE (seasons.club_id IN ( SELECT profiles.club_id
+           FROM profiles
+          WHERE (profiles.id = auth.uid()))))));
+
+alter table public.seasons enable row level security;
+create policy "seasons_all" on public.seasons as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.session_exercises enable row level security;
+create policy "club_members_manage_session_exercises" on public.session_exercises as permissive for all to public
+  using ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id = ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.share_links enable row level security;
+create policy "share_links_anon_read" on public.share_links as permissive for select to anon
+  using (((revoked = false) AND ((expires_at IS NULL) OR (expires_at > now()))));
+create policy "share_links_staff" on public.share_links as permissive for all to authenticated
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.subscriptions enable row level security;
+create policy "subs_superadmin_read" on public.subscriptions as permissive for select to authenticated
+  using (is_super_admin());
+create policy "subscriptions_select" on public.subscriptions as permissive for select to authenticated
+  using ((club_id = get_user_club_id()));
+
+alter table public.tasks enable row level security;
+create policy "Club members can create tasks" on public.tasks as permissive for insert to authenticated
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Club members can delete tasks" on public.tasks as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Club members can insert tasks" on public.tasks as permissive for insert to public
+  with check ((club_id = get_user_club_id()));
+create policy "Club members can update tasks" on public.tasks as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "Team-scoped task visibility" on public.tasks as permissive for select to public
+  using (((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()) OR (assigned_to = auth.uid()))));
+
+alter table public.taxonomy_aliases enable row level security;
+create policy "Anyone authenticated can read taxonomy_aliases" on public.taxonomy_aliases as permissive for select to authenticated
+  using (true);
+
+alter table public.teams enable row level security;
+create policy "Club members can delete teams" on public.teams as permissive for delete to public
+  using ((club_id = get_user_club_id()));
+create policy "Club members can insert teams" on public.teams as permissive for insert to public
+  with check ((club_id = get_user_club_id()));
+create policy "Club members can update teams" on public.teams as permissive for update to public
+  using ((club_id = get_user_club_id()));
+create policy "Club members can view teams" on public.teams as permissive for select to public
+  using ((club_id = get_user_club_id()));
+create policy "teams_super_all" on public.teams as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+
+alter table public.training_sessions enable row level security;
+create policy "ts_scoped_cud" on public.training_sessions as permissive for all to public
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  with check (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+create policy "ts_scoped_select" on public.training_sessions as permissive for select to public
+  using (((club_id = get_user_club_id()) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+
+alter table public.treatment_templates enable row level security;
+create policy "treatment_templates_club_delete" on public.treatment_templates as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "treatment_templates_club_insert" on public.treatment_templates as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "treatment_templates_club_select" on public.treatment_templates as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.treatments enable row level security;
+create policy "treatments_cud" on public.treatments as permissive for all to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "treatments_scoped_select" on public.treatments as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+
+alter table public.video_matches enable row level security;
+create policy "video_matches rw via video" on public.video_matches as permissive for all to public
+  using ((EXISTS ( SELECT 1
+   FROM videos v
+  WHERE (v.id = video_matches.video_id))))
+  with check ((EXISTS ( SELECT 1
+   FROM videos v
+  WHERE (v.id = video_matches.video_id))));
+
+alter table public.video_players enable row level security;
+create policy "video_players rw via video" on public.video_players as permissive for all to public
+  using ((EXISTS ( SELECT 1
+   FROM videos v
+  WHERE (v.id = video_players.video_id))))
+  with check ((EXISTS ( SELECT 1
+   FROM videos v
+  WHERE (v.id = video_players.video_id))));
+
+alter table public.video_sessions enable row level security;
+create policy "video_sessions rw via video" on public.video_sessions as permissive for all to public
+  using ((EXISTS ( SELECT 1
+   FROM videos v
+  WHERE (v.id = video_sessions.video_id))))
+  with check ((EXISTS ( SELECT 1
+   FROM videos v
+  WHERE (v.id = video_sessions.video_id))));
+
+alter table public.videos enable row level security;
+create policy "videos delete club" on public.videos as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "videos insert club" on public.videos as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "videos select team-scoped" on public.videos as permissive for select to public
+  using (((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (uploaded_by = auth.uid()))));
+create policy "videos update club" on public.videos as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+
+alter table public.wellness enable row level security;
+create policy "wellness_scoped_insert" on public.wellness as permissive for insert to authenticated
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "wellness_scoped_select" on public.wellness as permissive for select to public
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
+create policy "wellness_scoped_update" on public.wellness as permissive for update to authenticated
+  using ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))))
+  with check ((is_super_admin() OR (player_id IN ( SELECT my_player_ids() AS my_player_ids))));
