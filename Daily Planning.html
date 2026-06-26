@@ -754,7 +754,7 @@ async function loadSessionExercises(sessionId) {
     return;
   }
   const { data } = await window.sb.from('session_exercises')
-    .select('id,name,phase,duration,series,work_time,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
+    .select('id,name,phase,duration,series,work_time,rest_time,intensity,notes,exercise_id,planner_exercise_id,field_width,field_height,players_count,m2_per_player,calc_orientation,gym_exercises(name,category,description)')
     .eq('club_id', _dpClubId).eq('session_id', sessionId).eq('phase','main')
     .order('position');
   _dpFieldExercises = data || [];
@@ -785,13 +785,13 @@ function renderExerciseList(exercises) {
     if (ct) ct.textContent = '0';
     return;
   }
-  const totalMin = Math.round(exercises.reduce((s, e) => s + dpEffMin(e), 0));
+  const totalMin = Math.round(exercises.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
   if (ct) ct.textContent = `${exercises.length} · ${totalMin} min`;
   grid.innerHTML = exercises.map(dpExerciseCardHTML).join('') + '<button class="dp-ex-add no-print" onclick="openLibModal()"><i class="ti ti-plus" style="font-size:14px"></i>Add exercise</button>';
 }
 
 function dpExerciseCardHTML(e) {
-    const _eff = Math.round(dpEffMin(e));
+    const _eff = Math.round(dpBlockMins(e).total_min);
     const dur = _eff ? `${_eff}′` : '—';
     if (e.planner_exercise_id) {
       // Planner (field) exercise
@@ -837,7 +837,7 @@ function dpExerciseCardHTML(e) {
                 ? `<input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="Series" style="${EI};width:44px">
                    <span>×</span>
                    <input type="text" value="${e.work_time ?? ''}" placeholder="3:00" oninput="dpEditWork('${e.id}',this.value)" title="Work time (m:ss)" style="${EI};width:56px">
-                   <span data-eff="${e.id}">= ${Math.round(dpEffMin(e))}′</span>`
+                   <span data-eff="${e.id}">= ${Math.round(dpBlockMins(e).total_min)}′</span>`
                 : `<input type="number" min="0" value="${e.duration != null ? e.duration : ''}" placeholder="min" oninput="dpEditDur('${e.id}',this.value)" title="Duration (min)" style="${EI};width:54px"><span>min</span>`
             }</div>`;
           })()}
@@ -893,12 +893,17 @@ function dpWorkMin(wt) {
   const n = Number(s); if (!isFinite(n)) return 0;
   return n >= 20 ? n / 60 : n;
 }
-// Single source of truth for a block's effective minutes — used by totals AND
-// the GPS projection so the whole planner counts identically.
-function dpEffMin(e) {
-  if (e && e.duration != null && e.duration !== '') return Number(e.duration) || 0;
-  if (e && e.series && e.work_time) return (Number(e.series) || 0) * dpWorkMin(e.work_time);
-  return 0;
+// Single source of truth for a block's minutes — shared by totals AND projection.
+//   work_min  = series × work_time         → GPS load (drives the projection)
+//   total_min = series × (work + rest)      → session time (drives the totals)
+// Blocks without series/work fall back to the flat duration for both.
+function dpBlockMins(e) {
+  const series = Number(e && e.series) || 0;
+  const wMin = dpWorkMin(e && e.work_time);
+  const rMin = dpWorkMin(e && e.rest_time);
+  if (series && wMin) return { work_min: series * wMin, total_min: series * (wMin + rMin) };
+  const d = (e && e.duration != null && e.duration !== '') ? (Number(e.duration) || 0) : 0;
+  return { work_min: d, total_min: d };
 }
 
 // ── Per-task duration / series×work_time editing (BUG C) ──────────────────
@@ -912,7 +917,7 @@ function _dpEditSave(seid, patch){
 function _dpEffLabel(seid){
   const e = _dpFieldExercises.find(x => x.id === seid);
   const el = document.querySelector(`[data-eff="${seid}"]`);
-  if (e && el) el.textContent = '= ' + Math.round(dpEffMin(e)) + '′';
+  if (e && el) el.textContent = '= ' + Math.round(dpBlockMins(e).total_min) + '′';
 }
 function dpEditDur(seid, val){
   const e = _dpFieldExercises.find(x => x.id === seid); if (!e) return;
@@ -935,7 +940,7 @@ function dpEditWork(seid, val){
 
 function recalcTotals() {
   const actMin   = _dpActTotalMin;
-  const fieldMin = Math.round(_dpFieldExercises.reduce((s, e) => s + dpEffMin(e), 0));
+  const fieldMin = Math.round(_dpFieldExercises.reduce((s, e) => s + dpBlockMins(e).total_min, 0));
   const fieldCt  = _dpFieldExercises.length;
   const total    = actMin + fieldMin;
   _dpSessionTotalMin = total;
@@ -975,7 +980,7 @@ function dpSaveTargets(){
 async function renderGpsProjection(){
   const card = document.getElementById('dpGpsProj'); if (!card) return;
   const blocks = (_dpFieldExercises||[]);
-  const withId = blocks.filter(e => e.exercise_id && dpEffMin(e) > 0);
+  const withId = blocks.filter(e => e.exercise_id && dpBlockMins(e).work_min > 0);
   // Fetch any profiles we don't have cached yet.
   const need = [...new Set(withId.map(e => e.exercise_id).filter(id => !(id in _dpGpsProfiles)))];
   if (need.length) {
@@ -1002,7 +1007,7 @@ async function renderGpsProjection(){
     const m = (window.CM_GPS_METRICS||[]).find(x => x.key === k); if (!m) return '';
     // Σ per_min × minutes, then to display unit (TD km→m ×1000); totals shown as integers.
     let proj = 0;
-    covered.forEach(e => { proj += num(_dpGpsProfiles[e.exercise_id][k]) * dpEffMin(e); });
+    covered.forEach(e => { proj += num(_dpGpsProfiles[e.exercise_id][k]) * dpBlockMins(e).work_min; });
     proj = Math.round(proj * m.mult);
     projVals[k] = proj;
     const unit = m.avgUnit || '';
@@ -1155,7 +1160,7 @@ async function dpRenderPrintSheet() {
 
     // 3) KPI strip
     const actMin = _dpActTotalMin || 0;
-    const fieldMin = Math.round((_dpFieldExercises||[]).reduce((s,e)=>s+dpEffMin(e),0));
+    const fieldMin = Math.round((_dpFieldExercises||[]).reduce((s,e)=>s+dpBlockMins(e).total_min,0));
     const total = actMin + fieldMin;
     const au = (parseInt(rpe)||0) * total || 0;
     const kpis = [['Activation', actMin?actMin+'′':'—'], ['Field', fieldMin?fieldMin+'′':'—'], ['Total', total?total+'′':'—'], ['Duration', total?total+'′':'—'], ['Planned AU', au?String(au):'—', true]];
@@ -1357,6 +1362,7 @@ async function addPlannerExercise(exerciseId) {
     duration:            ex?.duration    || null,
     series:              ex?.series      || null,
     work_time:           ex?.work_time   || null,
+    rest_time:           ex?.rest_time   || null,
     position:            pos,
     field_width:         ex?.field_width  || null,
     field_height:        ex?.field_height || null,

@@ -839,7 +839,7 @@
 
           <div class="pl-form-row cols-2" style="margin-bottom:10px">
             <div class="pl-form-field">
-              <label class="pl-form-label">Duration (min) · work / GPS load</label>
+              <label class="pl-form-label">Duration (min) · total incl. rest</label>
               <input type="number" class="pl-form-input" id="plExDuration" placeholder="auto" min="1" max="180">
             </div>
             <div class="pl-form-field">
@@ -863,7 +863,7 @@
             <div class="pl-form-field" style="background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px">
               <div style="font:600 10px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted)">Time breakdown</div>
               <div id="plTotalInfo" style="font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-fg);margin-top:4px">Total time incl. rest: —</div>
-              <div style="font:400 10.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">Duration (work) = GPS load · Total = session time incl. rest. 3:00 = 3 min 0 sec.</div>
+              <div style="font:400 10.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">Duration = total incl. rest (planning time) · Work = GPS load. 3:00 = 3 min 0 sec.</div>
             </div>
           </div>
 
@@ -2669,7 +2669,8 @@
     const n = Number(s); if (!isFinite(n)) return 0;
     return n >= 20 ? n/60 : n;
   }
-  const plMinToClock = min => { const m = Math.floor(min), s = Math.round((min - m)*60); return `${m}:${String(s).padStart(2,'0')}`; };
+  const plFmtMin = m => (Math.round(m * 10) / 10).toString();
+  // Duration field = TOTAL incl. rest (planning time). Work (GPS load) shown beside.
   function plRecalcDuration(){
     const series = parseInt(document.getElementById('plExSeries')?.value) || 0;
     const wMin = plWorkMin(document.getElementById('plExWorkTime')?.value);
@@ -2677,10 +2678,11 @@
     const durEl = document.getElementById('plExDuration');
     const totEl = document.getElementById('plTotalInfo');
     if (series && wMin) {
-      if (!_plDurManual && durEl) { durEl.value = Math.round(series * wMin); updateSpaceOrientation?.(); }
-      if (totEl) totEl.textContent = `Total time incl. rest: ${plMinToClock(series*(wMin+rMin))} (work ${plMinToClock(series*wMin)} · rest ${plMinToClock(series*rMin)})`;
+      const work = series * wMin, total = series * (wMin + rMin);
+      if (!_plDurManual && durEl) { durEl.value = Math.round(total); updateSpaceOrientation?.(); }
+      if (totEl) totEl.textContent = `Work (GPS load): ${plFmtMin(work)} min · Total incl. rest: ${plFmtMin(total)} min`;
     } else if (totEl) {
-      totEl.textContent = 'Total time incl. rest: —';
+      totEl.textContent = '—';
     }
   }
   // Recompute when series/work/rest change; manual Duration edit disables autocalc.
@@ -2818,9 +2820,9 @@
     document.getElementById('plExRestTime').value  = ex.rest_time     || '';
     // Duration autocalc: treat a stored duration that differs from series×work
     // as a manual override (keep it); otherwise let it auto-calc. Refresh total.
-    { const _s = parseInt(ex.series) || 0, _w = plWorkMin(ex.work_time);
-      const _computed = (_s && _w) ? Math.round(_s * _w) : null;
-      _plDurManual = !!(ex.duration && _computed != null && Number(ex.duration) !== _computed);
+    { const _s = parseInt(ex.series) || 0, _w = plWorkMin(ex.work_time), _r = plWorkMin(ex.rest_time);
+      const _total = (_s && _w) ? Math.round(_s * (_w + _r)) : null;   // Duration now = total incl. rest
+      _plDurManual = !!(ex.duration && _total != null && Number(ex.duration) !== _total);
       plRecalcDuration(); }
     document.getElementById('plExMatchDay').value    = ex.match_day != null ? ex.match_day : '';
     document.getElementById('plExObjective').value   = ex.objective   || '';
