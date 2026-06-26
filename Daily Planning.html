@@ -1277,11 +1277,18 @@ async function dpRenderPrintSheet() {
     // Shared diagram-card renderer for both Field and Activation
     const orientShort = e => { const o=(e.calc_orientation||'').toUpperCase(); const m=_DP_ORIENT[o]; return m?m.short:(o?o.slice(0,3):''); };
     const printExCard = e => {
-      const tag = orientShort(e); const dur = e.duration?`${e.duration}′`:'';
+      const tag = orientShort(e);
       const meta = [];
       if (e.players_count) meta.push(`${e.players_count} pl`);
       if (e.m2_per_player) meta.push(`${e.m2_per_player} m²/p`);
       if (e.field_width && e.field_height) meta.push(`${e.field_width}×${e.field_height} m`);
+      const seriesMode = !!(e.series && e.work_time);
+      const totalMin = seriesMode ? Math.round(dpBlockMins(e).total_min) : (e.duration || null);
+      const workLine = seriesMode
+        ? `${e.series} × ${esc(e.work_time)} work${e.rest_time ? ` + ${esc(e.rest_time)} rest` : ''}`
+        : '';
+      const note = (e.notes || '').trim();
+      const dur = totalMin ? totalMin + '′' : '';
       const src = _img(e);
       const thumb = src ? `<img src="${esc(src)}" style="display:block;width:100%;height:auto">`
                         : `<div style="width:100%;height:124px;background:#1F7A43"></div>`;
@@ -1293,6 +1300,8 @@ async function dpRenderPrintSheet() {
         <div style="padding:8px 10px 9px">
           <div style="font:600 12.5px ${FONT};color:#15181D">${esc(e.name||'—')}</div>
           ${meta.length?`<div style="font:400 10px ${MONO};color:#8A93A0;margin-top:3px">${esc(meta.join(' · '))}</div>`:''}
+          ${workLine ? `<div style="font:500 10.5px ${MONO};color:#15803D;margin-top:4px">${esc(workLine)}</div>` : ''}
+          ${note ? `<div style="font:400 10.5px ${FONT};color:#5B6470;margin-top:4px">${esc(note)}</div>` : ''}
         </div>
       </div>`;
     };
