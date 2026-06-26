@@ -1,5 +1,11 @@
 # CLAVAMETRICS DATABASE SCHEMA
 
+> ⚠️ **OBSOLETO (desde 2026-06-26).** Este doc es narrativo, parcial y desactualizado.
+> Fuente de verdad del esquema:
+> - Estructura completa (104 tablas reales): [`db/schema.sql`](db/schema.sql)
+> - Diagrama por dominio: [`docs/schema-diagram.md`](docs/schema-diagram.md)
+> - Auditoría de migraciones: [`docs/migrations-audit.md`](docs/migrations-audit.md)
+
 # DATABASE OVERVIEW
 
 Database provider:
