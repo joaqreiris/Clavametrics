@@ -410,6 +410,14 @@
   window.applyClubTheme();
   const clubId = await window.getClubId();
   if (!clubId) return;
+  // Unmapping GPS is gated like gps_drill_map RLS: admin/owner/super only.
+  let canEditMap = false;
+  try {
+    const _p = await window.getProfile();
+    const _b = (_p?.role || _p?.club_role || '').toLowerCase();
+    canEditMap = _b === 'admin' || _b === 'owner';
+    if (!canEditMap && window.isSuperAdmin) { try { canEditMap = await window.isSuperAdmin(); } catch {} }
+  } catch {}
   window._slTeams = await window.getTeams(clubId);
   window._slTeamMap = Object.fromEntries((window._slTeams||[]).map(t => [t.id, t.name]));
   (function slRenderTeamFilter() {
@@ -742,11 +750,26 @@
     if (!data || !n) { host.innerHTML = header + `<div class="sl-gps-empty">No GPS data yet</div>`; wireGear(); return; }
     const mins = data.total_minutes == null ? null : Number(data.total_minutes);
     const grid = cells => `<div class="sl-preview-grid">${cells.map(c => `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('')}</div>`;
+    const unmapBtn = canEditMap ? ` · <button type="button" data-gps-unmap style="background:none;border:0;padding:0;color:var(--cm-danger,#dc2626);font:inherit;cursor:pointer;text-decoration:underline">Unmap</button>` : '';
     host.innerHTML = header +
       sub('Avg total · per session') + grid(window.cmFormatGpsCells(data, 'avg')) +
       sub('Per minute · intensity')  + grid(window.cmFormatGpsCells(data, 'permin')) +
-      `<div class="sl-gps-ctx">Avg of ${n} instance${n !== 1 ? 's' : ''}${mins != null ? ` · ~${Math.round(mins)} min total` : ''}</div>`;
+      `<div class="sl-gps-ctx">Avg of ${n} instance${n !== 1 ? 's' : ''}${mins != null ? ` · ~${Math.round(mins)} min total` : ''}${unmapBtn}</div>`;
     wireGear();
+    host.querySelector('[data-gps-unmap]')?.addEventListener('click', e => { e.stopPropagation(); unmapExercise(exId); });
+  }
+
+  // Unmap: delete this exercise's gps_drill_map rows (club-scoped) → profile empties. Idempotent.
+  async function unmapExercise(exId) {
+    const { data: rows } = await window.sb.from('gps_drill_map')
+      .select('period_name').eq('club_id', clubId).eq('exercise_id', exId);
+    const cnt = rows ? rows.length : 0;
+    if (!cnt) { renderExGpsProfile(exId); return; }
+    if (!confirm(`This will unlink ${cnt} period name${cnt !== 1 ? 's' : ''} from this drill.`)) return;
+    const { error } = await window.sb.from('gps_drill_map')
+      .delete().eq('club_id', clubId).eq('exercise_id', exId);
+    if (error) { alert('Could not unmap: ' + error.message); return; }
+    if (selectedId === exId) renderExGpsProfile(exId);
   }
 
   function hidePreview() {
