@@ -834,7 +834,7 @@ function dpExerciseCardHTML(e) {
           ${(() => {
             if (e.phase !== 'main') return '';   // editor only for field tasks (live in _dpFieldExercises)
             const EI = 'padding:4px 6px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit;font-size:11.5px';
-            const seriesMode = (e.series || e.work_time) && (e.duration == null || e.duration === '');
+            const seriesMode = !!(e.series && e.work_time);   // structure decides, not absence of a legacy duration
             return `<div class="dp-ex-edit no-print" style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-top:6px;font:500 11px var(--cm-font-sans);color:var(--cm-fg-muted)">${
               seriesMode
                 ? `<input type="number" min="1" value="${e.series ?? ''}" oninput="dpEditSeries('${e.id}',this.value)" title="Series" style="${EI};width:40px">
