@@ -5149,8 +5149,11 @@ async function calBuildMonthSheet(){
       const nm = e.session_type === 'match'
         ? ('vs ' + (e.opponent || e.title || 'Match'))
         : (e.title || (CAL_TYPE_META[e.session_type]?.label) || meta.abbr);
+      const marker = (e.session_type === 'match' && e.rival_crest_url)
+        ? `<img src="${esc(e.rival_crest_url)}" alt="" style="width:11px;height:11px;border-radius:2px;object-fit:contain;flex:none;background:#fff">`
+        : `<span style="width:6px;height:6px;border-radius:50%;background:${meta.fg};flex:none"></span>`;
       return `<div style="display:flex;align-items:center;gap:4px;padding:2px 5px;border-radius:5px;background:${meta.bg};border:1px solid ${meta.bd};color:${meta.fg};font:600 9px ${FONT};overflow:hidden;white-space:nowrap">
-        <span style="width:6px;height:6px;border-radius:50%;background:${meta.fg};flex:none"></span>
+        ${marker}
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1">${esc(nm)}</span>
         ${t?`<span style="margin-left:auto;font:500 8.5px ${MONO};opacity:.7;flex:none">${esc(t)}</span>`:''}
       </div>`;
