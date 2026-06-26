@@ -750,7 +750,7 @@
     if (!data || !n) { host.innerHTML = header + `<div class="sl-gps-empty">No GPS data yet</div>`; wireGear(); return; }
     const mins = data.total_minutes == null ? null : Number(data.total_minutes);
     const grid = cells => `<div class="sl-preview-grid">${cells.map(c => `<div class="sl-preview-cell"><div class="l">${c.l}</div><div class="v">${c.v}</div></div>`).join('')}</div>`;
-    const unmapBtn = canEditMap ? ` · <button type="button" data-gps-unmap style="background:none;border:0;padding:0;color:var(--cm-danger,#dc2626);font:inherit;cursor:pointer;text-decoration:underline">Unmap</button>` : '';
+    const unmapBtn = canEditMap ? ` · <button type="button" data-gps-unmap style="background:none;border:0;padding:0;color:var(--cm-danger,#dc2626);font:inherit;cursor:pointer;text-decoration:underline">Unmap drill (GPS)</button>` : '';
     host.innerHTML = header +
       sub('Avg total · per session') + grid(window.cmFormatGpsCells(data, 'avg')) +
       sub('Per minute · intensity')  + grid(window.cmFormatGpsCells(data, 'permin')) +
@@ -765,7 +765,8 @@
       .select('period_name').eq('club_id', clubId).eq('exercise_id', exId);
     const cnt = rows ? rows.length : 0;
     if (!cnt) { renderExGpsProfile(exId); return; }
-    if (!confirm(`This will unlink ${cnt} period name${cnt !== 1 ? 's' : ''} from this drill.`)) return;
+    const exName = document.getElementById('prevName')?.textContent || 'this drill';
+    if (!confirm(`Unlink all ${cnt} period name${cnt !== 1 ? 's' : ''} from "${exName}"? The GPS profile will be cleared.`)) return;
     const { error } = await window.sb.from('gps_drill_map')
       .delete().eq('club_id', clubId).eq('exercise_id', exId);
     if (error) { alert('Could not unmap: ' + error.message); return; }
@@ -948,6 +949,37 @@
     // Unmapped primero.
     groups.sort((a,b) => (a.mapped===b.mapped) ? (b.nInst - a.nInst) : (a.mapped ? 1 : -1));
 
+    // GPS preview per period_name (≥30s, mirrors the v_exercise_gps_profile floor).
+    // Lets each card show the RESULTING TD/min before saving → flags absurd merges.
+    const gpsByName = new Map();    // period_name → { n, sumPerMin, sumTotal }
+    async function loadGpsByName(){
+      let off = 0, page;
+      do {
+        const { data } = await window.sb.from('gps_period_reports')
+          .select('period_name,total_distance,duration_seconds')
+          .eq('club_id', clubId).gte('duration_seconds', 30).range(off, off + 999);
+        page = data || [];
+        page.forEach(r => {
+          if (!r.period_name || !r.duration_seconds || r.total_distance == null) return;
+          const e = gpsByName.get(r.period_name) || { n:0, sumPerMin:0, sumTotal:0 };
+          e.n++; e.sumTotal += +r.total_distance;
+          e.sumPerMin += (+r.total_distance) / (r.duration_seconds/60);
+          gpsByName.set(r.period_name, e);
+        });
+        off += 1000;
+      } while (page.length === 1000);
+      paint();   // refresh cards with the GPS line once data lands
+    }
+    // Resulting profile if this group were saved as one drill. total_distance is KM.
+    function groupGps(g){
+      let n=0, sumPerMin=0, sumTotal=0;
+      g.names.forEach(x => { const e = gpsByName.get(x.period_name); if (e){ n+=e.n; sumPerMin+=e.sumPerMin; sumTotal+=e.sumTotal; } });
+      if (!n) return null;
+      const tdPerMin = (sumPerMin/n) * 1000;   // m/min
+      const tdAvgKm  = sumTotal/n;             // km/session
+      return { n, tdPerMin, tdAvgKm, absurd: tdPerMin > 150 || tdAvgKm > 10 };
+    }
+
     let createdCount = 0;
 
     const ov = document.createElement('div');
@@ -1072,6 +1104,10 @@
           <span>${g.names.length} variant${g.names.length!==1?'s':''}${single?' · '+esc(g.names[0].period_name):''}</span>
           <button type="button" data-expand="${i}" style="${MINIBTN_CSS}">${g.expanded?'Hide names':'Edit names'}</button>
         </div>`;
+        const gps = groupGps(g);
+        const gpsLine = gps ? `<div style="font:600 10.5px var(--cm-font-mono);margin-top:4px;color:${gps.absurd?'var(--cm-danger,#dc2626)':'var(--cm-fg-muted)'}">
+          GPS preview · ${Math.round(gps.tdPerMin)} m/min · ${gps.tdAvgKm.toFixed(1)} km/session · ${gps.n} valid${gps.absurd?' · ⚠ Unusually high — likely mixed drills':''}
+        </div>` : '';
         const panel = g.expanded ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft,rgba(0,0,0,.02))">
           ${g.names.map(n => `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:3px 0">
             <input type="checkbox" data-namesel="${i}" value="${esc(n.period_name)}">
@@ -1091,7 +1127,7 @@
             </div>
             <select data-choice="${i}" style="padding:7px 9px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg);color:var(--cm-fg-strong);font:inherit">${exOptions(g.choice)}</select>
             <button class="cm-btn is-outline is-sm" data-create="${i}" title="Create an exercise named &quot;${esc(g.repName)}&quot; and map to it">Create exercise</button>
-          </div>${variantsLine}${panel}
+          </div>${gpsLine}${variantsLine}${panel}
         </div>`;
       }).join('');
       listEl.querySelectorAll('[data-choice]').forEach(s => s.addEventListener('change', () => { groups[+s.dataset.choice].choice = s.value; paint(); }));
@@ -1186,6 +1222,7 @@
     ov.querySelector('[data-save]').addEventListener('click', save);
     ov.querySelector('[data-merge]').addEventListener('click', mergeSelected);
     paint();
+    loadGpsByName();   // async; re-paints with the GPS preview line when ready
   }
 })();
 </script>
