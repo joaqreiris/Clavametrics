@@ -3548,7 +3548,9 @@ create or replace view public.v_exercise_gps_profile as
     avg(r.hmld) AS hmld_avg
    FROM (gps_period_reports r
      JOIN gps_drill_map m ON (((m.club_id = r.club_id) AND (m.period_name = r.period_name))))
-  WHERE ((m.exercise_id IS NOT NULL) AND (m.ignored = false) AND (r.duration_seconds > (0)::numeric))
+  WHERE ((m.exercise_id IS NOT NULL) AND (m.ignored = false)
+    AND (r.duration_seconds >= (30)::numeric)                                          -- duration floor: drop <30s junk (m/min explosion)
+    AND ((r.total_distance IS NULL) OR (((r.total_distance * 1000.0) / r.duration_seconds) <= (13)::numeric)))  -- defensive ≤13 m/s avg-speed cap
   GROUP BY r.club_id, m.exercise_id;
 
 create or replace view public.v_gps_period_names as
