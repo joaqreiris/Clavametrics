@@ -94,25 +94,34 @@ indica qué versión sobrevive; lo demás es ruido que la baseline puede colapsa
 
 ## 4. Artefactos muertos / redundantes
 
-**Columnas duplicadas u obsoletas en tablas core:**
-- `injuries.mechanism` (012/013, free-text) vs `injuries.injury_mechanism` (014, con CHECK) — la
-  primera quedó legacy, nunca dropeada.
-- `exercises.preview_svg` (082) vs `preview_png` (084) vs `preview_path` + bucket (085) — **tres
-  estrategias** de preview de drills agregadas en cascada. Si la app estandarizó en el bucket
-  (085), las dos inline (082/084) son ruido. ⚠️ Verificar contra `Exercises Library.html` antes de dropear.
+> ⚠️ **CORRECCIÓN (2026-06-26):** una verificación exhaustiva contra el código real y los cuerpos
+> de funciones de la DB demostró que **casi nada de lo que parecía "muerto" lo está**. El "0
+> referencias" de la auditoría inicial era falso para varios. Verdad verificada abajo. **NO dropear
+> sin grep + revisar funciones/políticas primero.**
 
-**Tablas creadas por migración sin uso en código (candidatas a deprecar):**
-| Tabla | Migración | Nota |
-|-------|-----------|------|
-| `card_templates` | 038 | 0 referencias en todo el repo |
-| `default_exercises` | 044 | Tabla semilla; la app lee `exercises`/`gym_exercises`, nunca esta |
-| `taxonomy_aliases` | 089 | Solo backend (normalización `cm_norm`), 0 refs cliente |
-| `platform_admins` | 060→061 | 061 la dropeó, **pero existe en la DB hoy** (recreada fuera de migraciones). Drift activo. |
+**Columnas — estado REAL verificado:**
+| Columna | Veredicto | Evidencia |
+|---------|-----------|-----------|
+| `injuries.mechanism` | ❌ **VIVA, no dropear** | `Injuries.html` la lee (`inj.mechanism`, L2364) y la escribe en el insert (L2426). La que está **muerta es `injury_mechanism`** (0 refs en código) — al revés de lo que decía esta auditoría. |
+| `exercises.preview_svg` | ❌ **VIVA** | `Planner.html` la selecciona y la escribe (`preview_svg: _previewSvg`). |
+| `exercises.preview_png` | ❌ **VIVA** | Usada en `Exercises Library.html`, `Planner.html`, `Daily Planning.html` como fallback de `preview_path`. |
 
-> ⚠️ **`platform_admins` CONFIRMADA en la DB** (introspección 2026-06-26) pese a que la migración
-> 061 la eliminó: alguien la volvió a crear directo en Supabase. El código (`invite-staff`,
-> `Chat & Tasks.html`) la usa. La memoria del proyecto dice que el super admin canónico es
-> `is_super_admin()` vía `profiles.role` — hay que decidir cuál es la verdad y alinear código + DB.
+→ El modelo de preview es en cascada: `preview_path` (Storage, preferido) → `preview_png` (data-URL,
+fallback) → `preview_svg` (Planner). Ninguna es ruido puro hoy.
+
+**Tablas — estado REAL verificado:**
+| Tabla | Migración | Veredicto |
+|-------|-----------|-----------|
+| `platform_admins` | 060→061 | ❌ **NO dropear.** `is_super_admin()` la lee directo (`select exists … from platform_admins where user_id=auth.uid()`), + `Chat & Tasks.html` + `invite-staff`. Dropearla **rompe el gate de super admin** y RLS dependiente. |
+| `card_templates` | 038 | ✅ **Sin uso** (0 refs en código, funciones y políticas). Dropeable, pero ganancia mínima. |
+| `taxonomy_aliases` | 089 | ✅ **Huérfana** (0 refs; `cm_norm` NO la usa — es un normalizador de strings puro). Dropeable, ganancia mínima. |
+| `default_exercises` | 044 | Tabla semilla; la app lee `exercises`/`gym_exercises`. No la dropees: es la fuente del seed de nuevos clubs. |
+
+> 🔴 **Contradicción crítica con la memoria del proyecto.** La nota de memoria dice que el super
+> admin es `is_super_admin()` vía `profiles.role='super_admin'` y "no usar platform_admins". **La DB
+> real dice lo contrario:** `is_super_admin()` consulta `platform_admins`. Hay que decidir cuál es la
+> verdad y alinear (función + tabla + código + memoria). Hasta entonces, `platform_admins` es
+> **load-bearing**.
 
 **Data-fixes de una sola vez (no son esquema; la baseline puede omitir el cuerpo, conservar el DDL):**
 - 088 §2/§3 (valores + propagación taxonomía), 089 (backfill club rows), 096 (backfill memberships),
@@ -188,13 +197,14 @@ Mover las 103 históricas a `migrations/applied/` (read-only, registro históric
 Nuevas migraciones bajo `supabase/migrations/` con timestamp (`supabase migration new`). Mata de
 raíz los números duplicados y el "lo apliqué a mano y me olvidé".
 
-### Paso 4 — Limpieza de drift
-1. Decidir `exercises.preview_svg`/`preview_png` vs `preview_path` → dropear las 2 muertas.
-2. Resolver `platform_admins`: **CONFIRMADO que existe en la DB** (pese a que 061 la borró). Decidir si
-   es la fuente canónica o migrar `invite-staff`/`Chat & Tasks.html` a `is_super_admin()`.
-3. Dropear `card_templates`, `taxonomy_aliases` si se confirma 0 uso (ver §4).
-4. ~~Confirmar tipo de `microcycles.id`~~ ✅ es `text` y los FKs son consistentes (§5). Sin acción.
-5. Borrar `injuries.mechanism` legacy tras migrar datos a `injury_mechanism`.
+### Paso 4 — Limpieza de drift  (revisado: casi todo NO es seguro — ver §4)
+**Verificado contra código y funciones (2026-06-26). Resumen: solo 2 candidatos son seguros.**
+1. ❌ `exercises.preview_svg`/`preview_png` → **NO dropear**, ambas vivas (Planner / Exercises Library / Daily Planning).
+2. ❌ `injuries.mechanism` → **NO dropear**, viva en `Injuries.html`. (La dead es `injury_mechanism`; esa sí se podría dropear, 0 refs.)
+3. 🔴 `platform_admins` → **NO dropear**, `is_super_admin()` depende de ella. Tarea real: **decidir el modelo de super admin** (platform_admins vs profiles.role) y alinear función + código + memoria. No es un drop, es una decisión de diseño.
+4. ✅ Solo `card_templates` y `taxonomy_aliases` están sin uso real → dropeables, pero ganancia mínima (tablas inertes). Opcional.
+5. ✅ `microcycles.id` es `text`, FKs consistentes (§5). Sin acción.
+6. Candidato dead real menor: `injuries.injury_mechanism` (0 refs en código). Confirmar que tampoco lo usa ningún reporte antes de dropear.
 
 ### Paso 5 — Quick wins inmediatos (sin riesgo)
 - Fusionar `101+102+103` mentalmente como "daily planning fields" (ya aplicadas; solo doc).
