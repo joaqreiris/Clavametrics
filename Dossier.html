@@ -181,12 +181,16 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 
   <div class="dossier-cfg dossier-tests no-print" id="dossierEvo"></div>
 
+  <div class="dossier-cfg dossier-tests no-print" id="dossierEvoTech"></div>
+
   <div id="sheetHost"></div>
 </div>
 
 <script>
 // ── dossier config (which BLOCKS render — profile/hero always shown — + which physical TESTS) ──
-const DOSSIER_CFG = { blocks: { technical:true, scouting:true, athletic:true, production:true, evolution:true }, tests: ['cmj','sprint'], evolution: [] };
+const DOSSIER_CFG = { blocks: { technical:true, scouting:true, athletic:true, production:true, evolution:true }, tests: ['cmj','sprint'], evolution: [], evolutionTech: [] };
+// subjective technical attributes (unit '/10') — module-level mirror of boot's TECH, for the no-print panel.
+const DOSSIER_TECH = ['Technique','Passing','Vision','1v1','Defending','Duels'];
 // assigned inside boot() once data is fetched; calling it repaints the sheet live.
 let renderSheet = ()=>{};
 
@@ -371,6 +375,13 @@ async function boot(){
   } catch(_){}
   const hasRadar = TECH.some(t=>scoreByType[t]!=null);
 
+  // Full /10 technical history (all dates, asc) for the Evolution block (radar stays a latest snapshot).
+  let _tech = [];
+  try { const { data } = await window.sb.from('evaluations')
+    .select('evaluation_type,value,test_date').eq('club_id',clubId).eq('player_id',id)
+    .eq('unit','/10').in('evaluation_type',TECH).order('test_date',{ascending:true});
+    _tech = data||[]; } catch(_){}
+
   // Objective evals → CMJ + Sprint (latest match by type)
   let cmj=null, sprint=null;
   try {
@@ -403,6 +414,17 @@ async function boot(){
     return rows.filter(r => String(r[col]||'').toLowerCase().startsWith(t.src.m.toLowerCase()) && r.value!=null && r.test_date)
       .map(r => ({ d:r.test_date, v:Number(r.value) })).filter(p => isFinite(p.v))
       .sort((a,b)=> a.d<b.d?-1:1);
+  }
+  // Subjective technical series (/10): 'overall' = avg of attributes per date, else a single attribute over time.
+  function techSeries(key){
+    if(key==='overall'){
+      const byDate={};
+      for(const r of _tech){ const v=Number(r.value); if(!isFinite(v)||!r.test_date) continue;
+        (byDate[r.test_date]=byDate[r.test_date]||[]).push(v); }
+      return Object.keys(byDate).sort().map(d=>({ d, v: byDate[d].reduce((a,b)=>a+b,0)/byDate[d].length }));
+    }
+    return _tech.filter(r=>r.evaluation_type===key && r.value!=null && r.test_date)
+      .map(r=>({ d:r.test_date, v:Number(r.value) })).filter(p=>isFinite(p.v)).sort((a,b)=> a.d<b.d?-1:1);
   }
   function dossierSpark(series){
     if(!series || series.length<2) return '';
@@ -631,12 +653,16 @@ async function boot(){
     </div>` : ''}
 
     <!-- Evolution (selectable line charts over time) -->
-    ${(DOSSIER_CFG.blocks.evolution && DOSSIER_CFG.evolution.length) ? `<div class="ph-block">
+    ${(DOSSIER_CFG.blocks.evolution && (DOSSIER_CFG.evolution.length || DOSSIER_CFG.evolutionTech.length)) ? `<div class="ph-block">
       <div class="ph-sec"><h2>${esc(L.evolution||'Evolution')}</h2><div class="rule"></div></div>
       <div class="ph-evo-grid">
         ${DOSSIER_CFG.evolution.map(k=>{ const t=DOSSIER_TEST_BY_KEY[k]; const s=dossierSeries(k);
            if(!t||s.length<2) return ''; return `<div class="ph-evo">
              <div class="ph-evo-h">${esc(t.label)}${t.unit?` <span>${esc(t.unit)}</span>`:''}</div>${dossierSpark(s)}</div>`;
+        }).join('')}
+        ${DOSSIER_CFG.evolutionTech.map(k=>{ const s=techSeries(k); if(s.length<2) return '';
+           const lbl = k==='overall' ? (L.techOverall||'Technical (avg)') : k;
+           return `<div class="ph-evo"><div class="ph-evo-h">${esc(lbl)} <span>/10</span></div>${dossierSpark(s)}</div>`;
         }).join('')}
       </div></div>` : ''}
 
@@ -707,6 +733,22 @@ document.querySelectorAll('#dossierCfg input[data-block]').forEach(cb=>cb.addEve
     const k = cb.dataset.evo;
     if(cb.checked){ if(!DOSSIER_CFG.evolution.includes(k)) DOSSIER_CFG.evolution.push(k); }
     else { DOSSIER_CFG.evolution = DOSSIER_CFG.evolution.filter(x=>x!==k); }
+    renderSheet();
+  }));
+})();
+
+// technical-evolution checklist (no-print) — Overall + per-attribute /10 lines; toggle add/remove key, repaint live
+(function(){
+  const wrap = document.getElementById('dossierEvoTech'); if(!wrap) return;
+  const items = [{k:'overall',l:'Overall'}].concat(DOSSIER_TECH.map(a=>({k:a,l:a})));
+  wrap.innerHTML = `<span class="cfg-ttl">Technical evolution</span>`
+    + `<div class="grp">`
+      + items.map(it => `<label><input type="checkbox" data-evotech="${esc(it.k)}"${DOSSIER_CFG.evolutionTech.includes(it.k)?' checked':''}> ${esc(it.l)}</label>`).join('')
+    + `</div>`;
+  wrap.querySelectorAll('input[data-evotech]').forEach(cb=>cb.addEventListener('change',()=>{
+    const k = cb.dataset.evotech;
+    if(cb.checked){ if(!DOSSIER_CFG.evolutionTech.includes(k)) DOSSIER_CFG.evolutionTech.push(k); }
+    else { DOSSIER_CFG.evolutionTech = DOSSIER_CFG.evolutionTech.filter(x=>x!==k); }
     renderSheet();
   }));
 })();
