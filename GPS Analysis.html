@@ -2213,6 +2213,7 @@ async function renderKpiCard(cardEl, metricKey, sel) {
       const cid = window._gpClubId;
       const { from, to } = getDateRange();
       const { data: rpts } = await window.sb.from('gps_reports')
+        .eq('is_invalid', false)
         .select('id, training_sessions!inner(session_date)')
         .eq('club_id', cid).eq('player_id', sel.player_id)
         .gte('training_sessions.session_date', from)
@@ -6852,6 +6853,7 @@ async function renderMatchMax(report) {
       const coreKeys = metricKeys.filter(k => _XM_CORE_KEYS.has(k));
       if (coreKeys.length) {
         const { data: rpts } = await window.sb.from('gps_reports')
+          .eq('is_invalid', false)
           .select(`session_id,${coreKeys.join(',')}`)
           .in('session_id', sids)
           .eq('club_id', clubId)
@@ -6867,6 +6869,7 @@ async function renderMatchMax(report) {
       const customKeys = metricKeys.filter(k => !_XM_CORE_KEYS.has(k));
       if (customKeys.length) {
         const { data: coreRows } = await window.sb.from('gps_reports')
+          .eq('is_invalid', false)
           .select('id,session_id')
           .in('session_id', sids)
           .eq('club_id', clubId)
@@ -7048,6 +7051,7 @@ async function renderWeeklyBars(state) {
   const loadBySid = {};
   if (_WB_CORE_COLS.has(metricKey)) {
     const { data: rpts } = await window.sb.from('gps_reports')
+      .eq('is_invalid', false)
       .select(`session_id,${metricKey}`)
       .in('session_id', allSids)
       .eq('club_id', clubId)
@@ -7057,6 +7061,7 @@ async function renderWeeklyBars(state) {
     });
   } else {
     const { data: coreRows } = await window.sb.from('gps_reports')
+      .eq('is_invalid', false)
       .select('id,session_id')
       .in('session_id', allSids)
       .eq('club_id', clubId)
@@ -8019,6 +8024,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       // GPS reports + RPE in parallel
       const [{ data: reports }, { data: rpeRows }] = await Promise.all([
         window.sb.from('gps_reports')
+          .eq('is_invalid', false)
           .select('id,session_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
           .eq('player_id', playerId).eq('club_id', clubId).in('session_id', sessIds),
         window.sb.from('rpe')
@@ -8638,6 +8644,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     const { data: rpts } = await window.sb
       .from('gps_reports')
+      .eq('is_invalid', false)
       .select('session_id,player_load')
       .eq('club_id', clubId)
       .eq('player_id', playerId)
@@ -8722,6 +8729,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
     const { data: rpts } = await window.sb
       .from('gps_reports')
+      .eq('is_invalid', false)
       .select('session_id,player_load')
       .eq('club_id', clubId)
       .eq('player_id', playerId)
@@ -9002,6 +9010,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       ])];
       const { data: reports } = await _scopeTeam(window.sb
         .from('gps_reports')
+        .eq('is_invalid', false)
         .select(`player_id,session_id,${MC_METRICS.map(m => m.key).join(',')}`)
         .eq('club_id', clubId).in('session_id', allSessIds));
 
@@ -9982,6 +9991,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const sessIds = matchSessions.map(s => s.id);
       const { data: reports } = await _scopeTeam(window.sb
         .from('gps_reports')
+        .eq('is_invalid', false)
         .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played,players!inner(position)')
         .eq('club_id', clubId).in('session_id', sessIds));
 
@@ -10723,6 +10733,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       _scCurrentClubId = clubId;
       const { data: reports } = await _scopeTeam(window.sb
         .from('gps_reports')
+        .eq('is_invalid', false)
         .select('id, player_id, total_distance, high_speed_distance, very_high_speed_distance, sprint_distance, sprint_count, max_speed, accelerations, decelerations, player_load, time_played')
         .eq('session_id', sessionId)
         .eq('club_id', clubId));
@@ -11508,6 +11519,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       const allIds = [sessionId, ...equivalents.map(s => s.id)];
       const { data: reports, error: rErr } = await _scopeTeam(window.sb
         .from('gps_reports')
+        .eq('is_invalid', false)
         .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
         .in('session_id', allIds)
         .eq('club_id', clubId));
@@ -11774,6 +11786,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       const [{ data: reports }, { data: players }] = await Promise.all([
         _scopeTeam(window.sb.from('gps_reports')
+          .eq('is_invalid', false)
           .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load')
           .in('session_id', [sessionId, compareSessionId]).eq('club_id', clubId)),
         _gpRoster(clubId, window._gpTeamId),
@@ -12026,6 +12039,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       const { data: reports, error } = await _scopeTeam(window.sb
         .from('gps_reports')
+        .eq('is_invalid', false)
         .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
         .in('session_id', [sessionId, refId])
         .eq('club_id', clubId));
