@@ -1587,14 +1587,19 @@
       // Step 1: session IDs — a date filter, if active, wins over the card range.
       let sessionIds = await getSessionIds(_fbEffectiveRange(FB, config.range), ctx, sb);
       if (stale()) return;
-      if (FB?.mdCodes?.length && sessionIds.length) {
-        const want = new Set(FB.mdCodes.map(String));
+      if ((FB?.mdCodes?.length || FB?.rivals?.length) && sessionIds.length) {
+        // MD and Rival are both session_attributes → one fetch, AND-filter sessions.
+        const wantMd = FB?.mdCodes?.length ? new Set(FB.mdCodes.map(String)) : null;
+        const wantRv = FB?.rivals?.length  ? new Set(FB.rivals)              : null;
         const { data: ts } = await sb.from('training_sessions')
           .select('id,session_attributes').in('id', sessionIds);
         if (stale()) return;
-        sessionIds = (ts || [])
-          .filter(s => want.has(String(s.session_attributes?.md_code ?? '')))
-          .map(s => s.id);
+        sessionIds = (ts || []).filter(s => {
+          const a = s.session_attributes || {};
+          if (wantMd && !wantMd.has(String(a.md_code ?? ''))) return false;
+          if (wantRv && !wantRv.has(a.rival || a.opponent || '')) return false;
+          return true;
+        }).map(s => s.id);
       }
       if (!sessionIds.length) {
         _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', effectiveRange: _fbEffectiveRange(FB, config.range), sessionIds: 0 });

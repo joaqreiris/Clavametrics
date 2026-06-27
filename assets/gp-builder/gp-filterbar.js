@@ -22,12 +22,13 @@
     { key: 'player',     icon: 'ti-user',           placeholder: 'All players',     multi: true },
     { key: 'position',   icon: 'ti-shirt-sport',    placeholder: 'All positions',   multi: true },
     { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'All microcycles', multi: true },
+    { key: 'rival',      icon: 'ti-ball-football',   placeholder: 'All rivals',      multi: true },
   ];
 
   // English labels for the Add-filter menu (placeholders quedan en su idioma actual).
   const FILTER_LABELS = {
     md_code: 'Matchday', date: 'Date', player: 'Players',
-    position: 'Positions', microcycle: 'Microcycle',
+    position: 'Positions', microcycle: 'Microcycle', rival: 'Rival',
   };
 
   const DATE_PRESETS = [
@@ -43,12 +44,13 @@
     player:     [],                            // ids de jugador
     position:   [],                            // posiciones
     microcycle: [],                            // ids de microciclo
+    rival:      [],                            // nombres de rival (session_attributes.rival)
     date:       { preset: null, from: null, to: null },
     visibleFilters: DROPS.map(d => d.key),     // qué filtros se muestran en la barra
   };
   function isFilterVisible(key) { return state.visibleFilters.includes(key); }
   // opciones reales por desplegable: [{ value, label }]
-  const options = { md_code: [], player: [], position: [], microcycle: [] };
+  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [] };
 
   // ── Filtros encadenados ───────────────────────────────────────────────────
   // Relación REAL del club: un gps_report por fila (date/md/mc/jugador/posición).
@@ -56,7 +58,7 @@
   // las sesiones reales (no cálculos derivados tipo getISOWeek).
   let _rows = [];            // [{ d, md, mc, p, pos }]
   let _validCache = null;    // { md_code:Set, microcycle:Set, player:Set, position:Set } | null (sin filtros)
-  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'pos' };
+  const _FIELD = { md_code: 'md', microcycle: 'mc', player: 'p', position: 'pos', rival: 'rv' };
 
   function _anyFilterActive() {
     return !!(state.md_code.length || state.player.length || state.position.length || state.microcycle.length
@@ -82,10 +84,11 @@
     if (exceptKey !== 'microcycle' && state.microcycle.length && !state.microcycle.includes(r.mc)) return false;
     if (exceptKey !== 'player'     && state.player.length     && !state.player.includes(r.p))      return false;
     if (exceptKey !== 'position'   && state.position.length   && !state.position.includes(r.pos))  return false;
+    if (exceptKey !== 'rival'      && state.rival.length      && !state.rival.includes(r.rv))      return false;
     return true;
   }
   function _computeValidSets() {
-    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set() };
+    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set(), rival: new Set() };
     for (const r of _rows) {
       for (const key in _FIELD) if (_rowMatches(r, key)) out[key].add(r[_FIELD[key]]);
     }
@@ -133,6 +136,7 @@
       playerIds:     state.player.slice(),
       positions:     state.position.slice(),
       microcycleIds: state.microcycle.slice(),
+      rivals:        state.rival.slice(),
       date:          { ...state.date },
       activeCount: activeCount(),
     };
@@ -396,6 +400,7 @@
     if (!shown.length) { list.innerHTML = `<div class="fb-empty">Sin opciones para los filtros actuales.</div>`; return; }
     list.innerHTML = shown.map(o =>
       `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
+      (o.crest ? `<img src="${escAttr(o.crest)}" alt="" style="width:16px;height:16px;object-fit:contain;border-radius:2px;margin-right:2px" onerror="this.remove()">` : '') +
       `<span>${escHtml(o.label)}</span></label>`
     ).join('');
     list.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
@@ -703,8 +708,19 @@
         mc:  ts.microcycle_id != null ? String(ts.microcycle_id) : '',
         p:   r.player_id,
         pos: r.players?.position || '',
+        rv:  ts.session_attributes?.rival || ts.session_attributes?.opponent || '',
       };
     }).filter(x => x.d);
+
+    // Rivals real (distintos, no vacíos) desde session_attributes.rival, con escudo.
+    const rivalMap = new Map();   // name → crest
+    (reports || []).filter(r => _teamOk(r.training_sessions?.team_id)).forEach(r => {
+      const a = r.training_sessions?.session_attributes || {};
+      const name = a.rival || a.opponent;
+      if (name && !rivalMap.has(name)) rivalMap.set(name, a.rival_crest_url || null);
+    });
+    options.rival = [...rivalMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, crest]) => ({ value: name, label: name, crest }));
 
     applyChaining();   // si había filtros restaurados, deja _validCache listo
 
