@@ -269,12 +269,19 @@
   /* ── draggable resize (replaces S/M/L/FULL) ───────────────────── */
   .gp-grid.is-edit .gp-c .gp-c-h { cursor:grab; }
   .gp-rz { display:none; position:absolute; right:3px; bottom:3px; width:18px; height:18px; cursor:nwse-resize; z-index:6; touch-action:none; }
-  .gp-grid.is-edit .gp-c .gp-rz { display:block; }
+  /* Subtle: the handle only appears on card hover (or while resizing), not always. */
+  .gp-grid.is-edit .gp-c .gp-rz { display:block; opacity:0; transition:opacity .15s ease; }
+  .gp-grid.is-edit .gp-c:hover .gp-rz,
+  .gp-c.gp-rz-active .gp-rz { opacity:1; }
   .gp-rz::before, .gp-rz::after { content:''; position:absolute; right:3px; bottom:3px; background:var(--cm-fg-faint); border-radius:1px; }
   .gp-rz::before { width:12px; height:2px; }
   .gp-rz::after  { width:2px;  height:12px; }
   .gp-grid.is-edit .gp-c:hover .gp-rz::before,
   .gp-grid.is-edit .gp-c:hover .gp-rz::after { background:var(--cm-accent); }
+  /* KPI resizes WIDTH only → grip on the right edge, horizontal cursor, vertical bar. */
+  .gp-c:has(> .gp-c-b.gp-kpi) .gp-rz { top:50%; bottom:auto; right:2px; transform:translateY(-50%); width:14px; height:24px; cursor:ew-resize; }
+  .gp-c:has(> .gp-c-b.gp-kpi) .gp-rz::before { display:none; }
+  .gp-c:has(> .gp-c-b.gp-kpi) .gp-rz::after { right:5px; bottom:auto; top:6px; width:2px; height:12px; }
   .gp-c.gp-rz-active { outline:1.5px solid var(--cm-accent) !important; outline-offset:-2px; box-shadow:var(--cm-shadow-3); z-index:10; }
   .gp-c.gp-rz-active .gp-rz::before, .gp-c.gp-rz-active .gp-rz::after { background:var(--cm-accent); }
 
@@ -336,6 +343,25 @@
   .gp-kpi .d.warn { color:var(--cm-warning); }
   .gp-kpi .d.down { color:var(--cm-danger); }
   .gp-kpi .gp-kpi-spark { margin-top:auto; padding-top:6px; }   /* fills slack, anchors to foot, keeps a min gap */
+  /* KPI: drop the card header — the tile carries its own internal label, so the
+     header title would be a duplicate. Edit/delete stay reachable as floating
+     actions revealed on card hover. Non-canvas only (canvas uses the header as
+     the drag grip). */
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h {
+    position:absolute; top:0; right:0; left:auto; width:auto;
+    padding:6px; border-bottom:none; background:transparent; z-index:8; pointer-events:none;
+  }
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .ttl,
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .sub,
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .size-toggle { display:none; }
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .right {
+    margin:0; gap:4px; opacity:0; transform:translateY(-2px);
+    transition:opacity .15s, transform .15s; pointer-events:auto;
+  }
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi):hover > .gp-c-h .right { opacity:1; transform:none; }
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .right > button {
+    background:var(--cm-surface); border-color:var(--cm-border-soft); box-shadow:var(--cm-shadow-1);
+  }
 
   .gp-zwrap { overflow-x:auto; min-width:0; max-width:100%; }
   /* width:max-content + min-width:100% (mismo patrón que .ol-hm): si las columnas
