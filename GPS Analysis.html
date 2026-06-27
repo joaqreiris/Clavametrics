@@ -169,7 +169,6 @@
   /* ── F1: free-canvas placement (flag-gated; .is-canvas added by gp-canvas.js) ── */
   .gp-grid.is-canvas { grid-auto-rows: 36px; align-items: stretch; }
   /* F2: resize handles (canvas + edit only) */
-  .gp-grid.is-canvas .gp-rz { display:none; }
   .gp-grid.is-canvas .gp-rh { display:none; position:absolute; z-index:7; }
   /* Handles show ONLY on card hover (or while actively resizing) — never left
      drawn permanently. They straddle the border, so hovering a handle keeps the
@@ -269,36 +268,10 @@
      Hidden (not deleted from static markup) so the two never coexist. */
   .size-toggle { display:none !important; }
 
-  /* ── draggable resize (replaces S/M/L/FULL) ───────────────────── */
+  /* Resizing is owned entirely by the canvas engine (.gp-rh, 8 handles + "X col"
+     badge — see the F2 block above). The old single-corner .gp-rz handle/overlay
+     system was removed to avoid two overlapping resize frames on a card. */
   .gp-grid.is-edit .gp-c .gp-c-h { cursor:grab; }
-  .gp-rz { display:none; position:absolute; right:3px; bottom:3px; width:18px; height:18px; cursor:nwse-resize; z-index:6; touch-action:none; }
-  /* Subtle: the handle only appears on card hover (or while resizing), not always. */
-  .gp-grid.is-edit .gp-c .gp-rz { display:block; opacity:0; transition:opacity .15s ease; }
-  .gp-grid.is-edit .gp-c:hover .gp-rz,
-  .gp-c.gp-rz-active .gp-rz { opacity:1; }
-  .gp-rz::before, .gp-rz::after { content:''; position:absolute; right:3px; bottom:3px; background:var(--cm-fg-faint); border-radius:1px; }
-  .gp-rz::before { width:12px; height:2px; }
-  .gp-rz::after  { width:2px;  height:12px; }
-  .gp-grid.is-edit .gp-c:hover .gp-rz::before,
-  .gp-grid.is-edit .gp-c:hover .gp-rz::after { background:var(--cm-accent); }
-  /* KPI resizes WIDTH only → grip on the right edge, horizontal cursor, vertical bar. */
-  .gp-c:has(> .gp-c-b.gp-kpi) .gp-rz { top:50%; bottom:auto; right:2px; transform:translateY(-50%); width:14px; height:24px; cursor:ew-resize; }
-  .gp-c:has(> .gp-c-b.gp-kpi) .gp-rz::before { display:none; }
-  .gp-c:has(> .gp-c-b.gp-kpi) .gp-rz::after { right:5px; bottom:auto; top:6px; width:2px; height:12px; }
-  .gp-c.gp-rz-active { outline:1.5px solid var(--cm-accent) !important; outline-offset:-2px; box-shadow:var(--cm-shadow-3); z-index:10; }
-  .gp-c.gp-rz-active .gp-rz::before, .gp-c.gp-rz-active .gp-rz::after { background:var(--cm-accent); }
-
-  /* width badge on the card while resizing */
-  .gp-rz-badge { position:absolute; top:8px; right:8px; z-index:11; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:999px; background:var(--cm-accent); color:var(--cm-fg-on-accent); font:600 10.5px/1 var(--cm-font-mono); white-space:nowrap; box-shadow:var(--cm-shadow-2); pointer-events:none; }
-
-  /* snap-guide overlay drawn over the grid while resizing */
-  .gp-grid.is-resizing { position:relative; }
-  .gp-rz-ov { position:absolute; inset:0; z-index:2; pointer-events:none; display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
-  .gp-rz-ov > i { border-right:1px dashed var(--cm-border-strong); border-left:1px dashed var(--cm-border-strong); opacity:0.5; }
-  .gp-rz-mk { position:absolute; top:-22px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:2px; font:600 10px/1 var(--cm-font-mono); color:var(--cm-fg-faint); white-space:nowrap; }
-  .gp-rz-mk::after { content:''; width:1px; height:8px; background:var(--cm-border-strong); }
-  .gp-rz-mk.is-on { color:var(--cm-accent); }
-  .gp-rz-mk.is-on::after { width:2px; height:12px; background:var(--cm-accent); }
 
   /* No internal scroll: the content adapts to the card size. Charts re-resize via
      the ResizeObserver in gp-canvas.js (reflowCard → Chart.resize), KPI scales by
@@ -891,7 +864,7 @@
               <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-c-b" style="position:relative;min-height:190px">
-              <canvas id="canvasACWR"></canvas>
+              <canvas id="canvasACWR" style="display:block;flex:1;width:100%;min-height:0"></canvas>
             </div>
           </div>
 
@@ -2323,12 +2296,11 @@ async function openChangeMetricModal(card) {
 }
 
 // ── Drag & drop for card grids ─────────────────────────────────
-// Defensive cleanup: a move (gp-canvas pointer-drag) or resize can be interrupted
-// — the native HTML5 drag hijacks the pointer stream, pointer capture is lost, or
-// a handler throws mid-gesture — leaving a card stuck with .gp-mv-active
-// (faded/rotated) or .gp-rz-active. Sweep them off ALL cards on every
-// gesture-end path so nothing stays "pegado".
-const _GP_STUCK = ['gp-mv-active', 'gp-rz-active', 'gp-rh-active', 'is-dragging'];
+// Defensive cleanup: a canvas move (.gp-mv-active) or resize (.gp-rh-active) can be
+// interrupted — the pointer stream is hijacked, capture is lost, or a handler throws
+// mid-gesture — leaving a card stuck. Sweep these off ALL cards on every gesture-end
+// path so nothing stays "pegado".
+const _GP_STUCK = ['gp-mv-active', 'gp-rh-active', 'is-dragging'];
 function _gpClearDragArtifacts() {
   document.querySelectorAll('.' + _GP_STUCK.join(', .'))
     .forEach(c => c.classList.remove(..._GP_STUCK));
@@ -3739,8 +3711,11 @@ window.gpRenderScienceCards = async function (reports, clubId) {
       },
       options: {
         ..._chartDefaults,
+        maintainAspectRatio: false,   // fill the card height; resize redraws to the box
         scales: {
-          x: { ..._chartDefaults.scales.x },
+          // small card → don't crop dates: keep them horizontal and auto-skip overlap
+          x: { ..._chartDefaults.scales.x,
+               ticks: { ..._chartDefaults.scales.x.ticks, autoSkip: true, maxRotation: 0, autoSkipPadding: 10 } },
           y: { ..._chartDefaults.scales.y, min: 0, max: 2,
                ticks: { ..._chartDefaults.scales.y.ticks, stepSize: 0.5,
                         callback: v => v === 0.8 ? '0.8 ✓' : v === 1.3 ? '1.3 ⚠' : v === 1.5 ? '1.5 ✗' : v } },
@@ -3751,6 +3726,20 @@ window.gpRenderScienceCards = async function (reports, clubId) {
         },
       }
     });
+    // Bespoke card: guarantee the chart redraws to the card size on resize
+    // (debounced). The canvas-grid ResizeObserver also covers it, but binding once
+    // to the stable card box — looking up the live chart each time — survives the
+    // card's own re-renders (Chart is destroyed+recreated on each data refresh).
+    const _acwrCard = document.getElementById('card-acwr');
+    if (_acwrCard && typeof ResizeObserver !== 'undefined' && !_acwrCard.__acwrRO) {
+      let _t;
+      const ro = new ResizeObserver(() => {
+        clearTimeout(_t);
+        _t = setTimeout(() => { try { Chart.getChart(canvasACWR)?.resize(); } catch (e) {} }, 60);
+      });
+      ro.observe(_acwrCard);
+      _acwrCard.__acwrRO = ro;
+    }
   }
   } catch(e) { _showCardError('card-acwr', e); }
 
@@ -8624,8 +8613,10 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       },
       options: {
         ..._chartDefaults,
+        maintainAspectRatio: false,   // fill the card height; resize redraws to the box
         scales: {
-          x: { ..._chartDefaults.scales.x },
+          x: { ..._chartDefaults.scales.x,
+               ticks: { ..._chartDefaults.scales.x.ticks, autoSkip: true, maxRotation: 0, autoSkipPadding: 10 } },
           y: { ..._chartDefaults.scales.y, min: 0, max: 2,
                ticks: { ..._chartDefaults.scales.y.ticks, stepSize: 0.5,
                         callback: v => v === 0.8 ? '0.8 ✓' : v === 1.3 ? '1.3 ⚠' : v === 1.5 ? '1.5 ✗' : v } },
