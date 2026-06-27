@@ -534,7 +534,7 @@
     const p = window.gpState?.datePreset;
     if (p === 'last7') range = 'w7';
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
-    return { type:'bars', metrics:[], dimensions:[], scope:'player', compare:'role', refMcId:null, range,
+    return { type:'bars', metrics:[], dimensions:[], scope:'player', scopeTouched:false, compare:'role', refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
              points:true, area:false, horizontal:false, stacked:false, sort:null };
   }
@@ -1101,6 +1101,7 @@
         if (!S) return;
         document.getElementById('gpbScope').querySelectorAll('button').forEach(o => o.classList.toggle('is-on', o===b));
         S.scope = b.dataset.scope;
+        S.scopeTouched = true;   // explicit user choice → no auto-default afterwards
         pulseNext = true; renderCard();
       };
     });
@@ -1188,6 +1189,10 @@
     if (!S) return;
     pulseNext = true;
     S.type = id;
+    // A NEW table card defaults to squad (a player-scoped table shows a single
+    // player → confusing by default). Strict === false so a saved card being
+    // edited (scopeTouched undefined) or an explicit user choice is never overridden.
+    if (id === 'table' && S.scopeTouched === false) S.scope = 'squad';
     const t = VIZ_TYPES[id];
     if (S.metrics.length > t.max) S.metrics = S.metrics.slice(0, t.max);
     S.metrics.forEach(m => { const cat = catalogMap.get(m.id); if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg'; });
@@ -1519,6 +1524,8 @@
     if (!body) return;
     // KPI cards drop the full card header (it duplicates the tile's own .l label).
     if (config?.viz === 'kpi') window.gpbStripKpiHeader?.(cardEl);
+    // Per-card player picker for player-scope cards (mixed dashboards).
+    window._gpEnsureCardPlayerPicker?.(cardEl, config);
     _absorbCalcFromConfig(config);   // reabsorbe métricas calculadas embebidas (reload/reuse)
 
     // Per-element request token: the live builder preview re-resolves on every change,

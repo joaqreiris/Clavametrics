@@ -775,6 +775,9 @@
   // ── API pública ─────────────────────────────────────────────────────────
   window.gpFilterBar = {
     getState,
+    // Player options shown in the global filter (current roster ∪ anyone with GPS
+    // data in this team's sessions). Reused by the per-card player picker.
+    getPlayerOptions() { return options.player.slice(); },   // [{ value:id, label }]
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     clearAll: clearAll_,
     async reload() { try { await loadData(); } catch (e) { console.warn('gpFilterBar reload:', e); } },
