@@ -755,7 +755,7 @@
           <button class="pill" id="baselinePill"><i class="ti ti-target"></i><span id="baselineLabel">vs Role</span></button>
           <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines."><i class="ti ti-history"></i>Historical</button>
           <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
-          <button class="pill is-on" id="editToggle"><i class="ti ti-pencil"></i>Edit layout</button>
+          <button class="pill" id="editToggle"><i class="ti ti-pencil"></i>Edit layout</button>
           <button class="pill" id="saveLayoutBtn"><i class="ti ti-device-floppy"></i>Save layout</button>
           <button class="pill"><i class="ti ti-bookmark"></i>Saved views</button>
           <button class="pill"><i class="ti ti-plus"></i>Add card</button>
@@ -2275,6 +2275,8 @@ function initGridDragDrop(gridEl, viewKey) {
   let dragging = null;
 
   gridEl.addEventListener('dragstart', e => {
+    // Drag only works while layout-editing is on (set by the Edit layout toggle).
+    if (!document.body.classList.contains('layout-editing')) return;
     const card = e.target.closest('.gp-c[draggable="true"]');
     if (!card) return;
     dragging = card;
@@ -2301,9 +2303,8 @@ function initGridDragDrop(gridEl, viewKey) {
     saveLayout(viewKey);
   });
 
-  gridEl.querySelectorAll('.gp-c').forEach(c => {
-    if (!c.getAttribute('draggable')) c.setAttribute('draggable', 'true');
-  });
+  // Cards start NON-draggable; setLayoutEditing() flips the draggable attribute
+  // when the Edit layout mode is turned on/off.
 }
 
 document.querySelectorAll('.gp-view').forEach(view => {
@@ -7603,15 +7604,34 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     }
   });
   const editBtn = document.getElementById('editToggle');
-  editBtn.addEventListener('click', () => {
-    editBtn.classList.toggle('is-on');
-    const on = editBtn.classList.contains('is-on');
+  // Single source of truth for the layout-edit mode: drives the button state,
+  // the edit skin (.gp-grid.is-edit → dashed outlines + resize handles) and the
+  // cards' draggable flag. OFF = cards fixed, no resize markers, normal cursor.
+  function setLayoutEditing(on) {
+    editBtn.classList.toggle('is-on', on);
+    document.body.classList.toggle('layout-editing', on);
     document.querySelectorAll('.gp-grid').forEach(g => g.classList.toggle('is-edit', on));
+    document.querySelectorAll('.gp-grid .gp-c').forEach(c => {
+      if (on) c.setAttribute('draggable', 'true');
+      else c.removeAttribute('draggable');
+    });
+  }
+  // Start OFF.
+  setLayoutEditing(false);
+  editBtn.addEventListener('click', async () => {
+    const on = !editBtn.classList.contains('is-on');
+    setLayoutEditing(on);
+    // Leaving edit mode → persist the current view's layout so moves aren't lost.
+    if (!on) {
+      const view = document.querySelector('.gp-view.is-on')?.dataset.view;
+      if (view) await saveLayout(view).catch(e => console.warn('editToggle save:', e));
+    }
   });
   document.getElementById('saveLayoutBtn')?.addEventListener('click', async () => {
     const view = document.querySelector('.gp-view.is-on')?.dataset.view;
     if (!view) return;
     await saveLayout(view).catch(e => console.warn('saveLayoutBtn:', e));
+    setLayoutEditing(false);   // saving also exits edit mode → cards fixed again
     showToast('Layout guardado');
   });
   // Card size is changed by dragging the corner handle (gp-resize.js);
