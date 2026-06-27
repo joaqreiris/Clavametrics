@@ -48,6 +48,10 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 .dossier-cfg .cfg-ttl{font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg)}
 .dossier-cfg label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--cm-fg);cursor:pointer}
 .dossier-cfg input{accent-color:var(--accent);cursor:pointer}
+.cfg-tpl{display:flex;align-items:center;gap:8px;width:100%;padding-bottom:10px;margin-bottom:2px;border-bottom:1px solid var(--cm-border-soft)}
+.cfg-tpl select{height:30px;padding:0 8px;border:1px solid var(--cm-border-strong);border-radius:7px;background:var(--cm-surface);color:var(--cm-fg);font:500 12px var(--cm-font-sans);cursor:pointer}
+.cfg-tpl button{height:30px;padding:0 11px;border:1px solid var(--cm-border-strong);border-radius:7px;background:var(--cm-surface);color:var(--cm-fg);font:500 12px var(--cm-font-sans);cursor:pointer}
+.cfg-tpl button:hover{background:var(--cm-bg-soft)}
 .dossier-tests{align-items:flex-start;gap:24px}
 .dossier-tests .grp{display:flex;flex-direction:column;gap:7px}
 .dossier-tests .grp .gh{font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-faint);margin-bottom:1px}
@@ -170,6 +174,11 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
   </div>
 
   <div class="dossier-cfg no-print" id="dossierCfg">
+    <div class="cfg-tpl">
+      <select id="dossierTplSel"><option value="">— Template —</option></select>
+      <button id="dossierTplSave" type="button">Save as…</button>
+      <button id="dossierTplDel" type="button">Delete</button>
+    </div>
     <span class="cfg-ttl">Build dossier</span>
     <label><input type="checkbox" data-block="technical" checked> Technical</label>
     <label><input type="checkbox" data-block="athletic" checked> Athletic</label>
@@ -699,6 +708,30 @@ async function boot(){
   });
   };
   renderSheet();
+
+  // ── dossier templates (club-scoped presets): load / save / delete ──
+  const _dossierTpls = {};
+  async function loadDossierTemplates(sel){
+    const { data } = await window.sb.from('dossier_templates').select('id,name,config').eq('club_id', clubId).order('name');
+    const dd = document.getElementById('dossierTplSel'); if(!dd) return;
+    dd.innerHTML = `<option value="">— Template —</option>` + (data||[]).map(t=>{ _dossierTpls[t.id]=t; return `<option value="${t.id}">${esc(t.name)}</option>`; }).join('');
+    if(sel) dd.value = sel;
+  }
+  document.getElementById('dossierTplSel')?.addEventListener('change', e=>{ const t=_dossierTpls[e.target.value]; if(t) applyTemplate(t.config||{}); });
+  document.getElementById('dossierTplSave')?.addEventListener('click', async ()=>{
+    const name = (prompt('Template name (e.g. "Physical dossier"):')||'').trim(); if(!name) return;
+    let uid=null; try{ uid=(await window.sb.auth.getUser())?.data?.user?.id||null; }catch(_){}
+    const { data, error } = await window.sb.from('dossier_templates').insert({ club_id:clubId, created_by:uid, name, config:DOSSIER_CFG }).select('id').single();
+    if(error){ alert('Could not save template'); return; }
+    await loadDossierTemplates(data?.id);
+  });
+  document.getElementById('dossierTplDel')?.addEventListener('click', async ()=>{
+    const dd=document.getElementById('dossierTplSel'); const id=dd&&dd.value; if(!id) return;
+    if(!confirm('Delete this template?')) return;
+    await window.sb.from('dossier_templates').delete().eq('id', id).eq('club_id', clubId);
+    await loadDossierTemplates();
+  });
+  await loadDossierTemplates();
 }
 
 // config panel (no-print) — toggle which blocks render, repaint live
@@ -752,6 +785,22 @@ document.querySelectorAll('#dossierCfg input[data-block]').forEach(cb=>cb.addEve
     renderSheet();
   }));
 })();
+
+// templates: sync the (already-built) panel checkboxes from DOSSIER_CFG, and apply a loaded preset.
+function syncPanelFromCfg(){
+  document.querySelectorAll('#dossierCfg input[data-block]').forEach(cb=> cb.checked = !!DOSSIER_CFG.blocks[cb.dataset.block]);
+  document.querySelectorAll('input[data-test]').forEach(cb=> cb.checked = DOSSIER_CFG.tests.includes(cb.dataset.test));
+  document.querySelectorAll('input[data-evo]').forEach(cb=> cb.checked = DOSSIER_CFG.evolution.includes(cb.dataset.evo));
+  document.querySelectorAll('input[data-evotech]').forEach(cb=> cb.checked = DOSSIER_CFG.evolutionTech.includes(cb.dataset.evotech));
+}
+function applyTemplate(cfg){
+  cfg = cfg||{};
+  DOSSIER_CFG.blocks = Object.assign({technical:true,athletic:true,production:true,scouting:true,evolution:true}, cfg.blocks||{});
+  DOSSIER_CFG.tests = Array.isArray(cfg.tests)? cfg.tests.slice():[];
+  DOSSIER_CFG.evolution = Array.isArray(cfg.evolution)? cfg.evolution.slice():[];
+  DOSSIER_CFG.evolutionTech = Array.isArray(cfg.evolutionTech)? cfg.evolutionTech.slice():[];
+  syncPanelFromCfg(); renderSheet();
+}
 
 // accent swatches (no-print toolbar)
 document.querySelectorAll('.sw').forEach(s=>s.addEventListener('click',()=>{
