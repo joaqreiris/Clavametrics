@@ -794,6 +794,7 @@
           <button class="pill" id="baselinePill"><i class="ti ti-target"></i><span id="baselineLabel">vs Role</span></button>
           <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines."><i class="ti ti-history"></i>Historical</button>
           <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
+          <button class="pill" id="assignRivalsBtn" title="Tag GPS days with their match rival"><i class="ti ti-ball-football"></i>Assign rivals</button>
           <button class="pill" id="saveLayoutBtn"><i class="ti ti-device-floppy"></i>Save layout</button>
           <button class="pill"><i class="ti ti-bookmark"></i>Saved views</button>
           <button class="pill"><i class="ti ti-plus"></i>Add card</button>
@@ -2250,6 +2251,133 @@ async function renderKpiCard(cardEl, metricKey, sel) {
 // ACWR · selector de MÉTRICA BASE (único parámetro elegible). Cambia solo la métrica
 // sobre la que se calcula la carga aguda:crónica; bandas, umbrales y cálculo quedan
 // bespoke. Re-render vía refreshDashboard → gpRenderScienceCards (lee data-metric-key).
+// ── Assign rival / match to GPS days (Phase 2 · A1 historical container) ──────
+// Idempotent: a day that already has a session REUSES it — sets the rival in its
+// attributes if missing, never overwriting session_id / type / is_historical. A
+// day whose reports have NO session gets a historical 'match' container created
+// and its reports linked. Historical containers are excluded from Calendar/Planner.
+async function _gpOpenAssignRivals() {
+  const clubId = window._gpClubId || (await window.getClubId?.());
+  if (!clubId) { showToast('No club selected', true); return; }
+  const teamId = window._gpTeamId || null;
+  const ov   = makeModal('Assign rival to GPS days', '<div id="arBody" style="min-width:540px;max-width:640px"><div style="padding:24px;color:var(--cm-fg-muted)">Loading GPS days…</div></div>');
+  const body = ov.querySelector('#arBody');
+  try {
+    let sq = window.sb.from('training_sessions')
+      .select('id, session_date, session_type, session_attributes')
+      .eq('club_id', clubId).order('session_date', { ascending: false });
+    if (teamId) sq = sq.eq('team_id', teamId);
+    const [{ data: sessions }, { data: reps }, { data: opps }] = await Promise.all([
+      sq,
+      window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false).limit(50000),
+      window.sb.from('opponent_branding').select('opponent_name, crest_url').eq('club_id', clubId).order('opponent_name'),
+    ]);
+    const cnt = new Map();
+    (reps || []).forEach(r => { if (r.session_id) cnt.set(r.session_id, (cnt.get(r.session_id) || 0) + 1); });
+    const rows = (sessions || [])
+      .filter(s => cnt.has(s.id))                                                            // has GPS
+      .filter(s => !(s.session_attributes?.rival || s.session_attributes?.opponent))         // no rival yet
+      .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, players: cnt.get(s.id) }));
+    window.__gpOpponents = opps || [];
+    if (!rows.length) { body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">Every GPS day already has a rival. 🎉</div>'; return; }
+    body.innerHTML = `
+      <p style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">GPS days with no rival yet. Assigning sets the day as a match vs the chosen rival (the session is reused — Calendar/Planner unaffected).</p>
+      <div style="max-height:48vh;overflow:auto"><table class="gp-map-table" style="width:100%">
+        <thead><tr><th>Date</th><th>Type</th><th>Players</th><th style="text-align:right">Rival</th></tr></thead>
+        <tbody>${rows.map(r => `
+          <tr data-sid="${r.id}" data-date="${r.date}">
+            <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-mono)">${r.players}</td>
+            <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-assign" data-sid="${r.id}" data-date="${r.date}"><i class="ti ti-ball-football" style="font-size:14px"></i>Assign rival</button></td>
+          </tr>`).join('')}</tbody>
+      </table></div>`;
+    body.querySelectorAll('.ar-assign').forEach(btn =>
+      btn.addEventListener('click', () => _gpRivalPicker(btn, clubId, teamId, btn.dataset.sid, btn.dataset.date)));
+  } catch (e) {
+    body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`;
+  }
+}
+
+// Rival picker for one day: opponent_branding list + "New rival…" (name + crest).
+function _gpRivalPicker(anchor, clubId, teamId, sessionId, date) {
+  const opps = window.__gpOpponents || [];
+  const items = [
+    ...opps.map(o => ({ label: o.opponent_name, name: o.opponent_name, crest: o.crest_url || null })),
+    { label: '＋ New rival…', _new: true },
+  ];
+  makePopover(anchor, items, async item => {
+    if (item._new) return _gpNewRivalForm(clubId, teamId, sessionId, date);
+    await _gpAssignRivalToDay(clubId, teamId, sessionId, date, item.name, item.crest);
+  });
+}
+
+// Small modal to create a brand-new rival (name + crest URL) → saved to opponent_branding.
+function _gpNewRivalForm(clubId, teamId, sessionId, date) {
+  const ov = makeModal('New rival', `
+    <div style="min-width:380px;display:flex;flex-direction:column;gap:12px">
+      <label style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Rival name
+        <input id="arName" type="text" placeholder="e.g. Polvorín FC" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 13px/1.4 var(--cm-font-sans);box-sizing:border-box"></label>
+      <label style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Crest URL (optional)
+        <input id="arCrest" type="text" placeholder="https://…/crest.png" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box"></label>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="arCancel" class="cm-btn is-outline is-sm">Cancel</button>
+        <button id="arSave" class="cm-btn is-filled is-sm">Save &amp; assign</button>
+      </div>
+    </div>`);
+  ov.querySelector('#arCancel').onclick = () => ov.remove();
+  ov.querySelector('#arSave').onclick = async () => {
+    const name  = ov.querySelector('#arName').value.trim();
+    const crest = ov.querySelector('#arCrest').value.trim() || null;
+    if (!name) { showToast('Enter a rival name', true); return; }
+    ov.remove();
+    await _gpAssignRivalToDay(clubId, teamId, sessionId, date, name, crest);
+  };
+}
+
+// Persist: reuse opponent_branding (insert if new), then tag the day's session
+// (idempotent) or create a historical container if the day has no session.
+async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, crestUrl) {
+  try {
+    // 1. opponent_branding — reuse by (club, name); insert if missing, fill crest if given.
+    const { data: existsOpp } = await window.sb.from('opponent_branding')
+      .select('id, crest_url').eq('club_id', clubId).ilike('opponent_name', rivalName).maybeSingle();
+    if (!existsOpp) {
+      await window.sb.from('opponent_branding').insert({ club_id: clubId, opponent_name: rivalName, crest_url: crestUrl || null }).catch(e => console.warn('opp insert:', e));
+    } else if (crestUrl && !existsOpp.crest_url) {
+      await window.sb.from('opponent_branding').update({ crest_url: crestUrl }).eq('id', existsOpp.id).catch(() => {});
+    }
+    const finalCrest = crestUrl || existsOpp?.crest_url || null;
+
+    if (sessionId) {
+      // 2a. Existing session → merge rival into attributes (never overwrite session_id/type/is_historical).
+      const { data: s } = await window.sb.from('training_sessions').select('session_attributes').eq('id', sessionId).maybeSingle();
+      const attrs = { ...(s?.session_attributes || {}), rival: rivalName };
+      if (finalCrest) attrs.rival_crest_url = finalCrest;
+      const { error } = await window.sb.from('training_sessions').update({ session_attributes: attrs }).eq('id', sessionId);
+      if (error) throw error;
+    } else if (date) {
+      // 2b. No session for this day → create a HISTORICAL match container (invisible in
+      //     Calendar/Planner) and link the day's reports. (Reports without a session have
+      //     no date, so this path only fires when a caller passes a concrete date.)
+      const { data: created, error } = await window.sb.from('training_sessions')
+        .insert({ club_id: clubId, ...(teamId ? { team_id: teamId } : {}), session_date: date,
+                  session_type: 'match', is_historical: true, title: `Match vs ${rivalName}`,
+                  session_attributes: { rival: rivalName, ...(finalCrest ? { rival_crest_url: finalCrest } : {}) } })
+        .select('id').maybeSingle();
+      if (error) throw error;
+      // (linking null-session reports to `created.id` would require a date on those rows)
+    }
+    showToast(`Rival → ${rivalName}`);
+    try { await window.gpFilterBar?.reload?.(); } catch {}
+    try { await window.refreshDashboard?.(); } catch {}
+    document.querySelector('.gp-modal-overlay')?.remove();
+    _gpOpenAssignRivals();   // reopen with the row gone
+  } catch (e) {
+    showToast(`Assign failed: ${e.message}`, true);
+  }
+}
+
 // ── Per-card player picker (scope.level='player') · mixed dashboards ──────────
 // PRECEDENCE (mirrors the resolver, resolver.js: config.scope.playerId || ctx.playerId):
 //   · card HAS scope.playerId → that player wins — the card is PINNED to it,
@@ -2462,7 +2590,7 @@ exportBtn?.addEventListener('click', e => {
 // ── 2. Dashboard bar pills ────────────────────────────────────
 document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   const pill = e.target.closest('.pill');
-  if (!pill || pill.id === 'saveLayoutBtn') return;
+  if (!pill || pill.id === 'saveLayoutBtn' || pill.id === 'assignRivalsBtn') return;
   e.stopPropagation();
   const ic = pill.querySelector('.ti')?.className || '';
 
@@ -7879,6 +8007,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     await saveLayout(view).catch(e => console.warn('saveLayoutBtn:', e));
     showToast('Layout guardado');
   });
+  document.getElementById('assignRivalsBtn')?.addEventListener('click', () => _gpOpenAssignRivals());
   // Card size is changed by dragging the corner handle (gp-resize.js);
   // the S/M/L/FULL toggle is gone. Make sure every card has its handle + span.
   window.gpInitResize?.(document);
