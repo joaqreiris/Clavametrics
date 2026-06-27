@@ -374,8 +374,10 @@ create table if not exists public.exercises (
   preview_svg text,
   preview_png text,
   preview_path text,
+  source_type text not null default 'canvas',
   constraint exercises_pkey primary key (id),
   constraint exercises_game_type_check CHECK ((game_type = ANY (ARRAY['SSG'::text, 'MSG'::text, 'LSG'::text]))),
+  constraint exercises_source_type_check CHECK ((source_type = ANY (ARRAY['canvas'::text, 'image'::text]))),
   constraint exercises_intensity_check CHECK ((intensity = ANY (ARRAY['LOW'::text, 'MEDIUM'::text, 'HIGH'::text, 'VERY_HIGH'::text]))),
   constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text])))
 );

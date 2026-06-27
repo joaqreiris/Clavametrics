@@ -83,6 +83,7 @@
   .sl-thumb.has-img{ background:#2f7d4c; aspect-ratio:auto; height:auto; }
   .sl-thumb.has-img::after{ display:none; }
   .sl-thumb-img{ display:block; width:100%; height:auto; }
+  .sl-import-badge{ position:absolute; bottom:6px; left:6px; z-index:2; display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:999px; background:rgba(0,0,0,0.55); color:#fff; font:600 9px/1 var(--cm-font-mono); letter-spacing:.04em; text-transform:uppercase; }
   .sl-thumb .focus, .sl-thumb .dur, .sl-thumb .md-badge{ z-index:2; }
   .sl-thumb .focus {
     position:absolute; top:10px; left:10px;
@@ -430,7 +431,7 @@
 
   // ── Data ─────────────────────────────────────────────────────────
   const { data, error } = await window.sb.from('exercises')
-    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,preview_png,preview_path')
+    .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,created_at,visible_teams,preview_png,preview_path,source_type')
     .eq('club_id', clubId)
     .order('created_at', { ascending: false });
 
@@ -660,6 +661,7 @@
       return `<div class="sl-card${selectedId === ex.id ? ' is-active' : ''}" data-id="${ex.id}">
         <div class="sl-thumb${ex._previewImg ? ' has-img' : ''}">
           ${focusBadge}${durBadge}${mdBadgeThumb}
+          ${ex.source_type === 'image' ? `<span class="sl-import-badge"><i class="ti ti-photo"></i>Imported</span>` : ''}
           ${ex._previewImg ? `<img class="sl-thumb-img" src="${ex._previewImg}" alt="">` : ''}
         </div>
         <div class="sl-body">

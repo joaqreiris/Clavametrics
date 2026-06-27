@@ -224,6 +224,7 @@
   .pl-ex.is-active .pl-ex-n { background:var(--cm-accent); color:var(--cm-fg-on-accent); border-color:var(--cm-accent); }
   .pl-ex-thumb{ width:56px; height:auto; aspect-ratio:auto; border-radius:4px; overflow:hidden; flex:none; background:#2f7d4c; border:1px solid var(--cm-border-soft); }
   .pl-ex-thumb img{ width:100%; height:auto; display:block; }
+  .pl-ex-imgtag{ position:absolute; top:2px; right:2px; display:flex; align-items:center; justify-content:center; width:14px; height:14px; border-radius:3px; background:rgba(0,0,0,0.55); color:#fff; font-size:9px; }
   .pl-ex-hover{ position:fixed; z-index:1200; display:none; pointer-events:none; width:300px; background:var(--cm-surface); border:1px solid var(--cm-border-strong); border-radius:10px; box-shadow:var(--cm-shadow-2); overflow:hidden; }
   .pl-ex-hover.is-on{ display:block; }
   .pl-ex-hover .ph-img{ width:100%; height:auto; display:block; background:#2f7d4c; }
@@ -346,6 +347,18 @@
   }
   .pl-pitch .pf-lines { position:absolute; inset:0; width:100%; height:100%; }
   .pl-field .canvas-container { position:relative; z-index:1; }
+  /* Image-drill overlay — covers the canvas when source_type='image' */
+  .pl-img-overlay {
+    position:absolute; inset:0; z-index:6; display:none;
+    align-items:center; justify-content:center; background:var(--pf-grass);
+  }
+  .pl-img-overlay.is-on { display:flex; }
+  .pl-img-overlay img { max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block; }
+  .pl-img-overlay .pl-img-badge {
+    position:absolute; top:12px; left:12px; display:flex; align-items:center; gap:5px;
+    background:rgba(0,0,0,0.55); color:#fff; padding:4px 9px; border-radius:6px;
+    font:600 10px/1 var(--cm-font-mono); letter-spacing:.06em; text-transform:uppercase;
+  }
   .pl-field::after {
     content:"";
     position:absolute; inset:0;
@@ -771,9 +784,15 @@
         <div class="pl-section">
           <h3>
             <i class="ti ti-book-2"></i>Exercises
-            <button class="cm-btn is-primary is-sm" id="plNewExBtn" style="margin-left:auto;height:22px;padding:0 8px;font-size:10.5px">
-              <i class="ti ti-plus" style="font-size:11px"></i>New
-            </button>
+            <span style="margin-left:auto;display:flex;gap:6px">
+              <button class="cm-btn is-primary is-sm" id="plNewExBtn" style="height:22px;padding:0 8px;font-size:10.5px">
+                <i class="ti ti-plus" style="font-size:11px"></i>New
+              </button>
+              <button class="cm-btn is-outline is-sm" id="plNewImgBtn" title="Create an exercise from an uploaded image" style="height:22px;padding:0 8px;font-size:10.5px">
+                <i class="ti ti-photo" style="font-size:11px"></i>Image
+              </button>
+            </span>
+            <input type="file" id="plImgFileInput" accept="image/png,image/jpeg" style="display:none">
           </h3>
           <div class="hub-search" style="margin-bottom:8px">
             <i class="ti ti-search"></i>
@@ -808,6 +827,12 @@
         <!-- 3. Exercise config form (shown when exercise selected) -->
         <div class="pl-section" id="plExConfigSection" style="display:none">
           <h3><i class="ti ti-settings-2"></i>Configuration</h3>
+
+          <div class="pl-form-field" id="plReplaceImgRow" style="display:none;margin-bottom:12px">
+            <label class="pl-form-label" style="display:flex;align-items:center;gap:6px"><i class="ti ti-photo" style="font-size:14px"></i>Imported image</label>
+            <button type="button" class="cm-btn is-outline is-sm" id="plReplaceImgBtn" style="margin-top:4px"><i class="ti ti-upload" style="font-size:13px"></i>Replace image</button>
+            <div style="font:400 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">This drill uses an uploaded image, so field objects are disabled. You can still edit all data and map GPS periods.</div>
+          </div>
 
           <div class="pl-form-field" style="margin-bottom:10px">
             <label class="pl-form-label">Exercise name</label>
@@ -1014,6 +1039,12 @@
           </div>
 
           <canvas id="plCanvas"></canvas>
+
+          <!-- Image-drill overlay — shown instead of the canvas for source_type='image' -->
+          <div class="pl-img-overlay" id="plImgOverlay">
+            <span class="pl-img-badge"><i class="ti ti-photo"></i>Imported</span>
+            <img id="plImgOverlayImg" alt="">
+          </div>
 
           <!-- Properties panel — shown when arrow or zone is selected -->
           <div id="plPropBar">
@@ -2480,6 +2511,9 @@
   let currentFocus         = [];
   let currentGameType      = null;
   let currentGameTypeOn    = false;
+  let _curSourceType       = 'canvas';   // 'canvas' | 'image' — drives image-drill mode
+  let _imgPickMode         = 'create';   // 'create' | 'replace' — how the next file pick is used
+  let _imgCacheBust        = 0;          // bust the browser cache when an image is replaced in place
 
   // ── Draft / unsaved-changes tracking ────────────────────────────
   // You can draw freely without a saved exercise row. While there is no
@@ -2675,7 +2709,7 @@
   // ── Exercise CRUD ────────────────────────────────────────────────
   async function loadExercises() {
     const { data, error } = await window.sb.from('exercises')
-      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,objects_json,preview_svg,preview_png')
+      .select('id,name,players_count,field_width,field_height,duration,orientation,series,work_time,rest_time,match_day,intensity,focus,game_type_enabled,game_type,objective,description,visible_teams,objects_json,preview_svg,preview_png,preview_path,source_type')
       .eq('club_id', clubId)
       .order('created_at', { ascending: false });
 
@@ -2686,6 +2720,18 @@
     }
 
     exercises = data || [];
+    // Resolve a display image per exercise: signed Storage URL (1h) with base64 fallback.
+    try {
+      const paths = exercises.filter(e => e.preview_path).map(e => e.preview_path);
+      if (paths.length) {
+        const { data: urls } = await window.sb.storage.from('drill-previews').createSignedUrls(paths, 3600);
+        const signed = {};
+        (urls||[]).forEach(u => { if (u && u.path && u.signedUrl) signed[u.path] = u.signedUrl; });
+        exercises.forEach(e => { e._previewImg = e.preview_path ? (signed[e.preview_path] || e.preview_png || null) : (e.preview_png || null); });
+      } else {
+        exercises.forEach(e => { e._previewImg = e.preview_png || null; });
+      }
+    } catch(_) { exercises.forEach(e => { e._previewImg = e.preview_png || null; }); }
     renderExerciseList();
   }
 
@@ -2694,7 +2740,7 @@
     const {error}=await window.sb.from('exercises').delete().eq('id',id).eq('club_id',clubId);
     if(error){alert('Error: '+error.message);return;}
     if(currentExerciseId===id){
-      currentExerciseId=null; fc.clear(); fc.renderAll(); _arrowData.clear();
+      currentExerciseId=null; _curSourceType='canvas'; plSetImageMode(false); fc.clear(); fc.renderAll(); _arrowData.clear();
       document.getElementById('plExSummarySection').style.display='none';
       document.getElementById('plExConfigSection').style.display='none';
       const lbl=document.getElementById('plFieldLabel'); if(lbl)lbl.textContent='No exercise selected';
@@ -2737,7 +2783,7 @@
       const meta  = dispO ? ORIENT_META[dispO] : null;
       return `
         <div class="pl-ex${currentExerciseId === ex.id ? ' is-active' : ''}" data-ex-id="${ex.id}">
-          <div class="pl-ex-thumb">${ex.preview_png ? `<img src="${ex.preview_png}" alt="">` : `<span class="pl-ex-n">${i+1}</span>`}</div>
+          <div class="pl-ex-thumb" style="position:relative">${(ex._previewImg||ex.preview_png) ? `<img src="${ex._previewImg||ex.preview_png}" alt="">` : `<span class="pl-ex-n">${i+1}</span>`}${ex.source_type === 'image' ? `<span class="pl-ex-imgtag" title="Imported image"><i class="ti ti-photo"></i></span>` : ''}</div>
           <div class="pl-ex-body">
             <div class="pl-ex-title">${ex.name || 'Untitled'}</div>
             <div class="pl-ex-meta">${ex.players_count ? ex.players_count + ' pl' : '—'} · ${area ? area + ' m²/p' : '—'}</div>
@@ -2763,7 +2809,7 @@
         const ex = exercises.find(e => e.id === el.dataset.exId);
         if (!ex) return;
         const area = (ex.players_count>0 && ex.field_width>0 && ex.field_height>0) ? Math.round((ex.field_width*ex.field_height)/ex.players_count) : null;
-        hv.innerHTML = (ex.preview_png ? `<img class="ph-img" src="${ex.preview_png}" alt="">` : `<div class="ph-empty">No preview yet</div>`)
+        hv.innerHTML = ((ex._previewImg||ex.preview_png) ? `<img class="ph-img" src="${ex._previewImg||ex.preview_png}" alt="">` : `<div class="ph-empty">No preview yet</div>`)
           + `<div class="ph-meta"><div class="ph-name">${ex.name||'Untitled'}</div>`
           + `<div class="ph-sub">${ex.players_count?ex.players_count+' pl':'—'}${area?' · '+area+' m²/p':''}${ex.duration?' · '+ex.duration+'′':''}</div></div>`;
         hv.classList.add('is-on');
@@ -2810,19 +2856,33 @@
     setGameTypeEnabled(!!ex.game_type_enabled);
     if (ex.game_type_enabled) setGameType(ex.game_type || null);
 
-    // Canvas
+    // Canvas vs. uploaded image
+    _curSourceType = ex.source_type === 'image' ? 'image' : 'canvas';
     _arrowData.clear();
-    _loadingExercise = true;
-    // Restore the pitch first (loadFromJSON ignores the `field` key → objects untouched).
-    const _f = (ex.objects_json && ex.objects_json.field) || {};
-    plRenderField(_f.type, _f.variant, _f.orient);   // old/empty → football/full/h
-    if (ex.objects_json) {
-      fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _loadingExercise = false; _dirty = false; });
-    } else {
+    if (_curSourceType === 'image') {
+      // Image drill: no field objects — show the uploaded image instead of the canvas.
+      _loadingExercise = true;
       fc.clear(); fc.renderAll();
-      _loadingExercise = false; _dirty = false;
+      _loadingExercise = false; _dirty = false; _historyStack = [];
+      plSetImageMode(true, ex._previewImg || '');
+      if (!ex._previewImg && ex.preview_path) {
+        window.sb.storage.from('drill-previews').createSignedUrl(ex.preview_path, 3600)
+          .then(({ data }) => { if (currentExerciseId === id && data?.signedUrl) plSetImageMode(true, data.signedUrl); });
+      }
+    } else {
+      plSetImageMode(false);
+      _loadingExercise = true;
+      // Restore the pitch first (loadFromJSON ignores the `field` key → objects untouched).
+      const _f = (ex.objects_json && ex.objects_json.field) || {};
+      plRenderField(_f.type, _f.variant, _f.orient);   // old/empty → football/full/h
+      if (ex.objects_json) {
+        fc.loadFromJSON(ex.objects_json, () => { _rebuildArrowDataFromCanvas(); _resignCustomObjects(); fc.renderAll(); _loadingExercise = false; _dirty = false; });
+      } else {
+        fc.clear(); fc.renderAll();
+        _loadingExercise = false; _dirty = false;
+      }
+      _historyStack = [];
     }
-    _historyStack = [];
 
     // Field tag
     const label = document.getElementById('plFieldLabel');
@@ -2895,6 +2955,84 @@
       selectExercise(data.id);
       setTimeout(() => document.getElementById('plExName')?.select(), 100);
     }
+  });
+
+  // ── Exercise from image ─────────────────────────────────────────
+  // Toggle the field area between the drawing canvas and the uploaded-image overlay.
+  function plSetImageMode(on, url) {
+    const ov  = document.getElementById('plImgOverlay');
+    const img = document.getElementById('plImgOverlayImg');
+    const canvasWrap = document.querySelector('#plField .canvas-container');
+    const fab = document.querySelector('#plField .pl-field-fab');
+    const fieldSel = document.getElementById('plFieldSel');
+    if (on) {
+      if (img) img.src = url || '';
+      ov?.classList.add('is-on');
+      if (canvasWrap) canvasWrap.style.visibility = 'hidden';
+      if (fab) fab.style.display = 'none';
+      if (fieldSel) fieldSel.style.display = 'none';
+      document.getElementById('plReplaceImgRow')?.style.setProperty('display', '');
+    } else {
+      ov?.classList.remove('is-on');
+      if (img) img.src = '';
+      if (canvasWrap) canvasWrap.style.visibility = '';
+      if (fab) fab.style.display = '';
+      if (fieldSel) fieldSel.style.display = '';
+      document.getElementById('plReplaceImgRow')?.style.setProperty('display', 'none');
+    }
+  }
+
+  // Validate a picked file and route it to create-new vs replace-current.
+  async function _handleImgFile(file) {
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/.test(file.type)) { alert('Please choose a PNG or JPG image.'); return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Image is too large (max 5 MB).'); return; }
+
+    if (_imgPickMode === 'replace') {
+      if (!currentExerciseId) return;
+      const path = `${clubId}/${currentExerciseId}.png`;
+      const up = await window.sb.storage.from('drill-previews').upload(path, file, { upsert: true, contentType: file.type });
+      if (up.error) { alert('Upload failed: ' + up.error.message); return; }
+      await window.sb.from('exercises').update({ preview_path: path, preview_png: null, source_type: 'image' }).eq('id', currentExerciseId);
+      const { data } = await window.sb.storage.from('drill-previews').createSignedUrl(path, 3600);
+      const fresh = data?.signedUrl ? data.signedUrl + '#b=' + (++_imgCacheBust) : '';
+      plSetImageMode(true, fresh);
+      await loadExercises();
+      return;
+    }
+
+    // create: insert a fresh image-drill row, then upload its preview.
+    const _activeTeam = sessionStorage.getItem('cal_active_team') || (_plTeams[0]?.id || null);
+    const { data: row, error } = await window.sb.from('exercises').insert({
+      club_id:       clubId,
+      name:          'New exercise',
+      source_type:   'image',
+      created_by:    profile?.id || null,
+      visible_teams: _activeTeam ? [_activeTeam] : null
+    }).select('id').single();
+    if (error || !row) { alert('Error creating exercise: ' + (error?.message || 'unknown')); return; }
+    const path = `${clubId}/${row.id}.png`;
+    const up = await window.sb.storage.from('drill-previews').upload(path, file, { upsert: true, contentType: file.type });
+    if (up.error) { alert('Upload failed: ' + up.error.message); }
+    else { await window.sb.from('exercises').update({ preview_path: path, preview_png: null }).eq('id', row.id); }
+    await loadExercises();
+    selectExercise(row.id);
+    setTimeout(() => document.getElementById('plExName')?.select(), 100);
+  }
+
+  document.getElementById('plNewImgBtn')?.addEventListener('click', () => {
+    _imgPickMode = 'create';
+    const inp = document.getElementById('plImgFileInput');
+    if (inp) { inp.value = ''; inp.click(); }
+  });
+  document.getElementById('plReplaceImgBtn')?.addEventListener('click', () => {
+    if (!currentExerciseId) return;
+    _imgPickMode = 'replace';
+    const inp = document.getElementById('plImgFileInput');
+    if (inp) { inp.value = ''; inp.click(); }
+  });
+  document.getElementById('plImgFileInput')?.addEventListener('change', (e) => {
+    _handleImgFile(e.target.files && e.target.files[0]);
   });
 
   // ── Save exercise ───────────────────────────────────────────────
@@ -3004,8 +3142,11 @@
       game_type:         currentGameTypeOn ? (currentGameType || null) : null,
       objective:         document.getElementById('plExObjective')?.value?.trim()   || null,
       description:       document.getElementById('plExDescription')?.value?.trim() || null,
-      objects_json:      _oj,
-      preview_svg:       _previewSvg,
+      // Image drills have no field objects; keep canvas state null so we never
+      // overwrite the uploaded preview with an empty pitch.
+      source_type:       _curSourceType || 'canvas',
+      objects_json:      _curSourceType === 'image' ? null : _oj,
+      preview_svg:       _curSourceType === 'image' ? null : _previewSvg,
       visible_teams:     (document.getElementById('plExVisAll')?.checked) ? null : (_plVisibleTeams.length ? _plVisibleTeams : null)
     };
 
@@ -3024,7 +3165,7 @@
 
     btn.disabled = false;
     if (!error) {
-      if (currentExerciseId && _previewBlob) {
+      if (currentExerciseId && _previewBlob && _curSourceType !== 'image') {
         try {
           const _pPath = `${clubId}/${currentExerciseId}.png`;
           const _up = await window.sb.storage.from('drill-previews')
