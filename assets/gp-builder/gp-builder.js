@@ -1516,6 +1516,8 @@
   async function resolveAndRenderCard(cardEl, config) {
     const body = cardEl.querySelector('.gp-c-b');
     if (!body) return;
+    // KPI cards drop the full card header (it duplicates the tile's own .l label).
+    if (config?.viz === 'kpi') window.gpbStripKpiHeader?.(cardEl);
     _absorbCalcFromConfig(config);   // reabsorbe métricas calculadas embebidas (reload/reuse)
 
     // Per-element request token: the live builder preview re-resolves on every change,

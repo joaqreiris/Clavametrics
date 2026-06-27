@@ -343,25 +343,23 @@
   .gp-kpi .d.warn { color:var(--cm-warning); }
   .gp-kpi .d.down { color:var(--cm-danger); }
   .gp-kpi .gp-kpi-spark { margin-top:auto; padding-top:6px; }   /* fills slack, anchors to foot, keeps a min gap */
-  /* KPI: drop the card header — the tile carries its own internal label, so the
-     header title would be a duplicate. Edit/delete stay reachable as floating
-     actions revealed on card hover. Non-canvas only (canvas uses the header as
-     the drag grip). */
-  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h {
-    position:absolute; top:0; right:0; left:auto; width:auto;
-    padding:6px; border-bottom:none; background:transparent; z-index:8; pointer-events:none;
+  /* KPI: the card header (.gp-c-h) is REMOVED from the DOM at render time
+     (window.gpbStripKpiHeader) — the tile carries its own .l label, so a header
+     title would duplicate it. Its edit/delete buttons are relocated here: a
+     compact floating overlay, top-right, revealed on card hover. */
+  .gp-kpi-actions {
+    position:absolute; top:6px; right:6px; z-index:8; display:flex; gap:4px;
+    opacity:0; transform:translateY(-2px); transition:opacity .15s, transform .15s;
+    pointer-events:none;
   }
-  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .ttl,
-  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .sub,
-  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .size-toggle { display:none; }
-  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .right {
-    margin:0; gap:4px; opacity:0; transform:translateY(-2px);
-    transition:opacity .15s, transform .15s; pointer-events:auto;
+  .gp-c:hover > .gp-kpi-actions { opacity:1; transform:none; pointer-events:auto; }
+  .gp-kpi-actions > button {
+    width:24px; height:24px; padding:0; border-radius:6px; border:1px solid var(--cm-border-soft);
+    background:var(--cm-surface); color:var(--cm-fg-muted); cursor:pointer; box-shadow:var(--cm-shadow-1);
+    display:inline-flex; align-items:center; justify-content:center;
   }
-  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi):hover > .gp-c-h .right { opacity:1; transform:none; }
-  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) > .gp-c-h .right > button {
-    background:var(--cm-surface); border-color:var(--cm-border-soft); box-shadow:var(--cm-shadow-1);
-  }
+  .gp-kpi-actions > button:hover { color:var(--cm-fg-strong); border-color:var(--cm-border); background:var(--cm-bg-soft); }
+  .gp-kpi-actions > button .ti { font-size:13px; }
 
   .gp-zwrap { overflow-x:auto; min-width:0; max-width:100%; }
   /* width:max-content + min-width:100% (mismo patrón que .ol-hm): si las columnas
@@ -2889,6 +2887,9 @@ async function _mountSavedBuilderCards(clubId) {
       grid.appendChild(el);
       grid.dataset.gptBuilderMounted = '1';
 
+      // KPI: no card header — strip it now so it never flashes before the builder render.
+      if (config.viz === 'kpi') window.gpbStripKpiHeader(el);
+
       // resolve real data (async, non-blocking)
       _resolveAndRenderSavedCard(el, config, clubId).catch(e => console.warn('resolve saved card:', e));
     }
@@ -2899,6 +2900,40 @@ async function _mountSavedBuilderCards(clubId) {
 }
 
 /** Resolves a saved card's data and renders it using the same pipeline as the builder. */
+// KPI cards render WITHOUT the full card header (.gp-c-h). The tile already
+// carries its own small label (.gp-kpi .l), so a header title would duplicate it
+// and eat ~2/3 of the card. We physically REMOVE the header from the DOM (not
+// hide it via CSS) and relocate its edit/delete buttons into a compact floating
+// overlay revealed on hover — listeners ride along with the moved nodes.
+// Idempotent; skipped while the card is the live builder draft. Callers guard
+// with config.viz === 'kpi'.
+window.gpbStripKpiHeader = function (cardEl) {
+  if (!cardEl || cardEl.classList.contains('is-editing') || cardEl.classList.contains('is-draft')) return;
+  const head = cardEl.querySelector(':scope > .gp-c-h');
+  if (head) {
+    const ttl = head.querySelector('.ttl')?.textContent?.trim();
+    if (ttl) cardEl.dataset.cardTitle = ttl;          // keep title for example-card dedup
+    let actions = cardEl.querySelector(':scope > .gp-kpi-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'gp-kpi-actions';
+      cardEl.appendChild(actions);
+    }
+    head.querySelectorAll('[data-edit],[data-del]').forEach(btn => {
+      btn.style.cssText = '';                          // normalize → use .gp-kpi-actions styling
+      actions.appendChild(btn);
+    });
+    head.remove();
+  }
+  // Drop the loading-state body centering/min-height so the KPI sizes to content.
+  const body = cardEl.querySelector(':scope > .gp-c-b');
+  if (body) {
+    body.style.removeProperty('min-height');
+    body.style.removeProperty('align-items');
+    body.style.removeProperty('justify-content');
+  }
+};
+
 async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
   const body = cardEl.querySelector('.gp-c-b');
   if (!body) return;
@@ -3129,8 +3164,8 @@ function _renderGenericExampleCards() {
     // Dedup tras editar+guardar: si ya hay una card GUARDADA (montada desde
     // dashboard_cards) con el mismo título en la grilla, la semilla estática sobra.
     const grid = el.closest('.gp-grid');
-    const saved = grid && [...grid.querySelectorAll('.gp-c[data-card-id] .ttl')]
-      .some(t => t.closest('.gp-c') !== el && t.textContent.trim() === cfg.title);
+    const saved = grid && [...grid.querySelectorAll('.gp-c[data-card-id]')]
+      .some(c => c !== el && ((c.querySelector('.ttl')?.textContent.trim()) || c.dataset.cardTitle || '') === cfg.title);
     if (saved) { el.remove(); continue; }
     if (!el.__config) el.__config = cfg;         // semilla; el builder la reemplaza al editar+guardar
     const pen = el.querySelector('[data-edit]');
