@@ -48,6 +48,9 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 .dossier-cfg .cfg-ttl{font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg)}
 .dossier-cfg label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--cm-fg);cursor:pointer}
 .dossier-cfg input{accent-color:var(--accent);cursor:pointer}
+.dossier-tests{align-items:flex-start;gap:24px}
+.dossier-tests .grp{display:flex;flex-direction:column;gap:7px}
+.dossier-tests .grp .gh{font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-faint);margin-bottom:1px}
 .swatch{display:flex;gap:6px;align-items:center}
 .sw{width:18px;height:18px;border-radius:5px;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--cm-border)}
 .sw.on{box-shadow:0 0 0 2px var(--cm-fg-strong)}
@@ -170,14 +173,34 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
     <label><input type="checkbox" data-block="scouting" checked> Scouting</label>
   </div>
 
+  <div class="dossier-cfg dossier-tests no-print" id="dossierTests"></div>
+
   <div id="sheetHost"></div>
 </div>
 
 <script>
-// ── dossier config (Phase 1: which BLOCKS render — profile/hero always shown) ──
-const DOSSIER_CFG = { blocks: { technical:true, scouting:true, athletic:true, production:true } };
+// ── dossier config (which BLOCKS render — profile/hero always shown — + which physical TESTS) ──
+const DOSSIER_CFG = { blocks: { technical:true, scouting:true, athletic:true, production:true }, tests: ['cmj','sprint'] };
 // assigned inside boot() once data is fetched; calling it repaints the sheet live.
 let renderSheet = ()=>{};
+
+// ── physical-test catalog (curated): key/label/unit/source table+prefix/lowerBetter; grouped for the panel ──
+const DOSSIER_TESTS = [
+  { group:'Jumps & power', items:[
+    {key:'cmj',   label:'CMJ',         unit:'cm', src:{t:'force_tests', m:'CMJ'},   low:false},
+    {key:'sj',    label:'Squat jump',  unit:'cm', src:{t:'force_tests', m:'SJ'},    low:false},
+    {key:'dj',    label:'Drop jump',   unit:'cm', src:{t:'force_tests', m:'DJ'},    low:false},
+    {key:'broad', label:'Broad jump',  unit:'cm', src:{t:'evaluations', m:'Broad jump'}, low:false} ]},
+  { group:'Speed & agility', items:[
+    {key:'sprint', label:'Sprint 30 m', unit:'s', src:{t:'evaluations', m:'Sprint'},   low:true},
+    {key:'cod505', label:'505 COD',     unit:'s', src:{t:'evaluations', m:'505 COD'},  low:true},
+    {key:'illinois',label:'Illinois',   unit:'s', src:{t:'evaluations', m:'Illinois'}, low:true} ]},
+  { group:'Endurance', items:[
+    {key:'ift',   label:'30-15 IFT',   unit:'km/h', src:{t:'evaluations', m:'30-15 IFT'}, low:false},
+    {key:'yoyo1', label:'Yo-Yo IR1',   unit:'m',    src:{t:'evaluations', m:'Yo-Yo IR1'}, low:false},
+    {key:'cooper',label:'Cooper 12-min',unit:'m',   src:{t:'evaluations', m:'Cooper'},    low:false} ]},
+];
+const DOSSIER_TEST_BY_KEY = Object.fromEntries(DOSSIER_TESTS.flatMap(g => g.items.map(it => [it.key, it])));
 
 // ── i18n (light) — only static labels; proper nouns are not translated ──
 const LABELS = {
@@ -354,6 +377,37 @@ async function boot(){
     }
   } catch(_){}
 
+  // Physical tests (selectable): fetch force_tests + evaluations once, latest-first, for the selected-tests rows.
+  let _ft=[], _ev=[];
+  try {
+    const [ftRes, evRes] = await Promise.all([
+      window.sb.from('force_tests').select('test_type,value,test_date').eq('player_id', id).eq('club_id', clubId).order('test_date',{ascending:false}),
+      window.sb.from('evaluations').select('evaluation_type,value,test_date').eq('player_id', id).eq('club_id', clubId).order('test_date',{ascending:false}) ]);
+    _ft = ftRes.data||[]; _ev = evRes.data||[];
+  } catch(_){}
+  function dossierTestLatest(key){ const t=DOSSIER_TEST_BY_KEY[key]; if(!t) return null;
+    const rows = t.src.t==='force_tests' ? _ft : _ev; const col = t.src.t==='force_tests'?'test_type':'evaluation_type';
+    const hit = rows.find(r => String(r[col]||'').toLowerCase().startsWith(t.src.m.toLowerCase()));
+    return (hit && hit.value!=null) ? Number(hit.value) : null; }
+
+  // Teammate cohort for per-test percentiles (filled in the mates/ids block below; latest value per peer, same source as the player's).
+  let _mFtRows=[], _mEvRows=[];
+  function dossierTestCohort(key){
+    const t=DOSSIER_TEST_BY_KEY[key]; if(!t) return [];
+    const rows = t.src.t==='force_tests' ? _mFtRows : _mEvRows; const col = t.src.t==='force_tests'?'test_type':'evaluation_type';
+    const latest={};
+    for(const r of rows){ const v=Number(r.value); if(!isFinite(v)) continue;
+      if(String(r[col]||'').toLowerCase().startsWith(t.src.m.toLowerCase()) && !(r.player_id in latest)) latest[r.player_id]=v; }
+    return Object.values(latest);
+  }
+  function dossierTestPct(key){
+    const t=DOSSIER_TEST_BY_KEY[key]; if(!t || !window.evalBench) return null;
+    const val=dossierTestLatest(key); const arr=dossierTestCohort(key);
+    if(val==null || arr.length<4) return null;
+    const r=window.evalBench.percentile(val,{n:arr.length,values:arr}, !!t.low);
+    return r==null?null:(100-r);
+  }
+
   // Category percentiles ("Top N%") vs same-team peers, same aggregation as the player side.
   let pctTopSpeed=null, pctDist=null, pctHsr=null, pctCmj=null, pctSprint=null;
   if(player.team_id && seasonStart && seasonEnd && window.evalBench){
@@ -361,6 +415,11 @@ async function boot(){
       const { data: mates } = await window.sb.from('players').select('id').eq('club_id',clubId).eq('team_id',player.team_id);
       const ids=(mates||[]).map(p=>p.id);
       if(ids.length){
+        // teammates' physical tests (latest-first) → cohorts for per-test percentiles
+        const [_mFt, _mEv] = await Promise.all([
+          window.sb.from('force_tests').select('player_id,test_type,value,test_date').eq('club_id',clubId).in('player_id',ids).order('test_date',{ascending:false}),
+          window.sb.from('evaluations').select('player_id,evaluation_type,value,test_date').eq('club_id',clubId).in('player_id',ids).neq('unit','/10').order('test_date',{ascending:false}) ]);
+        _mFtRows=(_mFt&&_mFt.data)||[]; _mEvRows=(_mEv&&_mEv.data)||[];
         const { data: g } = await window.sb.from('gps_reports')
           .select('player_id,max_speed,total_distance,high_speed_distance, session:training_sessions!inner(session_type,session_date)')
           .eq('club_id',clubId).in('player_id', ids)
@@ -534,9 +593,10 @@ async function boot(){
       <div class="ph-sec"><h2>${esc(L.athleticProfile||'Athletic profile')}</h2><div class="rule"></div><span class="tag">${esc(L.vsCategory)}</span></div>
       ${phMetric(L.topSpeed, topSpeed, 'km/h', pctTopSpeed, false)}
       ${phMetric(L.distMatch, distPerMatch!=null?distPerMatch/1000:null, 'km', pctDist, false)}
-      ${phMetric(L.cmj||'CMJ', cmj, 'cm', pctCmj, false)}
       ${phMetric(L.hsrMatch, hsrPerMatch, 'm', pctHsr, false)}
-      ${phMetric(L.sprint30, sprint, 's', pctSprint, true)}
+      ${DOSSIER_CFG.tests.map(k => { const t=DOSSIER_TEST_BY_KEY[k]; if(!t) return '';
+         const pct = dossierTestPct(k);   // percentile from the same source as the value; null when <4 peers
+         return phMetric(t.label, dossierTestLatest(k), t.unit, pct, t.low); }).join('')}
     </div>` : ''}
 
     <!-- Season production (only if prod) -->
@@ -579,6 +639,21 @@ document.querySelectorAll('#dossierCfg input[data-block]').forEach(cb=>cb.addEve
   DOSSIER_CFG.blocks[cb.dataset.block] = cb.checked;
   renderSheet();
 }));
+
+// physical-tests checklist (no-print) — grouped by catalog; toggle add/remove key, repaint live
+(function(){
+  const wrap = document.getElementById('dossierTests'); if(!wrap) return;
+  wrap.innerHTML = `<span class="cfg-ttl">Physical tests</span>`
+    + DOSSIER_TESTS.map(g => `<div class="grp"><span class="gh">${esc(g.group)}</span>`
+        + g.items.map(it => `<label><input type="checkbox" data-test="${esc(it.key)}"${DOSSIER_CFG.tests.includes(it.key)?' checked':''}> ${esc(it.label)}</label>`).join('')
+      + `</div>`).join('');
+  wrap.querySelectorAll('input[data-test]').forEach(cb=>cb.addEventListener('change',()=>{
+    const k = cb.dataset.test;
+    if(cb.checked){ if(!DOSSIER_CFG.tests.includes(k)) DOSSIER_CFG.tests.push(k); }
+    else { DOSSIER_CFG.tests = DOSSIER_CFG.tests.filter(x=>x!==k); }
+    renderSheet();
+  }));
+})();
 
 // accent swatches (no-print toolbar)
 document.querySelectorAll('.sw').forEach(s=>s.addEventListener('click',()=>{
