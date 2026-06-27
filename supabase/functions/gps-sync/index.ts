@@ -72,7 +72,10 @@ const METADATA_KEYS = new Set([
 // ⚠️ Slugs VARY across OpenField versions — VERIFY against GET /parameters.
 const SLUG_MAP: Record<string, { col: string; conv: number }> = {
   // distances
-  total_distance:                     { col: 'total_distance',           conv: 1 / 1000 }, // m → km
+  // Catapult returns SI (metres) for total_distance, same as every other distance.
+  // Keep it in METRES — the canonical DB unit for all distances. (Was 1/1000 → km,
+  // which made total_distance the odd one out and broke KPI/table parity.)
+  total_distance:                     { col: 'total_distance',           conv: 1 },         // m
   total_high_speed_distance:          { col: 'high_speed_distance',      conv: 1 },         // m
   total_very_high_speed_distance:     { col: 'very_high_speed_distance', conv: 1 },         // m  (VERIFY slug)
   total_sprint_distance:              { col: 'sprint_distance',          conv: 1 },         // m  (VERIFY slug)

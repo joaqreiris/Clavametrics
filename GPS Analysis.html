@@ -2169,17 +2169,32 @@ const _KPI_CORE_COLS = new Set([
   'player_load','avg_speed','hmld','time_played','sprint_count','distance_per_minute',
 ]);
 
-// Single source for distance display. total_distance is stored in METERS (DB
-// normalized 2026-06-27), like every other distance column → show meters, never km.
-window.gpFmtDist = (m) => (m == null || isNaN(+m)) ? '—' : `${Math.round(+m).toLocaleString('en')} m`;
+// ── Canonical metric formatter, by metric TYPE (single source of truth) ──────
+// DB canonical units: ALL distances in METERS, velocities in km/h, counts as
+// integers, player_load in AU. No /1000 heuristics, no name autodetection.
+const _GP_DIST  = new Set(['total_distance','high_speed_distance','very_high_speed_distance','sprint_distance','hmld']);
+const _GP_SPEED = new Set(['max_speed','avg_speed']);
+const _GP_COUNT = new Set(['accelerations','decelerations','sprint_count']);
+// Returns a formatted string for the known categories, or null for an unknown
+// metric (caller falls back to the catalog unit). sub=true wraps the unit in <sub>.
+window.gpFmtMetric = (key, v, sub) => {
+  if (v == null || isNaN(+v)) return '—';
+  const n = +v;
+  const wrap = (val, unit) => sub ? `${val} <sub>${unit}</sub>` : `${val} ${unit}`;
+  if (_GP_DIST.has(key))     return wrap(Math.round(n).toLocaleString('en'), 'm');   // metres, 0 dec
+  if (_GP_SPEED.has(key))    return wrap(n.toFixed(1), 'km/h');                       // km/h, 1 dec
+  if (_GP_COUNT.has(key))    return `${Math.round(n)}`;                               // integer count, no unit
+  if (key === 'player_load') return `${n.toFixed(1)}`;                               // AU, 1 dec
+  return null;                                                                        // unknown → caller decides
+};
+// Distance shorthand (plain "3,480 m") kept for existing call sites.
+window.gpFmtDist = (m) => (m == null || isNaN(+m)) ? '—' : window.gpFmtMetric('total_distance', m, false);
 
 function _fmtKpiValue(value, unit, metricKey) {
   if (value == null) return '—';
-  if (metricKey === 'total_distance') return `${Math.round(value).toLocaleString('en')} <sub>m</sub>`;
-  if (['high_speed_distance','very_high_speed_distance','sprint_distance','hmld'].includes(metricKey))
-    return `${Math.round(value)} <sub>m</sub>`;
-  if (['max_speed','avg_speed','distance_per_minute'].includes(metricKey))
-    return `${(+value).toFixed(2)} <sub>${unit || 'km/h'}</sub>`;
+  const canon = window.gpFmtMetric(metricKey, value, true);
+  if (canon !== null) return canon;
+  // Unknown metric (custom/EAV, e.g. distance_per_minute m/min) → use its catalog unit.
   if (unit) return `${+value % 1 === 0 ? Math.round(value) : (+value).toFixed(1)} <sub>${unit}</sub>`;
   return `${Math.round(value)}`;
 }
@@ -3057,12 +3072,12 @@ window.refreshDashboard = async function (opts = {}) {
       const initials = p ? (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() : '?';
       const num  = p?.number ? `#${p.number}` : '';
       const pos  = p?.position || '—';
-      const dist = r.total_distance       ? window.gpFmtDist(r.total_distance)            : '—';
-      const hsr  = r.high_speed_distance  ? Math.round(r.high_speed_distance) + ' m'     : '—';
-      const spr  = r.sprint_distance      ? Math.round(r.sprint_distance) + ' m'         : '—';
-      const spd  = r.max_speed            ? r.max_speed + ' km/h'                        : '—';
-      const acc  = r.accelerations != null ? Math.round(r.accelerations) : '—';
-      const load = r.player_load  != null ? Math.round(r.player_load)   : '—';
+      const dist = r.total_distance       ? window.gpFmtMetric('total_distance', r.total_distance)         : '—';
+      const hsr  = r.high_speed_distance  ? window.gpFmtMetric('high_speed_distance', r.high_speed_distance) : '—';
+      const spr  = r.sprint_distance      ? window.gpFmtMetric('sprint_distance', r.sprint_distance)       : '—';
+      const spd  = r.max_speed            ? window.gpFmtMetric('max_speed', r.max_speed)                   : '—';
+      const acc  = r.accelerations != null ? window.gpFmtMetric('accelerations', r.accelerations)         : '—';
+      const load = r.player_load  != null ? window.gpFmtMetric('player_load', r.player_load)               : '—';
       return `<tr>
         <td class="pc"><div class="gp-mini-pl"><div class="gp-mav">${initials}</div>
           <div><div class="gp-mn">${fn}</div><div class="gp-md">${num} · ${pos}</div></div></div></td>
@@ -3371,17 +3386,18 @@ function _getChartMetrics() {
   ];
 }
 
-// Format a metric value using catalog decimals/unit. Falls back to old _RANK_METRIC_UNITS.
+// Format a metric value by TYPE (gpFmtMetric); unknown metrics fall back to the
+// catalog decimals/unit, then to _RANK_METRIC_UNITS.
 function _fmtMetricVal(key, value) {
   const v = value || 0;
-  if (key === 'total_distance') return window.gpFmtDist(v);
+  const canon = window.gpFmtMetric(key, v, false);
+  if (canon !== null) return canon;
   const def = (window._gpCatalog || []).find(d => d.key === key);
   if (def) {
     const r = def.decimals === 0 ? Math.round(v) : +v.toFixed(def.decimals);
     return r + (def.unit ? ' ' + def.unit : '');
   }
   const unit = _RANK_METRIC_UNITS[key] ?? '';
-  if (key === 'max_speed') return v.toFixed(1) + ' km/h';
   return Math.round(v) + (unit ? ' ' + unit : '');
 }
 
