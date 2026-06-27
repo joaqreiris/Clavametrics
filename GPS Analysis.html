@@ -2319,43 +2319,11 @@ function _gpClearDragArtifacts() {
 });
 
 function initGridDragDrop(gridEl, viewKey) {
-  let dragging = null;
-
-  gridEl.addEventListener('dragstart', e => {
-    // In canvas mode (the active build) gp-canvas.js owns moves via pointer events and
-    // preempts native DnD — bail so we never add 'is-dragging' (opacity:0.4) for a
-    // native drag that gp-canvas preventDefaults, whose dragend then never fires.
-    if (gridEl.classList.contains('is-canvas')) return;
-    const card = e.target.closest('.gp-c[draggable="true"]');
-    if (!card) return;
-    dragging = card;
-    setTimeout(() => card.classList.add('is-dragging'), 0);
-  });
-
-  gridEl.addEventListener('dragend', () => {
-    dragging?.classList.remove('is-dragging');
-    dragging = null;
-    _gpClearDragArtifacts();   // never leave a card mid-move/-resize
-  });
-
-  gridEl.addEventListener('dragover', e => {
-    e.preventDefault();
-    if (!dragging) return;
-    const target = e.target.closest('.gp-c');
-    if (!target || target === dragging) return;
-    const rect = target.getBoundingClientRect();
-    const after = e.clientX > rect.left + rect.width / 2;
-    if (after) target.after(dragging); else target.before(dragging);
-  });
-
-  gridEl.addEventListener('drop', e => {
-    e.preventDefault();
-    _gpClearDragArtifacts();
-    saveLayout(viewKey);
-  });
-
-  // Native HTML5 reorder is the non-canvas fallback. In canvas mode (the active
-  // build) gp-canvas.js owns moves via pointer events and preempts this.
+  // Card moves are 100% pointer-based (gp-canvas.js). The old native HTML5 DnD
+  // reorder was removed: its 'dragstart' re-added .is-dragging (opacity:0.4) via a
+  // setTimeout AFTER endMove/sweep had cleaned up — and gp-canvas preventDefaults the
+  // native drag, so its 'dragend' never fired → the card stayed faded. Nothing here
+  // now; cards never carry draggable="true" either.
 }
 
 document.querySelectorAll('.gp-view').forEach(view => {

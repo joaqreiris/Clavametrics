@@ -736,7 +736,8 @@
     savedCard.classList.remove('is-draft', 'is-editing');
     savedCard.dataset.size = S.size;
     savedCard.style.setProperty('--cm-accent', S.color);
-    savedCard.setAttribute('draggable', 'true');
+    // No native draggable: moves are 100% pointer-based (gp-canvas.js). A native
+    // dragstart would re-add .is-dragging (opacity:0.4) and never get a dragend.
 
     const titleEl = savedCard.querySelector('.ttl');
     const subEl   = savedCard.querySelector('.sub');
