@@ -2966,7 +2966,10 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
       await import('./lib/gp-card/resolver.js').catch(() => ({}));
     if (!aggregateSeries) return; // resolver not available as module in this context
 
-    const ctx = { clubId, playerId: window.gpState?.playerId || null, mcId: window.gpState?.mcId || null, asOf: new Date().toISOString().slice(0,10) };
+    const ctx = { clubId, playerId: window.gpState?.playerId || null, mcId: window.gpState?.mcId || null,
+                  teamId: window._gpTeamId || null,
+                  teamPlayerIds: Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null,
+                  asOf: new Date().toISOString().slice(0,10) };
     const sessionIds = await getSessionIds(config.range, ctx, window.sb);
     if (!sessionIds.length) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No sessions in range</div></div>'; return; }
     const rows = await fetchReports(sessionIds, config, ctx, new Map(), window.sb);

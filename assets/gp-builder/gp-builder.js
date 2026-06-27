@@ -1552,11 +1552,13 @@
       const _chosenPid = window._gpPlayerId || window.gpState?.playerId || null;
       const ctx = {
         clubId:   _clubId || window._gpClubId || null,
-        // Clamp al equipo: si el jugador elegido no es del equipo activo, usar el primero del equipo.
-        playerId: (_chosenPid && (!_teamPids || _teamPids.includes(_chosenPid)))
-                    ? _chosenPid
-                    : (_teamPids?.[0] || _chosenPid || null),
+        // Use the chosen player as-is — no clamp to the current roster. The resolver
+        // scopes by the team's sessions (incl. legacy null-team data), so a historical
+        // player resolves their OWN data instead of being swapped for the first of the
+        // roster. teamId drives that session scope (no category mixing).
+        playerId: _chosenPid,
         mcId:     window._gpMcId || window.gpState?.mcId || null,
+        teamId:   window._gpTeamId || null,
         teamPlayerIds: _teamPids,
         asOf:     new Date().toISOString().slice(0, 10),
       };
@@ -4564,7 +4566,9 @@
       metrics: baseIds.map(id => { const c = catalogMap.get(id) || {}; return { id, agg: 'avg', kind: c.kind || 'accum', unit: c.unit || '', custom: !!c.is_custom }; }),
       dimensions: [], range: { type: range }, comparison: null, style: {},
     };
-    const ctx = { clubId: _clubId, playerId: window._gpPlayerId || window.gpState?.playerId || null, mcId: currentMcId() };
+    const ctx = { clubId: _clubId, playerId: window._gpPlayerId || window.gpState?.playerId || null, mcId: currentMcId(),
+                  teamId: window._gpTeamId || null,
+                  teamPlayerIds: Array.isArray(window._gpPlayerIds) ? window._gpPlayerIds : null };
 
     const sessionIds = await getSessionIds(config.range, ctx, window.sb);
     const rows = sessionIds.length ? await fetchReports(sessionIds, config, ctx, catalogMap, window.sb) : [];

@@ -645,16 +645,30 @@
       (_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
       (_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false }),
       window.sb.from('gps_reports')
-        .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id), players!inner(position)')
+        .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id), players!inner(id, first_name, last_name, number, position)')
         .eq('club_id', clubId).limit(20000),
     ]);
 
-    // Jugadores reales
-    options.player = (players || []).map(p => ({
-      value: p.id,
-      label: `${p.last_name || ''} ${(p.first_name || '')[0] || ''}.${p.number ? ' #' + p.number : ''}`.trim()
-              || p.id,
-    }));
+    // A report belongs to this team if its session is the team's, or legacy null-team
+    // (imported/old data). No active team → club-wide (fallback).
+    const _teamOk = (tid) => !_gpTeam || tid == null || String(tid) === String(_gpTeam);
+
+    // Jugadores seleccionables = roster ACTUAL ∪ cualquiera con datos GPS en sesiones
+    // de este equipo (incl. históricos que ya no están en el plantel). Sin esto no
+    // podrías ni elegir a un jugador de temporada pasada. Dedup por id.
+    const _pMap = new Map();
+    (players || []).forEach(p => _pMap.set(p.id, p));
+    (reports || []).forEach(r => {
+      const pl = r.players, tid = r.training_sessions?.team_id;
+      if (pl && _teamOk(tid) && !_pMap.has(pl.id)) _pMap.set(pl.id, pl);
+    });
+    options.player = [..._pMap.values()]
+      .sort((a, b) => (a.last_name || '').localeCompare(b.last_name || ''))
+      .map(p => ({
+        value: p.id,
+        label: `${p.last_name || ''} ${(p.first_name || '')[0] || ''}.${p.number ? ' #' + p.number : ''}`.trim()
+                || p.id,
+      }));
 
     // Posiciones reales (distintas, no vacías)
     const posSet = new Set();
@@ -679,8 +693,9 @@
       label: m.name || (m.start_date ? `MC ${String(m.start_date).slice(0, 10)}` : m.id),
     }));
 
-    // Relación real (un gps_report por fila) para el encadenado de filtros.
-    _rows = (reports || []).map(r => {
+    // Relación real (un gps_report por fila) para el encadenado de filtros — scopeada
+    // al equipo (team-or-null), igual que los datos que muestra el resolver.
+    _rows = (reports || []).filter(r => _teamOk(r.training_sessions?.team_id)).map(r => {
       const ts = r.training_sessions || {};
       return {
         d:   ts.session_date || '',
