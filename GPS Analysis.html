@@ -2169,9 +2169,13 @@ const _KPI_CORE_COLS = new Set([
   'player_load','avg_speed','hmld','time_played','sprint_count','distance_per_minute',
 ]);
 
+// Single source for distance display. total_distance is stored in METERS (DB
+// normalized 2026-06-27), like every other distance column → show meters, never km.
+window.gpFmtDist = (m) => (m == null || isNaN(+m)) ? '—' : `${Math.round(+m).toLocaleString('en')} m`;
+
 function _fmtKpiValue(value, unit, metricKey) {
   if (value == null) return '—';
-  if (metricKey === 'total_distance') return `${(value / 1000).toFixed(1)} <sub>km</sub>`;
+  if (metricKey === 'total_distance') return `${Math.round(value).toLocaleString('en')} <sub>m</sub>`;
   if (['high_speed_distance','very_high_speed_distance','sprint_distance','hmld'].includes(metricKey))
     return `${Math.round(value)} <sub>m</sub>`;
   if (['max_speed','avg_speed','distance_per_minute'].includes(metricKey))
@@ -3053,7 +3057,7 @@ window.refreshDashboard = async function (opts = {}) {
       const initials = p ? (((p.first_name||'')[0]||'') + ((p.last_name||'')[0]||'')).toUpperCase() : '?';
       const num  = p?.number ? `#${p.number}` : '';
       const pos  = p?.position || '—';
-      const dist = r.total_distance       ? (r.total_distance / 1000).toFixed(1) + ' km' : '—';
+      const dist = r.total_distance       ? window.gpFmtDist(r.total_distance)            : '—';
       const hsr  = r.high_speed_distance  ? Math.round(r.high_speed_distance) + ' m'     : '—';
       const spr  = r.sprint_distance      ? Math.round(r.sprint_distance) + ' m'         : '—';
       const spd  = r.max_speed            ? r.max_speed + ' km/h'                        : '—';
@@ -3080,7 +3084,7 @@ window.refreshDashboard = async function (opts = {}) {
     const kpiVals = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
     const distCard = document.querySelector('.gp-view[data-view="ind"] .gp-c[data-card-id="kpi-distance"]');
     if (distCard) renderKpiCard(distCard, distCard.dataset.metricKey || 'total_distance', sel);
-    else if (kpiVals[0]) kpiVals[0].innerHTML = `${sel.total_distance ? (sel.total_distance/1000).toFixed(1) : '—'} <sub>km</sub>`;
+    else if (kpiVals[0]) kpiVals[0].innerHTML = `${sel.total_distance ? Math.round(sel.total_distance).toLocaleString('en') : '—'} <sub>m</sub>`;
     if (kpiVals[1]) kpiVals[1].innerHTML = `${sel.high_speed_distance != null ? Math.round(sel.high_speed_distance) : '—'} <sub>m</sub>`;
     if (kpiVals[2]) kpiVals[2].innerHTML = `${sel.sprint_distance != null ? Math.round(sel.sprint_distance) : '—'}`;
   }
@@ -3095,7 +3099,7 @@ window.refreshDashboard = async function (opts = {}) {
   const totHsr  = reports.reduce((s,r) => s+(r.high_speed_distance||0), 0);
   const totSpr  = reports.reduce((s,r) => s+(r.sprint_distance||0), 0);
   const grpKpis = document.querySelectorAll('.gp-view[data-view="mgrp"] .gp-kpi .v');
-  if (grpKpis[0]) grpKpis[0].innerHTML = `${(totDist/1000).toFixed(1)} <sub>km</sub>`;
+  if (grpKpis[0]) grpKpis[0].innerHTML = `${Math.round(totDist).toLocaleString('en')} <sub>m</sub>`;
   if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
   if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
 
@@ -3370,7 +3374,7 @@ function _getChartMetrics() {
 // Format a metric value using catalog decimals/unit. Falls back to old _RANK_METRIC_UNITS.
 function _fmtMetricVal(key, value) {
   const v = value || 0;
-  if (key === 'total_distance') return (v / 1000).toFixed(1) + ' km';
+  if (key === 'total_distance') return window.gpFmtDist(v);
   const def = (window._gpCatalog || []).find(d => d.key === key);
   if (def) {
     const r = def.decimals === 0 ? Math.round(v) : +v.toFixed(def.decimals);
@@ -3839,8 +3843,8 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     // Use current reports for match vs training comparison per metric
     const METS    = ['total_distance','high_speed_distance','sprint_distance','accelerations','player_load'];
     const MLABELS = ['Distance','HSR','Sprint','Accel','Load'];
-    const SCALES  = [1000, 1, 1, 1, 1];
-    const UNITS   = ['km','m','m','n','AU'];
+    const SCALES  = [1, 1, 1, 1, 1];   // all distances stored in meters → no km scaling
+    const UNITS   = ['m','m','m','n','AU'];
 
     // For match: avg of current reports (assume current session = latest available)
     const matchVals = METS.map(m => {
@@ -3991,7 +3995,7 @@ function _updateIndKpis(reports, state) {
   const p = sel.players;
   const fname = p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : '—';
   const kv = document.querySelectorAll('.gp-view[data-view="ind"] .gp-kpi .v');
-  if (kv[0]) kv[0].innerHTML = `${sel.total_distance ? (sel.total_distance / 1000).toFixed(1) : '—'} <sub>km</sub>`;
+  if (kv[0]) kv[0].innerHTML = `${sel.total_distance ? Math.round(sel.total_distance).toLocaleString('en') : '—'} <sub>m</sub>`;
   if (kv[1]) kv[1].innerHTML = `${sel.high_speed_distance != null ? Math.round(sel.high_speed_distance) : '—'} <sub>m</sub>`;
   if (kv[2]) kv[2].innerHTML = `${sel.sprint_distance != null ? Math.round(sel.sprint_distance) : '—'}`;
 }
@@ -4166,7 +4170,7 @@ function _updateZTable(reports, state) {
 
 const _RANK_METRIC_UNITS = {
   high_speed_distance: 'm', very_high_speed_distance: 'm', sprint_distance: 'm',
-  hmld: 'm', total_distance: 'km', player_load: 'AU',
+  hmld: 'm', total_distance: 'm', player_load: 'AU',
   accelerations: '', decelerations: '', max_speed: 'km/h',
 };
 
@@ -4295,7 +4299,7 @@ window.renderView = async function () {
   const totHsr  = reports.reduce((s,r) => s+(r.high_speed_distance||0), 0);
   const totSpr  = reports.reduce((s,r) => s+(r.sprint_distance||0), 0);
   const grpKpis = document.querySelectorAll('.gp-view[data-view="mgrp"] .gp-kpi .v');
-  if (grpKpis[0]) grpKpis[0].innerHTML = `${(totDist/1000).toFixed(1)} <sub>km</sub>`;
+  if (grpKpis[0]) grpKpis[0].innerHTML = `${Math.round(totDist).toLocaleString('en')} <sub>m</sub>`;
   if (grpKpis[1]) grpKpis[1].innerHTML = `${totHsr.toLocaleString()} <sub>m</sub>`;
   if (grpKpis[2]) grpKpis[2].innerHTML = `${totSpr.toLocaleString()}`;
   _rerenderScienceCards(reports, clubId);
@@ -4443,8 +4447,10 @@ window.renderView = async function () {
   }
 
   function detectConversion(colName, metric) {
-    if (!DISTANCE_METRICS.has(metric)) return 1;
-    if (/\bkm\b/i.test(colName)) return 1000;
+    // Fixed per metric, NOT guessed from the header: the source CSV has
+    // total_distance in km, every other distance in meters. The DB stores all in
+    // meters → total_distance × 1000, the rest × 1.
+    if (metric === 'total_distance') return 1000;
     return 1;
   }
 
@@ -7016,7 +7022,7 @@ async function renderWeeklyBars(state) {
   }
 
   const cat      = (window._gpCatalog || []).find(d => d.key === metricKey);
-  const unit     = metricKey === 'total_distance' ? 'km' : (cat?.unit || 'AU');
+  const unit     = metricKey === 'total_distance' ? 'm' : (cat?.unit || 'AU');
   const maxTotal = Math.max(...points.map(p => p.total), 1);
   const BAR_MAX  = 110; // px available for bars (within 150px container minus labels)
 
@@ -7025,7 +7031,7 @@ async function renderWeeklyBars(state) {
     const col    = _wkCol(p.pct);
     const pctLbl = p.pct !== null ? (p.pct >= 0 ? '+' : '') + p.pct + '%' : '—';
     const totalFmt = metricKey === 'total_distance'
-      ? (p.total / 1000).toFixed(1) + ' km'
+      ? window.gpFmtDist(p.total)
       : Math.round(p.total) + ' ' + unit;
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;height:100%">
       <div style="height:16px;display:flex;align-items:center;justify-content:center">
@@ -7166,9 +7172,9 @@ async function annotateKpiCards() {
     }
     if (bl.baseline) {
       const catEntry = (window._gpCatalog || []).find(e => e.key === metric);
-      const unit = catEntry?.unit ?? (metric === 'total_distance' ? 'km' : metric.includes('distance') ? 'm' : '');
-      const decs = catEntry?.decimals ?? (metric === 'total_distance' ? 1 : 0);
-      const blRaw = metric === 'total_distance' ? bl.baseline / 1000 : bl.baseline;
+      const unit = catEntry?.unit ?? (metric === 'total_distance' ? 'm' : metric.includes('distance') ? 'm' : '');
+      const decs = catEntry?.decimals ?? 0;
+      const blRaw = bl.baseline;   // total_distance is meters now (no /1000)
       const blDisp = decs === 0 ? Math.round(blRaw) : blRaw.toFixed(decs);
       const conf = bl.confidence === 'high' ? '✓' : '~';
       blLine.title = 'Baseline: avg of best matches · Miguel et al. 2022';
@@ -7784,7 +7790,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // Default chip config (6 slots, matches original hardcoded kpis array)
   const _PW_DEFAULT_CHIPS = [
     { key: 'player_load',         label: 'Int Load',       unit: 'AU',   dec: 0, agg: 'sum'   },
-    { key: 'total_distance',      label: 'Total Distance', unit: 'km',   dec: 2, agg: 'sum_km'},
+    { key: 'total_distance',      label: 'Total Distance', unit: 'm',    dec: 0, agg: 'sum'   },
     { key: 'high_speed_distance', label: 'Total HSR',      unit: 'm',    dec: 0, agg: 'sum'   },
     { key: 'sprint_count',        label: 'Total Sprints',  unit: '',     dec: 0, agg: 'sum'   },
     { key: 'acc_dec',             label: 'Acc + Dec',      unit: '',     dec: 0, agg: 'accdec'},
@@ -7977,8 +7983,8 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     return {
       key:   override,
       label: cat?.label || override,
-      unit:  override === 'total_distance' ? 'km' : (cat?.unit || ''),
-      dec:   override === 'total_distance' ? 2    : (cat?.decimals ?? 0),
+      unit:  override === 'total_distance' ? 'm' : (cat?.unit || ''),
+      dec:   override === 'total_distance' ? 0    : (cat?.decimals ?? 0),
       agg:   override === 'max_speed' ? 'max' : 'sum',
     };
   }
@@ -7988,7 +7994,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     if (def.agg === 'accdec') return reports.reduce((s, r) => s + (r.accelerations || 0) + (r.decelerations || 0), 0);
     if (def.agg === 'max')    return Math.max(...reports.map(r => r[def.key] || 0));
     const raw = reports.reduce((s, r) => s + (r[def.key] || 0), 0);
-    return def.agg === 'sum_km' ? raw / 1000 : raw;
+    return raw;   // distances stored in meters → sum as-is (no km conversion)
   }
 
   function _pwValHtml(val, def) {
@@ -11165,7 +11171,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
   // ── annotate player vs baseline KPI cards ─────────────────────
   async function annotateScKpiCards() {
     const SC_KPI_MAP = [
-      { cardId: 'sc-kpi-distance', metric: 'total_distance',     icon: 'ti-route', unit: 'km', decimals: 1, divisor: 1000 },
+      { cardId: 'sc-kpi-distance', metric: 'total_distance',     icon: 'ti-route', unit: 'm',  decimals: 0, divisor: 1 },
       { cardId: 'sc-kpi-hsr',     metric: 'high_speed_distance',  icon: 'ti-bolt',  unit: 'm',  decimals: 0, divisor: 1 },
       { cardId: 'sc-kpi-sprints', metric: 'sprint_distance',      icon: 'ti-flame', unit: 'm',  decimals: 0, divisor: 1 },
     ];
@@ -11202,7 +11208,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         if (dispVal == null) {
           vEl.innerHTML = '—';
         } else {
-          const formatted = decimals === 0 ? Math.round(dispVal) : dispVal.toFixed(decimals);
+          const formatted = decimals === 0 ? Math.round(dispVal).toLocaleString('en') : dispVal.toFixed(decimals);
           vEl.innerHTML = `${formatted} <sub>${unit}</sub>`;
         }
       }
