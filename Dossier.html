@@ -51,6 +51,10 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 .dossier-tests{align-items:flex-start;gap:24px}
 .dossier-tests .grp{display:flex;flex-direction:column;gap:7px}
 .dossier-tests .grp .gh{font-weight:600;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-faint);margin-bottom:1px}
+.ph-evo-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.ph-evo{border:1px solid #E7E7E4;border-radius:8px;padding:8px 10px}
+.ph-evo-h{font:600 11px var(--cm-font-sans,sans-serif);color:#15181D;margin-bottom:4px}
+.ph-evo-h span{color:#9CA3AF;font-weight:500}
 .swatch{display:flex;gap:6px;align-items:center}
 .sw{width:18px;height:18px;border-radius:5px;cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--cm-border)}
 .sw.on{box-shadow:0 0 0 2px var(--cm-fg-strong)}
@@ -175,12 +179,14 @@ body{font:400 14px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:#EDEDEA
 
   <div class="dossier-cfg dossier-tests no-print" id="dossierTests"></div>
 
+  <div class="dossier-cfg dossier-tests no-print" id="dossierEvo"></div>
+
   <div id="sheetHost"></div>
 </div>
 
 <script>
 // ── dossier config (which BLOCKS render — profile/hero always shown — + which physical TESTS) ──
-const DOSSIER_CFG = { blocks: { technical:true, scouting:true, athletic:true, production:true }, tests: ['cmj','sprint'] };
+const DOSSIER_CFG = { blocks: { technical:true, scouting:true, athletic:true, production:true, evolution:true }, tests: ['cmj','sprint'], evolution: [] };
 // assigned inside boot() once data is fetched; calling it repaints the sheet live.
 let renderSheet = ()=>{};
 
@@ -389,6 +395,31 @@ async function boot(){
     const rows = t.src.t==='force_tests' ? _ft : _ev; const col = t.src.t==='force_tests'?'test_type':'evaluation_type';
     const hit = rows.find(r => String(r[col]||'').toLowerCase().startsWith(t.src.m.toLowerCase()));
     return (hit && hit.value!=null) ? Number(hit.value) : null; }
+
+  // Evolution: a test's full dated history (asc) + a print-safe inline-SVG sparkline of it.
+  function dossierSeries(key){
+    const t=DOSSIER_TEST_BY_KEY[key]; if(!t) return [];
+    const rows = t.src.t==='force_tests' ? _ft : _ev; const col = t.src.t==='force_tests'?'test_type':'evaluation_type';
+    return rows.filter(r => String(r[col]||'').toLowerCase().startsWith(t.src.m.toLowerCase()) && r.value!=null && r.test_date)
+      .map(r => ({ d:r.test_date, v:Number(r.value) })).filter(p => isFinite(p.v))
+      .sort((a,b)=> a.d<b.d?-1:1);
+  }
+  function dossierSpark(series){
+    if(!series || series.length<2) return '';
+    const W=300,H=78,L=8,R=8,T=10,B=18;
+    const vs=series.map(p=>p.v), minV=Math.min(...vs), maxV=Math.max(...vs), span=(maxV-minV)||1;
+    const x=i=> L+(i/(series.length-1))*(W-L-R), y=v=> T+(1-(v-minV)/span)*(H-T-B);
+    const pts=series.map((p,i)=>`${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    const dots=series.map((p,i)=>`<circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="2.1" fill="#15803D"/>`).join('');
+    const f=series[0], l=series[series.length-1];
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">
+      <polyline points="${pts}" fill="none" stroke="#15803D" stroke-width="1.6"/>${dots}
+      <text x="${L}" y="${H-4}" font-size="8" fill="#9CA3AF" font-family="ui-monospace,monospace">${esc(f.d)}</text>
+      <text x="${W-R}" y="${H-4}" font-size="8" fill="#9CA3AF" text-anchor="end" font-family="ui-monospace,monospace">${esc(l.d)}</text>
+      <text x="${x(0).toFixed(1)}" y="${(y(f.v)-5).toFixed(1)}" font-size="8.5" fill="#5B6470" font-family="ui-monospace,monospace">${num1(f.v)}</text>
+      <text x="${x(series.length-1).toFixed(1)}" y="${(y(l.v)-5).toFixed(1)}" font-size="8.5" fill="#15181D" text-anchor="end" font-family="ui-monospace,monospace">${num1(l.v)}</text>
+    </svg>`;
+  }
 
   // Teammate cohort for per-test percentiles (filled in the mates/ids block below; latest value per peer, same source as the player's).
   let _mFtRows=[], _mEvRows=[];
@@ -599,6 +630,16 @@ async function boot(){
          return phMetric(t.label, dossierTestLatest(k), t.unit, pct, t.low); }).join('')}
     </div>` : ''}
 
+    <!-- Evolution (selectable line charts over time) -->
+    ${(DOSSIER_CFG.blocks.evolution && DOSSIER_CFG.evolution.length) ? `<div class="ph-block">
+      <div class="ph-sec"><h2>${esc(L.evolution||'Evolution')}</h2><div class="rule"></div></div>
+      <div class="ph-evo-grid">
+        ${DOSSIER_CFG.evolution.map(k=>{ const t=DOSSIER_TEST_BY_KEY[k]; const s=dossierSeries(k);
+           if(!t||s.length<2) return ''; return `<div class="ph-evo">
+             <div class="ph-evo-h">${esc(t.label)}${t.unit?` <span>${esc(t.unit)}</span>`:''}</div>${dossierSpark(s)}</div>`;
+        }).join('')}
+      </div></div>` : ''}
+
     <!-- Season production (only if prod) -->
     ${(DOSSIER_CFG.blocks.production && prod) ? `<div class="ph-block"><div class="ph-sec"><h2>${esc(L.seasonProduction)}</h2><div class="rule"></div></div>
       <section class="ph-kpis">
@@ -651,6 +692,21 @@ document.querySelectorAll('#dossierCfg input[data-block]').forEach(cb=>cb.addEve
     const k = cb.dataset.test;
     if(cb.checked){ if(!DOSSIER_CFG.tests.includes(k)) DOSSIER_CFG.tests.push(k); }
     else { DOSSIER_CFG.tests = DOSSIER_CFG.tests.filter(x=>x!==k); }
+    renderSheet();
+  }));
+})();
+
+// evolution checklist (no-print) — mark tests to chart over time; toggle add/remove key, repaint live
+(function(){
+  const wrap = document.getElementById('dossierEvo'); if(!wrap) return;
+  wrap.innerHTML = `<span class="cfg-ttl">Evolution</span>`
+    + DOSSIER_TESTS.map(g => `<div class="grp"><span class="gh">${esc(g.group)}</span>`
+        + g.items.map(it => `<label><input type="checkbox" data-evo="${esc(it.key)}"${DOSSIER_CFG.evolution.includes(it.key)?' checked':''}> ${esc(it.label)}</label>`).join('')
+      + `</div>`).join('');
+  wrap.querySelectorAll('input[data-evo]').forEach(cb=>cb.addEventListener('change',()=>{
+    const k = cb.dataset.evo;
+    if(cb.checked){ if(!DOSSIER_CFG.evolution.includes(k)) DOSSIER_CFG.evolution.push(k); }
+    else { DOSSIER_CFG.evolution = DOSSIER_CFG.evolution.filter(x=>x!==k); }
     renderSheet();
   }));
 })();
