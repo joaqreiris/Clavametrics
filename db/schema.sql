@@ -300,6 +300,18 @@ create table if not exists public.default_exercises (
   constraint default_exercises_complexity_check CHECK ((complexity = ANY (ARRAY['Low'::text, 'Medium'::text, 'High'::text])))
 );
 
+create table if not exists public.dossier_templates (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  created_by uuid,
+  name text not null,
+  config jsonb default '{}'::jsonb not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint dossier_templates_pkey primary key (id)
+);
+CREATE INDEX dossier_templates_club_idx ON public.dossier_templates USING btree (club_id);
+
 create table if not exists public.drills (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
@@ -1991,6 +2003,8 @@ alter table public.dashboard_cards add constraint dashboard_cards_dashboard_id_f
 alter table public.dashboards add constraint dashboards_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.dashboards add constraint dashboards_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.dashboards add constraint dashboards_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.dossier_templates add constraint dossier_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.dossier_templates add constraint dossier_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.drills add constraint drills_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.drills add constraint drills_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.drills add constraint drills_session_id_fkey FOREIGN KEY (session_id) REFERENCES training_sessions(id) ON DELETE SET NULL;
@@ -3817,6 +3831,24 @@ create policy "creator or staff update dashboards" on public.dashboards as permi
 alter table public.default_exercises enable row level security;
 create policy "Anyone authenticated can read default_exercises" on public.default_exercises as permissive for select to authenticated
   using (true);
+
+alter table public.dossier_templates enable row level security;
+create policy "dossier_templates_select" on public.dossier_templates as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "dossier_templates_insert" on public.dossier_templates as permissive for insert to public
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "dossier_templates_update" on public.dossier_templates as permissive for update to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "dossier_templates_delete" on public.dossier_templates as permissive for delete to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
 
 alter table public.drills enable row level security;
 create policy "drills_delete" on public.drills as permissive for delete to public
