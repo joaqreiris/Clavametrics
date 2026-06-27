@@ -315,16 +315,27 @@
   .gp-view { display:none; }
   .gp-view.is-on { display:block; }
 
-  .gp-kpi { padding:14px 16px; }
-  .gp-kpi .l { display:flex; align-items:center; gap:6px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
+  /* ── KPI cards: dense, content-sized tiles (Data-Studio / Power-BI density) ──
+     A KPI is ONE number — it must NOT inherit the chart height ramp (280/420/580)
+     nor stretch to match a taller chart sharing its grid row (that's the dead
+     space). Scoped via :has() so chart/table cards are untouched. Canvas/paged
+     mode keeps the user's explicit resize, so these overrides skip .is-canvas. */
+  .gp-grid:not(.is-canvas) .gp-c:has(> .gp-c-b.gp-kpi) {
+    max-height: none;       /* drop the chart height ramp — size to content */
+    align-self: start;      /* don't stretch to the row's tallest card */
+  }
+  .gp-grid:not(.is-canvas) .gp-c-b.gp-kpi { flex: 0 0 auto; }   /* no dead stretch */
+  .gp-kpi { padding:12px 15px; justify-content:flex-start; align-items:stretch; text-align:left; gap:0; min-height:112px; }
+  .gp-kpi .l { display:flex; align-items:center; gap:6px; font:500 11px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:7px; }
   .gp-kpi .l .ti { font-size:13px; }
-  .gp-kpi .v { font:600 24px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .gp-kpi .v { font:600 27px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
   .gp-kpi .v sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
-  .gp-kpi .t { margin-top:10px; font:500 11.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted); }
+  .gp-kpi .t { margin-top:5px; font:500 11.5px/1.3 var(--cm-font-sans); color:var(--cm-fg-muted); }
   .gp-kpi .d { display:inline-flex; align-items:center; gap:3px; font:600 12px/1 var(--cm-font-mono); }
   .gp-kpi .d.up { color:var(--cm-success); }
   .gp-kpi .d.warn { color:var(--cm-warning); }
   .gp-kpi .d.down { color:var(--cm-danger); }
+  .gp-kpi .gp-kpi-spark { margin-top:auto; padding-top:6px; }   /* fills slack, anchors to foot, keeps a min gap */
 
   .gp-zwrap { overflow-x:auto; min-width:0; max-width:100%; }
   /* width:max-content + min-width:100% (mismo patrón que .ol-hm): si las columnas
@@ -778,7 +789,7 @@
                 <button data-del title="Remove card"><i class="ti ti-x"></i></button>
               </div>
             </div>
-            <div class="gp-c-b" style="min-height:120px;align-items:center;justify-content:center">
+            <div class="gp-c-b" style="min-height:120px">
               <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
             </div>
           </div>
@@ -1010,7 +1021,7 @@
                 <button data-del title="Remove card"><i class="ti ti-x"></i></button>
               </div>
             </div>
-            <div class="gp-c-b" style="min-height:120px;align-items:center;justify-content:center">
+            <div class="gp-c-b" style="min-height:120px">
               <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
             </div>
           </div>

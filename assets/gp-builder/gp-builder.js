@@ -2977,7 +2977,7 @@
     } else if (d.name) {
       tLine = `<div class="t">${esc(d.name)}</div>`;
     }
-    const sparkHtml = spark ? `<div class="gp-kpi-spark" style="margin-top:12px;height:36px;position:relative"><canvas></canvas></div>` : '';
+    const sparkHtml = spark ? `<div class="gp-kpi-spark" style="height:32px;position:relative;width:100%"><canvas></canvas></div>` : '';
     return `<div class="l"><i class="ti ${d.icon}"></i>${esc(lLabel)}</div>
       <div class="v">${fmt(Math.round(d.value * 10) / 10)}${d.unit ? ` <sub>${esc(d.unit)}</sub>` : ''}</div>
       ${tLine}${sparkHtml}`;
