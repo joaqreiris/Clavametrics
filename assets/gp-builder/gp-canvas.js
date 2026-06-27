@@ -248,7 +248,7 @@
     // resize handles, or the floating KPI actions — so dropdowns / pencil / ✕ and a
     // short click keep working. Activation is DEFERRED to onMove (DRAG_THRESH) so a
     // click under 5px never moves the card; no preventDefault here for the same reason.
-    if (e.target.closest('button, a, select, input, textarea, [role=button], .gp-c-pick, .gp-rz, .gp-rh, .gp-kpi-actions')) return;
+    if (e.target.closest('button, a, select, input, textarea, [role=button], .gp-c-pick, .gp-c-picks, .gp-rz, .gp-rh, .gp-kpi-actions')) return;
     const card = e.target.closest('.gp-c');
     if (!card || card.classList.contains('gp-add')) return;
     const grid = card.closest('.gp-grid');
@@ -379,8 +379,13 @@
     renderAll();
     document.addEventListener('pointerdown', onDown);
     document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
+    // End a move/resize in the CAPTURE phase (+ lostpointercapture) so a bespoke
+    // card that stops propagation on its own pointerup (e.g. the ACWR metric
+    // dropdown) can never prevent onUp from running. Otherwise mv/rz stay set and
+    // the card keeps following the cursor on the next pointermove ("trabada").
+    document.addEventListener('pointerup', onUp, true);
+    document.addEventListener('pointercancel', onUp, true);
+    document.addEventListener('lostpointercapture', onUp, true);
     document.addEventListener('dragstart', e => {
       if (e.target.closest && e.target.closest('.gp-grid.is-canvas')) e.preventDefault();
     }, true);
