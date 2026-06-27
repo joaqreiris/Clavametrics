@@ -288,17 +288,6 @@
   .gp-c.gp-rz-active { outline:1.5px solid var(--cm-accent) !important; outline-offset:-2px; box-shadow:var(--cm-shadow-3); z-index:10; }
   .gp-c.gp-rz-active .gp-rz::before, .gp-c.gp-rz-active .gp-rz::after { background:var(--cm-accent); }
 
-  /* ── Locked layout: freeze a view. Cards stay fixed (content stays interactive);
-     the whole edit skin — dashed outlines, grid lines, resize handles, grab cursor
-     — is hidden. Applied per grid via .is-locked (toggled by the lock pill). ── */
-  .gp-grid.is-locked .gp-c { outline:none !important; cursor:default !important; }
-  .gp-grid.is-locked .gp-c:hover { outline:none !important; box-shadow:var(--cm-shadow-1) !important; border-color:var(--cm-border) !important; }
-  .gp-grid.is-locked .gp-rz,
-  .gp-grid.is-locked .gp-rh,
-  .gp-grid.is-locked .gp-snapgrid { display:none !important; }
-  .gp-grid.is-locked.is-canvas { background-image:none !important; }
-  .gp-grid.is-locked.is-canvas .gp-c-h { cursor:default !important; }
-
   /* width badge on the card while resizing */
   .gp-rz-badge { position:absolute; top:8px; right:8px; z-index:11; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:999px; background:var(--cm-accent); color:var(--cm-fg-on-accent); font:600 10.5px/1 var(--cm-font-mono); white-space:nowrap; box-shadow:var(--cm-shadow-2); pointer-events:none; }
 
@@ -311,7 +300,14 @@
   .gp-rz-mk.is-on { color:var(--cm-accent); }
   .gp-rz-mk.is-on::after { width:2px; height:12px; background:var(--cm-accent); }
 
-  .gp-c-b { padding:14px; flex:1; display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; min-height:0; min-width:0; }
+  /* No internal scroll: the content adapts to the card size. Charts re-resize via
+     the ResizeObserver in gp-canvas.js (reflowCard → Chart.resize), KPI scales by
+     container query. Tables are the exception — they can exceed the card, so their
+     body keeps vertical scroll. */
+  .gp-c-b { padding:14px; flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; min-width:0; }
+  .gp-c.is-table > .gp-c-b,
+  .gp-c-b:has(.gp-zt),
+  .gp-c-b:has(.gp-zwrap) { overflow-y:auto; }
   /* Card body children must shrink to the card width (never push the grid wider);
      wide content scrolls inside its own wrapper (e.g. .gp-zwrap) instead. */
   .gp-c-b > * { min-width:0; max-width:100%; }
@@ -820,7 +816,6 @@
           <button class="pill" id="baselinePill"><i class="ti ti-target"></i><span id="baselineLabel">vs Role</span></button>
           <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines."><i class="ti ti-history"></i>Historical</button>
           <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
-          <button class="pill" id="lockToggle" title="Lock layout — freeze cards"><i class="ti ti-lock-open"></i></button>
           <button class="pill" id="saveLayoutBtn"><i class="ti ti-device-floppy"></i>Save layout</button>
           <button class="pill"><i class="ti ti-bookmark"></i>Saved views</button>
           <button class="pill"><i class="ti ti-plus"></i>Add card</button>
@@ -1868,10 +1863,8 @@ async function saveLayout(viewKey, overrideDid) {
       if ([x, y, w, h].every(Number.isFinite)) Object.assign(item, { x, y, w, h });
       return item;
     });
-    const locked = grid.classList.contains('is-locked');
-    (window._gpViewLock ||= {})[viewKey] = locked;
     const { error } = await window.sb.from('gps_dashboard_layouts').upsert(
-      { user_id: uid, club_id: cid, dashboard_id: did, layout, locked, updated_at: new Date().toISOString() },
+      { user_id: uid, club_id: cid, dashboard_id: did, layout, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,club_id,dashboard_id' }
     );
     if (error) {
@@ -1892,11 +1885,8 @@ async function loadLayout(viewKey) {
     const cid = await window.getClubId?.();
     if (!uid || !cid) return null;
     const { data, error } = await window.sb.from('gps_dashboard_layouts')
-      .select('layout, locked').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
+      .select('layout').eq('user_id', uid).eq('club_id', cid).eq('dashboard_id', did).maybeSingle();
     if (error) { console.warn('loadLayout: DB error (using defaults):', error.message); return null; }
-    // Side-effect: sync the persisted lock for this view (return shape unchanged so
-    // every existing caller keeps getting the layout array).
-    if (data) { (window._gpViewLock ||= {})[viewKey] = !!data.locked; window._applyViewLock?.(viewKey); }
     return data?.layout || null;
   } catch (err) { console.warn('loadLayout: unexpected error (using defaults):', err); return null; }
 }
@@ -2338,26 +2328,27 @@ async function openChangeMetricModal(card) {
 // a handler throws mid-gesture — leaving a card stuck with .gp-mv-active
 // (faded/rotated) or .gp-rz-active. Sweep them off ALL cards on every
 // gesture-end path so nothing stays "pegado".
+const _GP_STUCK = ['gp-mv-active', 'gp-rz-active', 'gp-rh-active', 'is-dragging'];
 function _gpClearDragArtifacts() {
-  document.querySelectorAll('.gp-mv-active, .gp-rz-active, .gp-rh-active')
-    .forEach(c => c.classList.remove('gp-mv-active', 'gp-rz-active', 'gp-rh-active'));
+  document.querySelectorAll('.' + _GP_STUCK.join(', .'))
+    .forEach(c => c.classList.remove(..._GP_STUCK));
 }
 // Bound on BOTH window and document in the CAPTURE phase so a bespoke card that
 // stops propagation on its own pointer handlers (e.g. the ACWR metric dropdown)
-// can never swallow the cleanup. `lostpointercapture` covers the case where a
-// child (a Chart.js canvas) steals the pointer mid-drag and no pointerup bubbles.
-['pointerup', 'mouseup', 'dragend', 'drop', 'pointercancel', 'lostpointercapture'].forEach(evt => {
-  window.addEventListener(evt, _gpClearDragArtifacts, true);
-  document.addEventListener(evt, _gpClearDragArtifacts, true);
+// can never swallow the cleanup. `lostpointercapture` covers a child (Chart.js
+// canvas) stealing the pointer mid-drag; `pointerdown` clears any stale state at
+// the START of the next interaction, so nothing can stay "pegado" through a click.
+['pointerdown', 'pointerup', 'mouseup', 'dragend', 'drop', 'pointercancel', 'lostpointercapture'].forEach(evt => {
+  window.addEventListener(evt, _gpClearDragArtifacts, { capture: true });
+  document.addEventListener(evt, _gpClearDragArtifacts, { capture: true });
 });
 
 function initGridDragDrop(gridEl, viewKey) {
   let dragging = null;
 
   gridEl.addEventListener('dragstart', e => {
-    // Native HTML5 reorder is the fallback for non-canvas grids; disabled while the
-    // grid is locked. (In canvas mode gp-canvas.js handles moves and preempts this.)
-    if (gridEl.classList.contains('is-locked')) return;
+    // Native HTML5 reorder is the non-canvas fallback. (In canvas mode — the active
+    // build — gp-canvas.js handles moves via pointer events and preempts this.)
     const card = e.target.closest('.gp-c[draggable="true"]');
     if (!card) return;
     dragging = card;
@@ -2386,8 +2377,8 @@ function initGridDragDrop(gridEl, viewKey) {
     saveLayout(viewKey);
   });
 
-  // Native HTML5 reorder is the non-canvas fallback (gated by !is-locked above).
-  // In canvas mode (the active build) gp-canvas.js owns moves via pointer events.
+  // Native HTML5 reorder is the non-canvas fallback. In canvas mode (the active
+  // build) gp-canvas.js owns moves via pointer events and preempts this.
 }
 
 document.querySelectorAll('.gp-view').forEach(view => {
@@ -2429,7 +2420,7 @@ exportBtn?.addEventListener('click', e => {
 // ── 2. Dashboard bar pills ────────────────────────────────────
 document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   const pill = e.target.closest('.pill');
-  if (!pill || pill.id === 'lockToggle' || pill.id === 'saveLayoutBtn') return;
+  if (!pill || pill.id === 'saveLayoutBtn') return;
   e.stopPropagation();
   const ic = pill.querySelector('.ti')?.className || '';
 
@@ -7725,7 +7716,6 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     document.getElementById('secTitle').textContent = titles[v]?.[0] || '';
     const subEl = document.getElementById('secSub');
     if (subEl && titles[v]?.[1]) subEl.textContent = titles[v][1];
-    window._syncLockBtnForActiveView?.();   // pill reflects the active view's lock state
     // Re-render with cached data when switching sections (avoids re-fetch overhead)
     if (window._gpReports?.length) {
       _updateSquadRanking(window._gpReports);
@@ -7734,45 +7724,11 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       window.renderView?.();
     }
   });
-  // ── Lock (replaces the old Edit-layout mode) ──────────────────────────────
-  // The dashboard is ALWAYS editable by direct interaction (drag to move, hover
-  // handles to resize, autosave on drop). The lock pill FREEZES a view: it adds
-  // .is-locked to that view's grid (cards fixed, edit skin hidden) while the card
-  // content stays interactive. Lock state is per view and persisted with the layout.
-  const lockBtn = document.getElementById('lockToggle');
-  function _gpActiveView() { return document.querySelector('.gp-view.is-on')?.dataset.view || null; }
-  // Reflect a view's lock state into its grid + (if it's the active view) the pill.
-  window._applyViewLock = function (viewKey) {
-    const locked = !!(window._gpViewLock && window._gpViewLock[viewKey]);
-    document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`)?.classList.toggle('is-locked', locked);
-    if (viewKey === _gpActiveView()) _syncLockBtn(locked);
-  };
-  function _syncLockBtn(locked) {
-    if (!lockBtn) return;
-    lockBtn.classList.toggle('is-on', locked);
-    const i = lockBtn.querySelector('i');
-    if (i) i.className = `ti ti-lock${locked ? '' : '-open'}`;
-    lockBtn.title = locked ? 'Unlock layout — edit cards' : 'Lock layout — freeze cards';
-  }
-  // Keep the pill in sync with whatever view is active (also called on view switch).
-  window._syncLockBtnForActiveView = function () {
-    const v = _gpActiveView();
-    _syncLockBtn(!!(v && window._gpViewLock && window._gpViewLock[v]));
-  };
-  lockBtn?.addEventListener('click', async () => {
-    const view = _gpActiveView();
-    if (!view) return;
-    const grid = document.querySelector(`.gp-view[data-view="${view}"] .gp-grid`);
-    if (!grid) return;
-    const locked = !grid.classList.contains('is-locked');
-    (window._gpViewLock ||= {})[view] = locked;
-    grid.classList.toggle('is-locked', locked);
-    _syncLockBtn(locked);
-    await saveLayout(view).catch(e => console.warn('lockToggle save:', e));   // persists lock + layout
-  });
-  window._syncLockBtnForActiveView();
+  // The dashboard is ALWAYS editable by direct interaction: click opens card
+  // content (dropdowns, pencil), click+drag (>5px) moves it, hover handles resize.
+  // No edit mode, no lock. Moves/resizes autosave on drop; Save layout is a backup.
   document.getElementById('saveLayoutBtn')?.addEventListener('click', async () => {
-    const view = _gpActiveView();
+    const view = document.querySelector('.gp-view.is-on')?.dataset.view;
     if (!view) return;
     await saveLayout(view).catch(e => console.warn('saveLayoutBtn:', e));
     showToast('Layout guardado');

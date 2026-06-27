@@ -224,9 +224,8 @@
   let mvPending = null;   // armed on pointerdown; promotes to `mv` once past DRAG_THRESH
 
   function canInteract(grid) {
-    // Always editable now (no edit mode); a per-grid lock (.is-locked) freezes it.
-    return grid && grid.classList.contains('is-canvas') && !grid.classList.contains('is-locked')
-        && window.innerWidth > MOBILE;
+    // Always editable now — no edit mode, no lock. Just canvas + desktop width.
+    return grid && grid.classList.contains('is-canvas') && window.innerWidth > MOBILE;
   }
 
   function onDown(e) {
@@ -360,8 +359,8 @@
     grid.classList.add('is-canvas');
   }
   function syncEditClass() {
-    // Layout is always editable now (no edit mode). The edit skin (.is-edit) stays
-    // on; a per-grid lock (.is-locked, handled in GPS Analysis.html) suppresses it.
+    // Layout is always editable now (no edit mode, no lock). The edit skin (.is-edit)
+    // stays on so hover handles / outlines are available on every card.
     document.querySelectorAll('.gp-grid').forEach(g => g.classList.add('is-edit'));
     document.querySelectorAll('.gp-grid.is-canvas').forEach(drawSnapGrid);
   }
