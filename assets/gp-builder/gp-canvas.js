@@ -303,7 +303,7 @@
   function endResize() {
     if (!rz) return;
     const { card, badge, prevDraggable } = rz;
-    badge.remove(); card.classList.remove('gp-rh-active');
+    badge.remove(); card.classList.remove('gp-rh-active', 'is-dragging');
     card.style.removeProperty('z-index');   // drop the lift set in onDown
     if (prevDraggable == null) card.removeAttribute('draggable'); else card.setAttribute('draggable', prevDraggable);
     reflowCard(card); persist(card); rz = null;
@@ -311,7 +311,9 @@
   function endMove() {
     if (!mv) return;
     const { card, prevDraggable } = mv;
-    card.classList.remove('gp-mv-active');
+    // Also drop 'is-dragging' (native HTML5 DnD skin, opacity:0.4) in case a native
+    // dragstart fired before we took over with pointer capture and its dragend never ran.
+    card.classList.remove('gp-mv-active', 'is-dragging');
     card.style.removeProperty('z-index');   // drop the lift set in onMove → back below the bars
     if (prevDraggable == null) card.removeAttribute('draggable'); else card.setAttribute('draggable', prevDraggable);
     reflowCard(card); persist(card); mv = null;
@@ -322,8 +324,8 @@
     // one we tracked), so a card whose pointer stream was hijacked never stays "pegada"
     // (faded/rotated) nor elevated above the bars. Also catches a stale z-index left
     // without the class.
-    document.querySelectorAll('.gp-mv-active, .gp-rh-active, .gp-c[style*="z-index"]')
-      .forEach(c => { c.classList.remove('gp-mv-active', 'gp-rh-active'); c.style.removeProperty('z-index'); });
+    document.querySelectorAll('.gp-mv-active, .gp-rh-active, .is-dragging, .gp-c[style*="z-index"]')
+      .forEach(c => { c.classList.remove('gp-mv-active', 'gp-rh-active', 'is-dragging'); c.style.removeProperty('z-index'); });
   }
 
   function persist(card) {

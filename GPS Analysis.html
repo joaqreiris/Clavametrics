@@ -2322,8 +2322,10 @@ function initGridDragDrop(gridEl, viewKey) {
   let dragging = null;
 
   gridEl.addEventListener('dragstart', e => {
-    // Native HTML5 reorder is the non-canvas fallback. (In canvas mode — the active
-    // build — gp-canvas.js handles moves via pointer events and preempts this.)
+    // In canvas mode (the active build) gp-canvas.js owns moves via pointer events and
+    // preempts native DnD — bail so we never add 'is-dragging' (opacity:0.4) for a
+    // native drag that gp-canvas preventDefaults, whose dragend then never fires.
+    if (gridEl.classList.contains('is-canvas')) return;
     const card = e.target.closest('.gp-c[draggable="true"]');
     if (!card) return;
     dragging = card;
