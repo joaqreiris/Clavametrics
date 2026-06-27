@@ -2302,8 +2302,11 @@ async function openChangeMetricModal(card) {
 // path so nothing stays "pegado".
 const _GP_STUCK = ['gp-mv-active', 'gp-rh-active', 'is-dragging'];
 function _gpClearDragArtifacts() {
-  document.querySelectorAll('.' + _GP_STUCK.join(', .'))
-    .forEach(c => c.classList.remove(..._GP_STUCK));
+  // Clear the stuck edit classes AND the inline z-index lift the canvas engine sets
+  // while moving/resizing (card.style.zIndex = 2000+…), so a card never stays faded
+  // nor elevated above the filter bars after an interrupted drop.
+  document.querySelectorAll('.' + _GP_STUCK.join(', .') + ', .gp-c[style*="z-index"]')
+    .forEach(c => { c.classList.remove(..._GP_STUCK); c.style.removeProperty('z-index'); });
 }
 // Bound on BOTH window and document in the CAPTURE phase so a bespoke card that
 // stops propagation on its own pointer handlers (e.g. the ACWR metric dropdown)

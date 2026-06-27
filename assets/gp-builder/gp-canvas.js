@@ -304,6 +304,7 @@
     if (!rz) return;
     const { card, badge, prevDraggable } = rz;
     badge.remove(); card.classList.remove('gp-rh-active');
+    card.style.removeProperty('z-index');   // drop the lift set in onDown
     if (prevDraggable == null) card.removeAttribute('draggable'); else card.setAttribute('draggable', prevDraggable);
     reflowCard(card); persist(card); rz = null;
   }
@@ -311,15 +312,18 @@
     if (!mv) return;
     const { card, prevDraggable } = mv;
     card.classList.remove('gp-mv-active');
+    card.style.removeProperty('z-index');   // drop the lift set in onMove → back below the bars
     if (prevDraggable == null) card.removeAttribute('draggable'); else card.setAttribute('draggable', prevDraggable);
     reflowCard(card); persist(card); mv = null;
   }
   function onUp() {
     if (rz) endResize(); if (mv) endMove(); mvPending = null;
-    // Defensive: clear edit-active state on EVERY card (not just the one we tracked),
-    // so a bespoke card whose pointer stream was hijacked never stays "pegada".
-    document.querySelectorAll('.gp-mv-active, .gp-rh-active')
-      .forEach(c => c.classList.remove('gp-mv-active', 'gp-rh-active'));
+    // Defensive: clear edit-active state + the inline lift on EVERY card (not just the
+    // one we tracked), so a card whose pointer stream was hijacked never stays "pegada"
+    // (faded/rotated) nor elevated above the bars. Also catches a stale z-index left
+    // without the class.
+    document.querySelectorAll('.gp-mv-active, .gp-rh-active, .gp-c[style*="z-index"]')
+      .forEach(c => { c.classList.remove('gp-mv-active', 'gp-rh-active'); c.style.removeProperty('z-index'); });
   }
 
   function persist(card) {
