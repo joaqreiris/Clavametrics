@@ -303,7 +303,12 @@ Deno.serve(async (req: Request) => {
           if (!playerId) { skippedUnmapped++; continue; }
 
           const { core, extras } = normalizeMetrics(row);
-          recs.push({ club_id: clubId, session_id: sessionId, player_id: playerId, ...core });
+          // Outlier defense (same contract as the CSV importer): total_distance in
+          // canonical metres above the physical session max = noise (e.g. a GPS unit
+          // left on in the bus). Insert but flag is_invalid so aggregates exclude it.
+          const OUTLIER_MAX_M = 25000; // keep in sync with assets/gps-units.js
+          const is_invalid = typeof core.total_distance === 'number' && core.total_distance > OUTLIER_MAX_M;
+          recs.push({ club_id: clubId, session_id: sessionId, player_id: playerId, ...core, is_invalid });
           if (extras.length) extrasByPlayer.set(playerId, extras);
         }
 

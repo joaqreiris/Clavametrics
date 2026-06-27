@@ -642,6 +642,7 @@ create table if not exists public.gps_reports (
   sprint_count integer,
   distance_per_minute numeric,
   updated_at timestamp with time zone default now(),
+  is_invalid boolean default false not null,
   constraint gps_reports_pkey primary key (id),
   constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id)
 );

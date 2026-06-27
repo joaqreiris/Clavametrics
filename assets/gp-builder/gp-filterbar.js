@@ -646,7 +646,7 @@
       (_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false }),
       window.sb.from('gps_reports')
         .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id), players!inner(id, first_name, last_name, number, position)')
-        .eq('club_id', clubId).limit(20000),
+        .eq('club_id', clubId).eq('is_invalid', false).limit(20000),
     ]);
 
     // A report belongs to this team if its session is the team's, or legacy null-team
