@@ -452,76 +452,17 @@
 
   // ── Card drag-to-reorder ──────────────────────────────────────
 
-  function wireCardDrag(grid, dashboardId) {
-    if (!grid) return;
-    let dragSrc = null;
-
-    grid.addEventListener('dragstart', e => {
-      const card = e.target.closest('.gp-c[data-card-id]');
-      if (!card) return;
-      dragSrc = card;
-      card.classList.add('gpt-dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-
-    grid.addEventListener('dragend', () => {
-      dragSrc?.classList.remove('gpt-dragging');
-      grid.querySelectorAll('.gpt-drag-over').forEach(n => n.classList.remove('gpt-drag-over'));
-      dragSrc = null;
-    });
-
-    grid.addEventListener('dragover', e => {
-      if (!dragSrc) return;
-      e.preventDefault();
-      const over = e.target.closest('.gp-c');
-      if (!over || over === dragSrc) return;
-      grid.querySelectorAll('.gpt-drag-over').forEach(n => n.classList.remove('gpt-drag-over'));
-      over.classList.add('gpt-drag-over');
-      const r = over.getBoundingClientRect();
-      const after = e.clientX > r.left + r.width / 2;
-      grid.insertBefore(dragSrc, after ? over.nextElementSibling : over);
-    });
-
-    grid.addEventListener('drop', async e => {
-      e.preventDefault();
-      grid.querySelectorAll('.gpt-drag-over').forEach(n => n.classList.remove('gpt-drag-over'));
-      if (!dragSrc || !window.reorderCards || !window.sb) return;
-
-      // collect all builder cards with their new positions
-      const ordered = [...grid.querySelectorAll('.gp-c[data-card-id]')]
-        .map((el, i) => ({ id: el.dataset.cardId, position: i }));
-
-      const save = window.reorderCards(ordered, window.sb)
-        .catch(e => console.warn('gpt reorderCards:', e));
-      trackSave(save);
-      await save;
-    });
-  }
+  // Native HTML5 drag-to-reorder REMOVED. It coexisted with gp-canvas.js's pointer
+  // free-canvas move on the SAME card, required draggable="true" (which fired a
+  // native dragstart even during a pointer move) and added .gpt-dragging (opacity:.45)
+  // whose native dragend never ran when the pointer-drag handled the drop → the card
+  // stayed faded. Card moves are 100% pointer-based now (gp-canvas.js).
+  function wireCardDrag() { /* no-op: see comment above */ }
 
   function wireAllGridDrags() {
-    // wire predefined view grids for their builder cards
-    document.querySelectorAll('.gp-view').forEach(view => {
-      const grid = view.querySelector('.gp-grid');
-      if (!grid || grid.dataset.gptDragWired) return;
-      grid.dataset.gptDragWired = '1';
-
-      // make builder cards draggable
-      grid.querySelectorAll('.gp-c[data-card-id]').forEach(c => c.setAttribute('draggable', 'true'));
-
-      // also observe for future cards added to this grid
-      const obs = new MutationObserver(muts => {
-        muts.forEach(m => m.addedNodes.forEach(n => {
-          if (n.nodeType === 1 && n.classList.contains('gp-c') && n.dataset.cardId) {
-            n.setAttribute('draggable', 'true');
-          }
-        }));
-      });
-      obs.observe(grid, { childList: true });
-
-      const dashboardId = view.closest('[data-dashboard-id]')?.dataset.dashboardId
-        || document.querySelector(`#sections .gp-sec[data-view="${view.dataset.view}"]`)?.dataset.dashboardId;
-      wireCardDrag(grid, dashboardId);
-    });
+    // Native drag-to-reorder removed (moves are pointer-based, gp-canvas.js). No
+    // longer set draggable="true" on cards — that attribute is what fired the native
+    // dragstart and left .gpt-dragging (opacity:.45) stuck. Nothing to wire here.
   }
 
   // ── Card element builder (for custom dashboards) ──────────────
@@ -534,7 +475,8 @@
     el.dataset.card     = 'chart';
     el.dataset.cardId   = card.id;
     el.__config         = config;
-    el.setAttribute('draggable', 'true');
+    // No draggable="true": moves are pointer-based (gp-canvas.js); the native
+    // dragstart left .gpt-dragging (opacity:.45) stuck.
     // Width: prefer a saved span, else derive from the size bucket.
     const _span = config.style?.span
       || (window.gpSpanFromSize ? window.gpSpanFromSize(el.dataset.size, false) : null);

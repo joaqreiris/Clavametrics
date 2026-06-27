@@ -324,8 +324,8 @@
     // one we tracked), so a card whose pointer stream was hijacked never stays "pegada"
     // (faded/rotated) nor elevated above the bars. Also catches a stale z-index left
     // without the class.
-    document.querySelectorAll('.gp-mv-active, .gp-rh-active, .is-dragging, .gp-c[style*="z-index"]')
-      .forEach(c => { c.classList.remove('gp-mv-active', 'gp-rh-active', 'is-dragging'); c.style.removeProperty('z-index'); });
+    document.querySelectorAll('.gp-mv-active, .gp-rh-active, .is-dragging, .gpt-dragging, .gpt-drag-over, .gp-c[style*="z-index"]')
+      .forEach(c => { c.classList.remove('gp-mv-active', 'gp-rh-active', 'is-dragging', 'gpt-dragging', 'gpt-drag-over'); c.style.removeProperty('z-index'); });
   }
 
   function persist(card) {
