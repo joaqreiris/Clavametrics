@@ -171,7 +171,11 @@
   /* F2: resize handles (canvas + edit only) */
   .gp-grid.is-canvas .gp-rz { display:none; }
   .gp-grid.is-canvas .gp-rh { display:none; position:absolute; z-index:7; }
-  .gp-grid.is-canvas.is-edit .gp-c .gp-rh { display:block; }
+  /* Handles show ONLY on card hover (or while actively resizing) — never left
+     drawn permanently. They straddle the border, so hovering a handle keeps the
+     card :hover alive. */
+  .gp-grid.is-canvas.is-edit .gp-c:hover .gp-rh,
+  .gp-grid.is-canvas .gp-c.gp-rh-active .gp-rh { display:block; }
   .gp-rh-n,.gp-rh-s { left:10px; right:10px; height:8px; cursor:ns-resize; }
   .gp-rh-e,.gp-rh-w { top:10px; bottom:10px; width:8px; cursor:ew-resize; }
   .gp-rh-n { top:0; } .gp-rh-s { bottom:0; } .gp-rh-w { left:0; } .gp-rh-e { right:0; }
@@ -343,6 +347,22 @@
   .gp-kpi .d.warn { color:var(--cm-warning); }
   .gp-kpi .d.down { color:var(--cm-danger); }
   .gp-kpi .gp-kpi-spark { margin-top:auto; padding-top:6px; }   /* fills slack, anchors to foot, keeps a min gap */
+  /* ── KPI fluid scaling (canvas mode only) ──────────────────────────────────
+     In the 12-col grid a KPI is always compact (height = content): dense,
+     top-left, 27px — unchanged. In canvas mode the card has an explicit height,
+     so make the body a size-container: once there's spare room the number grows
+     with the card (clamped by both height and width) and the block centers. */
+  .gp-grid.is-canvas .gp-c-b.gp-kpi { container-type: size; container-name: kpi; }
+  @container kpi (min-height: 168px) {
+    .gp-kpi { justify-content:center; align-items:center; text-align:center; }
+    .gp-kpi .l { margin-bottom:10px; font-size:clamp(11px, 5cqh, 15px); justify-content:center; }
+    .gp-kpi .v { font-size:clamp(28px, min(26cqh, 22cqw), 104px); }
+    .gp-kpi .t { margin-top:8px; font-size:clamp(11.5px, 4.5cqh, 15px); }
+    .gp-kpi .gp-kpi-spark { margin-top:14px; padding-top:0; width:100%; }   /* cohesive block, not foot-anchored */
+    .gp-kpi-multi { align-items:center; justify-content:center; }
+    .gp-kpi-tile .kv { font-size:clamp(20px, min(16cqh, 14cqw), 64px); }
+    .gp-kpi-tile .kl, .gp-kpi-tile .kt { justify-content:center; }
+  }
   /* KPI: the card header (.gp-c-h) is REMOVED from the DOM at render time
      (window.gpbStripKpiHeader) — the tile carries its own .l label, so a header
      title would duplicate it. Its edit/delete buttons are relocated here: a
@@ -2304,8 +2324,8 @@ async function openChangeMetricModal(card) {
 // (faded/rotated) or .gp-rz-active. Sweep them off ALL cards on every
 // gesture-end path so nothing stays "pegado".
 function _gpClearDragArtifacts() {
-  document.querySelectorAll('.gp-mv-active, .gp-rz-active')
-    .forEach(c => c.classList.remove('gp-mv-active', 'gp-rz-active'));
+  document.querySelectorAll('.gp-mv-active, .gp-rz-active, .gp-rh-active')
+    .forEach(c => c.classList.remove('gp-mv-active', 'gp-rz-active', 'gp-rh-active'));
 }
 ['pointerup', 'mouseup', 'dragend', 'drop', 'pointercancel'].forEach(evt =>
   document.addEventListener(evt, _gpClearDragArtifacts, true));
