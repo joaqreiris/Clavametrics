@@ -20,6 +20,7 @@
   const MINW   = 2;
   const MINH   = 3;
   const MOBILE = 1000;
+  const DRAG_THRESH = 5;   // px the pointer must travel before a move starts (vs a click)
   const SIZE_ROWS = { sm: 5, md: 7, lg: 10, full: 13 };
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
@@ -220,9 +221,11 @@
   // ── unified pointer interaction (resize OR move) ─────────────────────────
   let rz = null;
   let mv = null;
+  let mvPending = null;   // armed on pointerdown; promotes to `mv` once past DRAG_THRESH
 
   function canInteract(grid) {
-    return grid && grid.classList.contains('is-canvas') && grid.classList.contains('is-edit')
+    // Always editable now (no edit mode); a per-grid lock (.is-locked) freezes it.
+    return grid && grid.classList.contains('is-canvas') && !grid.classList.contains('is-locked')
         && window.innerWidth > MOBILE;
   }
 
@@ -242,21 +245,19 @@
       try { handle.setPointerCapture(e.pointerId); } catch (_) {}
       resizeMove(e); return;
     }
-    const head = e.target.closest('.gp-c-h');
-    if (head && !e.target.closest('button, a, select, input, [role=button], .gp-c-pick')) {
-      const card = head.closest('.gp-c'); const grid = card && card.closest('.gp-grid');
-      if (!canInteract(grid)) return;
-      card.style.zIndex = 2000 + (window.__gpZ = (window.__gpZ || 0) + 1);
-      e.preventDefault();
-      const base = snapshot(grid);
-      const mover = base.find(b => b.el === card);
-      if (!mover) return;
-      card.classList.add('gp-mv-active');
-      const prevDraggable = card.getAttribute('draggable'); card.setAttribute('draggable', 'false');
-      mv = { card, grid, m: gridMetrics(grid), base, mover, prevDraggable,
-             startX: mover.x, startY: mover.y, startPX: e.clientX, startPY: e.clientY };
-      try { card.setPointerCapture(e.pointerId); } catch (_) {}
-    }
+    // Move: grab anywhere on the card (body OR header) EXCEPT interactive content,
+    // resize handles, or the floating KPI actions — so dropdowns / pencil / ✕ and a
+    // short click keep working. Activation is DEFERRED to onMove (DRAG_THRESH) so a
+    // click under 5px never moves the card; no preventDefault here for the same reason.
+    if (e.target.closest('button, a, select, input, textarea, [role=button], .gp-c-pick, .gp-rz, .gp-rh, .gp-kpi-actions')) return;
+    const card = e.target.closest('.gp-c');
+    if (!card || card.classList.contains('gp-add')) return;
+    const grid = card.closest('.gp-grid');
+    if (!canInteract(grid)) return;
+    const base = snapshot(grid);
+    const mover = base.find(b => b.el === card);
+    if (!mover) return;
+    mvPending = { card, grid, base, mover, startPX: e.clientX, startPY: e.clientY, pointerId: e.pointerId };
   }
 
   function resizeMove(e) {
@@ -282,7 +283,23 @@
     applyCoords(card, { x: tx, y: ty, w: mover.w, h: mover.h });
   }
 
-  function onMove(e) { if (rz) resizeMove(e); else if (mv) moveMove(e); }
+  function onMove(e) {
+    if (rz) { resizeMove(e); return; }
+    if (mv) { moveMove(e); return; }
+    if (!mvPending) return;
+    const dx = e.clientX - mvPending.startPX, dy = e.clientY - mvPending.startPY;
+    if (dx * dx + dy * dy < DRAG_THRESH * DRAG_THRESH) return;   // still a click, not a drag
+    const { card, grid, base, mover, startPX, startPY, pointerId } = mvPending;
+    mvPending = null;
+    card.style.zIndex = 2000 + (window.__gpZ = (window.__gpZ || 0) + 1);
+    card.classList.add('gp-mv-active');
+    const prevDraggable = card.getAttribute('draggable'); card.setAttribute('draggable', 'false');
+    mv = { card, grid, m: gridMetrics(grid), base, mover, prevDraggable,
+           startX: mover.x, startY: mover.y, startPX, startPY };
+    try { card.setPointerCapture(pointerId); } catch (_) {}
+    try { window.getSelection().removeAllRanges(); } catch (_) {}
+    moveMove(e);
+  }
 
   function endResize() {
     if (!rz) return;
@@ -298,7 +315,7 @@
     if (prevDraggable == null) card.removeAttribute('draggable'); else card.setAttribute('draggable', prevDraggable);
     reflowCard(card); persist(card); mv = null;
   }
-  function onUp() { if (rz) endResize(); if (mv) endMove(); }
+  function onUp() { if (rz) endResize(); if (mv) endMove(); mvPending = null; }
 
   function persist(card) {
     const view = card.closest('.gp-view') && card.closest('.gp-view').dataset.view;
@@ -337,8 +354,9 @@
     grid.classList.add('is-canvas');
   }
   function syncEditClass() {
-    const editing = !!document.querySelector('#editToggle.is-on');
-    document.querySelectorAll('.gp-grid').forEach(g => g.classList.toggle('is-edit', editing));
+    // Layout is always editable now (no edit mode). The edit skin (.is-edit) stays
+    // on; a per-grid lock (.is-locked, handled in GPS Analysis.html) suppresses it.
+    document.querySelectorAll('.gp-grid').forEach(g => g.classList.add('is-edit'));
     document.querySelectorAll('.gp-grid.is-canvas').forEach(drawSnapGrid);
   }
   function renderGrid(grid) {
@@ -370,14 +388,8 @@
     });
     document.querySelectorAll('.gp-grid').forEach(g => obs.observe(g, { childList: true }));
     document.getElementById('sections')?.addEventListener('click', () => setTimeout(renderAll, 80));
-    document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#editToggle')) setTimeout(syncEditClass, 30); });
-    const _eb = document.getElementById('editToggle');
-    if (_eb) _eb.classList.remove('is-on');
-    document.querySelectorAll('.gp-grid').forEach(g => {
-      g.classList.remove('is-edit');
-      const sg = g.querySelector(':scope > .gp-snapgrid');
-      if (sg) sg.remove();
-    });
+    // Always-editable: keep the edit skin on from boot (lock per grid suppresses it).
+    document.querySelectorAll('.gp-grid').forEach(g => g.classList.add('is-edit'));
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

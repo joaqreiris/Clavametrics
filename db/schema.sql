@@ -506,6 +506,7 @@ create table if not exists public.gps_dashboard_layouts (
   club_id uuid not null,
   dashboard_id text not null,
   layout jsonb default '{}'::jsonb not null,
+  locked boolean default false not null,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint gps_dashboard_layouts_pkey primary key (id),
