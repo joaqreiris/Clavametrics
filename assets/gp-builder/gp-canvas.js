@@ -315,7 +315,13 @@
     if (prevDraggable == null) card.removeAttribute('draggable'); else card.setAttribute('draggable', prevDraggable);
     reflowCard(card); persist(card); mv = null;
   }
-  function onUp() { if (rz) endResize(); if (mv) endMove(); mvPending = null; }
+  function onUp() {
+    if (rz) endResize(); if (mv) endMove(); mvPending = null;
+    // Defensive: clear edit-active state on EVERY card (not just the one we tracked),
+    // so a bespoke card whose pointer stream was hijacked never stays "pegada".
+    document.querySelectorAll('.gp-mv-active, .gp-rz-active, .gp-rh-active')
+      .forEach(c => c.classList.remove('gp-mv-active', 'gp-rz-active', 'gp-rh-active'));
+  }
 
   function persist(card) {
     const view = card.closest('.gp-view') && card.closest('.gp-view').dataset.view;

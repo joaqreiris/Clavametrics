@@ -245,10 +245,9 @@
   .gp-grid.is-canvas .gp-rh-badge { background:var(--cm-fg-strong); color:var(--cm-bg); }
   /* F6b: "+ Add card" lives in the toolbar now — hide the in-grid tile in canvas */
   .gp-grid.is-canvas > .gp-add { display:none !important; }
-  /* F6c: snap grid (edit only) */
-  .gp-grid.is-canvas .gp-snapgrid { position:absolute; inset:0; pointer-events:none; z-index:0; }
-  .gp-grid.is-canvas .gp-snapgrid > i { position:absolute; top:0; bottom:0; border-left:1px solid var(--cm-border-soft); }
-  .gp-grid.is-canvas.is-edit { background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--row-step,50px) - 1px), var(--cm-border-soft) calc(var(--row-step,50px) - 1px), var(--cm-border-soft) var(--row-step,50px)); }
+  /* F6c: snap grid removed — free canvas, no background checkered grid (neither the
+     column lines .gp-snapgrid nor the row repeating-linear-gradient). */
+  .gp-grid.is-canvas .gp-snapgrid { display:none !important; }
   .gp-grid.is-canvas > .gp-c {
     grid-column: calc(var(--gp-x, 0) + 1) / span var(--gp-w, 6);
     grid-row:    calc(var(--gp-y, 0) + 1) / span var(--gp-h, 11);
@@ -2343,8 +2342,14 @@ function _gpClearDragArtifacts() {
   document.querySelectorAll('.gp-mv-active, .gp-rz-active, .gp-rh-active')
     .forEach(c => c.classList.remove('gp-mv-active', 'gp-rz-active', 'gp-rh-active'));
 }
-['pointerup', 'mouseup', 'dragend', 'drop', 'pointercancel'].forEach(evt =>
-  document.addEventListener(evt, _gpClearDragArtifacts, true));
+// Bound on BOTH window and document in the CAPTURE phase so a bespoke card that
+// stops propagation on its own pointer handlers (e.g. the ACWR metric dropdown)
+// can never swallow the cleanup. `lostpointercapture` covers the case where a
+// child (a Chart.js canvas) steals the pointer mid-drag and no pointerup bubbles.
+['pointerup', 'mouseup', 'dragend', 'drop', 'pointercancel', 'lostpointercapture'].forEach(evt => {
+  window.addEventListener(evt, _gpClearDragArtifacts, true);
+  document.addEventListener(evt, _gpClearDragArtifacts, true);
+});
 
 function initGridDragDrop(gridEl, viewKey) {
   let dragging = null;
