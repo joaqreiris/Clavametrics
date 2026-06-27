@@ -803,17 +803,13 @@
         <div class="gp-grid is-edit">
 
           <!-- Genérica de ejemplo (builder · gp.card/v1) -->
-          <div class="gp-c" data-size="sm" id="card-gen-week-kpi" data-card-id="gen-week-kpi" data-card="chart">
-            <div class="gp-c-h">
-              <span class="ttl">Distancia total (semana)</span>
-              <span class="sub">kpi · player · editable example</span>
-              <div class="right">
-                <div class="size-toggle"><button class="is-on">S</button><button>M</button><button>L</button></div>
-                <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
-                <button data-del title="Remove card"><i class="ti ti-x"></i></button>
-              </div>
+          <div class="gp-c" data-size="sm" id="card-gen-week-kpi" data-card-id="gen-week-kpi" data-card="chart" data-card-title="Distancia total (semana)">
+            <!-- KPI: no card header (the tile carries its own internal label). Edit/delete float on hover. -->
+            <div class="gp-kpi-actions">
+              <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
+              <button data-del title="Remove card"><i class="ti ti-x"></i></button>
             </div>
-            <div class="gp-c-b" style="min-height:120px">
+            <div class="gp-c-b">
               <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
             </div>
           </div>
@@ -1035,17 +1031,13 @@
         <div class="gp-grid is-edit">
 
           <!-- Genérica de ejemplo (builder · gp.card/v1) -->
-          <div class="gp-c" data-size="sm" id="card-gen-match-kpi" data-card-id="gen-match-kpi" data-card="chart">
-            <div class="gp-c-h">
-              <span class="ttl">KPIs de partido</span>
-              <span class="sub">kpi · player · editable example</span>
-              <div class="right">
-                <div class="size-toggle"><button class="is-on">S</button><button>M</button><button>L</button></div>
-                <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
-                <button data-del title="Remove card"><i class="ti ti-x"></i></button>
-              </div>
+          <div class="gp-c" data-size="sm" id="card-gen-match-kpi" data-card-id="gen-match-kpi" data-card="chart" data-card-title="KPIs de partido">
+            <!-- KPI: no card header (the tile carries its own internal label). Edit/delete float on hover. -->
+            <div class="gp-kpi-actions">
+              <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
+              <button data-del title="Remove card"><i class="ti ti-x"></i></button>
             </div>
-            <div class="gp-c-b" style="min-height:120px">
+            <div class="gp-c-b">
               <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
             </div>
           </div>
@@ -2306,6 +2298,18 @@ async function openChangeMetricModal(card) {
 }
 
 // ── Drag & drop for card grids ─────────────────────────────────
+// Defensive cleanup: a move (gp-canvas pointer-drag) or resize can be interrupted
+// — the native HTML5 drag hijacks the pointer stream, pointer capture is lost, or
+// a handler throws mid-gesture — leaving a card stuck with .gp-mv-active
+// (faded/rotated) or .gp-rz-active. Sweep them off ALL cards on every
+// gesture-end path so nothing stays "pegado".
+function _gpClearDragArtifacts() {
+  document.querySelectorAll('.gp-mv-active, .gp-rz-active')
+    .forEach(c => c.classList.remove('gp-mv-active', 'gp-rz-active'));
+}
+['pointerup', 'mouseup', 'dragend', 'drop', 'pointercancel'].forEach(evt =>
+  document.addEventListener(evt, _gpClearDragArtifacts, true));
+
 function initGridDragDrop(gridEl, viewKey) {
   let dragging = null;
 
@@ -2321,6 +2325,7 @@ function initGridDragDrop(gridEl, viewKey) {
   gridEl.addEventListener('dragend', () => {
     dragging?.classList.remove('is-dragging');
     dragging = null;
+    _gpClearDragArtifacts();   // never leave a card mid-move/-resize
   });
 
   gridEl.addEventListener('dragover', e => {
@@ -2335,6 +2340,7 @@ function initGridDragDrop(gridEl, viewKey) {
 
   gridEl.addEventListener('drop', e => {
     e.preventDefault();
+    _gpClearDragArtifacts();
     saveLayout(viewKey);
   });
 
@@ -2850,23 +2856,36 @@ async function _mountSavedBuilderCards(clubId) {
       el.dataset.cardId   = card.id;
       el.__config         = config;
       el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
-      el.innerHTML = `
-        <div class="gp-c-h">
-          <span class="ttl">${(config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</span>
-          <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
-          <div class="right">
-            <div class="size-toggle">
-              <button>S</button><button>M</button><button>L</button><button style="width:30px">FULL</button>
-            </div>
+      // KPI cards render WITHOUT the .gp-c-h header (the tile carries its own
+      // internal label → a header title would duplicate it). Edit/delete go into
+      // a floating overlay instead. Charts/tables keep the full header.
+      const _isKpi = config.viz === 'kpi';
+      const _safeTitle = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+      if (_isKpi) el.dataset.cardTitle = config.title || '';   // keep title for example-card dedup
+      el.innerHTML = _isKpi
+        ? `<div class="gp-kpi-actions">
             <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
             <button data-del title="Remove card"><i class="ti ti-x"></i></button>
           </div>
-        </div>
-        <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
-          <div class="cb2-state load" style="min-height:120px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
-        </div>`;
+          <div class="gp-c-b">
+            <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
+          </div>`
+        : `<div class="gp-c-h">
+            <span class="ttl">${_safeTitle}</span>
+            <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
+            <div class="right">
+              <div class="size-toggle">
+                <button>S</button><button>M</button><button>L</button><button style="width:30px">FULL</button>
+              </div>
+              <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
+              <button data-del title="Remove card"><i class="ti ti-x"></i></button>
+            </div>
+          </div>
+          <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
+            <div class="cb2-state load" style="min-height:120px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
+          </div>`;
 
-      // sync size-toggle selection
+      // sync size-toggle selection (charts only; KPI has no toggle)
       const sizeMap = { sm:'S', md:'M', lg:'L', full:'FULL' };
       el.querySelectorAll('.size-toggle button').forEach(b =>
         b.classList.toggle('is-on', b.textContent.trim() === (sizeMap[el.dataset.size] || 'M'))
@@ -2886,9 +2905,6 @@ async function _mountSavedBuilderCards(clubId) {
 
       grid.appendChild(el);
       grid.dataset.gptBuilderMounted = '1';
-
-      // KPI: no card header — strip it now so it never flashes before the builder render.
-      if (config.viz === 'kpi') window.gpbStripKpiHeader(el);
 
       // resolve real data (async, non-blocking)
       _resolveAndRenderSavedCard(el, config, clubId).catch(e => console.warn('resolve saved card:', e));
