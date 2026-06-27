@@ -248,7 +248,7 @@
     // resize handles, or the floating KPI actions — so dropdowns / pencil / ✕ and a
     // short click keep working. Activation is DEFERRED to onMove (DRAG_THRESH) so a
     // click under 5px never moves the card; no preventDefault here for the same reason.
-    if (e.target.closest('button, a, select, input, textarea, [role=button], .gp-c-pick, .gp-c-picks, .gp-rz, .gp-rh, .gp-kpi-actions')) return;
+    if (e.target.closest('button, a, select, input, textarea, [role=button], .gp-c-pick, .gp-c-picks, .gp-rh, .gp-kpi-actions')) return;
     const card = e.target.closest('.gp-c');
     if (!card || card.classList.contains('gp-add')) return;
     const grid = card.closest('.gp-grid');
@@ -318,8 +318,8 @@
     if (rz) endResize(); if (mv) endMove(); mvPending = null;
     // Defensive: clear edit-active state on EVERY card (not just the one we tracked),
     // so a bespoke card whose pointer stream was hijacked never stays "pegada".
-    document.querySelectorAll('.gp-mv-active, .gp-rz-active, .gp-rh-active')
-      .forEach(c => c.classList.remove('gp-mv-active', 'gp-rz-active', 'gp-rh-active'));
+    document.querySelectorAll('.gp-mv-active, .gp-rh-active')
+      .forEach(c => c.classList.remove('gp-mv-active', 'gp-rh-active'));
   }
 
   function persist(card) {
