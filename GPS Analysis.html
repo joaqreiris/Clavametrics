@@ -2273,14 +2273,17 @@ async function _gpOpenAssignRivals() {
     const [{ data: sessions }, { data: reps }, { data: opps }] = await Promise.all([
       sq,
       window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false).limit(50000),
-      window.sb.from('opponent_branding').select('opponent_name, crest_url').eq('club_id', clubId).order('opponent_name'),
+      window.sb.from('opponent_branding').select('id, opponent_name, crest_url').eq('club_id', clubId).order('opponent_name'),
     ]);
     const cnt = new Map();
     (reps || []).forEach(r => { if (r.session_id) cnt.set(r.session_id, (cnt.get(r.session_id) || 0) + 1); });
-    const rows = (sessions || [])
-      .filter(s => cnt.has(s.id))                                                            // has GPS
+    const gpsDays = (sessions || []).filter(s => cnt.has(s.id));                              // sessions w/ valid GPS
+    const rows = gpsDays
       .filter(s => !(s.session_attributes?.rival || s.session_attributes?.opponent))         // no rival yet
       .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, players: cnt.get(s.id) }));
+    // Diagnostics: if a known GPS day is missing from `rows`, this tells you whether it has
+    // no valid GPS (excluded by is_invalid) or it already carries a rival.
+    console.info(`[AssignRivals] club sessions=${sessions?.length || 0} · GPS days=${gpsDays.length} · already w/ rival=${gpsDays.length - rows.length} · listed=${rows.length}`);
     window.__gpOpponents = opps || [];
     if (!rows.length) { body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">Every GPS day already has a rival. 🎉</div>'; return; }
     body.innerHTML = `
@@ -2321,32 +2324,71 @@ async function _gpOpenAssignRivals() {
 function _gpRivalPicker(anchor, clubId, teamId, sessionId, date) {
   const opps = window.__gpOpponents || [];
   const items = [
-    ...opps.map(o => ({ label: o.opponent_name, name: o.opponent_name, crest: o.crest_url || null })),
+    ...opps.map(o => ({ label: o.opponent_name, name: o.opponent_name, crest: o.crest_url || null, oppId: o.id })),
     { label: '＋ New rival…', _new: true },
   ];
   makePopover(anchor, items, async item => {
     if (item._new) return _gpNewRivalForm(clubId, teamId, sessionId, date);
-    await _gpAssignRivalToDay(clubId, teamId, sessionId, date, item.name, item.crest);
+    // Existing catalog entry → reuse its id (no duplicate).
+    await _gpAssignRivalToDay(clubId, teamId, sessionId, date, item.name, item.crest, item.oppId);
   });
 }
 
-// Small modal to create a brand-new rival (name + crest URL) → saved to opponent_branding.
+// Small modal to create a brand-new rival → saved to opponent_branding. Crest can be
+// uploaded from the computer (→ Storage, club-assets bucket) or pasted as a URL.
 function _gpNewRivalForm(clubId, teamId, sessionId, date) {
   const ov = makeModal('New rival', `
     <div style="min-width:380px;display:flex;flex-direction:column;gap:12px">
       <label style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Rival name
         <input id="arName" type="text" placeholder="e.g. Polvorín FC" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 13px/1.4 var(--cm-font-sans);box-sizing:border-box"></label>
-      <label style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Crest URL (optional)
-        <input id="arCrest" type="text" placeholder="https://…/crest.png" style="margin-top:6px;width:100%;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box"></label>
+      <div style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Crest (optional)</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="arCrestPrev" style="width:48px;height:48px;flex-shrink:0;border:1px dashed var(--cm-border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--cm-surface-2);color:var(--cm-fg-muted);overflow:hidden"><i class="ti ti-shield" style="font-size:18px"></i></div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+          <label class="cm-btn is-outline is-sm" style="cursor:pointer;align-self:flex-start">
+            <i class="ti ti-upload" style="font-size:14px"></i><span id="arUpLbl">Upload from computer</span>
+            <input id="arFile" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none">
+          </label>
+          <input id="arCrest" type="text" placeholder="…or paste a crest URL" style="width:100%;padding:7px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
+        </div>
+      </div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button id="arCancel" class="cm-btn is-outline is-sm">Cancel</button>
         <button id="arSave" class="cm-btn is-filled is-sm">Save &amp; assign</button>
       </div>
     </div>`);
+  const prev    = ov.querySelector('#arCrestPrev');
+  const crestIn = ov.querySelector('#arCrest');
+  const fileIn  = ov.querySelector('#arFile');
+  const upLbl   = ov.querySelector('#arUpLbl');
+  const saveBtn = ov.querySelector('#arSave');
+  const showPrev = url => { prev.innerHTML = url ? `<img src="${url}" style="width:100%;height:100%;object-fit:contain">` : '<i class="ti ti-shield" style="font-size:18px"></i>'; };
+  crestIn.addEventListener('input', () => showPrev(crestIn.value.trim()));
+  fileIn.addEventListener('change', async () => {
+    const file = fileIn.files?.[0];
+    if (!file) return;
+    showPrev(URL.createObjectURL(file));      // instant local preview
+    upLbl.textContent = 'Uploading…'; saveBtn.disabled = true;
+    try {
+      const opName = ov.querySelector('#arName').value.trim() || 'rival';
+      const slug   = window.slugifyOpponent ? window.slugifyOpponent(opName) : 'rival';
+      const ext    = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      const path   = `opponent-crests/${clubId}/${slug}.${ext}`;
+      const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
+      crestIn.value = publicUrl;             // surface it so the user sees/can edit it
+      showPrev(publicUrl);
+      upLbl.textContent = 'Replace crest';
+    } catch (e) {
+      showToast(`Upload failed: ${e.message}`, true);
+      upLbl.textContent = 'Upload from computer';
+    } finally { saveBtn.disabled = false; }
+  });
   ov.querySelector('#arCancel').onclick = () => ov.remove();
-  ov.querySelector('#arSave').onclick = async () => {
+  saveBtn.onclick = async () => {
     const name  = ov.querySelector('#arName').value.trim();
-    const crest = ov.querySelector('#arCrest').value.trim() || null;
+    const crest = crestIn.value.trim() || null;
     if (!name) { showToast('Enter a rival name', true); return; }
     ov.remove();
     await _gpAssignRivalToDay(clubId, teamId, sessionId, date, name, crest);
@@ -2355,23 +2397,33 @@ function _gpNewRivalForm(clubId, teamId, sessionId, date) {
 
 // Persist: reuse opponent_branding (insert if new), then tag the day's session
 // (idempotent) or create a historical container if the day has no session.
-async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, crestUrl) {
+async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, crestUrl, knownOppId) {
   try {
-    // 1. opponent_branding — reuse by (club, name); insert if missing, fill crest if given.
+    // 1. opponent_branding (club catalog) — reuse by (club, name); insert if missing, fill
+    //    crest if given. We CAPTURE its id so the day references the entity, not just text:
+    //    that's what makes the same rival comparable across seasons/sources.
+    let oppId = knownOppId || null;
     const { data: existsOpp } = await window.sb.from('opponent_branding')
       .select('id, crest_url').eq('club_id', clubId).ilike('opponent_name', rivalName).maybeSingle();
     if (!existsOpp) {
-      await window.sb.from('opponent_branding').insert({ club_id: clubId, opponent_name: rivalName, crest_url: crestUrl || null }).catch(e => console.warn('opp insert:', e));
-    } else if (crestUrl && !existsOpp.crest_url) {
-      await window.sb.from('opponent_branding').update({ crest_url: crestUrl }).eq('id', existsOpp.id).catch(() => {});
+      const { data: ins } = await window.sb.from('opponent_branding')
+        .insert({ club_id: clubId, opponent_name: rivalName, crest_url: crestUrl || null })
+        .select('id').maybeSingle();
+      oppId = ins?.id || oppId;
+    } else {
+      oppId = existsOpp.id;
+      if (crestUrl && !existsOpp.crest_url) {
+        await window.sb.from('opponent_branding').update({ crest_url: crestUrl }).eq('id', existsOpp.id).catch(() => {});
+      }
     }
     const finalCrest = crestUrl || existsOpp?.crest_url || null;
+    // session_attributes carries BOTH: rival (text, back-compat) + opponent_id (the real relation).
+    const rivalAttrs = { rival: rivalName, ...(oppId ? { opponent_id: oppId } : {}), ...(finalCrest ? { rival_crest_url: finalCrest } : {}) };
 
     if (sessionId) {
       // 2a. Existing session → merge rival into attributes (never overwrite session_id/type/is_historical).
       const { data: s } = await window.sb.from('training_sessions').select('session_attributes').eq('id', sessionId).maybeSingle();
-      const attrs = { ...(s?.session_attributes || {}), rival: rivalName };
-      if (finalCrest) attrs.rival_crest_url = finalCrest;
+      const attrs = { ...(s?.session_attributes || {}), ...rivalAttrs };
       const { error } = await window.sb.from('training_sessions').update({ session_attributes: attrs }).eq('id', sessionId);
       if (error) throw error;
     } else if (date) {
@@ -2381,7 +2433,7 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
       const { data: created, error } = await window.sb.from('training_sessions')
         .insert({ club_id: clubId, ...(teamId ? { team_id: teamId } : {}), session_date: date,
                   session_type: 'match', is_historical: true, title: `Match vs ${rivalName}`,
-                  session_attributes: { rival: rivalName, ...(finalCrest ? { rival_crest_url: finalCrest } : {}) } })
+                  session_attributes: rivalAttrs })
         .select('id').maybeSingle();
       if (error) throw error;
       // (linking null-session reports to `created.id` would require a date on those rows)
@@ -8250,6 +8302,9 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       const mc        = _mcMap[mcKey];
       const matchDate = mc?.match_date || null;
+      // TODO(cross-season): microcycles.rival is still free TEXT. GPS days now reference the
+      // opponent catalog via session_attributes.opponent_id; the planner should migrate
+      // microcycles.rival → opponent_id too so MC rivals compare to GPS rivals by entity.
       const rival     = mc?.rival     || '';
 
       if (nextMatch) nextMatch.innerHTML = matchDate

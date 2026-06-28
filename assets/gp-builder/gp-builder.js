@@ -1597,7 +1597,10 @@
         sessionIds = (ts || []).filter(s => {
           const a = s.session_attributes || {};
           if (wantMd && !wantMd.has(String(a.md_code ?? ''))) return false;
-          if (wantRv && !wantRv.has(a.rival || a.opponent || '')) return false;
+          // Rival is grouped by ENTITY: the filterbar emits the normalized name as the key
+          // (opponent_id-backed when available). We always store the rival text alongside
+          // opponent_id, so the normalized text reproduces the same key here.
+          if (wantRv && !wantRv.has((a.rival || a.opponent || '').trim().toLowerCase())) return false;
           return true;
         }).map(s => s.id);
       }

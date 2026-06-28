@@ -645,14 +645,41 @@
       .eq('club_id', clubId).limit(3000);
     const _mcQ = window.sb.from('microcycles').select('id,name,start_date')
       .eq('club_id', clubId);
-    const [{ data: players }, { data: sessions }, { data: mcs }, { data: reports }] = await Promise.all([
+    // Opponent catalog: lets the Rival dimension group by ENTITY (opponent_id / canonical
+    // name) instead of the raw string, so the same rival unifies across seasons/sources.
+    const _obQ = window.sb.from('opponent_branding').select('id, opponent_name, crest_url')
+      .eq('club_id', clubId);
+    const [{ data: players }, { data: sessions }, { data: mcs }, { data: reports }, { data: opponents }] = await Promise.all([
       (_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name'),
       (_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
       (_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false }),
       window.sb.from('gps_reports')
         .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id), players!inner(id, first_name, last_name, number, position)')
         .eq('club_id', clubId).eq('is_invalid', false).limit(20000),
+      _obQ,
     ]);
+
+    // Entity resolver: opponent_id (catalog) wins; else match raw text to a catalog row
+    // by name; else fall back to the normalized text. Returns a stable { key, label, crest }
+    // so two "Sevilla" (any season/source) collapse to one bucket. The matcher in
+    // gp-builder.js derives the SAME key from the raw text (we always store both).
+    const _obById   = new Map();   // id    → { name, crest }
+    const _obByName = new Map();   // lower → { id, name, crest }
+    (opponents || []).forEach(o => {
+      _obById.set(o.id, { name: o.opponent_name, crest: o.crest_url || null });
+      _obByName.set((o.opponent_name || '').trim().toLowerCase(), { id: o.id, name: o.opponent_name, crest: o.crest_url || null });
+    });
+    function _rivalEntity(a) {
+      a = a || {};
+      let name = a.rival || a.opponent || '';
+      let crest = a.rival_crest_url || null;
+      const cat = a.opponent_id ? _obById.get(a.opponent_id) : null;
+      if (cat) { name = cat.name || name; crest = cat.crest || crest; }
+      if (!name) return null;
+      const norm = name.trim().toLowerCase();
+      const byName = _obByName.get(norm);
+      return { key: norm, label: (cat && cat.name) || (byName && byName.name) || name, crest: crest || (byName && byName.crest) || null };
+    }
 
     // A report belongs to this team if its session is the team's, or legacy null-team
     // (imported/old data). No active team → club-wide (fallback).
@@ -708,19 +735,19 @@
         mc:  ts.microcycle_id != null ? String(ts.microcycle_id) : '',
         p:   r.player_id,
         pos: r.players?.position || '',
-        rv:  ts.session_attributes?.rival || ts.session_attributes?.opponent || '',
+        rv:  _rivalEntity(ts.session_attributes)?.key || '',
       };
     }).filter(x => x.d);
 
-    // Rivals real (distintos, no vacíos) desde session_attributes.rival, con escudo.
-    const rivalMap = new Map();   // name → crest
+    // Rivals reales agrupados por ENTIDAD (opponent_id / nombre canónico), con escudo.
+    // key = nombre normalizado (lo que matchea el resolver); label = nombre canónico.
+    const rivalMap = new Map();   // key → { label, crest }
     (reports || []).filter(r => _teamOk(r.training_sessions?.team_id)).forEach(r => {
-      const a = r.training_sessions?.session_attributes || {};
-      const name = a.rival || a.opponent;
-      if (name && !rivalMap.has(name)) rivalMap.set(name, a.rival_crest_url || null);
+      const ent = _rivalEntity(r.training_sessions?.session_attributes);
+      if (ent && !rivalMap.has(ent.key)) rivalMap.set(ent.key, { label: ent.label, crest: ent.crest });
     });
-    options.rival = [...rivalMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([name, crest]) => ({ value: name, label: name, crest }));
+    options.rival = [...rivalMap.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label))
+      .map(([key, v]) => ({ value: key, label: v.label, crest: v.crest }));
 
     applyChaining();   // si había filtros restaurados, deja _validCache listo
 
