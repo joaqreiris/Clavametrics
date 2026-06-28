@@ -649,13 +649,16 @@
     // name) instead of the raw string, so the same rival unifies across seasons/sources.
     const _obQ = window.sb.from('opponent_branding').select('id, opponent_name, crest_url')
       .eq('club_id', clubId);
-    const [{ data: players }, { data: sessions }, { data: mcs }, { data: reports }, { data: opponents }] = await Promise.all([
+    const [{ data: players }, { data: sessions }, { data: mcs }, reports, { data: opponents }] = await Promise.all([
       (_gpTeam ? _plQ.eq('team_id', _gpTeam) : _plQ).order('last_name'),
       (_gpTeam ? _seQ.eq('team_id', _gpTeam) : _seQ),
       (_gpTeam ? _mcQ.eq('team_id', _gpTeam) : _mcQ).order('start_date', { ascending: false }),
-      window.sb.from('gps_reports')
+      // Paginated: the server caps at ~1000 rows (.limit(20000) is ignored). This feeds
+      // EVERY filter dimension (md codes, rivals, players, microcycles) — truncation here
+      // silently hid filter options on big clubs.
+      window.cmFetchAll(() => window.sb.from('gps_reports')
         .select('player_id, training_sessions!inner(session_date, session_attributes, microcycle_id, team_id), players!inner(id, first_name, last_name, number, position)')
-        .eq('club_id', clubId).eq('is_invalid', false).limit(20000),
+        .eq('club_id', clubId).eq('is_invalid', false), { label: 'filterbar.reports' }).catch(() => []),
       _obQ,
     ]);
 

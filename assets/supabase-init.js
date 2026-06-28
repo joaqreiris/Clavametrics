@@ -9,6 +9,45 @@
 
   window.sb = supabase.createClient(SB_URL, SB_KEY);
 
+  // ── Paginated fetch — defeats PostgREST's server max-rows cap (≈1000) ──────────
+  // The server silently truncates any query to ~1000 rows; client-side .limit(50000)
+  // does NOT override it. This is the ONLY robust way to read >1000 rows: page through
+  // with .range() until a short page comes back. CRITICAL for BI accuracy (squad/long-
+  // range reads of gps_reports easily exceed 1000 rows → silently incomplete aggregates).
+  //
+  // Pass a FACTORY that builds a FRESH query each call (a query builder is single-use):
+  //   const rows = await window.cmFetchAll(() =>
+  //     window.sb.from('gps_reports').select('session_id,player_load').eq('club_id', cid));
+  // Do NOT add .range()/.limit() yourself — the helper owns paging. Pass opts.orderBy
+  // (default 'id') so ranges are CONSISTENT across pages (PostgREST needs an explicit
+  // order with range, else pages can overlap/skip). Returns the full array (throws on the
+  // first-page error; later-page errors stop paging and return what was gathered).
+  window.cmFetchAll = async function (queryFactory, opts) {
+    const pageSize = (opts && opts.pageSize) || 1000;
+    const maxPages = (opts && opts.maxPages) || 50;          // 50k-row safety ceiling
+    const label    = (opts && opts.label)    || 'cmFetchAll';
+    const orderBy  = (opts && 'orderBy' in opts) ? opts.orderBy : 'id';
+    const all = [];
+    for (let page = 0; page < maxPages; page++) {
+      const from = page * pageSize, to = from + pageSize - 1;
+      let qb = queryFactory();
+      if (orderBy) qb = qb.order(orderBy, { ascending: true });
+      const { data, error } = await qb.range(from, to);
+      if (error) {
+        if (page === 0) throw error;                         // surface like a normal query
+        console.error(`[cmFetchAll:${label}] page ${page} error — returning ${all.length} rows so far:`, error);
+        break;
+      }
+      if (!data || !data.length) break;
+      all.push(...data);
+      if (data.length < pageSize) break;                     // short page → last page
+      if (page === maxPages - 1) {
+        console.warn(`[cmFetchAll:${label}] hit maxPages=${maxPages} (${all.length} rows) — result may be truncated`);
+      }
+    }
+    return all;
+  };
+
   let _clubId          = null;
   let _profile         = null;
   let _club            = null;

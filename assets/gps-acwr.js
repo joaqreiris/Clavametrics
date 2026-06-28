@@ -53,11 +53,13 @@
     const sessDateMap = Object.fromEntries(sessions.map(s => [s.id, s.session_date]));
     const ids         = sessions.map(s => s.id);
 
-    const { data: reports } = await window.sb
+    // Paginated: the server caps at ~1000 rows; a 28-day squad window exceeds that and
+    // would compute the ACWR on a truncated, wrong dataset.
+    const reports = await window.cmFetchAll(() => window.sb
       .from('gps_reports')
       .select('player_id,session_id,player_load,total_distance,high_speed_distance,sprint_count,sprint_distance')
       .eq('club_id', clubId)
-      .in('session_id', ids);
+      .in('session_id', ids), { label: 'acwr.fetchReports' });
 
     return (reports || []).map(r => ({ ...r, session_date: sessDateMap[r.session_id] }));
   }

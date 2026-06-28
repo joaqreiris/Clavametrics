@@ -175,28 +175,31 @@
     const byPlayer = {};
 
     if (isCore) {
-      const { data, error } = await window.sb
+      // Paginated (server caps at ~1000): a full squad of match rows exceeds that and would
+      // truncate some players' baselines. Paging is id-ordered, so do the top-n-by-value
+      // selection client-side (same result as the old server .order(metric).slice(n)).
+      const data = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
         .select(`player_id, ${metric}, training_sessions!inner(session_type)`)
         .in('player_id', player_ids)
         .eq('club_id', clubId)
         .eq('training_sessions.session_type', 'match')
-        .not(metric, 'is', null)
-        .order(metric, { ascending: false });
-      if (error || !data) return {};
-      data.forEach(r => {
-        if (!byPlayer[r.player_id]) byPlayer[r.player_id] = [];
-        if (byPlayer[r.player_id].length < n) byPlayer[r.player_id].push(+(r[metric] || 0));
-      });
+        .not(metric, 'is', null), { label: 'baseline.squad-core' }).catch(() => null);
+      if (!data) return {};
+      const _vals = {};
+      data.forEach(r => { (_vals[r.player_id] = _vals[r.player_id] || []).push(+(r[metric] || 0)); });
+      Object.keys(_vals).forEach(pid => { byPlayer[pid] = _vals[pid].sort((a, b) => b - a).slice(0, n); });
     } else {
       // Custom metric — two-step via gps_report_metrics
-      const { data: matchReports, error: e1 } = await window.sb
+      // Paginated: full-squad match reports can exceed the server's ~1000-row cap →
+      // truncated report-id set → incomplete custom-metric baselines.
+      const matchReports = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
         .select('id, player_id, training_sessions!inner(session_type)')
         .in('player_id', player_ids)
         .eq('club_id', clubId)
-        .eq('training_sessions.session_type', 'match');
-      if (e1 || !matchReports?.length) return {};
+        .eq('training_sessions.session_type', 'match'), { label: 'baseline.squad-eav' }).catch(() => null);
+      if (!matchReports?.length) return {};
 
       const reportToPlayer = {};
       matchReports.forEach(r => { reportToPlayer[r.id] = r.player_id; });
