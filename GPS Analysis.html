@@ -216,6 +216,11 @@
   .gp-grid.is-canvas.is-edit .gp-c:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); }
   .gp-grid.is-canvas .gp-c.gp-mv-active,
   .gp-grid.is-canvas .gp-c.gp-rh-active { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring), var(--cm-shadow-2); outline:none; }
+  /* Selected card (single click) — subtle accent ring; double-click opens the editor.
+     Listed with the :hover variant so the ring survives hover (which is more specific). */
+  .gp-c.gp-c-selected,
+  .gp-grid.is-canvas .gp-c.gp-c-selected,
+  .gp-grid.is-canvas.is-edit .gp-c.gp-c-selected:hover { border-color:var(--cm-accent); box-shadow:0 0 0 2px var(--cm-focus-ring, color-mix(in srgb, var(--cm-accent) 38%, transparent)), var(--cm-shadow-2); outline:none; }
   .gp-grid.is-canvas .gp-c.gp-mv-active { box-shadow:var(--cm-shadow-3); transform:scale(1.02) rotate(-1deg); }
   /* header chrome: drag cursor + reveal action buttons on hover/active */
   .gp-grid.is-canvas.is-edit .gp-c .gp-c-h { cursor:grab; }
@@ -2959,10 +2964,47 @@ window.gpOpenCardEditor = function (card) {
   const dots = [...card.querySelectorAll('.gp-c-h .right > button')].find(b => b.querySelector('.ti-dots'));
   if (dots) dots.click();
 };
-// ESC closes transient card editors (popovers + the topmost modal). The builder panel
-// owns its own ESC / click-outside (gp-builder.js).
+
+// ── 4b·2. Selection model (Power BI / Figma) — single click selects, dbl-click edits ──
+// A short click SELECTS a card (accent ring); double-click opens its editor. Only one card
+// is selected at a time. Selection drives Cmd+C/X/V/D. Held in a live element ref (pasted
+// cards may lack an id attribute), mirrored to window.__gpSelectedCardId for compatibility.
+let _gpSelectedCard = null;
+window.gpSelectCard = function (card) {
+  if (!card || card.classList.contains('gp-add')) return;
+  document.querySelectorAll('.gp-c-selected').forEach(c => { if (c !== card) c.classList.remove('gp-c-selected'); });
+  card.classList.add('gp-c-selected');
+  _gpSelectedCard = card;
+  window.__gpSelectedCardId = card.id || card.dataset.cardId || null;
+};
+window.gpDeselectCards = function () {
+  document.querySelectorAll('.gp-c-selected').forEach(c => c.classList.remove('gp-c-selected'));
+  _gpSelectedCard = null;
+  window.__gpSelectedCardId = null;
+};
+// Double-click → open the editor (no need to select first). Same exclusions as drag/select
+// so internal controls keep their own behavior.
+document.addEventListener('dblclick', e => {
+  const card = e.target.closest?.('.gp-c');
+  if (!card || card.classList.contains('gp-add')) return;
+  if (e.target.closest('button, a, select, input, textarea, [role=button], .gp-c-pick, .gp-c-picks, .gp-rh, .gp-kpi-actions')) return;
+  e.preventDefault();
+  window.gpSelectCard(card);
+  window.gpOpenCardEditor(card);
+});
+// Click on empty dashboard area (not a card / control / panel / toolbar) → deselect.
+document.addEventListener('pointerdown', e => {
+  const t = e.target;
+  if (!t.closest) return;
+  if (t.closest('.gp-c')) return;                                                    // a card → selection handled on pointerup
+  if (t.closest('#gpbPanel, .gp-modal-overlay, .gp-popover, .gp-src-drawer, .gp-dash-bar, .hub-topbar, .hub-sidebar')) return;
+  window.gpDeselectCards();
+}, true);
+// ESC → deselect; close transient card editors (popovers + the topmost modal). The builder
+// panel owns its own ESC / click-outside (gp-builder.js).
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
+  window.gpDeselectCards();
   closePop();
   const ov = [...document.querySelectorAll('.gp-modal-overlay')].pop();
   if (ov) ov.remove();
@@ -2973,13 +3015,13 @@ document.addEventListener('keydown', e => {
 // clipboard (window.__gpCardClipboard) survives view switches in-session. Science cards
 // are not gp.card/v1 → excluded. The active target is the last card clicked/hovered.
 window.__gpCardClipboard = window.__gpCardClipboard || null;
-window.__gpFocusedCardId  = window.__gpFocusedCardId || null;
-(function () {
-  const setFocus = e => { const c = e.target?.closest?.('.gp-c'); if (c && c.id) window.__gpFocusedCardId = c.id; };
-  document.addEventListener('pointerover', setFocus, true);
-  document.addEventListener('pointerdown', setFocus, true);
-})();
-function _gpActiveCard() { return window.__gpFocusedCardId ? document.getElementById(window.__gpFocusedCardId) : null; }
+window.__gpSelectedCardId = window.__gpSelectedCardId || null;
+// Copy/cut/paste/duplicate operate on the SELECTED card (single click), held as a live
+// element ref (pasted cards may lack an id attribute), with an id fallback.
+function _gpActiveCard() {
+  if (_gpSelectedCard && _gpSelectedCard.isConnected) return _gpSelectedCard;
+  return window.__gpSelectedCardId ? document.getElementById(window.__gpSelectedCardId) : null;
+}
 function _gpIsBuilderCard(card) {
   return !!card && card.dataset.card === 'chart' && card.__config && card.__config.schema === 'gp.card/v1';
 }
@@ -3017,6 +3059,7 @@ function _gpCopyCard(card) {
 async function _gpRemoveCard(card) {
   const view = card.closest('.gp-view')?.dataset.view;
   const cid = card.dataset.cardId;
+  if (card === _gpSelectedCard) window.gpDeselectCards();
   card.remove();
   if (window.deleteDashboardCard && cid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cid)) {
     window.deleteDashboardCard(cid, window.sb).catch(e => console.warn('cut delete:', e));
@@ -3054,6 +3097,32 @@ document.addEventListener('keydown', e => {
   e.preventDefault();
   if (k === 'c') { if (_gpCopyCard(card)) showToast('Card copied'); }
   else { if (_gpCopyCard(card)) { _gpRemoveCard(card); showToast('Card cut'); } }
+});
+// Cmd/Ctrl+D = duplicate (config + new id). While the BUILDER is open → duplicate the
+// in-progress config (the brief's "Duplicate inside the builder"). Otherwise → duplicate
+// the SELECTED card. Never hijacks typing.
+document.addEventListener('keydown', async e => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 'd') return;
+  const t = e.target;
+  if (t.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+  const builderOpen = !!document.querySelector('.es-panel.is-open');
+  if (builderOpen) {
+    const cfg = window.GpBuilder?.currentConfig?.();
+    if (!cfg) return;
+    e.preventDefault();
+    const view = document.querySelector('.gp-view.is-on')?.dataset.view;
+    const grid = document.querySelector('.gp-view.is-on .gp-grid');
+    const el = await _gpInsertConfigIntoView(cfg, view, grid);
+    if (el) showToast('Card duplicated');
+    return;
+  }
+  const card = _gpActiveCard();
+  if (!_gpIsBuilderCard(card)) return;
+  e.preventDefault();
+  const view = card.closest('.gp-view')?.dataset.view || document.querySelector('.gp-view.is-on')?.dataset.view;
+  const grid = card.closest('.gp-grid') || document.querySelector('.gp-view.is-on .gp-grid');
+  const el = await _gpInsertConfigIntoView(card.__config, view, grid);
+  if (el) showToast('Card duplicated');
 });
 
 // ── 5. Z-score matrix sort ────────────────────────────────────

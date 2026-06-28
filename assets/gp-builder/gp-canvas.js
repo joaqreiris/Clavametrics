@@ -319,10 +319,11 @@
     reflowCard(card); persist(card); mv = null;
   }
   function onUp(e) {
-    // Click-to-edit: a real click is a pointerup whose press armed mvPending but NEVER
+    // Click-to-SELECT: a real click is a pointerup whose press armed mvPending but NEVER
     // crossed DRAG_THRESH (so it was never promoted to mv/rz). onDown already excluded
-    // interactive controls, so mvPending only exists for a press on the card body → open
-    // that card's editor. Drags (mv/rz) and pointercancel/lostpointercapture never open.
+    // interactive controls, so mvPending only exists for a press on the card body → select
+    // that card (double-click opens the editor — see gpOpenCardEditor on dblclick). Drags
+    // (mv/rz) and pointercancel/lostpointercapture never select.
     const clickCard = (e && e.type === 'pointerup' && mvPending && !mv && !rz) ? mvPending.card : null;
     if (rz) endResize(); if (mv) endMove(); mvPending = null;
     // Defensive: clear edit-active state + the inline lift on EVERY card (not just the
@@ -331,8 +332,8 @@
     // without the class.
     document.querySelectorAll('.gp-mv-active, .gp-rh-active, .is-dragging, .gpt-dragging, .gpt-drag-over, .gp-c[style*="z-index"]')
       .forEach(c => { c.classList.remove('gp-mv-active', 'gp-rh-active', 'is-dragging', 'gpt-dragging', 'gpt-drag-over'); c.style.removeProperty('z-index'); });
-    if (clickCard && !clickCard.classList.contains('gp-add') && typeof window.gpOpenCardEditor === 'function') {
-      window.gpOpenCardEditor(clickCard);
+    if (clickCard && !clickCard.classList.contains('gp-add') && typeof window.gpSelectCard === 'function') {
+      window.gpSelectCard(clickCard);
     }
   }
 
