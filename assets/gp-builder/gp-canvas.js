@@ -318,7 +318,12 @@
     if (prevDraggable == null) card.removeAttribute('draggable'); else card.setAttribute('draggable', prevDraggable);
     reflowCard(card); persist(card); mv = null;
   }
-  function onUp() {
+  function onUp(e) {
+    // Click-to-edit: a real click is a pointerup whose press armed mvPending but NEVER
+    // crossed DRAG_THRESH (so it was never promoted to mv/rz). onDown already excluded
+    // interactive controls, so mvPending only exists for a press on the card body → open
+    // that card's editor. Drags (mv/rz) and pointercancel/lostpointercapture never open.
+    const clickCard = (e && e.type === 'pointerup' && mvPending && !mv && !rz) ? mvPending.card : null;
     if (rz) endResize(); if (mv) endMove(); mvPending = null;
     // Defensive: clear edit-active state + the inline lift on EVERY card (not just the
     // one we tracked), so a card whose pointer stream was hijacked never stays "pegada"
@@ -326,6 +331,9 @@
     // without the class.
     document.querySelectorAll('.gp-mv-active, .gp-rh-active, .is-dragging, .gpt-dragging, .gpt-drag-over, .gp-c[style*="z-index"]')
       .forEach(c => { c.classList.remove('gp-mv-active', 'gp-rh-active', 'is-dragging', 'gpt-dragging', 'gpt-drag-over'); c.style.removeProperty('z-index'); });
+    if (clickCard && !clickCard.classList.contains('gp-add') && typeof window.gpOpenCardEditor === 'function') {
+      window.gpOpenCardEditor(clickCard);
+    }
   }
 
   function persist(card) {

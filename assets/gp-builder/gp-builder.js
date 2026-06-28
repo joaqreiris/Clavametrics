@@ -1177,10 +1177,24 @@
     // toast
     document.getElementById('gpbToastAct').onclick = () => toastEl.classList.remove('is-on');
 
-    // ESC key
+    // ESC key — close an inner popover/flyout first; if neither is open, close the editor.
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { closePop(); closeFly(); }
+      if (e.key !== 'Escape') return;
+      const inner = (popEl && popEl.classList.contains('is-open')) || (flyEl && flyEl.classList.contains('is-open'));
+      closePop(); closeFly();
+      if (!inner && S) cancelBuild();
     });
+    // Click on empty dashboard area (inside .gp-page, not on a card or a control) closes
+    // the editor — direct-manipulation model. Capture phase so it beats card handlers.
+    // The panel and its popovers live on <body> (outside .gp-page), so they never match.
+    document.addEventListener('pointerdown', e => {
+      if (!S || !panelEl.classList.contains('is-open')) return;
+      const t = e.target;
+      if (!t.closest || !t.closest('.gp-page')) return;
+      if (t.closest('.gp-c')) return;                                            // a card → click-to-edit
+      if (t.closest('button, select, input, textarea, a, [role=button], .gp-c-pick, .pill')) return; // a control
+      cancelBuild();
+    }, true);
   }
 
   // ── Type / metric management ──────────────────────────────
