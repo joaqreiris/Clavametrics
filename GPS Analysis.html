@@ -461,7 +461,7 @@
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 
   /* ── GPS interactive controls ─────────────────────────────── */
-  .gp-popover { position:fixed; z-index:900; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; min-width:180px; }
+  .gp-popover { position:fixed; z-index:970; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); box-shadow:0 8px 24px rgba(0,0,0,.18); padding:4px; min-width:180px; }
   .gp-popover-item { display:flex; align-items:center; gap:8px; width:100%; padding:7px 10px; border:0; background:transparent; color:var(--cm-fg); font:500 13px/1 var(--cm-font-sans); cursor:pointer; border-radius:5px; text-align:left; }
   .gp-popover-item:hover { background:var(--cm-bg-soft); color:var(--cm-fg-strong); }
   .gp-popover-item .ti { font-size:14px; color:var(--cm-fg-muted); }
@@ -2263,12 +2263,13 @@ async function _gpOpenAssignRivals() {
   const ov   = makeModal('Assign rival to GPS days', '<div id="arBody" style="min-width:540px;max-width:640px"><div style="padding:24px;color:var(--cm-fg-muted)">Loading GPS days…</div></div>');
   const body = ov.querySelector('#arBody');
   try {
-    let sq = window.sb.from('training_sessions')
+    // NO team filter here: the real inclusion criterion is "the session has GPS
+    // reports of THIS club" (cnt.has below) + "no rival yet". Imported / container
+    // sessions often have team_id null or a different team — filtering by the active
+    // team hid exactly the days that need a rival. Club-scoped only.
+    const sq = window.sb.from('training_sessions')
       .select('id, session_date, session_type, session_attributes')
-      .eq('club_id', clubId).order('session_date', { ascending: false });
-    // Team scope MUST include legacy null-team sessions — that's exactly where the
-    // imported GPS days without a rival live (same team-or-null scope as the resolver).
-    if (teamId) sq = sq.or(`team_id.eq.${teamId},team_id.is.null`);
+      .eq('club_id', clubId).order('session_date', { ascending: false }).limit(5000);
     const [{ data: sessions }, { data: reps }, { data: opps }] = await Promise.all([
       sq,
       window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false).limit(50000),
@@ -2284,18 +2285,33 @@ async function _gpOpenAssignRivals() {
     if (!rows.length) { body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">Every GPS day already has a rival. 🎉</div>'; return; }
     body.innerHTML = `
       <p style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">GPS days with no rival yet. Assigning sets the day as a match vs the chosen rival (the session is reused — Calendar/Planner unaffected).</p>
+      <input id="arSearch" type="text" placeholder="Search date…" style="width:100%;margin:0 0 10px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
       <div style="max-height:48vh;overflow:auto"><table class="gp-map-table" style="width:100%">
         <thead><tr><th>Date</th><th>Type</th><th>Players</th><th style="text-align:right">Rival</th></tr></thead>
         <tbody>${rows.map(r => `
-          <tr data-sid="${r.id}" data-date="${r.date}">
+          <tr data-sid="${r.id}" data-date="${r.date}" data-search="${(r.date + ' ' + (r.type || '')).toLowerCase()}">
             <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
             <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
             <td style="font:500 11.5px/1 var(--cm-font-mono)">${r.players}</td>
             <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-assign" data-sid="${r.id}" data-date="${r.date}"><i class="ti ti-ball-football" style="font-size:14px"></i>Assign rival</button></td>
           </tr>`).join('')}</tbody>
-      </table></div>`;
+      </table>
+      <div id="arNoMatch" style="display:none;padding:18px;text-align:center;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">No days match.</div></div>`;
     body.querySelectorAll('.ar-assign').forEach(btn =>
       btn.addEventListener('click', () => _gpRivalPicker(btn, clubId, teamId, btn.dataset.sid, btn.dataset.date)));
+    const arSearch = body.querySelector('#arSearch');
+    const arRows   = [...body.querySelectorAll('tbody tr')];
+    const arEmpty  = body.querySelector('#arNoMatch');
+    arSearch.addEventListener('input', () => {
+      const q = arSearch.value.trim().toLowerCase();
+      let shown = 0;
+      arRows.forEach(tr => {
+        const hit = !q || tr.dataset.search.includes(q);
+        tr.style.display = hit ? '' : 'none';
+        if (hit) shown++;
+      });
+      arEmpty.style.display = shown ? 'none' : '';
+    });
   } catch (e) {
     body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`;
   }
