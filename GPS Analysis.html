@@ -2266,7 +2266,9 @@ async function _gpOpenAssignRivals() {
     let sq = window.sb.from('training_sessions')
       .select('id, session_date, session_type, session_attributes')
       .eq('club_id', clubId).order('session_date', { ascending: false });
-    if (teamId) sq = sq.eq('team_id', teamId);
+    // Team scope MUST include legacy null-team sessions — that's exactly where the
+    // imported GPS days without a rival live (same team-or-null scope as the resolver).
+    if (teamId) sq = sq.or(`team_id.eq.${teamId},team_id.is.null`);
     const [{ data: sessions }, { data: reps }, { data: opps }] = await Promise.all([
       sq,
       window.sb.from('gps_reports').select('session_id').eq('club_id', clubId).eq('is_invalid', false).limit(50000),
