@@ -2895,10 +2895,19 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
     { label: 'Remove',        icon: 'ti-trash' },
   ], item => {
     if (item.label === 'Duplicate') {
-      const clone = card.cloneNode(true);
-      initSizeToggles(clone);
-      card.after(clone);
-      showToast('Card duplicated');
+      // Builder cards → clone the gp.card/v1 CONFIG + new id (persisted, editable
+      // independently). Science cards keep the legacy DOM clone (not config-backed).
+      if (_gpIsBuilderCard(card)) {
+        const view = card.closest('.gp-view')?.dataset.view
+                  || document.querySelector('.gp-view.is-on')?.dataset.view;
+        const grid = card.closest('.gp-grid') || document.querySelector('.gp-view.is-on .gp-grid');
+        _gpInsertConfigIntoView(card.__config, view, grid).then(el => el && showToast('Card duplicated'));
+      } else {
+        const clone = card.cloneNode(true);
+        initSizeToggles(clone);
+        card.after(clone);
+        showToast('Card duplicated');
+      }
     } else if (item.label === 'Remove') {
       const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
       const defs = GP_CARD_DEFS[view] || [];
@@ -2956,6 +2965,94 @@ document.addEventListener('keydown', e => {
   closePop();
   const ov = [...document.querySelectorAll('.gp-modal-overlay')].pop();
   if (ov) ov.remove();
+});
+
+// ── 4c. Copy / cut / paste builder cards (Cmd/Ctrl + C / X / V) ───────────────
+// Operates on the gp.card/v1 CONFIG (the source of truth), not the DOM node. Internal
+// clipboard (window.__gpCardClipboard) survives view switches in-session. Science cards
+// are not gp.card/v1 → excluded. The active target is the last card clicked/hovered.
+window.__gpCardClipboard = window.__gpCardClipboard || null;
+window.__gpFocusedCardId  = window.__gpFocusedCardId || null;
+(function () {
+  const setFocus = e => { const c = e.target?.closest?.('.gp-c'); if (c && c.id) window.__gpFocusedCardId = c.id; };
+  document.addEventListener('pointerover', setFocus, true);
+  document.addEventListener('pointerdown', setFocus, true);
+})();
+function _gpActiveCard() { return window.__gpFocusedCardId ? document.getElementById(window.__gpFocusedCardId) : null; }
+function _gpIsBuilderCard(card) {
+  return !!card && card.dataset.card === 'chart' && card.__config && card.__config.schema === 'gp.card/v1';
+}
+// Insert a config as a NEW card into a view's grid: persist → build DOM → render → save layout.
+async function _gpInsertConfigIntoView(srcConfig, view, grid) {
+  if (!srcConfig || !view || !grid) return null;
+  const config = (typeof structuredClone === 'function') ? structuredClone(srcConfig) : JSON.parse(JSON.stringify(srcConfig));
+  delete config.id;
+  let newId = null;
+  try {
+    const clubId = window._gpClubId || await window.getClubId?.();
+    const uid = await window.gpsGetUserId?.();
+    if (clubId && window.saveDashboardCard) newId = await window.saveDashboardCard(config, clubId, view, uid, window.sb);
+  } catch (e) { console.warn('paste/duplicate persist:', e); }
+  newId = newId || ('paste-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+  const el = window.gpBuildBuilderCardEl(config, newId);
+  // Append before the "Add card" tile; the canvas engine auto-flows it to a free spot
+  // (so it never overlaps the source exactly).
+  const addBtn = grid.querySelector('.gp-add');
+  if (addBtn) grid.insertBefore(el, addBtn); else grid.appendChild(el);
+  const clubId = window._gpClubId || await window.getClubId?.();
+  if (window.GpBuilder?.resolveAndRenderCard) window.GpBuilder.resolveAndRenderCard(el, config);
+  else if (typeof _resolveAndRenderSavedCard === 'function') _resolveAndRenderSavedCard(el, config, clubId).catch(() => {});
+  if (config.viz === 'kpi') window.gpbStripKpiHeader?.(el);
+  saveLayout(view).catch(() => {});
+  return el;
+}
+function _gpCopyCard(card) {
+  if (!_gpIsBuilderCard(card)) return false;
+  const cfg = (typeof structuredClone === 'function') ? structuredClone(card.__config) : JSON.parse(JSON.stringify(card.__config));
+  delete cfg.id;
+  window.__gpCardClipboard = cfg;
+  return true;
+}
+async function _gpRemoveCard(card) {
+  const view = card.closest('.gp-view')?.dataset.view;
+  const cid = card.dataset.cardId;
+  card.remove();
+  if (window.deleteDashboardCard && cid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cid)) {
+    window.deleteDashboardCard(cid, window.sb).catch(e => console.warn('cut delete:', e));
+  }
+  if (view) saveLayout(view).catch(() => {});
+}
+async function _gpPasteCard() {
+  if (!window.__gpCardClipboard) return;
+  const view = document.querySelector('.gp-view.is-on')?.dataset.view;
+  const grid = document.querySelector('.gp-view.is-on .gp-grid');
+  if (!view || !grid) { showToast('No active dashboard', true); return; }
+  const el = await _gpInsertConfigIntoView(window.__gpCardClipboard, view, grid);
+  if (el) showToast('Card pasted');
+}
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k !== 'c' && k !== 'x' && k !== 'v') return;
+  const t = e.target;
+  // never hijack typing, nor fire while a modal / the builder panel / the source drawer is open
+  if (t.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+  if (document.querySelector('.gp-modal-overlay, .es-panel.is-open, .gp-src-drawer.is-open')) return;
+  if (k === 'v') {
+    if (!window.__gpCardClipboard) return;          // nothing to paste → let the OS handle it
+    e.preventDefault(); _gpPasteCard(); return;
+  }
+  // C / X need a builder-card target; let real text selections copy normally
+  if (k === 'c' && window.getSelection && String(window.getSelection()).trim()) return;
+  const card = _gpActiveCard();
+  if (!card) return;
+  if (!_gpIsBuilderCard(card)) {
+    if (card.classList.contains('gp-c')) { e.preventDefault(); showToast('Only builder cards can be copied'); }
+    return;
+  }
+  e.preventDefault();
+  if (k === 'c') { if (_gpCopyCard(card)) showToast('Card copied'); }
+  else { if (_gpCopyCard(card)) { _gpRemoveCard(card); showToast('Card cut'); } }
 });
 
 // ── 5. Z-score matrix sort ────────────────────────────────────
@@ -3124,6 +3221,60 @@ document.querySelector('.gp-conns')?.addEventListener('click', e => {
 </script>
 
 <script>
+// Build a builder-card (.gp-c) DOM element from a gp.card/v1 config. Single source of
+// truth for both the saved-card mount loop and copy/paste/duplicate. Wires the size-toggle
+// and the ✕ delete (removes DOM + its dashboard_cards row when persisted). Editing is via
+// click-to-edit (no pencil). The caller appends it and triggers the render.
+window.gpBuildBuilderCardEl = function (config, cardId) {
+  const el = document.createElement('div');
+  el.className = 'gp-c';
+  el.dataset.size     = config.style?.size || 'md';
+  el.dataset.card     = 'chart';
+  el.dataset.cardId   = cardId;
+  el.__config         = config;
+  el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
+  // KPI cards render WITHOUT the .gp-c-h header (the tile carries its own label); their
+  // ✕ lives in a floating overlay. Charts/tables keep the full header.
+  const _isKpi = config.viz === 'kpi';
+  const _safeTitle = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  if (_isKpi) el.dataset.cardTitle = config.title || '';   // keep title for example-card dedup
+  el.innerHTML = _isKpi
+    ? `<div class="gp-kpi-actions">
+            <button data-del title="Remove card"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="gp-c-b">
+        <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
+      </div>`
+    : `<div class="gp-c-h">
+        <span class="ttl">${_safeTitle}</span>
+        <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
+        <div class="right">
+          <div class="size-toggle">
+            <button>S</button><button>M</button><button>L</button><button style="width:30px">FULL</button>
+          </div>
+          <button data-del title="Remove card"><i class="ti ti-x"></i></button>
+        </div>
+      </div>
+      <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
+        <div class="cb2-state load" style="min-height:120px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
+      </div>`;
+  // sync size-toggle selection (charts only; KPI has no toggle)
+  const sizeMap = { sm:'S', md:'M', lg:'L', full:'FULL' };
+  el.querySelectorAll('.size-toggle button').forEach(b =>
+    b.classList.toggle('is-on', b.textContent.trim() === (sizeMap[el.dataset.size] || 'M')));
+  // delete → remove DOM + its dashboard_cards row (only when it's a persisted UUID)
+  el.querySelector('[data-del]')?.addEventListener('click', () => {
+    const cid = el.dataset.cardId;
+    el.remove();
+    if (window.deleteDashboardCard && cid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cid)) {
+      window.deleteDashboardCard(cid, window.sb).catch(e => console.warn('deleteDashboardCard:', e));
+    }
+    const v = document.querySelector('.gp-view.is-on')?.dataset.view;
+    if (v) saveLayout(v).catch(() => {});
+  });
+  return el;
+};
+
 // ── GPS Builder Fase 2: mount saved builder cards onto each view's grid ──
 // Dual-read: existing predefined cards (HTML) stay unchanged.
 // Builder cards stored in dashboard_cards are appended to the same grid.
@@ -3157,57 +3308,10 @@ async function _mountSavedBuilderCards(clubId) {
       // Si ya hay un elemento para esta card.id en la grilla, no crear otro (evita duplicado).
       if (grid.querySelector(`.gp-c[data-card-id="${(window.CSS?.escape?.(card.id)) || card.id}"]`)) continue;
 
-      const el = document.createElement('div');
-      el.className = 'gp-c';
-      el.dataset.size     = card.size || config.style?.size || 'md';
-      el.dataset.card     = 'chart';
-      el.dataset.cardId   = card.id;
-      el.__config         = config;
-      el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
-      // KPI cards render WITHOUT the .gp-c-h header (the tile carries its own
-      // internal label → a header title would duplicate it). Edit/delete go into
-      // a floating overlay instead. Charts/tables keep the full header.
-      const _isKpi = config.viz === 'kpi';
-      const _safeTitle = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-      if (_isKpi) el.dataset.cardTitle = config.title || '';   // keep title for example-card dedup
-      el.innerHTML = _isKpi
-        ? `<div class="gp-kpi-actions">
-                        <button data-del title="Remove card"><i class="ti ti-x"></i></button>
-          </div>
-          <div class="gp-c-b">
-            <div class="cb2-state load" style="min-height:100px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
-          </div>`
-        : `<div class="gp-c-h">
-            <span class="ttl">${_safeTitle}</span>
-            <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
-            <div class="right">
-              <div class="size-toggle">
-                <button>S</button><button>M</button><button>L</button><button style="width:30px">FULL</button>
-              </div>
-                            <button data-del title="Remove card"><i class="ti ti-x"></i></button>
-            </div>
-          </div>
-          <div class="gp-c-b" style="min-height:160px;align-items:center;justify-content:center">
-            <div class="cb2-state load" style="min-height:120px"><div class="cb2-spin"></div><div class="t">Loading…</div></div>
-          </div>`;
-
-      // sync size-toggle selection (charts only; KPI has no toggle)
-      const sizeMap = { sm:'S', md:'M', lg:'L', full:'FULL' };
+      const el = window.gpBuildBuilderCardEl(config, card.id);
+      el.dataset.size = card.size || config.style?.size || 'md';
       el.querySelectorAll('.size-toggle button').forEach(b =>
-        b.classList.toggle('is-on', b.textContent.trim() === (sizeMap[el.dataset.size] || 'M'))
-      );
-
-      el.querySelector('[data-edit]')?.addEventListener('click', () => {
-        if (window.GpBuilder?.openForEdit) window.GpBuilder.openForEdit(el);
-      });
-
-      // delete button
-      el.querySelector('[data-del]')?.addEventListener('click', async () => {
-        el.remove();
-        if (window.deleteDashboardCard && card.id) {
-          window.deleteDashboardCard(card.id, window.sb).catch(e => console.warn('deleteDashboardCard:', e));
-        }
-      });
+        b.classList.toggle('is-on', b.textContent.trim() === ({ sm:'S', md:'M', lg:'L', full:'FULL' }[el.dataset.size] || 'M')));
 
       grid.appendChild(el);
       grid.dataset.gptBuilderMounted = '1';
