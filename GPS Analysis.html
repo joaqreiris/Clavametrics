@@ -3839,6 +3839,13 @@ function _showCardError(cardId, err) {
   console.error('[GPS card ' + cardId + ']', err);
 }
 
+// Soft empty state: not an error, just no data to chart (keeps the card from going gray).
+function _showCardEmpty(cardId, msg) {
+  const card = document.getElementById(cardId);
+  const body = card?.querySelector('.gp-c-b');
+  if (body) body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:80px;padding:14px;color:var(--cm-fg-muted);font:500 11.5px/1.4 var(--cm-font-sans)">' + (msg || 'No data') + '</div>';
+}
+
 window.gpRenderScienceCards = async function (reports, clubId) {
   // Synchronous cards first — each isolated so one failure never cascades
   try { _renderVzones(reports);   } catch(e) { _showCardError('card-vzones', e); }
@@ -3870,13 +3877,25 @@ window.gpRenderScienceCards = async function (reports, clubId) {
   // ACWR base metric is configurable (card-acwr[data-metric-key]); default player_load.
   // The shared `daily` below stays player_load (TSB et al. depend on it); a separate
   // `acwrDaily` drives the ACWR chart when a different base metric is chosen.
-  const acwrMetric = document.getElementById('card-acwr')?.dataset.metricKey || 'player_load';
+  let acwrMetric = document.getElementById('card-acwr')?.dataset.metricKey || 'player_load';
   const _acwrCols  = acwrMetric !== 'player_load' ? `,${acwrMetric}` : '';
-  const { data: histLoads } = await _scopeTeam(window.sb.from('gps_reports')
+  let { data: histLoads, error: histLoadsErr } = await _scopeTeam(window.sb.from('gps_reports')
     .eq('is_invalid', false)
     .select(`session_id,player_load${_acwrCols}`)
     .in('session_id', hids.slice(0, 400))
     .eq('club_id', clubId));
+  // If the chosen ACWR base-metric column doesn't exist (legacy/bad metricKey), the
+  // select errors and returns null — that silently emptied the whole science section.
+  // Fall back to player_load so the cards still render.
+  if (histLoadsErr && _acwrCols) {
+    console.error('[GPS ACWR] base-metric "' + acwrMetric + '" select failed, falling back to player_load:', histLoadsErr);
+    acwrMetric = 'player_load';
+    ({ data: histLoads } = await _scopeTeam(window.sb.from('gps_reports')
+      .eq('is_invalid', false)
+      .select('session_id,player_load')
+      .in('session_id', hids.slice(0, 400))
+      .eq('club_id', clubId)));
+  }
 
   // Build session → avg load map
   const loadBySession = {};
@@ -3900,14 +3919,19 @@ window.gpRenderScienceCards = async function (reports, clubId) {
     });
   const acwrDaily = acwrMetric === 'player_load' ? daily : _dailyFrom(acwrMetric);
 
-  if (!daily.length) return;
+  // No load history → the trend charts can't be computed. Mark the ACWR card with an
+  // explicit "No data" state instead of leaving it gray, then stop.
+  if (!daily.length) { _showCardEmpty('card-acwr', 'No data'); return; }
 
   // ── ACWR chart ────────────────────────────────────────────
   try {
   const canvasACWR = document.getElementById('canvasACWR');
-  if (canvasACWR && window.gpScience) {
+  const acwrData = window.gpScience ? window.gpScience.acwr(acwrDaily || []) : [];
+  if (canvasACWR && window.gpScience && !acwrData.length) {
+    // Computed but nothing to plot → soft empty state (don't abort the other cards).
+    _showCardEmpty('card-acwr', 'No data');
+  } else if (canvasACWR && window.gpScience) {
     Chart.getChart(canvasACWR)?.destroy();
-    const acwrData = window.gpScience.acwr(acwrDaily);
     // Reflect the chosen base metric in the in-chart dropdown chip.
     const _acwrChip = document.querySelector('#card-acwr [data-acwr-metric-pick]');
     if (_acwrChip) {
