@@ -252,7 +252,7 @@ Deno.serve(async (req: Request) => {
       return !isNaN(ms) && ms >= fromMsRange && ms <= toMsRange;
     });
 
-    let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0;
+    let syncedActivities = 0, syncedRows = 0, syncedPeriods = 0, skippedUnmapped = 0, flaggedPeriods = 0;
     const errors: string[] = [];
 
     for (const act of activities) {
@@ -386,11 +386,22 @@ Deno.serve(async (req: Request) => {
               const extra_metrics: Record<string, number> = {};
               for (const ex of extras) extra_metrics[ex.metric_key] = ex.value;
 
+              // FLAG (don't drop): avg speed = total_distance(m) / duration(s). > 13 m/s is
+              // physically impossible for a drill (GPS left on outside the pitch → noise).
+              // We MARK it so the user can review/exclude later; the data is never lost.
+              const _td  = typeof core.total_distance === 'number' ? core.total_distance : null;
+              const _mps = (_td != null && durationSeconds != null && durationSeconds > 0)
+                ? _td / durationSeconds : null;
+              const isSpeedOutlier = _mps != null && _mps > 13;
+              if (isSpeedOutlier) flaggedPeriods++;
+
               periodRecs.push({
                 club_id: clubId, session_id: sessionId, player_id: playerId,
                 period_id: periodId, period_name: periodName,
                 duration_seconds: durationSeconds ?? null,
                 ...core, extra_metrics,
+                is_flagged: isSpeedOutlier,
+                flag_reason: isSpeedOutlier ? 'speed_outlier' : null,
               });
             }
             if (periodRecs.length) {
@@ -413,7 +424,9 @@ Deno.serve(async (req: Request) => {
     await adminClient.from('gps_integrations')
       .update({ last_sync_at: new Date().toISOString(), last_error: null }).eq('id', integration_id);
 
-    return json({ ok: true, synced_activities: syncedActivities, synced_rows: syncedRows, synced_periods: syncedPeriods, skipped_unmapped: skippedUnmapped, unmapped_params: [...unmappedParams], errors });
+    console.log(`[gps-sync] flagged ${flaggedPeriods} periods: speed_outlier`);
+
+    return json({ ok: true, synced_activities: syncedActivities, synced_rows: syncedRows, synced_periods: syncedPeriods, flagged_periods: flaggedPeriods, skipped_unmapped: skippedUnmapped, unmapped_params: [...unmappedParams], errors });
 
   } catch (err) {
     const message = String((err as Error)?.message || err);
