@@ -356,18 +356,21 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 /* ── Conditional table formatting (GPS Chart Reference §5 · adapted to cm tokens) ─────
    Per-column cell modes: bar / heat / icon / pct / plain. Min/max & thresholds are
    computed from the REAL column data in gp-builder.js — nothing here is hardcoded. */
-.gp-zt td.tf { padding: 3px 8px; }
-.tf-c { display: flex; align-items: center; gap: 7px; min-height: 24px; font: 600 12px/1 var(--cm-font-mono); color: var(--cm-fg); }
+/* Density: cell padding/height/font follow the shared --cm-tbl-* tokens (defined in :root
+   on the dashboard). --cm-tbl-bar-h drives the bar/heat chip height so the row compacts to
+   ~--cm-row-h. Fallbacks keep this self-contained if the tokens aren't present. */
+.gp-zt td.tf { padding: var(--cm-tbl-pad-y, 4px) 8px; }
+.tf-c { display: flex; align-items: center; gap: 7px; min-height: var(--cm-tbl-bar-h, 18px); font: 600 var(--cm-tbl-fs, 12px)/1 var(--cm-font-mono); color: var(--cm-fg); }
 .tf-c.plain, .tf-c.icon { justify-content: center; }
 .tf-c.heat { justify-content: center; }
 
 /* bar: proportional fill behind the value */
-.tf-c.bar { position: relative; justify-content: flex-end; padding: 0 8px; min-width: 76px; height: 22px; border-radius: 5px; background: var(--cm-bg-soft); overflow: hidden; }
+.tf-c.bar { position: relative; justify-content: flex-end; padding: 0 8px; min-width: 76px; height: var(--cm-tbl-bar-h, 18px); border-radius: 5px; background: var(--cm-bg-soft); overflow: hidden; }
 .tf-c.bar .tf-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cm-accent); border-radius: 5px; opacity: .85; }
 .tf-c.bar .tf-val { position: relative; z-index: 1; }
 
 /* heat: full-cell color chip (bg set inline per value) */
-.tf-c.heat.heat-cell { width: 100%; min-width: 56px; height: 24px; border-radius: 5px; }
+.tf-c.heat.heat-cell { width: 100%; min-width: 56px; height: var(--cm-tbl-bar-h, 18px); border-radius: 5px; }
 
 /* icon: traffic dot or arrow + value */
 .tf-c.icon .tf-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
