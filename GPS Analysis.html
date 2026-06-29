@@ -2907,7 +2907,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
         const view = card.closest('.gp-view')?.dataset.view
                   || document.querySelector('.gp-view.is-on')?.dataset.view;
         const grid = card.closest('.gp-grid') || document.querySelector('.gp-view.is-on .gp-grid');
-        _gpInsertConfigIntoView(card.__config, view, grid).then(el => el && showToast('Card duplicated'));
+        _gpInsertConfigIntoView(card.__config, view, grid, _gpCardSize(card)).then(el => el && showToast('Card duplicated'));
       } else {
         const clone = card.cloneNode(true);
         initSizeToggles(clone);
@@ -2915,17 +2915,7 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
         showToast('Card duplicated');
       }
     } else if (item.label === 'Remove') {
-      const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
-      const defs = GP_CARD_DEFS[view] || [];
-      const isCatalogCard = card.id && defs.some(d => d.id === card.id);
-      if (isCatalogCard) {
-        _cardStash.set(card.id, card);
-        card.remove();
-        showToast('Card removed — recoverable via Add card');
-        saveLayout(view).catch(e => console.warn('saveLayout on remove:', e));
-      } else {
-        card.remove();
-      }
+      _gpRemoveCardCoherent(card);   // catalog → stash; custom/pasted → delete row. Same as Delete key.
     } else if (item.label === 'Change metric') {
       if (!card.dataset.cardId) { showToast('Change metric not available for this card'); return; }
       openChangeMetricModal(card);
@@ -3025,8 +3015,37 @@ function _gpActiveCard() {
 function _gpIsBuilderCard(card) {
   return !!card && card.dataset.card === 'chart' && card.__config && card.__config.schema === 'gp.card/v1';
 }
-// Insert a config as a NEW card into a view's grid: persist → build DOM → render → save layout.
-async function _gpInsertConfigIntoView(srcConfig, view, grid) {
+// Snapshot the free-canvas geometry of a card (lives in the DOM, NOT in __config).
+function _gpCardSize(card) {
+  if (!card) return null;
+  const num = v => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
+  return { w: num(card.dataset.w), h: num(card.dataset.h),
+           x: num(card.dataset.x), y: num(card.dataset.y),
+           dataSize: card.dataset.size || null };
+}
+// Place a freshly-built card BESIDE the source (right; else first free row in its column),
+// clamped to the canvas, reusing the captured w/h. Explicit coords → the canvas engine
+// keeps them (toCanvasLayout respects coords) instead of auto-flowing to a default size.
+function _gpPlacePasted(el, grid, size) {
+  if (!size || (!size.w && !size.h)) return;
+  const C = (window.gpCanvas && window.gpCanvas.COLS) || 12;
+  const w = size.w || parseInt(el.dataset.w, 10) || 6;
+  const h = size.h || parseInt(el.dataset.h, 10) || 7;
+  const sx = Number.isFinite(size.x) ? size.x : 0;
+  const sy = Number.isFinite(size.y) ? size.y : 0;
+  const occ = [...grid.querySelectorAll(':scope > .gp-c')].filter(c => c !== el)
+    .map(c => ({ x: +c.dataset.x, y: +c.dataset.y, w: +c.dataset.w, h: +c.dataset.h }))
+    .filter(r => [r.x, r.y, r.w, r.h].every(Number.isFinite));
+  const free = (x, y) => x >= 0 && x + w <= C && !occ.some(r => x < r.x + r.w && x + w > r.x && y < r.y + r.h && y + h > r.y);
+  let x, y;
+  if (free(sx + w, sy)) { x = sx + w; y = sy; }                    // beside (right)
+  else { x = Math.max(0, Math.min(sx, C - w)); y = sy; let g = 0; while (!free(x, y) && g++ < 500) y++; }  // first free row below
+  if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, { x, y, w, h });
+  else { el.dataset.x = x; el.dataset.y = y; el.dataset.w = w; el.dataset.h = h; }
+  if (size.dataSize) el.dataset.size = size.dataSize;
+}
+// Insert a config as a NEW card into a view's grid: persist → build DOM → size+place → render.
+async function _gpInsertConfigIntoView(srcConfig, view, grid, size) {
   if (!srcConfig || !view || !grid) return null;
   const config = (typeof structuredClone === 'function') ? structuredClone(srcConfig) : JSON.parse(JSON.stringify(srcConfig));
   delete config.id;
@@ -3038,8 +3057,9 @@ async function _gpInsertConfigIntoView(srcConfig, view, grid) {
   } catch (e) { console.warn('paste/duplicate persist:', e); }
   newId = newId || ('paste-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
   const el = window.gpBuildBuilderCardEl(config, newId);
-  // Append before the "Add card" tile; the canvas engine auto-flows it to a free spot
-  // (so it never overlaps the source exactly).
+  // Keep the source's size and drop it beside the original (coords set BEFORE append so the
+  // canvas engine respects them). Without a size, fall back to the auto-flow default.
+  _gpPlacePasted(el, grid, size);
   const addBtn = grid.querySelector('.gp-add');
   if (addBtn) grid.insertBefore(el, addBtn); else grid.appendChild(el);
   const clubId = window._gpClubId || await window.getClubId?.();
@@ -3053,25 +3073,42 @@ function _gpCopyCard(card) {
   if (!_gpIsBuilderCard(card)) return false;
   const cfg = (typeof structuredClone === 'function') ? structuredClone(card.__config) : JSON.parse(JSON.stringify(card.__config));
   delete cfg.id;
-  window.__gpCardClipboard = cfg;
+  window.__gpCardClipboard = { cfg, size: _gpCardSize(card) };   // size lives in the DOM, not cfg
   return true;
 }
-async function _gpRemoveCard(card) {
-  const view = card.closest('.gp-view')?.dataset.view;
-  const cid = card.dataset.cardId;
+// Coherent removal — single source of truth for the "…" Remove, Cmd+X and the Delete key.
+// Catalog (HTML) cards → stash + saveLayout (recoverable via Add card). Custom/pasted cards
+// → remove + delete their dashboard_cards row. Always clears selection + persists layout.
+function _gpRemoveCardCoherent(card, opts) {
+  if (!card) return;
+  const silent = opts && opts.silent;
+  const view = card.closest('.gp-view')?.dataset.view || document.querySelector('.gp-view.is-on')?.dataset.view;
+  const defs = GP_CARD_DEFS[view] || [];
+  const isCatalogCard = card.id && defs.some(d => d.id === card.id);
   if (card === _gpSelectedCard) window.gpDeselectCards();
-  card.remove();
-  if (window.deleteDashboardCard && cid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cid)) {
-    window.deleteDashboardCard(cid, window.sb).catch(e => console.warn('cut delete:', e));
+  if (isCatalogCard) {
+    _cardStash.set(card.id, card);
+    card.remove();
+    if (!silent) showToast('Card removed — recoverable via Add card');
+  } else {
+    const cid = card.dataset.cardId;
+    card.remove();
+    if (window.deleteDashboardCard && cid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cid)) {
+      window.deleteDashboardCard(cid, window.sb).catch(e => console.warn('deleteDashboardCard:', e));
+    }
+    if (!silent) showToast('Card removed');
   }
-  if (view) saveLayout(view).catch(() => {});
+  if (view) saveLayout(view).catch(e => console.warn('saveLayout on remove:', e));
 }
 async function _gpPasteCard() {
-  if (!window.__gpCardClipboard) return;
+  const clip = window.__gpCardClipboard;
+  if (!clip) return;
+  const cfg  = clip.cfg || clip;            // tolerate an older flat-config clipboard
+  const size = clip.size || null;
   const view = document.querySelector('.gp-view.is-on')?.dataset.view;
   const grid = document.querySelector('.gp-view.is-on .gp-grid');
   if (!view || !grid) { showToast('No active dashboard', true); return; }
-  const el = await _gpInsertConfigIntoView(window.__gpCardClipboard, view, grid);
+  const el = await _gpInsertConfigIntoView(cfg, view, grid, size);
   if (el) showToast('Card pasted');
 }
 document.addEventListener('keydown', e => {
@@ -3096,7 +3133,7 @@ document.addEventListener('keydown', e => {
   }
   e.preventDefault();
   if (k === 'c') { if (_gpCopyCard(card)) showToast('Card copied'); }
-  else { if (_gpCopyCard(card)) { _gpRemoveCard(card); showToast('Card cut'); } }
+  else { if (_gpCopyCard(card)) { _gpRemoveCardCoherent(card, { silent: true }); showToast('Card cut'); } }
 });
 // Cmd/Ctrl+D = duplicate (config + new id). While the BUILDER is open → duplicate the
 // in-progress config (the brief's "Duplicate inside the builder"). Otherwise → duplicate
@@ -3112,7 +3149,7 @@ document.addEventListener('keydown', async e => {
     e.preventDefault();
     const view = document.querySelector('.gp-view.is-on')?.dataset.view;
     const grid = document.querySelector('.gp-view.is-on .gp-grid');
-    const el = await _gpInsertConfigIntoView(cfg, view, grid);
+    const el = await _gpInsertConfigIntoView(cfg, view, grid, _gpCardSize(_gpActiveCard()));
     if (el) showToast('Card duplicated');
     return;
   }
@@ -3121,8 +3158,20 @@ document.addEventListener('keydown', async e => {
   e.preventDefault();
   const view = card.closest('.gp-view')?.dataset.view || document.querySelector('.gp-view.is-on')?.dataset.view;
   const grid = card.closest('.gp-grid') || document.querySelector('.gp-view.is-on .gp-grid');
-  const el = await _gpInsertConfigIntoView(card.__config, view, grid);
+  const el = await _gpInsertConfigIntoView(card.__config, view, grid, _gpCardSize(card));
   if (el) showToast('Card duplicated');
+});
+// Delete / Backspace → remove the SELECTED card (reuses the coherent Remove logic).
+// Never when typing in a field, or while a modal / builder / drawer is open.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  const t = e.target;
+  if (t.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+  if (document.querySelector('.gp-modal-overlay, .es-panel.is-open, .gp-src-drawer.is-open')) return;
+  const card = _gpActiveCard();
+  if (!card || !card.classList.contains('gp-c')) return;
+  e.preventDefault();
+  _gpRemoveCardCoherent(card);
 });
 
 // ── 5. Z-score matrix sort ────────────────────────────────────
