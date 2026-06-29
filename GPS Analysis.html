@@ -2651,15 +2651,103 @@ document.querySelectorAll('.gp-view').forEach(view => {
 // ── 0. Settings (⚙) menu — consolidates the setup actions (data sources, GPS settings,
 //       metrics catalog). Items delegate to the hidden buttons so handlers stay intact.
 const gpGearBtn = document.getElementById('gpGearBtn');
-gpGearBtn?.addEventListener('click', e => {
+gpGearBtn?.addEventListener('click', async e => {
   e.stopPropagation();
-  const n = window._gpSessionCount;
+  const n  = window._gpSessionCount;
+  const fc = await _gpFlaggedCount();   // periods awaiting review
   makePopover(gpGearBtn, [
     { label: 'Data sources' + (Number.isFinite(n) ? ` · ${n} GPS sessions` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
     { label: 'GPS settings',    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
     { label: 'Metrics catalog', icon: 'ti-list',                   act: 'gpCatalogBtn' },
-  ], item => document.getElementById(item.act)?.click());
+    { sep: true },
+    { label: 'Flagged periods' + (fc ? ` · ${fc} need review` : ''), icon: 'ti-flag', act: 'flagged' },
+  ], item => {
+    if (item.act === 'flagged') _gpOpenFlaggedPanel();
+    else document.getElementById(item.act)?.click();
+  });
 });
+
+// ── Flagged periods — review panel (Fase 3·B) ────────────────────────────────
+// Periods the importer marked is_flagged (speed_outlier) are EXCLUDED from analysis
+// (v_gps_task_analysis) but kept in the table. Here the user reviews each one and either
+// Deletes it (confirmed noise) or Keeps it (un-flag → back into analysis).
+window._gpFlaggedCount = window._gpFlaggedCount || 0;
+async function _gpFlaggedCount() {
+  const clubId = window._gpClubId || await window.getClubId?.();
+  if (!clubId || !window.sb) return 0;
+  const { count } = await window.sb.from('gps_period_reports')
+    .select('id', { count: 'exact', head: true })
+    .eq('club_id', clubId).eq('is_flagged', true);
+  window._gpFlaggedCount = count || 0;
+  return window._gpFlaggedCount;
+}
+async function _gpOpenFlaggedPanel() {
+  const clubId = window._gpClubId || await window.getClubId?.();
+  if (!clubId) { showToast('No club selected', true); return; }
+  const ov = makeModal('Flagged periods', '<div id="flaggedBody" style="min-width:660px;max-width:880px"><div style="padding:24px;color:var(--cm-fg-muted)">Loading…</div></div>');
+  await _gpRenderFlagged(clubId, ov.querySelector('#flaggedBody'), ov);
+}
+async function _gpRenderFlagged(clubId, body, ov) {
+  let rows;
+  try {
+    rows = await window.cmFetchAll(() => window.sb.from('gps_period_reports')
+      .select('id, period_name, duration_seconds, total_distance, flag_reason, training_sessions(session_date), players(first_name,last_name)')
+      .eq('club_id', clubId).eq('is_flagged', true), { label: 'flagged-periods' });
+  } catch (e) { body.innerHTML = `<div style="padding:24px;color:var(--cm-danger)">${e.message}</div>`; return; }
+  if (!rows.length) {
+    body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">No flagged periods. 🎉</div>';
+    window._gpFlaggedCount = 0; return;
+  }
+  window._gpFlaggedCount = rows.length;
+  const mps = r => (r.total_distance != null && r.duration_seconds) ? (r.total_distance / r.duration_seconds).toFixed(1) : '—';
+  const num = 'text-align:right;font-family:var(--cm-font-mono);font-variant-numeric:tabular-nums';
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap">
+      <span style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${rows.length} periods need review</span>
+      <span style="font:500 11px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Impossible speed (&gt;13 m/s) — likely GPS noise. Delete the noise; keep the rest (returns to analysis).</span>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="cm-btn is-outline is-sm" id="flagKeepAll"><i class="ti ti-check"></i>Keep all</button>
+        <button class="cm-btn is-outline is-sm" id="flagDelAll" style="color:var(--cm-danger);border-color:var(--cm-danger)"><i class="ti ti-trash"></i>Delete all</button>
+      </div>
+    </div>
+    <div class="gp-imp-preview" style="max-height:54vh;overflow:auto"><table>
+      <thead><tr><th>Date</th><th>Player</th><th>Period</th><th style="text-align:right">Dur (s)</th><th style="text-align:right">Total (m)</th><th style="text-align:right">m/s</th><th>Reason</th><th></th></tr></thead>
+      <tbody>${rows.map(r => `
+        <tr data-id="${r.id}">
+          <td style="font-family:var(--cm-font-mono)">${r.training_sessions?.session_date || '—'}</td>
+          <td>${[r.players?.first_name, r.players?.last_name].filter(Boolean).join(' ') || '—'}</td>
+          <td>${r.period_name || '—'}</td>
+          <td style="${num}">${r.duration_seconds != null ? Math.round(r.duration_seconds) : '—'}</td>
+          <td style="${num}">${r.total_distance != null ? Math.round(r.total_distance) : '—'}</td>
+          <td style="${num};color:var(--cm-danger)">${mps(r)}</td>
+          <td style="color:var(--cm-fg-muted)">${r.flag_reason || '—'}</td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="cm-btn is-ghost is-sm flag-keep" data-id="${r.id}" title="Un-flag · return to analysis"><i class="ti ti-check"></i>Keep</button>
+            <button class="cm-btn is-ghost is-sm flag-del"  data-id="${r.id}" title="Delete this period" style="color:var(--cm-danger)"><i class="ti ti-trash"></i>Delete</button>
+          </td>
+        </tr>`).join('')}</tbody>
+    </table></div>`;
+  body.querySelectorAll('.flag-keep').forEach(b => b.addEventListener('click', () => _gpFlagAction(clubId, body, ov, [b.dataset.id], 'keep')));
+  body.querySelectorAll('.flag-del').forEach(b => b.addEventListener('click', () => _gpFlagAction(clubId, body, ov, [b.dataset.id], 'delete')));
+  body.querySelector('#flagKeepAll').addEventListener('click', () => _gpFlagAction(clubId, body, ov, rows.map(r => r.id), 'keep'));
+  body.querySelector('#flagDelAll').addEventListener('click', () => _gpFlagAction(clubId, body, ov, rows.map(r => r.id), 'delete'));
+}
+async function _gpFlagAction(clubId, body, ov, ids, mode) {
+  if (!ids.length) return;
+  try {
+    if (mode === 'delete') {
+      const { error } = await window.sb.from('gps_period_reports').delete().eq('club_id', clubId).in('id', ids);
+      if (error) throw error;
+      showToast(ids.length > 1 ? `Deleted ${ids.length} periods` : 'Period deleted');
+    } else {
+      const { error } = await window.sb.from('gps_period_reports').update({ is_flagged: false, flag_reason: null }).eq('club_id', clubId).in('id', ids);
+      if (error) throw error;
+      showToast(ids.length > 1 ? `Kept ${ids.length} periods` : 'Period kept');
+    }
+  } catch (e) { showToast(`Action failed: ${e.message}`, true); return; }
+  await _gpRenderFlagged(clubId, body, ov);          // re-query → reflects the change
+  try { window.refreshDashboard?.(); } catch {}      // un-flagged data re-enters the analysis
+}
 
 // ── 1. Export button ──────────────────────────────────────────
 const exportBtn = document.querySelector('.gp-bar .right .cm-btn.is-outline');
