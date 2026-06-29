@@ -37,11 +37,40 @@
     { id:'player_name',  name:'Player name', icon:'ti-user',           group:'Identity' },
     { id:'position',     name:'Position',    icon:'ti-shirt-sport',    group:'Identity' },
     { id:'session_date', name:'Date',        icon:'ti-calendar',       group:'Time' },
-    { id:'md_code',      name:'MD code',     icon:'ti-calendar-event', group:'Time' },
-    { id:'microcycle',   name:'Microcycle',  icon:'ti-calendar-week',  group:'Time' },
-    { id:'rival',        name:'Rival',       icon:'ti-ball-football',  group:'Context' },
+    { id:'md_code',      name:'MD code',     icon:'ti-calendar-event', group:'Time',    sessionOnly:true },
+    { id:'microcycle',   name:'Microcycle',  icon:'ti-calendar-week',  group:'Time',    sessionOnly:true },
+    { id:'rival',        name:'Rival',       icon:'ti-ball-football',  group:'Context', sessionOnly:true },
+    // Task source only (v_gps_task_analysis)
+    { id:'drill',          name:'Drill',          icon:'ti-soccer-field', group:'Task', task:true },
+    { id:'field_size',     name:'Field size',     icon:'ti-ruler',        group:'Task', task:true },
+    { id:'players_format', name:'Players format', icon:'ti-users',        group:'Task', task:true },
   ];
   const DIM_MAP = new Map(DIMENSIONS.map(d => [d.id, d]));
+  // Which dimensions apply to a given source. task dims → task only; md/mc/rival → session
+  // only; the rest (player/position/date) → both.
+  function dimAllowed(d, source) {
+    if (!d) return false;
+    if (d.task)        return source === 'task';
+    if (d.sessionOnly) return source !== 'task';
+    return true;
+  }
+  // Per-minute / task-only METRICS — synthetic catalog entries (columns live in
+  // v_gps_task_analysis, not gps_metric_definitions). Merged into catalogMap on load and
+  // shown in the flyout only when source='task'. kind:'avg' → default agg = avg (intensity).
+  const TASK_METRICS = [
+    { id:'total_distance_per_min',           name:'Distance / min',    unit:'m/min',  kind:'avg' },
+    { id:'high_speed_distance_per_min',      name:'HSR / min',         unit:'m/min',  kind:'avg' },
+    { id:'very_high_speed_distance_per_min', name:'VHSR / min',        unit:'m/min',  kind:'avg' },
+    { id:'sprint_distance_per_min',          name:'Sprint dist / min', unit:'m/min',  kind:'avg' },
+    { id:'player_load_per_min',              name:'Player load / min', unit:'AU/min', kind:'avg' },
+    { id:'accelerations_per_min',            name:'Accel / min',       unit:'/min',   kind:'avg' },
+    { id:'decelerations_per_min',            name:'Decel / min',       unit:'/min',   kind:'avg' },
+    { id:'hmld_per_min',                     name:'HMLD / min',        unit:'m/min',  kind:'avg' },
+    { id:'m2_per_player',                    name:'m² per player',     unit:'m²',     kind:'avg' },
+    { id:'work_min',                         name:'Work (min)',        unit:'min',    kind:'accum' },
+  ].map(m => ({ ...m, group_name:'Task', is_custom:false, squad_rollup:true, decimals:1 }));
+  const TASK_METRIC_IDS   = new Set(TASK_METRICS.map(m => m.id));
+  const TASK_METRIC_GROUP = { g:'Task metrics', custom:false, items:TASK_METRICS };
   // Mock row labels per dimension — only for the builder's pre-save preview.
   const DIM_MOCK = {
     player_name:  ['R. Vega','T. López','I. Barreiro','S. Rivas','M. Paredes'],
@@ -180,7 +209,7 @@
 
   function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
   function fmt(n) { return n >= 1000 ? n.toLocaleString('en-US') : (Number.isInteger(n) ? n : n.toFixed(1)); }
-  function defaultAgg(kind) { return (kind === 'peak' || kind === 'calculated') ? 'avg' : 'total'; }
+  function defaultAgg(kind) { return (kind === 'peak' || kind === 'calculated' || kind === 'avg') ? 'avg' : 'total'; }
   function isAggOk(agg, kind) { return kind !== 'peak' || (AGG[agg] && AGG[agg].peakOk); }
   function metIcon(m) { return (m && m.calculated) ? 'ti-math-function' : (CAT_ICON[m.group_name] || 'ti-chart-bar'); }
   function metSample(m) { return CAT_SAMPLE[m.group_name] || 100; }
@@ -201,6 +230,7 @@
       schema: 'gp.card/v1',
       title:  autoTitle(S) || null,
       viz:    S.type,
+      source: S.source || 'session',
       scope:  { level: S.scope },
       metrics: S.metrics.map(m => {
         const cat = catalogMap.get(m.id) || {};
@@ -322,6 +352,9 @@
       custom: !rows.find(r => r.category === g)?.is_core,
       items:  groupMap[g],
     }));
+    // Task per-min metrics live only in v_gps_task_analysis → register them so buildConfig
+    // and the resolver can resolve them by id (the flyout shows them only when source='task').
+    TASK_METRICS.forEach(m => catalogMap.set(m.id, m));
   }
 
   // ── DOM injection ──────────────────────────────────────────
@@ -350,6 +383,13 @@
         </div>
         <div class="es-p-b" id="gpbPaneBody">
           <div class="pane is-on" data-pane="setup">
+            <div class="es-sec">
+              <div class="lab">Analyze by</div>
+              <div class="es-seg" id="gpbSource">
+                <button class="is-on" data-source="session"><i class="ti ti-calendar-stats"></i>Session</button>
+                <button data-source="task"><i class="ti ti-soccer-field"></i>Task</button>
+              </div>
+            </div>
             <div class="es-sec">
               <div class="lab">Title</div>
               <input class="es-input" id="gpbTitle" placeholder="Auto-generated">
@@ -534,7 +574,7 @@
     const p = window.gpState?.datePreset;
     if (p === 'last7') range = 'w7';
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
-    return { type:'bars', metrics:[], dimensions:[], scope:'player', scopeTouched:false, compare:'role', refMcId:null, range,
+    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, compare:'role', refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
              points:true, area:false, horizontal:false, stacked:false, sort:null };
   }
@@ -867,6 +907,7 @@
 
     if (cfg) {
       S.type    = cfg.type;
+      S.source  = cfg.source || 'session';
       S.scope   = cfg.scope;
       S.range   = cfg.range;
       S.compare = cfg.compare;
@@ -884,9 +925,10 @@
       S.sort    = cfg.sort || null;
       S.title   = cfg.title || '';
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
-      S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id)).map(d => ({ id:d.id }));
+      S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id }));
     } else if (rawConfig?.schema === 'gp.card/v1') {
       S.type    = rawConfig.viz                  || 'bars';
+      S.source  = rawConfig.source || 'session';
       S.scope   = rawConfig.scope?.level         || 'player';
       S.range   = rawConfig.range?.type          || 'mc';
       S.compare = rawConfig.comparison?.baseline || 'none';
@@ -911,7 +953,7 @@
           if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg';
           return m;
         });
-      S.dimensions = (rawConfig.dimensions || []).filter(d => DIM_MAP.has(d.id)).map(d => ({ id:d.id }));
+      S.dimensions = (rawConfig.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id }));
     } else {
       cancelBuild();
       return;
@@ -1095,6 +1137,11 @@
       });
     }
 
+    // source (Analyze by: Session / Task)
+    document.getElementById('gpbSource')?.querySelectorAll('button').forEach(b => {
+      b.onclick = () => setSource(b.dataset.source);
+    });
+
     // scope
     document.getElementById('gpbScope').querySelectorAll('button').forEach(b => {
       b.onclick = () => {
@@ -1245,6 +1292,17 @@
     syncAll();
   }
 
+  // Analyze by: Session ↔ Task. Switching prunes dims/metrics that don't apply to the new
+  // source and (for Task) defaults the range to the active season.
+  function setSource(src) {
+    if (!S || (src !== 'session' && src !== 'task') || S.source === src) return;
+    S.source = src;
+    if (src === 'task') S.range = 'season';                 // task default scope (all-time still pickable)
+    S.dimensions = (S.dimensions || []).filter(d => dimAllowed(DIM_MAP.get(d.id), src));
+    if (src !== 'task') S.metrics = (S.metrics || []).filter(m => !TASK_METRIC_IDS.has(m.id));
+    pulseNext = true; closeFly(); syncAll();
+  }
+
   // ── Sync functions ────────────────────────────────────────
 
   function syncAll() { syncTypes(); renderMetrics(); syncSelects(); syncStyle(); syncHeader(); syncSizeToggle(); renderCard(); }
@@ -1257,6 +1315,9 @@
     document.getElementById('gpbMetHint').textContent = VIZ_REQ_LBL[S.type];
     document.getElementById('gpbScope').querySelectorAll('button').forEach(b =>
       b.classList.toggle('is-on', b.dataset.scope === S.scope)
+    );
+    document.getElementById('gpbSource')?.querySelectorAll('button').forEach(b =>
+      b.classList.toggle('is-on', b.dataset.source === (S.source || 'session'))
     );
   }
 
@@ -4037,10 +4098,10 @@
 
     // ── DIMENSIONS section (only for vizzes that group by a dimension) ──
     if (dmax > 0) {
-      const dims = DIMENSIONS.filter(d => !q || d.name.toLowerCase().includes(q) || d.id.includes(q));
+      const dims = DIMENSIONS.filter(d => dimAllowed(d, S.source) && (!q || d.name.toLowerCase().includes(q) || d.id.includes(q)));
       if (dims.length) {
         shown += dims.length;
-        html += `<div class="es-fly-grp dim">Dimensiones</div>`;
+        html += `<div class="es-fly-grp dim">Dimensions</div>`;
         dims.forEach(d => {
           const on  = (S.dimensions || []).some(x => x.id === d.id);
           const dis = !on && dimFull;
@@ -4056,9 +4117,10 @@
       }
     }
 
-    // ── MEASURES section (the gps_metric_definitions catalog) ──
+    // ── MEASURES section (the gps_metric_definitions catalog + task per-min when source='task') ──
     let measuresHtml = '';
-    catalogGroups.forEach(grp => {
+    const _groups = (S.source === 'task') ? catalogGroups.concat([TASK_METRIC_GROUP]) : catalogGroups;
+    _groups.forEach(grp => {
       const items = grp.items.filter(m => !q || m.name.toLowerCase().includes(q) || m.id.includes(q));
       if (!items.length) return;
       shown += items.length;
@@ -4242,11 +4304,12 @@
 
   // Panel poblado con el catálogo REAL del builder: DIMENSIONS + catalogMap.
   function ddPanelHTML() {
-    const mets  = [...catalogMap.values()];
+    // Task per-min metrics live in catalogMap (for resolution) but only belong to source='task'.
+    const mets  = [...catalogMap.values()].filter(m => S?.source === 'task' || !TASK_METRIC_IDS.has(m.id));
     const total = DIMENSIONS.length + mets.length;
     const q = _ddQuery.trim().toLowerCase();
     const hit = (id, name) => !q || name.toLowerCase().includes(q) || id.toLowerCase().includes(q);
-    const dimRows = DIMENSIONS.filter(d => hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
+    const dimRows = DIMENSIONS.filter(d => dimAllowed(d, S?.source) && hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
     const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, _metPlaced(m.id)));
     const none = '<div class="bdd-grp-h"><span class="hint">sin coincidencias</span></div>';
     const addCalc = '<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>Métrica calculada</button>';
