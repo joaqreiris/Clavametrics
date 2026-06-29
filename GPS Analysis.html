@@ -3865,23 +3865,25 @@ async function _detectSmartDefault(clubId, userId) {
   const saved = loadGpsPrefs();
   if (saved) return saved;
 
-  // 2. Check for recent non-historical sessions (last 30 days)
+  // 2. Recent activity? (ANY session in the last 30 days — not just non-historical, so a
+  //    club actively training lands on the familiar Last-30 view.)
   const d30 = new Date(); d30.setDate(d30.getDate() - 30);
   const { count: recentCount } = await window.sb.from('training_sessions')
     .select('id', { count: 'exact', head: true })
-    .eq('club_id', clubId).eq('is_historical', false)
+    .eq('club_id', clubId)
     .gte('session_date', d30.toISOString().slice(0, 10));
 
   if (recentCount > 0) {
     return { datePreset: 'last30', includeHistorical: false, microcycle: 'All' };
   }
 
-  // 3. No recent sessions — check for any historical sessions
-  const { count: histCount } = await window.sb.from('training_sessions')
+  // 3. No recent activity but there IS data (migrated / historical, regardless of the
+  //    is_historical flag) → show ALL of it so the dashboard never starts empty.
+  const { count: anyCount } = await window.sb.from('training_sessions')
     .select('id', { count: 'exact', head: true })
-    .eq('club_id', clubId).eq('is_historical', true);
+    .eq('club_id', clubId);
 
-  if (histCount > 0) {
+  if (anyCount > 0) {
     return { datePreset: 'allTime', includeHistorical: true, microcycle: 'All', _showHistBanner: true };
   }
 

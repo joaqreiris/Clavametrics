@@ -67,10 +67,19 @@
     { id:'decelerations_per_min',            name:'Decel / min',       unit:'/min',   kind:'avg' },
     { id:'hmld_per_min',                     name:'HMLD / min',        unit:'m/min',  kind:'avg' },
     { id:'m2_per_player',                    name:'m² per player',     unit:'m²',     kind:'avg' },
-    { id:'work_min',                         name:'Work (min)',        unit:'min',    kind:'accum' },
-  ].map(m => ({ ...m, group_name:'Task', is_custom:false, squad_rollup:true, decimals:1 }));
+    // Optional (not imposed): the user adds these from "+ Add metric" if wanted.
+    { id:'work_min',                         name:'Work time',         unit:'min',    kind:'accum', decimals:0 },
+    { id:'n_instances',                      name:'Instances',         unit:'',       kind:'accum', decimals:0 },
+  ].map(m => ({ ...m, group_name:'Task', is_custom:false, squad_rollup:true, decimals: m.decimals ?? 1 }));
   const TASK_METRIC_IDS   = new Set(TASK_METRICS.map(m => m.id));
   const TASK_METRIC_GROUP = { g:'Task metrics', custom:false, items:TASK_METRICS };
+  // Hidden from the Task flyout: their real value lives in a task column instead. time_played
+  // is 0/null in migrated period data → use 'Work time' (from duration_seconds) instead.
+  const TASK_HIDE_METRICS = new Set(['time_played']);
+  // Built-in DERIVED metrics: a simple formula over base columns. Resolved as CALCULATED
+  // metrics in any card (session + task) — the resolver evaluates the formula per row, then
+  // aggregates. Easy to extend with more "sum of two fields" derivations.
+  const DERIVED_METRICS = { acc_dec: { name: 'Acc+Dec', formula: 'accelerations + decelerations' } };
   // Mock row labels per dimension — only for the builder's pre-save preview.
   const DIM_MOCK = {
     player_name:  ['R. Vega','T. López','I. Barreiro','S. Rivas','M. Paredes'],
@@ -115,10 +124,11 @@
     { id:'mono',  cols:['#1F2937','#4B5563','#9CA3AF','#E5E7EB'] },
   ];
   const RANGES = [
-    { id:'mc',     name:'MC (current)',  icon:'ti-calendar-week',  d:'Current microcycle' },
-    { id:'w7',     name:'Last 7 days',   icon:'ti-calendar',       d:'Rolling week' },
-    { id:'w30',    name:'Last 30 days',  icon:'ti-calendar-month', d:'Rolling month' },
-    { id:'season', name:'Season to date',icon:'ti-calendar-stats', d:'Current season' },
+    { id:'mc',      name:'MC (current)',  icon:'ti-calendar-week',  d:'Current microcycle' },
+    { id:'w7',      name:'Last 7 days',   icon:'ti-calendar',       d:'Rolling week' },
+    { id:'w30',     name:'Last 30 days',  icon:'ti-calendar-month', d:'Rolling month' },
+    { id:'season',  name:'Season to date',icon:'ti-calendar-stats', d:'Current season' },
+    { id:'allTime', name:'All time',      icon:'ti-infinity',       d:'Every session on record' },
   ];
   const COMPARES = [
     { id:'role',  name:'vs role baseline', icon:'ti-users',          d:'Same position group' },
@@ -239,7 +249,9 @@
         // Calculated metric → self-contained card: embed the formula + name so the
         // resolver can compute it per session and the card re-renders on reload even
         // if the catalog entry isn't around (the card references the metric by id).
-        if (cat.calculated && cat.formula) { out.kind = 'calculated'; out.formula = cat.formula; out.name = cat.name || m.id; }
+        // Any catalog metric carrying a formula (user-calculated OR a built-in derived like
+        // acc_dec) → embed it so the resolver evaluates it per row instead of reading a column.
+        if (cat.formula) { out.kind = 'calculated'; out.formula = cat.formula; out.name = cat.name || m.id; }
         // Per-column conditional format (table viz). Persist the user's rule, or a
         // sensible default for table cards so the formatting survives save/reload.
         if (m.format) out.format = m.format;
@@ -356,6 +368,20 @@
     // Task per-min metrics live only in v_gps_task_analysis → register them so buildConfig
     // and the resolver can resolve them by id (the flyout shows them only when source='task').
     TASK_METRICS.forEach(m => catalogMap.set(m.id, m));
+    // Built-in derived metrics (e.g. acc_dec = accelerations + decelerations). Mutate the
+    // existing catalog entry in place when present (keeps catalogGroups in sync — same object
+    // reference); otherwise add it to an Intensity-ish group so the flyout offers it.
+    Object.entries(DERIVED_METRICS).forEach(([id, d]) => {
+      const m = catalogMap.get(id);
+      if (m) { m.formula = d.formula; m.kind = m.kind || 'accum'; if (d.name) m.name = d.name; }
+      else {
+        const nm = { id, name: d.name, unit: d.unit || '', kind: 'accum', formula: d.formula,
+                     group_name: 'Intensity', is_custom: false, squad_rollup: true, decimals: d.decimals ?? 0 };
+        catalogMap.set(id, nm);
+        const grp = catalogGroups.find(g => g.g === 'Intensity') || catalogGroups[0];
+        if (grp) grp.items.push(nm); else catalogGroups.push({ g: 'Derived', custom: false, items: [nm] });
+      }
+    });
   }
 
   // ── DOM injection ──────────────────────────────────────────
@@ -1995,6 +2021,7 @@
       case '30':     return { type: 'w30' };
       case '90':     return { type: 'custom', from: _fbDaysBack(90) };
       case 'season': return { type: 'season' };
+      case 'all':    return { type: 'allTime' };
     }
     const r = { type: 'custom' };
     if (d.from) r.from = d.from;
@@ -3153,7 +3180,6 @@
       pct: Math.max(3, Math.round((isMc ? Math.abs(p.y) : p.y) / max * 100)),
       barCol: isMc ? (p.y >= 0 ? _cssVar('--cm-success', '#16A34A') : _cssVar('--cm-danger', '#DC2626')) : color,
       change: (p.change == null ? null : p.change),    // +n = climbed, −n = dropped (preview only)
-      n: p.n, timeMin: p.timeMin,                      // task: instances + total time (→ row tooltip)
     }));
     return { rows, color, showVal, unit, isMc };
   }
@@ -3172,10 +3198,8 @@
       const v = Math.round(r.value * 10) / 10;
       return r.isMc ? `${v > 0 ? '+' : ''}${esc(fmt(v))}%` : esc(fmt(v)) + (d.unit ? ' ' + esc(d.unit) : '');
     };
-    // task only (timeMin present) → don't alter session ranking behavior
-    const auxTip = r => r.timeMin != null ? ` title="${r.n != null ? r.n + ' instance' + (r.n === 1 ? '' : 's') : ''} · ${Math.round(r.timeMin)} min"` : '';
     return `<div class="gp-rank">${d.rows.map(r => `
-      <div class="gp-rank-row"${auxTip(r)}>
+      <div class="gp-rank-row">
         <span class="ax">${r.rank}</span>
         <span class="gp-rank-bar"><span class="gp-rank-fill" style="width:${r.pct}%;background:${r.barCol || d.color}">${esc(r.name)}</span></span>
         <span class="gp-rank-v">${d.showVal ? valTxt(r) : ''}${_rankChangeHtml(r.change)}</span>
@@ -3436,10 +3460,6 @@
     if (!series?.length || !rowPts.length) { body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
 
     const accent  = config.style?.color || _cssVar('--cm-accent', '#15803D');
-    // Task tables ALWAYS show N (instances collapsed) + Time (total work min) so a 1-instance
-    // average is never mistaken for an 8-instance one. These describe the row (group), not a
-    // metric, so they come from series[0]'s points (p.n / p.timeMin).
-    const isTask = config.source === 'task';
     const dimCols = (config.dimensions || []).map(d => DIM_MAP.get(d.id)?.name || d.id);
     if (!dimCols.length) dimCols.push(config.dimensions?.[0] ? 'Group' : 'Player');   // legacy single identity
     const cols = _tableColumns(config, series, accent);
@@ -3462,10 +3482,7 @@
       const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="Formato condicional"><i class="ti ti-adjustments"></i></span>` : '';
       return `<th class="tf-sortable${editable ? ' tf-h' : ''}" data-sort="${sid}" title="Ordenar por esta columna">${name}${arrow(sid)}${chip}</th>`;
     }).join('');
-    const auxHead = isTask
-      ? `<th class="tf-aux" title="Instances (periods) collapsed into this row">N</th><th class="tf-aux" title="Total work time (min)">Time</th>`
-      : '';
-    const head = `<tr>${dimHead}${metHead}${auxHead}</tr>`;
+    const head = `<tr>${dimHead}${metHead}</tr>`;
 
     const rows = orderedRows.map(p => {
       // Alinear las celdas de dimensión al header (dimCols = config.dimensions): si la serie
@@ -3478,10 +3495,7 @@
         const pt = c.s.points.find(q => q.x === p.x);
         return `<td class="tf">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;
       }).join('');
-      const auxCells = isTask
-        ? `<td class="tf-aux">${p.n ?? '—'}</td><td class="tf-aux">${p.timeMin != null ? Math.round(p.timeMin) : '—'}</td>`
-        : '';
-      return `<tr>${dimCells}${valCells}${auxCells}</tr>`;
+      return `<tr>${dimCells}${valCells}</tr>`;
     }).join('');
 
     body.innerHTML = `<div class="gp-zwrap"><table class="gp-zt"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
@@ -4135,7 +4149,8 @@
     let measuresHtml = '';
     const _groups = (S.source === 'task') ? catalogGroups.concat([TASK_METRIC_GROUP]) : catalogGroups;
     _groups.forEach(grp => {
-      const items = grp.items.filter(m => !q || m.name.toLowerCase().includes(q) || m.id.includes(q));
+      const items = grp.items.filter(m => !(S.source === 'task' && TASK_HIDE_METRICS.has(m.id))
+        && (!q || m.name.toLowerCase().includes(q) || m.id.includes(q)));
       if (!items.length) return;
       shown += items.length;
       measuresHtml += `<div class="es-fly-grp ${grp.custom?'cust':''}">${esc(grp.g)}</div>`;
@@ -4319,7 +4334,8 @@
   // Panel poblado con el catálogo REAL del builder: DIMENSIONS + catalogMap.
   function ddPanelHTML() {
     // Task per-min metrics live in catalogMap (for resolution) but only belong to source='task'.
-    const mets  = [...catalogMap.values()].filter(m => S?.source === 'task' || !TASK_METRIC_IDS.has(m.id));
+    const mets  = [...catalogMap.values()].filter(m => (S?.source === 'task' || !TASK_METRIC_IDS.has(m.id))
+      && !(S?.source === 'task' && TASK_HIDE_METRICS.has(m.id)));
     const total = DIMENSIONS.length + mets.length;
     const q = _ddQuery.trim().toLowerCase();
     const hit = (id, name) => !q || name.toLowerCase().includes(q) || id.toLowerCase().includes(q);

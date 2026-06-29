@@ -23,6 +23,11 @@
       "type": "string",
       "enum": ["kpi", "bars", "line", "scatter", "radar", "ranking", "table", "heatmap"]
     },
+    "source": {
+      "type": "string",
+      "enum": ["session", "task"],
+      "$comment": "Data source. Absent ⇒ 'session' (gps_reports). 'task' reads v_gps_task_analysis (period×player) and unlocks the task dimensions + per-minute metrics."
+    },
     "scope": {
       "type": "object",
       "additionalProperties": false,
@@ -42,7 +47,7 @@
         "required": ["id", "agg"],
         "properties": {
           "id": { "type": "string" },
-          "agg": { "type": "string", "enum": ["avg", "total", "median", "max", "min"] },
+          "agg": { "type": "string", "enum": ["avg", "wavg", "total", "median", "max", "min"] },
           "kind": { "type": "string", "enum": ["accum", "peak", "calculated"] },
           "unit": { "type": "string" },
           "custom": { "type": "boolean" },
@@ -86,7 +91,7 @@
         "additionalProperties": false,
         "required": ["id"],
         "properties": {
-          "id": { "type": "string", "enum": ["player_name", "position", "session_date", "md_code", "microcycle", "rival"] }
+          "id": { "type": "string", "enum": ["player_name", "position", "session_date", "md_code", "microcycle", "rival", "drill", "field_size", "players_format"] }
         }
       }
     },
@@ -95,7 +100,7 @@
       "additionalProperties": false,
       "required": ["type"],
       "properties": {
-        "type": { "type": "string", "enum": ["mc", "w7", "w30", "season", "custom"] },
+        "type": { "type": "string", "enum": ["mc", "w7", "w30", "season", "custom", "allTime"] },
         "from": { "type": "string", "format": "date" },
         "to": { "type": "string", "format": "date" },
         "mcCode": { "type": ["string", "null"] }

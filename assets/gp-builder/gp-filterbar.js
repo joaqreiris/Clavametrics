@@ -36,6 +36,7 @@
     { id: '30',    label: 'Last 30 days', days: 30  },
     { id: '90',    label: 'Last 90 days', days: 90  },
     { id: 'season',label: 'Season',       days: 365 },
+    { id: 'all',   label: 'All time',     days: null },
   ];
 
   // ── Estado (en memoria) ─────────────────────────────────────────────────
@@ -69,7 +70,8 @@
     if (dt.preset) {
       const p = DATE_PRESETS.find(x => x.id === dt.preset);
       const back = n => { const x = new Date(); x.setDate(x.getDate() - n); return x.toISOString().slice(0, 10); };
-      return { from: p ? back(p.days) : null, to: null };
+      // days == null → "All time" → no lower bound (don't collapse to today).
+      return { from: (p && p.days != null) ? back(p.days) : null, to: null };
     }
     return { from: dt.from || null, to: dt.to || null };
   }
