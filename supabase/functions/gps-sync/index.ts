@@ -44,8 +44,13 @@ const CATAPULT_BASE: Record<string, string> = {
 };
 
 // ── Canonical column units (must match the CSV-imported data convention) ────
-//   total_distance → km · other distances → m · player_load → AU
+//   ALL distances — INCLUDING total_distance — → METRES · player_load → AU
 //   max_speed/avg_speed → km/h · time_played → min · distance_per_minute → m/min
+//   ⚠️ total_distance was historically km (conv 1/1000) and that's why old rows are
+//   small; it is now METRES everywhere (SLUG_MAP total_distance.conv = 1). PERIODS use
+//   the SAME normalizeMetrics() as sessions, so period total_distance is metres too —
+//   do NOT add a separate ×1000 / ÷1000 anywhere. (Legacy km rows are fixed by a
+//   one-time per-club UPDATE; see migrations/107_normalize_gps_period_reports_metres.sql.)
 // INT columns are rounded; the rest are stored toFixed(4).
 const GPS_INT_COLS = new Set(['accelerations', 'decelerations', 'sprint_count', 'time_played']);
 
@@ -375,6 +380,8 @@ Deno.serve(async (req: Request) => {
               const endS   = readParam(row, 'end_time');
               const durationSeconds = (startS != null && endS != null && endS >= startS) ? (endS - startS) : null;
 
+              // Same normalizeMetrics() as the session grain → period metrics land in the
+              // SAME canonical units (total_distance in METRES, conv:1). Do not re-scale.
               const { core, extras } = normalizeMetrics(row);
               const extra_metrics: Record<string, number> = {};
               for (const ex of extras) extra_metrics[ex.metric_key] = ex.value;
