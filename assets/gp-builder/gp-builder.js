@@ -94,11 +94,12 @@
   const VIZ_REQ_LBL   = { kpi:'pick 1', ranking:'pick 1', scatter:'pick 2 (X,Y)', bars:'pick 1–2', line:'pick 1+', radar:'pick 3+', table:'pick 1+', heatmap:'pick 1+' };
 
   const AGGS = [
-    { id:'avg',    name:'Average',     short:'AVG', icon:'ti-divide',     peakOk:true  },
-    { id:'total',  name:'Total (sum)', short:'SUM', icon:'ti-sigma',      peakOk:false },
-    { id:'median', name:'Median',      short:'MED', icon:'ti-chart-dots', peakOk:false },
-    { id:'max',    name:'Maximum',     short:'MAX', icon:'ti-arrow-up',   peakOk:true  },
-    { id:'min',    name:'Minimum',     short:'MIN', icon:'ti-arrow-down', peakOk:true  },
+    { id:'avg',    name:'Average',             short:'AVG',  icon:'ti-divide',     peakOk:true  },
+    { id:'wavg',   name:'Weighted avg (time)', short:'WAVG', icon:'ti-scale',      peakOk:false },
+    { id:'total',  name:'Total (sum)',         short:'SUM',  icon:'ti-sigma',      peakOk:false },
+    { id:'median', name:'Median',              short:'MED',  icon:'ti-chart-dots', peakOk:false },
+    { id:'max',    name:'Maximum',             short:'MAX',  icon:'ti-arrow-up',   peakOk:true  },
+    { id:'min',    name:'Minimum',             short:'MIN',  icon:'ti-arrow-down', peakOk:true  },
   ];
   const AGG = Object.fromEntries(AGGS.map(a => [a.id, a]));
 
@@ -3152,6 +3153,7 @@
       pct: Math.max(3, Math.round((isMc ? Math.abs(p.y) : p.y) / max * 100)),
       barCol: isMc ? (p.y >= 0 ? _cssVar('--cm-success', '#16A34A') : _cssVar('--cm-danger', '#DC2626')) : color,
       change: (p.change == null ? null : p.change),    // +n = climbed, −n = dropped (preview only)
+      n: p.n, timeMin: p.timeMin,                      // task: instances + total time (→ row tooltip)
     }));
     return { rows, color, showVal, unit, isMc };
   }
@@ -3170,8 +3172,10 @@
       const v = Math.round(r.value * 10) / 10;
       return r.isMc ? `${v > 0 ? '+' : ''}${esc(fmt(v))}%` : esc(fmt(v)) + (d.unit ? ' ' + esc(d.unit) : '');
     };
+    // task only (timeMin present) → don't alter session ranking behavior
+    const auxTip = r => r.timeMin != null ? ` title="${r.n != null ? r.n + ' instance' + (r.n === 1 ? '' : 's') : ''} · ${Math.round(r.timeMin)} min"` : '';
     return `<div class="gp-rank">${d.rows.map(r => `
-      <div class="gp-rank-row">
+      <div class="gp-rank-row"${auxTip(r)}>
         <span class="ax">${r.rank}</span>
         <span class="gp-rank-bar"><span class="gp-rank-fill" style="width:${r.pct}%;background:${r.barCol || d.color}">${esc(r.name)}</span></span>
         <span class="gp-rank-v">${d.showVal ? valTxt(r) : ''}${_rankChangeHtml(r.change)}</span>
@@ -3432,6 +3436,10 @@
     if (!series?.length || !rowPts.length) { body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
 
     const accent  = config.style?.color || _cssVar('--cm-accent', '#15803D');
+    // Task tables ALWAYS show N (instances collapsed) + Time (total work min) so a 1-instance
+    // average is never mistaken for an 8-instance one. These describe the row (group), not a
+    // metric, so they come from series[0]'s points (p.n / p.timeMin).
+    const isTask = config.source === 'task';
     const dimCols = (config.dimensions || []).map(d => DIM_MAP.get(d.id)?.name || d.id);
     if (!dimCols.length) dimCols.push(config.dimensions?.[0] ? 'Group' : 'Player');   // legacy single identity
     const cols = _tableColumns(config, series, accent);
@@ -3454,7 +3462,10 @@
       const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="Formato condicional"><i class="ti ti-adjustments"></i></span>` : '';
       return `<th class="tf-sortable${editable ? ' tf-h' : ''}" data-sort="${sid}" title="Ordenar por esta columna">${name}${arrow(sid)}${chip}</th>`;
     }).join('');
-    const head = `<tr>${dimHead}${metHead}</tr>`;
+    const auxHead = isTask
+      ? `<th class="tf-aux" title="Instances (periods) collapsed into this row">N</th><th class="tf-aux" title="Total work time (min)">Time</th>`
+      : '';
+    const head = `<tr>${dimHead}${metHead}${auxHead}</tr>`;
 
     const rows = orderedRows.map(p => {
       // Alinear las celdas de dimensión al header (dimCols = config.dimensions): si la serie
@@ -3467,7 +3478,10 @@
         const pt = c.s.points.find(q => q.x === p.x);
         return `<td class="tf">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;
       }).join('');
-      return `<tr>${dimCells}${valCells}</tr>`;
+      const auxCells = isTask
+        ? `<td class="tf-aux">${p.n ?? '—'}</td><td class="tf-aux">${p.timeMin != null ? Math.round(p.timeMin) : '—'}</td>`
+        : '';
+      return `<tr>${dimCells}${valCells}${auxCells}</tr>`;
     }).join('');
 
     body.innerHTML = `<div class="gp-zwrap"><table class="gp-zt"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
