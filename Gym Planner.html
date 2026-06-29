@@ -727,6 +727,15 @@ async function gpRunAi() {
     const emphasis = document.getElementById('gpAiEmphasis').value.trim();
     if (emphasis) constraints.emphasis = emphasis;
 
+    // Calendar context: anchor the session to its microcycle position (MD-x)
+    try {
+      const dctx = await window.cmResolveDayContext(_gpCurrentDate, _gpTeamId, _gpClubId);
+      if (dctx?.md)               constraints.md         = dctx.md;
+      if (dctx?.microcycle?.name) constraints.microcycle = dctx.microcycle.name;
+      if (dctx?.home_away)        constraints.home_away  = dctx.home_away;
+      if (dctx?.opponent || dctx?.rival) constraints.opponent = dctx.opponent || dctx.rival;
+    } catch(_) {}
+
     const { data, error } = await window.sb.functions.invoke('generate-gym-plan', { body: { objective, constraints, candidates: cands } });
     if (error) throw error;
     if (data && data.error) throw new Error(data.error);
