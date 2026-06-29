@@ -49,8 +49,8 @@
   .hub-topbar .actions { margin-left:auto; display:flex; align-items:center; gap:8px; }
 
   .gp-page { padding:20px 28px 64px; max-width:1600px; width:100%; }
-  .gp-bar { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
-  .gp-bar h1 { font:600 24px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .gp-bar { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .gp-bar h1 { font:600 19px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
   .gp-bar .sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:6px; }
   .gp-bar .right { margin-left:auto; display:flex; align-items:center; gap:8px; }
 
@@ -105,18 +105,17 @@
   .gp-conn-status.err .d { background:var(--cm-danger); }
   .gp-conn-status.av { background:var(--cm-bg-soft); color:var(--cm-fg-muted); border:1px solid var(--cm-border-soft); }
 
-  .gp-sections { display:flex; gap:4px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:6px; box-shadow:var(--cm-shadow-1); margin-bottom:14px; flex-wrap:wrap; }
-  .gp-sec { padding:6px 14px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 13px/1 var(--cm-font-sans); cursor:pointer; border-radius:7px; display:flex; flex-direction:column; align-items:flex-start; gap:3px; }
+  .gp-sections { display:flex; gap:4px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:4px; box-shadow:var(--cm-shadow-1); margin-bottom:8px; flex-wrap:wrap; }
+  .gp-sec { padding:6px 12px; border:0; background:transparent; color:var(--cm-fg-muted); font:500 12.5px/1 var(--cm-font-sans); cursor:pointer; border-radius:7px; display:flex; align-items:center; gap:6px; }
   .gp-sec:hover { color:var(--cm-fg); background:var(--cm-bg-soft); }
   .gp-sec.is-on { color:var(--cm-fg-strong); background:var(--cm-accent-soft); font-weight:600; }
   .gp-sec .row { display:flex; align-items:center; gap:6px; }
   .gp-sec .row .ti { font-size:14px; }
-  .gp-sec .sub { font:500 10.5px/1 var(--cm-font-mono); color:var(--cm-fg-muted); padding-left:20px; }
-  .gp-sec.is-on .sub { color:var(--cm-accent); }
+  .gp-sec .sub { display:none; }   /* single-line tabs (Data Studio feel) — title is enough */
 
-  .gp-dash-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:10px 14px; box-shadow:var(--cm-shadow-1); margin-bottom:14px; position:relative; z-index:30; }
-  .gp-dash-bar .h { font:600 14px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
-  .gp-dash-bar .h-sub { font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted); margin-left:4px; }
+  .gp-dash-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:7px 12px; box-shadow:var(--cm-shadow-1); margin-bottom:8px; position:relative; z-index:30; }
+  /* Title is redundant with the selected tab → hidden; this row is now just filters + actions. */
+  .gp-dash-bar .h, .gp-dash-bar .h-sub { display:none; }
   .gp-dash-bar .right { margin-left:auto; display:flex; align-items:center; gap:6px; }
   .gp-dash-bar .pill { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border-radius:999px; border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg-muted); font:500 11.5px/1 var(--cm-font-sans); cursor:pointer; }
   .gp-dash-bar .pill:hover { color:var(--cm-fg); border-color:var(--cm-border-strong); }
@@ -779,11 +778,15 @@
         <h1>GPS analysis</h1>
         <span class="sub" id="gpSub">Loading…</span>
         <div class="right">
-          <button class="gp-src-btn" id="srcBtn">
-            <span class="dot"></span><i class="ti ti-cloud-download"></i>Data sources<span class="ct">4 connected</span><i class="ti ti-chevron-down"></i>
-          </button>
-          <button class="cm-btn is-ghost is-sm" id="gpSettingsBtn"><i class="ti ti-adjustments-horizontal" style="font-size:14px"></i>GPS settings</button>
-          <button class="cm-btn is-ghost is-sm" id="gpCatalogBtn"><i class="ti ti-list" style="font-size:14px"></i>Metrics catalog</button>
+          <!-- Setup actions live in the ⚙ Settings menu (they're for setup, not analysis).
+               Kept in the DOM but hidden so their existing handlers stay bound; the menu
+               just .click()s them. -->
+          <div id="gpSetupBtns" hidden>
+            <button class="gp-src-btn" id="srcBtn"><span class="dot"></span><i class="ti ti-cloud-download"></i>Data sources<span class="ct" id="srcCount">—</span><i class="ti ti-chevron-down"></i></button>
+            <button class="cm-btn is-ghost is-sm" id="gpSettingsBtn"><i class="ti ti-adjustments-horizontal" style="font-size:14px"></i>GPS settings</button>
+            <button class="cm-btn is-ghost is-sm" id="gpCatalogBtn"><i class="ti ti-list" style="font-size:14px"></i>Metrics catalog</button>
+          </div>
+          <button class="cm-btn is-ghost is-sm" id="gpGearBtn" title="Setup & configuration"><i class="ti ti-settings" style="font-size:14px"></i>Settings</button>
           <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
         </div>
       </div>
@@ -828,7 +831,7 @@
         <div class="gp-grid is-edit">
 
           <!-- Genérica de ejemplo (builder · gp.card/v1) -->
-          <div class="gp-c" data-size="sm" id="card-gen-week-kpi" data-card-id="gen-week-kpi" data-card="chart" data-card-title="Distancia total (semana)">
+          <div class="gp-c" data-size="sm" id="card-gen-week-kpi" data-card-id="gen-week-kpi" data-card="chart" data-card-title="Total distance (week)">
             <!-- KPI: no card header (the tile carries its own internal label). Edit/delete float on hover. -->
             <div class="gp-kpi-actions">
                             <button data-del title="Remove card"><i class="ti ti-x"></i></button>
@@ -855,7 +858,7 @@
           </div>
 
           <div class="gp-c" data-size="md" id="card-xmatch" data-card-id="xmatch">
-            <div class="gp-c-h"><span class="ttl">× match avg</span><span class="sub">× partido promedio · semana</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
+            <div class="gp-c-h"><span class="ttl">× match avg</span><span class="sub">× match avg · week</span><div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div></div>
             <div class="gp-c-b">
               <div class="gp-xm">
                 <div style="padding:8px 0;color:var(--cm-fg-muted);font:500 11px/1.4 var(--cm-font-sans)">Select a player and microcycle.</div>
@@ -885,7 +888,7 @@
               <span class="ttl">ACWR</span>
               <span class="sub">8-week</span>
               <div class="gp-c-picks" style="margin-left:6px">
-                <span class="gp-c-pick is-accent" data-acwr-metric-pick title="Métrica base">Player load <i class="ti ti-chevron-down"></i></span>
+                <span class="gp-c-pick is-accent" data-acwr-metric-pick title="Base metric">Player load <i class="ti ti-chevron-down"></i></span>
               </div>
               <div class="right"><div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div><button><i class="ti ti-dots"></i></button></div>
             </div>
@@ -986,7 +989,7 @@
               <span class="ttl">Outliers</span>
               <span class="sub">temporal z · same MD · per player</span>
               <div class="right">
-                <select id="sc-outlier-thresh" class="sc-sel" style="font-size:11px;height:24px;padding:0 5px" title="Umbral resaltado">
+                <select id="sc-outlier-thresh" class="sc-sel" style="font-size:11px;height:24px;padding:0 5px" title="Highlight threshold">
                   <option value="2" selected>|z|&gt;2</option>
                   <option value="2.5">|z|&gt;2.5</option>
                   <option value="3">|z|&gt;3</option>
@@ -1025,10 +1028,10 @@
           <!-- vs sesión — comparación % 1-a-1 vs sesión de referencia -->
           <div class="gp-c" data-size="md" id="card-sc-vs-session" data-card-id="sc-vs-session">
             <div class="gp-c-h">
-              <span class="ttl">vs sesión</span>
+              <span class="ttl">vs session</span>
               <span class="sub">% cambio grupo · 1-a-1</span>
               <div class="right">
-                <select class="sc-sel" id="sc-vs-compare-sel" title="Elegir sesión de referencia (mismo MD code)" style="max-width:180px"><option value="">Compare with…</option></select>
+                <select class="sc-sel" id="sc-vs-compare-sel" title="Pick a reference session (same MD code)" style="max-width:180px"><option value="">Compare with…</option></select>
                 <div class="size-toggle"><button>S</button><button class="is-on">M</button><button>L</button></div>
                 <button><i class="ti ti-dots"></i></button>
               </div>
@@ -1051,7 +1054,7 @@
         <div class="gp-grid is-edit">
 
           <!-- Genérica de ejemplo (builder · gp.card/v1) -->
-          <div class="gp-c" data-size="sm" id="card-gen-match-kpi" data-card-id="gen-match-kpi" data-card="chart" data-card-title="KPIs de partido">
+          <div class="gp-c" data-size="sm" id="card-gen-match-kpi" data-card-id="gen-match-kpi" data-card="chart" data-card-title="Match KPIs">
             <!-- KPI: no card header (the tile carries its own internal label). Edit/delete float on hover. -->
             <div class="gp-kpi-actions">
                             <button data-del title="Remove card"><i class="ti ti-x"></i></button>
@@ -1147,7 +1150,7 @@
           <!-- Genérica de ejemplo (builder · gp.card/v1) -->
           <div class="gp-c" data-size="full" id="card-gen-weekly-load" data-card-id="gen-weekly-load" data-card="chart">
             <div class="gp-c-h">
-              <span class="ttl">Carga semanal</span>
+              <span class="ttl">Weekly load</span>
               <span class="sub">bars · squad · editable example</span>
               <div class="right">
                 <div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div>
@@ -1800,7 +1803,7 @@ function _acRender(active) {
   _acOverlay.querySelector('.ac-open-builder')?.addEventListener('click', () => {
     _acClose();
     if (window.GpBuilder?.startNew) window.GpBuilder.startNew();
-    else showToast('El Chart builder todavía no cargó', true);
+    else showToast('Chart builder hasn’t loaded yet', true);
   });
   // template cards: "?" popover + "Agregar"
   _acOverlay.querySelectorAll('.ac-tpl').forEach(tpl => {
@@ -2124,7 +2127,7 @@ async function _svSave(viewKey, name) {
     { onConflict: 'user_id,club_id,dashboard_id' }
   );
   if (error) { console.error('_svSave:', error); showToast('Failed to save view', true); return; }
-  showToast(`Vista "${name}" guardada`);
+  showToast(`View "${name}" saved`);
 }
 
 async function _svDelete(viewKey, snapDid) {
@@ -2139,7 +2142,7 @@ async function _svLoad(viewKey, snapDid, name) {
   if (!ctx) { showToast('Failed to load — session unavailable', true); return; }
   const { data, error } = await window.sb.from('gps_dashboard_layouts')
     .select('layout').eq('user_id', ctx.uid).eq('club_id', ctx.cid).eq('dashboard_id', snapDid).maybeSingle();
-  if (error || !data?.layout?.length) { showToast('Vista no encontrada', true); return; }
+  if (error || !data?.layout?.length) { showToast('View not found', true); return; }
   const snapLayout = data.layout;
   const grid = document.querySelector(`.gp-view[data-view="${viewKey}"] .gp-grid`);
   if (!grid) return;
@@ -2179,7 +2182,7 @@ async function _svLoad(viewKey, snapDid, name) {
 
   window.renderView?.();
   window.refreshDashboard?.();
-  showToast(`Vista "${name}" cargada`);
+  showToast(`View "${name}" loaded`);
 }
 
 // ── KPI card rendering helpers ──────────────────────────────────
@@ -2559,7 +2562,7 @@ function _openAcwrMetricPicker(anchor, card) {
     try { await window.refreshDashboard?.(); } catch (e) { console.warn('acwr metric refresh:', e); }
     const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
     saveLayout(view).catch(e => console.warn('saveLayout (acwr metric):', e));
-    showToast('ACWR · métrica base → ' + lbl);
+    showToast('ACWR · base metric → ' + lbl);
   });
 }
 
@@ -2595,7 +2598,7 @@ async function openChangeMetricModal(card) {
       try { await window.refreshDashboard?.(); } catch (e) { console.warn('acwr metric refresh:', e); }
       const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'mgrp';
       await saveLayout(view);
-      showToast('ACWR · métrica base actualizada');
+      showToast('ACWR · base metric updated');
       return;
     }
     const selPlayer = (window._gpReports || []).find(r => r.player_id === window.gpState?.playerId)
@@ -2642,6 +2645,19 @@ function initGridDragDrop(gridEl, viewKey) {
 document.querySelectorAll('.gp-view').forEach(view => {
   const grid = view.querySelector('.gp-grid');
   if (grid) initGridDragDrop(grid, view.dataset.view);
+});
+
+// ── 0. Settings (⚙) menu — consolidates the setup actions (data sources, GPS settings,
+//       metrics catalog). Items delegate to the hidden buttons so handlers stay intact.
+const gpGearBtn = document.getElementById('gpGearBtn');
+gpGearBtn?.addEventListener('click', e => {
+  e.stopPropagation();
+  const n = window._gpSessionCount;
+  makePopover(gpGearBtn, [
+    { label: 'Data sources' + (Number.isFinite(n) ? ` · ${n} GPS sessions` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
+    { label: 'GPS settings',    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
+    { label: 'Metrics catalog', icon: 'ti-list',                   act: 'gpCatalogBtn' },
+  ], item => document.getElementById(item.act)?.click());
 });
 
 // ── 1. Export button ──────────────────────────────────────────
@@ -2866,12 +2882,12 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   if (ic.includes('ti-bookmark')) {
     const view = document.querySelector('.gp-view.is-on')?.dataset.view || 'ind';
     _svList(view).then(saved => {
-      const svItems = [{ label: 'Guardar vista actual…', icon: 'ti-device-floppy', action: 'save' }];
+      const svItems = [{ label: 'Save current view…', icon: 'ti-device-floppy', action: 'save' }];
       if (saved.length) {
         svItems.push({ sep: true });
         saved.forEach(v => {
           svItems.push({ label: v.name, icon: 'ti-bookmark', action: 'load', data: v });
-          svItems.push({ label: `Borrar "${v.name}"`, icon: 'ti-trash', action: 'delete', data: v });
+          svItems.push({ label: `Delete "${v.name}"`, icon: 'ti-trash', action: 'delete', data: v });
         });
       }
       makePopover(pill, svItems, async item => {
@@ -2883,7 +2899,7 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
           await _svLoad(view, item.data.snapDid, item.data.name);
         } else if (item.action === 'delete') {
           await _svDelete(view, item.data.snapDid);
-          showToast(`Vista "${item.data.name}" eliminada`);
+          showToast(`View "${item.data.name}" deleted`);
         }
       });
     }).catch(e => { console.error('_svList:', e); showToast('Failed to load views', true); });
@@ -3682,7 +3698,7 @@ window.refreshDashboard = async function (opts = {}) {
 // builder reemplaza la semilla por la card guardada en dashboard_cards.
 const _GEN_EXAMPLE_CONFIGS = {
   'card-gen-week-kpi': () => ({
-    schema: 'gp.card/v1', title: 'Distancia total', viz: 'kpi',
+    schema: 'gp.card/v1', title: 'Total distance', viz: 'kpi',
     // squad → no depende de que haya un jugador seleccionado; season → ventana amplia
     // (la card de ejemplo siempre muestra un dato). El usuario lo acota con el lápiz.
     scope: { level: 'squad' },
@@ -3703,7 +3719,7 @@ const _GEN_EXAMPLE_CONFIGS = {
     style: { size: 'full', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false },
   }),
   'card-gen-match-kpi': () => ({
-    schema: 'gp.card/v1', title: 'KPIs de partido', viz: 'kpi',
+    schema: 'gp.card/v1', title: 'Match KPIs', viz: 'kpi',
     // squad → no depende de gpState.playerId (que solo lo setea el dashboard ind).
     scope: { level: 'squad' },
     metrics: [{ id: 'total_distance', agg: 'total', kind: 'accum', unit: 'm' }],
@@ -3711,7 +3727,7 @@ const _GEN_EXAMPLE_CONFIGS = {
     style: { size: 'sm', color: '#15803D', palette: 'pitch', axes: true, legend: true, dataLabels: false },
   }),
   'card-gen-weekly-load': () => ({
-    schema: 'gp.card/v1', title: 'Carga semanal', viz: 'bars',
+    schema: 'gp.card/v1', title: 'Weekly load', viz: 'bars',
     scope: { level: 'squad' },
     metrics: [{ id: 'player_load', agg: 'total', kind: 'accum', unit: 'AU' }],
     range: { type: 'season' }, comparison: null,
@@ -7602,7 +7618,7 @@ function _openXmatchMetricsEditor(card, anchor) {
   pop.style.cssText = 'min-width:190px;max-height:300px;overflow-y:auto;padding:4px 0';
 
   function buildPop() {
-    pop.innerHTML = `<div style="padding:6px 12px 4px;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.4px">Métricas visibles</div>`;
+    pop.innerHTML = `<div style="padding:6px 12px 4px;font:600 10.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.4px">Visible metrics</div>`;
     all.forEach(m => {
       const isOn = active.has(m.key);
       const row  = document.createElement('div');
@@ -7616,7 +7632,7 @@ function _openXmatchMetricsEditor(card, anchor) {
       row.addEventListener('click', e => {
         e.stopPropagation();
         if (isOn) {
-          if (active.size <= 1) { showToast('Debe haber al menos una métrica'); return; }
+          if (active.size <= 1) { showToast('Pick at least one metric'); return; }
           active.delete(m.key);
         } else {
           active.add(m.key);
@@ -7811,21 +7827,21 @@ function _openWkThreshEditor(card, anchor) {
   pop.className = 'gp-popover';
   pop.style.cssText = 'min-width:210px;padding:12px 14px';
   pop.innerHTML = `
-    <div style="font:600 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-bottom:10px">Umbrales de riesgo (%)</div>
+    <div style="font:600 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-bottom:10px">Risk thresholds (%)</div>
     <div style="display:flex;flex-direction:column;gap:8px">
       <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span>🟡 Amarillo ≤</span>
+        <span>🟡 Yellow ≤</span>
         <input id="wkok-thresh-y" type="number" min="1" max="98" value="${yellow}"
           style="width:54px;padding:4px 6px;border:1px solid var(--cm-border-soft);border-radius:4px;background:var(--cm-bg-sunk);color:var(--cm-fg);font:600 12px/1 var(--cm-font-sans);text-align:center;outline:none">
       </label>
       <label style="font:500 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span>🔴 Rojo &gt;</span>
+        <span>🔴 Red &gt;</span>
         <input id="wkok-thresh-r" type="number" min="2" max="99" value="${red}"
           style="width:54px;padding:4px 6px;border:1px solid var(--cm-border-soft);border-radius:4px;background:var(--cm-bg-sunk);color:var(--cm-fg);font:600 12px/1 var(--cm-font-sans);text-align:center;outline:none">
       </label>
       <button id="wkok-thresh-save"
         style="margin-top:2px;padding:5px 12px;background:var(--cm-accent);color:#fff;border:none;border-radius:5px;font:600 11.5px/1 var(--cm-font-sans);cursor:pointer">
-        Guardar
+        Save
       </button>
     </div>`;
   _posPopover(pop, anchor);
@@ -7834,13 +7850,13 @@ function _openWkThreshEditor(card, anchor) {
     const y = Math.round(parseFloat(pop.querySelector('#wkok-thresh-y').value));
     const r = Math.round(parseFloat(pop.querySelector('#wkok-thresh-r').value));
     if (!isFinite(y) || !isFinite(r) || y < 1 || r < 2) { showToast('Ingresá valores válidos'); return; }
-    if (r <= y) { showToast('El umbral rojo debe ser mayor que el amarillo'); return; }
+    if (r <= y) { showToast('Red threshold must be higher than yellow'); return; }
     const existing = (() => { try { return JSON.parse(card.dataset.config || '{}'); } catch { return {}; } })();
     card.dataset.config = JSON.stringify({ ...existing, wkok_yellow: y, wkok_red: r });
     saveLayout('ind');
     closePop();
     renderWeeklyBars(window.gpState).catch(e => console.warn('renderWeeklyBars:', e));
-    showToast(`Umbrales: ${y}% / ${r}%`);
+    showToast(`Thresholds: ${y}% / ${r}%`);
   });
 }
 
@@ -8439,7 +8455,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     const view = document.querySelector('.gp-view.is-on')?.dataset.view;
     if (!view) return;
     await saveLayout(view).catch(e => console.warn('saveLayoutBtn:', e));
-    showToast('Layout guardado');
+    showToast('Layout saved');
   });
   document.getElementById('assignRivalsBtn')?.addEventListener('click', () => _gpOpenAssignRivals());
   // Card size is changed by dragging the corner handle (gp-resize.js);
@@ -10653,7 +10669,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       _mpCurrentRows = rows;
       _mpRenderKPIs(rows);
-    } catch (e) { console.error('_mpLoad:', e); kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Error cargando datos.</div>'; }
+    } catch (e) { console.error('_mpLoad:', e); kpiBody.innerHTML = '<div style="padding:16px;color:var(--cm-fg-muted)">Error loading data.</div>'; }
   }
 
   // ── KPIs (configurable chips) ─────────────────────────────────
@@ -12140,7 +12156,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       if (sErr) throw sErr;
 
       const current  = (allSess || []).find(s => s.id === sessionId);
-      if (!current) { body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Sesión no encontrada.</div>'; return; }
+      if (!current) { body.innerHTML = '<div style="padding:16px 0;color:var(--cm-fg-muted)">Session not found.</div>'; return; }
 
       const matchKey = _ztMdCode(current);
 
@@ -12201,7 +12217,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           return `<div class="sc-zt-row">
             <span class="sc-zt-label">${_ztLabel(key)}</span>
             <span class="gp-zc neu" style="width:52px">—</span>
-            <span class="sc-zt-text">sin datos suficientes</span>
+            <span class="sc-zt-text">not enough data</span>
           </div>`;
         }
 
@@ -12399,7 +12415,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
       <div class="ol-hm-wrap">
         <table class="ol-hm">
           <thead><tr>
-            <th class="ol-pc ol-hm-th${noSort && !_olSortCol ? '' : ''}" data-key="">Jugador</th>
+            <th class="ol-pc ol-hm-th${noSort && !_olSortCol ? '' : ''}" data-key="">Player</th>
             ${thCells}
           </tr></thead>
           <tbody>${bodyRows}</tbody>
@@ -12721,7 +12737,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
           return `<div class="sc-vs-row">
             <span class="sc-vs-label">${_vsLabel(key)}</span>
             <span class="sc-vs-pct neu">—</span>
-            <span class="sc-vs-vals">sin datos</span>
+            <span class="sc-vs-vals">no data</span>
           </div>`;
         }
 
@@ -12741,7 +12757,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         <div style="font:600 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint);padding:8px 0 4px;text-transform:uppercase;letter-spacing:.04em">
           plantel · ${mdCode} · vs ${refLabel}
         </div>
-        ${rows.join('') || '<div style="padding:12px 0;color:var(--cm-fg-muted)">Sin métricas seleccionadas.</div>'}`;
+        ${rows.join('') || '<div style="padding:12px 0;color:var(--cm-fg-muted)">No metrics selected.</div>'}`;
 
     } catch (e) {
       console.warn('renderVsSession:', e);

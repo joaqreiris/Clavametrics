@@ -178,10 +178,10 @@
     if (!right || right.querySelector('.gp-page-sel')) return;
     const sel = document.createElement('select');
     sel.className = 'pill gp-page-sel';
-    sel.innerHTML = '<option value="fit">Ajustar al ancho</option>'
+    sel.innerHTML = '<option value="fit">Fit width</option>'
                   + '<option value="wide">16:9</option>'
-                  + '<option value="a4l">A4 horizontal</option>'
-                  + '<option value="a4p">A4 vertical</option>';
+                  + '<option value="a4l">A4 landscape</option>'
+                  + '<option value="a4p">A4 portrait</option>';
     sel.addEventListener('change', () => {
       const g = activeGrid(); if (!g) return;
       try { localStorage.setItem(PAGE_KEY(activeView()), sel.value); } catch (e) {}
@@ -189,18 +189,12 @@
     });
     const btn = document.createElement('button');
     btn.type = 'button'; btn.className = 'pill gp-compact-btn';
-    btn.innerHTML = '<i class="ti ti-arrow-bar-to-up"></i>Compactar';
+    btn.innerHTML = '<i class="ti ti-arrow-bar-to-up"></i>Compact';
     btn.addEventListener('click', () => { const g = activeGrid(); if (g) compact(g); });
     right.insertBefore(btn, right.firstChild);
     right.insertBefore(sel, right.firstChild);
-    const add = document.createElement('button');
-    add.type = 'button'; add.className = 'pill gp-addcard-btn';
-    add.innerHTML = '<i class="ti ti-plus"></i>Add card';
-    add.addEventListener('click', () => {
-      const g = activeGrid(); const tile = g && g.querySelector('.gp-add');
-      if (tile) tile.click();
-    });
-    right.insertBefore(add, right.firstChild);
+    // NB: no injected "Add card" here — the static dashboard-bar pill already covers it
+    // (avoids the duplicate button). The in-grid .gp-add tile remains the insert target.
   }
 
   // ── resize handles ───────────────────────────────────────────────────────
