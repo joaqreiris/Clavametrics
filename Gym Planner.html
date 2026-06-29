@@ -15,6 +15,7 @@
 <script src="assets/supabase-init.js"></script>
 <script src="lib/day-context.js"></script>
 <script src="assets/sidebar.js"></script>
+<script defer src="assets/gps-acwr.js"></script>
 <script src="assets/global-search.js" defer></script>
 <style>
   body.cm{background:var(--cm-bg)}
@@ -734,6 +735,40 @@ async function gpRunAi() {
       if (dctx?.microcycle?.name) constraints.microcycle = dctx.microcycle.name;
       if (dctx?.home_away)        constraints.home_away  = dctx.home_away;
       if (dctx?.opponent || dctx?.rival) constraints.opponent = dctx.opponent || dctx.rival;
+    } catch(_) {}
+
+    // Team load status — soft squad-level signal to modulate volume/intensity (never a diagnosis)
+    try {
+      const load = {};
+      if (window.gpsACWR?.calculateTeamACWR) {
+        const acwr = await window.gpsACWR.calculateTeamACWR({ clubId: _gpClubId, refDate: _gpCurrentDate });
+        const pl = acwr?.player_load;
+        if (pl != null) {
+          load.acwr_player_load = Number(pl.toFixed(2));
+          const z = window.gpsACWR.getZone ? window.gpsACWR.getZone(pl) : null;
+          if (z) load.acwr_zone = z.label;
+        }
+      }
+      // Readiness: recent (4d) vs own 28d baseline → scale-agnostic relative label
+      const since28 = new Date(_gpCurrentDate); since28.setDate(since28.getDate() - 28);
+      const { data: wel } = await window.sb.from('wellness')
+        .select('readiness, submitted_at').eq('club_id', _gpClubId)
+        .gte('submitted_at', since28.toISOString().slice(0,10))
+        .not('readiness', 'is', null);
+      if (wel && wel.length) {
+        const r4 = new Date(_gpCurrentDate); r4.setDate(r4.getDate() - 4);
+        const r4s = r4.toISOString().slice(0,10);
+        const recent = wel.filter(w => w.submitted_at >= r4s).map(w => Number(w.readiness));
+        const all28  = wel.map(w => Number(w.readiness));
+        const avg = a => a.length ? a.reduce((s,v)=>s+v,0)/a.length : null;
+        const rAvg = avg(recent), bAvg = avg(all28);
+        if (rAvg != null && bAvg) {
+          const d = (rAvg - bAvg) / bAvg;
+          load.readiness_trend = d <= -0.08 ? 'below baseline' : d >= 0.08 ? 'above baseline' : 'at baseline';
+          load.readiness_n = recent.length;
+        }
+      }
+      if (Object.keys(load).length) constraints.load = load;
     } catch(_) {}
 
     const { data, error } = await window.sb.functions.invoke('generate-gym-plan', { body: { objective, constraints, candidates: cands } });

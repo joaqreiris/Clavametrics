@@ -87,6 +87,17 @@ Hard rules:
     MD+2         → progressive re-entry.
   These are sensible defaults; the explicit OBJECTIVE always wins if it
   conflicts. Reflect the chosen logic briefly in the top-level "notes".
+- If TEAM LOAD signals are present (ACWR, readiness), use them ONLY to modulate
+  the session — never to diagnose or predict injury. They are soft, squad-level
+  context worth a closer look, not a verdict:
+    ACWR in "Caution"/"High risk", OR readiness "below baseline"
+        → trim total volume, lower plyometric contacts, avoid high-load
+          eccentrics; bias toward quality and control;
+    ACWR "Under-training" with readiness "at"/"above baseline"
+        → progressing load is reasonable if the objective calls for it.
+  If a load signal is absent, do not infer or mention it. When load context
+  shaped the dosage, state it plainly in "notes" (e.g. "Volume trimmed: squad
+  ACWR elevated"), framed as a coaching choice, never as a risk claim.
 - main items also get a "mode" field: "SR" (sets x reps) by default.
 - Keep it sensible: warmup 2-4 items, plyo 0-3, main 3-6. Set each block's
   "min" (estimated minutes). Leave a block's items [] if not appropriate.
@@ -155,6 +166,8 @@ Deno.serve(async (req: Request) => {
       constraints?.microcycle ? `MICROCYCLE: ${constraints.microcycle}` : '',
       constraints?.home_away ? `VENUE: ${constraints.home_away}` : '',
       constraints?.opponent ? `OPPONENT: ${constraints.opponent}` : '',
+      constraints?.load?.acwr_player_load != null ? `TEAM ACWR (player load, soft signal): ${constraints.load.acwr_player_load}${constraints.load.acwr_zone ? ` — ${constraints.load.acwr_zone}` : ''}` : '',
+      constraints?.load?.readiness_trend ? `TEAM READINESS (recent vs baseline): ${constraints.load.readiness_trend}${constraints.load.readiness_n ? ` (n=${constraints.load.readiness_n})` : ''}` : '',
       constraints?.duration_min ? `TARGET DURATION (min): ${constraints.duration_min}` : '',
       constraints?.available_equipment?.length ? `AVAILABLE EQUIPMENT: ${constraints.available_equipment.join(', ')}` : '',
       sequence?.length ? `COACH PURPOSE ORDER: ${sequence.join(' > ')}` : '',
