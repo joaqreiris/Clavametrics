@@ -76,10 +76,11 @@
   // Hidden from the Task flyout: their real value lives in a task column instead. time_played
   // is 0/null in migrated period data → use 'Work time' (from duration_seconds) instead.
   const TASK_HIDE_METRICS = new Set(['time_played']);
-  // Built-in DERIVED metrics: a simple formula over base columns. Resolved as CALCULATED
-  // metrics in any card (session + task) — the resolver evaluates the formula per row, then
-  // aggregates. Easy to extend with more "sum of two fields" derivations.
-  const DERIVED_METRICS = { acc_dec: { name: 'Acc+Dec', formula: 'accelerations + decelerations' } };
+  // Built-in DERIVED metrics — the lib/gp-card resolver computes them per row (see DERIVED
+  // there). The builder only needs to OFFER them in the catalog (no formula needed here).
+  const DERIVED_METRICS = { acc_dec: { name: 'Acc+Dec', unit: '' } };
+  // COUNT metrics are integers → force 0 decimals on display (mirrors GPS Analysis _GP_COUNT).
+  const COUNT_METRICS = new Set(['accelerations', 'decelerations', 'sprint_count', 'acc_dec']);
   // Mock row labels per dimension — only for the builder's pre-save preview.
   const DIM_MOCK = {
     player_name:  ['R. Vega','T. López','I. Barreiro','S. Rivas','M. Paredes'],
@@ -249,9 +250,7 @@
         // Calculated metric → self-contained card: embed the formula + name so the
         // resolver can compute it per session and the card re-renders on reload even
         // if the catalog entry isn't around (the card references the metric by id).
-        // Any catalog metric carrying a formula (user-calculated OR a built-in derived like
-        // acc_dec) → embed it so the resolver evaluates it per row instead of reading a column.
-        if (cat.formula) { out.kind = 'calculated'; out.formula = cat.formula; out.name = cat.name || m.id; }
+        if (cat.calculated && cat.formula) { out.kind = 'calculated'; out.formula = cat.formula; out.name = cat.name || m.id; }
         // Per-column conditional format (table viz). Persist the user's rule, or a
         // sensible default for table cards so the formatting survives save/reload.
         if (m.format) out.format = m.format;
@@ -368,20 +367,22 @@
     // Task per-min metrics live only in v_gps_task_analysis → register them so buildConfig
     // and the resolver can resolve them by id (the flyout shows them only when source='task').
     TASK_METRICS.forEach(m => catalogMap.set(m.id, m));
-    // Built-in derived metrics (e.g. acc_dec = accelerations + decelerations). Mutate the
-    // existing catalog entry in place when present (keeps catalogGroups in sync — same object
-    // reference); otherwise add it to an Intensity-ish group so the flyout offers it.
+    // Built-in derived metrics (e.g. acc_dec). The resolver computes them; here we just make
+    // sure they're OFFERED. Mutate the existing entry in place (keeps catalogGroups in sync —
+    // same object reference); otherwise add it to an Intensity-ish group.
     Object.entries(DERIVED_METRICS).forEach(([id, d]) => {
       const m = catalogMap.get(id);
-      if (m) { m.formula = d.formula; m.kind = m.kind || 'accum'; if (d.name) m.name = d.name; }
+      if (m) { m.kind = m.kind || 'accum'; if (d.name) m.name = d.name; }
       else {
-        const nm = { id, name: d.name, unit: d.unit || '', kind: 'accum', formula: d.formula,
-                     group_name: 'Intensity', is_custom: false, squad_rollup: true, decimals: d.decimals ?? 0 };
+        const nm = { id, name: d.name, unit: d.unit || '', kind: 'accum',
+                     group_name: 'Intensity', is_custom: false, squad_rollup: true, decimals: 0 };
         catalogMap.set(id, nm);
         const grp = catalogGroups.find(g => g.g === 'Intensity') || catalogGroups[0];
         if (grp) grp.items.push(nm); else catalogGroups.push({ g: 'Derived', custom: false, items: [nm] });
       }
     });
+    // Counts are integers → force 0 decimals regardless of the DB catalog value.
+    COUNT_METRICS.forEach(id => { const m = catalogMap.get(id); if (m) m.decimals = 0; });
   }
 
   // ── DOM injection ──────────────────────────────────────────
@@ -3288,7 +3289,8 @@
     const id   = (cat?.id || cat?.key || '').toLowerCase();
     const grp  = (cat?.group_name || '').toLowerCase();
     let mode = 'plain', dir = 'high', dec = 0;
-    if (/acwr|ratio/.test(name) || /acwr|ratio/.test(id)) { mode = 'icon'; dir = 'band'; dec = 2; }      // load ratio band
+    if (COUNT_METRICS.has(id)) { mode = 'bar'; dec = 0; }                                                  // counts → integer
+    else if (/acwr|ratio/.test(name) || /acwr|ratio/.test(id)) { mode = 'icon'; dir = 'band'; dec = 2; }  // load ratio band
     else if (unit === '%' || /readiness|wellness|availab/.test(name)) { mode = 'pct'; dec = 0; }          // % / readiness
     else if (grp === 'distance' || unit === 'm' || unit === 'km') { mode = 'bar'; }                       // distance / volume
     else if (grp === 'count' || unit === 'n' || /count|sprint/.test(name)) { mode = 'bar'; }              // counts
@@ -3385,8 +3387,10 @@
   /** Per-column effective format + real-data stats (min/max/thr) for the table. */
   function _tableColumns(config, series, accent) {
     return series.map((s, i) => {
-      const cat  = catalogMap.get(config.metrics?.[i]?.id) || {};
+      const mid  = config.metrics?.[i]?.id;
+      const cat  = catalogMap.get(mid) || {};
       const f    = config.metrics?.[i]?.format || _defaultFormat(cat);
+      if (COUNT_METRICS.has(mid)) f.dec = 0;   // counts are integers, even on older saved cards
       const vals = s.points.map(p => p.y).filter(v => isFinite(v));
       const min  = vals.length ? Math.min(...vals) : 0;
       const max  = vals.length ? Math.max(...vals) : 1;
