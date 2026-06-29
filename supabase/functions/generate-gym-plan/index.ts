@@ -75,6 +75,18 @@ Hard rules:
     prevention/activation → controlled tempo, moderate volume.
   Fields sets (number as string), reps (e.g. "8", "6-8", "5x3"), load
   (e.g. "RPE 8", "75%", "moderate", "bodyweight"), rest (e.g. "90s"), notes.
+- If a MATCH-DAY POSITION is given (e.g. MD-4, MD-1, MD+1), do NOT treat the
+  session in isolation — modulate load and emphasis to fit the microcycle:
+    MD-5 / MD-4  → main loading window: heavier strength is appropriate,
+                   higher-intent plyo allowed;
+    MD-3         → moderate-high, build volume but keep quality;
+    MD-2         → moderate, quality over volume, trim total sets;
+    MD-1         → activation / primer ONLY: low volume, minimal-to-zero plyo
+                   contacts, no high-load eccentrics, short and sharp;
+    MD+1         → regeneration: low intensity, no high mechanical stress;
+    MD+2         → progressive re-entry.
+  These are sensible defaults; the explicit OBJECTIVE always wins if it
+  conflicts. Reflect the chosen logic briefly in the top-level "notes".
 - main items also get a "mode" field: "SR" (sets x reps) by default.
 - Keep it sensible: warmup 2-4 items, plyo 0-3, main 3-6. Set each block's
   "min" (estimated minutes). Leave a block's items [] if not appropriate.
@@ -139,6 +151,10 @@ Deno.serve(async (req: Request) => {
       `OBJECTIVE: ${objective.trim()}`,
       constraints?.players ? `PLAYERS: ${constraints.players}` : '',
       constraints?.emphasis ? `EMPHASIS: ${constraints.emphasis}` : '',
+      constraints?.md ? `MATCH-DAY POSITION: ${constraints.md}` : '',
+      constraints?.microcycle ? `MICROCYCLE: ${constraints.microcycle}` : '',
+      constraints?.home_away ? `VENUE: ${constraints.home_away}` : '',
+      constraints?.opponent ? `OPPONENT: ${constraints.opponent}` : '',
       constraints?.duration_min ? `TARGET DURATION (min): ${constraints.duration_min}` : '',
       constraints?.available_equipment?.length ? `AVAILABLE EQUIPMENT: ${constraints.available_equipment.join(', ')}` : '',
       sequence?.length ? `COACH PURPOSE ORDER: ${sequence.join(' > ')}` : '',
