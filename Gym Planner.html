@@ -738,11 +738,14 @@ async function gpRunAi() {
     if (hasWork && !confirm('Replace the current session with the AI draft?')) { btn.disabled = false; status.textContent = ''; return; }
 
     const content = {
-      warmup: { min: plan.warmup?.min || '', rows: (plan.warmup?.items||[]).map(it => [it.name, it.sets||'', it.reps||'', '', it.notes||'']) },
-      plyo:   { min: plan.plyo?.min || '',   rows: (plan.plyo?.items||[]).map(it => [it.name, _gpSR(it), '', '', it.rest||'', it.notes||'']) },
-      main:   { min: plan.main?.min || '',   rows: (plan.main?.items||[]).map(it => ({ v:[it.name, _gpSR(it), it.load||'', it.rest||'', '', ''], mode: it.mode||'SR' })) },
+      warmup: { min: plan.warmup?.min || '', rows: (plan.warmup?.items||[]).map(it => ({ v:[it.name, it.sets||'', it.reps||'', '', it.notes||''], exId: it.exercise_id || null })) },
+      plyo:   { min: plan.plyo?.min || '',   rows: (plan.plyo?.items||[]).map(it => ({ v:[it.name, _gpSR(it), '', '', it.rest||'', it.notes||''], exId: it.exercise_id || null })) },
+      main:   { min: plan.main?.min || '',   rows: (plan.main?.items||[]).map(it => ({ v:[it.name, _gpSR(it), it.load||'', it.rest||'', '', ''], exId: it.exercise_id || null, mode: it.mode||'SR' })) },
     };
     gpApplyContent(content);
+    await gpResolveSessionMedia();
+    document.querySelectorAll('#gpWarmupBody tr,#gpPlyoBody tr,#gpMainBody tr').forEach(gpRenderRowThumb);
+    gpRenderPrintSheet();
     const mainNotes = (plan.main?.items||[]).filter(it => it.notes).map(it => `${it.name}: ${it.notes}`);
     const noteParts = [plan.notes, ...mainNotes].filter(Boolean);
     if (noteParts.length) { const n = document.getElementById('gpNotes'); if (n) n.value = (n.value ? n.value + '\n' : '') + noteParts.join('\n'); }
