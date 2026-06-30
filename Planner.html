@@ -2677,11 +2677,45 @@
     setOrientBtn(e.target.value || null);
   });
 
+  // ── Parse field size + player count out of the drill NAME ─────────────────
+  // Mirrors the players_format SQL parse (v_gps_task_analysis): field "<w>x<h>[m]"
+  // and the "NvN(+N)(+NvN)…" game format. Player count = sum of the numeric tokens
+  // in the format ("5VS5+2" → 12, "2VS1 + 1" → 4); non-numeric extras (GK) are ignored.
+  // Returns { width, height, players } with nulls where nothing parsed.
+  function _plParseNameMeasures(name) {
+    const s = String(name || '');
+    let width = null, height = null, players = null;
+    const fm = s.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)\s*[mM]?/);
+    if (fm) { width = parseFloat(fm[1]); height = parseFloat(fm[2]); }
+    const gm = s.match(/\d+\s*v(?:s)?\s*\d+(?:\s*\+\s*(?:\d+\s*v(?:s)?\s*\d+|\d+|gk))*/i);
+    if (gm) {
+      const nums = gm[0].match(/\d+/g);
+      if (nums) players = nums.reduce((a, n) => a + parseInt(n, 10), 0);
+    }
+    return { width, height, players };
+  }
+
+  // Pre-fill space/players from the name AS A SUGGESTION — only empty fields, never
+  // overwriting values the user (or a saved exercise) already set.
+  function _plAutofillMeasuresFromName() {
+    const nameEl = document.getElementById('plExName');
+    const wEl = document.getElementById('plExWidth');
+    const hEl = document.getElementById('plExHeight');
+    const pEl = document.getElementById('plExPlayers');
+    if (!nameEl || !wEl || !hEl || !pEl) return;
+    const p = _plParseNameMeasures(nameEl.value);
+    let changed = false;
+    if (p.width   != null && !wEl.value.trim()) { wEl.value = p.width;   changed = true; }
+    if (p.height  != null && !hEl.value.trim()) { hEl.value = p.height;  changed = true; }
+    if (p.players != null && !pEl.value.trim()) { pEl.value = p.players; changed = true; }
+    if (changed) updateSpaceOrientation();
+  }
+
   // Form input listeners — live updates
   ['plExPlayers','plExWidth','plExHeight','plExDuration','plExSeries','plExWorkTime','plExRestTime'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', updateSpaceOrientation);
   });
-  document.getElementById('plExName')?.addEventListener('input', updateSummaryCard);
+  document.getElementById('plExName')?.addEventListener('input', () => { updateSummaryCard(); _plAutofillMeasuresFromName(); });
   document.getElementById('plExMatchDay')?.addEventListener('input', updateSummaryCard);
 
   // ── Duration is read-only: auto = series × (work + rest) = total incl. rest ─
@@ -2849,6 +2883,9 @@
     document.getElementById('plExObjective').value   = ex.objective   || '';
     document.getElementById('plExDescription').value = ex.description || '';
     plSetVisibilityUI(ex.visible_teams);
+
+    // Suggest space/players from the name when the stored fields are empty (editable).
+    _plAutofillMeasuresFromName();
 
     setOrientBtn(ex.orientation || null);
     setIntensity(ex.intensity || null);
@@ -3292,6 +3329,11 @@
   });
   await loadExercises();
   updateSpaceOrientation();
+
+  // Deep-link: "Planner.html?exercise=<id>" (e.g. Exercises Library → Open in Planner)
+  // loads that exercise into the canvas for editing. No param → empty (New exercise).
+  const _deepId = new URLSearchParams(location.search).get('exercise');
+  if (_deepId && exercises.some(e => e.id === _deepId)) await selectExercise(_deepId);
 
 })().catch(console.error);
 

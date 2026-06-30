@@ -290,7 +290,7 @@
             <div class="sl-preview-grid" id="prevGrid"></div>
             <div class="sl-preview-tags" id="prevTags"></div>
             <div class="sl-gps" id="prevGps" style="display:none"></div>
-            <button class="cm-btn is-outline is-sm sl-preview-open" onclick="window.location.href='Planner.html'">
+            <button class="cm-btn is-outline is-sm sl-preview-open" id="prevOpenBtn">
               <i class="ti ti-edit" style="font-size:13px"></i>Open in Planner
             </button>
           </div>
@@ -728,6 +728,10 @@
     (ex.focus||[]).forEach(f => { tags += `<span class="sl-tag t-focus">${f}</span>`; });
     document.getElementById('prevTags').innerHTML = tags;
     renderExGpsProfile(ex.id);
+
+    // Open in Planner → carry the exercise id so the Planner loads it for editing.
+    const openBtn = document.getElementById('prevOpenBtn');
+    if (openBtn) openBtn.onclick = () => { window.location.href = 'Planner.html?exercise=' + encodeURIComponent(ex.id); };
 
     document.getElementById('slPreview').classList.add('is-visible');
     document.getElementById('slPreview').scrollIntoView({ behavior:'smooth', block:'nearest' });
