@@ -67,9 +67,11 @@
     { id:'decelerations_per_min',            name:'Decel / min',       unit:'/min',   kind:'avg' },
     { id:'hmld_per_min',                     name:'HMLD / min',        unit:'m/min',  kind:'avg' },
     { id:'m2_per_player',                    name:'m² per player',     unit:'m²',     kind:'avg' },
-    // Optional (not imposed): the user adds these from "+ Add metric" if wanted.
-    { id:'work_min',                         name:'Work time',         unit:'min',    kind:'accum', decimals:0 },
-    { id:'n_instances',                      name:'Instances',         unit:'',       kind:'accum', decimals:0 },
+    // Optional (not imposed): the user adds these from "+ Add metric" if wanted. work_time is
+    // computed in the resolver from duration_seconds → MINUTES; kind 'avg' → default agg AVG
+    // (typical instance duration); pick SUM for total time on the drill.
+    { id:'work_time',                        name:'Work time',         unit:'min',    kind:'avg',   decimals:0 },
+    { id:'n_instances',                      name:'Number of sessions',unit:'',       kind:'accum', decimals:0 },
   ].map(m => ({ ...m, group_name:'Task', is_custom:false, squad_rollup:true, decimals: m.decimals ?? 1 }));
   const TASK_METRIC_IDS   = new Set(TASK_METRICS.map(m => m.id));
   const TASK_METRIC_GROUP = { g:'Task metrics', custom:false, items:TASK_METRICS };
