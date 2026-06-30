@@ -62,6 +62,8 @@
               "mode": { "type": "string", "enum": ["plain", "bar", "heat", "icon", "pct"] },
               "dir": { "type": "string", "enum": ["high", "band"] },
               "dec": { "type": "integer", "minimum": 0, "maximum": 3 },
+              "label": { "type": "string", "$comment": "Per-card column rename (overrides the catalog name in this card only)." },
+              "align": { "type": "string", "enum": ["left", "center", "right"], "$comment": "Per-column content alignment (table viz). Default: measures right." },
               "barColor": { "type": ["string", "null"] },
               "heatScale": { "type": "string", "enum": ["gyr", "ryg", "seq"] },
               "iconStyle": { "type": "string", "enum": ["dot", "arrow"] },
@@ -91,7 +93,9 @@
         "additionalProperties": false,
         "required": ["id"],
         "properties": {
-          "id": { "type": "string", "enum": ["player_name", "position", "session_date", "md_code", "microcycle", "rival", "drill", "field_size", "players_format"] }
+          "id": { "type": "string", "enum": ["player_name", "position", "session_date", "md_code", "microcycle", "rival", "drill", "field_size", "players_format"] },
+          "label": { "type": "string", "$comment": "Per-card column rename (table viz)." },
+          "align": { "type": "string", "enum": ["left", "center", "right"], "$comment": "Per-column content alignment (table viz). Default: left." }
         }
       }
     },

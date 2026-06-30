@@ -413,11 +413,25 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .gp-zt th.tf-sortable:hover { color: var(--cm-accent); }
 .gp-zt .tf-sort-arr { font-size: 11px; vertical-align: middle; color: var(--cm-accent); }
 
-/* Task auto columns: N (instances) + Time (total min) — subtle, narrow, right-aligned mono */
-.gp-zt th.tf-aux, .gp-zt td.tf-aux { width: 48px; text-align: right; white-space: nowrap;
-  padding: var(--cm-tbl-pad-y, 4px) 8px; font: 600 var(--cm-tbl-fs, 12px)/1 var(--cm-font-mono);
-  font-variant-numeric: tabular-nums; color: var(--cm-fg-muted); }
-.gp-zt td.tf-aux { border-left: 1px solid var(--cm-border-soft); }
+/* Builder tables (those with conditional td.tf cells) wrap their headers so full
+   names ("Work time", "Players format") read in two lines instead of clipping.
+   Scoped to :has(td.tf) so the bespoke z-score/heatmap tables stay single-line. */
+.gp-zt:has(td.tf) th { white-space: normal; line-height: 1.2; }
+
+/* Per-column alignment (rename + align pane). Defaults stay dims-left / measures-right;
+   these classes override per column. The inner .tf-c flex follows for value cells. */
+.gp-zt th.tf-al-left,   .gp-zt td.tf-al-left   { text-align: left; }
+.gp-zt th.tf-al-center, .gp-zt td.tf-al-center { text-align: center; }
+.gp-zt th.tf-al-right,  .gp-zt td.tf-al-right  { text-align: right; }
+.gp-zt td.tf-al-left   .tf-c { justify-content: flex-start; }
+.gp-zt td.tf-al-center .tf-c { justify-content: center; }
+.gp-zt td.tf-al-right  .tf-c { justify-content: flex-end; }
+
+/* rename text input inside the column pane */
+.tf-pane input[type="text"][data-label] { width: 100%; min-width: 150px; padding: 5px 8px; border-radius: 6px;
+  border: 1px solid var(--cm-border); background: var(--cm-bg-sunk); color: var(--cm-fg-strong);
+  font: 500 12.5px/1.2 var(--cm-font-sans); }
+.tf-pane input[type="text"][data-label]:focus { outline: none; border-color: var(--cm-accent); }
 /* always-visible "format" chip so the header reads as clickable */
 .gp-zt th.tf-h .tf-fbtn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 5px; border-radius: 5px; background: var(--cm-bg-soft); border: 1px solid var(--cm-border); color: var(--cm-fg-muted); vertical-align: middle; transition: background .12s, color .12s, border-color .12s; }
 .gp-zt th.tf-h:hover .tf-fbtn { background: var(--cm-accent); border-color: var(--cm-accent); color: var(--cm-fg-on-accent); }

@@ -25,7 +25,7 @@
     bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 1 },
     line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
     scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1 },
-    radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 0 },
+    radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 1 },
     ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1 },
     table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 4 },
     heatmap: { name: 'Heatmap', icon: 'ti-layout-grid',  min: 1, max: 12, dimMax: 1 },
@@ -263,7 +263,7 @@
         if (m.line) out.line = true;               // combo: render this metric as a line (2nd axis)
         return out;
       }),
-      dimensions: (S.dimensions || []).map(d => ({ id:d.id })),
+      dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
@@ -958,7 +958,7 @@
       S.sort    = cfg.sort || null;
       S.title   = cfg.title || '';
       S.metrics = JSON.parse(JSON.stringify(cfg.metrics || []));
-      S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id }));
+      S.dimensions = (cfg.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}) }));
     } else if (rawConfig?.schema === 'gp.card/v1') {
       S.type    = rawConfig.viz                  || 'bars';
       S.source  = rawConfig.source || 'session';
@@ -986,7 +986,7 @@
           if (cat?.kind === 'peak' && !AGG[m.agg]?.peakOk) m.agg = 'avg';
           return m;
         });
-      S.dimensions = (rawConfig.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id }));
+      S.dimensions = (rawConfig.dimensions || []).filter(d => DIM_MAP.has(d.id) && dimAllowed(DIM_MAP.get(d.id), S.source)).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}) }));
     } else {
       cancelBuild();
       return;
@@ -1863,7 +1863,8 @@
         // Per-axis role baseline drives the radial scale (so axes don't collapse).
         // Fetched for any player-scope radar; the baseline RING is only drawn when
         // comparison ≠ none (radarChartData keys that off config.comparison).
-        if (config.scope.level === 'player' && fetchRoleBaseline) {
+        // Grouped radar (a dimension is set) normalizes per-axis itself — no role ring.
+        if (config.scope.level === 'player' && fetchRoleBaseline && !(config.dimensions || []).length) {
           try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
           catch (e) { console.warn('gpb role baseline:', e); }
         }
@@ -2142,6 +2143,24 @@
     const baselineOf   = baselineInfo ? baselineInfo.of : 'del baseline';
 
     const ms        = (series || []).filter(s => s.points && s.points.length);
+
+    // Grouped radar: a dimension (drill / field size / players format / position…) is set,
+    // so draw ONE polygon per group across the metric axes. Each axis is normalized 0–100%
+    // by its own max across groups (mixed units don't collapse). No baseline ring here.
+    if ((config.dimensions || []).length > 0) {
+      const axes  = ms.map(s => (s.name || s.label || '').split(' ').slice(0, 2).join(' '));
+      const units = ms.map(s => s.unit || '');
+      const order = [], seen = new Set();
+      ms.forEach(s => s.points.forEach(p => { if (!seen.has(p.x)) { seen.add(p.x); order.push(p.x); } }));
+      const axisMax = ms.map(s => Math.max(1, ...s.points.map(p => Math.abs(p.y) || 0)));
+      const groups = order.map(g => {
+        const real = ms.map(s => { const pt = s.points.find(p => p.x === g); return pt ? (pt.y || 0) : 0; });
+        const gp   = real.map((v, i) => Math.round((v / axisMax[i]) * 100));
+        return { name: String(g), pct: gp, realLabels: real.map((v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : '')) };
+      });
+      return { grouped: true, axes, groups, colors: barColors(config, groups.length), rMax: 100, color, showAxes, showLeg, showLbl };
+    }
+
     const labels    = ms.map(s => (s.name || s.label || '').split(' ').slice(0, 2).join(' '));
     const units     = ms.map(s => s.unit || '');
     const realVals  = ms.map(s => s.points[0]?.y ?? 0);
@@ -2159,7 +2178,8 @@
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
   function mountRadarChart(body, config, series, baselineMap) {
     const d = radarChartData(config, series, baselineMap);
-    if (!d.labels.length) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
+    const axisLabels = d.grouped ? d.axes : d.labels;
+    if (!axisLabels.length || (d.grouped && !d.groups.length)) { destroyBodyChart(body); body.innerHTML = ''; showEmptyBody(body, 'No rows match the current scope, range and filters.'); return; }
     if (typeof Chart === 'undefined') { destroyBodyChart(body); body.innerHTML = renderTypeFromDataset(config, series); return; }
 
     // Token cancels any earlier pending mount. The builder preview re-renders on
@@ -2178,7 +2198,17 @@
       body.appendChild(canvas);
       Chart.getChart(canvas)?.destroy();                 // belt-and-suspenders before reuse
 
-      const datasets = [{
+      const datasets = d.grouped
+        ? d.groups.map((g, gi) => ({
+            label: g.name,
+            data: g.pct,
+            borderColor: d.colors[gi],
+            backgroundColor: d.colors[gi] + '22',
+            borderWidth: 2.2,
+            pointRadius: 3, pointHoverRadius: 5,
+            pointBackgroundColor: d.colors[gi], pointBorderColor: '#fff', pointBorderWidth: 1.2,
+          }))
+        : [{
         label: 'Jugador',
         data: d.pct,
         borderColor: d.color,
@@ -2187,7 +2217,7 @@
         pointRadius: 4, pointHoverRadius: 6,
         pointBackgroundColor: d.color, pointBorderColor: '#fff', pointBorderWidth: 1.5,
       }];
-      if (d.hasBaseline) datasets.push({
+      if (!d.grouped && d.hasBaseline) datasets.push({
         label: d.baselineName,
         data: d.pct.map(() => 100),
         borderColor: 'rgba(148,163,184,0.75)',
@@ -2198,26 +2228,31 @@
 
       body.__chart = new Chart(canvas, {
         type: 'radar',
-        data: { labels: d.labels, datasets },
+        data: { labels: axisLabels, datasets },
         plugins: [_radarLabelPlugin],
         options: {
           responsive: true, maintainAspectRatio: false,
           animation: { duration: 320 },
           plugins: {
-            legend: { display: d.showLeg && d.hasBaseline, position: 'bottom',
+            legend: { display: d.grouped ? d.showLeg : (d.showLeg && d.hasBaseline), position: 'bottom',
                       labels: { boxWidth: 10, padding: 12, font: { size: 10 }, usePointStyle: true } },
             tooltip: { callbacks: { label: ctx => {
+              if (d.grouped) {
+                // "Drill A — HSR: 640 m" (real value per group per axis)
+                const real = d.groups[ctx.datasetIndex]?.realLabels[ctx.dataIndex] ?? (ctx.raw + '%');
+                return `${ctx.dataset.label} — ${ctx.chart.data.labels[ctx.dataIndex]}: ${real}`;
+              }
               if (ctx.datasetIndex !== 0) return `${ctx.dataset.label}: ${ctx.raw}%`;
               // Real value + % of baseline, e.g. "HSR: 640 m · 78% del pico"
               const lbl = ctx.chart.data.labels[ctx.dataIndex], real = d.realLabels[ctx.dataIndex];
               return d.hasBaseline ? `${lbl}: ${real} · ${ctx.raw}% ${d.baselineOf}` : `${lbl}: ${real}`;
             } } },
-            gpbRadarLabels: { show: d.showLbl, labels: d.realLabels, color: d.color },
+            gpbRadarLabels: { show: !d.grouped && d.showLbl, labels: d.realLabels, color: d.color },
           },
           scales: {
             r: {
               min: 0, max: d.rMax,
-              ticks: { display: d.showAxes, stepSize: 30, font: { size: 9 }, color: '#9CA3AF',
+              ticks: { display: d.showAxes, stepSize: d.grouped ? 25 : 30, font: { size: 9 }, color: '#9CA3AF',
                        backdropColor: 'transparent', callback: v => v + '%' },
               grid: { color: 'rgba(148,163,184,0.18)' },
               angleLines: { color: 'rgba(148,163,184,0.22)' },
@@ -2234,15 +2269,20 @@
   function mountRadarPreview(body, S) {
     const ms = S.metrics.map(m => catalogMap.get(m.id)).filter(Boolean);
     if (ms.length < 3) { destroyBodyChart(body); body.innerHTML = renderType(S); return; }
+    // When a dimension is chosen the radar draws one polygon per group → mock 3 groups
+    // so the preview reflects the real grouped render.
+    const grouped = (S.dimensions || []).length > 0;
+    const groups  = grouped ? ['Group A', 'Group B', 'Group C'] : ['all'];
     const series = ms.map((m, i) => ({
       label: m.id, name: m.name, unit: m.unit,
-      points: [{ x: 'all', y: +(metSample(m) * (0.55 + 0.4 * Math.abs(Math.sin(i * 1.3 + 1)))).toFixed(1) }],
+      points: groups.map((g, gi) => ({ x: g, y: +(metSample(m) * (0.5 + 0.45 * Math.abs(Math.sin(i * 1.3 + 1 + gi * 1.7)))).toFixed(1) })),
     }));
     const baselineMap = new Map(ms.map(m => [m.id, metSample(m)]));
     const cfg = {
       viz: 'radar',
+      dimensions: grouped ? [{ id: S.dimensions[0].id }] : [],
       comparison: cmpConfig(S),
-      style: { color: S.color, axes: S.axes, legend: S.legend, dataLabels: S.labels },
+      style: { color: S.color, palette: S.palette, axes: S.axes, legend: S.legend, dataLabels: S.labels },
     };
     mountRadarChart(body, cfg, series, baselineMap);
   }
@@ -3487,15 +3527,25 @@
     const arrow = id => (sort && sort.col === id)
       ? ` <i class="ti ti-${sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'} tf-sort-arr"></i>` : '';
 
+    // Per-column rename + alignment live on config: dimensions[j].{label,align} and the
+    // metric column's format.{label,align}. Defaults: dims left, measures right.
+    const dims = config.dimensions || [];
     const dimHead = dimCols.map((n, j) => {
-      const sid = _dimSortId(config, j);
-      return `<th class="${j === 0 ? 'pc' : 'dc'} tf-sortable" data-sort="${sid}" title="Ordenar por esta columna">${esc(n)}${arrow(sid)}</th>`;
+      const d    = dims[j] || {};
+      const lbl  = d.label || n;                                   // custom rename wins
+      const al   = d.align || 'left';
+      const sid  = _dimSortId(config, j);
+      // Column-options chip only when this header maps to a real dimension (not the legacy
+      // single-identity fallback) so the pane has something to edit.
+      const chip = (editable && dims[j]) ? `<span class="tf-fbtn" data-di="${j}" title="Column options"><i class="ti ti-adjustments"></i></span>` : '';
+      return `<th class="${j === 0 ? 'pc' : 'dc'} tf-sortable tf-al-${al}${(editable && dims[j]) ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
     }).join('');
     const metHead = cols.map((c, i) => {
       const sid  = 'met:' + (config.metrics?.[i]?.id || i);
-      const name = esc(c.s.name.split(' ')[0]);
-      const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="Formato condicional"><i class="ti ti-adjustments"></i></span>` : '';
-      return `<th class="tf-sortable${editable ? ' tf-h' : ''}" data-sort="${sid}" title="Ordenar por esta columna">${name}${arrow(sid)}${chip}</th>`;
+      const lbl  = c.f.label || c.s.name;                          // FULL name (no word-splitting); custom rename wins
+      const al   = c.f.align || 'right';
+      const chip = editable ? `<span class="tf-fbtn" data-mi="${i}" title="Column options & format"><i class="ti ti-adjustments"></i></span>` : '';
+      return `<th class="tf-sortable tf-al-${al}${editable ? ' tf-h' : ''}" data-sort="${sid}" title="${esc(lbl)}">${esc(lbl)}${arrow(sid)}${chip}</th>`;
     }).join('');
     const head = `<tr>${dimHead}${metHead}</tr>`;
 
@@ -3505,10 +3555,10 @@
       // header y body nunca se desincronicen.
       const _dv = (p.dims || [p.x]).slice(0, dimCols.length);
       while (_dv.length < dimCols.length) _dv.push('—');
-      const dimCells = _dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'}">${esc(v)}</td>`).join('');
+      const dimCells = _dv.map((v, i) => `<td class="${i === 0 ? 'pc' : 'dc'} tf-al-${(dims[i]?.align) || 'left'}">${esc(v)}</td>`).join('');
       const valCells = cols.map(c => {
         const pt = c.s.points.find(q => q.x === p.x);
-        return `<td class="tf">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;
+        return `<td class="tf tf-al-${c.f.align || 'right'}">${tableCellHtml(pt ? pt.y : null, c.f, c.stats)}</td>`;
       }).join('');
       return `<tr>${dimCells}${valCells}</tr>`;
     }).join('');
@@ -3526,6 +3576,9 @@
     if (editable) {
       body.querySelectorAll('.tf-fbtn[data-mi]').forEach(chip => chip.addEventListener('click', e => {
         e.stopPropagation(); openTfPane(+chip.dataset.mi, chip.closest('th'));
+      }));
+      body.querySelectorAll('.tf-fbtn[data-di]').forEach(chip => chip.addEventListener('click', e => {
+        e.stopPropagation(); openDimPane(+chip.dataset.di, chip.closest('th'));
       }));
     }
   }
@@ -3635,7 +3688,12 @@
         </div></div>`;
     }
     const decRow = `<div class="tf-row"><span class="lab">Decimales</span><input type="number" min="0" max="3" data-dec value="${f.dec ?? 0}"></div>`;
+    // Rename + alignment apply to any table column (persisted in the metric's format).
+    const alignSeg = seg('align', [{ v: 'left', l: 'left' }, { v: 'center', l: 'center' }, { v: 'right', l: 'right' }], f.align || 'right');
+    const labelRow = `<div class="tf-row"><span class="lab">Label</span><input type="text" data-label placeholder="${esc(cat.name || '')}" value="${esc(f.label || '')}"></div>`;
+    const alignRow = `<div class="tf-row"><span class="lab">Align</span>${alignSeg}</div>`;
     return `<div class="tf-hd"><span class="t">${esc(cat.name || 'Columna')}</span><button class="x"><i class="ti ti-x"></i></button></div>
+      ${labelRow}${alignRow}
       <div class="tf-row"><span class="lab">Formato</span>${modeSeg}</div>${cond}${decRow}`;
   }
 
@@ -3658,6 +3716,37 @@
     if (lo) lo.oninput = applyThr;
     const dec = pane.querySelector('[data-dec]');
     if (dec) dec.oninput = () => { const d = parseInt(dec.value, 10); if (isFinite(d)) { f.dec = Math.max(0, Math.min(3, d)); _rerenderDraftTable(); } };
+    const lab = pane.querySelector('[data-label]');
+    if (lab) lab.oninput = () => { const v = lab.value.trim(); if (v) f.label = v; else delete f.label; _rerenderDraftTable(); };
+    pane.querySelectorAll('[data-align]').forEach(b => b.onclick = () => { f.align = b.dataset.align; _renderTfPane(mi); _rerenderDraftTable(); });
+  }
+
+  // ── Dimension-column pane (.tf-pane): rename + alignment only ──
+  function openDimPane(j, anchor) {
+    closeTfPane();
+    const d = S.dimensions?.[j]; if (!d) return;
+    _tfPane = document.createElement('div');
+    _tfPane.className = 'tf-pane';
+    document.body.appendChild(_tfPane);
+    _renderDimPane(j);
+    _positionPane(_tfPane, anchor);
+    setTimeout(() => {
+      document.addEventListener('mousedown', _tfOutside, true);
+      document.addEventListener('keydown', _tfEsc, true);
+    }, 0);
+  }
+
+  function _renderDimPane(j) {
+    const d = S.dimensions[j], cat = DIM_MAP.get(d.id) || {};
+    const seg = (attr, opts, cur) => `<div class="tf-seg">${opts.map(o => `<button data-${attr}="${o.v}" class="${cur === o.v ? 'is-on' : ''}">${o.l}</button>`).join('')}</div>`;
+    const alignSeg = seg('align', [{ v: 'left', l: 'left' }, { v: 'center', l: 'center' }, { v: 'right', l: 'right' }], d.align || 'left');
+    _tfPane.innerHTML = `<div class="tf-hd"><span class="t">${esc(cat.name || 'Column')}</span><button class="x"><i class="ti ti-x"></i></button></div>
+      <div class="tf-row"><span class="lab">Label</span><input type="text" data-label placeholder="${esc(cat.name || '')}" value="${esc(d.label || '')}"></div>
+      <div class="tf-row"><span class="lab">Align</span>${alignSeg}</div>`;
+    _tfPane.querySelector('.x').onclick = closeTfPane;
+    const lab = _tfPane.querySelector('[data-label]');
+    if (lab) lab.oninput = () => { const v = lab.value.trim(); if (v) d.label = v; else delete d.label; _rerenderDraftTable(); };
+    _tfPane.querySelectorAll('[data-align]').forEach(b => b.onclick = () => { d.align = b.dataset.align; _renderDimPane(j); _rerenderDraftTable(); });
   }
 
   /** Builder preview table — real data when a backend is present, else a badged mock. */
