@@ -738,8 +738,8 @@
   }
 
   // GPS per-minute profile — read-only from the SSOT view v_exercise_gps_profile.
-  // total_distance_per_min comes in KM/min (TD stored in km) → ×1000 to show m/min.
-  // The other distances (HSR/VHSR/sprint) are already m/min; player load is AU/min.
+  // All distances are already stored in metres → m/min as-is (no km→m conversion);
+  // player load is AU/min.
   async function renderExGpsProfile(exId) {
     const host = document.getElementById('prevGps');
     if (!host) return;
@@ -977,14 +977,14 @@
       } while (page.length === 1000);
       paint();   // refresh cards with the GPS line once data lands
     }
-    // Resulting profile if this group were saved as one drill. total_distance is KM.
+    // Resulting profile if this group were saved as one drill. total_distance is METRES.
     function groupGps(g){
       let n=0, sumPerMin=0, sumTotal=0;
       g.names.forEach(x => { const e = gpsByName.get(x.period_name); if (e){ n+=e.n; sumPerMin+=e.sumPerMin; sumTotal+=e.sumTotal; } });
       if (!n) return null;
-      const tdPerMin = (sumPerMin/n) * 1000;   // m/min
-      const tdAvgKm  = sumTotal/n;             // km/session
-      return { n, tdPerMin, tdAvgKm, absurd: tdPerMin > 150 || tdAvgKm > 10 };
+      const tdPerMin = sumPerMin/n;   // m/min (already metres)
+      const tdAvgM   = sumTotal/n;    // m/session (already metres)
+      return { n, tdPerMin, tdAvgM, absurd: tdPerMin > 150 || tdAvgM > 10000 };
     }
 
     let createdCount = 0;
@@ -1153,7 +1153,7 @@
         </div>`;
         const gps = groupGps(g);
         const gpsLine = gps ? `<div style="font:600 10.5px var(--cm-font-mono);margin-top:4px;color:${gps.absurd?'var(--cm-danger,#dc2626)':'var(--cm-fg-muted)'}">
-          GPS preview · ${Math.round(gps.tdPerMin)} m/min · ${gps.tdAvgKm.toFixed(1)} km/session · ${gps.n} valid${gps.absurd?' · ⚠ Unusually high — likely mixed drills':''}
+          GPS preview · ${Math.round(gps.tdPerMin)} m/min · ${Math.round(gps.tdAvgM)} m/session · ${gps.n} valid${gps.absurd?' · ⚠ Unusually high — likely mixed drills':''}
         </div>` : '';
         const panel = g.expanded ? `<div style="margin-top:8px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:8px;background:var(--cm-bg-soft,rgba(0,0,0,.02))">
           ${g.names.map(n => `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:3px 0">

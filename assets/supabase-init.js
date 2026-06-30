@@ -381,13 +381,13 @@
 
   // ── GPS per-minute profile: catálogo de métricas + preferencia del usuario ──
   // Las columnas vienen de v_exercise_gps_profile. `mult` lleva total_distance de
-  // km/min → m/min (×1000); el resto ya está en su unidad. Preferencia compartida
-  // entre pantallas (Exercises Library + Drill Designer) vía localStorage.
-  // Each metric carries two reads of the same drill: PER MINUTE (intensity, key)
-  // and AVG TOTAL per session (volume, avgKey). Same `mult` convention: total
-  // distance is stored in km → ×1000 to show metres in both reads.
+  // Preferencia compartida entre pantallas (Exercises Library + Drill Designer) vía
+  // localStorage. Each metric carries two reads of the same drill: PER MINUTE
+  // (intensity, key) and AVG TOTAL per session (volume, avgKey). All distances are
+  // ALREADY stored in metres (gps_period_reports + the views), so mult:1 across the
+  // board — total_distance no longer needs the legacy km→m ×1000.
   window.CM_GPS_METRICS = [
-    { key:'total_distance_per_min',           label:'Total dist',  unit:'m/min',  mult:1000, dec:0,  avgKey:'total_distance_avg',           avgUnit:'m',  avgMult:1000, avgDec:0 },
+    { key:'total_distance_per_min',           label:'Total dist',  unit:'m/min',  mult:1,    dec:0,  avgKey:'total_distance_avg',           avgUnit:'m',  avgMult:1,    avgDec:0 },
     { key:'high_speed_distance_per_min',      label:'HSR',         unit:'m/min',  mult:1,    dec:1,  avgKey:'high_speed_distance_avg',      avgUnit:'m',  avgMult:1,    avgDec:0 },
     { key:'very_high_speed_distance_per_min', label:'VHSR',        unit:'m/min',  mult:1,    dec:1,  avgKey:'very_high_speed_distance_avg', avgUnit:'m',  avgMult:1,    avgDec:0 },
     { key:'sprint_distance_per_min',          label:'Sprint dist', unit:'m/min',  mult:1,    dec:1,  avgKey:'sprint_distance_avg',          avgUnit:'m',  avgMult:1,    avgDec:0 },
