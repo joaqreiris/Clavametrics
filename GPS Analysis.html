@@ -3604,7 +3604,7 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
   const body = cardEl.querySelector('.gp-c-b');
   if (!body) return;
   try {
-    const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, CORE_COLS } =
+    const { applyAgg, aggregateSeries, getSessionIds, fetchReports, fetchEavMetrics, CORE_COLS, neededKeys } =
       await import('./lib/gp-card/resolver.js').catch(() => ({}));
     if (!aggregateSeries) return; // resolver not available as module in this context
 
@@ -3616,9 +3616,15 @@ async function _resolveAndRenderSavedCard(cardEl, config, clubId) {
     if (!sessionIds.length) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No sessions in range</div></div>'; return; }
     const rows = await fetchReports(sessionIds, config, ctx, new Map(), window.sb);
     if (!rows.length) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No GPS data</div></div>'; return; }
-    const customKeys = (config.metrics||[]).filter(m => !CORE_COLS.has(m.id)).map(m => m.id);
-    const eavMap = customKeys.length ? await fetchEavMetrics(rows.map(r=>r.id), customKeys, clubId, window.sb) : new Map();
     const catalog = new Map((window._gpCatalog||[]).map(c => [c.key, { id:c.key, name:c.label, unit:c.unit||'', kind:c.kind||'accum', is_custom:!c.is_core, squad_rollup:c.squad_rollup??true }]));
+    // EAV keys via the resolver's neededKeys (excludes synthetic/derived like work_time,
+    // n_instances, acc_dec → they're computed in rowVal, NOT looked up in gps_report_metrics).
+    // source='task' has no EAV at all (the view exposes every metric as a column).
+    const customKeys = (config.source === 'task')
+      ? []
+      : (neededKeys ? neededKeys(config, catalog).eav
+                    : (config.metrics||[]).filter(m => !CORE_COLS.has(m.id)).map(m => m.id));
+    const eavMap = customKeys.length ? await fetchEavMetrics(rows.map(r=>r.id), customKeys, clubId, window.sb) : new Map();
     const series = aggregateSeries(rows, eavMap, config, catalog);
     if (!series.some(s=>s.points.length)) { body.innerHTML = '<div class="cb2-state empty" style="min-height:100px"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data</div></div>'; return; }
     // basic render (builder will do full render when builder is loaded)
