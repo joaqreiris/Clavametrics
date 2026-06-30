@@ -191,8 +191,11 @@
     btn.type = 'button'; btn.className = 'pill gp-compact-btn';
     btn.innerHTML = '<i class="ti ti-arrow-bar-to-up"></i>Compact';
     btn.addEventListener('click', () => { const g = activeGrid(); if (g) compact(g); });
-    right.insertBefore(btn, right.firstChild);
-    right.insertBefore(sel, right.firstChild);
+    // Group the layout actions (Fit width, Compact) WITH Save layout / Saved views / Add card
+    // instead of dropping them at the left of the cluster, ahead of the filter pills.
+    const anchor = right.querySelector('#saveLayoutBtn') || null;
+    right.insertBefore(sel, anchor);
+    right.insertBefore(btn, anchor);
     // NB: no injected "Add card" here — the static dashboard-bar pill already covers it
     // (avoids the duplicate button). The in-grid .gp-add tile remains the insert target.
   }

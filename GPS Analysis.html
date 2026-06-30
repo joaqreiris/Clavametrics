@@ -819,7 +819,6 @@
           <button class="pill" id="baselinePill"><i class="ti ti-target"></i><span id="baselineLabel">vs Role</span></button>
           <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines."><i class="ti ti-history"></i>Historical</button>
           <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
-          <button class="pill" id="assignRivalsBtn" title="Tag GPS days with their match rival"><i class="ti ti-ball-football"></i>Assign rivals</button>
           <button class="pill" id="saveLayoutBtn"><i class="ti ti-device-floppy"></i>Save layout</button>
           <button class="pill"><i class="ti ti-bookmark"></i>Saved views</button>
           <button class="pill"><i class="ti ti-plus"></i>Add card</button>
@@ -2659,10 +2658,12 @@ gpGearBtn?.addEventListener('click', async e => {
     { label: 'Data sources' + (Number.isFinite(n) ? ` · ${n} GPS sessions` : ''), icon: 'ti-cloud-download', act: 'srcBtn' },
     { label: 'GPS settings',    icon: 'ti-adjustments-horizontal', act: 'gpSettingsBtn' },
     { label: 'Metrics catalog', icon: 'ti-list',                   act: 'gpCatalogBtn' },
+    { label: 'Assign rivals',   icon: 'ti-ball-football',          act: 'rivals' },
     { sep: true },
     { label: 'Flagged periods' + (fc ? ` · ${fc} need review` : ''), icon: 'ti-flag', act: 'flagged' },
   ], item => {
     if (item.act === 'flagged') _gpOpenFlaggedPanel();
+    else if (item.act === 'rivals') _gpOpenAssignRivals();
     else document.getElementById(item.act)?.click();
   });
 });
@@ -2783,7 +2784,7 @@ exportBtn?.addEventListener('click', e => {
 // ── 2. Dashboard bar pills ────────────────────────────────────
 document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
   const pill = e.target.closest('.pill');
-  if (!pill || pill.id === 'saveLayoutBtn' || pill.id === 'assignRivalsBtn') return;
+  if (!pill || pill.id === 'saveLayoutBtn') return;
   e.stopPropagation();
   const ic = pill.querySelector('.ti')?.className || '';
 
@@ -8554,7 +8555,7 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
     await saveLayout(view).catch(e => console.warn('saveLayoutBtn:', e));
     showToast('Layout saved');
   });
-  document.getElementById('assignRivalsBtn')?.addEventListener('click', () => _gpOpenAssignRivals());
+  // Assign rivals now lives in the ⚙ Settings menu (act:'rivals' → _gpOpenAssignRivals).
   // Card size is changed by dragging the corner handle (gp-resize.js);
   // the S/M/L/FULL toggle is gone. Make sure every card has its handle + span.
   window.gpInitResize?.(document);
