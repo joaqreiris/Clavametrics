@@ -58,14 +58,16 @@
   // v_gps_task_analysis, not gps_metric_definitions). Merged into catalogMap on load and
   // shown in the flyout only when source='task'. kind:'avg' → default agg = avg (intensity).
   const TASK_METRICS = [
+    // Curated: only the useful /min are visible. The rest stay registered (resolve fine if
+    // referenced) but are hidden from "+ Add metric" to keep the list clean.
     { id:'total_distance_per_min',           name:'Distance / min',    unit:'m/min',  kind:'avg' },
     { id:'high_speed_distance_per_min',      name:'HSR / min',         unit:'m/min',  kind:'avg' },
     { id:'very_high_speed_distance_per_min', name:'VHSR / min',        unit:'m/min',  kind:'avg' },
-    { id:'sprint_distance_per_min',          name:'Sprint dist / min', unit:'m/min',  kind:'avg' },
-    { id:'player_load_per_min',              name:'Player load / min', unit:'AU/min', kind:'avg' },
-    { id:'accelerations_per_min',            name:'Accel / min',       unit:'/min',   kind:'avg' },
-    { id:'decelerations_per_min',            name:'Decel / min',       unit:'/min',   kind:'avg' },
     { id:'hmld_per_min',                     name:'HMLD / min',        unit:'m/min',  kind:'avg' },
+    { id:'sprint_distance_per_min',          name:'Sprint dist / min', unit:'m/min',  kind:'avg', hidden:true },
+    { id:'player_load_per_min',              name:'Player load / min', unit:'AU/min', kind:'avg', hidden:true },
+    { id:'accelerations_per_min',            name:'Accel / min',       unit:'/min',   kind:'avg', hidden:true },
+    { id:'decelerations_per_min',            name:'Decel / min',       unit:'/min',   kind:'avg', hidden:true },
     { id:'m2_per_player',                    name:'m² per player',     unit:'m²',     kind:'avg' },
     // Optional (not imposed): the user adds these from "+ Add metric" if wanted. work_time is
     // computed in the resolver from duration_seconds → MINUTES; kind 'avg' → default agg AVG
@@ -76,8 +78,9 @@
   const TASK_METRIC_IDS   = new Set(TASK_METRICS.map(m => m.id));
   const TASK_METRIC_GROUP = { g:'Task metrics', custom:false, items:TASK_METRICS };
   // Hidden from the Task flyout: their real value lives in a task column instead. time_played
-  // is 0/null in migrated period data → use 'Work time' (from duration_seconds) instead.
-  const TASK_HIDE_METRICS = new Set(['time_played']);
+  // is 0/null in migrated period data → use 'Work time' instead. distance_per_minute (DB
+  // catalog) is hidden in favour of the cleaner 'Distance / min' (same value).
+  const TASK_HIDE_METRICS = new Set(['time_played', 'distance_per_minute']);
   // Built-in DERIVED metrics — the lib/gp-card resolver computes them per row (see DERIVED
   // there). The builder only needs to OFFER them in the catalog (no formula needed here).
   const DERIVED_METRICS = { acc_dec: { name: 'Acc+Dec', unit: '' } };
@@ -1717,7 +1720,7 @@
 
       // Step 2: reports — then narrow rows by player / position (AND).
       const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
-      const rows = _fbFilterRows(rawRows, FB);
+      const rows = _fbFilterRows(rawRows, FB, config.source);
       if (stale()) return;
       if (!rows.length) {
         _gpbDiag(config, FB, ctx, { stage: 'NO ROWS', sessionIds: sessionIds.length, rowsBeforeFbFilter: rawRows.length, rowsAfter: 0 });
@@ -1814,7 +1817,7 @@
           let refSeries = [];
           if (refSessions.length) {
             const refFB = FB ? { ...FB, microcycleIds: [] } : null;   // keep player/position parity
-            const refRows = _fbFilterRows(await fetchReports(refSessions, config, ctx, catalogMap, sb), refFB);
+            const refRows = _fbFilterRows(await fetchReports(refSessions, config, ctx, catalogMap, sb), refFB, config.source);
             if (stale()) return;
             if (refRows.length) {
               const refEav = await fetchExtraMetrics(refRows, config, catalogMap, _clubId, sb);
@@ -2031,20 +2034,26 @@
     if (d.to)   r.to   = d.to;
     return r;
   }
-  /** Narrow report rows by the player / position / microcycle filters (AND). */
-  function _fbFilterRows(rows, FB) {
+  /** Narrow report rows by the player / position / microcycle filters (AND). Shape-aware:
+   *  task rows (v_gps_task_analysis) are FLAT (r.position), session rows are NESTED
+   *  (r.players.position) — mirror the resolver's dual-shape dimGroup. */
+  function _fbFilterRows(rows, FB, source) {
     if (!FB) return rows;
+    const isTask = source === 'task';
     let out = rows;
-    if (FB.playerIds?.length) { const s = new Set(FB.playerIds); out = out.filter(r => s.has(r.player_id)); }
+    if (FB.playerIds?.length) { const s = new Set(FB.playerIds); out = out.filter(r => s.has(r.player_id)); }  // player_id is flat in both
     if (FB.positions?.length) {
       const s = new Set(FB.positions);
       out = out.filter(r => {
-        const pl = r.players; if (!pl) return false;
-        if (pl.position && s.has(pl.position)) return true;
-        return Array.isArray(pl.positions) && pl.positions.some(x => s.has(x));
+        const pos = isTask ? r.position : r.players?.position;     // flat (task) OR nested (session)
+        if (pos && s.has(pos)) return true;
+        const arr = r.players?.positions;                          // multi-position only on session rows
+        return Array.isArray(arr) && arr.some(x => s.has(x));
       });
     }
-    if (FB.microcycleIds?.length) { const s = new Set(FB.microcycleIds.map(String)); out = out.filter(r => s.has(String(r.training_sessions?.microcycle_id ?? ''))); }
+    // microcycle_id isn't exposed by the task view → skip (microcycle isn't a task filter yet,
+    // and filtering on a missing field would drop every row).
+    if (!isTask && FB.microcycleIds?.length) { const s = new Set(FB.microcycleIds.map(String)); out = out.filter(r => s.has(String(r.training_sessions?.microcycle_id ?? ''))); }
     return out;
   }
   /** Re-render every builder card in the active dashboard (called on filter change). */
@@ -4155,7 +4164,7 @@
     let measuresHtml = '';
     const _groups = (S.source === 'task') ? catalogGroups.concat([TASK_METRIC_GROUP]) : catalogGroups;
     _groups.forEach(grp => {
-      const items = grp.items.filter(m => !(S.source === 'task' && TASK_HIDE_METRICS.has(m.id))
+      const items = grp.items.filter(m => !m.hidden && !(S.source === 'task' && TASK_HIDE_METRICS.has(m.id))
         && (!q || m.name.toLowerCase().includes(q) || m.id.includes(q)));
       if (!items.length) return;
       shown += items.length;
@@ -4340,7 +4349,7 @@
   // Panel poblado con el catálogo REAL del builder: DIMENSIONS + catalogMap.
   function ddPanelHTML() {
     // Task per-min metrics live in catalogMap (for resolution) but only belong to source='task'.
-    const mets  = [...catalogMap.values()].filter(m => (S?.source === 'task' || !TASK_METRIC_IDS.has(m.id))
+    const mets  = [...catalogMap.values()].filter(m => !m.hidden && (S?.source === 'task' || !TASK_METRIC_IDS.has(m.id))
       && !(S?.source === 'task' && TASK_HIDE_METRICS.has(m.id)));
     const total = DIMENSIONS.length + mets.length;
     const q = _ddQuery.trim().toLowerCase();
