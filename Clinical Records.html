@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medical records — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<style>
+  /* ── App shell (real, replaces Claude Design preview shell) ────────────── */
+  body.cm { background: var(--cm-bg); }
+  .hub-main { min-width: 0; display: flex; flex-direction: column; }
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+  /* shims for the few preview classes not in clavametrics.css */
+  .cm-page { padding: 24px 28px 64px; width: 100%; }
+  .cm-page-header { display: flex; gap: 16px; }
+  .cm-eyebrow { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
+  .cm-page-header h1 { font: 600 26px/1.1 var(--cm-font-sans); letter-spacing: -0.02em; color: var(--cm-fg-strong); }
+  .cm-page-header p { font: var(--cm-body); color: var(--cm-fg-muted); margin-top: 4px; }
+  .cm-pill .cm-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+  /* ── Page content (verbatim from the Claude Design preview) ───────────── */
+  .cr-role {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 10px; border-radius: var(--cm-r-pill);
+    background: var(--cm-info-bg); color: var(--cm-info); border: 1px solid var(--cm-info-bd);
+    font: 600 11px/1 var(--cm-font-sans); letter-spacing: 0.02em;
+  }
+  .cr-role .ti { font-size: 14px; }
+
+  /* KPI header */
+  .mi-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
+  .mi-kpi { padding: 15px 16px; display: flex; flex-direction: column; gap: 9px; cursor: pointer; transition: border-color var(--cm-dur-1), box-shadow var(--cm-dur-1), transform var(--cm-dur-1); border: 1px solid var(--cm-border); }
+  .mi-kpi:hover { border-color: var(--cm-border-strong); box-shadow: var(--cm-shadow-2); transform: translateY(-1px); }
+  .mi-kpi.is-active { border-color: var(--cm-fg-strong); box-shadow: var(--cm-shadow-2); }
+  .mi-kpi .lab { display: flex; align-items: center; gap: 6px; font: 500 10px/1.2 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
+  .mi-kpi .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .mi-kpi .num { font: 600 30px/1 var(--cm-font-mono); letter-spacing: -0.02em; color: var(--cm-fg-strong); font-feature-settings: "tnum"; }
+  .mi-kpi .num.is-warn { color: var(--cm-warning); }
+  .mi-kpi .num small { font: 500 14px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .mi-kpi .sub { font: 500 11px/1.3 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .mi-kpi.is-availability { cursor: default; }
+  .mi-kpi.is-availability:hover { transform: none; box-shadow: var(--cm-shadow-1); border-color: var(--cm-border); }
+
+  /* filter bar */
+  .mi-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .mi-filter { display: flex; flex-direction: column; gap: 6px; }
+  .mi-filter label { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding-left: 2px; }
+  .mi-filter .cm-select { height: 36px; min-width: 180px; cursor: pointer; }
+  .mi-seg { display: inline-flex; gap: 2px; background: var(--cm-bg-soft); border: 1px solid var(--cm-border); border-radius: var(--cm-r-3); padding: 3px; height: 36px; }
+  .mi-seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; cursor: pointer; padding: 0 12px; border-radius: var(--cm-r-2); font: 500 12.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted); transition: background var(--cm-dur-1), color var(--cm-dur-1); }
+  .mi-seg button .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .mi-seg button:hover { color: var(--cm-fg); }
+  .mi-seg button.is-active { background: var(--cm-surface); color: var(--cm-fg-strong); box-shadow: var(--cm-shadow-1); }
+  .mi-search-count { margin-left: auto; font: 500 12.5px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+
+  /* table */
+  .mi-table { width: 100%; border-collapse: collapse; }
+  .mi-table thead th { text-align: left; font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding: 11px 18px; background: var(--cm-bg-sunk); border-top: 1px solid var(--cm-border); border-bottom: 1px solid var(--cm-border); white-space: nowrap; }
+  .mi-table th.num, .mi-table td.num { text-align: right; }
+  .mi-table th.cen, .mi-table td.cen { text-align: center; }
+  .mi-table tbody td { padding: 11px 18px; border-bottom: 1px solid var(--cm-border-soft); font: var(--cm-body-sm); color: var(--cm-fg); vertical-align: middle; }
+  .mi-table tbody tr { cursor: pointer; transition: background var(--cm-dur-1); }
+  .mi-table tbody tr:hover { background: var(--cm-bg-soft); }
+  .mi-table tbody tr:last-child td { border-bottom: 0; }
+
+  .mi-player { display: flex; align-items: center; gap: 11px; }
+  .mi-photo { width: 34px; height: 34px; border-radius: var(--cm-r-3); flex-shrink: 0; background: repeating-linear-gradient(135deg, var(--cm-bg-sunk) 0 5px, var(--cm-bg-soft) 5px 10px); border: 1px solid var(--cm-border); display: flex; align-items: center; justify-content: center; font: 600 11px/1 var(--cm-font-mono); color: var(--cm-fg-faint); background-size: cover; background-position: center; }
+  .mi-name { font: 600 13.5px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .mi-sub { font: 500 11px/1.2 var(--cm-font-mono); color: var(--cm-fg-faint); margin-top: 2px; }
+  .mi-pos { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 22px; padding: 0 7px; border-radius: var(--cm-r-2); font: 600 11px/1 var(--cm-font-mono); }
+  .mi-issue { color: var(--cm-fg); font-weight: 500; }
+  .mi-issue.none { color: var(--cm-fg-faint); }
+  .mi-avail { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
+  .mi-avail .v { font: 600 13px/1 var(--cm-font-mono); color: var(--cm-fg-strong); min-width: 34px; text-align: right; }
+  .mi-avail-track { width: 54px; height: 6px; border-radius: 999px; background: var(--cm-bg-sunk); overflow: hidden; }
+  .mi-avail-fill { height: 100%; border-radius: 999px; background: var(--cm-success); }
+  .mi-avail-fill.warn { background: var(--cm-warning); }
+  .mi-avail-fill.bad { background: var(--cm-danger); }
+  .mi-review { font: 500 12.5px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .mi-review.overdue { color: var(--cm-warning); font-weight: 600; }
+  .mi-review .ti { font-size: 13px; vertical-align: middle; margin-left: 3px; }
+  .mi-burden { display: inline-flex; gap: 3px; align-items: flex-end; height: 16px; }
+  .mi-burden i { display: block; width: 5px; border-radius: 1px; background: var(--cm-border-strong); }
+  .mi-burden i.on.low { background: var(--cm-success); }
+  .mi-burden i.on.med { background: var(--cm-warning); }
+  .mi-burden i.on.high { background: var(--cm-danger); }
+  .mi-days { font: 600 13px/1 var(--cm-font-mono); color: var(--cm-fg-strong); }
+  .mi-days.none { color: var(--cm-fg-faint); font-weight: 500; }
+  .mi-chev { color: var(--cm-fg-faint); }
+  .mi-chev .ti { font-size: 16px; }
+
+  .cr-access { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding: 12px 16px; background: var(--cm-bg-soft); border: 1px solid var(--cm-border); border-radius: var(--cm-r-4); font: 500 12.5px/1.5 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .cr-access .ti { font-size: 17px; color: var(--cm-fg-faint); flex-shrink: 0; }
+  .cr-access b { color: var(--cm-fg-strong); font-weight: 600; }
+
+  @media (max-width: 1080px) { .mi-kpis { grid-template-columns: repeat(3, 1fr); } }
+</style>
+</head>
+<body class="cm">
+<div class="hub-shell" data-screen-label="20 Clinical records">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-stethoscope"></i><span>Medical</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Clinical records</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input id="cr-search" placeholder="Search players, diagnoses…" aria-label="Search players">
+      </div>
+      <div class="actions">
+        <span class="cr-role" id="role-badge"><i class="ti ti-shield-lock"></i>Medical role</span>
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="cm-page" style="max-width:1320px;">
+      <header class="cm-page-header" style="align-items:flex-start; margin-bottom:18px;">
+        <div style="flex:1;">
+          <div class="cm-eyebrow" style="margin-bottom:8px;">Medical</div>
+          <h1>Medical records</h1>
+          <p id="cr-subtitle">Squad clinical status · loading…</p>
+        </div>
+      </header>
+
+      <!-- KPI header -->
+      <div class="mi-kpis">
+        <div class="mi-kpi" data-filter="fit">
+          <div class="lab"><span class="dot" style="background:var(--cm-success)"></span>Available</div>
+          <div class="num" id="k-fit">—</div>
+          <div class="sub">full training</div>
+        </div>
+        <div class="mi-kpi" data-filter="modified">
+          <div class="lab"><span class="dot" style="background:var(--cm-warning)"></span>Modified</div>
+          <div class="num" id="k-mod">—</div>
+          <div class="sub">adapted / RTP</div>
+        </div>
+        <div class="mi-kpi" data-filter="injured">
+          <div class="lab"><span class="dot" style="background:var(--cm-danger)"></span>Injured</div>
+          <div class="num" id="k-inj">—</div>
+          <div class="sub">in rehab</div>
+        </div>
+        <div class="mi-kpi" data-filter="unavailable">
+          <div class="lab"><span class="dot" style="background:var(--cm-neutral)"></span>Unavailable</div>
+          <div class="num" id="k-un">—</div>
+          <div class="sub">not selectable</div>
+        </div>
+        <div class="mi-kpi is-availability">
+          <div class="lab"><i class="ti ti-heart-rate-monitor" style="font-size:13px;"></i>Squad availability</div>
+          <div class="num">—</div>
+          <div class="sub">selectable load</div>
+        </div>
+        <div class="mi-kpi" data-filter="overdue">
+          <div class="lab"><i class="ti ti-calendar-due" style="font-size:13px;"></i>Overdue reviews</div>
+          <div class="num is-warn" id="k-over">—</div>
+          <div class="sub">need scheduling</div>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="mi-bar">
+        <div class="mi-filter">
+          <label for="f-team">Team / category</label>
+          <select id="f-team" class="cm-select"><option value="">Loading…</option></select>
+        </div>
+        <div class="mi-seg" id="status-seg" style="align-self:flex-end;">
+          <button class="is-active" data-filter="all">All</button>
+          <button data-filter="fit"><span class="dot" style="background:var(--cm-success)"></span>Available</button>
+          <button data-filter="modified"><span class="dot" style="background:var(--cm-warning)"></span>Modified</button>
+          <button data-filter="injured"><span class="dot" style="background:var(--cm-danger)"></span>Injured</button>
+          <button data-filter="unavailable"><span class="dot" style="background:var(--cm-neutral)"></span>Unavailable</button>
+        </div>
+        <span class="mi-search-count" id="row-count">—</span>
+      </div>
+
+      <!-- Table -->
+      <div class="cm-card" style="overflow:hidden;">
+        <div style="overflow-x:auto;">
+        <table class="mi-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Pos</th>
+              <th>Status</th>
+              <th>Active issue</th>
+              <th class="num">Days out</th>
+              <th class="num">Availability</th>
+              <th>Last review</th>
+              <th class="cen">Burden</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="mi-tbody"><tr><td colspan="9" style="padding:28px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading squad…</td></tr></tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="cr-access">
+        <i class="ti ti-lock"></i>
+        <span>You are viewing as <b id="access-role">Medical role</b> — full clinical detail. Coach / S&amp;C roles see this list reduced to status, availability &amp; RTP only.</span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  // ── helpers ──────────────────────────────────────────────────────────────
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtRev = iso => { const d = new Date(iso + 'T00:00:00'); return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2); };
+  const monthsSince = iso => (Date.now() - new Date(iso + 'T00:00:00')) / (86400000 * 30.4);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  const initials = (f, l) => ((f||'').trim()[0]||'') + ((l||'').trim()[0]||'') || '—';
+
+  const POS_COLOR = {
+    GK: 'var(--cm-danger)', CB: 'var(--cm-info)', FB: '#3B82F6',
+    MF: 'var(--cm-success)', WG: 'var(--cm-warning)', ST: 'var(--cm-danger)',
+  };
+  const STATUS = {
+    fit:         { cls: 'is-success', label: 'Fit' },
+    modified:    { cls: 'is-warning', label: 'Modified' },
+    injured:     { cls: 'is-danger',  label: 'Injured' },
+    unavailable: { cls: '',           label: 'Unavailable' },
+  };
+
+  // map free-text position → short code used by the design
+  function posCode(pos) {
+    const p = (pos || '').toLowerCase();
+    if (!p) return 'NA';
+    if (/(gk|goalkeep|portero|arquer|golero)/.test(p)) return 'GK';
+    if (/(central|centre.?back|center.?back|zaguer|defensa central|cb\b)/.test(p)) return 'CB';
+    if (/(lateral|full.?back|wing.?back|fb\b|rb\b|lb\b)/.test(p)) return 'FB';
+    if (/(winger|extremo|wide|wg\b|rw\b|lw\b)/.test(p)) return 'WG';
+    if (/(striker|delanter|forward|center.?forward|centro delanter|st\b|cf\b)/.test(p)) return 'ST';
+    if (/(mid|volante|medio|mediocampist|mf\b|cm\b|dm\b|am\b)/.test(p)) return 'MF';
+    return p.replace(/[^a-z]/g, '').slice(0, 2).toUpperCase() || 'NA';
+  }
+
+  // Football season window (Aug 1 → Jul 31). TODO: switch to Mundo Seasons when it lands.
+  function seasonWindow() {
+    const now = new Date(), y = now.getFullYear();
+    const startY = now.getMonth() >= 7 ? y : y - 1; // month index 7 = Aug
+    return { start: startY + '-08-01', end: (startY + 1) + '-07-31' };
+  }
+
+  // ── state ────────────────────────────────────────────────────────────────
+  let _clubId = null, _teamId = null, _roster = [], filter = 'all';
+
+  // ── data ─────────────────────────────────────────────────────────────────
+  async function initTeams() {
+    let full = false;
+    try { const prof = await window.getProfile(); const r = (prof?.role || prof?.club_role || '').toLowerCase(); full = (r === 'admin' || r === 'owner'); } catch (_) {}
+    if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch (_) {} }
+    let teams = [];
+    try { teams = await window.getTeams(_clubId) || []; } catch (_) {}
+    if (!full) { let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch (_) {} const s = new Set(mine); teams = teams.filter(t => s.has(t.id)); }
+    const sel = document.getElementById('f-team');
+    if (!teams.length) { sel.innerHTML = '<option value="">No teams</option>'; return; }
+    const saved = sessionStorage.getItem('cal_active_team');
+    _teamId = (saved && teams.some(t => t.id === saved)) ? saved : teams[0].id;
+    sel.innerHTML = teams.map(t => '<option value="' + t.id + '"' + (t.id === _teamId ? ' selected' : '') + '>' + esc(t.name) + '</option>').join('');
+    sel.onchange = () => { _teamId = sel.value; sessionStorage.setItem('cal_active_team', _teamId); location.reload(); };
+  }
+
+  async function loadRoster() {
+    const { data: players } = await window.sb.from('players')
+      .select('id, first_name, last_name, number, position, status, photo_url')
+      .eq('club_id', _clubId).eq('team_id', _teamId)
+      .neq('status', 'inactive').is('archived_at', null)
+      .order('number', { ascending: true });
+    const ids = (players || []).map(p => p.id);
+    if (!ids.length) { _roster = []; return; }
+
+    // latest active injury per player → active issue + days out
+    const injByPlayer = {};
+    try {
+      const { data: inj } = await window.sb.from('injuries')
+        .select('player_id, injury_type, body_area, sub_classification, start_date, status')
+        .eq('club_id', _clubId).in('player_id', ids).eq('status', 'active')
+        .order('start_date', { ascending: false });
+      (inj || []).forEach(r => { if (!injByPlayer[r.player_id]) injByPlayer[r.player_id] = r; });
+    } catch (_) {}
+
+    // career injury count → burden meter
+    const burdenByPlayer = {};
+    try {
+      const { data: all } = await window.sb.from('injuries').select('player_id').eq('club_id', _clubId).in('player_id', ids);
+      (all || []).forEach(r => { burdenByPlayer[r.player_id] = (burdenByPlayer[r.player_id] || 0) + 1; });
+    } catch (_) {}
+
+    // medical profile → review dates (medical role only; returns nothing otherwise)
+    const mpByPlayer = {};
+    try {
+      const { data: mp } = await window.sb.from('player_medical_profile')
+        .select('player_id, last_review_date, next_review_date').eq('club_id', _clubId).in('player_id', ids);
+      (mp || []).forEach(r => { mpByPlayer[r.player_id] = r; });
+    } catch (_) {}
+
+    // availability % over the season window
+    const availByPlayer = {};
+    try {
+      const { start, end } = seasonWindow();
+      const { data: av } = await window.sb.from('availability')
+        .select('player_id, status, date').eq('club_id', _clubId).in('player_id', ids)
+        .gte('date', start).lte('date', end);
+      const agg = {};
+      (av || []).forEach(r => { const a = agg[r.player_id] || (agg[r.player_id] = { t: 0, ok: 0 }); a.t++; if (r.status === 'available') a.ok++; });
+      Object.keys(agg).forEach(pid => { availByPlayer[pid] = agg[pid].t ? Math.round(agg[pid].ok / agg[pid].t * 100) : null; });
+    } catch (_) {}
+
+    const today = Date.now();
+    _roster = (players || []).map(p => {
+      const inj = injByPlayer[p.id];
+      const st = (p.status === 'available') ? 'fit' : (STATUS[p.status] ? p.status : 'fit');
+      const issue = inj ? [inj.sub_classification || inj.injury_type, inj.body_area].filter(Boolean).join(' · ') : null;
+      const days = (inj && inj.start_date) ? Math.max(0, Math.round((today - new Date(inj.start_date + 'T00:00:00')) / 86400000)) : 0;
+      const bcount = burdenByPlayer[p.id] || 0;
+      const burden = bcount >= 5 ? 3 : bcount >= 2 ? 2 : 1;
+      const mp = mpByPlayer[p.id] || {};
+      const review = mp.last_review_date || null;
+      const nextDue = mp.next_review_date || null;
+      const overdue = nextDue ? (new Date(nextDue + 'T00:00:00') < Date.now()) : (review ? monthsSince(review) > 6 : false);
+      return {
+        id: p.id,
+        n: (((p.first_name || '') + ' ' + (p.last_name || '')).trim()) || '—',
+        num: (p.number ?? '') === '' ? '' : p.number,
+        init: initials(p.first_name, p.last_name),
+        photo: p.photo_url || null,
+        pos: posCode(p.position),
+        st, issue, days,
+        avail: (p.id in availByPlayer) ? availByPlayer[p.id] : null,
+        review, overdue, burden,
+      };
+    });
+  }
+
+  // ── render (markup verbatim from preview; null-safe + real navigation) ────
+  function burdenMeter(level) {
+    const cls = level >= 3 ? 'high' : level === 2 ? 'med' : 'low';
+    let h = '<span class="mi-burden">';
+    for (let i = 1; i <= 3; i++) { const on = i <= level ? 'on ' + cls : ''; const ht = 8 + i * 3; h += '<i class="' + on + '" style="height:' + ht + 'px"></i>'; }
+    return h + '</span>';
+  }
+
+  function render() {
+    const tb = document.getElementById('mi-tbody');
+    const q = (document.getElementById('cr-search').value || '').toLowerCase().trim();
+    const rows = _roster.filter(p => {
+      if (filter === 'overdue') { if (!p.overdue) return false; }
+      else if (filter !== 'all' && p.st !== filter) return false;
+      if (q && !(p.n.toLowerCase().includes(q) || (p.issue || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+    document.getElementById('row-count').textContent = rows.length + (rows.length === 1 ? ' player' : ' players');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="9" style="padding:28px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players match.</td></tr>'; return; }
+    tb.innerHTML = rows.map(p => {
+      const s = STATUS[p.st] || STATUS.unavailable;
+      const posColor = POS_COLOR[p.pos] || 'var(--cm-fg-muted)';
+      const photoStyle = p.photo ? ' style="background-image:url(\'' + esc(p.photo) + '\')"' : '';
+      const photoInner = p.photo ? '' : esc(p.init);
+      const af = p.avail == null ? '' : p.avail >= 85 ? '' : p.avail >= 60 ? 'warn' : 'bad';
+      const availCell = (p.avail == null)
+        ? '<span class="mi-issue none">—</span>'
+        : '<div class="mi-avail"><span class="v">' + p.avail + '%</span><span class="mi-avail-track"><span class="mi-avail-fill ' + af + '" style="width:' + p.avail + '%"></span></span></div>';
+      const reviewCell = p.review
+        ? '<span class="mi-review' + (p.overdue ? ' overdue' : '') + '">' + fmtRev(p.review) + (p.overdue ? '<i class="ti ti-alert-triangle"></i>' : '') + '</span>'
+        : '<span class="mi-review" style="color:var(--cm-fg-faint)">—</span>';
+      return '<tr onclick="location.href=\'Clinical%20Record.html?player=' + p.id + '\'">' +
+        '<td><div class="mi-player"><div class="mi-photo"' + photoStyle + '>' + photoInner + '</div>' +
+          '<div><div class="mi-name">' + esc(p.n) + '</div><div class="mi-sub">' + (p.num !== '' ? '#' + p.num : '') + '</div></div></div></td>' +
+        '<td><span class="mi-pos" style="color:' + posColor + ';background:color-mix(in srgb,' + posColor + ' 12%,transparent)">' + esc(p.pos) + '</span></td>' +
+        '<td><span class="cm-pill ' + s.cls + '"><span class="cm-dot"></span>' + s.label + '</span></td>' +
+        '<td><span class="mi-issue' + (p.issue ? '' : ' none') + '">' + esc(p.issue || '—') + '</span></td>' +
+        '<td class="num"><span class="mi-days' + (p.days ? '' : ' none') + '">' + (p.days || '—') + '</span></td>' +
+        '<td class="num">' + availCell + '</td>' +
+        '<td>' + reviewCell + '</td>' +
+        '<td class="cen">' + burdenMeter(p.burden) + '</td>' +
+        '<td class="mi-chev"><i class="ti ti-chevron-right"></i></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function counts() {
+    const c = { fit: 0, modified: 0, injured: 0, unavailable: 0, overdue: 0 };
+    _roster.forEach(p => { if (c[p.st] != null) c[p.st]++; if (p.overdue) c.overdue++; });
+    set('k-fit', c.fit); set('k-mod', c.modified); set('k-inj', c.injured); set('k-un', c.unavailable); set('k-over', c.overdue);
+  }
+
+  function renderSquadAvail() {
+    const vals = _roster.map(p => p.avail).filter(v => v != null);
+    const el = document.querySelector('.mi-kpi.is-availability .num');
+    if (!el) return;
+    el.innerHTML = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) + '<small>%</small>' : '—';
+  }
+
+  function setFilter(f) {
+    filter = f;
+    document.querySelectorAll('#status-seg button').forEach(b => b.classList.toggle('is-active', b.dataset.filter === f));
+    if (f === 'overdue') document.querySelectorAll('#status-seg button').forEach(b => b.classList.remove('is-active'));
+    document.querySelectorAll('.mi-kpi[data-filter]').forEach(k => k.classList.toggle('is-active', k.dataset.filter === f));
+    render();
+  }
+
+  async function setRole() {
+    let access = false;
+    try { const prof = await window.getProfile(); const r = (prof?.role || prof?.club_role || '').toLowerCase(); access = ['admin', 'owner', 'physio'].includes(r); } catch (_) {}
+    if (!access && window.isSuperAdmin) { try { access = await window.isSuperAdmin(); } catch (_) {} }
+    const label = access ? 'Medical role · full access' : 'Limited view · status only';
+    const b = document.getElementById('role-badge'); if (b) b.innerHTML = '<i class="ti ti-shield-lock"></i>' + label;
+    set('access-role', access ? 'Medical role' : 'a limited role');
+  }
+
+  // ── wiring ───────────────────────────────────────────────────────────────
+  document.querySelectorAll('#status-seg button').forEach(b => b.addEventListener('click', () => setFilter(b.dataset.filter)));
+  document.querySelectorAll('.mi-kpi[data-filter]').forEach(k => k.addEventListener('click', () => setFilter(k.dataset.filter === filter ? 'all' : k.dataset.filter)));
+  document.getElementById('cr-search').addEventListener('input', render);
+
+  async function boot() {
+    try {
+      _clubId = await window.getClubId();
+      if (!_clubId) { document.getElementById('cr-subtitle').textContent = 'No club found for this account.'; return; }
+      await initTeams();
+      await loadRoster();
+      counts(); render(); renderSquadAvail(); setRole();
+      const teamName = document.querySelector('#f-team option:checked')?.textContent || '';
+      document.getElementById('cr-subtitle').textContent = 'Squad clinical status · ' + (teamName ? teamName + ' · ' : '') + _roster.length + (_roster.length === 1 ? ' player' : ' players');
+    } catch (e) {
+      console.error('[Clinical records] boot failed', e);
+      document.getElementById('mi-tbody').innerHTML = '<tr><td colspan="9" style="padding:28px;text-align:center;color:var(--cm-danger);font:var(--cm-body-sm)">Could not load squad. Check console.</td></tr>';
+    }
+  }
+  boot();
+</script>
+
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme:"hybrid", accent:"green" };</script>
+<script defer src="settings-drawer.js"></script>
+<script defer src="tweaks-panel.js"></script>
+<script defer src="theme-tweaks.js"></script>
+</body>
+</html>

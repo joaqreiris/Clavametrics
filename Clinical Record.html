@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinical record — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#15803D">
+<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script src="assets/global-search.js" defer></script>
+<style>
+  /* ── App shell (real, replaces Claude Design preview shell) ────────────── */
+  body.cm { background: var(--cm-bg); }
+  .hub-main { min-width: 0; display: flex; flex-direction: column; }
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+  /* shims for the few preview classes not in clavametrics.css */
+  .cm-page { padding: 24px 28px 64px; width: 100%; }
+  .cm-page-header { display: flex; gap: 16px; }
+  .cm-eyebrow { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
+  .cm-page-header h1 { font: 600 26px/1.1 var(--cm-font-sans); letter-spacing: -0.02em; color: var(--cm-fg-strong); }
+  .cm-page-header p { font: var(--cm-body); color: var(--cm-fg-muted); margin-top: 4px; }
+  .cm-pill .cm-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+  /* ── Role indicator ─────────────────────────────────────────── */
+  .cr-role {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 10px; border-radius: var(--cm-r-pill);
+    background: var(--cm-info-bg); color: var(--cm-info); border: 1px solid var(--cm-info-bd);
+    font: 600 11px/1 var(--cm-font-sans); letter-spacing: 0.02em;
+  }
+  .cr-role .ti { font-size: 14px; }
+
+  /* ── Back link ──────────────────────────────────────────────── */
+  .cr-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font: 500 12.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted);
+    text-decoration: none; padding: 5px 9px 5px 6px; border-radius: var(--cm-r-2);
+    margin-bottom: 14px; transition: background var(--cm-dur-1), color var(--cm-dur-1);
+  }
+  .cr-back:hover { background: var(--cm-accent-soft); color: var(--cm-fg); }
+  .cr-back .ti { font-size: 15px; }
+
+  /* ── A · Identity + safety strip ────────────────────────────── */
+  .cr-id { padding: 20px 22px; margin-bottom: 14px; }
+  .cr-id-main { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .cr-photo {
+    width: 72px; height: 84px; border-radius: var(--cm-r-4); flex-shrink: 0;
+    background:
+      repeating-linear-gradient(135deg, var(--cm-bg-sunk) 0 7px, var(--cm-bg-soft) 7px 14px);
+    border: 1px solid var(--cm-border);
+    display: flex; align-items: center; justify-content: center;
+    font: 600 22px/1 var(--cm-font-mono); color: var(--cm-fg-faint); letter-spacing: 0.04em;
+  }
+  .cr-id-who { min-width: 220px; }
+  .cr-id-who h1 { font: var(--cm-h1); letter-spacing: var(--cm-tr-display); color: var(--cm-fg-strong); display: flex; align-items: center; gap: 10px; }
+  .cr-id-num { font: 600 16px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .cr-id-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; font: 500 13px/1 var(--cm-font-mono); color: var(--cm-fg-muted); flex-wrap: wrap; }
+  .cr-id-meta .sep { color: var(--cm-fg-faint); }
+
+  .cr-id-stats { display: flex; align-items: stretch; gap: 0; margin-left: auto; flex-wrap: wrap; }
+  .cr-id-stat { display: flex; flex-direction: column; gap: 6px; padding: 2px 20px; border-left: 1px solid var(--cm-border); }
+  .cr-id-stat:first-child { border-left: 0; }
+  .cr-id-stat .k { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
+  .cr-id-stat .v { font: 600 14px/1.3 var(--cm-font-sans); color: var(--cm-fg-strong); display: flex; align-items: center; gap: 6px; }
+  .cr-id-stat .vsub { font: 500 11.5px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .cr-id-stat.is-soon .v { color: var(--cm-warning); }
+  .cr-id-stat.is-soon .vsub { color: var(--cm-warning); }
+  .cr-id-stat.is-overdue .v, .cr-id-stat.is-overdue .vsub { color: var(--cm-danger); }
+
+  /* Alerts row */
+  .cr-alerts { display: flex; align-items: center; gap: 8px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--cm-border); flex-wrap: wrap; }
+  .cr-alerts-lab { display: inline-flex; align-items: center; gap: 6px; font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); margin-right: 4px; }
+  .cr-alerts-lab .ti { font-size: 14px; color: var(--cm-danger); }
+  .cr-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px; border-radius: var(--cm-r-3);
+    font: 500 12px/1 var(--cm-font-sans);
+    background: var(--cm-bg-soft); color: var(--cm-fg); border: 1px solid var(--cm-border);
+  }
+  .cr-chip .ti { font-size: 14px; color: var(--cm-fg-faint); }
+  .cr-chip b { font-weight: 600; }
+  .cr-chip.is-danger { background: var(--cm-danger-bg); color: var(--cm-danger); border-color: var(--cm-danger-bd); }
+  .cr-chip.is-danger .ti { color: var(--cm-danger); }
+  .cr-chip.is-warning { background: var(--cm-warning-bg); color: var(--cm-warning); border-color: var(--cm-warning-bd); }
+  .cr-chip.is-warning .ti { color: var(--cm-warning); }
+  .cr-chip.is-mono { font-family: var(--cm-font-mono); font-weight: 600; }
+
+  /* ── Layout: rail + main ────────────────────────────────────── */
+  .cr-cols { display: grid; grid-template-columns: 312px 1fr; gap: 14px; align-items: start; }
+  .cr-rail { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 70px; }
+
+  .cr-card-head { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--cm-border); }
+  .cr-card-head .ti { font-size: 16px; color: var(--cm-fg-muted); }
+  .cr-card-head h2 { font: 600 13px/1 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.005em; }
+  .cr-card-body { padding: 14px 18px; }
+
+  .cr-mini-lab { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
+
+  /* baseline key-value block */
+  .cr-base + .cr-base { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--cm-border-soft); }
+  .cr-base .cr-mini-lab { margin-bottom: 7px; }
+  .cr-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font: var(--cm-body-sm); padding: 2px 0; }
+  .cr-kv span { color: var(--cm-fg-muted); }
+  .cr-kv b { color: var(--cm-fg-strong); font-weight: 600; text-align: right; }
+  .cr-kv b.is-warn { color: var(--cm-warning); }
+  .cr-taglist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .cr-tag {
+    display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px;
+    border-radius: var(--cm-r-3); font: 500 12px/1 var(--cm-font-sans);
+    background: var(--cm-bg-soft); border: 1px solid var(--cm-border); color: var(--cm-fg);
+    cursor: default;
+  }
+  .cr-tag.is-danger { background: var(--cm-danger-bg); color: var(--cm-danger); border-color: var(--cm-danger-bd); }
+  .cr-tue { font: 600 8.5px/1 var(--cm-font-mono); letter-spacing: 0.06em; padding: 2px 4px; border-radius: 3px; background: var(--cm-info); color: #fff; }
+
+  /* PCMA traffic-light rows */
+  .cr-pcma-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--cm-border-soft); }
+  .cr-pcma-row:first-child { border-top: 0; }
+  .cr-pcma-name { display: flex; align-items: center; gap: 8px; font: 500 13px/1 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .cr-tl { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .cr-tl.ok { background: var(--cm-success); }
+  .cr-tl.warn { background: var(--cm-warning); }
+  .cr-tl.bad { background: var(--cm-danger); }
+  .cr-pcma-res { grid-column: 1; font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .cr-pcma-dates { grid-column: 2; grid-row: 1 / span 2; text-align: right; font: 500 11px/1.5 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .cr-pcma-dates b { color: var(--cm-fg-muted); font-weight: 600; }
+
+  /* ── Tabs ───────────────────────────────────────────────────── */
+  .cr-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--cm-border); margin-bottom: 16px; overflow-x: auto; }
+  .cr-tab {
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+    border: 0; background: transparent; cursor: pointer;
+    padding: 11px 13px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    font: 500 13px/1 var(--cm-font-sans); color: var(--cm-fg-muted);
+    transition: color var(--cm-dur-1), border-color var(--cm-dur-1);
+  }
+  .cr-tab .ti { font-size: 16px; }
+  .cr-tab:hover { color: var(--cm-fg); }
+  .cr-tab.is-active { color: var(--cm-fg-strong); border-bottom-color: var(--cm-accent); font-weight: 600; }
+  .cr-panel { display: none; }
+  .cr-panel.is-active { display: block; }
+
+  /* ── Status / active-issue banner ───────────────────────────── */
+  .cr-status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .cr-status-card { padding: 16px 18px; }
+  .cr-status-card .cr-mini-lab { margin-bottom: 10px; }
+  .cr-status-now { display: flex; align-items: center; gap: 10px; }
+  .cr-status-now .big { font: 600 20px/1 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .cr-status-sub { font: 500 12.5px/1.5 var(--cm-font-mono); color: var(--cm-fg-muted); margin-top: 10px; }
+  .cr-issue { display: flex; align-items: flex-start; gap: 12px; }
+  .cr-issue-ic { width: 36px; height: 36px; border-radius: var(--cm-r-3); background: var(--cm-warning-bg); color: var(--cm-warning); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--cm-warning-bd); }
+  .cr-issue-ic .ti { font-size: 18px; }
+  .cr-issue h3 { font: 600 14px/1.3 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .cr-issue p { font: 500 12.5px/1.5 var(--cm-font-mono); color: var(--cm-fg-muted); margin-top: 4px; }
+
+  /* ── KPI row ─────────────────────────────────────────────────── */
+  #kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 14px; }
+  .cr-kpi { padding: 13px 14px; display: flex; flex-direction: column; gap: 7px; }
+  .cr-kpi .lab { display: flex; align-items: center; gap: 5px; font: 500 9.5px/1.2 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
+  .cr-kpi .lab .ti { font-size: 12px; }
+  .cr-kpi .big { display: flex; align-items: baseline; gap: 3px; }
+  .cr-kpi .num { font: 600 26px/1 var(--cm-font-mono); letter-spacing: -0.02em; color: var(--cm-fg-strong); font-feature-settings: "tnum"; }
+  .cr-kpi .num.is-warn { color: var(--cm-warning); }
+  .cr-kpi .num.is-good { color: var(--cm-success); }
+  .cr-kpi .unit { font: 500 13px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .cr-kpi .sub { font: 500 11px/1.3 var(--cm-font-mono); color: var(--cm-fg-faint); }
+
+  /* ── Body map ────────────────────────────────────────────────── */
+  .cr-bodymap { padding: 0; }
+  .bm-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 0; }
+  .bm-head h2 { font: 600 13px/1 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .bm-toggle { display: inline-flex; gap: 2px; background: var(--cm-bg-soft); border: 1px solid var(--cm-border); border-radius: var(--cm-r-3); padding: 3px; }
+  .bm-toggle button { border: 0; background: transparent; cursor: pointer; padding: 4px 11px; border-radius: var(--cm-r-2); font: 500 11.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .bm-toggle button.is-active { background: var(--cm-surface); color: var(--cm-fg-strong); box-shadow: var(--cm-shadow-1); }
+  .bm-stage { position: relative; display: flex; justify-content: center; padding: 12px 18px 6px; }
+  .bm-svg { width: 150px; height: auto; overflow: visible; }
+  .bm-zone { fill: var(--cm-bg-sunk); stroke: var(--cm-border-strong); stroke-width: 1; transition: fill var(--cm-dur-1), opacity var(--cm-dur-1); }
+  .bm-zone.is-hot { cursor: pointer; }
+  .bm-zone.is-hot:hover { opacity: 0.78; }
+  .bm-tip { position: absolute; top: 12px; right: 18px; min-width: 168px; background: var(--cm-fg-strong); color: #fff; border-radius: var(--cm-r-3); padding: 9px 11px; opacity: 0; pointer-events: none; transition: opacity var(--cm-dur-1); z-index: 5; box-shadow: var(--cm-shadow-pop); }
+  .bm-tip.is-on { opacity: 1; }
+  .bm-tip-h { font: 600 11px/1 var(--cm-font-sans); margin-bottom: 6px; }
+  .bm-tip-r { display: flex; align-items: center; gap: 6px; font: 500 11px/1.5 var(--cm-font-mono); color: rgba(255,255,255,0.8); }
+  .bm-tip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .bm-tip-dot.minimal { background: #9CA3AF; } .bm-tip-dot.mild { background: #60A5FA; }
+  .bm-tip-dot.moderate { background: var(--cm-warning); } .bm-tip-dot.severe { background: var(--cm-danger); }
+  .bm-legend { display: flex; align-items: center; justify-content: center; gap: 14px; padding: 8px 18px 16px; flex-wrap: wrap; }
+  .bm-legend .it { display: flex; align-items: center; gap: 6px; font: 500 10.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .bm-legend .sw { width: 11px; height: 11px; border-radius: 3px; }
+  .bm-foot { font: 500 10.5px/1.4 var(--cm-font-mono); color: var(--cm-fg-faint); text-align: center; padding: 0 18px 14px; }
+
+  /* ── Timeline ────────────────────────────────────────────────── */
+  .tl-wrap { padding: 16px 20px 20px; }
+  .tl-grid { display: grid; grid-template-columns: 64px 1fr; gap: 8px 12px; align-items: center; }
+  .tl-rowhead { font: 600 11.5px/1 var(--cm-font-mono); color: var(--cm-fg-muted); text-align: right; }
+  .tl-track { position: relative; height: 28px; display: grid; grid-template-columns: repeat(12, 1fr); background: var(--cm-bg-soft); border: 1px solid var(--cm-border); border-radius: var(--cm-r-2); }
+  .tl-track.tl-months { background: transparent; border: 0; height: 16px; }
+  .tl-months span { font: 500 9.5px/1 var(--cm-font-mono); color: var(--cm-fg-faint); text-align: center; }
+  .tl-cell { border-left: 1px solid var(--cm-border-soft); }
+  .tl-cell:first-child { border-left: 0; }
+  .tl-mark { position: absolute; top: 50%; transform: translate(-50%, -50%); border: 0; background: transparent; cursor: pointer; padding: 4px; }
+  .tl-mark-dot { display: block; width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--cm-surface); }
+  .tl-mark.minimal .tl-mark-dot { background: #9CA3AF; } .tl-mark.mild .tl-mark-dot { background: #60A5FA; }
+  .tl-mark.moderate .tl-mark-dot { background: var(--cm-warning); } .tl-mark.severe .tl-mark-dot { background: var(--cm-danger); }
+  .tl-mark:hover .tl-mark-dot { transform: scale(1.25); }
+
+  /* ── Tables (shared) ─────────────────────────────────────────── */
+  .cr-table-head { padding: 15px 20px 13px; display: flex; align-items: center; justify-content: space-between; }
+  .cr-table-head h2 { font: 600 14px/1 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.005em; }
+  .cr-table-head .count { font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .cr-table { width: 100%; border-collapse: collapse; }
+  .cr-table thead th { text-align: left; font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding: 9px 16px; background: var(--cm-bg-sunk); border-top: 1px solid var(--cm-border); border-bottom: 1px solid var(--cm-border); white-space: nowrap; }
+  .cr-table th.num, .cr-table td.num { text-align: right; }
+  .cr-table tbody td { padding: 11px 16px; border-bottom: 1px solid var(--cm-border-soft); font: var(--cm-body-sm); color: var(--cm-fg); vertical-align: middle; }
+  .cr-table tbody tr:last-child td { border-bottom: 0; }
+  .cr-table tbody tr:hover { background: var(--cm-bg-soft); }
+  .cr-table .c-date { font: 500 12.5px/1 var(--cm-font-mono); color: var(--cm-fg); white-space: nowrap; }
+  .cr-table .c-val { font: 600 13px/1 var(--cm-font-mono); color: var(--cm-fg-strong); font-feature-settings: "tnum"; }
+  .cr-table .c-dx { font-weight: 500; color: var(--cm-fg-strong); }
+  .cr-table .c-muted { color: var(--cm-fg-muted); }
+  .cr-zone { font-weight: 600; color: var(--cm-fg-strong); }
+  .cr-lat { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px; border-radius: var(--cm-r-1); background: var(--cm-bg-sunk); border: 1px solid var(--cm-border); font: 600 10px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .cr-recur { display: inline-flex; align-items: center; margin-left: 6px; color: var(--cm-warning); vertical-align: middle; }
+  .cr-recur .ti { font-size: 13px; }
+  .cr-empty { text-align: center; color: var(--cm-fg-faint); font: 500 13px/1 var(--cm-font-sans); padding: 32px 16px; }
+  .cr-pain { display: inline-flex; align-items: center; gap: 4px; font: 600 13px/1 var(--cm-font-mono); color: var(--cm-fg-strong); }
+  .cr-pain .ti { font-size: 13px; color: var(--cm-fg-faint); }
+  .cr-resp { font: 600 12px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .cr-resp.good { color: var(--cm-success); } .cr-resp.bad { color: var(--cm-danger); }
+
+  /* filters */
+  .cr-filters { display: flex; align-items: flex-end; gap: 14px; padding: 14px 18px; flex-wrap: wrap; }
+  .cr-filter { display: flex; flex-direction: column; gap: 6px; }
+  .cr-filter label { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); padding-left: 2px; }
+  .cr-filter .cm-select { height: 34px; min-width: 150px; cursor: pointer; }
+
+  /* injuries layout */
+  .cr-inj-cols { display: grid; grid-template-columns: 1fr 252px; gap: 14px; align-items: start; }
+
+  /* concussion */
+  .cr-conc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .cr-conc-card { padding: 14px 16px; background: var(--cm-bg-soft); border: 1px solid var(--cm-border); border-radius: var(--cm-r-4); }
+  .cr-conc-card .cr-mini-lab { margin-bottom: 10px; }
+  .cr-conc-card .cr-kv b.is-warn { color: var(--cm-warning); }
+  .cr-grtp { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .cr-grtp-step { padding: 12px 10px; border-radius: var(--cm-r-3); background: var(--cm-bg-soft); border: 1px solid var(--cm-border); text-align: center; }
+  .cr-grtp-step.is-done { background: var(--cm-success-bg); border-color: var(--cm-success-bd); }
+  .cr-grtp-n { width: 24px; height: 24px; border-radius: 50%; margin: 0 auto 8px; display: flex; align-items: center; justify-content: center; font: 600 12px/1 var(--cm-font-mono); background: var(--cm-surface); border: 1px solid var(--cm-border); color: var(--cm-fg-muted); }
+  .cr-grtp-step.is-done .cr-grtp-n { background: var(--cm-success); border-color: var(--cm-success); color: #fff; }
+  .cr-grtp-l { font: 500 11px/1.3 var(--cm-font-sans); color: var(--cm-fg-strong); min-height: 28px; }
+  .cr-grtp-d { font: 500 10px/1 var(--cm-font-mono); color: var(--cm-fg-faint); margin-top: 6px; }
+
+  /* imaging */
+  #img-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .cr-img-card { display: flex; align-items: stretch; gap: 0; padding: 0; overflow: hidden; }
+  .cr-img-thumb { width: 76px; flex-shrink: 0; background: repeating-linear-gradient(135deg, var(--cm-bg-sunk) 0 7px, var(--cm-bg-soft) 7px 14px); border-right: 1px solid var(--cm-border); display: flex; align-items: center; justify-content: center; color: var(--cm-fg-faint); }
+  .cr-img-thumb .ti { font-size: 26px; }
+  .cr-img-body { flex: 1; min-width: 0; padding: 13px 14px; }
+  .cr-img-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .cr-img-date { font: 500 11.5px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .cr-img-area { font: 600 13.5px/1 var(--cm-font-sans); color: var(--cm-fg-strong); margin: 9px 0 4px; }
+  .cr-img-find { font: 500 12px/1.45 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .cr-img-open { align-self: center; margin-right: 10px; color: var(--cm-fg-faint); }
+
+  /* documents */
+  #doc-list { display: flex; flex-direction: column; }
+  .cr-doc { display: flex; align-items: center; gap: 14px; padding: 13px 18px; border-bottom: 1px solid var(--cm-border-soft); }
+  .cr-doc:last-child { border-bottom: 0; }
+  .cr-doc:hover { background: var(--cm-bg-soft); }
+  .cr-doc-ic { width: 36px; height: 36px; border-radius: var(--cm-r-3); background: var(--cm-bg-sunk); border: 1px solid var(--cm-border); display: flex; align-items: center; justify-content: center; color: var(--cm-fg-muted); flex-shrink: 0; }
+  .cr-doc-ic .ti { font-size: 18px; }
+  .cr-doc-main { flex: 1; min-width: 0; }
+  .cr-doc-name { font: 600 13.5px/1.3 var(--cm-font-sans); color: var(--cm-fg-strong); }
+  .cr-doc-meta { font: 500 11.5px/1.3 var(--cm-font-mono); color: var(--cm-fg-faint); margin-top: 3px; }
+  .cr-vis { display: inline-flex; align-items: center; gap: 5px; font: 500 11px/1 var(--cm-font-sans); color: var(--cm-fg-muted); background: var(--cm-bg-soft); border: 1px solid var(--cm-border); border-radius: var(--cm-r-pill); padding: 5px 9px; white-space: nowrap; }
+  .cr-vis .ti { font-size: 13px; color: var(--cm-fg-faint); }
+
+  /* access note */
+  .cr-access { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 12px 16px; background: var(--cm-bg-soft); border: 1px solid var(--cm-border); border-radius: var(--cm-r-4); font: 500 12.5px/1.5 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .cr-access .ti { font-size: 17px; color: var(--cm-fg-faint); flex-shrink: 0; }
+  .cr-access b { color: var(--cm-fg-strong); font-weight: 600; }
+
+  .cr-sec-title { font: 600 13px/1 var(--cm-font-sans); color: var(--cm-fg-strong); margin: 22px 4px 12px; display: flex; align-items: center; gap: 8px; }
+  .cr-sec-title .ti { font-size: 16px; color: var(--cm-fg-muted); }
+
+  @media (max-width: 1180px) {
+    .cr-cols { grid-template-columns: 1fr; }
+    .cr-rail { position: static; flex-direction: row; flex-wrap: wrap; }
+    .cr-rail > .cm-card { flex: 1 1 320px; }
+    #kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .cr-inj-cols { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body class="cm">
+<div class="hub-shell" data-screen-label="20 Clinical record">
+  <div id="hub-side-root"></div>
+
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-stethoscope"></i><span>Medical</span><span class="sep">/</span>
+        <a href="Clinical%20Records.html" style="color:var(--cm-fg-muted);text-decoration:none">Clinical records</a><span class="sep">/</span>
+        <span id="cr-crumb-name" style="color:var(--cm-fg-strong);font-weight:600">Player</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, diagnoses…" aria-label="Search">
+      </div>
+      <div class="actions">
+        <span class="cr-role" id="role-badge"><i class="ti ti-shield-lock"></i>Medical role</span>
+        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="cm-page" style="max-width:1320px;">
+      <a class="cr-back" href="Clinical%20Records.html"><i class="ti ti-arrow-left"></i>Clinical records</a>
+
+      <!-- ══ A · IDENTITY + SAFETY STRIP ══ -->
+      <div class="cm-card cr-id">
+        <div class="cr-id-main">
+          <div class="cr-photo">MA</div>
+          <div class="cr-id-who">
+            <h1><span id="cr-name">Mateo Álvarez</span> <span class="cr-id-num" id="cr-num">#9</span></h1>
+            <div class="cr-id-meta">
+              <span class="cm-pill is-danger">ST</span>
+              <span class="sep">·</span><span>24 yrs · 14 Mar 2002</span>
+              <span class="sep">·</span><span>1.82 m · 82 kg</span>
+              <span class="sep">·</span><span>First team</span>
+            </div>
+          </div>
+          <div class="cr-id-stats">
+            <div class="cr-id-stat">
+              <span class="k">Medical status</span>
+              <span class="v"><span class="cm-pill is-warning"><span class="cm-dot"></span>Modified</span></span>
+              <span class="vsub">RTP · hamstring</span>
+            </div>
+            <div class="cr-id-stat">
+              <span class="k">Last review</span>
+              <span class="v" id="cr-last-review">10 Jun 26</span>
+              <span class="vsub" id="cr-last-review-note">12 days ago</span>
+            </div>
+            <div class="cr-id-stat" id="cr-next-review-stat">
+              <span class="k">Next review</span>
+              <span class="v"><i class="ti ti-calendar-due" style="font-size:14px;"></i><span id="next-review">04 Jul 26</span></span>
+              <span class="vsub" id="next-review-note">in 12d</span>
+            </div>
+            <div class="cr-id-stat">
+              <span class="k">Treating physician</span>
+              <span class="v" id="cr-physician">Dra. C. Méndez</span>
+              <span class="vsub">Sports medicine</span>
+            </div>
+          </div>
+        </div>
+        <div class="cr-alerts" id="cr-alerts">
+          <span class="cr-alerts-lab"><i class="ti ti-urgent"></i>Medical alerts</span>
+          <span class="cr-chip is-mono"><i class="ti ti-droplet"></i>Blood <b>O+</b></span>
+          <span class="cr-chip is-danger"><i class="ti ti-alert-triangle-filled"></i>Penicillin allergy · severe</span>
+          <span class="cr-chip is-warning"><i class="ti ti-alert-triangle"></i>Ibuprofen · mild rash</span>
+          <span class="cr-chip"><i class="ti ti-lungs"></i>Exercise-induced asthma</span>
+        </div>
+      </div>
+
+      <!-- ══ RAIL + MAIN ══ -->
+      <div class="cr-cols">
+
+        <!-- ── LEFT RAIL ── -->
+        <div class="cr-rail">
+
+          <!-- B · MEDICAL BASELINE -->
+          <div class="cm-card">
+            <div class="cr-card-head"><i class="ti ti-clipboard-list"></i><h2>Medical baseline</h2></div>
+            <div class="cr-card-body">
+              <div class="cr-base">
+                <div class="cr-kv"><span>Blood type</span><b id="cr-blood">O+ · CcEe</b></div>
+              </div>
+              <div class="cr-base">
+                <div class="cr-mini-lab">Allergies</div>
+                <div class="cr-taglist" id="cr-allergies">
+                  <span class="cr-tag is-danger" title="Anaphylaxis — carries auto-injector"><i class="ti ti-alert-triangle-filled" style="font-size:13px;"></i>Penicillin</span>
+                  <span class="cr-tag" title="Mild skin rash">Ibuprofen</span>
+                </div>
+              </div>
+              <div class="cr-base">
+                <div class="cr-mini-lab">Chronic conditions</div>
+                <div class="cr-taglist" id="cr-chronic">
+                  <span class="cr-tag" title="Controlled with PRN salbutamol">Exercise-induced asthma</span>
+                </div>
+              </div>
+              <div class="cr-base">
+                <div class="cr-mini-lab">Medications &amp; supplements</div>
+                <div class="cr-taglist" id="cr-meds">
+                  <span class="cr-tag">Salbutamol · PRN <span class="cr-tue">TUE</span></span>
+                  <span class="cr-tag">Vitamin D3</span>
+                  <span class="cr-tag">Creatine</span>
+                  <span class="cr-tag">Omega-3</span>
+                </div>
+              </div>
+              <div class="cr-base">
+                <div class="cr-mini-lab">Emergency contact</div>
+                <div class="cr-kv" id="cr-ec"><span>Lucía Álvarez · mother</span><b>+54 11 5512-8841</b></div>
+              </div>
+              <div class="cr-base">
+                <div class="cr-mini-lab">Insurance / clinic</div>
+                <div class="cr-kv" id="cr-insurance"><span>Clínica Deportiva Norte</span><b>POL-44-2291</b></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- C · CARDIAC & PCMA SCREENING -->
+          <div class="cm-card">
+            <div class="cr-card-head"><i class="ti ti-heart-rate-monitor"></i><h2>Cardiac &amp; PCMA screening</h2></div>
+            <div class="cr-card-body" id="cr-pcma" style="padding-top:6px;padding-bottom:6px;">
+              <div class="cr-pcma-row">
+                <span class="cr-pcma-name"><span class="cr-tl ok"></span>ECG · 12-lead</span>
+                <span class="cr-pcma-res">Normal sinus rhythm</span>
+                <span class="cr-pcma-dates">12 Aug 25<br><b>Due Aug 26</b></span>
+              </div>
+              <div class="cr-pcma-row">
+                <span class="cr-pcma-name"><span class="cr-tl ok"></span>Echocardiogram</span>
+                <span class="cr-pcma-res">Structurally normal</span>
+                <span class="cr-pcma-dates">12 Aug 25<br><b>Due Aug 26</b></span>
+              </div>
+              <div class="cr-pcma-row">
+                <span class="cr-pcma-name"><span class="cr-tl ok"></span>Stress test</span>
+                <span class="cr-pcma-res">Max HR 192 · no anomaly</span>
+                <span class="cr-pcma-dates">12 Aug 25<br><b>Due Aug 26</b></span>
+              </div>
+              <div class="cr-pcma-row">
+                <span class="cr-pcma-name"><span class="cr-tl ok"></span>Vision</span>
+                <span class="cr-pcma-res">20/20 both eyes</span>
+                <span class="cr-pcma-dates">10 Aug 25<br><b>Due Aug 26</b></span>
+              </div>
+              <div class="cr-pcma-row">
+                <span class="cr-pcma-name"><span class="cr-tl warn"></span>Dental</span>
+                <span class="cr-pcma-res">Checkup overdue</span>
+                <span class="cr-pcma-dates">14 Mar 25<br><b style="color:var(--cm-warning)">Overdue</b></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cr-access">
+            <i class="ti ti-lock"></i>
+            <span>You are viewing as <b>Medical role</b> — full clinical detail. Coach / S&amp;C roles see status, availability &amp; RTP only.</span>
+          </div>
+        </div>
+
+        <!-- ── MAIN AREA ── -->
+        <div>
+          <div class="cr-tabs">
+            <button class="cr-tab is-active" data-tab="overview"><i class="ti ti-layout-dashboard"></i>Overview</button>
+            <button class="cr-tab" data-tab="injuries"><i class="ti ti-bandage"></i>Injury history</button>
+            <button class="cr-tab" data-tab="illness"><i class="ti ti-virus"></i>Illness &amp; episodes</button>
+            <button class="cr-tab" data-tab="surgical"><i class="ti ti-scalpel"></i>Surgical</button>
+            <button class="cr-tab" data-tab="treatments"><i class="ti ti-massage"></i>Treatments</button>
+            <button class="cr-tab" data-tab="imaging"><i class="ti ti-scan"></i>Imaging &amp; studies</button>
+            <button class="cr-tab" data-tab="documents"><i class="ti ti-files"></i>Documents</button>
+          </div>
+
+          <!-- PANEL · OVERVIEW -->
+          <div class="cr-panel is-active" id="panel-overview">
+            <div class="cr-status-row">
+              <div class="cm-card cr-status-card">
+                <div class="cr-mini-lab">Current status</div>
+                <div class="cr-status-now">
+                  <span class="cm-pill is-warning"><span class="cm-dot"></span>Modified training</span>
+                  <span class="big">Returning to play</span>
+                </div>
+                <div class="cr-status-sub">Cleared for non-contact · full contact target <b style="color:var(--cm-fg-strong)">26 Jun 26</b></div>
+              </div>
+              <div class="cm-card cr-status-card">
+                <div class="cr-mini-lab">Active issue</div>
+                <div class="cr-issue">
+                  <div class="cr-issue-ic"><i class="ti ti-bandage"></i></div>
+                  <div>
+                    <h3>Biceps femoris grade II strain · R</h3>
+                    <p>Onset 20 May 26 · 33 days · recurrence · stage 5/6 RTP</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="cr-mini-lab" style="margin:4px 4px 10px;">Career medical KPIs</div>
+            <div id="kpi-row"></div>
+
+            <div class="cr-inj-cols">
+              <div class="cm-card">
+                <div class="cr-table-head"><h2>Injury timeline</h2><span class="count">by season</span></div>
+                <div class="tl-wrap"><div id="timeline"></div></div>
+                <div class="bm-legend" style="border-top:1px solid var(--cm-border);">
+                  <span class="it"><span class="sw" style="background:#9CA3AF"></span>Minimal</span>
+                  <span class="it"><span class="sw" style="background:#60A5FA"></span>Mild</span>
+                  <span class="it"><span class="sw" style="background:var(--cm-warning)"></span>Moderate</span>
+                  <span class="it"><span class="sw" style="background:var(--cm-danger)"></span>Severe</span>
+                </div>
+              </div>
+              <div class="cm-card cr-bodymap" id="bodymap-overview">
+                <div class="bm-head">
+                  <h2>Injury heatmap</h2>
+                  <div class="bm-toggle">
+                    <button class="is-active" data-view="front">Front</button>
+                    <button data-view="back">Back</button>
+                  </div>
+                </div>
+                <div class="bm-stage"></div>
+                <div class="bm-tip"></div>
+                <div class="bm-foot">Tinted by frequency &amp; severity · click a zone to filter</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL · INJURY HISTORY -->
+          <div class="cr-panel" id="panel-injuries">
+            <div class="cr-inj-cols">
+              <div class="cm-card">
+                <div class="cr-filters">
+                  <div class="cr-filter">
+                    <label for="flt-season">Season</label>
+                    <select id="flt-season" class="cm-select">
+                      <option value="all">All seasons</option>
+                      <option value="2025/26">2025/26</option>
+                      <option value="2024/25">2024/25</option>
+                      <option value="2023/24">2023/24</option>
+                    </select>
+                  </div>
+                  <div class="cr-filter">
+                    <label for="flt-zone">Body zone</label>
+                    <select id="flt-zone" class="cm-select">
+                      <option value="all">All zones</option>
+                      <option value="head">Head</option>
+                      <option value="lback">Lower back</option>
+                      <option value="groin">Groin</option>
+                      <option value="quad-r">Quadriceps</option>
+                      <option value="ham-r">Hamstring</option>
+                      <option value="knee-r">Knee</option>
+                      <option value="ankle-l">Ankle</option>
+                    </select>
+                  </div>
+                  <div class="cr-filter">
+                    <label for="flt-tissue">Tissue</label>
+                    <select id="flt-tissue" class="cm-select">
+                      <option value="all">All tissue</option>
+                      <option value="Muscle">Muscle</option>
+                      <option value="Ligament">Ligament</option>
+                      <option value="Tendon">Tendon</option>
+                      <option value="Concussion">Concussion</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="cr-table-head" style="border-top:1px solid var(--cm-border);">
+                  <h2>Injury history</h2><span class="count" id="inj-count"></span>
+                </div>
+                <div style="overflow-x:auto;">
+                <table class="cr-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th><th>Zone</th><th>Tissue</th><th>Diagnosis</th>
+                      <th>Mechanism</th><th>Severity</th><th class="num">Days</th><th>RTP</th><th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="inj-tbody"></tbody>
+                </table>
+                </div>
+              </div>
+              <div class="cm-card cr-bodymap" id="bodymap-injuries">
+                <div class="bm-head">
+                  <h2>Body map</h2>
+                  <div class="bm-toggle">
+                    <button class="is-active" data-view="front">Front</button>
+                    <button data-view="back">Back</button>
+                  </div>
+                </div>
+                <div class="bm-stage"></div>
+                <div class="bm-tip"></div>
+                <div class="bm-foot">Click a zone to filter the table</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL · ILLNESS & EPISODES -->
+          <div class="cr-panel" id="panel-illness">
+            <div class="cm-card">
+              <div class="cr-table-head"><h2>Illness &amp; non-injury episodes</h2><span class="count">3 episodes</span></div>
+              <table class="cr-table">
+                <thead><tr><th>Date</th><th>System</th><th>Diagnosis</th><th class="num">Days lost</th><th>Status</th></tr></thead>
+                <tbody id="ill-tbody"></tbody>
+              </table>
+            </div>
+            <div class="cr-sec-title"><i class="ti ti-brain"></i>Concussion log</div>
+            <div class="cm-card" style="padding:18px;">
+              <div id="concussion-body"></div>
+            </div>
+          </div>
+
+          <!-- PANEL · SURGICAL -->
+          <div class="cr-panel" id="panel-surgical">
+            <div class="cm-card">
+              <div class="cr-table-head"><h2>Surgical history</h2><span class="count">1 procedure</span></div>
+              <div style="overflow-x:auto;">
+              <table class="cr-table">
+                <thead><tr><th>Date</th><th>Procedure</th><th>Surgeon / clinic</th><th>Implants</th><th>Outcome</th><th>Related injury</th></tr></thead>
+                <tbody id="surg-tbody"></tbody>
+              </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL · TREATMENTS -->
+          <div class="cr-panel" id="panel-treatments">
+            <div class="cm-card">
+              <div class="cr-table-head"><h2>Treatment log</h2><span class="count">current rehab block</span></div>
+              <div style="overflow-x:auto;">
+              <table class="cr-table">
+                <thead><tr><th>Date</th><th>Type</th><th>Modalities</th><th class="num">Pain pre→post</th><th>Performed by</th><th>Response</th></tr></thead>
+                <tbody id="tx-tbody"></tbody>
+              </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL · IMAGING -->
+          <div class="cr-panel" id="panel-imaging">
+            <div class="cr-table-head" style="padding-left:4px;padding-right:4px;"><h2>Imaging &amp; studies</h2><span class="count">5 studies</span></div>
+            <div id="img-grid"></div>
+          </div>
+
+          <!-- PANEL · DOCUMENTS -->
+          <div class="cr-panel" id="panel-documents">
+            <div class="cm-card">
+              <div class="cr-table-head"><h2>Documents</h2><span class="count">6 files</span></div>
+              <div id="doc-list"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="clinical-record.js"></script>
+
+<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script>window.__CM_TWEAK_DEFAULTS = { theme:"hybrid", accent:"green" };</script>
+<script defer src="settings-drawer.js"></script>
+<script defer src="tweaks-panel.js"></script>
+<script defer src="theme-tweaks.js"></script>
+</body>
+</html>

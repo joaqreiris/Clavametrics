@@ -177,6 +177,7 @@
       { href: 'Nutrition.html',         icon: 'ti-apple',            label: 'Nutrition',        key: 'nutrition' },
     ]},
     { label: 'Medical', items: [
+      { href: 'Clinical%20Records.html',    icon: 'ti-clipboard-heart',      label: 'Clinical records',    key: 'clinical' },
       { href: 'Injuries.html',              icon: 'ti-bandage',              label: 'Injuries',            key: 'injuries' },
       { href: 'Physio.html',                icon: 'ti-stethoscope',          label: 'Treatments',          key: 'treatments' },
       { href: 'Rehab & Preventives.html',   icon: 'ti-activity-heartbeat',   label: 'Rehab & preventives', key: 'rehab' },
