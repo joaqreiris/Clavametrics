@@ -300,6 +300,104 @@ function getBodyCoords(area) {
     }).join('');
   }
 
+  // ── Illness & episodes tab (illness/other → table, concussion → GRTP log) ────
+  const EP_STATUS_PILL = { active: ['is-danger', 'Active'], monitoring: ['is-warning', 'Monitoring'], resolved: ['is-success', 'Resolved'] };
+  const GRTP_STEPS = [
+    'Symptom-limited activity', 'Light aerobic', 'Sport-specific',
+    'Non-contact drills', 'Full-contact practice', 'Return to sport',
+  ];
+
+  function daysBetween(startIso, endIso) {
+    const a = new Date((startIso || '') + 'T00:00:00'), b = new Date((endIso || '') + 'T00:00:00');
+    if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+    return Math.max(0, Math.round((b - a) / 86400000));
+  }
+
+  function scatHtml(scat) {
+    if (!scat || typeof scat !== 'object') return '';
+    const parts = [];
+    const push = (label, val) => {
+      if (val === undefined || val === null || val === '') return;
+      parts.push('<div><div class="cr-mini-lab">' + esc(label) + '</div>' +
+        '<div style="font:var(--cm-body-sm);color:var(--cm-fg-strong)">' + esc(String(val)) + '</div></div>');
+    };
+    push('SCAT baseline', scat.baseline);
+    push('SCAT score', scat.score);
+    if (!parts.length) return '';
+    return '<div style="display:flex;gap:24px;margin:12px 0 4px">' + parts.join('') + '</div>';
+  }
+
+  function grtpLadder(detail) {
+    const gmap = {};
+    arr(detail && detail.grtp).forEach(s => { if (s && s.step != null) gmap[s.step] = s; });
+    let html = '<div class="cr-grtp">';
+    for (let i = 1; i <= 6; i++) {
+      const step = gmap[i] || {};
+      const label = step.label || GRTP_STEPS[i - 1];
+      const done = step.done === true;
+      const date = step.date ? (fmtDate(step.date) || '') : '';
+      html += '<div class="cr-grtp-step' + (done ? ' is-done' : '') + '">' +
+        '<div class="cr-grtp-n">' + i + '</div>' +
+        '<div class="cr-grtp-l">' + esc(label) + '</div>' +
+        '<div class="cr-grtp-d">' + esc(date) + '</div>' +
+        '</div>';
+    }
+    return html + '</div>';
+  }
+
+  function renderEpisodes(rows) {
+    rows = arr(rows);
+    const illness = rows.filter(e => e && (e.category === 'illness' || e.category === 'other'));
+    const concussions = rows.filter(e => e && e.category === 'concussion');
+
+    // ── Illness table ──
+    const tbody = document.getElementById('ill-tbody');
+    if (tbody) {
+      setText('ill-count', illness.length + ' ' + (illness.length === 1 ? 'episode' : 'episodes'));
+      if (!illness.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="cr-empty">No episodes recorded</td></tr>';
+      } else {
+        tbody.innerHTML = illness.map(e => {
+          const st = EP_STATUS_PILL[e.status] || ['', e.status || '—'];
+          const statusPill = '<span class="cm-pill ' + st[0] + '"><span class="cm-dot"></span>' + esc(st[1]) + '</span>';
+          const days = (e.days_lost != null) ? e.days_lost
+            : (e.end_date ? (daysBetween(e.start_date, e.end_date) ?? '—') : '—');
+          return '<tr>' +
+            '<td class="c-date">' + esc(fmtDate(e.start_date) || '—') + '</td>' +
+            '<td>' + esc(e.system || '—') + '</td>' +
+            '<td class="c-dx">' + esc(e.diagnosis || '—') + '</td>' +
+            '<td class="num">' + esc(String(days)) + '</td>' +
+            '<td>' + statusPill + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+    }
+
+    // ── Concussion log ──
+    const cbody = document.getElementById('concussion-body');
+    if (cbody) {
+      if (!concussions.length) {
+        cbody.innerHTML = '<div class="cr-empty" style="padding:8px 0">No concussions recorded</div>';
+      } else {
+        cbody.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px">' + concussions.map(e => {
+          const st = EP_STATUS_PILL[e.status] || ['', e.status || '—'];
+          const statusPill = '<span class="cm-pill ' + st[0] + '"><span class="cm-dot"></span>' + esc(st[1]) + '</span>';
+          const days = (e.days_lost != null) ? String(e.days_lost)
+            : (e.end_date ? String(daysBetween(e.start_date, e.end_date) ?? '—') : '—');
+          const warn = e.status !== 'resolved' ? ' class="is-warn"' : '';
+          return '<div class="cr-conc-card">' +
+            '<div class="cr-kv"><span>Concussion</span><b>' + esc(fmtDate(e.start_date) || '—') + '</b></div>' +
+            '<div class="cr-kv"><span>Days lost</span><b' + warn + '>' + esc(days) + '</b></div>' +
+            '<div class="cr-kv" style="margin-bottom:6px"><span>Status</span><b>' + statusPill + '</b></div>' +
+            scatHtml(e.detail && e.detail.scat) +
+            '<div class="cr-mini-lab" style="margin:12px 0 8px">Graduated return to play</div>' +
+            grtpLadder(e.detail) +
+            '</div>';
+        }).join('') + '</div>';
+      }
+    }
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -626,6 +724,15 @@ function getBodyCoords(area) {
           .order('surgery_date', { ascending: false });
         renderSurgeries(data);
       } catch (_) { renderSurgeries([]); }
+
+      // ── Illness & episodes + concussion log (fetched once) ──
+      try {
+        const { data } = await window.sb.from('medical_episodes')
+          .select('category,system,diagnosis,start_date,end_date,days_lost,status,detail,notes')
+          .eq('club_id', clubId).eq('player_id', playerId)
+          .order('start_date', { ascending: false });
+        renderEpisodes(data);
+      } catch (_) { renderEpisodes([]); }
     } finally {
       doneLoading();
     }
