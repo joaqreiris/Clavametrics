@@ -512,11 +512,140 @@ function getBodyCoords(area) {
     }).join('');
   }
 
+  // ── Overview: identity meta, current status, active issue, KPIs, timeline ───
+  const PLAYER_STATUS = { available: ['is-success', 'Available'], injured: ['is-danger', 'Injured'], modified: ['is-warning', 'Modified'], unavailable: ['', 'Unavailable'] };
+
+  function fmtDateLong(iso) {
+    if (!iso) return null;
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear();
+  }
+  function ageFrom(dob) {
+    if (!dob) return null;
+    const d = new Date(dob + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    let a = _today.getFullYear() - d.getFullYear();
+    const m = _today.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && _today.getDate() < d.getDate())) a--;
+    return a >= 0 ? a : null;
+  }
+  function kpiCard(label, icon, num, unit, sub, numCls) {
+    return '<div class="cr-kpi">' +
+      '<div class="lab">' + (icon ? '<i class="ti ' + icon + '"></i>' : '') + esc(label) + '</div>' +
+      '<div class="big"><span class="num' + (numCls ? ' ' + numCls : '') + '">' + esc(String(num)) + '</span>' +
+        (unit ? '<span class="unit">' + esc(unit) + '</span>' : '') + '</div>' +
+      '<div class="sub">' + esc(sub) + '</div>' +
+      '</div>';
+  }
+
+  function renderOverview(player) {
+    player = player || {};
+
+    // identity meta — position pill + age · date of birth (height/weight/team not fetched)
+    let meta = '';
+    if (player.position) meta += '<span class="cm-pill">' + esc(player.position) + '</span>';
+    const age = ageFrom(player.date_of_birth);
+    const dob = player.date_of_birth ? fmtDateLong(player.date_of_birth) : null;
+    const ageDob = [age != null ? age + ' yrs' : null, dob].filter(Boolean).join(' · ');
+    if (ageDob) meta += (meta ? '<span class="sep">·</span>' : '') + '<span>' + esc(ageDob) + '</span>';
+    setHTML('cr-id-meta', meta || DASH);
+
+    // most recent open injury (active or returning)
+    const open = arr(_injuries)
+      .filter(i => i.status === 'active' || i.status === 'returning')
+      .sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')))[0] || null;
+
+    // current status card (from player.status)
+    const ps = PLAYER_STATUS[player.status] || ['', 'Unknown'];
+    const big = player.status === 'available' ? 'Full training' : (open ? 'Managing active issue' : ps[1]);
+    setHTML('cr-cur-status', '<span class="cm-pill ' + ps[0] + '"><span class="cm-dot"></span>' + esc(ps[1]) +
+      '</span><span class="big">' + esc(big) + '</span>');
+    const subEl = document.querySelector('.cr-status-sub');
+    if (subEl) subEl.innerHTML = open && open.expected_return
+      ? 'Expected return · <b style="color:var(--cm-fg-strong)">' + esc(fmtDate(open.expected_return) || '—') + '</b>'
+      : '';
+
+    // active issue card
+    const issueEl = document.querySelector('.cr-issue');
+    if (issueEl) {
+      if (open) {
+        const diag = open.sub_classification || open.injury_type || 'Active injury';
+        const p = 'Onset ' + (fmtDate(open.start_date) || '—') + ' · ' + daysOut(open) + ' days · ' + (open.status || '');
+        issueEl.innerHTML = '<div class="cr-issue-ic"><i class="ti ti-bandage"></i></div>' +
+          '<div><h3>' + esc(diag) + '</h3><p>' + esc(p) + '</p></div>';
+      } else {
+        issueEl.innerHTML = '<div class="cr-issue-ic" style="background:var(--cm-success-bg);color:var(--cm-success);border-color:var(--cm-success-bd)">' +
+          '<i class="ti ti-check"></i></div><div><h3>No active issue</h3></div>';
+      }
+    }
+
+    // career KPIs (from injuries)
+    const krow = document.getElementById('kpi-row');
+    if (krow) {
+      const injs = arr(_injuries);
+      const total = injs.length;
+      const daysLost = injs.reduce((s, i) => s + daysOut(i), 0);
+      const activeN = injs.filter(i => i.status === 'active' || i.status === 'returning').length;
+      const severeN = injs.filter(i => String(i.severity || '').toLowerCase() === 'severe').length;
+      const avgDays = total ? Math.round(daysLost / total) : 0;
+      const lastStart = injs.map(i => i.start_date).filter(Boolean).sort().reverse()[0];
+      const sinceLast = lastStart ? Math.max(0, Math.round((_today - new Date(lastStart + 'T00:00:00')) / 86400000)) : null;
+      krow.innerHTML =
+        kpiCard('Injuries', 'ti-bandage', total, '', 'career') +
+        kpiCard('Days lost', 'ti-calendar-off', daysLost, 'd', 'career') +
+        kpiCard('Active', 'ti-alert-triangle', activeN, '', 'now', activeN > 0 ? 'is-warn' : '') +
+        kpiCard('Severe', 'ti-urgent', severeN, '', 'career') +
+        kpiCard('Avg days', 'ti-clock', avgDays, 'd', 'per injury') +
+        kpiCard('Since last', 'ti-history', sinceLast == null ? '—' : sinceLast, sinceLast == null ? '' : 'd', 'ago');
+    }
+
+    renderTimeline();
+  }
+
+  // Per-season (Aug→Jul) injury timeline with severity-coloured marks.
+  const TL_MONTHS = ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
+  const TL_SEV = { minor: 'mild', moderate: 'moderate', severe: 'severe' };
+  function renderTimeline() {
+    const el = document.getElementById('timeline');
+    if (!el) return;
+    const injs = arr(_injuries).filter(i => i.start_date);
+    if (!injs.length) {
+      el.innerHTML = '<div class="cr-empty" style="padding:8px 0">No injuries recorded</div>';
+      return;
+    }
+    const bySeason = {};
+    injs.forEach(i => { const s = seasonLabel(i.start_date); if (s) (bySeason[s] = bySeason[s] || []).push(i); });
+    const seasons = Object.keys(bySeason).sort().reverse();
+
+    let html = '<div class="tl-grid">';
+    html += '<div></div><div class="tl-track tl-months">' + TL_MONTHS.map(m => '<span>' + m + '</span>').join('') + '</div>';
+    seasons.forEach(s => {
+      html += '<div class="tl-rowhead">' + esc(s) + '</div><div class="tl-track">';
+      for (let c = 0; c < 12; c++) html += '<div class="tl-cell"></div>';
+      bySeason[s].forEach(i => {
+        const d = new Date(i.start_date + 'T00:00:00');
+        if (isNaN(d.getTime())) return;
+        const mi = (d.getMonth() - 7 + 12) % 12;
+        const left = ((mi + 0.5) / 12 * 100).toFixed(2);
+        const cls = TL_SEV[String(i.severity || 'minor').toLowerCase()] || 'mild';
+        const tip = (i.sub_classification || i.injury_type || 'Injury') +
+          (i.body_area ? ' · ' + i.body_area : '') + ' · ' + (fmtDate(i.start_date) || '');
+        html += '<button class="tl-mark ' + cls + '" style="left:' + left + '%" title="' + esc(tip) + '"><span class="tl-mark-dot"></span></button>';
+      });
+      html += '</div>';
+    });
+    el.innerHTML = html + '</div>';
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
 
     // identity band
+    setText('cr-name', '—'); setText('cr-num', '');
+    const photo = document.getElementById('cr-photo');
+    if (photo) { photo.textContent = ''; photo.style.backgroundImage = ''; }
     setHTML('cr-id-meta', DASH);
     setText('cr-med-status', '—'); setText('cr-medstatus-sub', '');
     setText('cr-last-review', '—'); setText('cr-last-review-note', '');
@@ -798,6 +927,18 @@ function getBodyCoords(area) {
       setText('cr-crumb-name', name);
       document.title = 'Clinical record — ' + name + ' · ClavaMetrics';
 
+      const photo = document.getElementById('cr-photo');
+      if (photo) {
+        if (player.photo_url) {
+          photo.style.backgroundImage = "url('" + esc(player.photo_url) + "')";
+          photo.style.backgroundSize = 'cover';
+          photo.style.backgroundPosition = 'center';
+          photo.textContent = '';
+        } else {
+          photo.textContent = (((player.first_name || '').trim()[0] || '') + ((player.last_name || '').trim()[0] || '')) || '—';
+        }
+      }
+
       // ── Medical profile (1 row) — feeds review dates, baseline & alerts ──
       let profile = null;
       try {
@@ -847,6 +988,7 @@ function getBodyCoords(area) {
       paintCard(injuriesCard(), _injView);
       populateInjuryFilters();
       renderInjuryTable();
+      renderOverview(player);
 
       // ── Surgical history tab (fetched once; related injury looked up in _injuries) ──
       try {
