@@ -103,8 +103,22 @@ function getBodyCoords(area) {
   // ── Overview injury heatmap state (fetched once, re-rendered on toggle) ──────
   let _injuries = [];
   let _bodyView = 'front';
+  let _profile = null;          // player_medical_profile row (reused for sex)
+  let _bodySex = 'male';        // silhouette sex: 'male' | 'female'
+  let _playerId = null;
+  let _clubId = null;
   const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
   const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
+
+  // Sex is 'female' only if the profile row explicitly says so; anything else
+  // (male, null, no row) falls back to 'male'.
+  const currentBodySex = () => (_profile && _profile.sex === 'female') ? 'female' : 'male';
+  const bodyImgSrc = () => 'assets/body-' + _bodySex + '-' + _bodyView + '.png';
+  function refreshBodyImg() { const img = document.getElementById('cr-bodyImg'); if (img) img.src = bodyImgSrc(); }
+  function applySexActive() {
+    document.querySelectorAll('#cr-sexToggle button[data-sex]')
+      .forEach(b => b.classList.toggle('is-active', b.dataset.sex === _bodySex));
+  }
 
   function renderOverviewHeatmap(view) {
     const svg = document.getElementById('cr-bodySvg');
@@ -207,11 +221,38 @@ function getBodyCoords(area) {
     btn.addEventListener('click', () => {
       const view = btn.dataset.view === 'back' ? 'back' : 'front';
       _bodyView = view;
-      document.querySelectorAll('#bodymap-overview .bm-toggle button')
+      document.querySelectorAll('#bodymap-overview .bm-toggle button[data-view]')
         .forEach(b => b.classList.toggle('is-active', b === btn));
-      const img = document.getElementById('cr-bodyImg');
-      if (img) img.src = view === 'back' ? 'assets/body-male-back.png' : 'assets/body-male-front.png';
+      refreshBodyImg();
       renderOverviewHeatmap(view);
+    });
+  });
+
+  // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
+  applySexActive(); // default 'male' active until the profile row resolves
+  document.querySelectorAll('#cr-sexToggle button[data-sex]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const sex = btn.dataset.sex === 'female' ? 'female' : 'male';
+      if (sex === _bodySex) return;
+      const prev = _bodySex;
+      _bodySex = sex;
+      applySexActive();
+      refreshBodyImg();
+      renderOverviewHeatmap(_bodyView); // hotspots are sex-independent; keep them in sync
+
+      if (!_clubId || !_playerId) return;
+      try {
+        const { error } = await window.sb.from('player_medical_profile')
+          .upsert({ club_id: _clubId, player_id: _playerId, sex: _bodySex }, { onConflict: 'player_id' });
+        if (error) throw error;
+        if (_profile) _profile.sex = _bodySex;
+      } catch (e) {
+        console.error('[Clinical record] could not persist body sex', e);
+        _bodySex = prev; // revert on failure (e.g. no write permission)
+        applySexActive();
+        refreshBodyImg();
+        renderOverviewHeatmap(_bodyView);
+      }
     });
   });
 
@@ -335,10 +376,12 @@ function getBodyCoords(area) {
     try {
       const playerId = new URLSearchParams(location.search).get('player');
       if (!playerId) { showError('No player specified.'); return; }
+      _playerId = playerId;
 
       let clubId = null;
       try { clubId = await window.getClubId(); } catch (_) {}
       if (!clubId) { showError('No club found for this account.'); return; }
+      _clubId = clubId;
 
       let player = null;
       try {
@@ -360,14 +403,20 @@ function getBodyCoords(area) {
       let profile = null;
       try {
         const { data } = await window.sb.from('player_medical_profile')
-          .select('blood_type,blood_phenotype,allergies,chronic_conditions,family_history,emergency_contact,treating_physician,insurance,last_review_date,next_review_date')
+          .select('blood_type,blood_phenotype,allergies,chronic_conditions,family_history,emergency_contact,treating_physician,insurance,last_review_date,next_review_date,sex')
           .eq('club_id', clubId).eq('player_id', playerId).maybeSingle();
         profile = data;
       } catch (_) {}
       const p = profile || {};
+      _profile = profile;
       renderReview(p);
       renderBaseline(p);
       renderAlerts(p);
+
+      // silhouette sex from the profile row (reused, no extra fetch)
+      _bodySex = currentBodySex();
+      applySexActive();
+      refreshBodyImg();
 
       // ── Medications & supplements ──
       try {
