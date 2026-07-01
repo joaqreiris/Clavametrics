@@ -37,6 +37,111 @@
   const mainEl = () => document.querySelector('.hub-main');
   const doneLoading = () => { const m = mainEl(); if (m) m.classList.remove('is-loading'); };
 
+  // ── Body-map coordinates (copied VERBATIM from Injuries.html — do not edit) ──
+const BODY_COORDS = {
+  'head':             { ant:[50,10],  post:[50,10]  },
+  'neck':             { ant:[50,21],  post:[50,21]  },
+  'chest':            { ant:[50,46],  post:null       },
+  'upper back':       { ant:null,     post:[50,41]  },
+  'abdomen':          { ant:[50,62],  post:null       },
+  'lower back':       { ant:null,     post:[50,65]  },
+  'groin':            { ant:[50,78],  post:null       },
+  'right shoulder':   { ant:[29,32],  post:[71,32]  },
+  'left shoulder':    { ant:[71,32],  post:[29,32]  },
+  'shoulder':         { ant:[50,32],  post:[50,32]  },
+  'right arm':        { ant:[26,52],  post:[74,52]  },
+  'left arm':         { ant:[74,52],  post:[26,52]  },
+  'right elbow':      { ant:[24,63],  post:[76,63]  },
+  'left elbow':       { ant:[76,63],  post:[24,63]  },
+  'right wrist':      { ant:[22,73],  post:[78,73]  },
+  'left wrist':       { ant:[78,73],  post:[22,73]  },
+  'right hip':        { ant:[37,90],  post:[63,90]  },
+  'left hip':         { ant:[63,90],  post:[37,90]  },
+  'hip':              { ant:[50,90],  post:[50,90]  },
+  'right glute':      { ant:null,     post:[38,100] },
+  'left glute':       { ant:null,     post:[62,100] },
+  'glute':            { ant:null,     post:[50,100] },
+  'right thigh':      { ant:[39,113], post:null      },
+  'left thigh':       { ant:[61,113], post:null      },
+  'thigh':            { ant:[50,113], post:null      },
+  'right adductor':   { ant:[42,110], post:null      },
+  'left adductor':    { ant:[58,110], post:null      },
+  'adductor':         { ant:[50,110], post:null      },
+  'right hamstring':  { ant:null,     post:[39,118] },
+  'left hamstring':   { ant:null,     post:[61,118] },
+  'hamstring':        { ant:null,     post:[50,118] },
+  'right knee':       { ant:[39,137], post:[39,137] },
+  'left knee':        { ant:[61,137], post:[61,137] },
+  'knee':             { ant:[50,137], post:[50,137] },
+  'right calf':       { ant:null,     post:[39,157] },
+  'left calf':        { ant:null,     post:[61,157] },
+  'calf':             { ant:null,     post:[50,157] },
+  'right shin':       { ant:[39,154], post:null      },
+  'left shin':        { ant:[61,154], post:null      },
+  'shin':             { ant:[50,154], post:null      },
+  'right achilles':   { ant:null,     post:[39,169] },
+  'left achilles':    { ant:null,     post:[61,169] },
+  'achilles':         { ant:null,     post:[50,169] },
+  'right ankle':      { ant:[39,180], post:[39,180] },
+  'left ankle':       { ant:[61,180], post:[61,180] },
+  'ankle':            { ant:[50,180], post:[50,180] },
+  'right foot':       { ant:[39,193], post:[39,193] },
+  'left foot':        { ant:[61,193], post:[61,193] },
+  'foot':             { ant:[50,193], post:[50,193] },
+};
+
+function getBodyCoords(area) {
+  if (!area) return null;
+  const k = area.toLowerCase().trim();
+  if (BODY_COORDS[k]) return BODY_COORDS[k];
+  for (const [key, val] of Object.entries(BODY_COORDS)) {
+    if (k.includes(key) || key.includes(k)) return val;
+  }
+  return null;
+}
+
+  // ── Overview injury heatmap state (fetched once, re-rendered on toggle) ──────
+  let _injuries = [];
+  let _bodyView = 'front';
+  const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
+  const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
+
+  function renderOverviewHeatmap(view) {
+    const svg = document.getElementById('cr-bodySvg');
+    if (!svg) return;
+    const groups = {};
+    arr(_injuries).forEach(inj => {
+      if (!inj || !inj.body_area) return;
+      const k = String(inj.body_area).toLowerCase().trim();
+      if (!k) return;
+      const g = groups[k] || (groups[k] = { area: inj.body_area, total: 0, worst: 'minor', active: false });
+      g.total++;
+      const sev = String(inj.severity || 'minor').toLowerCase();
+      if ((SEV_RANK[sev] || 0) > (SEV_RANK[g.worst] || 0)) g.worst = sev;
+      if (inj.status === 'active' || inj.status === 'returning') g.active = true;
+    });
+
+    let html = '';
+    Object.values(groups).forEach(g => {
+      const coords = getBodyCoords(g.area);
+      if (!coords) return;
+      const pt = view === 'back' ? coords.post : coords.ant;
+      if (!pt) return;
+      const color = SEV_COLOR[g.worst] || '#EA580C';
+      const r = g.total >= 3 ? 5.5 : 4;
+      const pulseCls = g.active ? ' pulse' : '';
+      const tip = g.area + ' · ' + g.total + ' ' + (g.total === 1 ? 'injury' : 'injuries') + ' · worst: ' + g.worst;
+      const cx = pt[0], cy = pt[1];
+      html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + color +
+        '" stroke="var(--cm-surface)" stroke-width="1.5" class="hot-dot' + pulseCls + '"><title>' + esc(tip) + '</title></circle>';
+      if (g.total > 1) {
+        html += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" ' +
+          'font-size="5.5" font-weight="700" fill="white" pointer-events="none">' + (g.total > 9 ? '9+' : g.total) + '</text>';
+      }
+    });
+    svg.innerHTML = html;
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -70,7 +175,7 @@
     if (issue) issue.innerHTML = '<div class="cr-issue-ic"><i class="ti ti-check"></i></div><div><h3>No active issue</h3></div>';
     setHTML('kpi-row', '');
     setHTML('timeline', '');
-    document.querySelectorAll('.bm-stage').forEach(s => s.innerHTML = '');
+    setHTML('cr-bodySvg', ''); // clear hotspots only — keep the silhouette img
 
     // detail tables (not yet wired) → empty state
     setHTML('inj-tbody', emptyRow(9));
@@ -94,6 +199,19 @@
       document.querySelectorAll('.cr-tab').forEach(b => b.classList.toggle('is-active', b === btn));
       document.querySelectorAll('.cr-panel').forEach(p =>
         p.classList.toggle('is-active', p.id === 'panel-' + tab));
+    });
+  });
+
+  // ── Overview heatmap Front/Back toggle ──────────────────────────────────────
+  document.querySelectorAll('#bodymap-overview .bm-toggle button[data-view]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const view = btn.dataset.view === 'back' ? 'back' : 'front';
+      _bodyView = view;
+      document.querySelectorAll('#bodymap-overview .bm-toggle button')
+        .forEach(b => b.classList.toggle('is-active', b === btn));
+      const img = document.getElementById('cr-bodyImg');
+      if (img) img.src = view === 'back' ? 'assets/body-male-back.png' : 'assets/body-male-front.png';
+      renderOverviewHeatmap(view);
     });
   });
 
@@ -268,6 +386,15 @@
           .order('performed_on', { ascending: false });
         renderScreenings(data);
       } catch (_) { renderScreenings([]); }
+
+      // ── Injuries → Overview body heatmap (fetched once) ──
+      try {
+        const { data } = await window.sb.from('injuries')
+          .select('body_area,severity,status')
+          .eq('club_id', clubId).eq('player_id', playerId);
+        _injuries = arr(data);
+      } catch (_) { _injuries = []; }
+      renderOverviewHeatmap(_bodyView);
     } finally {
       doneLoading();
     }

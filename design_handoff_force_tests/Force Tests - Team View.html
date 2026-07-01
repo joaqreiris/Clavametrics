@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Force tests — Team view · ClavaMetrics</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ── Screen-local styles (chart + controls) ─────────────────── */
+  .ft-controls {
+    display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap;
+    padding: 16px 18px;
+  }
+  .ft-control { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .ft-control > label {
+    font: 500 10.5px/1 var(--cm-font-sans);
+    letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase;
+    color: var(--cm-fg-faint);
+    padding-left: 2px;
+  }
+  .ft-control .cm-select { height: 36px; min-width: 188px; cursor: pointer; }
+  .ft-control.is-metric .cm-select { min-width: 168px; }
+  .ft-spacer { flex: 1 1 24px; }
+
+  /* Segmented order toggle */
+  .ft-seg {
+    display: inline-flex; gap: 2px;
+    background: var(--cm-bg-soft);
+    border: 1px solid var(--cm-border);
+    border-radius: var(--cm-r-3);
+    padding: 3px;
+    height: 36px;
+  }
+  .cm-side-item span:not(.cm-side-count) { white-space: nowrap; }
+  .cm-crumb span { white-space: nowrap; }
+  .ft-seg button {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border: 0; background: transparent; cursor: pointer;
+    padding: 0 12px; border-radius: var(--cm-r-2);
+    font: 500 12.5px/1 var(--cm-font-sans);
+    color: var(--cm-fg-muted);
+    transition: background var(--cm-dur-1) var(--cm-ease), color var(--cm-dur-1) var(--cm-ease), box-shadow var(--cm-dur-1) var(--cm-ease);
+  }
+  .ft-seg button .ti { font-size: 15px; }
+  .ft-seg button:hover { color: var(--cm-fg); }
+  .ft-seg button.is-active {
+    background: var(--cm-surface);
+    color: var(--cm-fg-strong);
+    box-shadow: var(--cm-shadow-1);
+  }
+
+  /* Summary strip */
+  .ft-summary {
+    display: flex; align-items: stretch; gap: 0;
+    padding: 22px 24px;
+    flex-wrap: wrap;
+  }
+  .ft-avg { display: flex; flex-direction: column; gap: 8px; padding-right: 36px; }
+  .ft-avg .lab {
+    font: 500 10.5px/1 var(--cm-font-sans);
+    letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase;
+    color: var(--cm-fg-faint);
+  }
+  .ft-avg .big {
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .ft-avg .num {
+    font: 600 52px/0.95 var(--cm-font-mono);
+    letter-spacing: -0.02em;
+    color: var(--cm-fg-strong);
+    font-feature-settings: "tnum";
+  }
+  .ft-avg .unit { font: 500 17px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .ft-avg .sub { font: 500 12px/1.4 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .ft-avg .sub b { color: var(--cm-fg); font-weight: 600; }
+
+  .ft-stats { display: flex; gap: 0; margin-left: auto; align-items: center; }
+  .ft-stat {
+    display: flex; flex-direction: column; gap: 7px;
+    padding: 0 26px;
+    border-left: 1px solid var(--cm-border);
+  }
+  .ft-stat .k {
+    display: flex; align-items: center; gap: 6px;
+    font: 500 11px/1 var(--cm-font-sans); color: var(--cm-fg-faint);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .ft-stat .v { font: 600 18px/1 var(--cm-font-mono); color: var(--cm-fg-strong); font-feature-settings: "tnum"; }
+  .ft-stat .v small { font: 500 12px/1 var(--cm-font-sans); color: var(--cm-fg-muted); margin-left: 4px; }
+  .ft-stat .n { font: 500 11.5px/1.3 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .ft-stat .v.is-bad { color: var(--cm-danger); }
+
+  /* Chart */
+  .ft-chart-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px 0;
+  }
+  .ft-chart-title { font: 600 14px/1 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.005em; }
+  .ft-legend { display: flex; align-items: center; gap: 16px; }
+  .ft-legend .it { display: flex; align-items: center; gap: 6px; font: 500 11.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .ft-legend .sw { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .ft-legend .sw.ok   { background: #475569; }
+  .ft-legend .sw.warn { background: var(--cm-warning); }
+  .ft-legend .sw.bad  { background: var(--cm-danger); }
+  .ft-legend .sw.avgl { width: 16px; height: 0; border-top: 2px dashed var(--cm-fg-faint); border-radius: 0; }
+
+  .ft-plotwrap { padding: 18px 20px 6px; }
+  .ft-plot {
+    position: relative;
+    height: 296px;
+    display: flex; align-items: flex-end; gap: 0;
+  }
+  .ft-col {
+    flex: 1 1 0; min-width: 0; height: 100%;
+    display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+    position: relative;
+  }
+  .ft-val {
+    font: 600 11px/1 var(--cm-font-mono); color: var(--cm-fg-muted);
+    margin-bottom: 6px; font-feature-settings: "tnum"; white-space: nowrap;
+    transition: color var(--cm-dur-1) var(--cm-ease);
+  }
+  .ft-bar {
+    width: 68%; max-width: 30px; min-width: 8px;
+    background: #475569;
+    border-radius: 5px 5px 2px 2px;
+    transition: height var(--cm-dur-2) var(--cm-ease), background var(--cm-dur-1) var(--cm-ease);
+  }
+  .ft-col.warn .ft-bar { background: var(--cm-warning); }
+  .ft-col.bad  .ft-bar { background: var(--cm-danger); }
+  .ft-col.warn .ft-val { color: var(--cm-warning); }
+  .ft-col.bad  .ft-val { color: var(--cm-danger); }
+
+  .ft-avgline {
+    position: absolute; left: -4px; right: -4px;
+    border-top: 1.5px dashed var(--cm-fg-muted);
+    z-index: 4; pointer-events: none;
+  }
+  .ft-avgline .tag {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: var(--cm-fg-strong); color: #fff;
+    font: 600 10.5px/1 var(--cm-font-mono); font-feature-settings: "tnum";
+    padding: 4px 7px; border-radius: 5px; white-space: nowrap;
+  }
+  .ft-avgline.tag-right .tag { right: 0; }
+  .ft-avgline.tag-left  .tag { left: 0; }
+
+  .ft-names { display: flex; gap: 0; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--cm-border); height: 78px; }
+  .ft-nm { flex: 1 1 0; min-width: 0; position: relative; }
+  .ft-nm span {
+    position: absolute; left: 50%; top: 2px;
+    transform-origin: left center; transform: rotate(40deg);
+    white-space: nowrap;
+    font: 500 11px/1 var(--cm-font-sans);
+    color: var(--cm-fg-muted);
+  }
+  .ft-nm.warn span { color: var(--cm-warning); font-weight: 600; }
+  .ft-nm.bad  span { color: var(--cm-danger);  font-weight: 600; }
+
+  @media (max-width: 1080px) {
+    .ft-summary { flex-direction: column; gap: 22px; }
+    .ft-stats { margin-left: 0; }
+    .ft-stat:first-child { border-left: 0; padding-left: 0; }
+  }
+</style>
+</head>
+<body class="cm">
+<div style="display:grid; grid-template-columns:248px 1fr; min-height:100vh;">
+
+  <!-- ── Sidebar ── -->
+  <aside class="cm-shell-side">
+    <div class="cm-side-brand">
+      <span class="cm-logo-mark" style="width:30px;height:30px;border-radius:7px;"></span>
+      <div style="flex:1; min-width:0;">
+        <div class="cm-side-brand-name">Clava FC</div>
+        <div class="cm-side-brand-meta">First team · 2025/26</div>
+      </div>
+    </div>
+    <nav class="cm-side-nav">
+      <div class="cm-side-group-label">Overview</div>
+      <a class="cm-side-item"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+      <a class="cm-side-item"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+      <a class="cm-side-item"><i class="ti ti-users"></i><span>Squad</span></a>
+      <div class="cm-side-group-label">Performance</div>
+      <a class="cm-side-item"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+      <a class="cm-side-item"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+      <a class="cm-side-item is-active"><i class="ti ti-clipboard-data"></i><span>Evaluations</span></a>
+      <a class="cm-side-item"><i class="ti ti-bandage"></i><span>Injuries</span><span class="cm-side-count">3</span></a>
+    </nav>
+    <div class="cm-side-foot">
+      <div class="cm-side-user">
+        <span class="av">JR</span>
+        <div class="who">
+          <div class="name">Joaquín R.</div>
+          <div class="role">Head of performance</div>
+        </div>
+        <i class="ti ti-selector"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="cm-shell-main">
+    <div class="cm-topbar">
+      <div class="cm-crumb">
+        <i class="ti ti-clipboard-data"></i><span>Evaluations</span>
+        <span class="sep">/</span><span class="here">Force tests</span>
+      </div>
+      <div class="cm-topbar-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, tests, sessions…" />
+        <span class="cm-kbd">⌘</span><span class="cm-kbd">K</span>
+      </div>
+      <div class="cm-topbar-actions">
+        <button class="cm-icon-btn"><i class="ti ti-download"></i></button>
+        <button class="cm-btn is-primary is-sm"><i class="ti ti-plus"></i>New test</button>
+      </div>
+    </div>
+
+    <section class="cm-page">
+      <header class="cm-page-header" style="align-items:flex-start; margin-bottom:18px;">
+        <div style="flex:1;">
+          <div class="cm-eyebrow" style="margin-bottom:8px;">Force platform</div>
+          <h1>Force tests — team view</h1>
+          <p>Session · Jun 12, 2026 · 20 players tested · MC 14 · MD-2</p>
+        </div>
+      </header>
+
+      <!-- Controls -->
+      <div class="cm-card ft-controls" style="margin-bottom:14px;">
+        <div class="ft-control is-test">
+          <label for="ft-test">Test</label>
+          <select id="ft-test" class="cm-select">
+            <option value="cmj" selected>Countermovement Jump</option>
+            <option value="sj">Squat Jump</option>
+            <option value="dj">Drop Jump</option>
+          </select>
+        </div>
+        <div class="ft-control is-metric">
+          <label for="ft-metric">Metric</label>
+          <select id="ft-metric" class="cm-select">
+            <option value="jh" selected>Jump Height</option>
+            <option value="pp">Peak Power</option>
+            <option value="rsi">RSI</option>
+            <option value="ct">Contact Time</option>
+          </select>
+        </div>
+        <div class="ft-spacer"></div>
+        <div class="ft-control is-order">
+          <label>Order</label>
+          <div class="ft-seg" id="ft-order">
+            <button data-order="desc" class="is-active"><i class="ti ti-sort-descending-2"></i>High → Low</button>
+            <button data-order="asc"><i class="ti ti-sort-ascending-2"></i>Low → High</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="cm-card ft-summary" style="margin-bottom:14px;">
+        <div class="ft-avg">
+          <span class="lab" id="ft-avg-lab">Jump height · group average</span>
+          <div class="big">
+            <span class="num" id="ft-avg-num">38.1</span>
+            <span class="unit" id="ft-avg-unit">cm</span>
+          </div>
+          <span class="sub" id="ft-avg-sub">Range <b>30.2 – 46.8</b> · n = 20</span>
+        </div>
+        <div class="ft-stats">
+          <div class="ft-stat">
+            <div class="k"><i class="ti ti-arrow-up-right" style="font-size:13px;"></i>Top</div>
+            <div class="v" id="ft-top-v">46.8<small>cm</small></div>
+            <div class="n" id="ft-top-n">M. Álvarez</div>
+          </div>
+          <div class="ft-stat">
+            <div class="k"><i class="ti ti-arrow-down-right" style="font-size:13px;"></i>Lowest</div>
+            <div class="v" id="ft-low-v">30.2<small>cm</small></div>
+            <div class="n" id="ft-low-n">Y. Demir</div>
+          </div>
+          <div class="ft-stat">
+            <div class="k"><i class="ti ti-alert-triangle" style="font-size:13px;"></i>Below avg</div>
+            <div class="v is-bad" id="ft-below-v">11</div>
+            <div class="n" id="ft-below-n">of 20 players</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="cm-card">
+        <div class="ft-chart-head">
+          <div class="ft-chart-title" id="ft-chart-title">Jump height by player</div>
+          <div class="ft-legend">
+            <span class="it"><span class="sw avgl"></span>Group avg</span>
+            <span class="it"><span class="sw ok"></span>At / above</span>
+            <span class="it"><span class="sw warn"></span>Below</span>
+            <span class="it"><span class="sw bad"></span>Well below</span>
+          </div>
+        </div>
+        <div class="ft-plotwrap">
+          <div class="ft-plot" id="ft-plot"></div>
+          <div class="ft-names" id="ft-names"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  // ── Roster: base CMJ profile per player ──────────────────────
+  // jh = jump height (cm), mass (kg), reactive factor 0–1 (drives RSI / contact time)
+  const ROSTER = [
+    { name: 'M. Álvarez',  jh: 46.8, mass: 82, reactive: 0.85 },
+    { name: 'L. Romano',   jh: 45.1, mass: 74, reactive: 0.90 },
+    { name: 'R. Mendes',   jh: 43.9, mass: 80, reactive: 0.66 },
+    { name: 'J. Silva',    jh: 42.6, mass: 76, reactive: 0.78 },
+    { name: 'A. Ferrari',  jh: 41.8, mass: 75, reactive: 0.80 },
+    { name: 'N. Haddad',   jh: 40.9, mass: 72, reactive: 0.88 },
+    { name: 'D. Costa',    jh: 40.2, mass: 77, reactive: 0.72 },
+    { name: 'G. Russo',    jh: 39.6, mass: 74, reactive: 0.70 },
+    { name: 'T. Becker',   jh: 39.0, mass: 88, reactive: 0.55 },
+    { name: 'V. Lima',     jh: 38.4, mass: 71, reactive: 0.82 },
+    { name: 'F. Castro',   jh: 37.7, mass: 78, reactive: 0.60 },
+    { name: 'S. Petrov',   jh: 37.1, mass: 84, reactive: 0.50 },
+    { name: 'E. Moreau',   jh: 36.5, mass: 73, reactive: 0.64 },
+    { name: 'K. Novak',    jh: 35.8, mass: 90, reactive: 0.40 },
+    { name: 'B. Andersson',jh: 35.0, mass: 79, reactive: 0.52 },
+    { name: 'P. Sorensen', jh: 34.3, mass: 89, reactive: 0.45 },
+    { name: 'O. Bauer',    jh: 33.5, mass: 91, reactive: 0.38 },
+    { name: 'H. Tanaka',   jh: 32.6, mass: 70, reactive: 0.58 },
+    { name: 'C. Nilsson',  jh: 31.4, mass: 87, reactive: 0.35 },
+    { name: 'Y. Demir',    jh: 30.2, mass: 72, reactive: 0.48 },
+  ];
+
+  // Test factors applied to jump-derived metrics (jh, peak power)
+  const TESTS = {
+    cmj: { label: 'Countermovement Jump', jh: 1.00, pp: 1.00 },
+    sj:  { label: 'Squat Jump',           jh: 0.93, pp: 0.96 },
+    dj:  { label: 'Drop Jump',            jh: 0.86, pp: 0.90 },
+  };
+
+  // Metric definitions
+  const METRICS = {
+    jh:  { label: 'Jump height', unit: 'cm', dec: 1, betterHigh: true },
+    pp:  { label: 'Peak power',  unit: 'W',  dec: 0, betterHigh: true },
+    rsi: { label: 'RSI',         unit: '',   dec: 2, betterHigh: true },
+    ct:  { label: 'Contact time',unit: 'ms', dec: 0, betterHigh: false },
+  };
+
+  // Derive a metric value for a player under a given test
+  function valueFor(p, test, metric) {
+    const t = TESTS[test];
+    if (metric === 'jh') return p.jh * t.jh;
+    if (metric === 'pp') {
+      // Sayers peak power estimate (W) from jump height + body mass
+      const jhCm = p.jh * t.jh;
+      return 60.7 * jhCm + 45.3 * p.mass - 2055;
+    }
+    if (metric === 'rsi') return 1.05 + p.reactive * 1.55;          // ~1.05–2.45
+    if (metric === 'ct')  return 268 - p.reactive * 96;             // ~172–268 ms (lower = better)
+    return 0;
+  }
+
+  function fmt(v, dec) {
+    if (dec === 0) return Math.round(v).toLocaleString('en-US');
+    return v.toFixed(dec);
+  }
+
+  // Classify a player vs group average → '', 'warn', 'bad'
+  function classify(value, avg, betterHigh) {
+    const dev = (value - avg) / avg;            // signed deviation
+    const worse = betterHigh ? -dev : dev;      // how far on the WORSE side
+    if (worse <= 0) return '';
+    if (worse < 0.08) return 'warn';
+    return 'bad';
+  }
+
+  const state = { test: 'cmj', metric: 'jh', order: 'desc' };
+
+  function render() {
+    const m = METRICS[state.metric];
+    const t = TESTS[state.test];
+
+    // Compute values
+    let rows = ROSTER.map(p => ({ name: p.name, value: valueFor(p, state.test, state.metric) }));
+    const values = rows.map(r => r.value);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    const maxV = Math.max(...values);
+    const minV = Math.min(...values);
+    const scaleMax = maxV * 1.12;
+
+    // Sort
+    rows.sort((a, b) => state.order === 'desc' ? b.value - a.value : a.value - b.value);
+
+    // Best / worst by quality (respects better-direction)
+    const best  = m.betterHigh ? rows.reduce((a, b) => b.value > a.value ? b : a)
+                               : rows.reduce((a, b) => b.value < a.value ? b : a);
+    const worst = m.betterHigh ? rows.reduce((a, b) => b.value < a.value ? b : a)
+                               : rows.reduce((a, b) => b.value > a.value ? b : a);
+    const belowCount = rows.filter(r => classify(r.value, avg, m.betterHigh) !== '').length;
+
+    // ── Summary ──
+    const unitSuffix = m.unit ? '<small>' + m.unit + '</small>' : '';
+    document.getElementById('ft-avg-lab').textContent = m.label + ' · group average';
+    document.getElementById('ft-avg-num').textContent = fmt(avg, m.dec);
+    document.getElementById('ft-avg-unit').textContent = m.unit;
+    document.getElementById('ft-avg-sub').innerHTML =
+      'Range <b>' + fmt(minV, m.dec) + ' – ' + fmt(maxV, m.dec) + '</b> · n = ' + rows.length;
+    document.getElementById('ft-top-v').innerHTML = fmt(best.value, m.dec) + unitSuffix;
+    document.getElementById('ft-top-n').textContent = best.name;
+    document.getElementById('ft-low-v').innerHTML = fmt(worst.value, m.dec) + unitSuffix;
+    document.getElementById('ft-low-n').textContent = worst.name;
+    document.getElementById('ft-below-v').textContent = belowCount;
+    document.getElementById('ft-below-n').textContent = 'of ' + rows.length + ' players';
+    document.getElementById('ft-chart-title').textContent =
+      m.label + ' by player · ' + t.label + (m.betterHigh ? '' : ' · lower is better');
+
+    // ── Bars ──
+    const plot = document.getElementById('ft-plot');
+    const names = document.getElementById('ft-names');
+    plot.innerHTML = '';
+    names.innerHTML = '';
+
+    rows.forEach(r => {
+      const cls = classify(r.value, avg, m.betterHigh);
+      const hPct = (r.value / scaleMax) * 100;
+
+      const col = document.createElement('div');
+      col.className = 'ft-col' + (cls ? ' ' + cls : '');
+      col.innerHTML =
+        '<span class="ft-val">' + fmt(r.value, m.dec) + '</span>' +
+        '<span class="ft-bar" style="height:' + hPct.toFixed(1) + '%"></span>';
+      plot.appendChild(col);
+
+      const surname = r.name.replace(/^[A-Z]\.\s*/, '');
+      const nm = document.createElement('div');
+      nm.className = 'ft-nm' + (cls ? ' ' + cls : '');
+      nm.innerHTML = '<span>' + surname + '</span>';
+      nm.title = r.name;
+      names.appendChild(nm);
+    });
+
+    // ── Average line ──
+    const line = document.createElement('div');
+    line.className = 'ft-avgline ' + (state.order === 'asc' ? 'tag-left' : 'tag-right');
+    line.style.top = (100 - (avg / scaleMax) * 100).toFixed(1) + '%';
+    line.innerHTML = '<span class="tag">avg ' + fmt(avg, m.dec) + (m.unit ? ' ' + m.unit : '') + '</span>';
+    plot.appendChild(line);
+  }
+
+  // ── Wire controls ──
+  document.getElementById('ft-test').addEventListener('change', e => { state.test = e.target.value; render(); });
+  document.getElementById('ft-metric').addEventListener('change', e => { state.metric = e.target.value; render(); });
+  document.querySelectorAll('#ft-order button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#ft-order button').forEach(b => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      state.order = btn.dataset.order;
+      render();
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>

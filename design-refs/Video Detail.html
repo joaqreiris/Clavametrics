@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Video Room — Detail" subtitle="Detalle de video · reproductor (embed + fallback abrir afuera) + panel de vínculos/notas" viewport="1440x1320" -->
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Room — Detail · ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ── Shell ── */
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); font-weight:600; }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  /* ── Topbar ── */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb a { color:var(--cm-fg-muted); text-decoration:none; }
+  .hub-crumb a:hover { color:var(--cm-fg); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .spacer { margin-left:auto; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* ── Page layout: two columns ── */
+  .vd-page { padding:22px 32px 96px; max-width:1280px; margin:0 auto; width:100%; }
+  .vd-back { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px 0 8px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border); background:var(--cm-surface); color:var(--cm-fg-muted); text-decoration:none; font:500 13px/1 var(--cm-font-sans); margin-bottom:18px; }
+  .vd-back:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vd-back .ti { font-size:16px; }
+  .vd-grid { display:grid; grid-template-columns:1fr 340px; gap:24px; align-items:start; }
+  @media (max-width:1080px){ .vd-grid { grid-template-columns:1fr; } }
+
+  /* Variant label */
+  .vd-vlabel { display:flex; align-items:center; gap:9px; margin-bottom:10px; }
+  .vd-vlabel .num { width:20px; height:20px; border-radius:5px; background:var(--cm-fg-strong); color:var(--cm-bg); display:flex; align-items:center; justify-content:center; font:700 11px/1 var(--cm-font-mono); flex-shrink:0; }
+  .vd-vlabel .t { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .vd-vlabel .when { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vd-vlabel .when b { color:var(--cm-fg); font-weight:600; }
+  .vd-block + .vd-block { margin-top:24px; }
+  .vd-divider { display:flex; align-items:center; gap:12px; margin:26px 0 22px; }
+  .vd-divider::before, .vd-divider::after { content:''; height:1px; background:var(--cm-border); flex:1; }
+  .vd-divider span { font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-faint); }
+
+  /* ── Variant 1: embedded player ── */
+  .vd-player { position:relative; aspect-ratio:16/9; border-radius:var(--cm-r-5); overflow:hidden; background:#0B0E12; border:1px solid var(--cm-border); box-shadow:var(--cm-shadow-2); }
+  .vd-player .pitch { position:absolute; inset:0; background:radial-gradient(120% 100% at 50% -10%, #1f6b3a 0%, #14502a 45%, #0b3119 100%); }
+  .vd-player::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, rgba(8,12,16,0.15) 0%, rgba(8,12,16,0) 30%, rgba(8,12,16,0.55) 100%); }
+  .vd-embedbadge { position:absolute; top:14px; left:14px; z-index:4; display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 11px; border-radius:999px; background:rgba(8,12,16,0.55); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.14); color:#E6E8EB; font:600 11px/1 var(--cm-font-sans); }
+  .vd-embedbadge .ti { font-size:14px; }
+  .vd-embedbadge .dot { width:6px; height:6px; border-radius:50%; background:#3FB97E; box-shadow:0 0 0 3px rgba(63,185,126,0.25); }
+  .vd-bigplay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:4; width:68px; height:68px; border-radius:50%; background:rgba(255,255,255,0.94); color:#0E1116; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 30px rgba(0,0,0,0.45); cursor:pointer; transition:transform 140ms; }
+  .vd-bigplay:hover { transform:translate(-50%,-50%) scale(1.06); }
+  .vd-bigplay .ti { font-size:34px; margin-left:3px; }
+
+  /* scrubber */
+  .vd-scrub { position:absolute; left:0; right:0; bottom:0; z-index:5; padding:0 16px 13px; }
+  .vd-track { position:relative; height:5px; border-radius:999px; background:rgba(255,255,255,0.24); cursor:pointer; }
+  .vd-track .buf { position:absolute; left:0; top:0; bottom:0; width:62%; border-radius:999px; background:rgba(255,255,255,0.34); }
+  .vd-track .fill { position:absolute; left:0; top:0; bottom:0; width:34%; border-radius:999px; background:var(--cm-accent); }
+  .vd-track .knob { position:absolute; left:34%; top:50%; transform:translate(-50%,-50%); width:13px; height:13px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.4); }
+  .vd-ctrls { display:flex; align-items:center; gap:14px; margin-top:11px; color:#E6E8EB; }
+  .vd-ctrls .ti { font-size:19px; cursor:pointer; opacity:0.92; }
+  .vd-ctrls .ti:hover { opacity:1; }
+  .vd-ctrls .time { font:600 12px/1 var(--cm-font-mono); letter-spacing:0.02em; }
+  .vd-ctrls .time .tot { color:rgba(230,232,235,0.6); }
+  .vd-ctrls .right { margin-left:auto; display:flex; align-items:center; gap:14px; }
+
+  /* ── Variant 2: fallback "open outside" ── */
+  .vd-fallback { display:grid; grid-template-columns:300px 1fr; gap:0; border:1px solid var(--cm-border); border-radius:var(--cm-r-5); overflow:hidden; background:var(--cm-surface); box-shadow:var(--cm-shadow-1); }
+  @media (max-width:600px){ .vd-fallback { grid-template-columns:1fr; } }
+  .vd-fb-thumb { position:relative; aspect-ratio:16/9; background:#0B0E12; }
+  .vd-fb-thumb .pitch { position:absolute; inset:0; background:radial-gradient(120% 110% at 70% 0%, #2a527d 0%, #1c3a5c 50%, #112540 100%); }
+  .vd-fb-thumb::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, rgba(8,12,16,0) 40%, rgba(8,12,16,0.5) 100%); }
+  .vd-fb-thumb .lock { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:3; width:46px; height:46px; border-radius:50%; background:rgba(11,14,18,0.62); backdrop-filter:blur(3px); border:1px solid rgba(255,255,255,0.16); color:#E6E8EB; display:flex; align-items:center; justify-content:center; }
+  .vd-fb-thumb .lock .ti { font-size:21px; }
+  .vd-fb-thumb .dur { position:absolute; bottom:9px; right:9px; z-index:3; display:inline-flex; align-items:center; gap:5px; height:21px; padding:0 7px; border-radius:6px; background:rgba(8,12,16,0.82); color:#fff; font:600 11px/1 var(--cm-font-mono); }
+  .vd-fb-thumb .dur .ti { font-size:11px; opacity:0.85; }
+  .vd-fb-body { padding:20px 22px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:12px; }
+  .vd-fb-body .ohdr { display:inline-flex; align-items:center; gap:8px; }
+  .vd-fb-body .ohdr .src { display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 10px 0 8px; border-radius:999px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); font:600 11.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .vd-fb-body .ohdr .src .ti { font-size:14px; color:#0061FF; }
+  .vd-fb-body h4 { margin:0; font:600 15px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); letter-spacing:-0.01em; }
+  .vd-fb-body p { margin:0; font:var(--cm-body-sm); color:var(--cm-fg-muted); max-width:42ch; text-wrap:pretty; }
+  .vd-fb-body .acts { display:flex; align-items:center; gap:9px; margin-top:4px; }
+
+  /* under-player title row */
+  .vd-titlecard { margin-top:18px; padding:18px 20px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); }
+  .vd-titlecard h1 { margin:0; font:600 21px/1.25 var(--cm-font-sans); letter-spacing:-0.015em; color:var(--cm-fg-strong); }
+  .vd-titlecard .row { display:flex; align-items:center; gap:0; margin-top:12px; flex-wrap:wrap; }
+  .vd-titlecard .mi { display:inline-flex; align-items:center; gap:7px; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vd-titlecard .mi .ti { font-size:15px; color:var(--cm-fg-faint); }
+  .vd-titlecard .mi b { color:var(--cm-fg); font-weight:600; }
+  .vd-titlecard .vsep { width:1px; height:15px; background:var(--cm-border-strong); margin:0 14px; }
+  .vd-titlecard .src { display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 10px 0 8px; border-radius:999px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); font:600 11.5px/1 var(--cm-font-sans); color:var(--cm-fg); }
+  .vd-titlecard .src .ti { font-size:14px; color:#1FA463; }
+  .vd-titlecard .av { width:22px; height:22px; border-radius:50%; background:var(--cm-violet-bg); color:var(--cm-violet); display:inline-flex; align-items:center; justify-content:center; font:700 9px/1 var(--cm-font-sans); }
+
+  /* ── Right rail ── */
+  .vd-rail { display:flex; flex-direction:column; gap:16px; position:sticky; top:74px; }
+  .vd-panel { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); box-shadow:var(--cm-shadow-1); overflow:hidden; }
+  .vd-panel-hd { display:flex; align-items:center; gap:8px; padding:13px 15px; border-bottom:1px solid var(--cm-border); }
+  .vd-panel-hd .ti { font-size:16px; color:var(--cm-fg-muted); }
+  .vd-panel-hd h2 { flex:1; margin:0; font:600 13px/1 var(--cm-font-sans); letter-spacing:0.01em; color:var(--cm-fg-strong); }
+  .vd-panel-hd .add { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px 0 8px; border-radius:var(--cm-r-2); border:1px solid var(--cm-border); background:var(--cm-bg-soft); color:var(--cm-fg); font:600 12px/1 var(--cm-font-sans); cursor:pointer; }
+  .vd-panel-hd .add:hover { background:var(--cm-surface); border-color:var(--cm-border-strong); }
+  .vd-panel-hd .add .ti { font-size:14px; color:var(--cm-accent); }
+  .vd-panel-bd { padding:14px 15px; }
+
+  /* linked-to groups */
+  .vd-lgroup + .vd-lgroup { margin-top:14px; }
+  .vd-lk-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.07em; text-transform:uppercase; color:var(--cm-fg-faint); margin-bottom:8px; }
+  .vd-lchips { display:flex; flex-wrap:wrap; gap:7px; }
+  .vd-lchip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 6px 0 9px; border-radius:var(--cm-r-3); font:500 12.5px/1 var(--cm-font-sans); border:1px solid transparent; }
+  .vd-lchip .ti.lead { font-size:14px; }
+  .vd-lchip .x { width:18px; height:18px; border-radius:5px; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0.7; }
+  .vd-lchip .x:hover { opacity:1; background:rgba(0,0,0,0.08); }
+  .vd-lchip .x .ti { font-size:13px; }
+  .vd-lchip.session { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd); }
+  .vd-lchip.player  { background:var(--cm-violet-bg); color:var(--cm-violet); border-color:var(--cm-violet-bd); }
+  .vd-lchip.match   { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+
+  /* notes / tags */
+  .vd-notes { width:100%; min-height:84px; resize:vertical; border:1px solid var(--cm-border); border-radius:var(--cm-r-3); background:var(--cm-bg-soft); padding:10px 12px; font:var(--cm-body-sm); color:var(--cm-fg); line-height:1.5; }
+  .vd-notes:focus { outline:none; border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); background:var(--cm-surface); }
+  .vd-notes::placeholder { color:var(--cm-fg-faint); }
+  .vd-tags { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+  .vd-tag { display:inline-flex; align-items:center; gap:5px; height:25px; padding:0 9px; border-radius:999px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); color:var(--cm-fg-muted); font:500 11.5px/1 var(--cm-font-sans); }
+  .vd-tag .ti { font-size:12px; color:var(--cm-fg-faint); }
+  .vd-tag.add { border-style:dashed; cursor:pointer; color:var(--cm-fg-muted); }
+  .vd-tag.add:hover { border-color:var(--cm-accent); color:var(--cm-accent); }
+
+  /* details list */
+  .vd-dl { display:flex; flex-direction:column; }
+  .vd-dl .drow { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--cm-border); }
+  .vd-dl .drow:last-child { border-bottom:0; }
+  .vd-dl .dk { display:inline-flex; align-items:center; gap:8px; width:88px; flex-shrink:0; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vd-dl .dk .ti { font-size:15px; color:var(--cm-fg-faint); }
+  .vd-dl .dv { font:var(--cm-body-sm); color:var(--cm-fg-strong); font-weight:500; display:inline-flex; align-items:center; gap:7px; }
+  .vd-dl .dv .ti { font-size:14px; }
+  .vd-dl .dv.link { color:var(--cm-accent); cursor:pointer; }
+  .vd-dl .dv .av { width:20px; height:20px; border-radius:50%; background:var(--cm-violet-bg); color:var(--cm-violet); display:inline-flex; align-items:center; justify-content:center; font:700 8.5px/1 var(--cm-font-sans); }
+  .vd-store-note { display:flex; gap:9px; padding:11px 13px; margin-top:2px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-success-bd); }
+  .vd-store-note .ti { font-size:15px; color:var(--cm-accent); flex-shrink:0; margin-top:1px; }
+  .vd-store-note p { margin:0; font:var(--cm-meta); color:var(--cm-fg-muted); line-height:1.45; }
+  .vd-store-note p b { color:var(--cm-fg); font-weight:600; }
+
+  /* proto nav */
+  .proto-nav { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:300; display:flex; align-items:center; gap:4px; padding:5px; background:var(--cm-side-bg); border:1px solid var(--cm-side-border); border-radius:999px; box-shadow:var(--cm-shadow-pop); }
+  .proto-nav a { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px; border-radius:999px; color:var(--cm-side-fg-muted); text-decoration:none; font:500 12px/1 var(--cm-font-sans); white-space:nowrap; }
+  .proto-nav a:hover { color:var(--cm-side-fg); background:rgba(255,255,255,0.06); }
+  .proto-nav a.is-on { background:var(--cm-side-accent); color:var(--cm-side-bg); font-weight:600; }
+  .proto-nav .lbl { color:var(--cm-side-fg-muted); font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; padding:0 8px 0 6px; }
+  .proto-nav .ti { font-size:15px; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="Video Room — Detail">
+
+  <!-- Sidebar -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item is-active" href="Video Room.html"><i class="ti ti-video"></i><span>Video room</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av">JR</div>
+        <div class="who"><div class="name">Joaquín Reiris</div><div class="role">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
+        <a href="Video Room.html">Video room</a><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Detail</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-share-2"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-download"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-dots"></i></button>
+      </div>
+    </div>
+
+    <section class="vd-page">
+      <a class="vd-back" href="Video Room.html"><i class="ti ti-arrow-left"></i>Back to library</a>
+
+      <div class="vd-grid">
+
+        <!-- ░░░ LEFT — player ░░░ -->
+        <div class="vd-col-main">
+
+          <!-- Variant 1 -->
+          <div class="vd-block">
+            <div class="vd-vlabel">
+              <span class="num">1</span>
+              <span class="t">Embedded preview</span>
+              <span class="when">— when the source <b>allows embedding</b>, plays inside ClavaMetrics.</span>
+            </div>
+            <div class="vd-player">
+              <div class="pitch"></div>
+              <span class="vd-embedbadge"><span class="dot"></span><i class="ti ti-brand-google-drive"></i>Streaming from Drive</span>
+              <div class="vd-bigplay"><i class="ti ti-player-play-filled"></i></div>
+              <div class="vd-scrub">
+                <div class="vd-track"><div class="buf"></div><div class="fill"></div><div class="knob"></div></div>
+                <div class="vd-ctrls">
+                  <i class="ti ti-player-skip-back-filled"></i>
+                  <i class="ti ti-player-play-filled"></i>
+                  <i class="ti ti-player-skip-forward-filled"></i>
+                  <span class="time">31:24 <span class="tot">/ 92:14</span></span>
+                  <span class="right">
+                    <i class="ti ti-volume"></i>
+                    <i class="ti ti-settings"></i>
+                    <i class="ti ti-maximize"></i>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="vd-divider"><span>or</span></div>
+
+          <!-- Variant 2 -->
+          <div class="vd-block">
+            <div class="vd-vlabel">
+              <span class="num">2</span>
+              <span class="t">Open outside (fallback)</span>
+              <span class="when">— when the file <b>can't be embedded</b>, open it in the source app.</span>
+            </div>
+            <div class="vd-fallback">
+              <div class="vd-fb-thumb">
+                <div class="pitch"></div>
+                <div class="lock"><i class="ti ti-lock"></i></div>
+                <span class="dur"><i class="ti ti-clock"></i>04:48</span>
+              </div>
+              <div class="vd-fb-body">
+                <div class="ohdr"><span class="src"><i class="ti ti-brand-dropbox"></i>Dropbox</span></div>
+                <h4>Preview not available here</h4>
+                <p>This file's sharing settings don't allow embedding. The video stays in your club's Dropbox — open it there to watch.</p>
+                <div class="acts">
+                  <button class="cm-btn is-primary"><i class="ti ti-brand-dropbox" style="font-size:16px"></i>Open in Dropbox<i class="ti ti-external-link" style="font-size:15px"></i></button>
+                  <button class="cm-btn"><i class="ti ti-copy" style="font-size:15px"></i>Copy link</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Under-player: title + meta -->
+          <div class="vd-titlecard">
+            <h1>Clava FC vs. Crotenlo — Full match</h1>
+            <div class="row">
+              <span class="mi"><i class="ti ti-clock"></i><b>92:14</b></span>
+              <span class="vsep"></span>
+              <span class="mi"><i class="ti ti-calendar-event"></i>12 Oct 2025</span>
+              <span class="vsep"></span>
+              <span class="mi"><span class="av">MО</span>Uploaded by <b>M. Otero</b></span>
+              <span class="vsep"></span>
+              <span class="src"><i class="ti ti-brand-google-drive"></i>Google Drive</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ░░░ RIGHT — context rail ░░░ -->
+        <aside class="vd-rail">
+
+          <!-- Linked to -->
+          <div class="vd-panel">
+            <div class="vd-panel-hd">
+              <i class="ti ti-link"></i>
+              <h2>Linked to</h2>
+              <button class="add"><i class="ti ti-plus"></i>Link</button>
+            </div>
+            <div class="vd-panel-bd">
+              <div class="vd-lgroup">
+                <div class="vd-lk-label">Match</div>
+                <div class="vd-lchips">
+                  <span class="vd-lchip match"><i class="ti ti-ball-football lead"></i>vs Crotenlo · J11<span class="x"><i class="ti ti-x"></i></span></span>
+                </div>
+              </div>
+              <div class="vd-lgroup">
+                <div class="vd-lk-label">Session</div>
+                <div class="vd-lchips">
+                  <span class="vd-lchip session"><i class="ti ti-clipboard-list lead"></i>MD+1 Review<span class="x"><i class="ti ti-x"></i></span></span>
+                </div>
+              </div>
+              <div class="vd-lgroup">
+                <div class="vd-lk-label">Players</div>
+                <div class="vd-lchips">
+                  <span class="vd-lchip player"><i class="ti ti-user lead"></i>Otero<span class="x"><i class="ti ti-x"></i></span></span>
+                  <span class="vd-lchip player"><i class="ti ti-user lead"></i>Sosa<span class="x"><i class="ti ti-x"></i></span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notes / tags -->
+          <div class="vd-panel">
+            <div class="vd-panel-hd">
+              <i class="ti ti-note"></i>
+              <h2>Notes &amp; tags</h2>
+            </div>
+            <div class="vd-panel-bd">
+              <textarea class="vd-notes" placeholder="Add notes for the staff…">Build-up shape worked well first half. Clip pressing trigger at 31:20 for Monday's review.</textarea>
+              <div class="vd-tags">
+                <span class="vd-tag"><i class="ti ti-tag"></i>pressing</span>
+                <span class="vd-tag"><i class="ti ti-tag"></i>build-up</span>
+                <span class="vd-tag"><i class="ti ti-tag"></i>1st-half</span>
+                <span class="vd-tag add"><i class="ti ti-plus"></i>Add tag</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Details -->
+          <div class="vd-panel">
+            <div class="vd-panel-hd">
+              <i class="ti ti-info-circle"></i>
+              <h2>Details</h2>
+            </div>
+            <div class="vd-panel-bd">
+              <div class="vd-dl">
+                <div class="drow">
+                  <span class="dk"><i class="ti ti-cloud"></i>Source</span>
+                  <span class="dv"><i class="ti ti-brand-google-drive" style="color:#1FA463"></i>Google Drive</span>
+                </div>
+                <div class="drow">
+                  <span class="dk"><i class="ti ti-file"></i>File</span>
+                  <span class="dv">clava_vs_crotenlo.mp4</span>
+                </div>
+                <div class="drow">
+                  <span class="dk"><i class="ti ti-calendar"></i>Date</span>
+                  <span class="dv">12 Oct 2025</span>
+                </div>
+                <div class="drow">
+                  <span class="dk"><i class="ti ti-user-up"></i>Author</span>
+                  <span class="dv"><span class="av">MO</span>M. Otero</span>
+                </div>
+                <div class="drow">
+                  <span class="dk"><i class="ti ti-external-link"></i>Open</span>
+                  <span class="dv link">View in Drive</span>
+                </div>
+              </div>
+              <div class="vd-store-note">
+                <i class="ti ti-shield-check"></i>
+                <p>The file <b>lives in your club's Drive</b>. ClavaMetrics plays/opens it and manages its context — it never stores a copy.</p>
+              </div>
+            </div>
+          </div>
+
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Prototype navigator -->
+<nav class="proto-nav">
+  <span class="lbl">Video room</span>
+  <a href="Video Room - Connect.html"><i class="ti ti-plug"></i>Connect</a>
+  <a href="Video Room.html"><i class="ti ti-layout-grid"></i>Library</a>
+  <a class="is-on" href="Video Detail.html"><i class="ti ti-player-play"></i>Detail</a>
+</nav>
+
+</body>
+</html>

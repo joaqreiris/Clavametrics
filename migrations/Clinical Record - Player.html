@@ -3,38 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Clinical record — ClavaMetrics</title>
-<link rel="stylesheet" href="clavametrics.css">
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#15803D">
-<link rel="apple-touch-icon" href="/assets/clava-app-192.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ClavaMetrics">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="assets/supabase-init.js"></script>
-<script src="assets/sidebar.js"></script>
-<script src="assets/global-search.js" defer></script>
+<title>Clinical record — Mateo Álvarez · ClavaMetrics</title>
+<link rel="stylesheet" href="styles.css">
 <style>
-  /* ── App shell (real, replaces Claude Design preview shell) ────────────── */
-  body.cm { background: var(--cm-bg); }
-  .hub-main { min-width: 0; display: flex; flex-direction: column; }
-  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
-  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
-  .hub-crumb .ti { font-size:14px; }
-  .hub-crumb .sep { color:var(--cm-fg-faint); }
-  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
-  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
-  .hub-search .ti { font-size:16px; }
-  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
-  /* shims for the few preview classes not in clavametrics.css */
-  .cm-page { padding: 24px 28px 64px; width: 100%; }
-  .cm-page-header { display: flex; gap: 16px; }
-  .cm-eyebrow { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
-  .cm-page-header h1 { font: 600 26px/1.1 var(--cm-font-sans); letter-spacing: -0.02em; color: var(--cm-fg-strong); }
-  .cm-page-header p { font: var(--cm-body); color: var(--cm-fg-muted); margin-top: 4px; }
-  .cm-pill .cm-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
-
   /* ── Role indicator ─────────────────────────────────────────── */
   .cr-role {
     display: inline-flex; align-items: center; gap: 6px;
@@ -304,51 +275,78 @@
     #kpi-row { grid-template-columns: repeat(3, 1fr); }
     .cr-inj-cols { grid-template-columns: 1fr; }
   }
-
-  /* ── Overview injury heatmap (body map reused verbatim from Injuries.html) ── */
-  .body-stage { position:relative; width:100%; max-width:300px; aspect-ratio:1/2; display:flex; align-items:center; justify-content:center; }
-  .body-img { width:100%; height:100%; object-fit:contain; display:block; }
-  [data-theme="dark"] .body-img { filter:invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92); mix-blend-mode:normal; }
-  .body-hotspots { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-  .hot-dot { cursor:pointer; transition:opacity .15s; pointer-events:all; }
-  .hot-dot:hover { opacity:0.75; }
-  .hot-dot.pulse { animation:pulse 2.4s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
-  #bodymap-overview .bm-stage { max-width:260px; margin:0 auto; }
 </style>
 </head>
 <body class="cm">
-<div class="hub-shell" data-screen-label="20 Clinical record">
-  <div id="hub-side-root"></div>
+<div style="display:grid; grid-template-columns:248px 1fr; min-height:100vh;">
 
-  <main class="hub-main">
-    <div class="hub-topbar">
-      <div class="hub-crumb">
-        <i class="ti ti-stethoscope"></i><span>Medical</span><span class="sep">/</span>
-        <a href="Clinical%20Records.html" style="color:var(--cm-fg-muted);text-decoration:none">Clinical records</a><span class="sep">/</span>
-        <span id="cr-crumb-name" style="color:var(--cm-fg-strong);font-weight:600">Player</span>
+  <!-- ── Sidebar ── -->
+  <aside class="cm-shell-side">
+    <div class="cm-side-brand">
+      <span class="cm-logo-mark" style="width:30px;height:30px;border-radius:7px;"></span>
+      <div style="flex:1; min-width:0;">
+        <div class="cm-side-brand-name">Clava FC</div>
+        <div class="cm-side-brand-meta">First team · 2025/26</div>
       </div>
-      <div class="hub-search">
+    </div>
+    <nav class="cm-side-nav">
+      <div class="cm-side-group-label">Overview</div>
+      <a class="cm-side-item"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+      <a class="cm-side-item"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+      <a class="cm-side-item"><i class="ti ti-users"></i><span>Squad</span></a>
+      <div class="cm-side-group-label">Performance</div>
+      <a class="cm-side-item"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+      <a class="cm-side-item"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+      <a class="cm-side-item"><i class="ti ti-clipboard-data"></i><span>Evaluations</span></a>
+      <div class="cm-side-group-label">Medical</div>
+      <a class="cm-side-item is-active"><i class="ti ti-stethoscope"></i><span>Clinical records</span></a>
+      <a class="cm-side-item"><i class="ti ti-bandage"></i><span>Injuries</span><span class="cm-side-count">3</span></a>
+      <a class="cm-side-item"><i class="ti ti-activity-heartbeat"></i><span>Availability</span></a>
+      <a class="cm-side-item"><i class="ti ti-clipboard-heart"></i><span>Screening</span></a>
+    </nav>
+    <div class="cm-side-foot">
+      <div class="cm-side-user">
+        <span class="av">CM</span>
+        <div class="who">
+          <div class="name">Dra. C. Méndez</div>
+          <div class="role">Team physician</div>
+        </div>
+        <i class="ti ti-selector"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="cm-shell-main">
+    <div class="cm-topbar">
+      <div class="cm-crumb">
+        <i class="ti ti-stethoscope"></i><span>Medical</span>
+        <span class="sep">/</span><span>Clinical records</span>
+        <span class="sep">/</span><span class="here">M. Álvarez</span>
+      </div>
+      <div class="cm-topbar-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search players, diagnoses…" aria-label="Search">
+        <input placeholder="Search players, diagnoses, documents…" />
+        <span class="cm-kbd">⌘</span><span class="cm-kbd">K</span>
       </div>
-      <div class="actions">
-        <span class="cr-role" id="role-badge"><i class="ti ti-shield-lock"></i>Medical role</span>
-        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+      <div class="cm-topbar-actions">
+        <span class="cr-role"><i class="ti ti-shield-lock"></i>Medical role · full access</span>
+        <button class="cm-icon-btn" id="theme-toggle" title="Toggle theme"><i class="ti ti-moon"></i></button>
+        <button class="cm-icon-btn" title="Export record"><i class="ti ti-download"></i></button>
+        <button class="cm-btn is-primary is-sm"><i class="ti ti-plus"></i>Add record</button>
       </div>
     </div>
 
     <section class="cm-page" style="max-width:1320px;">
-      <a class="cr-back" href="Clinical%20Records.html"><i class="ti ti-arrow-left"></i>Clinical records</a>
+      <a class="cr-back" href="Clinical Record - Index.html"><i class="ti ti-arrow-left"></i>Medical records</a>
 
       <!-- ══ A · IDENTITY + SAFETY STRIP ══ -->
       <div class="cm-card cr-id">
         <div class="cr-id-main">
           <div class="cr-photo">MA</div>
           <div class="cr-id-who">
-            <h1><span id="cr-name">Mateo Álvarez</span> <span class="cr-id-num" id="cr-num">#9</span></h1>
-            <div class="cr-id-meta" id="cr-id-meta">
+            <h1>Mateo Álvarez <span class="cr-id-num">#9</span></h1>
+            <div class="cr-id-meta">
               <span class="cm-pill is-danger">ST</span>
               <span class="sep">·</span><span>24 yrs · 14 Mar 2002</span>
               <span class="sep">·</span><span>1.82 m · 82 kg</span>
@@ -358,27 +356,27 @@
           <div class="cr-id-stats">
             <div class="cr-id-stat">
               <span class="k">Medical status</span>
-              <span class="v" id="cr-med-status"><span class="cm-pill is-warning"><span class="cm-dot"></span>Modified</span></span>
-              <span class="vsub" id="cr-medstatus-sub">RTP · hamstring</span>
+              <span class="v"><span class="cm-pill is-warning"><span class="cm-dot"></span>Modified</span></span>
+              <span class="vsub">RTP · hamstring</span>
             </div>
             <div class="cr-id-stat">
               <span class="k">Last review</span>
-              <span class="v" id="cr-last-review">10 Jun 26</span>
-              <span class="vsub" id="cr-last-review-note">12 days ago</span>
+              <span class="v">10 Jun 26</span>
+              <span class="vsub">12 days ago</span>
             </div>
-            <div class="cr-id-stat" id="cr-next-review-stat">
+            <div class="cr-id-stat">
               <span class="k">Next review</span>
               <span class="v"><i class="ti ti-calendar-due" style="font-size:14px;"></i><span id="next-review">04 Jul 26</span></span>
               <span class="vsub" id="next-review-note">in 12d</span>
             </div>
             <div class="cr-id-stat">
               <span class="k">Treating physician</span>
-              <span class="v" id="cr-physician">Dra. C. Méndez</span>
-              <span class="vsub" id="cr-physician-sub">Sports medicine</span>
+              <span class="v">Dra. C. Méndez</span>
+              <span class="vsub">Sports medicine</span>
             </div>
           </div>
         </div>
-        <div class="cr-alerts" id="cr-alerts">
+        <div class="cr-alerts">
           <span class="cr-alerts-lab"><i class="ti ti-urgent"></i>Medical alerts</span>
           <span class="cr-chip is-mono"><i class="ti ti-droplet"></i>Blood <b>O+</b></span>
           <span class="cr-chip is-danger"><i class="ti ti-alert-triangle-filled"></i>Penicillin allergy · severe</span>
@@ -398,24 +396,24 @@
             <div class="cr-card-head"><i class="ti ti-clipboard-list"></i><h2>Medical baseline</h2></div>
             <div class="cr-card-body">
               <div class="cr-base">
-                <div class="cr-kv"><span>Blood type</span><b id="cr-blood">O+ · CcEe</b></div>
+                <div class="cr-kv"><span>Blood type</span><b>O+ · CcEe</b></div>
               </div>
               <div class="cr-base">
                 <div class="cr-mini-lab">Allergies</div>
-                <div class="cr-taglist" id="cr-allergies">
+                <div class="cr-taglist">
                   <span class="cr-tag is-danger" title="Anaphylaxis — carries auto-injector"><i class="ti ti-alert-triangle-filled" style="font-size:13px;"></i>Penicillin</span>
                   <span class="cr-tag" title="Mild skin rash">Ibuprofen</span>
                 </div>
               </div>
               <div class="cr-base">
                 <div class="cr-mini-lab">Chronic conditions</div>
-                <div class="cr-taglist" id="cr-chronic">
+                <div class="cr-taglist">
                   <span class="cr-tag" title="Controlled with PRN salbutamol">Exercise-induced asthma</span>
                 </div>
               </div>
               <div class="cr-base">
                 <div class="cr-mini-lab">Medications &amp; supplements</div>
-                <div class="cr-taglist" id="cr-meds">
+                <div class="cr-taglist">
                   <span class="cr-tag">Salbutamol · PRN <span class="cr-tue">TUE</span></span>
                   <span class="cr-tag">Vitamin D3</span>
                   <span class="cr-tag">Creatine</span>
@@ -424,11 +422,11 @@
               </div>
               <div class="cr-base">
                 <div class="cr-mini-lab">Emergency contact</div>
-                <div class="cr-kv" id="cr-ec"><span>Lucía Álvarez · mother</span><b>+54 11 5512-8841</b></div>
+                <div class="cr-kv"><span>Lucía Álvarez · mother</span><b>+54 11 5512-8841</b></div>
               </div>
               <div class="cr-base">
                 <div class="cr-mini-lab">Insurance / clinic</div>
-                <div class="cr-kv" id="cr-insurance"><span>Clínica Deportiva Norte</span><b>POL-44-2291</b></div>
+                <div class="cr-kv"><span>Clínica Deportiva Norte</span><b>POL-44-2291</b></div>
               </div>
             </div>
           </div>
@@ -436,7 +434,7 @@
           <!-- C · CARDIAC & PCMA SCREENING -->
           <div class="cm-card">
             <div class="cr-card-head"><i class="ti ti-heart-rate-monitor"></i><h2>Cardiac &amp; PCMA screening</h2></div>
-            <div class="cr-card-body" id="cr-pcma" style="padding-top:6px;padding-bottom:6px;">
+            <div class="cr-card-body" style="padding-top:6px;padding-bottom:6px;">
               <div class="cr-pcma-row">
                 <span class="cr-pcma-name"><span class="cr-tl ok"></span>ECG · 12-lead</span>
                 <span class="cr-pcma-res">Normal sinus rhythm</span>
@@ -488,7 +486,7 @@
             <div class="cr-status-row">
               <div class="cm-card cr-status-card">
                 <div class="cr-mini-lab">Current status</div>
-                <div class="cr-status-now" id="cr-cur-status">
+                <div class="cr-status-now">
                   <span class="cm-pill is-warning"><span class="cm-dot"></span>Modified training</span>
                   <span class="big">Returning to play</span>
                 </div>
@@ -528,12 +526,7 @@
                     <button data-view="back">Back</button>
                   </div>
                 </div>
-                <div class="bm-stage">
-                  <div class="body-stage">
-                    <img class="body-img" id="cr-bodyImg" src="assets/body-male-front.png" alt="Body map">
-                    <svg class="body-hotspots" id="cr-bodySvg" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet"></svg>
-                  </div>
-                </div>
+                <div class="bm-stage"></div>
                 <div class="bm-tip"></div>
                 <div class="bm-foot">Tinted by frequency &amp; severity · click a zone to filter</div>
               </div>
@@ -670,12 +663,5 @@
 </div>
 
 <script src="clinical-record.js"></script>
-
-<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
-<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
-<script>window.__CM_TWEAK_DEFAULTS = { theme:"hybrid", accent:"green" };</script>
-<script defer src="settings-drawer.js"></script>
-<script defer src="tweaks-panel.js"></script>
-<script defer src="theme-tweaks.js"></script>
 </body>
 </html>

@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Force tests — Player profile · ClavaMetrics</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* ── Controls ─────────────────────────────────────────────── */
+  .ft-controls { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; padding: 16px 18px; }
+  .ft-control { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .ft-control > label {
+    font: 500 10.5px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase; color: var(--cm-fg-faint); padding-left: 2px;
+  }
+  .ft-control .cm-select { height: 36px; min-width: 188px; cursor: pointer; }
+  .ft-control.is-metric .cm-select { min-width: 168px; }
+
+  /* ── Player header ────────────────────────────────────────── */
+  .ft-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    font: 500 12.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted);
+    text-decoration: none; padding: 5px 9px 5px 6px; border-radius: var(--cm-r-2);
+    margin-bottom: 14px; transition: background var(--cm-dur-1), color var(--cm-dur-1);
+  }
+  .ft-back:hover { background: var(--cm-accent-soft); color: var(--cm-fg); }
+  .ft-back .ti { font-size: 15px; }
+  .ft-phead { display: flex; align-items: center; gap: 16px; }
+  .ft-phead .cm-avatar { background: var(--cm-side-bg); color: #E6E8EB; border: 0; }
+  .ft-phead .who h1 { font: var(--cm-h1); letter-spacing: var(--cm-tr-display); color: var(--cm-fg-strong); }
+  .ft-phead .who .meta {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+    font: 500 13px/1 var(--cm-font-mono); color: var(--cm-fg-muted);
+  }
+
+  /* ── Summary cards ────────────────────────────────────────── */
+  .ft-cards { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 12px; }
+  .ft-sc { padding: 16px 18px 17px; display: flex; flex-direction: column; gap: 10px; }
+  .ft-sc .lab {
+    display: flex; align-items: center; gap: 6px;
+    font: 500 10.5px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow);
+    text-transform: uppercase; color: var(--cm-fg-faint);
+  }
+  .ft-sc .lab .ti { font-size: 13px; }
+  .ft-sc .big { display: flex; align-items: baseline; gap: 7px; }
+  .ft-sc .num { font: 600 32px/1 var(--cm-font-mono); letter-spacing: -0.02em; color: var(--cm-fg-strong); font-feature-settings: "tnum"; }
+  .ft-sc .unit { font: 500 14px/1 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .ft-sc .sub { font: 500 12px/1.3 var(--cm-font-mono); color: var(--cm-fg-muted); }
+  .ft-sc .sub b { color: var(--cm-fg); font-weight: 600; }
+
+  .ft-delta { display: inline-flex; align-items: center; gap: 3px; font: 600 12px/1 var(--cm-font-mono); }
+  .ft-delta.good { color: var(--cm-success); }
+  .ft-delta.bad  { color: var(--cm-danger); }
+  .ft-delta .ti { font-size: 13px; }
+
+  /* Asymmetry mini-bars */
+  .ft-asym-bars { display: flex; flex-direction: column; gap: 5px; margin-top: 1px; }
+  .ft-ab-row { display: flex; align-items: center; gap: 8px; }
+  .ft-ab-row .side { width: 10px; font: 600 10.5px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .ft-ab-track { flex: 1; height: 7px; background: var(--cm-bg-sunk); border-radius: 999px; overflow: hidden; }
+  .ft-ab-fill { height: 100%; border-radius: 999px; background: #475569; }
+  .ft-ab-fill.weak { background: var(--cm-border-strong); }
+  .ft-asym-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font: 600 12px/1 var(--cm-font-mono); padding: 0;
+  }
+
+  /* ── Chart ────────────────────────────────────────────────── */
+  .ft-chart-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 0; gap: 16px; flex-wrap: wrap; }
+  .ft-chart-title { font: 600 14px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.005em; }
+  .ft-legend { display: flex; align-items: center; gap: 16px; }
+  .ft-legend .it { display: flex; align-items: center; gap: 6px; font: 500 11.5px/1 var(--cm-font-sans); color: var(--cm-fg-muted); }
+  .ft-legend .sw { width: 12px; height: 3px; border-radius: 2px; background: #475569; }
+  .ft-legend .sw.avgl { background: none; border-top: 2px dashed var(--cm-fg-faint); height: 0; }
+  .ft-chartwrap { padding: 14px 16px 8px; }
+  .ft-chartwrap svg { display: block; width: 100%; height: auto; }
+
+  /* ── Table ────────────────────────────────────────────────── */
+  .ft-table-head { padding: 16px 20px 12px; display: flex; align-items: center; justify-content: space-between; }
+  .ft-table-head h2 { font: 600 14px/1 var(--cm-font-sans); color: var(--cm-fg-strong); letter-spacing: -0.005em; }
+  .ft-table-head .count { font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+  .ft-table { width: 100%; border-collapse: collapse; }
+  .ft-table thead th {
+    text-align: left; font: 500 10.5px/1 var(--cm-font-sans);
+    letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint);
+    padding: 9px 20px; background: var(--cm-bg-sunk);
+    border-top: 1px solid var(--cm-border); border-bottom: 1px solid var(--cm-border);
+  }
+  .ft-table th.num, .ft-table td.num { text-align: right; }
+  .ft-table tbody td { padding: 12px 20px; border-bottom: 1px solid var(--cm-border-soft); font: var(--cm-body-sm); color: var(--cm-fg); }
+  .ft-table tbody tr:last-child td { border-bottom: 0; }
+  .ft-table tbody tr:hover { background: var(--cm-bg-soft); }
+  .ft-table tbody tr.is-latest { background: var(--cm-accent-soft); }
+  .ft-table tbody tr.is-latest:hover { background: var(--cm-accent-soft); }
+  .ft-table .c-date { font: 500 13px/1 var(--cm-font-mono); color: var(--cm-fg); white-space: nowrap; }
+  .ft-table .c-val { font: 600 13.5px/1 var(--cm-font-mono); color: var(--cm-fg-strong); font-feature-settings: "tnum"; }
+  .ft-table .c-asym { font: 500 13px/1 var(--cm-font-mono); }
+  .ft-vsavg { font: 600 12px/1 var(--cm-font-mono); }
+  .ft-vsavg.good { color: var(--cm-success); }
+  .ft-vsavg.bad  { color: var(--cm-danger); }
+  .ft-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--cm-r-1);
+    font: 600 9.5px/1 var(--cm-font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+    background: var(--cm-accent); color: #fff; margin-left: 8px; }
+  .ft-asym-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+  @media (max-width: 1080px) { .ft-cards { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body class="cm">
+<div style="display:grid; grid-template-columns:248px 1fr; min-height:100vh;">
+
+  <!-- ── Sidebar ── -->
+  <aside class="cm-shell-side">
+    <div class="cm-side-brand">
+      <span class="cm-logo-mark" style="width:30px;height:30px;border-radius:7px;"></span>
+      <div style="flex:1; min-width:0;">
+        <div class="cm-side-brand-name">Clava FC</div>
+        <div class="cm-side-brand-meta">First team · 2025/26</div>
+      </div>
+    </div>
+    <nav class="cm-side-nav">
+      <div class="cm-side-group-label">Overview</div>
+      <a class="cm-side-item"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+      <a class="cm-side-item"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+      <a class="cm-side-item"><i class="ti ti-users"></i><span>Squad</span></a>
+      <div class="cm-side-group-label">Performance</div>
+      <a class="cm-side-item"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+      <a class="cm-side-item"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+      <a class="cm-side-item is-active"><i class="ti ti-clipboard-data"></i><span>Evaluations</span></a>
+      <a class="cm-side-item"><i class="ti ti-bandage"></i><span>Injuries</span><span class="cm-side-count">3</span></a>
+    </nav>
+    <div class="cm-side-foot">
+      <div class="cm-side-user">
+        <span class="av">JR</span>
+        <div class="who">
+          <div class="name">Joaquín R.</div>
+          <div class="role">Head of performance</div>
+        </div>
+        <i class="ti ti-selector"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="cm-shell-main">
+    <div class="cm-topbar">
+      <div class="cm-crumb">
+        <i class="ti ti-clipboard-data"></i><span>Evaluations</span>
+        <span class="sep">/</span><span>Force tests</span>
+        <span class="sep">/</span><span class="here" id="crumb-name">M. Álvarez</span>
+      </div>
+      <div class="cm-topbar-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, tests, sessions…" />
+        <span class="cm-kbd">⌘</span><span class="cm-kbd">K</span>
+      </div>
+      <div class="cm-topbar-actions">
+        <button class="cm-icon-btn"><i class="ti ti-download"></i></button>
+        <button class="cm-btn is-primary is-sm"><i class="ti ti-plus"></i>New test</button>
+      </div>
+    </div>
+
+    <section class="cm-page">
+      <a class="ft-back" href="Force Tests - Team View.html"><i class="ti ti-arrow-left"></i>Back to team</a>
+
+      <header class="cm-page-header" style="align-items:center; justify-content:space-between; margin-bottom:18px;">
+        <div class="ft-phead">
+          <span class="cm-avatar is-lg">MA</span>
+          <div class="who">
+            <h1>Mateo Álvarez</h1>
+            <div class="meta">
+              <span class="cm-pill is-danger">ST</span>
+              <span>24 yrs · 1.82 m · 82 kg · #9</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Controls -->
+      <div class="cm-card ft-controls" style="margin-bottom:14px;">
+        <div class="ft-control is-test">
+          <label for="ft-test">Test</label>
+          <select id="ft-test" class="cm-select">
+            <option value="cmj" selected>Countermovement Jump</option>
+            <option value="sj">Squat Jump</option>
+            <option value="dj">Drop Jump</option>
+          </select>
+        </div>
+        <div class="ft-control is-metric">
+          <label for="ft-metric">Metric</label>
+          <select id="ft-metric" class="cm-select">
+            <option value="jh" selected>Jump Height</option>
+            <option value="pp">Peak Power</option>
+            <option value="rsi">RSI</option>
+            <option value="ct">Contact Time</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Summary cards -->
+      <div class="ft-cards" style="margin-bottom:14px;">
+        <div class="cm-card ft-sc">
+          <div class="lab"><i class="ti ti-bolt"></i><span id="sc-latest-lab">Latest · jump height</span></div>
+          <div class="big"><span class="num" id="sc-latest-num">42.1</span><span class="unit" id="sc-latest-unit">cm</span></div>
+          <div class="sub">
+            <span class="ft-delta good" id="sc-latest-delta"><i class="ti ti-trending-up"></i>+3.6%</span>
+            <span style="color:var(--cm-fg-faint);"> vs personal avg</span>
+          </div>
+        </div>
+
+        <div class="cm-card ft-sc">
+          <div class="lab"><i class="ti ti-chart-line"></i>Personal avg</div>
+          <div class="big"><span class="num" id="sc-avg-num">40.6</span><span class="unit" id="sc-avg-unit">cm</span></div>
+          <div class="sub" id="sc-avg-sub"><b>10 tests</b> · this season</div>
+        </div>
+
+        <div class="cm-card ft-sc">
+          <div class="lab"><i class="ti ti-arrows-horizontal"></i>Asymmetry</div>
+          <div class="big">
+            <span class="ft-asym-pill"><span class="ft-asym-dot" id="sc-asym-dot"></span><span class="num" style="font-size:32px;" id="sc-asym-num">4%</span></span>
+            <span class="unit" id="sc-asym-side">Right</span>
+          </div>
+          <div class="ft-asym-bars">
+            <div class="ft-ab-row"><span class="side">L</span><div class="ft-ab-track"><div class="ft-ab-fill" id="ab-l"></div></div></div>
+            <div class="ft-ab-row"><span class="side">R</span><div class="ft-ab-track"><div class="ft-ab-fill" id="ab-r"></div></div></div>
+          </div>
+        </div>
+
+        <div class="cm-card ft-sc">
+          <div class="lab"><i class="ti ti-calendar-event"></i>Last test</div>
+          <div class="big"><span class="num" id="sc-last-num" style="font-size:26px;">3</span><span class="unit" id="sc-last-unit">days ago</span></div>
+          <div class="sub" id="sc-last-sub"><b>CMJ</b> · 12 Jun 2026</div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="cm-card" style="margin-bottom:14px;">
+        <div class="ft-chart-head">
+          <div class="ft-chart-title" id="ft-chart-title">Jump height over time</div>
+          <div class="ft-legend">
+            <span class="it"><span class="sw"></span><span id="lg-metric">Jump height</span></span>
+            <span class="it"><span class="sw avgl"></span>Personal avg</span>
+          </div>
+        </div>
+        <div class="ft-chartwrap" id="ft-chart"></div>
+      </div>
+
+      <!-- Table -->
+      <div class="cm-card">
+        <div class="ft-table-head">
+          <h2>Recent tests</h2>
+          <span class="count" id="ft-table-count">10 sessions</span>
+        </div>
+        <table class="ft-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Test</th>
+              <th class="num" id="th-metric">Jump height</th>
+              <th class="num">vs avg</th>
+              <th class="num">Asymmetry</th>
+            </tr>
+          </thead>
+          <tbody id="ft-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+  // ── Player + testing history ─────────────────────────────────
+  const MASS = 82;
+  const NOW = new Date('2026-06-15T00:00:00');
+  const TEST_LABEL = { cmj: 'Countermovement Jump', sj: 'Squat Jump', dj: 'Drop Jump' };
+  const TEST_SHORT = { cmj: 'CMJ', sj: 'SJ', dj: 'DJ' };
+
+  // Each session: date, jh (cm, test-specific), react (0–1 reactive factor), asym %, side
+  const SERIES = {
+    cmj: [
+      { date: '2025-09-08', jh: 38.9, react: 0.72, asym: 6, side: 'R' },
+      { date: '2025-10-06', jh: 39.6, react: 0.74, asym: 5, side: 'R' },
+      { date: '2025-11-10', jh: 40.2, react: 0.78, asym: 4, side: 'R' },
+      { date: '2025-12-08', jh: 39.4, react: 0.70, asym: 7, side: 'R' },
+      { date: '2026-01-19', jh: 40.8, react: 0.80, asym: 5, side: 'R' },
+      { date: '2026-02-16', jh: 41.3, react: 0.82, asym: 4, side: 'R' },
+      { date: '2026-03-16', jh: 40.6, react: 0.79, asym: 5, side: 'R' },
+      { date: '2026-04-13', jh: 41.9, react: 0.85, asym: 3, side: 'R' },
+      { date: '2026-05-11', jh: 41.4, react: 0.83, asym: 4, side: 'R' },
+      { date: '2026-06-12', jh: 42.1, react: 0.86, asym: 4, side: 'R' },
+    ],
+    sj: [
+      { date: '2025-09-22', jh: 36.0, react: 0.68, asym: 5, side: 'R' },
+      { date: '2025-11-03', jh: 37.1, react: 0.72, asym: 5, side: 'R' },
+      { date: '2025-12-15', jh: 36.5, react: 0.69, asym: 6, side: 'R' },
+      { date: '2026-02-02', jh: 37.8, react: 0.76, asym: 4, side: 'R' },
+      { date: '2026-03-30', jh: 38.2, react: 0.78, asym: 4, side: 'R' },
+      { date: '2026-05-25', jh: 38.6, react: 0.80, asym: 4, side: 'R' },
+    ],
+    dj: [
+      { date: '2025-10-20', jh: 34.0, react: 0.75, asym: 8, side: 'R' },
+      { date: '2025-12-01', jh: 34.6, react: 0.72, asym: 7, side: 'R' },
+      { date: '2026-01-12', jh: 35.1, react: 0.78, asym: 6, side: 'R' },
+      { date: '2026-02-23', jh: 35.8, react: 0.82, asym: 6, side: 'R' },
+      { date: '2026-04-20', jh: 36.2, react: 0.84, asym: 5, side: 'R' },
+      { date: '2026-06-01', jh: 36.7, react: 0.86, asym: 5, side: 'R' },
+    ],
+  };
+
+  const METRICS = {
+    jh:  { label: 'Jump height',  unit: 'cm', dec: 1, betterHigh: true },
+    pp:  { label: 'Peak power',   unit: 'W',  dec: 0, betterHigh: true },
+    rsi: { label: 'RSI',          unit: '',   dec: 2, betterHigh: true },
+    ct:  { label: 'Contact time', unit: 'ms', dec: 0, betterHigh: false },
+  };
+
+  function valueFor(s, test, metric) {
+    if (metric === 'jh') return s.jh;
+    if (metric === 'pp') return 60.7 * s.jh + 45.3 * MASS - 2055;       // Sayers estimate (W)
+    if (metric === 'rsi') return test === 'dj' ? 1.50 + s.react * 1.05  // reactive strength index
+                                               : 0.36 + s.react * 0.26; // RSI-modified
+    if (metric === 'ct') return test === 'dj' ? 240 - s.react * 70      // ground contact (ms)
+                                              : 720 - s.react * 150;     // contraction time (ms)
+    return 0;
+  }
+
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtDateShort(iso) { const d = new Date(iso + 'T00:00:00'); return d.getDate() + ' ' + MON[d.getMonth()]; }
+  function fmtDateFull(iso)  { const d = new Date(iso + 'T00:00:00'); return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear(); }
+  function fmt(v, dec) { return dec === 0 ? Math.round(v).toLocaleString('en-US') : v.toFixed(dec); }
+  function daysAgo(iso) { return Math.round((NOW - new Date(iso + 'T00:00:00')) / 86400000); }
+  function pct(d) { const r = Math.abs(d) < 0.05 ? 0 : d; return (r > 0 ? '+' : '') + r.toFixed(1) + '%'; }
+
+  const state = { test: 'cmj', metric: 'jh' };
+
+  // ── SVG line chart ──
+  function buildChart(points, avg, meta) {
+    const W = 960, H = 320, L = 56, R = 22, T = 24, B = 48;
+    const pw = W - L - R, ph = H - T - B;
+    const vals = points.map(p => p.value);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    const range = hi - lo || (hi * 0.1 || 1);
+    lo -= range * 0.22; hi += range * 0.22;
+    const x = i => L + pw * (points.length > 1 ? i / (points.length - 1) : 0.5);
+    const y = v => T + ph * (1 - (v - lo) / (hi - lo));
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">`;
+
+    // gridlines + y labels
+    for (let i = 0; i <= 3; i++) {
+      const gv = lo + (hi - lo) * (i / 3), gy = y(gv);
+      svg += `<line x1="${L}" y1="${gy.toFixed(1)}" x2="${W - R}" y2="${gy.toFixed(1)}" stroke="#EDEDEA" stroke-width="1"/>`;
+      svg += `<text x="${L - 10}" y="${(gy + 3.5).toFixed(1)}" text-anchor="end" font-family="'Geist Mono',monospace" font-size="11" fill="#8A93A0">${fmt(gv, meta.dec)}</text>`;
+    }
+
+    // area + line
+    const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`);
+    const area = `M${x(0).toFixed(1)},${(T + ph).toFixed(1)} L` + line.join(' L') + ` L${x(points.length - 1).toFixed(1)},${(T + ph).toFixed(1)} Z`;
+    svg += `<path d="${area}" fill="rgba(71,85,105,0.07)"/>`;
+    svg += `<polyline points="${line.join(' ')}" fill="none" stroke="#475569" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+    // average dotted line
+    const ay = y(avg);
+    svg += `<line x1="${L}" y1="${ay.toFixed(1)}" x2="${W - R}" y2="${ay.toFixed(1)}" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3 4"/>`;
+    svg += `<text x="${L + 6}" y="${(ay - 7).toFixed(1)}" font-family="'Geist Mono',monospace" font-size="11" font-weight="600" fill="#5B6470">avg ${fmt(avg, meta.dec)}${meta.unit ? ' ' + meta.unit : ''}</text>`;
+
+    // dots
+    points.forEach((p, i) => {
+      const last = i === points.length - 1;
+      svg += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="${last ? 5.5 : 3.8}" fill="${last ? '#1F2937' : '#FFFFFF'}" stroke="#1F2937" stroke-width="${last ? 0 : 2}"/>`;
+      // date labels
+      svg += `<text x="${x(i).toFixed(1)}" y="${(H - 18).toFixed(1)}" text-anchor="middle" font-family="'Geist Mono',monospace" font-size="11" fill="#8A93A0">${p.label}</text>`;
+    });
+
+    // latest value label
+    const lastP = points[points.length - 1];
+    svg += `<text x="${(x(points.length - 1) - 6).toFixed(1)}" y="${(y(lastP.value) - 12).toFixed(1)}" text-anchor="end" font-family="'Geist Mono',monospace" font-size="12.5" font-weight="600" fill="#0F1115">${fmt(lastP.value, meta.dec)}${meta.unit ? ' ' + meta.unit : ''}</text>`;
+
+    svg += `</svg>`;
+    return svg;
+  }
+
+  function render() {
+    const m = METRICS[state.metric];
+    const series = SERIES[state.test];
+    const rows = series.map(s => ({
+      iso: s.date, label: fmtDateShort(s.date), full: fmtDateFull(s.date),
+      value: valueFor(s, state.test, state.metric), asym: s.asym, side: s.side,
+    }));
+    const vals = rows.map(r => r.value);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const latest = rows[rows.length - 1];
+    const rawDelta = (latest.value - avg) / avg * 100;
+    const good = m.betterHigh ? rawDelta >= 0 : rawDelta <= 0;
+    const us = m.unit ? '<span class="unit">' + m.unit + '</span>' : '';
+
+    // Summary: latest
+    document.getElementById('sc-latest-lab').textContent = 'Latest · ' + m.label.toLowerCase();
+    document.getElementById('sc-latest-num').textContent = fmt(latest.value, m.dec);
+    document.getElementById('sc-latest-unit').textContent = m.unit;
+    const dEl = document.getElementById('sc-latest-delta');
+    dEl.className = 'ft-delta ' + (good ? 'good' : 'bad');
+    dEl.innerHTML = '<i class="ti ti-trending-' + (rawDelta >= 0 ? 'up' : 'down') + '"></i>' + pct(rawDelta);
+
+    // Summary: personal avg
+    document.getElementById('sc-avg-num').textContent = fmt(avg, m.dec);
+    document.getElementById('sc-avg-unit').textContent = m.unit;
+    document.getElementById('sc-avg-sub').innerHTML = '<b>' + rows.length + ' tests</b> · this season';
+
+    // Summary: asymmetry (latest session)
+    const a = latest.asym, side = latest.side;
+    document.getElementById('sc-asym-num').textContent = a + '%';
+    document.getElementById('sc-asym-side').textContent = side === 'R' ? 'Right' : 'Left';
+    const asymColor = a <= 5 ? 'var(--cm-success)' : a <= 10 ? 'var(--cm-warning)' : 'var(--cm-danger)';
+    document.getElementById('sc-asym-dot').style.background = asymColor;
+    const lW = side === 'R' ? (100 - a) : 100, rW = side === 'R' ? 100 : (100 - a);
+    const abl = document.getElementById('ab-l'), abr = document.getElementById('ab-r');
+    abl.style.width = lW + '%'; abr.style.width = rW + '%';
+    abl.className = 'ft-ab-fill' + (side === 'R' ? ' weak' : ''); abr.className = 'ft-ab-fill' + (side === 'L' ? ' weak' : '');
+
+    // Summary: last test
+    const dAgo = daysAgo(latest.iso);
+    document.getElementById('sc-last-num').textContent = dAgo;
+    document.getElementById('sc-last-unit').textContent = dAgo === 1 ? 'day ago' : 'days ago';
+    document.getElementById('sc-last-sub').innerHTML = '<b>' + TEST_SHORT[state.test] + '</b> · ' + latest.full;
+
+    // Chart
+    document.getElementById('ft-chart-title').textContent = m.label + ' over time · ' + TEST_LABEL[state.test] + (m.betterHigh ? '' : ' · lower is better');
+    document.getElementById('lg-metric').textContent = m.label;
+    document.getElementById('ft-chart').innerHTML = buildChart(rows, avg, m);
+
+    // Table
+    document.getElementById('th-metric').textContent = m.label + (m.unit ? ' (' + m.unit + ')' : '');
+    document.getElementById('ft-table-count').textContent = rows.length + ' sessions';
+    const tb = document.getElementById('ft-tbody');
+    tb.innerHTML = '';
+    [...rows].reverse().forEach((r, idx) => {
+      const dlt = (r.value - avg) / avg * 100;
+      const rGood = m.betterHigh ? dlt >= 0 : dlt <= 0;
+      const aCol = r.asym <= 5 ? 'var(--cm-success)' : r.asym <= 10 ? 'var(--cm-warning)' : 'var(--cm-danger)';
+      const tr = document.createElement('tr');
+      if (idx === 0) tr.className = 'is-latest';
+      tr.innerHTML =
+        '<td class="c-date">' + r.full + (idx === 0 ? '<span class="ft-tag">Latest</span>' : '') + '</td>' +
+        '<td><span class="cm-pill">' + TEST_SHORT[state.test] + '</span></td>' +
+        '<td class="num c-val">' + fmt(r.value, m.dec) + '</td>' +
+        '<td class="num"><span class="ft-vsavg ' + (rGood ? 'good' : 'bad') + '">' + pct(dlt) + '</span></td>' +
+        '<td class="num c-asym"><span class="ft-asym-dot" style="background:' + aCol + '"></span>' + r.asym + '% ' + r.side + '</td>';
+      tb.appendChild(tr);
+    });
+  }
+
+  document.getElementById('ft-test').addEventListener('change', e => { state.test = e.target.value; render(); });
+  document.getElementById('ft-metric').addEventListener('change', e => { state.metric = e.target.value; render(); });
+
+  render();
+</script>
+</body>
+</html>

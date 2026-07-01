@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Video Room — Connect storage" subtitle="Empty state · conectar Drive/Dropbox · los videos viven en el proveedor del club" viewport="1440x1180" -->
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Room — Connect storage · ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ── Shell (shared with the rest of the app) ── */
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:300px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* ── Connect page ── */
+  .vc-page { padding:40px 32px 80px; max-width:1080px; margin:0 auto; width:100%; }
+  .vc-hero { text-align:center; max-width:660px; margin:0 auto 36px; }
+  .vc-hero .badge { display:inline-flex; align-items:center; gap:7px; height:26px; padding:0 12px; border-radius:999px; background:var(--cm-accent-soft); border:1px solid var(--cm-success-bd); color:var(--cm-accent); font:600 11.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; }
+  .vc-hero h1 { font:600 34px/1.1 var(--cm-font-sans); letter-spacing:-0.025em; color:var(--cm-fg-strong); margin:16px 0 10px; }
+  .vc-hero p { font:400 16px/1.55 var(--cm-font-sans); color:var(--cm-fg-muted); margin:0; }
+  .vc-hero p strong { color:var(--cm-fg); font-weight:600; }
+
+  /* Concept diagram */
+  .vc-diagram { display:flex; align-items:stretch; justify-content:center; gap:0; margin:0 auto 40px; max-width:880px; }
+  .vc-node { flex:1; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); padding:22px 22px; box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; gap:10px; position:relative; }
+  .vc-node .ico { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .vc-node .ico.store { background:var(--cm-info-bg); color:var(--cm-info); }
+  .vc-node .ico.clava { background:var(--cm-accent-soft); color:var(--cm-accent); }
+  .vc-node h3 { font:600 15px/1.3 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; }
+  .vc-node p { font:var(--cm-body-sm); color:var(--cm-fg-muted); margin:0; }
+  .vc-node .tag { position:absolute; top:14px; right:14px; font:600 10px/1 var(--cm-font-mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--cm-fg-faint); }
+  .vc-link { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 4px; min-width:124px; }
+  .vc-link .line { display:flex; align-items:center; color:var(--cm-fg-faint); width:100%; }
+  .vc-link .line .seg { flex:1; height:2px; background:repeating-linear-gradient(90deg, var(--cm-border-strong) 0 5px, transparent 5px 10px); }
+  .vc-link .line .ti { font-size:18px; color:var(--cm-accent); }
+  .vc-link .cap { font:600 10.5px/1.3 var(--cm-font-mono); color:var(--cm-fg-muted); text-align:center; margin-top:8px; }
+  .vc-link .cap .x { color:var(--cm-danger); font-weight:700; }
+
+  /* Provider choices */
+  .vc-sec-label { font:500 11px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); text-align:center; margin-bottom:16px; }
+  .vc-providers { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media (max-width:860px){ .vc-providers { grid-template-columns:1fr; } }
+  .vc-prov { color:inherit; text-decoration:none; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); padding:24px 22px; box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; gap:14px; transition:border-color 140ms, box-shadow 140ms, transform 140ms; }
+  .vc-prov.is-actionable { cursor:pointer; }
+  .vc-prov.is-actionable:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); transform:translateY(-2px); }
+  .vc-prov .head { display:flex; align-items:center; gap:12px; }
+  .vc-prov .glyph { width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
+  .vc-prov .glyph.drive { background:rgba(31,164,99,0.10); color:#1FA463; }
+  .vc-prov .glyph.dropbox { background:rgba(0,97,255,0.10); color:#0061FF; }
+  .vc-prov .glyph.clava { background:var(--cm-bg-sunk); color:var(--cm-fg-faint); }
+  .vc-prov .nm { font:600 16px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .vc-prov .sub { font:var(--cm-meta); color:var(--cm-fg-muted); margin-top:3px; }
+  .vc-prov .desc { font:var(--cm-body-sm); color:var(--cm-fg-muted); flex:1; }
+  .vc-prov .foot { margin-top:2px; }
+  .vc-prov.is-soon { opacity:0.78; }
+  .vc-soon-pill { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:999px; background:var(--cm-violet-bg); color:var(--cm-violet); border:1px solid var(--cm-violet-bd); font:600 10.5px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; }
+
+  .vc-note { display:flex; align-items:center; gap:10px; justify-content:center; margin-top:26px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .vc-note .ti { font-size:16px; color:var(--cm-accent); }
+
+  /* prototype navigator */
+  .proto-nav { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:300; display:flex; align-items:center; gap:4px; padding:5px; background:var(--cm-side-bg); border:1px solid var(--cm-side-border); border-radius:999px; box-shadow:var(--cm-shadow-pop); }
+  .proto-nav a { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px; border-radius:999px; color:var(--cm-side-fg-muted); text-decoration:none; font:500 12px/1 var(--cm-font-sans); white-space:nowrap; }
+  .proto-nav a:hover { color:var(--cm-side-fg); background:rgba(255,255,255,0.06); }
+  .proto-nav a.is-on { background:var(--cm-side-accent); color:var(--cm-side-bg); font-weight:600; }
+  .proto-nav .lbl { color:var(--cm-side-fg-muted); font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; padding:0 8px 0 6px; }
+  .proto-nav .ti { font-size:15px; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="Video Room — Connect">
+
+  <!-- Sidebar -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item" href="Video Room.html"><i class="ti ti-video"></i><span>Video room</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="#"><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av">JR</div>
+        <div class="who"><div class="name">Joaquín Reiris</div><div class="role">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Video room</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search across the workspace…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="vc-page">
+
+      <div class="vc-hero">
+        <span class="badge"><i class="ti ti-plug-connected" style="font-size:14px"></i>Set up · Video room</span>
+        <h1>Connect your video storage</h1>
+        <p>ClavaMetrics <strong>doesn't host your videos</strong>. They stay in the club's own Drive or Dropbox — here you just <strong>organize them and link them</strong> to sessions, players and matches.</p>
+      </div>
+
+      <!-- Concept diagram -->
+      <div class="vc-diagram">
+        <div class="vc-node">
+          <span class="tag">Your storage</span>
+          <div class="ico store"><i class="ti ti-cloud"></i></div>
+          <h3>The video lives in your Drive / Dropbox</h3>
+          <p>Files never leave the club's account. Full ownership, your permissions, your retention.</p>
+        </div>
+        <div class="vc-link">
+          <div class="line"><span class="seg"></span><i class="ti ti-link"></i><span class="seg"></span></div>
+          <div class="cap">We store the <strong>link + context</strong><br><span class="x">✕</span> never a copy of the file</div>
+        </div>
+        <div class="vc-node">
+          <span class="tag">ClavaMetrics</span>
+          <div class="ico clava"><i class="ti ti-binary-tree"></i></div>
+          <h3>We organize it & connect it to your work</h3>
+          <p>Tag each video to a session, player or match — and reach it from anywhere in the platform.</p>
+        </div>
+      </div>
+
+      <!-- Providers -->
+      <div class="vc-sec-label">Choose a source</div>
+      <div class="vc-providers">
+
+        <a class="vc-prov is-actionable" href="Video Room.html">
+          <div class="head">
+            <div class="glyph drive"><i class="ti ti-brand-google-drive"></i></div>
+            <div><div class="nm">Google Drive</div><div class="sub">drive.google.com</div></div>
+          </div>
+          <div class="desc">Connect a shared drive or folder. Paste any Drive link to add a video in seconds.</div>
+          <div class="foot"><button class="cm-btn is-primary is-block"><i class="ti ti-plug" style="font-size:15px"></i>Connect Google Drive</button></div>
+        </a>
+
+        <a class="vc-prov is-actionable" href="Video Room.html">
+          <div class="head">
+            <div class="glyph dropbox"><i class="ti ti-brand-dropbox"></i></div>
+            <div><div class="nm">Dropbox</div><div class="sub">dropbox.com</div></div>
+          </div>
+          <div class="desc">Connect a team folder. Link match footage and clips straight from Dropbox.</div>
+          <div class="foot"><button class="cm-btn is-primary is-block"><i class="ti ti-plug" style="font-size:15px"></i>Connect Dropbox</button></div>
+        </a>
+
+        <div class="vc-prov is-soon">
+          <div class="head">
+            <div class="glyph clava"><i class="ti ti-server-2"></i></div>
+            <div><div class="nm">ClavaMetrics storage</div><div class="sub">Hosted by us · Premium</div></div>
+          </div>
+          <div class="desc">Native hosting with upload, transcoding and clip trimming — no external account needed.</div>
+          <div class="foot"><span class="vc-soon-pill"><i class="ti ti-sparkles" style="font-size:12px"></i>Coming soon</span></div>
+        </div>
+
+      </div>
+
+      <div class="vc-note"><i class="ti ti-shield-lock"></i>You can disconnect any time — links are removed from ClavaMetrics, your files stay untouched.</div>
+
+    </section>
+  </main>
+</div>
+
+<!-- Prototype navigator -->
+<nav class="proto-nav">
+  <span class="lbl">Video room</span>
+  <a class="is-on" href="Video Room - Connect.html"><i class="ti ti-plug"></i>Connect</a>
+  <a href="Video Room.html"><i class="ti ti-layout-grid"></i>Library</a>
+  <a href="Video Detail.html"><i class="ti ti-player-play"></i>Detail</a>
+  <a href="Video Room - Integration.html"><i class="ti ti-arrows-exchange"></i>In context</a>
+</nav>
+
+</body>
+</html>

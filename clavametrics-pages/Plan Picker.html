@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Change plan · U-17 — ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ── App shell (same as Admin) ────────────────────────── */
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  /* Topbar */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-crumb a { color:var(--cm-fg-muted); text-decoration:none; }
+  .hub-crumb a:hover { color:var(--cm-fg); }
+  .hub-topbar .actions { margin-left:auto; display:flex; gap:8px; }
+
+  /* ── Page ─────────────────────────────────────────────── */
+  .pp-page { padding:24px 28px 120px; max-width:1320px; width:100%; }
+
+  /* Context bar */
+  .pp-ctx {
+    display:grid;
+    grid-template-columns: auto 1fr auto;
+    align-items:center; gap:16px;
+    padding:14px 16px;
+    background:var(--cm-surface);
+    border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-4);
+    margin-bottom:22px;
+  }
+  .pp-ctx-cat {
+    display:flex; align-items:center; gap:12px;
+  }
+  .pp-ctx-cat .badge {
+    width:40px; height:40px; border-radius:var(--cm-r-3);
+    background:linear-gradient(135deg, color-mix(in srgb, var(--cm-accent) 18%, var(--cm-surface)), var(--cm-surface));
+    border:1px solid var(--cm-border);
+    color:var(--cm-accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pp-ctx-cat .badge .ti { font-size:20px; }
+  .pp-ctx-cat h1 {
+    font:600 17px/1.2 var(--cm-font-sans);
+    letter-spacing:-0.01em; color:var(--cm-fg-strong);
+  }
+  .pp-ctx-cat .sub {
+    margin-top:2px; font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+  }
+
+  .pp-arrow {
+    display:flex; align-items:center; gap:14px;
+    font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+    letter-spacing:0.06em; text-transform:uppercase;
+  }
+  .pp-arrow .stage {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:6px 10px; border-radius:var(--cm-r-pill);
+    border:1px solid var(--cm-border); background:var(--cm-bg-soft);
+  }
+  .pp-arrow .stage.is-curr { color:#d4a14a; border-color:color-mix(in srgb, #d4a14a 35%, transparent); background:color-mix(in srgb, #d4a14a 10%, transparent); }
+  .pp-arrow .stage.is-next { color:var(--cm-accent); border-color:color-mix(in srgb, var(--cm-accent) 35%, transparent); background:var(--cm-accent-soft); }
+  .pp-arrow .stage .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .pp-arrow .ti { font-size:16px; color:var(--cm-fg-faint); }
+  .pp-arrow .stage.is-next .ti { color:currentColor; }
+
+  .pp-ctx .right {
+    display:flex; gap:8px;
+  }
+
+  /* Section eyebrow */
+  .pp-eyebrow {
+    display:flex; align-items:baseline; gap:10px;
+    margin: 26px 0 12px;
+  }
+  .pp-eyebrow h2 {
+    font:600 18px/1.2 var(--cm-font-sans);
+    letter-spacing:-0.015em; color:var(--cm-fg-strong);
+  }
+  .pp-eyebrow .meta {
+    font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+    letter-spacing:0.06em; text-transform:uppercase;
+  }
+  .pp-eyebrow .meta::before {
+    content:""; display:inline-block; width:4px; height:4px; border-radius:50%;
+    background:var(--cm-fg-faint); margin-right:8px; vertical-align:middle;
+  }
+  .pp-eyebrow .right { margin-left:auto; }
+
+  /* Billing toggle */
+  .pp-toggle {
+    display:inline-flex; padding:3px;
+    background:var(--cm-bg-soft); border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-pill); gap:2px;
+  }
+  .pp-toggle button {
+    padding:0 14px; height:30px; border-radius:var(--cm-r-pill);
+    font:500 12.5px/1 var(--cm-font-sans); color:var(--cm-fg-muted);
+    border:0; background:transparent; cursor:pointer;
+    display:inline-flex; align-items:center; gap:8px;
+  }
+  .pp-toggle button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+  .pp-toggle .save {
+    font:500 10px/1 var(--cm-font-mono);
+    color:var(--cm-accent); background:var(--cm-accent-soft);
+    padding:2px 5px; border-radius:3px;
+  }
+
+  /* ── Tier cards ───────────────────────────────────────── */
+  .pp-tiers {
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:12px;
+  }
+  @media (max-width: 1180px) { .pp-tiers { grid-template-columns:repeat(2, 1fr); } }
+  @media (max-width: 720px) { .pp-tiers { grid-template-columns:1fr; } }
+
+  .pp-tier {
+    position:relative;
+    display:flex; flex-direction:column;
+    background:var(--cm-surface);
+    border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-5);
+    padding:20px 20px 18px;
+    box-shadow:var(--cm-shadow-1);
+    cursor:pointer;
+    transition: border-color var(--cm-dur-1), box-shadow var(--cm-dur-1), transform var(--cm-dur-1);
+  }
+  .pp-tier:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); }
+  .pp-tier.is-selected {
+    border-color:var(--cm-accent);
+    box-shadow:0 0 0 1px var(--cm-accent), var(--cm-shadow-2);
+  }
+  .pp-tier.is-current { border-color:color-mix(in srgb, #d4a14a 60%, transparent); }
+  .pp-tier-badge {
+    position:absolute; top:-9px; right:18px;
+    font:500 10px/1 var(--cm-font-mono);
+    letter-spacing:0.08em; text-transform:uppercase;
+    padding:4px 9px; border-radius:var(--cm-r-pill);
+    color:var(--cm-fg-on-accent); background:var(--cm-accent);
+  }
+  .pp-tier.is-current .pp-tier-badge {
+    color:#7a5a18; background:color-mix(in srgb, #d4a14a 30%, var(--cm-surface));
+    border:1px solid color-mix(in srgb, #d4a14a 50%, transparent);
+  }
+  .pp-tier-radio {
+    position:absolute; top:18px; right:18px;
+    width:18px; height:18px;
+    border-radius:50%; border:1.5px solid var(--cm-border-strong);
+    background:var(--cm-surface);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pp-tier-radio::after {
+    content:""; width:8px; height:8px; border-radius:50%;
+    background:var(--cm-accent); opacity:0; transition:opacity var(--cm-dur-1);
+  }
+  .pp-tier.is-selected .pp-tier-radio { border-color:var(--cm-accent); }
+  .pp-tier.is-selected .pp-tier-radio::after { opacity:1; }
+
+  .pp-tier-name {
+    font:600 16px/1 var(--cm-font-sans);
+    color:var(--cm-fg-strong); letter-spacing:-0.01em;
+    display:flex; align-items:center; gap:8px;
+    padding-right:30px;
+  }
+  .pp-tier-name .ti { font-size:18px; color:var(--cm-fg-muted); }
+  .pp-tier.is-selected .pp-tier-name .ti { color:var(--cm-accent); }
+  .pp-tier-tag {
+    margin-top:6px;
+    font:500 12px/1.35 var(--cm-font-mono);
+    color:var(--cm-fg-muted);
+    min-height:32px;
+  }
+  .pp-tier-price {
+    display:flex; align-items:baseline; gap:5px;
+    margin:18px 0 4px;
+  }
+  .pp-tier-price .amt {
+    font:600 30px/1 var(--cm-font-sans);
+    letter-spacing:-0.025em; color:var(--cm-fg-strong);
+  }
+  .pp-tier-price .cur {
+    font:500 13px/1 var(--cm-font-mono); color:var(--cm-fg-muted);
+  }
+  .pp-tier-price .per {
+    font:500 12px/1.2 var(--cm-font-sans);
+    color:var(--cm-fg-muted); margin-left:4px;
+  }
+  .pp-tier-meta {
+    font:500 11.5px/1.3 var(--cm-font-mono);
+    color:var(--cm-fg-faint); margin-bottom:16px;
+  }
+  .pp-tier-meta .delta { color:var(--cm-accent); }
+  .pp-tier-meta .delta.is-down { color:#d4a14a; }
+  .pp-tier-feats {
+    display:flex; flex-direction:column; gap:8px;
+    padding-top:14px;
+    border-top:1px solid var(--cm-border-soft);
+  }
+  .pp-tier-feat {
+    display:flex; align-items:flex-start; gap:8px;
+    font:400 12.5px/1.4 var(--cm-font-sans);
+    color:var(--cm-fg);
+  }
+  .pp-tier-feat .ti { font-size:14px; color:var(--cm-accent); flex-shrink:0; margin-top:1px; }
+  .pp-tier-feat.is-off { color:var(--cm-fg-faint); }
+  .pp-tier-feat.is-off .ti { color:var(--cm-fg-faint); }
+  .pp-tier-feat strong { font-weight:600; color:var(--cm-fg-strong); }
+
+  /* ── Compare table ────────────────────────────────────── */
+  .pp-compare {
+    background:var(--cm-surface);
+    border:1px solid var(--cm-border);
+    border-radius:var(--cm-r-5);
+    overflow:hidden;
+    box-shadow:var(--cm-shadow-1);
+  }
+  .pp-compare table { width:100%; border-collapse:collapse; }
+  .pp-compare thead th {
+    text-align:left;
+    padding:14px 16px 12px;
+    font:500 11px/1 var(--cm-font-mono);
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--cm-fg-muted);
+    background:var(--cm-bg-soft);
+    border-bottom:1px solid var(--cm-border);
+    vertical-align:bottom;
+  }
+  .pp-compare thead th.tier {
+    text-align:center;
+    color:var(--cm-fg-strong);
+    font:600 13px/1.2 var(--cm-font-sans);
+    letter-spacing:-0.005em;
+    text-transform:none;
+    padding:14px 8px 12px;
+  }
+  .pp-compare thead th.tier.is-current { color:#d4a14a; }
+  .pp-compare thead th.tier.is-selected {
+    color:var(--cm-accent);
+    background:var(--cm-accent-soft);
+  }
+  .pp-compare tbody td {
+    padding:11px 16px;
+    border-bottom:1px solid var(--cm-border-soft);
+    font:400 13px/1.4 var(--cm-font-sans);
+    color:var(--cm-fg);
+    vertical-align:middle;
+  }
+  .pp-compare tbody td.label {
+    color:var(--cm-fg-muted);
+    font-weight:500;
+    font-size:12.5px;
+  }
+  .pp-compare tbody td.label .ti {
+    font-size:14px; margin-right:6px; color:var(--cm-fg-faint); vertical-align:-2px;
+  }
+  .pp-compare tbody td.cell {
+    text-align:center;
+    padding:11px 8px;
+    font:500 12.5px/1.3 var(--cm-font-mono);
+    color:var(--cm-fg);
+  }
+  .pp-compare tbody td.cell.is-selected { background:color-mix(in srgb, var(--cm-accent) 6%, transparent); }
+  .pp-compare tbody td.cell.is-current { background:color-mix(in srgb, #d4a14a 6%, transparent); }
+  .pp-compare tbody td.cell .ti-check { color:var(--cm-accent); font-size:16px; }
+  .pp-compare tbody td.cell .ti-x { color:var(--cm-fg-faint); font-size:14px; }
+  .pp-compare tbody td.cell strong { color:var(--cm-fg-strong); font-weight:600; }
+  .pp-compare tbody tr.section td {
+    background:var(--cm-bg-soft);
+    color:var(--cm-fg-muted);
+    font:500 11px/1 var(--cm-font-mono);
+    letter-spacing:0.08em; text-transform:uppercase;
+    padding:10px 16px;
+  }
+  .pp-compare tbody tr.section td.cell { background:var(--cm-bg-soft); }
+  .pp-compare tbody tr:last-child td { border-bottom:0; }
+
+  /* ── Enterprise strip ─────────────────────────────────── */
+  .pp-ent {
+    margin-top:18px;
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    align-items:center; gap:18px;
+    padding:18px 22px;
+    background:linear-gradient(135deg, color-mix(in srgb, #6366f1 8%, var(--cm-surface)), var(--cm-surface));
+    border:1px solid color-mix(in srgb, #6366f1 35%, transparent);
+    border-radius:var(--cm-r-5);
+  }
+  .pp-ent .mark {
+    width:44px; height:44px; border-radius:var(--cm-r-3);
+    background:color-mix(in srgb, #6366f1 18%, transparent);
+    color:#6366f1;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .pp-ent .mark .ti { font-size:22px; }
+  .pp-ent h3 {
+    font:600 15px/1.2 var(--cm-font-sans);
+    letter-spacing:-0.005em; color:var(--cm-fg-strong);
+  }
+  .pp-ent p {
+    margin-top:3px;
+    font:400 13px/1.45 var(--cm-font-sans);
+    color:var(--cm-fg-muted);
+    max-width:62ch;
+  }
+
+  /* ── Sticky action footer ─────────────────────────────── */
+  .pp-foot {
+    position:sticky; bottom:0;
+    margin:24px -28px -120px;
+    padding:14px 28px;
+    background:color-mix(in srgb, var(--cm-bg) 96%, transparent);
+    backdrop-filter:saturate(160%) blur(12px);
+    border-top:1px solid var(--cm-border);
+    display:grid;
+    grid-template-columns: 1fr auto;
+    align-items:center; gap:18px;
+    z-index:40;
+  }
+  .pp-foot-summary {
+    display:flex; align-items:center; gap:20px;
+    font:400 13px/1.4 var(--cm-font-sans);
+    color:var(--cm-fg-muted);
+  }
+  .pp-foot-summary .group {
+    display:flex; flex-direction:column; gap:2px;
+  }
+  .pp-foot-summary .lbl {
+    font:500 10.5px/1 var(--cm-font-mono);
+    letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--cm-fg-faint);
+  }
+  .pp-foot-summary .val {
+    font:600 14px/1 var(--cm-font-sans);
+    color:var(--cm-fg-strong);
+  }
+  .pp-foot-summary .val.mono {
+    font-family:var(--cm-font-mono); letter-spacing:-0.005em;
+  }
+  .pp-foot-summary .val.delta { color:var(--cm-accent); }
+  .pp-foot-summary .sep {
+    width:1px; height:28px; background:var(--cm-border);
+  }
+  .pp-foot .actions { display:flex; gap:8px; }
+
+  .pp-proration {
+    font:500 11.5px/1.4 var(--cm-font-mono);
+    color:var(--cm-fg-muted);
+  }
+  .pp-proration strong { color:var(--cm-fg-strong); }
+
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="01 Plan picker">
+
+  <!-- ───── SIDEBAR (Admin context) ───── -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"></path><path d="M12 18V5"></path><path d="M19 18v-9"></path></svg></div>
+      <div class="body"><div class="name">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="Chat &amp; Tasks.html"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Daily Planning.html"><i class="ti ti-soccer-field"></i><span>Daily planning</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item is-active" href="Admin.html"><i class="ti ti-shield-lock"></i><span>Admin</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av">JR</div>
+        <div class="who"><div class="name">Joaquín Reiris</div><div class="role">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───── MAIN ───── -->
+  <main class="hub-main">
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i>
+        <a href="Admin.html">Workspace</a>
+        <span class="sep">/</span>
+        <a href="Admin.html">Admin</a>
+        <span class="sep">/</span>
+        <a href="Admin.html">Subscription</a>
+        <span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Change plan · U-17</span>
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <div class="pp-page">
+
+      <!-- Context bar: which category we're changing -->
+      <div class="pp-ctx">
+        <div class="pp-ctx-cat">
+          <div class="badge"><i class="ti ti-ball-football"></i></div>
+          <div>
+            <h1>Clava FC · U-17 <span style="color:var(--cm-fg-muted);font-weight:500;font-size:14px;">— Youth competitive</span></h1>
+            <div class="sub">38 / 40 players · 4 staff · created Aug 2024</div>
+          </div>
+        </div>
+        <div class="pp-arrow">
+          <span class="stage is-curr"><span class="dot"></span>Basic · $60/mo</span>
+          <i class="ti ti-arrow-right"></i>
+          <span class="stage is-next"><span class="dot"></span>Professional · $120/mo</span>
+        </div>
+        <div class="right">
+          <a class="cm-btn is-outline is-sm" href="Admin.html"><i class="ti ti-x" style="font-size:14px"></i>Cancel</a>
+        </div>
+      </div>
+
+      <!-- Section header + billing toggle -->
+      <div class="pp-eyebrow">
+        <h2>Pick a tier for U-17</h2>
+        <span class="meta">Billed per category · cancel anytime</span>
+        <div class="right">
+          <div class="pp-toggle" id="pp-toggle">
+            <button class="is-on" data-cycle="monthly">Monthly</button>
+            <button data-cycle="annual">Annual <span class="save">−16%</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───── Tier cards ───── -->
+      <div class="pp-tiers" id="pp-tiers">
+
+        <!-- FREE -->
+        <div class="pp-tier" data-tier="free">
+          <span class="pp-tier-radio"></span>
+          <div class="pp-tier-name"><i class="ti ti-seedling"></i>Initiation</div>
+          <div class="pp-tier-tag">Up to 15 players · for development squads &amp; mini-categories.</div>
+          <div class="pp-tier-price">
+            <span class="amt" data-amt="0">$0</span>
+            <span class="cur">USD</span>
+            <span class="per">/ mo</span>
+          </div>
+          <div class="pp-tier-meta">free forever · no card needed</div>
+          <div class="pp-tier-feats">
+            <div class="pp-tier-feat"><i class="ti ti-check"></i><strong>15 players</strong> max · mobile app for athletes</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>RPE form · manual wellness · availability</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>Manual injury log</div>
+            <div class="pp-tier-feat is-off"><i class="ti ti-x"></i>No GPS / Catapult / StatSports</div>
+            <div class="pp-tier-feat is-off"><i class="ti ti-x"></i>No analytics dashboard</div>
+          </div>
+        </div>
+
+        <!-- BASIC (current) -->
+        <div class="pp-tier is-current" data-tier="basic">
+          <span class="pp-tier-badge">Current</span>
+          <span class="pp-tier-radio"></span>
+          <div class="pp-tier-name"><i class="ti ti-clipboard-text"></i>Basic</div>
+          <div class="pp-tier-tag">Up to 40 players · planning &amp; reports for youth &amp; B-teams.</div>
+          <div class="pp-tier-price">
+            <span class="amt" data-amt="60">$60</span>
+            <span class="cur">USD</span>
+            <span class="per">/ mo</span>
+          </div>
+          <div class="pp-tier-meta">your current tier · <span class="delta is-down">no change</span></div>
+          <div class="pp-tier-feats">
+            <div class="pp-tier-feat"><i class="ti ti-check"></i><strong>40 players</strong> · all of Initiation</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>Planner · Sessions library · Calendar</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>CSV import · basic match reports</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>10 GB storage · 1 yr history</div>
+            <div class="pp-tier-feat is-off"><i class="ti ti-x"></i>No live GPS · no predictive alerts</div>
+          </div>
+        </div>
+
+        <!-- PRO (recommended / selected) -->
+        <div class="pp-tier is-selected" data-tier="pro">
+          <span class="pp-tier-badge">Recommended</span>
+          <span class="pp-tier-radio"></span>
+          <div class="pp-tier-name"><i class="ti ti-radar-2"></i>Professional</div>
+          <div class="pp-tier-tag">Up to 80 players · GPS &amp; analytics for senior teams.</div>
+          <div class="pp-tier-price">
+            <span class="amt" data-amt="120">$120</span>
+            <span class="cur">USD</span>
+            <span class="per">/ mo</span>
+          </div>
+          <div class="pp-tier-meta"><span class="delta">+ $60/mo</span> vs current · 25% under ClubMetrics</div>
+          <div class="pp-tier-feats">
+            <div class="pp-tier-feat"><i class="ti ti-check"></i><strong>80 players</strong> · all of Basic</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i><strong>Live GPS</strong> · Catapult · StatSports · custom CSV</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>Analytics dashboard · ACWR · load monitor</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>Injury risk model · daily wellness alerts</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>50 GB storage · 3 yr history · API access</div>
+          </div>
+        </div>
+
+        <!-- FULL -->
+        <div class="pp-tier" data-tier="full">
+          <span class="pp-tier-radio"></span>
+          <div class="pp-tier-name"><i class="ti ti-crown"></i>Full</div>
+          <div class="pp-tier-tag">Unlimited players · everything, for senior pro setups.</div>
+          <div class="pp-tier-price">
+            <span class="amt" data-amt="200">$200</span>
+            <span class="cur">USD</span>
+            <span class="per">/ mo</span>
+          </div>
+          <div class="pp-tier-meta"><span class="delta">+ $140/mo</span> vs current · most under-15 clubs go Pro instead</div>
+          <div class="pp-tier-feats">
+            <div class="pp-tier-feat"><i class="ti ti-check"></i><strong>Unlimited players</strong> · all of Professional</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>Physio module · Nutrition · Evaluations</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>Tactical canvas · match-day live RPE</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>250 GB · unlimited history · priority support</div>
+            <div class="pp-tier-feat"><i class="ti ti-check"></i>Custom reports · white-label export</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ───── Compare table ───── -->
+      <div class="pp-eyebrow">
+        <h2>Compare features</h2>
+        <span class="meta">All limits enforced per category</span>
+      </div>
+
+      <div class="pp-compare">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:34%">Feature</th>
+              <th class="tier" style="width:16.5%">Initiation</th>
+              <th class="tier is-current" style="width:16.5%">Basic <span style="font:500 10px/1 var(--cm-font-mono); color:#d4a14a; display:block; margin-top:3px;">CURRENT</span></th>
+              <th class="tier is-selected" style="width:16.5%">Professional <span style="font:500 10px/1 var(--cm-font-mono); color:var(--cm-accent); display:block; margin-top:3px;">SELECTED</span></th>
+              <th class="tier" style="width:16.5%">Full</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="section"><td>Capacity</td><td class="cell"></td><td class="cell is-current"></td><td class="cell is-selected"></td><td class="cell"></td></tr>
+            <tr>
+              <td class="label"><i class="ti ti-users"></i>Players</td>
+              <td class="cell">15</td>
+              <td class="cell is-current"><strong>40</strong></td>
+              <td class="cell is-selected"><strong>80</strong></td>
+              <td class="cell">Unlimited</td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-user-shield"></i>Staff seats</td>
+              <td class="cell">2</td>
+              <td class="cell is-current">5</td>
+              <td class="cell is-selected">12</td>
+              <td class="cell">Unlimited</td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-database"></i>Storage</td>
+              <td class="cell">1 GB</td>
+              <td class="cell is-current">10 GB</td>
+              <td class="cell is-selected">50 GB</td>
+              <td class="cell">250 GB</td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-history"></i>Data retention</td>
+              <td class="cell">3 mo</td>
+              <td class="cell is-current">1 yr</td>
+              <td class="cell is-selected">3 yr</td>
+              <td class="cell">Unlimited</td>
+            </tr>
+
+            <tr class="section"><td>Performance data</td><td class="cell"></td><td class="cell is-current"></td><td class="cell is-selected"></td><td class="cell"></td></tr>
+            <tr>
+              <td class="label"><i class="ti ti-heartbeat"></i>RPE &amp; wellness</td>
+              <td class="cell"><i class="ti ti-check ti-check"></i></td>
+              <td class="cell is-current"><i class="ti ti-check ti-check"></i></td>
+              <td class="cell is-selected"><i class="ti ti-check ti-check"></i></td>
+              <td class="cell"><i class="ti ti-check ti-check"></i></td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-radar-2"></i>Live GPS · Catapult · StatSports</td>
+              <td class="cell"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-current"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-selected"><i class="ti ti-check ti-check"></i></td>
+              <td class="cell"><i class="ti ti-check ti-check"></i></td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-chart-line"></i>Analytics &amp; ACWR</td>
+              <td class="cell"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-current">Basic</td>
+              <td class="cell is-selected"><strong>Full</strong></td>
+              <td class="cell"><strong>Full + custom</strong></td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-alert-triangle"></i>Injury risk model</td>
+              <td class="cell"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-current"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-selected"><i class="ti ti-check ti-check"></i></td>
+              <td class="cell"><i class="ti ti-check ti-check"></i></td>
+            </tr>
+
+            <tr class="section"><td>Modules</td><td class="cell"></td><td class="cell is-current"></td><td class="cell is-selected"></td><td class="cell"></td></tr>
+            <tr>
+              <td class="label"><i class="ti ti-clipboard-list"></i>Planner · Sessions · Calendar</td>
+              <td class="cell">Read-only</td>
+              <td class="cell is-current"><i class="ti ti-check ti-check"></i></td>
+              <td class="cell is-selected"><i class="ti ti-check ti-check"></i></td>
+              <td class="cell"><i class="ti ti-check ti-check"></i></td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-stethoscope"></i>Physio &amp; Nutrition</td>
+              <td class="cell"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-current"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-selected">Physio only</td>
+              <td class="cell"><strong>Both</strong></td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-report-analytics"></i>Match reports &amp; evaluations</td>
+              <td class="cell"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-current">Reports only</td>
+              <td class="cell is-selected">Reports + evals</td>
+              <td class="cell"><strong>Reports + evals + live</strong></td>
+            </tr>
+
+            <tr class="section"><td>Platform</td><td class="cell"></td><td class="cell is-current"></td><td class="cell is-selected"></td><td class="cell"></td></tr>
+            <tr>
+              <td class="label"><i class="ti ti-plug"></i>Integrations &amp; API</td>
+              <td class="cell"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-current">CSV only</td>
+              <td class="cell is-selected"><strong>API + CSV</strong></td>
+              <td class="cell"><strong>API + CSV + webhooks</strong></td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-headset"></i>Support</td>
+              <td class="cell">Community</td>
+              <td class="cell is-current">Email · 48 h</td>
+              <td class="cell is-selected">Email · 8 h</td>
+              <td class="cell"><strong>Priority · 1 h</strong></td>
+            </tr>
+            <tr>
+              <td class="label"><i class="ti ti-shield-check"></i>SSO / SAML</td>
+              <td class="cell"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-current"><i class="ti ti-x ti-x"></i></td>
+              <td class="cell is-selected">Add-on</td>
+              <td class="cell"><i class="ti ti-check ti-check"></i></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ───── Enterprise strip ───── -->
+      <div class="pp-ent">
+        <div class="mark"><i class="ti ti-building-skyscraper"></i></div>
+        <div>
+          <h3>Need more than Full?</h3>
+          <p>Federations, multi-club groups and pro sides with 10+ categories get custom limits, dedicated environments, on-prem options, and a named CSM. Volume pricing kicks in at 5 paid categories.</p>
+        </div>
+        <a class="cm-btn is-outline is-sm" href="#"><i class="ti ti-message-circle" style="font-size:14px"></i>Talk to sales</a>
+      </div>
+
+    </div>
+
+    <!-- ───── Sticky action footer ───── -->
+    <div class="pp-foot">
+      <div class="pp-foot-summary">
+        <div class="group">
+          <span class="lbl">Category</span>
+          <span class="val">Clava FC · U-17</span>
+        </div>
+        <span class="sep"></span>
+        <div class="group">
+          <span class="lbl">New plan</span>
+          <span class="val" id="pp-foot-plan">Professional</span>
+        </div>
+        <span class="sep"></span>
+        <div class="group">
+          <span class="lbl">New monthly</span>
+          <span class="val mono" id="pp-foot-amt">$120 / mo</span>
+        </div>
+        <span class="sep"></span>
+        <div class="group">
+          <span class="lbl">Change</span>
+          <span class="val mono delta" id="pp-foot-delta">+ $60 / mo</span>
+        </div>
+        <span class="sep"></span>
+        <div class="pp-proration">
+          Prorated today · <strong id="pp-foot-pro">$38.71</strong><br>
+          <span style="color:var(--cm-fg-faint)">19 days left in this cycle · next bill <strong style="color:var(--cm-fg-muted)">Jun 14</strong></span>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="cm-btn is-ghost" href="Admin.html">Cancel</a>
+        <button class="cm-btn is-primary">
+          Confirm change
+          <i class="ti ti-arrow-right" style="font-size:14px"></i>
+        </button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  // ── Tier selection ──────────────────────────────────
+  const tiers = document.querySelectorAll('#pp-tiers .pp-tier');
+  const tierData = {
+    free:  { name: 'Initiation',   amt: 0,   curAmt: 60 },
+    basic: { name: 'Basic',        amt: 60,  curAmt: 60 },
+    pro:   { name: 'Professional', amt: 120, curAmt: 60 },
+    full:  { name: 'Full',         amt: 200, curAmt: 60 }
+  };
+  let cycle = 'monthly';
+  let selected = 'pro';
+
+  const fmt = n => '$' + n.toLocaleString();
+
+  function render() {
+    const t = tierData[selected];
+    const factor = cycle === 'annual' ? 0.84 : 1;
+    const amt = Math.round(t.amt * factor);
+    const cur = t.curAmt;
+    const delta = amt - cur;
+
+    document.getElementById('pp-foot-plan').textContent = t.name;
+    document.getElementById('pp-foot-amt').textContent = fmt(amt) + ' / mo';
+
+    const dEl = document.getElementById('pp-foot-delta');
+    if (delta > 0) {
+      dEl.textContent = '+ ' + fmt(delta) + ' / mo';
+      dEl.style.color = 'var(--cm-accent)';
+    } else if (delta < 0) {
+      dEl.textContent = '− ' + fmt(Math.abs(delta)) + ' / mo';
+      dEl.style.color = '#d4a14a';
+    } else {
+      dEl.textContent = 'No change';
+      dEl.style.color = 'var(--cm-fg-muted)';
+    }
+
+    // Prorate over 19/30 remaining days
+    const proration = Math.max(0, Math.round((delta * 19 / 30) * 100) / 100);
+    document.getElementById('pp-foot-pro').textContent =
+      delta > 0 ? '$' + proration.toFixed(2) :
+      delta < 0 ? '−$' + Math.abs(proration).toFixed(2) + ' credit' :
+      '$0.00';
+
+    // Update card amounts for billing cycle
+    document.querySelectorAll('.pp-tier .amt').forEach(el => {
+      const base = +el.dataset.amt;
+      const adj = Math.round(base * factor);
+      el.textContent = fmt(adj);
+    });
+  }
+
+  tiers.forEach(card => {
+    card.addEventListener('click', () => {
+      tiers.forEach(c => c.classList.remove('is-selected'));
+      card.classList.add('is-selected');
+      selected = card.dataset.tier;
+      render();
+    });
+  });
+
+  // ── Billing cycle toggle ────────────────────────────
+  document.querySelectorAll('#pp-toggle button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#pp-toggle button').forEach(o => o.classList.remove('is-on'));
+      b.classList.add('is-on');
+      cycle = b.dataset.cycle;
+      render();
+    });
+  });
+
+  render();
+</script>
+</body>
+</html>

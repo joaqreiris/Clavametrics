@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brand" name="Video Room — Library" subtitle="Biblioteca de videos · grilla de cards con origen (Drive/Dropbox) y vínculos a sesión/jugador/partido" viewport="1440x1180" -->
+<html lang="en" data-theme="hybrid">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Room — Library · ClavaMetrics</title>
+<link rel="stylesheet" href="clavametrics.css">
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* ── Shell (shared with the rest of the app) ── */
+  .hub-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+  .hub-side  { background:var(--cm-side-bg); color:var(--cm-side-fg); border-right:1px solid var(--cm-side-border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .hub-main  { display:flex; flex-direction:column; min-width:0; background:var(--cm-bg); }
+  .hub-brand { display:flex; align-items:center; gap:10px; padding:16px 16px 14px; border-bottom:1px solid var(--cm-side-border); }
+  .hub-brand .mark { width:30px; height:30px; border-radius:7px; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .hub-brand .mark svg { width:18px; height:18px; }
+  .hub-brand .body { flex:1; min-width:0; }
+  .hub-brand .name { font:600 14px/1.1 var(--cm-font-sans); letter-spacing:-0.01em; color:var(--cm-side-fg); }
+  .hub-brand .club { font:500 11.5px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+  .hub-brand .switch { width:24px; height:24px; border-radius:6px; border:1px solid var(--cm-side-border); background:transparent; color:var(--cm-side-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .hub-brand .switch .ti { font-size:14px; }
+  .hub-nav { padding:8px 10px; flex:1; }
+  .hub-nav-group + .hub-nav-group { margin-top:6px; }
+  .hub-nav-label { font:500 10.5px/1 var(--cm-font-sans); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-side-fg-muted); padding:10px 10px 6px; }
+  .hub-nav-item { display:flex; align-items:center; gap:10px; padding:6.5px 10px; border-radius:var(--cm-r-3); color:var(--cm-side-fg-muted); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; }
+  .hub-nav-item:hover { background:var(--cm-side-item-active-bg); color:var(--cm-side-fg); }
+  .hub-nav-item .ti { font-size:17px; flex-shrink:0; opacity:0.95; }
+  .hub-nav-item .count { margin-left:auto; font:500 11.5px/1 var(--cm-font-mono); color:var(--cm-side-fg-muted); }
+  .hub-nav-item.is-active { background:var(--cm-side-item-active-bg); color:var(--cm-side-item-active-fg); font-weight:600; }
+  .hub-side-foot { border-top:1px solid var(--cm-side-border); padding:10px; }
+  .hub-user { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--cm-r-3); }
+  .hub-user .av { width:28px; height:28px; border-radius:50%; background:var(--cm-side-accent); color:var(--cm-side-bg); display:flex; align-items:center; justify-content:center; font:600 11px/1 var(--cm-font-sans); flex-shrink:0; }
+  .hub-user .who { flex:1; min-width:0; }
+  .hub-user .who .name { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-side-fg); }
+  .hub-user .who .role { font:500 11px/1.2 var(--cm-font-mono); color:var(--cm-side-fg-muted); margin-top:2px; }
+
+  /* ── Topbar ── */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-topbar .spacer { margin-left:auto; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* ── Page ── */
+  .vr-page { padding:26px 32px 96px; max-width:1280px; margin:0 auto; width:100%; }
+  .vr-head { display:flex; align-items:flex-end; gap:16px; margin-bottom:20px; }
+  .vr-head .ttl h1 { font:var(--cm-h1); letter-spacing:-0.01em; color:var(--cm-fg-strong); margin:0; }
+  .vr-head .ttl p  { font:var(--cm-body); color:var(--cm-fg-muted); margin:5px 0 0; }
+  .vr-head .ttl p strong { color:var(--cm-fg); font-weight:600; }
+  .vr-head .grow { flex:1; }
+
+  /* Filter / search bar */
+  .vr-bar { display:flex; align-items:center; gap:10px; margin-bottom:22px; flex-wrap:wrap; }
+  .vr-search { display:flex; align-items:center; gap:8px; height:38px; width:300px; padding:0 12px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); transition:border-color var(--cm-dur-1), box-shadow var(--cm-dur-1); }
+  .vr-search:focus-within { border-color:var(--cm-accent); box-shadow:0 0 0 3px var(--cm-focus-ring); }
+  .vr-search .ti { font-size:16px; color:var(--cm-fg-muted); }
+  .vr-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body); color:var(--cm-fg); }
+  .vr-search .cm-kbd { flex-shrink:0; }
+
+  .vr-filter { display:inline-flex; align-items:center; gap:7px; height:38px; padding:0 12px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg); font:500 13.5px/1 var(--cm-font-sans); cursor:pointer; white-space:nowrap; transition:background var(--cm-dur-1), border-color var(--cm-dur-1); }
+  .vr-filter:hover { background:var(--cm-bg-soft); border-color:var(--cm-border-strong); }
+  .vr-filter .lead { color:var(--cm-fg-muted); }
+  .vr-filter .ti { font-size:15px; color:var(--cm-fg-muted); }
+  .vr-filter .chev { font-size:15px; color:var(--cm-fg-faint); margin-left:1px; }
+  .vr-filter.is-active { border-color:var(--cm-border-strong); background:var(--cm-bg-soft); }
+  .vr-filter.is-active .val { color:var(--cm-fg-strong); font-weight:600; }
+
+  .vr-bar .vr-right { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .vr-count { font:var(--cm-mono); color:var(--cm-fg-muted); }
+  .vr-viewtog { display:inline-flex; padding:3px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); }
+  .vr-viewtog button { width:30px; height:28px; border:0; background:transparent; border-radius:var(--cm-r-2); color:var(--cm-fg-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-viewtog button .ti { font-size:16px; }
+  .vr-viewtog button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
+
+  /* ── Grid ── */
+  .vr-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:18px; }
+  @media (max-width:1080px){ .vr-grid { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:720px){ .vr-grid { grid-template-columns:1fr; } }
+
+  .vr-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-5); overflow:hidden; box-shadow:var(--cm-shadow-1); cursor:pointer; transition:border-color 140ms, box-shadow 140ms, transform 140ms; display:flex; flex-direction:column; }
+  .vr-card:hover { border-color:var(--cm-border-strong); box-shadow:var(--cm-shadow-2); transform:translateY(-2px); }
+
+  /* Thumbnail */
+  .vr-thumb { position:relative; aspect-ratio:16/9; overflow:hidden; background:#0E1116; }
+  .vr-thumb .pitch { position:absolute; inset:0; }
+  .vr-thumb::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg, rgba(8,12,16,0.05) 0%, rgba(8,12,16,0) 32%, rgba(8,12,16,0.45) 100%); }
+  .vr-play { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0.92); z-index:3; width:48px; height:48px; border-radius:50%; background:rgba(255,255,255,0.92); color:#0E1116; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(0,0,0,0.35); opacity:0; transition:opacity 160ms, transform 160ms; }
+  .vr-play .ti { font-size:24px; margin-left:2px; }
+  .vr-card:hover .vr-play { opacity:1; transform:translate(-50%,-50%) scale(1); }
+
+  .vr-origin { position:absolute; top:10px; left:10px; z-index:3; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 9px 0 8px; border-radius:999px; background:rgba(255,255,255,0.95); border:1px solid rgba(0,0,0,0.06); font:600 11px/1 var(--cm-font-sans); color:#1c2128; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+  .vr-origin .ti { font-size:14px; }
+  .vr-origin.drive .ti { color:#1FA463; }
+  .vr-origin.dropbox .ti { color:#0061FF; }
+
+  .vr-dur { position:absolute; bottom:10px; right:10px; z-index:3; display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:6px; background:rgba(8,12,16,0.82); color:#fff; font:600 11.5px/1 var(--cm-font-mono); letter-spacing:0.02em; }
+  .vr-dur .ti { font-size:12px; opacity:0.85; }
+
+  .vr-type { position:absolute; bottom:10px; left:10px; z-index:3; display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:rgba(8,12,16,0.6); backdrop-filter:blur(2px); color:#E6E8EB; font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; }
+
+  /* Body */
+  .vr-body { padding:13px 14px 14px; display:flex; flex-direction:column; gap:10px; flex:1; }
+  .vr-card .top { display:flex; align-items:flex-start; gap:8px; }
+  .vr-card h3 { font:600 14.5px/1.32 var(--cm-font-sans); color:var(--cm-fg-strong); margin:0; letter-spacing:-0.005em; flex:1; text-wrap:pretty; }
+  .vr-card .more { width:26px; height:26px; flex-shrink:0; margin:-2px -4px 0 0; border:0; background:transparent; border-radius:var(--cm-r-2); color:var(--cm-fg-faint); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .vr-card .more:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
+  .vr-card .more .ti { font-size:17px; }
+
+  .vr-meta { display:flex; align-items:center; gap:8px; font:var(--cm-meta); color:var(--cm-fg-muted); }
+  .vr-meta .ti { font-size:13px; }
+  .vr-meta .dotsep { width:3px; height:3px; border-radius:50%; background:var(--cm-fg-faint); }
+
+  .vr-links { display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; padding-top:2px; }
+  .vr-chip { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px 0 7px; border-radius:var(--cm-r-2); font:500 11.5px/1 var(--cm-font-sans); white-space:nowrap; border:1px solid transparent; }
+  .vr-chip .ti { font-size:13px; }
+  .vr-chip.session { background:var(--cm-info-bg); color:var(--cm-info); border-color:var(--cm-info-bd); }
+  .vr-chip.player  { background:var(--cm-violet-bg); color:var(--cm-violet); border-color:var(--cm-violet-bd); }
+  .vr-chip.match   { background:var(--cm-success-bg); color:var(--cm-success); border-color:var(--cm-success-bd); }
+  .vr-chip.muted   { background:var(--cm-bg-sunk); color:var(--cm-fg-muted); border-color:var(--cm-border); }
+  .vr-chip.unlinked { background:var(--cm-warning-bg); color:var(--cm-warning); border:1px dashed var(--cm-warning-bd); cursor:pointer; }
+  .vr-chip.unlinked:hover { background:var(--cm-warning-bd); }
+
+  /* Storage note — make the "videos live in Drive/Dropbox" concept obvious */
+  .vr-note { display:inline-flex; align-items:center; gap:9px; padding:8px 13px; margin-top:14px; border-radius:var(--cm-r-3); background:var(--cm-accent-soft); border:1px solid var(--cm-success-bd); }
+  .vr-note .ic { width:22px; height:22px; border-radius:6px; background:var(--cm-surface); border:1px solid var(--cm-success-bd); display:flex; align-items:center; justify-content:center; color:var(--cm-accent); flex-shrink:0; }
+  .vr-note .ic .ti { font-size:14px; }
+  .vr-note p { margin:0; font:var(--cm-body-sm); color:var(--cm-fg-muted); }
+  .vr-note p strong { color:var(--cm-fg); font-weight:600; }
+  .vr-note .sep { width:1px; height:14px; background:var(--cm-border-strong); }
+  .vr-note a { color:var(--cm-accent); font-weight:600; text-decoration:none; }
+  .vr-note a:hover { text-decoration:underline; }
+
+  /* prototype navigator */
+  .proto-nav { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:300; display:flex; align-items:center; gap:4px; padding:5px; background:var(--cm-side-bg); border:1px solid var(--cm-side-border); border-radius:999px; box-shadow:var(--cm-shadow-pop); }
+  .proto-nav a { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 13px; border-radius:999px; color:var(--cm-side-fg-muted); text-decoration:none; font:500 12px/1 var(--cm-font-sans); white-space:nowrap; }
+  .proto-nav a:hover { color:var(--cm-side-fg); background:rgba(255,255,255,0.06); }
+  .proto-nav a.is-on { background:var(--cm-side-accent); color:var(--cm-side-bg); font-weight:600; }
+  .proto-nav .lbl { color:var(--cm-side-fg-muted); font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; padding:0 8px 0 6px; }
+  .proto-nav .ti { font-size:15px; }
+</style>
+</head>
+<body class="cm">
+
+<div class="hub-shell" data-screen-label="Video Room — Library">
+
+  <!-- Sidebar -->
+  <aside class="hub-side">
+    <div class="hub-brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18V10"/><path d="M12 18V5"/><path d="M19 18v-9"/></svg></div>
+      <div class="body"><div class="name">Clava FC</div><div class="club">First team · 2025/26</div></div>
+      <button class="switch"><i class="ti ti-selector"></i></button>
+    </div>
+    <nav class="hub-nav">
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Overview</div>
+        <a class="hub-nav-item" href="Hub.html"><i class="ti ti-home"></i><span>Staff Hub</span></a>
+        <a class="hub-nav-item" href="Calendar.html"><i class="ti ti-calendar-stats"></i><span>Calendar</span></a>
+        <a class="hub-nav-item" href="#"><i class="ti ti-message-circle"></i><span>Chat &amp; tasks</span><span class="count">12</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Technical</div>
+        <a class="hub-nav-item" href="Planner.html"><i class="ti ti-clipboard-list"></i><span>Planner</span></a>
+        <a class="hub-nav-item" href="Sessions Library.html"><i class="ti ti-list-tree"></i><span>Sessions library</span></a>
+        <a class="hub-nav-item is-active" href="Video Room.html"><i class="ti ti-video"></i><span>Video room</span></a>
+        <a class="hub-nav-item" href="Squad.html"><i class="ti ti-users-group"></i><span>Squad</span></a>
+        <a class="hub-nav-item" href="Availability.html"><i class="ti ti-user-check"></i><span>Availability</span><span class="count">3</span></a>
+        <a class="hub-nav-item" href="Match Reports.html"><i class="ti ti-report-analytics"></i><span>Match reports</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Performance</div>
+        <a class="hub-nav-item" href="Wellness.html"><i class="ti ti-heartbeat"></i><span>Wellness</span></a>
+        <a class="hub-nav-item" href="Load Monitor.html"><i class="ti ti-chart-line"></i><span>Load monitor</span></a>
+        <a class="hub-nav-item" href="GPS Analysis.html"><i class="ti ti-radar-2"></i><span>GPS analysis</span></a>
+        <a class="hub-nav-item" href="Gym Planner.html"><i class="ti ti-barbell"></i><span>Gym planner</span></a>
+        <a class="hub-nav-item" href="Gym Library.html"><i class="ti ti-books"></i><span>Gym library</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Medical</div>
+        <a class="hub-nav-item" href="Injuries.html"><i class="ti ti-bandage"></i><span>Injuries</span><span class="count">2</span></a>
+        <a class="hub-nav-item" href="Physio.html"><i class="ti ti-stethoscope"></i><span>Physio</span></a>
+      </div>
+      <div class="hub-nav-group">
+        <div class="hub-nav-label">Workspace</div>
+        <a class="hub-nav-item" href="#"><i class="ti ti-settings"></i><span>Settings</span></a>
+      </div>
+    </nav>
+    <div class="hub-side-foot">
+      <div class="hub-user">
+        <div class="av">JR</div>
+        <div class="who"><div class="name">Joaquín Reiris</div><div class="role">Performance · Admin</div></div>
+        <i class="ti ti-dots"></i>
+      </div>
+    </div>
+  </aside>
+
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div class="hub-crumb">
+        <i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Video room</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="actions">
+        <button class="cm-icon-btn"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn"><i class="ti ti-settings"></i></button>
+      </div>
+    </div>
+
+    <section class="vr-page">
+
+      <!-- Page header -->
+      <div class="vr-head">
+        <div class="ttl">
+          <h1>Video room</h1>
+          <p><strong>42 videos</strong> · organized and linked to your sessions, players and matches.</p>
+          <div class="vr-note">
+            <span class="ic"><i class="ti ti-cloud"></i></span>
+            <p>Videos live in <strong>your club's Google Drive &amp; Dropbox</strong> — ClavaMetrics doesn't host them, it links &amp; organizes them.</p>
+            <span class="sep"></span>
+            <a href="Video Room - Connect.html">Manage sources</a>
+          </div>
+        </div>
+        <div class="grow"></div>
+      </div>
+
+      <!-- Search + filters + Add -->
+      <div class="vr-bar">
+        <label class="vr-search">
+          <i class="ti ti-search"></i>
+          <input placeholder="Search videos, players, matches…">
+          <span class="cm-kbd">/</span>
+        </label>
+
+        <button class="vr-filter">
+          <i class="ti ti-link"></i><span class="lead">Link</span><span class="val">All types</span><i class="ti ti-chevron-down chev"></i>
+        </button>
+        <button class="vr-filter">
+          <i class="ti ti-calendar"></i><span class="val">Last 30 days</span><i class="ti ti-chevron-down chev"></i>
+        </button>
+        <button class="vr-filter">
+          <i class="ti ti-users-group"></i><span class="val">All teams</span><i class="ti ti-chevron-down chev"></i>
+        </button>
+
+        <div class="vr-right">
+          <span class="vr-count">6 of 42</span>
+          <div class="vr-viewtog">
+            <button class="is-on" title="Grid"><i class="ti ti-layout-grid"></i></button>
+            <button title="List"><i class="ti ti-list"></i></button>
+          </div>
+          <button class="cm-btn is-primary"><i class="ti ti-plus" style="font-size:16px"></i>Add video</button>
+        </div>
+      </div>
+
+      <!-- Grid -->
+      <div class="vr-grid">
+
+        <!-- 1 -->
+        <article class="vr-card">
+          <div class="vr-thumb">
+            <div class="pitch" style="background:radial-gradient(120% 100% at 50% -10%, #1f6b3a 0%, #14502a 45%, #0d3a1f 100%);"></div>
+            <span class="vr-origin drive"><i class="ti ti-brand-google-drive"></i>Drive</span>
+            <span class="vr-type">Match</span>
+            <span class="vr-dur"><i class="ti ti-clock"></i>92:14</span>
+            <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+          </div>
+          <div class="vr-body">
+            <div class="top">
+              <h3>Clava FC vs. Crotenlo — Full match</h3>
+              <button class="more"><i class="ti ti-dots"></i></button>
+            </div>
+            <div class="vr-meta"><i class="ti ti-calendar-event"></i>12 Oct 2025<span class="dotsep"></span>1080p</div>
+            <div class="vr-links">
+              <span class="vr-chip match"><i class="ti ti-ball-football"></i>Match · vs Crotenlo</span>
+              <span class="vr-chip session"><i class="ti ti-clipboard-list"></i>Session · Review</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 2 -->
+        <article class="vr-card">
+          <div class="vr-thumb">
+            <div class="pitch" style="background:radial-gradient(120% 110% at 70% 0%, #2a527d 0%, #1c3a5c 50%, #122740 100%);"></div>
+            <span class="vr-origin dropbox"><i class="ti ti-brand-dropbox"></i>Dropbox</span>
+            <span class="vr-type">Clip</span>
+            <span class="vr-dur"><i class="ti ti-clock"></i>03:48</span>
+            <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+          </div>
+          <div class="vr-body">
+            <div class="top">
+              <h3>Pressing triggers — 2nd half breakdown</h3>
+              <button class="more"><i class="ti ti-dots"></i></button>
+            </div>
+            <div class="vr-meta"><i class="ti ti-calendar-event"></i>10 Oct 2025<span class="dotsep"></span>Tactical</div>
+            <div class="vr-links">
+              <span class="vr-chip session"><i class="ti ti-clipboard-list"></i>Session · Unit meeting</span>
+              <span class="vr-chip match"><i class="ti ti-ball-football"></i>Match · vs Crotenlo</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 3 -->
+        <article class="vr-card">
+          <div class="vr-thumb">
+            <div class="pitch" style="background:radial-gradient(120% 100% at 30% 10%, #6d5224 0%, #4d3a18 50%, #34280f 100%);"></div>
+            <span class="vr-origin drive"><i class="ti ti-brand-google-drive"></i>Drive</span>
+            <span class="vr-type">Training</span>
+            <span class="vr-dur"><i class="ti ti-clock"></i>18:32</span>
+            <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+          </div>
+          <div class="vr-body">
+            <div class="top">
+              <h3>Rondo 4v2 — high tempo finishing drill</h3>
+              <button class="more"><i class="ti ti-dots"></i></button>
+            </div>
+            <div class="vr-meta"><i class="ti ti-calendar-event"></i>09 Oct 2025<span class="dotsep"></span>Field 2</div>
+            <div class="vr-links">
+              <span class="vr-chip session"><i class="ti ti-clipboard-list"></i>Session · MD-2</span>
+              <span class="vr-chip player"><i class="ti ti-user"></i>Player · Sosa</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 4 -->
+        <article class="vr-card">
+          <div class="vr-thumb">
+            <div class="pitch" style="background:radial-gradient(120% 100% at 60% -10%, #5a2440 0%, #401930 50%, #2a1020 100%);"></div>
+            <span class="vr-origin dropbox"><i class="ti ti-brand-dropbox"></i>Dropbox</span>
+            <span class="vr-type">Highlight</span>
+            <span class="vr-dur"><i class="ti ti-clock"></i>01:12</span>
+            <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+          </div>
+          <div class="vr-body">
+            <div class="top">
+              <h3>L. Herrera — goal &amp; off-ball runs</h3>
+              <button class="more"><i class="ti ti-dots"></i></button>
+            </div>
+            <div class="vr-meta"><i class="ti ti-calendar-event"></i>06 Oct 2025<span class="dotsep"></span>Individual</div>
+            <div class="vr-links">
+              <span class="vr-chip player"><i class="ti ti-user"></i>Player · Otero</span>
+              <span class="vr-chip match"><i class="ti ti-ball-football"></i>Match · vs River</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 5 -->
+        <article class="vr-card">
+          <div class="vr-thumb">
+            <div class="pitch" style="background:radial-gradient(120% 110% at 50% 0%, #1f6b3a 0%, #15512b 50%, #0d3a1f 100%);"></div>
+            <span class="vr-origin drive"><i class="ti ti-brand-google-drive"></i>Drive</span>
+            <span class="vr-type">Match</span>
+            <span class="vr-dur"><i class="ti ti-clock"></i>94:06</span>
+            <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+          </div>
+          <div class="vr-body">
+            <div class="top">
+              <h3>Clava FC vs. River Sur — Full match</h3>
+              <button class="more"><i class="ti ti-dots"></i></button>
+            </div>
+            <div class="vr-meta"><i class="ti ti-calendar-event"></i>05 Oct 2025<span class="dotsep"></span>1080p</div>
+            <div class="vr-links">
+              <span class="vr-chip match"><i class="ti ti-ball-football"></i>Match · vs River</span>
+              <span class="vr-chip muted">+2 more</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- 6 — unlinked example -->
+        <article class="vr-card">
+          <div class="vr-thumb">
+            <div class="pitch" style="background:radial-gradient(120% 100% at 40% 0%, #334155 0%, #232f3e 50%, #161e29 100%);"></div>
+            <span class="vr-origin dropbox"><i class="ti ti-brand-dropbox"></i>Dropbox</span>
+            <span class="vr-type">Clip</span>
+            <span class="vr-dur"><i class="ti ti-clock"></i>05:27</span>
+            <div class="vr-play"><i class="ti ti-player-play-filled"></i></div>
+          </div>
+          <div class="vr-body">
+            <div class="top">
+              <h3>Untitled clip — uploaded from Dropbox</h3>
+              <button class="more"><i class="ti ti-dots"></i></button>
+            </div>
+            <div class="vr-meta"><i class="ti ti-calendar-event"></i>03 Oct 2025<span class="dotsep"></span>Not organized</div>
+            <div class="vr-links">
+              <span class="vr-chip unlinked"><i class="ti ti-link-off"></i>Sin vincular · Link now</span>
+            </div>
+          </div>
+        </article>
+
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Prototype navigator -->
+<nav class="proto-nav">
+  <span class="lbl">Video room</span>
+  <a href="Video Room - Connect.html"><i class="ti ti-plug"></i>Connect</a>
+  <a class="is-on" href="Video Room.html"><i class="ti ti-layout-grid"></i>Library</a>
+  <a href="Video Detail.html"><i class="ti ti-player-play"></i>Detail</a>
+  <a href="Video Room - Integration.html"><i class="ti ti-arrows-exchange"></i>In context</a>
+</nav>
+
+</body>
+</html>

@@ -1,0 +1,175 @@
+/* ============================================================
+   ClavaMetrics — App shell, sidebar, topbar, brand mark
+   240–248px dark sidebar + flex main. Sticky topbar with blur.
+   ============================================================ */
+
+/* ── App shell ── */
+.cm-shell {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  min-height: 100vh;
+  background: var(--cm-bg);
+}
+.cm-shell-side {
+  background: var(--cm-side-bg);
+  border-right: var(--cm-bw) solid var(--cm-side-border);
+  color: var(--cm-side-fg);
+  display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh;
+  overflow-y: auto;
+}
+.cm-shell-main {
+  display: flex; flex-direction: column;
+  min-width: 0;
+  background: var(--cm-bg);
+}
+
+/* ── Sidebar brand ── */
+.cm-side-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: var(--cm-bw) solid var(--cm-side-border);
+}
+.cm-side-brand-mark {
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  background: var(--cm-side-accent);
+  color: var(--cm-side-bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cm-side-brand-mark svg { width: 18px; height: 18px; }
+.cm-side-brand-name {
+  font: 600 14px/1.1 var(--cm-font-sans);
+  color: var(--cm-side-fg);
+  letter-spacing: -0.01em;
+}
+.cm-side-brand-meta {
+  font: 500 11.5px/1.2 var(--cm-font-mono);
+  color: var(--cm-side-fg-muted);
+  margin-top: 2px;
+}
+
+/* ── Sidebar nav ── */
+.cm-side-nav { padding: 8px 10px; flex: 1; }
+.cm-side-group + .cm-side-group { margin-top: 6px; }
+.cm-side-group-label {
+  font: 500 10.5px/1 var(--cm-font-sans);
+  letter-spacing: var(--cm-tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--cm-side-fg-muted);
+  padding: 10px 10px 6px;
+}
+.cm-side-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6.5px 10px;
+  border-radius: var(--cm-r-3);
+  color: var(--cm-side-fg-muted);
+  text-decoration: none;
+  font: 500 13.5px/1 var(--cm-font-sans);
+  cursor: pointer;
+  transition: background var(--cm-dur-1), color var(--cm-dur-1);
+}
+.cm-side-item:hover { background: var(--cm-side-item-active-bg); color: var(--cm-side-fg); }
+.cm-side-item .ti { font-size: 17px; flex-shrink: 0; opacity: 0.95; }
+.cm-side-item.is-active {
+  background: var(--cm-side-item-active-bg);
+  color: var(--cm-side-item-active-fg);
+  font-weight: 600;
+}
+.cm-side-item .cm-side-count {
+  margin-left: auto;
+  font: var(--cm-mono);
+  color: var(--cm-side-fg-muted);
+}
+.cm-side-item.is-active .cm-side-count { color: var(--cm-side-item-active-fg); opacity: 0.8; }
+
+/* ── Sidebar footer (user + logout) ── */
+.cm-side-foot { border-top: var(--cm-bw) solid var(--cm-side-border); padding: 10px; }
+.cm-side-user {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--cm-r-3); cursor: pointer;
+}
+.cm-side-user:hover { background: var(--cm-side-item-active-bg); }
+.cm-side-user .av {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--cm-side-accent); color: var(--cm-side-bg);
+  display: flex; align-items: center; justify-content: center;
+  font: 600 11px/1 var(--cm-font-sans); flex-shrink: 0;
+}
+.cm-side-user .who { flex: 1; min-width: 0; }
+.cm-side-user .who .name { font: 600 13px/1.2 var(--cm-font-sans); color: var(--cm-side-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-side-user .who .role { font: 500 11px/1.2 var(--cm-font-mono); color: var(--cm-side-fg-muted); margin-top: 2px; }
+.cm-side-user .ti { font-size: 14px; color: var(--cm-side-fg-muted); }
+
+/* ── Topbar ── */
+.cm-topbar {
+  display: flex; align-items: center; gap: 14px;
+  height: 56px; padding: 0 24px;
+  border-bottom: var(--cm-bw) solid var(--cm-border);
+  background: color-mix(in srgb, var(--cm-bg) 92%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+  position: sticky; top: 0; z-index: var(--cm-z-sticky);
+}
+.cm-topbar h1 { font: 600 16px/1 var(--cm-font-sans); letter-spacing: -0.01em; color: var(--cm-fg-strong); }
+.cm-crumb { display: flex; align-items: center; gap: 8px; color: var(--cm-fg-muted); font: var(--cm-body-sm); }
+.cm-crumb .ti { font-size: 14px; }
+.cm-crumb .sep { color: var(--cm-fg-faint); }
+.cm-crumb .here { color: var(--cm-fg-strong); font-weight: 600; }
+.cm-topbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* Topbar search */
+.cm-topbar-search {
+  margin-left: auto;
+  width: 320px;
+  display: flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 10px;
+  background: var(--cm-bg-soft);
+  border: 1px solid var(--cm-border);
+  border-radius: var(--cm-r-3);
+  color: var(--cm-fg-muted);
+  cursor: text;
+  transition: border-color var(--cm-dur-1);
+}
+.cm-topbar-search:hover { border-color: var(--cm-border-strong); }
+.cm-topbar-search input {
+  flex: 1; min-width: 0;
+  border: 0; outline: none; background: transparent;
+  font: var(--cm-body-sm); color: var(--cm-fg);
+}
+.cm-topbar-search input::placeholder { color: var(--cm-fg-faint); }
+.cm-topbar-search .ti { font-size: 16px; }
+
+/* ── Page ── */
+.cm-page { padding: 28px 32px 64px; max-width: 1280px; margin: 0 auto; width: 100%; }
+.cm-page-header { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.cm-page-header h1 { font: var(--cm-h1); letter-spacing: -0.01em; color: var(--cm-fg-strong); }
+.cm-page-header p  { font: var(--cm-body); color: var(--cm-fg-muted); margin-top: 4px; }
+
+/* Section header */
+.cm-section-header { display: flex; align-items: center; gap: 12px; margin: 8px 0 14px; }
+.cm-section-header h2 { font: 600 14px/1 var(--cm-font-sans); letter-spacing: -0.005em; color: var(--cm-fg-strong); }
+.cm-section-header .count { font: 500 12px/1 var(--cm-font-mono); color: var(--cm-fg-faint); }
+.cm-section-header .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* ── Brand mark (rising-bars analytics glyph) ── */
+.cm-logo-mark {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--cm-accent);
+  color: var(--cm-fg-on-accent);
+  display: inline-flex; align-items: center; justify-content: center;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.cm-logo-mark::before {
+  content: "";
+  width: 14px; height: 14px;
+  background:
+    linear-gradient(to top, currentColor 36%, transparent 36%) left bottom / 3px 100% no-repeat,
+    linear-gradient(to top, currentColor 64%, transparent 64%) center bottom / 3px 100% no-repeat,
+    linear-gradient(to top, currentColor 92%, transparent 92%) right bottom / 3px 100% no-repeat;
+  color: var(--cm-fg-on-accent);
+  opacity: 0.95;
+}
