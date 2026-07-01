@@ -100,9 +100,10 @@ function getBodyCoords(area) {
   return null;
 }
 
-  // ── Overview injury heatmap state (fetched once, re-rendered on toggle) ──────
+  // ── Body heatmap + injury-history state (injuries fetched once, in the Overview) ──
   let _injuries = [];
-  let _bodyView = 'front';
+  let _bodyView = 'front';      // #bodymap-overview Front/Back view
+  let _injView = 'front';       // #bodymap-injuries Front/Back view
   let _profile = null;          // player_medical_profile row (reused for sex)
   let _bodySex = 'male';        // silhouette sex: 'male' | 'female'
   let _playerId = null;
@@ -110,18 +111,26 @@ function getBodyCoords(area) {
   const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
   const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
 
+  const overviewCard = () => document.getElementById('bodymap-overview');
+  const injuriesCard = () => document.getElementById('bodymap-injuries');
+
   // Sex is 'female' only if the profile row explicitly says so; anything else
   // (male, null, no row) falls back to 'male'.
   const currentBodySex = () => (_profile && _profile.sex === 'female') ? 'female' : 'male';
-  const bodyImgSrc = () => 'assets/body-' + _bodySex + '-' + _bodyView + '.png';
-  function refreshBodyImg() { const img = document.getElementById('cr-bodyImg'); if (img) img.src = bodyImgSrc(); }
+  function setSilhouette(card, view) {
+    const img = card && card.querySelector('.body-img');
+    if (img) img.src = 'assets/body-' + _bodySex + '-' + view + '.png';
+  }
   function applySexActive() {
     document.querySelectorAll('#cr-sexToggle button[data-sex]')
       .forEach(b => b.classList.toggle('is-active', b.dataset.sex === _bodySex));
   }
 
-  function renderOverviewHeatmap(view) {
-    const svg = document.getElementById('cr-bodySvg');
+  // Draw the injury heatmap into a given #bodymap-* card, looking up its own
+  // .body-img / .body-hotspots (no fixed ids). Hotspots are identical across
+  // cards; only the silhouette changes with sex/view.
+  function renderHeatmap(card, view) {
+    const svg = card && card.querySelector('.body-hotspots');
     if (!svg) return;
     const groups = {};
     arr(_injuries).forEach(inj => {
@@ -146,7 +155,7 @@ function getBodyCoords(area) {
       const pulseCls = g.active ? ' pulse' : '';
       const tip = g.area + ' · ' + g.total + ' ' + (g.total === 1 ? 'injury' : 'injuries') + ' · worst: ' + g.worst;
       const cx = pt[0], cy = pt[1];
-      html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + color +
+      html += '<circle data-area="' + esc(g.area) + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + color +
         '" stroke="var(--cm-surface)" stroke-width="1.5" class="hot-dot' + pulseCls + '"><title>' + esc(tip) + '</title></circle>';
       if (g.total > 1) {
         html += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" ' +
@@ -154,6 +163,109 @@ function getBodyCoords(area) {
       }
     });
     svg.innerHTML = html;
+  }
+
+  function paintCard(card, view) { setSilhouette(card, view); renderHeatmap(card, view); }
+
+  // ── Injury-history tab: mappings, season helper, filters & table ────────────
+  const TISSUE = { muscular: 'Muscle', acl: 'ACL', ligament: 'Ligament', tendon: 'Tendon', bone: 'Bone', other: 'Other' };
+  const MECH = { contact: 'Contact', non_contact: 'Non-contact', overuse: 'Overuse', unknown: '—' };
+  const SEV_PILL = { minor: '', moderate: 'is-warning', severe: 'is-danger' };
+  const STATUS_PILL = { active: ['is-danger', 'Active'], returning: ['is-warning', 'Returning'], cleared: ['is-success', 'Resolved'] };
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+  // Football season (Aug 1 → Jul 31) label from a date → "2025/26".
+  function seasonLabel(iso) {
+    if (!iso) return null;
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const startY = d.getMonth() >= 7 ? y : y - 1; // month index 7 = Aug
+    return startY + '/' + String(startY + 1).slice(2);
+  }
+
+  function tissueLabel(inj) { return inj.injury_category ? (TISSUE[inj.injury_category] || 'Other') : null; }
+
+  function mechLabel(inj) {
+    if (inj.injury_mechanism) return MECH[inj.injury_mechanism] || '—';
+    if (inj.mechanism) return inj.mechanism;
+    return '—';
+  }
+
+  function daysOut(inj) {
+    const start = new Date((inj.start_date || '') + 'T00:00:00');
+    if (isNaN(start.getTime())) return 0;
+    let end;
+    if (inj.returned_date) end = new Date(inj.returned_date + 'T00:00:00');
+    else if (inj.status !== 'cleared') end = new Date(_today.getTime());
+    else end = inj.expected_return ? new Date(inj.expected_return + 'T00:00:00') : new Date(_today.getTime());
+    if (isNaN(end.getTime())) end = new Date(_today.getTime());
+    return Math.max(0, Math.round((end - start) / 86400000));
+  }
+
+  const selVal = id => { const e = document.getElementById(id); return e ? e.value : 'all'; };
+
+  function fillSelect(id, allLabel, values) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="all">' + allLabel + '</option>' +
+      values.map(v => '<option value="' + esc(v) + '">' + esc(v) + '</option>').join('');
+    if (cur && [].some.call(sel.options, o => o.value === cur)) sel.value = cur;
+  }
+
+  function populateInjuryFilters() {
+    const seasons = new Set(), zones = new Set(), tissues = new Set();
+    arr(_injuries).forEach(inj => {
+      const s = seasonLabel(inj.start_date); if (s) seasons.add(s);
+      if (inj.body_area) zones.add(inj.body_area);
+      const t = tissueLabel(inj); if (t) tissues.add(t);
+    });
+    fillSelect('flt-season', 'All seasons', [...seasons].sort().reverse());
+    fillSelect('flt-zone', 'All zones', [...zones].sort());
+    fillSelect('flt-tissue', 'All tissue', [...tissues].sort());
+  }
+
+  function filteredInjuries() {
+    const season = selVal('flt-season'), zone = selVal('flt-zone'), tissue = selVal('flt-tissue');
+    return arr(_injuries).filter(inj => {
+      if (season && season !== 'all' && seasonLabel(inj.start_date) !== season) return false;
+      if (zone && zone !== 'all' && inj.body_area !== zone) return false;
+      if (tissue && tissue !== 'all' && tissueLabel(inj) !== tissue) return false;
+      return true;
+    });
+  }
+
+  function renderInjuryTable() {
+    const tbody = document.getElementById('inj-tbody');
+    if (!tbody) return;
+    const rows = filteredInjuries().slice()
+      .sort((a, b) => String(b.start_date || '').localeCompare(String(a.start_date || '')));
+    setText('inj-count', rows.length + ' ' + (rows.length === 1 ? 'injury' : 'injuries'));
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="9" class="cr-empty">No injuries recorded</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(inj => {
+      const sev = String(inj.severity || 'minor').toLowerCase();
+      const sevPill = '<span class="cm-pill ' + (SEV_PILL[sev] || '') + '"><span class="cm-dot"></span>' + esc(cap(sev)) + '</span>';
+      const st = STATUS_PILL[inj.status] || ['', inj.status || '—'];
+      const statusPill = '<span class="cm-pill ' + st[0] + '"><span class="cm-dot"></span>' + esc(st[1]) + '</span>';
+      const rtp = inj.returned_date ? esc(fmtDate(inj.returned_date))
+        : (inj.expected_return ? '~' + esc(fmtDate(inj.expected_return)) : '—');
+      const diagnosis = inj.sub_classification || inj.injury_type || '—';
+      return '<tr>' +
+        '<td class="c-date">' + esc(fmtDate(inj.start_date) || '—') + '</td>' +
+        '<td class="cr-zone">' + esc(inj.body_area || '—') + '</td>' +
+        '<td>' + esc(tissueLabel(inj) || '—') + '</td>' +
+        '<td class="c-dx">' + esc(diagnosis) + '</td>' +
+        '<td class="c-muted">' + esc(mechLabel(inj)) + '</td>' +
+        '<td>' + sevPill + '</td>' +
+        '<td class="num">' + daysOut(inj) + '</td>' +
+        '<td>' + rtp + '</td>' +
+        '<td>' + statusPill + '</td>' +
+        '</tr>';
+    }).join('');
   }
 
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
@@ -189,7 +301,7 @@ function getBodyCoords(area) {
     if (issue) issue.innerHTML = '<div class="cr-issue-ic"><i class="ti ti-check"></i></div><div><h3>No active issue</h3></div>';
     setHTML('kpi-row', '');
     setHTML('timeline', '');
-    setHTML('cr-bodySvg', ''); // clear hotspots only — keep the silhouette img
+    document.querySelectorAll('.body-hotspots').forEach(s => { s.innerHTML = ''; }); // clear hotspots, keep silhouettes
 
     // detail tables (not yet wired) → empty state
     setHTML('inj-tbody', emptyRow(9));
@@ -216,16 +328,40 @@ function getBodyCoords(area) {
     });
   });
 
-  // ── Overview heatmap Front/Back toggle ──────────────────────────────────────
-  document.querySelectorAll('#bodymap-overview .bm-toggle button[data-view]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const view = btn.dataset.view === 'back' ? 'back' : 'front';
-      _bodyView = view;
-      document.querySelectorAll('#bodymap-overview .bm-toggle button[data-view]')
-        .forEach(b => b.classList.toggle('is-active', b === btn));
-      refreshBodyImg();
-      renderOverviewHeatmap(view);
+  // ── Per-card Front/Back toggles (Overview + Injury history) ─────────────────
+  function wireViewToggle(cardId, getView, setView) {
+    document.querySelectorAll('#' + cardId + ' .bm-toggle button[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const view = btn.dataset.view === 'back' ? 'back' : 'front';
+        setView(view);
+        document.querySelectorAll('#' + cardId + ' .bm-toggle button[data-view]')
+          .forEach(b => b.classList.toggle('is-active', b === btn));
+        paintCard(document.getElementById(cardId), view);
+      });
     });
+  }
+  wireViewToggle('bodymap-overview', () => _bodyView, v => { _bodyView = v; });
+  wireViewToggle('bodymap-injuries', () => _injView, v => { _injView = v; });
+
+  // ── Injury heatmap click-to-filter (injuries card only) ─────────────────────
+  (function () {
+    const card = injuriesCard();
+    const svg = card && card.querySelector('.body-hotspots');
+    if (!svg) return;
+    svg.addEventListener('click', e => {
+      const c = e.target.closest('[data-area]');
+      if (!c) return;
+      const area = c.getAttribute('data-area');
+      const sel = document.getElementById('flt-zone');
+      if (sel) sel.value = [].some.call(sel.options, o => o.value === area) ? area : 'all';
+      renderInjuryTable();
+    });
+  })();
+
+  // ── Injury history filters → re-render table ────────────────────────────────
+  ['flt-season', 'flt-zone', 'flt-tissue'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.addEventListener('change', renderInjuryTable);
   });
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
@@ -237,8 +373,9 @@ function getBodyCoords(area) {
       const prev = _bodySex;
       _bodySex = sex;
       applySexActive();
-      refreshBodyImg();
-      renderOverviewHeatmap(_bodyView); // hotspots are sex-independent; keep them in sync
+      // silhouette is shared by both cards; repaint each with its own view
+      paintCard(overviewCard(), _bodyView);
+      paintCard(injuriesCard(), _injView);
 
       if (!_clubId || !_playerId) return;
       try {
@@ -250,8 +387,8 @@ function getBodyCoords(area) {
         console.error('[Clinical record] could not persist body sex', e);
         _bodySex = prev; // revert on failure (e.g. no write permission)
         applySexActive();
-        refreshBodyImg();
-        renderOverviewHeatmap(_bodyView);
+        paintCard(overviewCard(), _bodyView);
+        paintCard(injuriesCard(), _injView);
       }
     });
   });
@@ -416,7 +553,8 @@ function getBodyCoords(area) {
       // silhouette sex from the profile row (reused, no extra fetch)
       _bodySex = currentBodySex();
       applySexActive();
-      refreshBodyImg();
+      setSilhouette(overviewCard(), _bodyView);
+      setSilhouette(injuriesCard(), _injView);
 
       // ── Medications & supplements ──
       try {
@@ -443,7 +581,10 @@ function getBodyCoords(area) {
           .eq('club_id', clubId).eq('player_id', playerId);
         _injuries = arr(data);
       } catch (_) { _injuries = []; }
-      renderOverviewHeatmap(_bodyView);
+      paintCard(overviewCard(), _bodyView);
+      paintCard(injuriesCard(), _injView);
+      populateInjuryFilters();
+      renderInjuryTable();
     } finally {
       doneLoading();
     }
