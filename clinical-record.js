@@ -441,6 +441,46 @@ function getBodyCoords(area) {
     }).join('');
   }
 
+  // ── Imaging & studies tab ───────────────────────────────────────────────────
+  const MODALITY_LABEL = { mri: 'MRI', ultrasound: 'Ultrasound', xray: 'X-ray', ct: 'CT', lab: 'Lab', other: 'Other' };
+  const MODALITY_ICON = { mri: 'ti-scan', ultrasound: 'ti-wave-sine', xray: 'ti-bone', ct: 'ti-body-scan', lab: 'ti-test-pipe', other: 'ti-file-description' };
+  const IMG_RE = /\.(jpe?g|png|gif|webp|avif|bmp|svg)(\?|#|$)/i;
+  function renderStudies(rows) {
+    rows = arr(rows);
+    const grid = document.getElementById('img-grid');
+    if (!grid) return;
+    setText('img-count', rows.length + ' ' + (rows.length === 1 ? 'study' : 'studies'));
+    if (!rows.length) {
+      grid.innerHTML = '<div class="cr-empty" style="padding:8px 0">No studies recorded</div>';
+      return;
+    }
+    grid.innerHTML = rows.map(s => {
+      const label = MODALITY_LABEL[s.modality] || (s.modality ? cap(s.modality) : 'Study');
+      const isImg = s.file_url && IMG_RE.test(String(s.file_url));
+      const thumb = isImg
+        ? '<div class="cr-img-thumb" style="background-image:url(\'' + esc(s.file_url) + '\');background-size:cover;background-position:center"></div>'
+        : '<div class="cr-img-thumb"><i class="ti ' + (MODALITY_ICON[s.modality] || 'ti-photo') + '"></i></div>';
+      const find = s.finding
+        ? '<div class="cr-img-find" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.finding) + '</div>'
+        : '';
+      const open = s.file_url
+        ? '<a class="cr-img-open" href="' + esc(s.file_url) + '" target="_blank" rel="noopener" style="font:500 12px/1 var(--cm-font-sans)">Open</a>'
+        : '';
+      return '<div class="cm-card cr-img-card">' +
+        thumb +
+        '<div class="cr-img-body">' +
+          '<div class="cr-img-top">' +
+            '<span style="font:600 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">' + esc(label) + '</span>' +
+            '<span class="cr-img-date">' + esc(fmtDate(s.study_date) || '—') + '</span>' +
+          '</div>' +
+          '<div class="cr-img-area">' + esc(s.body_area || '—') + '</div>' +
+          find +
+        '</div>' +
+        open +
+        '</div>';
+    }).join('');
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -794,6 +834,15 @@ function getBodyCoords(area) {
         }
         renderTreatments(rows, nameMap);
       } catch (_) { renderTreatments([], {}); }
+
+      // ── Imaging & studies (fetched once) ──
+      try {
+        const { data } = await window.sb.from('medical_studies')
+          .select('modality,study_date,body_area,finding,file_url,related_injury_id')
+          .eq('club_id', clubId).eq('player_id', playerId)
+          .order('study_date', { ascending: false });
+        renderStudies(data);
+      } catch (_) { renderStudies([]); }
     } finally {
       doneLoading();
     }
