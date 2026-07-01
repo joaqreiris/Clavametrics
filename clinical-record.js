@@ -268,6 +268,38 @@ function getBodyCoords(area) {
     }).join('');
   }
 
+  // ── Surgical history tab ────────────────────────────────────────────────────
+  const LAT_SUFFIX = { left: ' · L', right: ' · R', bilateral: ' · Bilateral' };
+  function renderSurgeries(rows) {
+    rows = arr(rows);
+    const tbody = document.getElementById('surg-tbody');
+    if (!tbody) return;
+    setText('surg-count', rows.length + ' ' + (rows.length === 1 ? 'procedure' : 'procedures'));
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">No procedures recorded</td></tr>';
+      return;
+    }
+    const byId = {};
+    arr(_injuries).forEach(i => { if (i && i.id) byId[i.id] = i; });
+    tbody.innerHTML = rows.map(s => {
+      const proc = esc(s.procedure || '—') + (LAT_SUFFIX[s.laterality] || '');
+      const sc = [s.surgeon, s.clinic].filter(Boolean).join(' · ');
+      let rel = '—';
+      if (s.related_injury_id && byId[s.related_injury_id]) {
+        const inj = byId[s.related_injury_id];
+        rel = esc((inj.sub_classification || inj.injury_type || '—') + ' · ' + (inj.body_area || '—'));
+      }
+      return '<tr>' +
+        '<td class="c-date">' + esc(fmtDate(s.surgery_date) || '—') + '</td>' +
+        '<td class="c-dx">' + proc + '</td>' +
+        '<td>' + (sc ? esc(sc) : '—') + '</td>' +
+        '<td>' + (s.implants ? esc(s.implants) : '—') + '</td>' +
+        '<td>' + (s.outcome ? esc(s.outcome) : '—') + '</td>' +
+        '<td class="c-muted">' + rel + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -574,10 +606,10 @@ function getBodyCoords(area) {
         renderScreenings(data);
       } catch (_) { renderScreenings([]); }
 
-      // ── Injuries → Overview body heatmap (fetched once) ──
+      // ── Injuries → Overview heatmap + Injury history tab (fetched once) ──
       try {
         const { data } = await window.sb.from('injuries')
-          .select('body_area,severity,status')
+          .select('id,start_date,body_area,severity,status,injury_category,sub_classification,injury_type,injury_mechanism,mechanism,returned_date,expected_return')
           .eq('club_id', clubId).eq('player_id', playerId);
         _injuries = arr(data);
       } catch (_) { _injuries = []; }
@@ -585,6 +617,15 @@ function getBodyCoords(area) {
       paintCard(injuriesCard(), _injView);
       populateInjuryFilters();
       renderInjuryTable();
+
+      // ── Surgical history tab (fetched once; related injury looked up in _injuries) ──
+      try {
+        const { data } = await window.sb.from('surgeries')
+          .select('procedure,surgery_date,laterality,surgeon,clinic,implants,outcome,related_injury_id,notes')
+          .eq('club_id', clubId).eq('player_id', playerId)
+          .order('surgery_date', { ascending: false });
+        renderSurgeries(data);
+      } catch (_) { renderSurgeries([]); }
     } finally {
       doneLoading();
     }
