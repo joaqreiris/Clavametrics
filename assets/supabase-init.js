@@ -22,13 +22,30 @@
   // (default 'id') so ranges are CONSISTENT across pages (PostgREST needs an explicit
   // order with range, else pages can overlap/skip). Returns the full array (throws on the
   // first-page error; later-page errors stop paging and return what was gathered).
+  // ── Instrumentation (perf audit) — cheap counters to measure round-trips ────────
+  // Read with window.cmFetchStatsDump() in the console; reset with .reset(). One entry
+  // per label: { calls, pages (round-trips), rows, ms }. Use to compare before/after a
+  // dashboard load — the goal is fewer calls/pages/rows for the same view.
+  const _stats = (window.__cmFetchStats = window.__cmFetchStats || {});
+  window.cmFetchStatsDump = function () {
+    const t = { calls: 0, pages: 0, rows: 0, ms: 0 };
+    for (const k in _stats) { t.calls += _stats[k].calls; t.pages += _stats[k].pages; t.rows += _stats[k].rows; t.ms += _stats[k].ms; }
+    console.table({ ..._stats, TOTAL: { ...t, ms: Math.round(t.ms) } });
+    return _stats;
+  };
+  window.cmFetchStatsDump.reset = function () { for (const k in _stats) delete _stats[k]; };
+
   window.cmFetchAll = async function (queryFactory, opts) {
     const pageSize = (opts && opts.pageSize) || 1000;
     const maxPages = (opts && opts.maxPages) || 50;          // 50k-row safety ceiling
     const label    = (opts && opts.label)    || 'cmFetchAll';
     const orderBy  = (opts && 'orderBy' in opts) ? opts.orderBy : 'id';
+    const _s = (_stats[label] = _stats[label] || { calls: 0, pages: 0, rows: 0, ms: 0 });
+    const _t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
+    _s.calls++;
     const all = [];
     for (let page = 0; page < maxPages; page++) {
+      _s.pages++;
       const from = page * pageSize, to = from + pageSize - 1;
       let qb = queryFactory();
       if (orderBy) qb = qb.order(orderBy, { ascending: true });
@@ -45,6 +62,8 @@
         console.warn(`[cmFetchAll:${label}] hit maxPages=${maxPages} (${all.length} rows) — result may be truncated`);
       }
     }
+    _s.rows += all.length;
+    if (_t0) _s.ms += performance.now() - _t0;
     return all;
   };
 
