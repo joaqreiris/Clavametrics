@@ -398,6 +398,49 @@ function getBodyCoords(area) {
     }
   }
 
+  // ── Treatment log tab ───────────────────────────────────────────────────────
+  const RESP_PILL = { improving: ['is-success', 'Improving'], stable: ['', 'Stable'], worsening: ['is-danger', 'Worsening'] };
+  function modalitiesLabel(m) {
+    if (!Array.isArray(m)) return '—';
+    const parts = m.map(x => {
+      if (x == null) return null;
+      if (typeof x === 'string') return x;
+      if (typeof x === 'object') return x.name || x.label || null;
+      return String(x);
+    }).filter(Boolean);
+    return parts.length ? parts.join(', ') : '—';
+  }
+  function renderTreatments(rows, nameMap) {
+    rows = arr(rows); nameMap = nameMap || {};
+    const tbody = document.getElementById('tx-tbody');
+    if (!tbody) return;
+    setText('tx-count', rows.length + ' ' + (rows.length === 1 ? 'treatment' : 'treatments'));
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">No treatments recorded</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(t => {
+      const type = t.type || (t.treatment_type === 'preventive' ? 'Preventive' : 'Rehab');
+      let pain = '—';
+      if (t.pain_pre != null && t.pain_post != null) {
+        const color = t.pain_post < t.pain_pre ? 'var(--cm-success)'
+          : t.pain_post > t.pain_pre ? 'var(--cm-danger)' : 'var(--cm-fg-strong)';
+        pain = '<span style="font:600 13px/1 var(--cm-font-mono);color:' + color + '">' + t.pain_pre + ' → ' + t.pain_post + '</span>';
+      }
+      const who = nameMap[t.performed_by || t.physio_id] || '—';
+      const rp = RESP_PILL[t.player_status];
+      const resp = rp ? '<span class="cm-pill ' + rp[0] + '"><span class="cm-dot"></span>' + rp[1] + '</span>' : '—';
+      return '<tr>' +
+        '<td class="c-date">' + esc(fmtDate(t.date) || '—') + '</td>' +
+        '<td>' + esc(type) + '</td>' +
+        '<td class="c-muted">' + esc(modalitiesLabel(t.modalities)) + '</td>' +
+        '<td class="num">' + pain + '</td>' +
+        '<td>' + esc(who) + '</td>' +
+        '<td>' + resp + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -733,6 +776,24 @@ function getBodyCoords(area) {
           .order('start_date', { ascending: false });
         renderEpisodes(data);
       } catch (_) { renderEpisodes([]); }
+
+      // ── Treatment log (fetched once; performer names resolved from profiles) ──
+      try {
+        const { data: txs } = await window.sb.from('treatments')
+          .select('date,type,treatment_type,modalities,pain_pre,pain_post,performed_by,physio_id,player_status,adaptation_notes')
+          .eq('club_id', clubId).eq('player_id', playerId)
+          .order('date', { ascending: false });
+        const rows = arr(txs);
+        const ids = [...new Set(rows.map(t => t.performed_by || t.physio_id).filter(Boolean))];
+        const nameMap = {};
+        if (ids.length) {
+          try {
+            const { data: profs } = await window.sb.from('profiles').select('id,full_name').in('id', ids);
+            arr(profs).forEach(pr => { if (pr && pr.id) nameMap[pr.id] = pr.full_name || '—'; });
+          } catch (_) {}
+        }
+        renderTreatments(rows, nameMap);
+      } catch (_) { renderTreatments([], {}); }
     } finally {
       doneLoading();
     }
