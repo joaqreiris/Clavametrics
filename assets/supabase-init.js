@@ -35,6 +35,17 @@
   };
   window.cmFetchStatsDump.reset = function () { for (const k in _stats) delete _stats[k]; };
 
+  // ── GPS resolver cache invalidation ─────────────────────────────────────────────
+  // The GPS dashboard shares one fetch across cards via window.__gpResolverCache
+  // (getSessionIds/fetchReports keyed by club/team/scope/range/sessionIds). Call this
+  // after anything that changes the underlying data — GPS import/sync, flag/un-flag a
+  // report, assign rivals (creates sessions) — so the next dashboard refresh reads fresh
+  // data instead of a cached promise. Safe no-op if the cache was never created. Does NOT
+  // break cross-card sharing: the cache simply repopulates on the next resolve.
+  window.cmInvalidateGpsCache = function () {
+    try { window.__gpResolverCache && window.__gpResolverCache.clear(); } catch (e) { /* noop */ }
+  };
+
   window.cmFetchAll = async function (queryFactory, opts) {
     const pageSize = (opts && opts.pageSize) || 1000;
     const maxPages = (opts && opts.maxPages) || 50;          // 50k-row safety ceiling

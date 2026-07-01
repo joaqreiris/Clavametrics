@@ -3660,7 +3660,9 @@ window._gpRoster = _gpRoster;
 // ── refreshDashboard — reusable after import ──────────────────
 // opts.sessionId: if provided, update date range to cover that session
 window.refreshDashboard = async function (opts = {}) {
-  if (window.__gpResolverCache) window.__gpResolverCache.clear();
+  // Invalidate the shared resolver cache so a refresh always reads fresh data (post-import,
+  // post-flag, etc.). cmInvalidateGpsCache is the single entry point (supabase-init.js).
+  (window.cmInvalidateGpsCache || (() => window.__gpResolverCache?.clear()))();
   const clubId = window._gpClubId || (await window.getClubId());
   if (!clubId) return;
   window._gpClubId = clubId;
