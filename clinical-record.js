@@ -481,6 +481,37 @@ function getBodyCoords(area) {
     }).join('');
   }
 
+  // ── Documents tab (signed URLs generated on-demand at click) ────────────────
+  const DOC_ICON = { report: 'ti-file-text', consent: 'ti-file-check', certificate: 'ti-certificate', insurance: 'ti-shield', other: 'ti-file' };
+  const DOC_LABEL = { report: 'Report', consent: 'Consent', certificate: 'Certificate', insurance: 'Insurance', other: 'Other' };
+  function renderDocuments(rows) {
+    rows = arr(rows);
+    const list = document.getElementById('doc-list');
+    if (!list) return;
+    setText('doc-count', rows.length + ' ' + (rows.length === 1 ? 'file' : 'files'));
+    if (!rows.length) {
+      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">No documents</div>';
+      return;
+    }
+    list.innerHTML = rows.map(d => {
+      const icon = DOC_ICON[d.type] || 'ti-file';
+      const label = DOC_LABEL[d.type] || (d.type ? cap(d.type) : 'Document');
+      const meta = [label, fmtDate(d.doc_date)].filter(Boolean).join(' · ');
+      const hasFile = !!d.file_path;
+      const attrs = hasFile
+        ? ' data-path="' + esc(d.file_path) + '" style="cursor:pointer"'
+        : ' style="cursor:default;opacity:.6" title="No file attached"';
+      return '<div class="cr-doc"' + attrs + '>' +
+        '<div class="cr-doc-ic"><i class="ti ' + icon + '"></i></div>' +
+        '<div class="cr-doc-main">' +
+          '<div class="cr-doc-name">' + esc(d.title || 'Untitled') + '</div>' +
+          '<div class="cr-doc-meta">' + esc(meta || '—') + '</div>' +
+        '</div>' +
+        (hasFile ? '<i class="ti ti-external-link" style="color:var(--cm-fg-faint);margin-left:auto"></i>' : '') +
+        '</div>';
+    }).join('');
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -576,6 +607,24 @@ function getBodyCoords(area) {
     const sel = document.getElementById(id);
     if (sel) sel.addEventListener('change', renderInjuryTable);
   });
+
+  // ── Documents: open on click via on-demand signed URL (delegated) ───────────
+  (function () {
+    const list = document.getElementById('doc-list');
+    if (!list) return;
+    list.addEventListener('click', async e => {
+      const row = e.target.closest('.cr-doc[data-path]');
+      if (!row) return;
+      const path = row.getAttribute('data-path');
+      if (!path) return;
+      try {
+        const { data } = await window.sb.storage.from('medical-documents').createSignedUrl(path, 3600);
+        if (data && data.signedUrl) window.open(data.signedUrl, '_blank');
+      } catch (err) {
+        console.error('[Clinical record] could not open document', err);
+      }
+    });
+  })();
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
   applySexActive(); // default 'male' active until the profile row resolves
@@ -843,6 +892,15 @@ function getBodyCoords(area) {
           .order('study_date', { ascending: false });
         renderStudies(data);
       } catch (_) { renderStudies([]); }
+
+      // ── Documents (fetched once; signed URLs generated on click) ──
+      try {
+        const { data } = await window.sb.from('medical_documents')
+          .select('type,title,file_path,doc_date,uploaded_by')
+          .eq('club_id', clubId).eq('player_id', playerId)
+          .order('doc_date', { ascending: false });
+        renderDocuments(data);
+      } catch (_) { renderDocuments([]); }
     } finally {
       doneLoading();
     }
