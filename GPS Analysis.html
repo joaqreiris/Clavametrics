@@ -8522,6 +8522,59 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 <script src="assets/gp-builder/gp-filterbar.js" defer></script>
 
 <script>
+/* P3g — Lazy-render de chart cards (config-driven / builder).
+   Envuelve UNA sola vez window.GpBuilder.resolveAndRenderCard para que una card sólo
+   resuelva (fetch + aggregate + Chart.js) cuando entra —o está por entrar— al viewport.
+   Cards arriba del fold se dibujan enseguida (el observer dispara al observar); las de
+   más abajo o de otras vistas se difieren hasta el scroll / cambio de vista. Reduce el
+   trabajo inicial en dashboards largos sin cambiar datos ni comportamiento: mismo
+   entrypoint, los call sites son fire-and-forget, y el cache compartido evita N+1 cuando
+   varias cards resuelven el mismo rango.
+   Kill switch: setear window.__gpLazyRender = false para volver al render inmediato. */
+(function () {
+  if (window.__gpLazyRenderInstalled) return;
+  window.__gpLazyRenderInstalled = true;
+  var PREFETCH_MARGIN = '800px';   // pre-render antes de que la card entre al viewport
+
+  function wrap() {
+    var GB = window.GpBuilder;
+    if (!GB || typeof GB.resolveAndRenderCard !== 'function') return false;
+    if (GB.__lazyWrapped) return true;
+    GB.__lazyWrapped = true;
+    // Sin soporte de IO o kill switch → dejar el render inmediato original.
+    if (window.__gpLazyRender === false || typeof IntersectionObserver === 'undefined') return true;
+
+    var orig = GB.resolveAndRenderCard.bind(GB);
+    GB.resolveAndRenderCard = function (el, config) {
+      if (!el || !(el instanceof Element)) return orig(el, config);
+      // Re-render (edición, cambio de filtro): limpiar observer previo y re-observar con la
+      // nueva config. Si la card ya está visible, el observer dispara casi inmediato.
+      if (el.__lazyObs) { try { el.__lazyObs.disconnect(); } catch (e) {} el.__lazyObs = null; }
+      var io = new IntersectionObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          if (entries[i].isIntersecting) {
+            if (el.__lazyObs) { try { el.__lazyObs.disconnect(); } catch (e) {} el.__lazyObs = null; }
+            orig(el, config);
+            return;
+          }
+        }
+      }, { root: null, rootMargin: '0px 0px ' + PREFETCH_MARGIN + ' 0px', threshold: 0 });
+      el.__lazyObs = io;
+      io.observe(el);
+      return undefined;   // fire-and-forget: ningún call site hace await del resultado
+    };
+    return true;
+  }
+
+  // gp-builder.js carga con defer → puede no existir aún. Reintentar hasta que aparezca.
+  if (!wrap()) {
+    var tries = 0;
+    var iv = setInterval(function () { if (wrap() || ++tries > 150) clearInterval(iv); }, 100);
+  }
+})();
+</script>
+
+<script>
   const titles = {
     ind:  ['· Player Week Report', '— week vs match reference'],
     grp:  ['· Session Control',    '— daily training review · squad-wide'],
