@@ -12847,25 +12847,58 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
 
       await _vsEnsureSessions(clubId);
 
-      let reports;
-      try {
-        reports = await window.cmFetchAll(() => _scopeTeam(window.sb
-          .from('gps_reports')
-          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
-          .eq('club_id', clubId)
-          .eq('is_invalid', false)
-          .in('session_id', [sessionId, refId])), { label: 'ref-compare' });
-      } catch (error) { console.error('[ref compare] query failed:', error); throw error; }
+      const _ids = [sessionId, refId];
+      const _roster = (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) ? window._gpPlayerIds : null;
 
-      const curRpts  = (reports || []).filter(r => r.session_id === sessionId);
-      const refRpts  = (reports || []).filter(r => r.session_id === refId);
+      // Prefer server-side per-session aggregation (RPC gps_session_agg, migración 114);
+      // raw fallback si no está desplegado. Probe una vez por carga (window.__cmRpcAvail).
+      window.__cmRpcAvail = window.__cmRpcAvail || {};
+      let aggBySession = null;
+      if (window.__cmRpcAvail.gps_session_agg !== false) {
+        try {
+          const { data: aggRows, error: aggErr } = await window.sb.rpc('gps_session_agg', {
+            p_club_id: clubId, p_session_ids: _ids, p_player_ids: _roster,
+          });
+          if (aggErr) throw aggErr;
+          window.__cmRpcAvail.gps_session_agg = true;
+          if (Array.isArray(aggRows)) { aggBySession = {}; for (const a of aggRows) aggBySession[a.session_id] = a; }
+        } catch (aggErr) {
+          window.__cmRpcAvail.gps_session_agg = false;
+          console.warn('[ref compare] gps_session_agg RPC unavailable — raw fallback:', aggErr?.message || aggErr);
+          aggBySession = null;
+        }
+      }
+
+      let reports = null;
+      if (!aggBySession) {
+        try {
+          reports = await window.cmFetchAll(() => _scopeTeam(window.sb
+            .from('gps_reports')
+            .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
+            .eq('club_id', clubId)
+            .eq('is_invalid', false)
+            .in('session_id', _ids)), { label: 'ref-compare' });
+        } catch (error) { console.error('[ref compare] query failed:', error); throw error; }
+      }
+
+      // Squad agg de una sesión+métrica: RPC (columna precalc, max para pico) o crudo (JS).
+      const _sessAgg = (sid, key) => {
+        if (aggBySession) {
+          const a = aggBySession[sid];
+          if (!a) return null;
+          const v = a[_VS_PEAK.has(key) ? key + '_max' : key + '_avg'];
+          return (v == null || isNaN(v)) ? null : Number(v);
+        }
+        return _vsSquadAgg((reports || []).filter(r => r.session_id === sid), key);
+      };
+
       const refSess  = _vsAllSess.find(s => s.id === refId);
       const refLabel = refSess ? `${refSess.session_date} · ${refSess.title || _vsMdCode(refSess) || '—'}` : refId;
       const mdCode   = refSess ? (_vsMdCode(refSess) || '') : '';
 
       const rows = _vsMetrics.filter(k => _VS_CORE_COLS.has(k)).map(key => {
-        const cur  = _vsSquadAgg(curRpts, key);
-        const ref  = _vsSquadAgg(refRpts, key);
+        const cur  = _sessAgg(sessionId, key);
+        const ref  = _sessAgg(refId, key);
         const unit = _vsUnit(key);
 
         if (cur == null || ref == null) {
