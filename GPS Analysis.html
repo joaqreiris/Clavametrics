@@ -12282,33 +12282,70 @@ document.getElementById('gpCatalogBtn')?.addEventListener('click', openGpsMetric
         return;
       }
 
-      // Batch-fetch reports for current + all equivalents
+      // Batch per-session squad aggregation. Prefer the server-side RPC (gps_session_agg,
+      // migración 114): 1 fila por sesión en vez de squad×N filas crudas. Si el RPC no está
+      // desplegado, cae al fetch crudo + agg en JS — números idénticos en ambos caminos.
       const allIds = [sessionId, ...equivalents.map(s => s.id)];
-      let reports;
-      try {
-        reports = await window.cmFetchAll(() => _scopeTeam(window.sb
-          .from('gps_reports')
-          .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
-          .eq('club_id', clubId)
-          .eq('is_invalid', false)
-          .in('session_id', allIds)), { label: 'squad-vs' });
-      } catch (rErr) { console.error('[squad vs] query failed:', rErr); throw rErr; }
+      const _roster = (Array.isArray(window._gpPlayerIds) && window._gpPlayerIds.length) ? window._gpPlayerIds : null;
 
-      // Squad avg of current session per metric
-      const curRpts = (reports || []).filter(r => r.session_id === sessionId);
+      // Probe el RPC una sola vez por carga: si no está desplegado, no reintentar en cada
+      // render (evita un round-trip fallido + ruido de consola hasta aplicar la migración).
+      window.__cmRpcAvail = window.__cmRpcAvail || {};
+      let aggBySession = null;   // { [session_id]: { <col>_avg, max_speed_max, … } }
+      if (window.__cmRpcAvail.gps_session_agg !== false) {
+        try {
+          const { data: aggRows, error: aggErr } = await window.sb.rpc('gps_session_agg', {
+            p_club_id: clubId, p_session_ids: allIds, p_player_ids: _roster,
+          });
+          if (aggErr) throw aggErr;
+          window.__cmRpcAvail.gps_session_agg = true;
+          if (Array.isArray(aggRows)) {
+            aggBySession = {};
+            for (const a of aggRows) aggBySession[a.session_id] = a;
+          }
+        } catch (aggErr) {
+          window.__cmRpcAvail.gps_session_agg = false;
+          console.warn('[squad vs] gps_session_agg RPC unavailable — raw fallback:', aggErr?.message || aggErr);
+          aggBySession = null;
+        }
+      }
+
+      let reports = null;
+      if (!aggBySession) {
+        try {
+          reports = await window.cmFetchAll(() => _scopeTeam(window.sb
+            .from('gps_reports')
+            .select('session_id,player_id,total_distance,high_speed_distance,very_high_speed_distance,sprint_distance,sprint_count,max_speed,accelerations,decelerations,player_load,time_played')
+            .eq('club_id', clubId)
+            .eq('is_invalid', false)
+            .in('session_id', allIds)), { label: 'squad-vs' });
+        } catch (rErr) { console.error('[squad vs] query failed:', rErr); throw rErr; }
+      }
+
+      // Unifica ambos caminos: squad agg de una sesión+métrica (avg, o max para métricas pico).
+      // RPC → lee la columna precalculada; crudo → pliega las filas de la sesión en JS.
+      const _sessAgg = (sid, key) => {
+        if (aggBySession) {
+          const a = aggBySession[sid];
+          if (!a) return null;
+          const v = a[_ZT_PEAK.has(key) ? 'max_speed_max' : key + '_avg'];
+          return (v == null || isNaN(v)) ? null : Number(v);
+        }
+        return _ztSquadAgg((reports || []).filter(r => r.session_id === sid), key);
+      };
 
       // Historical series: one squad-avg value per equivalent session
       const histSeries = {};
       for (const key of _ztMetrics) {
         if (!_ZT_CORE_COLS.has(key)) { histSeries[key] = []; continue; }
         histSeries[key] = equivalents
-          .map(s => _ztSquadAgg((reports || []).filter(r => r.session_id === s.id), key))
+          .map(s => _sessAgg(s.id, key))
           .filter(v => v != null && !isNaN(v));
       }
 
       // Build metric rows
       const rows = _ztMetrics.map(key => {
-        const cur  = _ztSquadAgg(curRpts, key);
+        const cur  = _sessAgg(sessionId, key);
         const hist = histSeries[key] || [];
 
         if (hist.length < _ZT_MIN || cur == null) {
