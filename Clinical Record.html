@@ -451,7 +451,7 @@
 
           <!-- C · CARDIAC & PCMA SCREENING -->
           <div class="cm-card">
-            <div class="cr-card-head"><i class="ti ti-heart-rate-monitor"></i><h2>Cardiac &amp; PCMA screening</h2></div>
+            <div class="cr-card-head"><i class="ti ti-heart-rate-monitor"></i><h2>Cardiac &amp; PCMA screening</h2><button class="cm-btn is-sm" id="cr-scr-edit" style="margin-left:auto"><i class="ti ti-pencil"></i>Manage</button></div>
             <div class="cr-card-body" id="cr-pcma" style="padding-top:6px;padding-bottom:6px;">
               <div class="cr-pcma-row">
                 <span class="cr-pcma-name"><span class="cr-tl ok"></span>ECG · 12-lead</span>
@@ -822,6 +822,62 @@
     </div>
     <div class="cr-modal-foot">
       <button type="button" class="cm-btn" id="cr-meds-close2">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL · CARDIAC & PCMA SCREENING (CRUD) ══ -->
+<div class="cr-modal-ov" id="modalScreenings">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3>Cardiac &amp; PCMA screening</h3>
+      <button type="button" id="cr-scr-close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div class="cr-rep-list" id="scr-list"></div>
+
+      <div id="scr-form" style="border-top:1px solid var(--cm-border-soft);padding-top:14px;display:flex;flex-direction:column;gap:13px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+          <div class="cm-field">
+            <label class="cm-label" for="scr-type">Type *</label>
+            <select id="scr-type" class="cm-select">
+              <option value="">— Select —</option>
+              <option value="ecg">ECG</option>
+              <option value="echo">Echocardiogram</option>
+              <option value="stress_test">Stress test</option>
+              <option value="vision">Vision</option>
+              <option value="dental">Dental</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="cm-field">
+            <label class="cm-label" for="scr-status">Status *</label>
+            <select id="scr-status" class="cm-select">
+              <option value="ok">OK</option>
+              <option value="warning">Warning</option>
+              <option value="abnormal">Abnormal</option>
+            </select>
+          </div>
+        </div>
+        <div class="cm-field">
+          <label class="cm-label" for="scr-result">Result</label>
+          <input id="scr-result" class="cm-input" placeholder="e.g. Normal sinus rhythm / 20/20">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+          <div class="cm-field"><label class="cm-label" for="scr-performed">Performed on</label><input id="scr-performed" type="date" class="cm-input"></div>
+          <div class="cm-field"><label class="cm-label" for="scr-next">Next due</label><input id="scr-next" type="date" class="cm-input"></div>
+        </div>
+        <div class="cm-field"><label class="cm-label" for="scr-docurl">Document URL</label><input id="scr-docurl" class="cm-input" placeholder="Optional"></div>
+        <div class="cm-field"><label class="cm-label" for="scr-notes">Notes</label><textarea id="scr-notes" class="cm-textarea"></textarea></div>
+        <div id="scr-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="cm-btn" id="scr-clear">Clear</button>
+          <button type="button" class="cm-btn is-primary" id="scr-save">Save screening</button>
+        </div>
+      </div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="cr-scr-close2">Close</button>
     </div>
   </div>
 </div>

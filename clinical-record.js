@@ -112,6 +112,8 @@ function getBodyCoords(area) {
   let _clubId = null;
   let _meds = [];               // player_medications rows (for the manage modal)
   let _editingMedId = null;     // id being edited in the meds form, or null (insert)
+  let _screenings = [];         // medical_screenings rows (for the manage modal)
+  let _editingScrId = null;     // id being edited in the screenings form, or null (insert)
   const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
   const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
 
@@ -885,6 +887,137 @@ function getBodyCoords(area) {
     const ov = document.getElementById('modalMeds'); if (ov) ov.classList.remove('is-open');
   }
 
+  // ── PCMA screenings management (CRUD) modal ─────────────────────────────────
+  async function loadScreenings() {
+    try {
+      const { data } = await window.sb.from('medical_screenings').select('*')
+        .eq('club_id', _clubId).eq('player_id', _playerId)
+        .order('performed_on', { ascending: false });
+      _screenings = arr(data);
+    } catch (_) { _screenings = []; }
+    renderScrList();
+    renderScreenings(_screenings); // re-render the PCMA card rows (prompt 3 fn, reused)
+  }
+
+  function renderScrList() {
+    const list = document.getElementById('scr-list');
+    if (!list) return;
+    const rows = arr(_screenings);
+    if (!rows.length) {
+      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">No screenings recorded</div>';
+      return;
+    }
+    list.innerHTML = rows.map(s => {
+      const tl = SCREEN_TL[s.status] || 'ok';
+      const dotColor = tl === 'bad' ? 'var(--cm-danger)' : tl === 'warn' ? 'var(--cm-warning)' : 'var(--cm-success)';
+      const name = SCREEN_LABEL[s.type] || (s.type ? cap(s.type) : '—');
+      const perf = fmtDate(s.performed_on);
+      let due = '';
+      if (s.next_due) {
+        const d = daysFromToday(s.next_due);
+        due = d < 0 ? '<span style="color:var(--cm-warning)">Overdue</span>' : 'Due ' + esc(fmtDate(s.next_due) || '');
+      }
+      const bits = [];
+      if (s.result) bits.push(esc(s.result));
+      if (perf) bits.push(esc(perf));
+      let meta = bits.join(' · ');
+      if (due) meta += (meta ? ' · ' : '') + due;
+      if (!meta) meta = '—';
+      return '<div class="cr-scr-row" data-id="' + esc(s.id) + '" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--cm-border-soft)">' +
+        '<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:' + dotColor + '"></span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font:600 13px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">' + esc(name) + '</div>' +
+          '<div style="font:500 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">' + meta + '</div>' +
+        '</div>' +
+        '<button type="button" class="cr-rep-del bf-scr-edit" title="Edit"><i class="ti ti-pencil"></i></button>' +
+        '<button type="button" class="cr-rep-del bf-scr-del" title="Delete"><i class="ti ti-trash"></i></button>' +
+        '</div>';
+    }).join('');
+  }
+
+  function clearScrForm() {
+    _editingScrId = null;
+    ['scr-performed', 'scr-result', 'scr-next', 'scr-docurl', 'scr-notes'].forEach(id => setVal(id, ''));
+    setVal('scr-type', '');
+    setVal('scr-status', 'ok');
+    const btn = document.getElementById('scr-save'); if (btn) btn.textContent = 'Save screening';
+    const err = document.getElementById('scr-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+  }
+
+  function editScreening(id) {
+    const s = arr(_screenings).find(x => String(x.id) === String(id));
+    if (!s) return;
+    _editingScrId = s.id;
+    setVal('scr-type', s.type); setVal('scr-status', s.status || 'ok');
+    setVal('scr-performed', s.performed_on); setVal('scr-result', s.result);
+    setVal('scr-next', s.next_due); setVal('scr-docurl', s.doc_url); setVal('scr-notes', s.notes);
+    const btn = document.getElementById('scr-save'); if (btn) btn.textContent = 'Update screening';
+    const form = document.getElementById('scr-form'); if (form && form.scrollIntoView) form.scrollIntoView({ block: 'nearest' });
+  }
+
+  async function deleteScreening(id) {
+    if (!window.confirm('Delete this screening?')) return;
+    const err = document.getElementById('scr-error');
+    try {
+      const { error } = await window.sb.from('medical_screenings').delete().eq('id', id);
+      if (error) throw error;
+      if (String(_editingScrId) === String(id)) clearScrForm();
+      await loadScreenings();
+    } catch (e) {
+      console.error('[Clinical record] delete screening failed', e);
+      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    }
+  }
+
+  async function saveScreening() {
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const nn = s => (s === '' ? null : s);
+    const err = document.getElementById('scr-error');
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+
+    const type = val('scr-type'), status = val('scr-status');
+    if (!type || !status) { if (err) { err.textContent = 'Type and status are required.'; err.style.display = 'block'; } return; }
+
+    const fields = {
+      type: type,
+      status: status,
+      performed_on: nn(val('scr-performed')),
+      result: nn(val('scr-result')),
+      next_due: nn(val('scr-next')),
+      doc_url: nn(val('scr-docurl')),
+      notes: nn(val('scr-notes')),
+    };
+
+    const btn = document.getElementById('scr-save'); if (btn) btn.disabled = true;
+    try {
+      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      let error;
+      if (_editingScrId) {
+        ({ error } = await window.sb.from('medical_screenings').update(fields).eq('id', _editingScrId));
+      } else {
+        ({ error } = await window.sb.from('medical_screenings')
+          .insert(Object.assign({ club_id: _clubId, player_id: _playerId }, fields)));
+      }
+      if (error) throw error;
+      clearScrForm();
+      await loadScreenings();
+    } catch (e) {
+      console.error('[Clinical record] save screening failed', e);
+      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function openScreeningsModal() {
+    clearScrForm();
+    renderScrList();
+    const ov = document.getElementById('modalScreenings'); if (ov) ov.classList.add('is-open');
+  }
+  function closeScreeningsModal() {
+    const ov = document.getElementById('modalScreenings'); if (ov) ov.classList.remove('is-open');
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -1044,6 +1177,26 @@ function getBodyCoords(area) {
       else if (e.target.closest('.bf-med-del')) deleteMed(id);
     });
     on('modalMeds', 'click', e => { if (e.target.id === 'modalMeds') closeMedsModal(); });
+  })();
+
+  // ── PCMA screenings manage modal wiring ─────────────────────────────────────
+  (function () {
+    const on = (id, ev, fn) => { const e = document.getElementById(id); if (e) e.addEventListener(ev, fn); };
+    on('cr-scr-edit', 'click', openScreeningsModal);
+    on('cr-scr-close', 'click', closeScreeningsModal);
+    on('cr-scr-close2', 'click', closeScreeningsModal);
+    on('scr-save', 'click', saveScreening);
+    on('scr-clear', 'click', clearScrForm);
+    const list = document.getElementById('scr-list');
+    if (list) list.addEventListener('click', e => {
+      const row = e.target.closest('.cr-scr-row');
+      if (!row) return;
+      const id = row.getAttribute('data-id');
+      if (!id) return;
+      if (e.target.closest('.bf-scr-edit')) editScreening(id);
+      else if (e.target.closest('.bf-scr-del')) deleteScreening(id);
+    });
+    on('modalScreenings', 'click', e => { if (e.target.id === 'modalScreenings') closeScreeningsModal(); });
   })();
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
@@ -1253,14 +1406,8 @@ function getBodyCoords(area) {
       // ── Medications & supplements (loads _meds, baseline chips + manage list) ──
       await loadMeds();
 
-      // ── Cardiac & PCMA screenings ──
-      try {
-        const { data } = await window.sb.from('medical_screenings')
-          .select('type,performed_on,result,status,next_due')
-          .eq('club_id', clubId).eq('player_id', playerId)
-          .order('performed_on', { ascending: false });
-        renderScreenings(data);
-      } catch (_) { renderScreenings([]); }
+      // ── Cardiac & PCMA screenings (loads _screenings, card rows + manage list) ──
+      await loadScreenings();
 
       // ── Injuries → Overview heatmap + Injury history tab (fetched once) ──
       try {
