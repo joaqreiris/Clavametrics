@@ -23,6 +23,8 @@
   const emptyBlock = () => '<div class="cr-empty">No records</div>';
 
   const _today = new Date(); _today.setHours(0, 0, 0, 0);
+  const todayISO = () => _today.getFullYear() + '-' +
+    String(_today.getMonth() + 1).padStart(2, '0') + '-' + String(_today.getDate()).padStart(2, '0');
   function fmtDate(iso) {
     if (!iso) return null;
     const d = new Date(iso + 'T00:00:00');
@@ -338,19 +340,25 @@ function getBodyCoords(area) {
     return '<div style="display:flex;gap:24px;margin:12px 0 4px">' + parts.join('') + '</div>';
   }
 
-  function grtpLadder(detail) {
+  // Editable GRTP ladder — .cr-grtp-n toggles done, .cr-grtp-d holds a date input
+  // when done. Each step carries data-ep / data-step so the handlers can locate it.
+  function grtpLadder(detail, epId) {
     const gmap = {};
     arr(detail && detail.grtp).forEach(s => { if (s && s.step != null) gmap[s.step] = s; });
+    const ep = esc(epId);
     let html = '<div class="cr-grtp">';
     for (let i = 1; i <= 6; i++) {
       const step = gmap[i] || {};
       const label = step.label || GRTP_STEPS[i - 1];
       const done = step.done === true;
-      const date = step.date ? (fmtDate(step.date) || '') : '';
-      html += '<div class="cr-grtp-step' + (done ? ' is-done' : '') + '">' +
-        '<div class="cr-grtp-n">' + i + '</div>' +
+      const dateCell = done
+        ? '<input type="date" class="cm-input grtp-date" data-ep="' + ep + '" data-step="' + i + '" value="' +
+            esc(step.date || todayISO()) + '" style="height:26px;padding:0 6px;font-size:11px">'
+        : '<span style="color:var(--cm-fg-faint)">—</span>';
+      html += '<div class="cr-grtp-step' + (done ? ' is-done' : '') + '" data-ep="' + ep + '" data-step="' + i + '">' +
+        '<div class="cr-grtp-n grtp-toggle" data-ep="' + ep + '" data-step="' + i + '" style="cursor:pointer" title="Toggle step">' + i + '</div>' +
         '<div class="cr-grtp-l">' + esc(label) + '</div>' +
-        '<div class="cr-grtp-d">' + esc(date) + '</div>' +
+        '<div class="cr-grtp-d">' + dateCell + '</div>' +
         '</div>';
     }
     return html + '</div>';
@@ -404,7 +412,7 @@ function getBodyCoords(area) {
             '<div class="cr-kv" style="margin-bottom:6px"><span>Status</span><b>' + statusPill + '</b></div>' +
             scatHtml(e.detail && e.detail.scat) +
             '<div class="cr-mini-lab" style="margin:12px 0 8px">Graduated return to play</div>' +
-            grtpLadder(e.detail) +
+            grtpLadder(e.detail, e.id) +
             '</div>';
         }).join('') + '</div>';
       }
@@ -529,6 +537,45 @@ function getBodyCoords(area) {
       console.error('[Clinical record] delete episode failed', e);
       if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
     }
+  }
+
+  // ── GRTP ladder inline editing (persists medical_episodes.detail) ───────────
+  async function persistEpisodeDetail(ep, prevDetail) {
+    try {
+      const { error } = await window.sb.from('medical_episodes')
+        .update({ detail: ep.detail }).eq('id', ep.id).eq('club_id', _clubId);
+      if (error) throw error;
+    } catch (e) {
+      console.error('[Clinical record] GRTP persist failed', e);
+      ep.detail = prevDetail;          // revert in-memory change
+      renderEpisodes(_episodes);       // re-render to reflect the revert
+    }
+  }
+
+  function grtpToggle(epId, stepNum) {
+    const ep = arr(_episodes).find(x => String(x.id) === String(epId));
+    if (!ep || !(stepNum >= 1 && stepNum <= 6)) return;
+    const prevDetail = ep.detail ? JSON.parse(JSON.stringify(ep.detail)) : null;
+    let detail = ep.detail || {};
+    if (!Array.isArray(detail.grtp)) detail = Object.assign({}, detail, CONC_GRTP_INIT()); // seed 6 steps, keep other keys
+    ep.detail = detail;
+    const stepObj = detail.grtp.find(s => s && s.step === stepNum);
+    if (!stepObj) return;
+    const nowDone = !(stepObj.done === true);
+    stepObj.done = nowDone;
+    stepObj.date = nowDone ? (stepObj.date || todayISO()) : null;
+    renderEpisodes(_episodes);
+    persistEpisodeDetail(ep, prevDetail);
+  }
+
+  function grtpDateChange(epId, stepNum, value) {
+    const ep = arr(_episodes).find(x => String(x.id) === String(epId));
+    if (!ep || !ep.detail || !Array.isArray(ep.detail.grtp)) return;
+    const stepObj = ep.detail.grtp.find(s => s && s.step === stepNum);
+    if (!stepObj) return;
+    const prevDetail = JSON.parse(JSON.stringify(ep.detail));
+    stepObj.date = value || null;
+    persistEpisodeDetail(ep, prevDetail);
   }
 
   // ── Treatment log tab ───────────────────────────────────────────────────────
@@ -1344,6 +1391,18 @@ function getBodyCoords(area) {
         if (b) openEpisodeModal(b.getAttribute('data-id'));
       });
     });
+    // GRTP ladder inline editing (concussion cards)
+    const cbody = document.getElementById('concussion-body');
+    if (cbody) {
+      cbody.addEventListener('click', e => {
+        const n = e.target.closest('.grtp-toggle');
+        if (n) grtpToggle(n.getAttribute('data-ep'), parseInt(n.getAttribute('data-step'), 10));
+      });
+      cbody.addEventListener('change', e => {
+        const inp = e.target.closest('.grtp-date');
+        if (inp) grtpDateChange(inp.getAttribute('data-ep'), parseInt(inp.getAttribute('data-step'), 10), inp.value);
+      });
+    }
   })();
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
