@@ -1714,7 +1714,8 @@
 
       // Step 1: session IDs — a date filter, if active, wins over the card range (but NOT
       // for a pinned card: FBcard is null, so it keeps its own config.range).
-      let sessionIds = await getSessionIds(_fbEffectiveRange(FBcard, config.range), ctx, sb);
+      const _effRange = _fbEffectiveRange(FBcard, config.range);
+      let sessionIds = await getSessionIds(_effRange, ctx, sb);
       if (stale()) return;
       if ((FBcard?.mdCodes?.length || FBcard?.rivals?.length) && sessionIds.length) {
         // MD and Rival are both session_attributes → one fetch, AND-filter sessions.
@@ -1734,7 +1735,8 @@
         }).map(s => s.id);
       }
       if (!sessionIds.length) {
-        _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', pinned: _isPinned, effectiveRange: _fbEffectiveRange(FBcard, config.range), sessionIds: 0 });
+        if (_isPinned) console.log('[PIN DEBUG]', { pinnedPid: config.scope.playerId, effectiveRange: _effRange, sessionIdsCount: 0, rawRowsCount: '(n/a — died at getSessionIds)', rowsAfterFbFilter: '(n/a)' });
+        _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', pinned: _isPinned, effectiveRange: _effRange, sessionIds: 0 });
         _showCardState(cardEl, body, 'nodata', 'No sessions match the active filters.', config);
         return;
       }
@@ -1743,6 +1745,9 @@
       const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
       const rows = _fbFilterRows(rawRows, FBcard, config.source);
       if (stale()) return;
+      // PIN DEBUG: always log for a pinned card so we can see the exact stage it dies at
+      // (sessions? rows? or later at the role-baseline for the radar).
+      if (_isPinned) console.log('[PIN DEBUG]', { pinnedPid: config.scope.playerId, effectiveRange: _effRange, sessionIdsCount: sessionIds.length, rawRowsCount: rawRows.length, rowsAfterFbFilter: rows.length });
       if (!rows.length) {
         _gpbDiag(config, FB, ctx, { stage: 'NO ROWS', sessionIds: sessionIds.length, rowsBeforeFbFilter: rawRows.length, rowsAfter: 0 });
         _showCardState(cardEl, body, 'nodata', 'No GPS data for this selection.', config);
@@ -1793,6 +1798,7 @@
       if (stale()) return;
       const hasData = series.some(s => s.points.length > 0);
       if (!hasData) {
+        if (_isPinned) console.log('[PIN DEBUG] died at hasData (series has no points)', { seriesPoints: series.map(s => ({ metric: s.label, points: s.points.length })) });
         _gpbDiag(config, FB, ctx, { stage: 'NO HASDATA', sessionIds: sessionIds.length, rows: rows.length,
           seriesPoints: series.map(s => ({ metric: s.label, points: s.points.length })) });
         _showCardState(cardEl, body, 'nodata', 'No rows match the current scope, range and filters.', config);
@@ -1888,6 +1894,9 @@
         if (config.scope.level === 'player' && fetchRoleBaseline && !(config.dimensions || []).length) {
           try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
           catch (e) { console.warn('gpb role baseline:', e); }
+          // An empty/all-null baseline does NOT blank the radar — radarChartData falls back
+          // to the player's own value (100%) per axis. Logged so we can confirm the stage.
+          if (_isPinned) console.log('[PIN DEBUG] radar role baseline', { baselineMapSize: drawOpts.baselineMap?.size ?? 0, entries: drawOpts.baselineMap ? [...drawOpts.baselineMap.entries()] : null });
         }
       } else if (config.viz === 'line') {
         // Single-metric, player-scope line vs role → append a flat dashed reference
