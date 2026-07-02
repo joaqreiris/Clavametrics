@@ -2287,7 +2287,7 @@ async function _gpOpenAssignRivals() {
     const [sessions, reps, { data: opps }] = await Promise.all([
       // Paginated (server caps at ~1000): big clubs would otherwise lose sessions here too.
       window.cmFetchAll(() => window.sb.from('training_sessions')
-        .select('id, session_date, session_type, session_attributes')
+        .select('id, session_date, session_type, is_historical, session_attributes')
         .eq('club_id', clubId), { label: 'assign-rivals.sessions' }),
       // PRESENCE check only: a day that has ANY GPS row needs a rival, even if some rows
       // are flagged invalid (outliers). Validity matters for value reads, not "has GPS?".
@@ -2298,19 +2298,31 @@ async function _gpOpenAssignRivals() {
     const cnt = new Map();
     (reps || []).forEach(r => { if (r.session_id) cnt.set(r.session_id, (cnt.get(r.session_id) || 0) + 1); });
     const gpsDays = (sessions || []).filter(s => cnt.has(s.id));                              // sessions w/ valid GPS
+    const _rivalOf = s => s.session_attributes?.rival || s.session_attributes?.opponent || null;
     const rows = gpsDays
-      .filter(s => !(s.session_attributes?.rival || s.session_attributes?.opponent))         // no rival yet
+      .filter(s => !_rivalOf(s))                                                              // no rival yet
       .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, players: cnt.get(s.id) }))
       .sort((a, b) => String(b.date).localeCompare(String(a.date)));                          // newest first (paging is id-ordered)
+    // Days you can UNDO a rival on: GPS days that already carry a rival, plus historical
+    // 'match' containers we created just to hold a rival (which may have no GPS of their own).
+    // Real planned/future matches (is_historical=false) are intentionally NOT listed here.
+    const assignedRows = (sessions || [])
+      .filter(s => _rivalOf(s))
+      .filter(s => cnt.has(s.id) || (s.is_historical === true && s.session_type === 'match'))
+      .map(s => ({ id: s.id, date: s.session_date, type: s.session_type, rival: _rivalOf(s) }))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
     // Diagnostics: if a known GPS day is missing from `rows`, this tells you whether it has
     // no valid GPS (excluded by is_invalid) or it already carries a rival.
-    console.info(`[AssignRivals] club sessions=${sessions?.length || 0} · GPS days=${gpsDays.length} · already w/ rival=${gpsDays.length - rows.length} · listed=${rows.length}`);
+    console.info(`[AssignRivals] club sessions=${sessions?.length || 0} · GPS days=${gpsDays.length} · unassigned=${rows.length} · assigned(removable)=${assignedRows.length}`);
     window.__gpOpponents = opps || [];
-    if (!rows.length) { body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">Every GPS day already has a rival. 🎉</div>'; return; }
+    if (!gpsDays.length && !assignedRows.length) { body.innerHTML = '<div style="padding:24px;color:var(--cm-fg-muted)">No GPS days yet.</div>'; return; }
     body.innerHTML = `
-      <p style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">GPS days with no rival yet. Assigning sets the day as a match vs the chosen rival (the session is reused — Calendar/Planner unaffected).</p>
+      <p style="font:500 11.5px/1.5 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 12px">Assigning sets a GPS day as a match vs the chosen rival (the session is reused — Calendar/Planner unaffected). Removing a rival keeps all GPS data.</p>
       <input id="arSearch" type="text" placeholder="Search date…" style="width:100%;margin:0 0 10px;padding:8px 10px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:500 12px/1.4 var(--cm-font-mono);box-sizing:border-box">
-      <div style="max-height:48vh;overflow:auto"><table class="gp-map-table" style="width:100%">
+      <div style="max-height:48vh;overflow:auto">
+      ${rows.length ? `
+        <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:0 0 6px">Days with no rival yet</div>
+        <table class="gp-map-table" style="width:100%">
         <thead><tr><th>Date</th><th>Type</th><th>Players</th><th style="text-align:right">Rival</th></tr></thead>
         <tbody>${rows.map(r => `
           <tr data-sid="${r.id}" data-date="${r.date}" data-search="${(r.date + ' ' + (r.type || '')).toLowerCase()}">
@@ -2319,10 +2331,24 @@ async function _gpOpenAssignRivals() {
             <td style="font:500 11.5px/1 var(--cm-font-mono)">${r.players}</td>
             <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-assign" data-sid="${r.id}" data-date="${r.date}"><i class="ti ti-ball-football" style="font-size:14px"></i>Assign rival</button></td>
           </tr>`).join('')}</tbody>
-      </table>
+        </table>` : ''}
+      ${assignedRows.length ? `
+        <div style="font:600 10.5px/1 var(--cm-font-sans);text-transform:uppercase;letter-spacing:.06em;color:var(--cm-fg-muted);margin:${rows.length ? '16px' : '0'} 0 6px">Days with a rival</div>
+        <table class="gp-map-table" style="width:100%">
+        <thead><tr><th>Date</th><th>Type</th><th>Rival</th><th style="text-align:right">Action</th></tr></thead>
+        <tbody>${assignedRows.map(r => `
+          <tr data-search="${(r.date + ' ' + (r.type || '') + ' ' + (r.rival || '')).toLowerCase()}">
+            <td style="font:600 12px/1 var(--cm-font-mono)">${r.date}</td>
+            <td style="font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${r.type || '—'}</td>
+            <td style="font:600 11.5px/1 var(--cm-font-sans)">${r.rival || '—'}</td>
+            <td style="text-align:right"><button class="cm-btn is-outline is-sm ar-remove" data-sid="${r.id}" data-rival="${(r.rival || '').replace(/"/g, '&quot;')}"><i class="ti ti-x" style="font-size:14px"></i>Remove rival</button></td>
+          </tr>`).join('')}</tbody>
+        </table>` : ''}
       <div id="arNoMatch" style="display:none;padding:18px;text-align:center;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">No days match.</div></div>`;
     body.querySelectorAll('.ar-assign').forEach(btn =>
       btn.addEventListener('click', () => _gpRivalPicker(btn, clubId, teamId, btn.dataset.sid, btn.dataset.date)));
+    body.querySelectorAll('.ar-remove').forEach(btn =>
+      btn.addEventListener('click', () => _gpRemoveRivalFromDay(clubId, btn.dataset.sid, btn.dataset.rival)));
     const arSearch = body.querySelector('#arSearch');
     const arRows   = [...body.querySelectorAll('tbody tr')];
     const arEmpty  = body.querySelector('#arNoMatch');
@@ -2467,6 +2493,61 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
   } catch (e) {
     showToast(`Assign failed: ${e.message}`, true);
   }
+}
+
+// Undo a rival on a GPS day WITHOUT losing real data. Two cases, decided fresh at click:
+//  · Case B — the day exists ONLY as a rival container we created (is_historical 'match'
+//    with NO gps_reports of its own) → delete the empty container session.
+//  · Case A — a real session that pre-existed → strip only the rival keys from
+//    session_attributes, leaving the session + its GPS intact.
+// Safety: a session with ANY linked gps_reports is NEVER deleted — we strip instead.
+// opponent_branding is left untouched (the catalog rival is reused by other days/seasons).
+function _gpRemoveRivalFromDay(clubId, sessionId, rivalName) {
+  if (!sessionId) return;
+  const ov = makeModal('Remove rival', `
+    <div style="min-width:360px;max-width:430px;display:flex;flex-direction:column;gap:14px">
+      <p style="font:400 12.5px/1.6 var(--cm-font-sans);color:var(--cm-fg);margin:0">
+        Remove <strong>${(rivalName || 'the rival').replace(/</g, '&lt;')}</strong> from this day? GPS data is kept — only the rival link is removed. If the day is just an empty match container, it is deleted.
+      </p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="rrCancel" class="cm-btn is-outline is-sm">Cancel</button>
+        <button id="rrConfirm" class="cm-btn is-sm" style="background:var(--cm-danger);color:#fff;border-color:var(--cm-danger)">Remove rival</button>
+      </div>
+    </div>`);
+  ov.querySelector('#rrCancel').onclick = () => ov.remove();
+  ov.querySelector('#rrConfirm').onclick = async () => {
+    const btn = ov.querySelector('#rrConfirm'); btn.disabled = true; btn.textContent = 'Removing…';
+    try {
+      const { data: s, error: selErr } = await window.sb.from('training_sessions')
+        .select('session_type, is_historical, session_attributes').eq('id', sessionId).maybeSingle();
+      if (selErr) throw selErr;
+      if (!s) throw new Error('Session not found');
+      // Presence check: invalid rows count too — deletion must be conservative.
+      const { count: gpsCount, error: cntErr } = await window.sb.from('gps_reports')
+        .select('id', { count: 'exact', head: true }).eq('club_id', clubId).eq('session_id', sessionId);
+      if (cntErr) throw cntErr;
+      const isContainer = s.is_historical === true && s.session_type === 'match' && !gpsCount;
+      if (isContainer) {
+        const { error } = await window.sb.from('training_sessions').delete().eq('id', sessionId).eq('club_id', clubId);
+        if (error) throw error;
+      } else {
+        const attrs = { ...(s.session_attributes || {}) };
+        delete attrs.rival; delete attrs.opponent; delete attrs.opponent_id; delete attrs.rival_crest_url;
+        const { error } = await window.sb.from('training_sessions').update({ session_attributes: attrs }).eq('id', sessionId).eq('club_id', clubId);
+        if (error) throw error;
+      }
+      showToast('Rival removed');
+      try { window.cmInvalidateGpsCache?.(); } catch {}
+      try { await window.gpFilterBar?.reload?.(); } catch {}
+      try { await window.refreshDashboard?.(); } catch {}
+      ov.remove();
+      document.querySelector('.gp-modal-overlay')?.remove();   // close the Assign modal…
+      _gpOpenAssignRivals();                                   // …reopen fresh (row moved/gone)
+    } catch (e) {
+      showToast(`Remove failed: ${e.message}`, true);
+      btn.disabled = false; btn.textContent = 'Remove rival';
+    }
+  };
 }
 
 // ── Per-card player picker (scope.level='player') · mixed dashboards ──────────
