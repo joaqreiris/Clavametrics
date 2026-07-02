@@ -167,6 +167,17 @@
     return { baseline: S.compare };
   }
 
+  /** Subtitle suffix that makes the active comparison explicit on the card header, e.g.
+   *  ' · vs role baseline'. Empty when the card shows RAW values (compare === 'none'),
+   *  so the user never wonders whether they're reading values or %. */
+  function cmpBadge(S) {
+    if (!S || S.compare === 'none') return '';
+    const name = (S.compare === 'mc')
+      ? `vs ${mcLabel(S.refMcId)}`
+      : (COMPARES.find(c => c.id === S.compare)?.name || S.compare);
+    return name ? ` · ${name}` : '';
+  }
+
   /** Current microcycle id (from the page context), if any. */
   function currentMcId() { return window._gpMcId || window.gpState?.mcId || null; }
 
@@ -607,7 +618,9 @@
     const p = window.gpState?.datePreset;
     if (p === 'last7') range = 'w7';
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
-    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, compare:'role', refMcId:null, range,
+    // Default: NO comparison → the card shows RAW values, not %. Comparison is opt-in
+    // per card (the Comparison dropdown writes config.comparison; null = raw).
+    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, compare:'none', refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
              points:true, area:false, horizontal:false, stacked:false, sort:null };
   }
@@ -739,7 +752,7 @@
       if (titleElE) titleElE.textContent = autoTitle(S);
       if (subElE) {
         const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
-        subElE.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}`;
+        subElE.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
       }
       const mapSz = { S:'sm', M:'md', L:'lg', FULL:'full' };
       targetCard.querySelectorAll('.size-toggle button').forEach(b =>
@@ -817,7 +830,7 @@
     if (titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
-      subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}`;
+      subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
 
     const map = { S:'sm', M:'md', L:'lg', FULL:'full' };
@@ -1551,7 +1564,7 @@
     if (titleEl) titleEl.textContent = autoTitle(S);
     if (subEl) {
       const agg0 = S.metrics[0] ? (AGG[S.metrics[0].agg]?.short.toLowerCase() || '') : '';
-      subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}`;
+      subEl.textContent = `${VIZ_FULLNAME[S.type].toLowerCase()}${agg0?' · '+agg0:''} · ${S.scope}${cmpBadge(S)}`;
     }
   }
 

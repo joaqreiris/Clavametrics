@@ -128,7 +128,6 @@
   .gp-dash-bar[data-view="ind"] #dateRangePill,
   .gp-dash-bar[data-view="ind"] #mcPill,
   .gp-dash-bar[data-view="ind"] #playerPill,
-  .gp-dash-bar[data-view="ind"] #baselinePill,
   .gp-dash-bar[data-view="ind"] #histPill { display:none; }
   /* Session Control view: show sc-filter-group, hide ind pills */
   #sc-filter-group { display:none; }
@@ -138,7 +137,6 @@
   .gp-dash-bar[data-view="grp"] #dateRangePill,
   .gp-dash-bar[data-view="grp"] #mcPill,
   .gp-dash-bar[data-view="grp"] #playerPill,
-  .gp-dash-bar[data-view="grp"] #baselinePill,
   .gp-dash-bar[data-view="grp"] #histPill { display:none; }
   /* Other views: show no filter group */
   .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #pw-filter-group,
@@ -146,7 +144,6 @@
   .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #dateRangePill,
   .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #mcPill,
   .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #playerPill,
-  .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #baselinePill,
   .gp-dash-bar:not([data-view="ind"]):not([data-view="grp"]) #histPill { display:none; }
   /* pw-next-match inside gp-dash-bar: no margin-left:auto (right div handles alignment) */
   .gp-dash-bar #pw-next-match { margin-left:0; }
@@ -807,7 +804,7 @@
 
       <div class="gp-dash-bar" data-view="ind">
         <span class="h">Dashboard <span id="secTitle">· Individual</span></span>
-        <span class="h-sub" id="secSub">— · vs role baseline</span>
+        <span class="h-sub" id="secSub">— week vs match reference</span>
         <!-- Filtros viejos de Player Week eliminados: la barra de desplegables
              (gpFilterBar) es la ÚNICA fuente de filtrado. La comparación vive por card. -->
         <!-- Filtros viejos de Session Control eliminados: la barra de desplegables
@@ -816,7 +813,8 @@
           <button class="pill" id="dateRangePill"><i class="ti ti-calendar-range"></i><span id="dateRangeLabel">Last 30 days</span></button>
           <button class="pill" id="mcPill"><i class="ti ti-clock"></i><span id="mcLabel">All MCs</span></button>
           <button class="pill" id="playerPill"><i class="ti ti-user"></i><span id="playerLabel">All players</span></button>
-          <button class="pill" id="baselinePill"><i class="ti ti-target"></i><span id="baselineLabel">vs Role</span></button>
+          <!-- Baseline pill removed: comparison is NOT a global filter — it lives PER CARD
+               (config.comparison, opt-in via the card builder's Comparison dropdown). -->
           <button class="pill" id="histPill" title="Historical data is imported from previous periods or external sources. Useful for comparative analysis and personal baselines."><i class="ti ti-history"></i>Historical</button>
           <span style="width:1px;height:20px;background:var(--cm-border);margin:0 4px"></span>
           <button class="pill" id="saveLayoutBtn"><i class="ti ti-device-floppy"></i>Save layout</button>
@@ -1293,6 +1291,9 @@ window.gpState = {
   microcycle: 'All',
   mcId: null,
   playerId: null,
+  // NOT a global comparison control anymore (the top-bar baseline pill is gone; comparison
+  // is per card via config.comparison). Kept as an internal default that the z-normalized
+  // radar / profile cards still read (vs Role) — do not resurrect it as a global filter.
   baseline: 'vs Role',
   view: 'ind',
 };
@@ -1364,8 +1365,6 @@ function applyGpsPrefs(prefs) {
   if (plLabel) plLabel.textContent = window.gpState.playerName || 'All players';
   const histPill = document.getElementById('histPill');
   if (histPill) histPill.classList.toggle('is-on', !!window.gpState.includeHistorical);
-  const blLabel = document.getElementById('baselineLabel');
-  if (blLabel) blLabel.textContent = window.gpState.baseline || 'vs Role';
 }
 
 // ── UI: update filter subtitle in gpSub ───────────────────────
@@ -3021,17 +3020,6 @@ document.querySelector('.gp-dash-bar')?.addEventListener('click', async e => {
     inp.addEventListener('input', () => renderPlList(inp.value));
     _posPopover(pop, pill); _pop = pop;
     requestAnimationFrame(() => inp.focus());
-    return;
-  }
-
-  // ── Baseline pill ──────────────────────────────────────────
-  if (pill.id === 'baselinePill') {
-    makePopover(pill, ['vs Role','vs Squad','vs Personal','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
-      window.gpState.baseline = item.label;
-      document.getElementById('baselineLabel').textContent = item.label;
-      showToast(`Baseline → ${item.label}`);
-      saveGpsPrefs(); window.renderView?.();
-    });
     return;
   }
 

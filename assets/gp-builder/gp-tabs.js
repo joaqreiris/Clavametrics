@@ -483,10 +483,15 @@
     if (_span) el.dataset.span = String(_span);
     el.style.setProperty('--cm-accent', config.style?.color || '#15803D');
     const title = (config.title || config.viz || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    // Make the comparison explicit on the header when set, so raw-value cards (comparison
+    // null) are never confused with % cards. mc shows the generic label here (the builder
+    // draft shows the precise MC name).
+    const _CMP_LBL = { role:'vs role baseline', match:'vs match peak', md:'vs same MD code', mc:'vs microcycle' };
+    const _cmpBadge = config.comparison?.baseline ? ` · ${_CMP_LBL[config.comparison.baseline] || 'vs baseline'}` : '';
     el.innerHTML = `
       <div class="gp-c-h">
         <span class="ttl">${title}</span>
-        <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}</span>
+        <span class="sub">${config.viz || ''} · ${config.scope?.level || ''}${_cmpBadge}</span>
         <div class="right">
           <button data-edit title="Edit card"><i class="ti ti-pencil"></i></button>
           <button data-del title="Remove"><i class="ti ti-x"></i></button>
