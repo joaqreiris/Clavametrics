@@ -1704,6 +1704,13 @@
       //   · position → narrows rows to players in the chosen positions
       //   · microcycle → narrows rows to the chosen microcycle_id set
       const FB = window.gpFilterBar?.getState?.() || null;
+      // A PINNED player card (config.scope.playerId set) is an explicit player override —
+      // the bar's PLAYER filter must NOT re-narrow its rows, or picking another player in
+      // the bar would empty/override the pin (defeating "pinned card wins"). fetchReports
+      // already restricts to the pinned player; here we just drop the bar's player narrowing
+      // for this card. Every other bar filter (date/MD/rival/position/microcycle) still applies.
+      const _isPinned = config.scope?.level === 'player' && !!config.scope?.playerId;
+      const FBrows = (_isPinned && FB && FB.playerIds?.length) ? { ...FB, playerIds: [] } : FB;
 
       // Step 1: session IDs — a date filter, if active, wins over the card range.
       let sessionIds = await getSessionIds(_fbEffectiveRange(FB, config.range), ctx, sb);
@@ -1733,7 +1740,7 @@
 
       // Step 2: reports — then narrow rows by player / position (AND).
       const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
-      const rows = _fbFilterRows(rawRows, FB, config.source);
+      const rows = _fbFilterRows(rawRows, FBrows, config.source);
       if (stale()) return;
       if (!rows.length) {
         _gpbDiag(config, FB, ctx, { stage: 'NO ROWS', sessionIds: sessionIds.length, rowsBeforeFbFilter: rawRows.length, rowsAfter: 0 });
