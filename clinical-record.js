@@ -123,6 +123,8 @@ function getBodyCoords(area) {
   let _editingSurgId = null;    // id being edited in the surgery form, or null (insert)
   let _studies = [];            // medical_studies rows
   let _editingStudyId = null;   // id being edited in the study form, or null (insert)
+  let _documents = [];          // medical_documents rows
+  let _editingDocId = null;     // id being edited in the document form, or null (insert)
 
   // shared "— None — + one option per player injury" filler for related-injury selects
   function fillInjurySelect(selId, selected) {
@@ -926,9 +928,115 @@ function getBodyCoords(area) {
           '<div class="cr-doc-name">' + esc(d.title || 'Untitled') + '</div>' +
           '<div class="cr-doc-meta">' + esc(meta || '—') + '</div>' +
         '</div>' +
-        (hasFile ? '<i class="ti ti-external-link" style="color:var(--cm-fg-faint);margin-left:auto"></i>' : '') +
+        '<div style="display:flex;align-items:center;gap:6px;margin-left:auto">' +
+          (hasFile ? '<i class="ti ti-external-link" style="color:var(--cm-fg-faint);margin-right:2px"></i>' : '') +
+          editBtn(d.id, 'doc-edit-btn') +
+          '<button type="button" class="doc-del-btn" data-id="' + esc(d.id) + '" title="Delete" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-trash"></i></button>' +
+        '</div>' +
         '</div>';
     }).join('');
+  }
+
+  // ── Documents management (add with upload, edit metadata, delete) ───────────
+  async function loadDocs() {
+    try {
+      const { data } = await window.sb.from('medical_documents')
+        .select('id,type,title,file_path,doc_date,uploaded_by,notes')
+        .eq('club_id', _clubId).eq('player_id', _playerId)
+        .order('doc_date', { ascending: false });
+      _documents = arr(data);
+    } catch (_) { _documents = []; }
+    renderDocuments(_documents);
+  }
+
+  function openDocModal(id) {
+    const err = document.getElementById('doc-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const d = (id != null) ? (arr(_documents).find(x => String(x.id) === String(id)) || null) : null;
+    _editingDocId = d ? d.id : null;
+    setVal('doc-type', d ? (d.type || '') : '');
+    setVal('doc-title', d ? d.title : '');
+    setVal('doc-date', d ? d.doc_date : '');
+    setVal('doc-notes', d ? d.notes : '');
+    const fileInput = document.getElementById('doc-file'); if (fileInput) fileInput.value = '';
+    const cur = document.getElementById('doc-current');
+    if (cur) {
+      if (d && d.file_path) { cur.style.display = ''; cur.textContent = 'Current file: ' + studyFileName(d.file_path) + ' — uploading a new file replaces it.'; }
+      else { cur.style.display = 'none'; cur.textContent = ''; }
+    }
+    const title = document.getElementById('doc-modal-title'); if (title) title.textContent = d ? 'Edit document' : 'Add document';
+    const ov = document.getElementById('modalDoc'); if (ov) ov.classList.add('is-open');
+  }
+  function closeDocModal() {
+    const ov = document.getElementById('modalDoc'); if (ov) ov.classList.remove('is-open');
+  }
+
+  async function saveDoc() {
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const nn = s => (s === '' ? null : s);
+    const err = document.getElementById('doc-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const fail = msg => { if (err) { err.textContent = msg; err.style.display = 'block'; } };
+
+    const type = val('doc-type'), title = val('doc-title');
+    if (!type || !title) { fail('Type and title are required.'); return; }
+
+    const fileInput = document.getElementById('doc-file');
+    const file = (fileInput && fileInput.files && fileInput.files[0]) || null;
+    if (!_editingDocId && !file) { fail('A file is required.'); return; }
+
+    const btn = document.getElementById('doc-save'); if (btn) btn.disabled = true;
+    try {
+      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+
+      let file_path = null;
+      if (file) {
+        const okType = /^image\//.test(file.type) || file.type === 'application/pdf' || /\.docx?$/i.test(file.name) ||
+          file.type === 'application/msword' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        if (!okType) { fail('File must be an image, PDF or Word document.'); return; }
+        if (file.size > 15 * 1024 * 1024) { fail('File must be ≤ 15MB.'); return; }
+        const path = _clubId + '/' + _playerId + '/docs/' + Date.now() + '_' + sanitizeName(file.name);
+        const { error: upErr } = await window.sb.storage.from(MEDIA_BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined });
+        if (upErr) { fail('Upload failed: ' + ((upErr && upErr.message) || 'unknown error')); return; }
+        file_path = path;
+      }
+
+      const base = { type: type, title: title, doc_date: nn(val('doc-date')), notes: nn(val('doc-notes')) };
+      let error;
+      if (_editingDocId) {
+        const upd = Object.assign({}, base);
+        if (file_path) upd.file_path = file_path; // only replace when a new file was uploaded
+        ({ error } = await window.sb.from('medical_documents').update(upd).eq('id', _editingDocId));
+      } else {
+        let uploadedBy = null;
+        try { const prof = window.getProfile ? await window.getProfile() : null; uploadedBy = (prof && prof.id) || null; } catch (_) {}
+        ({ error } = await window.sb.from('medical_documents')
+          .insert(Object.assign({ club_id: _clubId, player_id: _playerId, file_path: file_path, uploaded_by: uploadedBy }, base)));
+      }
+      if (error) throw error;
+      closeDocModal();
+      await loadDocs();
+    } catch (e) {
+      console.error('[Clinical record] save document failed', e);
+      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function deleteDoc(id) {
+    if (!window.confirm('Delete this document?')) return;
+    const d = arr(_documents).find(x => String(x.id) === String(id));
+    try {
+      const { error } = await window.sb.from('medical_documents').delete().eq('id', id);
+      if (error) throw error;
+      if (d && d.file_path) {
+        try { await window.sb.storage.from(MEDIA_BUCKET).remove([d.file_path]); }
+        catch (remErr) { console.warn('[Clinical record] document file remove failed', remErr); }
+      }
+      await loadDocs();
+    } catch (e) {
+      console.error('[Clinical record] delete document failed', e);
+      window.alert('Could not delete the document.');
+    }
   }
 
   // ── Overview: identity meta, current status, active issue, KPIs, timeline ───
@@ -1530,11 +1638,23 @@ function getBodyCoords(area) {
     if (sel) sel.addEventListener('change', renderInjuryTable);
   });
 
-  // ── Documents: open on click via on-demand signed URL (delegated) ───────────
+  // ── Documents: add/edit/delete triggers + open on click (delegated) ─────────
   (function () {
+    const on = (id, ev, fn) => { const e = document.getElementById(id); if (e) e.addEventListener(ev, fn); };
+    on('cr-doc-add', 'click', () => openDocModal());
+    on('doc-close', 'click', closeDocModal);
+    on('doc-cancel', 'click', closeDocModal);
+    on('doc-save', 'click', saveDoc);
+    on('modalDoc', 'click', e => { if (e.target.id === 'modalDoc') closeDocModal(); });
+
     const list = document.getElementById('doc-list');
     if (!list) return;
     list.addEventListener('click', async e => {
+      // edit / delete buttons take precedence over the row's open-on-click
+      const edit = e.target.closest('.doc-edit-btn');
+      if (edit) { openDocModal(edit.getAttribute('data-id')); return; }
+      const del = e.target.closest('.doc-del-btn');
+      if (del) { deleteDoc(del.getAttribute('data-id')); return; }
       const row = e.target.closest('.cr-doc[data-path]');
       if (!row) return;
       const path = row.getAttribute('data-path');
@@ -1937,14 +2057,8 @@ function getBodyCoords(area) {
       // ── Imaging & studies (loads _studies, renders #img-grid) ──
       await loadStudies();
 
-      // ── Documents (fetched once; signed URLs generated on click) ──
-      try {
-        const { data } = await window.sb.from('medical_documents')
-          .select('type,title,file_path,doc_date,uploaded_by')
-          .eq('club_id', clubId).eq('player_id', playerId)
-          .order('doc_date', { ascending: false });
-        renderDocuments(data);
-      } catch (_) { renderDocuments([]); }
+      // ── Documents (loads _documents, renders #doc-list) ──
+      await loadDocs();
     } finally {
       doneLoading();
     }

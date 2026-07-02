@@ -683,7 +683,7 @@
           <!-- PANEL · DOCUMENTS -->
           <div class="cr-panel" id="panel-documents">
             <div class="cm-card">
-              <div class="cr-table-head"><h2>Documents</h2><span class="count" id="doc-count">6 files</span></div>
+              <div class="cr-table-head"><h2>Documents</h2><div style="display:flex;align-items:center;gap:10px"><span class="count" id="doc-count">6 files</span><button class="cm-btn is-sm" id="cr-doc-add"><i class="ti ti-plus"></i>Add document</button></div></div>
               <div id="doc-list"></div>
             </div>
           </div>
@@ -1021,6 +1021,45 @@
       <button type="button" class="cm-btn" id="study-delete" style="margin-right:auto;display:none;color:var(--cm-danger)">Delete</button>
       <button type="button" class="cm-btn" id="study-cancel">Cancel</button>
       <button type="button" class="cm-btn is-primary" id="study-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL · DOCUMENT ══ -->
+<div class="cr-modal-ov" id="modalDoc">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3 id="doc-modal-title">Add document</h3>
+      <button type="button" id="doc-close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field">
+          <label class="cm-label" for="doc-type">Type *</label>
+          <select id="doc-type" class="cm-select">
+            <option value="">— Select —</option>
+            <option value="report">Report</option>
+            <option value="consent">Consent</option>
+            <option value="certificate">Certificate</option>
+            <option value="insurance">Insurance</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="cm-field"><label class="cm-label" for="doc-date">Date</label><input id="doc-date" type="date" class="cm-input"></div>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="doc-title">Title *</label><input id="doc-title" class="cm-input"></div>
+      <div class="cm-field">
+        <label class="cm-label" for="doc-file">File</label>
+        <input id="doc-file" type="file" accept="image/*,application/pdf,.doc,.docx" class="cm-input">
+        <div class="cm-hint">≤15MB</div>
+        <div id="doc-current" style="display:none;margin-top:6px;font:500 11.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)"></div>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="doc-notes">Notes</label><textarea id="doc-notes" class="cm-textarea"></textarea></div>
+      <div id="doc-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="doc-cancel">Cancel</button>
+      <button type="button" class="cm-btn is-primary" id="doc-save">Save</button>
     </div>
   </div>
 </div>
