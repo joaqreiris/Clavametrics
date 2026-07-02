@@ -32,6 +32,8 @@
   const _cache = {};
   // Settings cache: clubId → { baseline_n, baseline_mode, active_metrics }
   const _settingsCache = {};
+  // Match-day cache: clubId → { set:Set<'YYYY-MM-DD'>, ts }
+  const _matchDatesCache = {};
 
   function _cacheKey(pid, metric, n) { return `${pid}:${metric}:${n}`; }
 
@@ -59,6 +61,34 @@
     else Object.keys(_settingsCache).forEach(k => delete _settingsCache[k]);
   };
 
+  // ── Match days — the SINGLE source of truth for "is this day a match?" ──────
+  // A day counts as a match if ANY source marks it: a training_sessions row with
+  // session_type='match' (Assign rivals, GPS import) OR a calendar_events row with
+  // type='match' (the Planner). Baselines, match reports and filters should all read
+  // matchness from here so a match is never invisible depending on where it came from.
+  async function _loadMatchDates(clubId) {
+    const cached = _matchDatesCache[clubId];
+    if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.set;
+    const set = new Set();
+    try {
+      const [ce, ms] = await Promise.all([
+        window.sb.from('calendar_events').select('date').eq('club_id', clubId).eq('type', 'match'),
+        window.sb.from('training_sessions').select('session_date').eq('club_id', clubId).eq('session_type', 'match'),
+      ]);
+      (ce.data || []).forEach(r => { if (r.date)          set.add(r.date); });
+      (ms.data || []).forEach(r => { if (r.session_date)  set.add(r.session_date); });
+    } catch { /* degrade: empty set → treated as "no matches" (insufficient) */ }
+    _matchDatesCache[clubId] = { set, ts: Date.now() };
+    return set;
+  }
+  // Public helpers so any consumer resolves matchness the SAME way.
+  window.gpsGetMatchDates = _loadMatchDates;                                  // → Promise<Set>
+  window.gpsIsMatchDay    = async (date, clubId) => (await _loadMatchDates(clubId)).has(date);
+  window.invalidateMatchDatesCache = function (clubId) {
+    if (clubId) delete _matchDatesCache[clubId];
+    else Object.keys(_matchDatesCache).forEach(k => delete _matchDatesCache[k]);
+  };
+
   // ── Cache invalidation ─────────────────────────────────────────
   window.invalidateBaselineCache = function (player_id) {
     const prefix = player_id ? player_id + ':' : null;
@@ -70,6 +100,7 @@
   // Listen for import events (fired by GPS import pipeline after UPSERT)
   window.addEventListener('gps:reports:updated', (e) => {
     window.invalidateBaselineCache();
+    window.invalidateMatchDatesCache(e.detail?.clubId);   // new sessions/matches may have arrived
     if (e.detail?.clubId) window.invalidateSettingsCache(e.detail.clubId);
   });
 
@@ -97,14 +128,24 @@
     let vals = [];
     let queryError = null;
 
+    // A report counts as "match" if its session falls on a match DAY (either source).
+    const matchDates = await _loadMatchDates(clubId);
+    if (!matchDates.size) {
+      const result = { baseline: null, count: 0, confidence: 'none', source: 'insufficient_data',
+                       warning: 'No match days on record' };
+      _cache[key] = { result, ts: now };
+      return result;
+    }
+    const _datesArr = [...matchDates];
+
     if (isCore) {
       // Core metric — column in gps_reports
       const { data, error } = await window.sb
         .from('gps_reports')
-        .select(`${metric}, training_sessions!inner(session_type)`)
+        .select(`${metric}, training_sessions!inner(session_date)`)
         .eq('player_id', player_id)
         .eq('club_id', clubId)
-        .eq('training_sessions.session_type', 'match')
+        .in('training_sessions.session_date', _datesArr)
         .not(metric, 'is', null)
         .order(metric, { ascending: false })
         .limit(n);
@@ -112,13 +153,13 @@
       vals = (data || []).map(r => +(r[metric] || 0));
     } else {
       // Custom metric — EAV in gps_report_metrics
-      // Step 1: get report IDs for player's match sessions
+      // Step 1: get report IDs for the player's reports on match days
       const { data: matchReports, error: e1 } = await window.sb
         .from('gps_reports')
-        .select('id, training_sessions!inner(session_type)')
+        .select('id, training_sessions!inner(session_date)')
         .eq('player_id', player_id)
         .eq('club_id', clubId)
-        .eq('training_sessions.session_type', 'match');
+        .in('training_sessions.session_date', _datesArr);
       queryError = e1;
       const reportIds = (matchReports || []).map(r => r.id);
       if (reportIds.length) {
@@ -171,6 +212,11 @@
     const settings = await _loadClubSettings(clubId);
     const n = (opts && opts.n) || settings.baseline_n || DEFAULT_N;
 
+    // Match days = the single source of truth (session_type='match' OR calendar match).
+    const matchDates = await _loadMatchDates(clubId);
+    if (!matchDates.size) return {};
+    const _datesArr = [...matchDates];
+
     // byPlayer: player_id → number[] (top-N values, descending)
     const byPlayer = {};
 
@@ -180,10 +226,10 @@
       // selection client-side (same result as the old server .order(metric).slice(n)).
       const data = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
-        .select(`player_id, ${metric}, training_sessions!inner(session_type)`)
+        .select(`player_id, ${metric}, training_sessions!inner(session_date)`)
         .in('player_id', player_ids)
         .eq('club_id', clubId)
-        .eq('training_sessions.session_type', 'match')
+        .in('training_sessions.session_date', _datesArr)
         .not(metric, 'is', null), { label: 'baseline.squad-core' }).catch(() => null);
       if (!data) return {};
       const _vals = {};
@@ -195,10 +241,10 @@
       // truncated report-id set → incomplete custom-metric baselines.
       const matchReports = await window.cmFetchAll(() => window.sb
         .from('gps_reports')
-        .select('id, player_id, training_sessions!inner(session_type)')
+        .select('id, player_id, training_sessions!inner(session_date)')
         .in('player_id', player_ids)
         .eq('club_id', clubId)
-        .eq('training_sessions.session_type', 'match'), { label: 'baseline.squad-eav' }).catch(() => null);
+        .in('training_sessions.session_date', _datesArr), { label: 'baseline.squad-eav' }).catch(() => null);
       if (!matchReports?.length) return {};
 
       const reportToPlayer = {};

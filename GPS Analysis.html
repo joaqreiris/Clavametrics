@@ -2502,6 +2502,8 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
       // (linking null-session reports to `created.id` would require a date on those rows)
     }
     showToast(`Rival → ${rivalName}`);
+    // The day is now a match → the vs-Match baseline (match-days cache) must refresh.
+    try { window.invalidateMatchDatesCache?.(clubId); window.invalidateBaselineCache?.(); } catch {}
     try { await window.gpFilterBar?.reload?.(); } catch {}
     try { await window.refreshDashboard?.(); } catch {}
     document.querySelector('.gp-modal-overlay')?.remove();
@@ -2558,7 +2560,7 @@ function _gpRemoveRivalFromDay(clubId, sessionId, rivalName) {
         if (error) throw error;
       }
       showToast('Rival removed');
-      try { window.cmInvalidateGpsCache?.(); } catch {}
+      try { window.cmInvalidateGpsCache?.(); window.invalidateMatchDatesCache?.(clubId); window.invalidateBaselineCache?.(); } catch {}
       try { await window.gpFilterBar?.reload?.(); } catch {}
       try { await window.refreshDashboard?.(); } catch {}
       ov.remove();
