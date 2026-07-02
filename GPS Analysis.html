@@ -900,7 +900,7 @@
           </div>
 
           <!-- Fitness · Fatigue · Form (CTL/ATL/TSB) -->
-          <div class="gp-c" data-size="md" id="card-tsb">
+          <div class="gp-c" data-size="md" id="card-tsb" data-card-id="tsb">
             <div class="gp-c-h">
               <span class="ttl">Fitness · Fatigue · Form</span>
               <span class="sub">CTL / ATL / TSB</span>
@@ -1855,10 +1855,17 @@ async function saveLayout(viewKey, overrideDid) {
         position: idx,
         config: { ...(() => { try { return JSON.parse(el.dataset.config || '{}'); } catch { return {}; } })(), ...(el.dataset.metricKey ? { metric_key: el.dataset.metricKey } : {}) },
       };
-      // F0: carry canvas coordinates when the engine has set them. Non-destructive —
-      // in the current (non-canvas) build no card has these, so the payload is unchanged.
-      const x = parseInt(el.dataset.x, 10), y = parseInt(el.dataset.y, 10),
-            w = parseInt(el.dataset.w, 10), h = parseInt(el.dataset.h, 10);
+      // Carry the free-canvas coordinates. Read the EFFECTIVE value: dataset first, else
+      // the live CSS var that actually drives the grid placement (--gp-x/y/w/h). This keeps
+      // the save correct even if dataset and the CSS var ever desync — the size/position the
+      // user SEES is what gets persisted.
+      const _coord = (key) => {
+        const d = parseInt(el.dataset[key], 10);
+        if (Number.isFinite(d)) return d;
+        const v = parseInt(el.style.getPropertyValue('--gp-' + key), 10);
+        return Number.isFinite(v) ? v : NaN;
+      };
+      const x = _coord('x'), y = _coord('y'), w = _coord('w'), h = _coord('h');
       if ([x, y, w, h].every(Number.isFinite)) Object.assign(item, { x, y, w, h });
       return item;
     });
@@ -3647,6 +3654,18 @@ async function _mountSavedBuilderCards(clubId) {
     const builderCards = cards.filter(c => c.source === 'builder');
     if (!builderCards.length) continue;
 
+    // Free-canvas coords for these builder cards from the saved layout. They mount HERE,
+    // async, possibly AFTER applyDefaultLayoutGeneric already ran — so without re-applying
+    // their x/y/w/h they'd lose size/position and fall back to the CSS default (span 6 /
+    // row 11). Keyed by card_id (= the card's UUID = dataset.cardId).
+    let _coordsById = null;
+    try {
+      const _lay = await loadLayout(view);
+      _coordsById = new Map((_lay || [])
+        .filter(c => [c.x, c.y, c.w, c.h].every(Number.isFinite))
+        .map(c => [String(c.card_id), { x: c.x, y: c.y, w: c.w, h: c.h }]));
+    } catch (e) { /* no layout → cards flow to defaults, still functional */ }
+
     for (const card of builderCards) {
       const config = card.config;
       if (!config || config.schema !== 'gp.card/v1') continue;
@@ -3658,6 +3677,14 @@ async function _mountSavedBuilderCards(clubId) {
       el.dataset.size = card.size || config.style?.size || 'md';
       el.querySelectorAll('.size-toggle button').forEach(b =>
         b.classList.toggle('is-on', b.textContent.trim() === ({ sm:'S', md:'M', lg:'L', full:'FULL' }[el.dataset.size] || 'M')));
+
+      // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
+      // first paint + placeCards keep the exact size/position instead of auto-flowing.
+      const _co = _coordsById?.get(String(card.id));
+      if (_co) {
+        if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, _co);
+        else { el.dataset.x = _co.x; el.dataset.y = _co.y; el.dataset.w = _co.w; el.dataset.h = _co.h; }
+      }
 
       grid.appendChild(el);
       grid.dataset.gptBuilderMounted = '1';
