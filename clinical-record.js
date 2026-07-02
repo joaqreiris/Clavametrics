@@ -638,6 +638,126 @@ function getBodyCoords(area) {
     el.innerHTML = html + '</div>';
   }
 
+  // ── Edit modal · Medical baseline ───────────────────────────────────────────
+  function sevOpt(v, cur) {
+    return '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + cap(v) + '</option>';
+  }
+  function allergyRowHtml(a) {
+    a = a || {};
+    return '<div class="cr-rep-row">' +
+      '<input class="cm-input bf-al-sub" placeholder="Substance" value="' + esc(a.substance || '') + '">' +
+      '<input class="cm-input bf-al-rx" placeholder="Reaction" value="' + esc(a.reaction || '') + '">' +
+      '<select class="cm-select bf-al-sev" style="max-width:130px">' +
+        sevOpt('mild', a.severity) + sevOpt('moderate', a.severity) + sevOpt('severe', a.severity) +
+      '</select>' +
+      '<button type="button" class="cr-rep-del" title="Remove"><i class="ti ti-trash"></i></button>' +
+      '</div>';
+  }
+  function chronicRowHtml(c) {
+    c = c || {};
+    return '<div class="cr-rep-row">' +
+      '<input class="cm-input bf-ch-name" placeholder="Condition" value="' + esc(c.name || '') + '">' +
+      '<input class="cm-input bf-ch-notes" placeholder="Notes" value="' + esc(c.notes || '') + '">' +
+      '<button type="button" class="cr-rep-del" title="Remove"><i class="ti ti-trash"></i></button>' +
+      '</div>';
+  }
+
+  function openBaselineModal() {
+    const p = _profile || {};
+    const setV = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
+    setV('bf-blood', p.blood_type);
+    setV('bf-phenotype', p.blood_phenotype);
+    setV('bf-sex', p.sex);
+    setV('bf-family', p.family_history);
+    const ec = p.emergency_contact || {};
+    setV('bf-ec-name', ec.name); setV('bf-ec-relation', ec.relation); setV('bf-ec-phone', ec.phone);
+    setV('bf-physician', p.treating_physician);
+    setV('bf-insurance', p.insurance);
+    setV('bf-last-review', p.last_review_date);
+    setV('bf-next-review', p.next_review_date);
+    const al = document.getElementById('bf-allergies');
+    if (al) al.innerHTML = arr(p.allergies).map(allergyRowHtml).join('');
+    const ch = document.getElementById('bf-chronic');
+    if (ch) ch.innerHTML = arr(p.chronic_conditions).map(chronicRowHtml).join('');
+    const err = document.getElementById('bf-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const ov = document.getElementById('modalBaseline'); if (ov) ov.classList.add('is-open');
+  }
+  function closeBaselineModal() {
+    const ov = document.getElementById('modalBaseline'); if (ov) ov.classList.remove('is-open');
+  }
+
+  async function saveBaseline() {
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const nn = s => (s === '' ? null : s);
+
+    const allergies = [];
+    document.querySelectorAll('#bf-allergies .cr-rep-row').forEach(r => {
+      const sub = r.querySelector('.bf-al-sub').value.trim();
+      const rx = r.querySelector('.bf-al-rx').value.trim();
+      const sev = r.querySelector('.bf-al-sev').value;
+      if (!sub && !rx) return; // discard empty rows
+      allergies.push({ substance: sub, reaction: rx || null, severity: sev || null });
+    });
+    const chronic = [];
+    document.querySelectorAll('#bf-chronic .cr-rep-row').forEach(r => {
+      const name = r.querySelector('.bf-ch-name').value.trim();
+      const notes = r.querySelector('.bf-ch-notes').value.trim();
+      if (!name && !notes) return;
+      chronic.push({ name: name, notes: notes || null });
+    });
+    const ecName = val('bf-ec-name'), ecRel = val('bf-ec-relation'), ecPhone = val('bf-ec-phone');
+    const emergency = (ecName || ecRel || ecPhone)
+      ? { name: ecName || null, relation: ecRel || null, phone: ecPhone || null } : null;
+
+    const payload = {
+      club_id: _clubId, player_id: _playerId,
+      blood_type: nn(val('bf-blood')),
+      blood_phenotype: nn(val('bf-phenotype')),
+      sex: nn(val('bf-sex')),
+      allergies: allergies,
+      chronic_conditions: chronic,
+      family_history: nn(val('bf-family')),
+      emergency_contact: emergency,
+      treating_physician: nn(val('bf-physician')),
+      insurance: nn(val('bf-insurance')),
+      last_review_date: nn(val('bf-last-review')),
+      next_review_date: nn(val('bf-next-review')),
+    };
+
+    const err = document.getElementById('bf-error');
+    const btn = document.getElementById('bf-save');
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+    if (btn) btn.disabled = true;
+    try {
+      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      const { data, error } = await window.sb.from('player_medical_profile')
+        .upsert(payload, { onConflict: 'player_id' })
+        .select('blood_type,blood_phenotype,allergies,chronic_conditions,family_history,emergency_contact,treating_physician,insurance,last_review_date,next_review_date,sex')
+        .maybeSingle();
+      if (error) throw error;
+
+      _profile = data || payload;
+      const p = _profile;
+      renderReview(p);     // identity band review dates + physician
+      renderBaseline(p);   // baseline card
+      renderAlerts(p);     // alerts strip
+
+      const newSex = currentBodySex();
+      if (newSex !== _bodySex) {
+        _bodySex = newSex;
+        applySexActive();
+        paintCard(overviewCard(), _bodyView);
+        paintCard(injuriesCard(), _injView);
+      }
+      closeBaselineModal();
+    } catch (e) {
+      console.error('[Clinical record] baseline save failed', e);
+      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) ? e.message : 'unknown error'); err.style.display = 'block'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -753,6 +873,30 @@ function getBodyCoords(area) {
         console.error('[Clinical record] could not open document', err);
       }
     });
+  })();
+
+  // ── Medical baseline edit modal wiring ──────────────────────────────────────
+  (function () {
+    const on = (id, ev, fn) => { const e = document.getElementById(id); if (e) e.addEventListener(ev, fn); };
+    on('cr-baseline-edit', 'click', openBaselineModal);
+    on('cr-baseline-close', 'click', closeBaselineModal);
+    on('bf-cancel', 'click', closeBaselineModal);
+    on('bf-save', 'click', saveBaseline);
+    on('bf-add-allergy', 'click', () => {
+      const l = document.getElementById('bf-allergies'); if (l) l.insertAdjacentHTML('beforeend', allergyRowHtml({}));
+    });
+    on('bf-add-chronic', 'click', () => {
+      const l = document.getElementById('bf-chronic'); if (l) l.insertAdjacentHTML('beforeend', chronicRowHtml({}));
+    });
+    ['bf-allergies', 'bf-chronic'].forEach(id => {
+      const list = document.getElementById(id);
+      if (list) list.addEventListener('click', e => {
+        const del = e.target.closest('.cr-rep-del');
+        if (del) { const row = del.closest('.cr-rep-row'); if (row) row.remove(); }
+      });
+    });
+    // click on the dimmed backdrop closes the modal
+    on('modalBaseline', 'click', e => { if (e.target.id === 'modalBaseline') closeBaselineModal(); });
   })();
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────

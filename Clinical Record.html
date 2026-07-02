@@ -315,6 +315,22 @@
   .hot-dot.pulse { animation:pulse 2.4s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
   #bodymap-overview .bm-stage, #bodymap-injuries .bm-stage { max-width:260px; margin:0 auto; }
+
+  /* ── Edit modal (namespaced, mirrors .inj-modal-* from Injuries.html) ─────── */
+  .cr-modal-ov { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:200; align-items:flex-start; justify-content:center; padding-top:48px; overflow-y:auto; }
+  .cr-modal-ov.is-open { display:flex; }
+  .cr-modal-box { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:14px; width:min(600px,96vw); margin-bottom:40px; display:flex; flex-direction:column; }
+  .cr-modal-h { display:flex; align-items:center; gap:12px; padding:18px 20px 14px; border-bottom:1px solid var(--cm-border-soft); }
+  .cr-modal-h h3 { font:600 17px/1 var(--cm-font-sans); color:var(--cm-fg-strong); flex:1; }
+  .cr-modal-h button { width:28px; height:28px; border-radius:7px; border:1px solid var(--cm-border-soft); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .cr-modal-body { padding:18px 20px; display:flex; flex-direction:column; gap:13px; }
+  .cr-modal-foot { padding:14px 20px; border-top:1px solid var(--cm-border-soft); display:flex; gap:8px; justify-content:flex-end; }
+  .cr-rep-list { display:flex; flex-direction:column; gap:8px; }
+  .cr-rep-row { display:flex; gap:8px; align-items:center; }
+  .cr-rep-row .cm-input, .cr-rep-row .cm-select { flex:1; min-width:0; }
+  .cr-rep-del { flex-shrink:0; width:36px; height:38px; border-radius:var(--cm-r-3); border:1px solid var(--cm-border); background:transparent; color:var(--cm-fg-muted); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .cr-rep-del:hover { color:var(--cm-danger); border-color:var(--cm-danger-bd); }
+  .cr-add-btn { align-self:flex-start; }
 </style>
 </head>
 <body class="cm">
@@ -395,7 +411,7 @@
 
           <!-- B · MEDICAL BASELINE -->
           <div class="cm-card">
-            <div class="cr-card-head"><i class="ti ti-clipboard-list"></i><h2>Medical baseline</h2></div>
+            <div class="cr-card-head"><i class="ti ti-clipboard-list"></i><h2>Medical baseline</h2><button class="cm-btn is-sm" id="cr-baseline-edit" style="margin-left:auto"><i class="ti ti-pencil"></i>Edit</button></div>
             <div class="cr-card-body">
               <div class="cr-base">
                 <div class="cr-kv"><span>Blood type</span><b id="cr-blood">O+ · CcEe</b></div>
@@ -676,6 +692,95 @@
       </div>
     </section>
   </main>
+</div>
+
+<!-- ══ EDIT MODAL · MEDICAL BASELINE ══ -->
+<div class="cr-modal-ov" id="modalBaseline">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3>Edit medical baseline</h3>
+      <button type="button" id="cr-baseline-close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field">
+          <label class="cm-label" for="bf-blood">Blood type</label>
+          <select id="bf-blood" class="cm-select">
+            <option value="">—</option>
+            <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+            <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+          </select>
+        </div>
+        <div class="cm-field">
+          <label class="cm-label" for="bf-phenotype">Blood phenotype</label>
+          <input id="bf-phenotype" class="cm-input" placeholder="e.g. CcEe">
+        </div>
+      </div>
+
+      <div class="cm-field">
+        <label class="cm-label" for="bf-sex">Sex</label>
+        <select id="bf-sex" class="cm-select">
+          <option value="">—</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
+      </div>
+
+      <div class="cm-field">
+        <label class="cm-label">Allergies</label>
+        <div class="cr-rep-list" id="bf-allergies"></div>
+        <button type="button" class="cm-btn is-sm cr-add-btn" id="bf-add-allergy"><i class="ti ti-plus"></i>Add allergy</button>
+      </div>
+
+      <div class="cm-field">
+        <label class="cm-label">Chronic conditions</label>
+        <div class="cr-rep-list" id="bf-chronic"></div>
+        <button type="button" class="cm-btn is-sm cr-add-btn" id="bf-add-chronic"><i class="ti ti-plus"></i>Add condition</button>
+      </div>
+
+      <div class="cm-field">
+        <label class="cm-label" for="bf-family">Family history</label>
+        <textarea id="bf-family" class="cm-textarea" placeholder="Relevant family medical history…"></textarea>
+      </div>
+
+      <div class="cm-field">
+        <label class="cm-label">Emergency contact</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <input id="bf-ec-name" class="cm-input" placeholder="Name">
+          <input id="bf-ec-relation" class="cm-input" placeholder="Relation">
+          <input id="bf-ec-phone" class="cm-input" placeholder="Phone">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field">
+          <label class="cm-label" for="bf-physician">Treating physician</label>
+          <input id="bf-physician" class="cm-input">
+        </div>
+        <div class="cm-field">
+          <label class="cm-label" for="bf-insurance">Insurance / clinic</label>
+          <input id="bf-insurance" class="cm-input">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field">
+          <label class="cm-label" for="bf-last-review">Last review date</label>
+          <input id="bf-last-review" type="date" class="cm-input">
+        </div>
+        <div class="cm-field">
+          <label class="cm-label" for="bf-next-review">Next review date</label>
+          <input id="bf-next-review" type="date" class="cm-input">
+        </div>
+      </div>
+
+      <div id="bf-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="bf-cancel">Cancel</button>
+      <button type="button" class="cm-btn is-primary" id="bf-save">Save</button>
+    </div>
+  </div>
 </div>
 
 <script src="clinical-record.js"></script>
