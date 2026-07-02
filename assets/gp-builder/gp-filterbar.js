@@ -18,7 +18,7 @@
   // ── Config de los desplegables (orden de la referencia) ─────────────────
   const DROPS = [
     { key: 'md_code',    icon: 'ti-calendar-event', placeholder: 'All MD',          multi: true },
-    { key: 'date',       icon: 'ti-calendar-range', placeholder: 'Any date',        date: true  },
+    { key: 'date',       icon: 'ti-calendar-range', placeholder: 'All time',        date: true  },
     { key: 'player',     icon: 'ti-user',           placeholder: 'All players',     multi: true },
     { key: 'position',   icon: 'ti-shirt-sport',    placeholder: 'All positions',   multi: true },
     { key: 'microcycle', icon: 'ti-calendar-week',  placeholder: 'All microcycles', multi: true },

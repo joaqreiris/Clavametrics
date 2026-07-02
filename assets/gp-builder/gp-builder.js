@@ -2121,7 +2121,11 @@
   /** Date filter (if active) overrides the card's own range; else keep card range. */
   function _fbEffectiveRange(FB, cardRange) {
     const d = FB?.date;
-    if (!d || (!d.preset && !d.from && !d.to)) return cardRange;
+    if (!d) return cardRange;   // no bar context (or a pinned island) → the card's own range
+    // The bar is the single source of the visible date window. NO active date filter means
+    // "all dates" — NOT the card's internal default (e.g. w30), which shows empty on
+    // historical/migrated data. Only an explicit preset / days / custom range narrows.
+    if (!d.preset && !d.from && !d.to && !(d.days && d.days.length)) return { type: 'allTime' };
     switch (d.preset) {
       case '7':      return { type: 'w7' };
       case '30':     return { type: 'w30' };
