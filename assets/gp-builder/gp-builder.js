@@ -1793,6 +1793,16 @@
           return true;
         }).map(s => s.id);
       }
+      // Specific dates: the bar's date filter can be a set of EXACT days (not just a range).
+      // Narrow to sessions whose session_date is one of the picked days. The range above
+      // already bounded to [min..max]; this refines it to only the selected days.
+      if (FBcard?.date?.days?.length && sessionIds.length) {
+        const wantDays = new Set(FBcard.date.days);
+        const { data: dts } = await sb.from('training_sessions')
+          .select('id,session_date').in('id', sessionIds);
+        if (stale()) return;
+        sessionIds = (dts || []).filter(s => wantDays.has(s.session_date)).map(s => s.id);
+      }
       if (!sessionIds.length) {
         if (_isPinned) console.log('[PIN DEBUG]', { pinnedPid: config.scope.playerId, effectiveRange: _effRange, sessionIdsCount: 0, rawRowsCount: '(n/a — died at getSessionIds)', rowsAfterFbFilter: '(n/a)' });
         _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', pinned: _isPinned, effectiveRange: _effRange, sessionIds: 0 });

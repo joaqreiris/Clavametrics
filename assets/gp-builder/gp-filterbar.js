@@ -46,12 +46,22 @@
     position:   [],                            // posiciones
     microcycle: [],                            // ids de microciclo
     rival:      [],                            // nombres de rival (session_attributes.rival)
-    date:       { preset: null, from: null, to: null },
+    // date: preset (Last 7/30/…) XOR days (specific real dates, multi-select) XOR a manual
+    // from/to custom range. `days` is the primary picker; from/to are also set to the
+    // days' min/max as a compat bound for consumers that only read from/to.
+    date:       { preset: null, from: null, to: null, days: [] },
     visibleFilters: DROPS.map(d => d.key),     // qué filtros se muestran en la barra
   };
   function isFilterVisible(key) { return state.visibleFilters.includes(key); }
   // opciones reales por desplegable: [{ value, label }]
-  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [] };
+  const options = { md_code: [], player: [], position: [], microcycle: [], rival: [], date: [] };
+
+  // 'YYYY-MM-DD' → '25 Apr 2026' (consistent, human-readable date label).
+  const _MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function _fmtDateLabel(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    return m ? `${parseInt(m[3], 10)} ${_MON[parseInt(m[2], 10) - 1]} ${m[1]}` : (iso || '');
+  }
 
   // ── Filtros encadenados ───────────────────────────────────────────────────
   // Relación REAL del club: un gps_report por fila (date/md/mc/jugador/posición).
@@ -63,7 +73,16 @@
 
   function _anyFilterActive() {
     return !!(state.md_code.length || state.player.length || state.position.length || state.microcycle.length
-      || state.date.preset || state.date.from || state.date.to);
+      || state.rival.length || state.date.preset || state.date.from || state.date.to || (state.date.days && state.date.days.length));
+  }
+  // Keep from/to = min/max of the selected days, so consumers that only read from/to get
+  // a correct bounding window (exact-day narrowing happens downstream in the resolver).
+  function _syncDaysBounds() {
+    const days = state.date.days || [];
+    if (!days.length) return;
+    const sorted = days.slice().sort();   // ascending 'YYYY-MM-DD'
+    state.date.from = sorted[0];
+    state.date.to   = sorted[sorted.length - 1];
   }
   function _dateBounds() {
     const dt = state.date;
@@ -78,9 +97,14 @@
   // ¿la fila cumple TODOS los filtros activos, salvo el del propio desplegado (exceptKey)?
   function _rowMatches(r, exceptKey) {
     if (exceptKey !== 'date') {
-      const { from, to } = _dateBounds();
-      if (from && r.d < from) return false;
-      if (to   && r.d > to)   return false;
+      const days = state.date.days;
+      if (days && days.length) {                          // specific dates → exact match
+        if (!days.includes(r.d)) return false;
+      } else {                                            // preset / custom range → bounds
+        const { from, to } = _dateBounds();
+        if (from && r.d < from) return false;
+        if (to   && r.d > to)   return false;
+      }
     }
     if (exceptKey !== 'md_code'    && state.md_code.length    && !state.md_code.includes(r.md))    return false;
     if (exceptKey !== 'microcycle' && state.microcycle.length && !state.microcycle.includes(r.mc)) return false;
@@ -90,9 +114,12 @@
     return true;
   }
   function _computeValidSets() {
-    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set(), rival: new Set() };
+    const out = { md_code: new Set(), microcycle: new Set(), player: new Set(), position: new Set(), rival: new Set(), date: new Set() };
     for (const r of _rows) {
       for (const key in _FIELD) if (_rowMatches(r, key)) out[key].add(r[_FIELD[key]]);
+      // Date valid-set: the dates possible under the OTHER active filters → prunes the
+      // date list the same way (choose rival=X ⇒ only X's dates remain selectable).
+      if (r.d && _rowMatches(r, 'date')) out.date.add(r.d);
     }
     return out;
   }
@@ -106,6 +133,12 @@
         const before = state[key].length;
         state[key] = state[key].filter(val => v[key].has(val));
         if (state[key].length !== before) pruned = true;
+      }
+      // Prune selected specific dates that became impossible under the other filters.
+      if (state.date.days && state.date.days.length) {
+        const before = state.date.days.length;
+        state.date.days = state.date.days.filter(dd => v.date.has(dd));
+        if (state.date.days.length !== before) { _syncDaysBounds(); pruned = true; }
       }
       if (!pruned) break;
     }
@@ -126,7 +159,7 @@
 
   // ── Helpers de estado ───────────────────────────────────────────────────
   function isActive(key) {
-    if (key === 'date') return !!(state.date.preset || state.date.from || state.date.to);
+    if (key === 'date') return !!(state.date.preset || state.date.from || state.date.to || (state.date.days && state.date.days.length));
     return state[key].length > 0;
   }
   function activeCount() {
@@ -178,8 +211,8 @@
     } catch (e) { /* storage no disponible */ }
   }
   function resetStateSilent() {
-    state.md_code = []; state.player = []; state.position = []; state.microcycle = [];
-    state.date = { preset: null, from: null, to: null };
+    state.md_code = []; state.player = []; state.position = []; state.microcycle = []; state.rival = [];
+    state.date = { preset: null, from: null, to: null, days: [] };
     state.visibleFilters = DROPS.map(d => d.key);
   }
   /** Carga los filtros guardados del dashboard activo (sin disparar fire). */
@@ -194,8 +227,8 @@
         state.position   = Array.isArray(s.position)   ? s.position   : [];
         state.microcycle = Array.isArray(s.microcycle) ? s.microcycle : [];
         state.date     = (s.date && typeof s.date === 'object')
-          ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null }
-          : { preset: null, from: null, to: null };
+          ? { preset: s.date.preset || null, from: s.date.from || null, to: s.date.to || null, days: Array.isArray(s.date.days) ? s.date.days : [] }
+          : { preset: null, from: null, to: null, days: [] };
         state.visibleFilters = (Array.isArray(s.visibleFilters) && s.visibleFilters.length)
           ? s.visibleFilters.filter(k => DROPS.some(d => d.key === k))
           : DROPS.map(d => d.key);
@@ -346,46 +379,86 @@
       `<div class="fb-presets">` +
         DATE_PRESETS.map(p => `<button class="fb-preset" type="button" data-preset="${p.id}">${p.label}</button>`).join('') +
       `</div>` +
-      `<div class="fb-date-h">Range</div>` +
-      `<div class="fb-range">` +
-        `<label>From<input type="date" class="fb-date-from"></label>` +
-        `<label>To<input type="date" class="fb-date-to"></label>` +
-      `</div>` +
-      `<div class="fb-date-h">Single day</div>` +
-      `<div class="fb-range">` +
-        `<label>Date<input type="date" class="fb-date-single"></label>` +
-      `</div>` +
-      `<div class="fb-foot">` +
+      `<div class="fb-date-h">Specific dates</div>` +
+      `<div class="fb-search"><i class="ti ti-search"></i><input type="text" placeholder="Search date…"></div>` +
+      `<div class="fb-actions-top">` +
+        `<button class="fb-link" type="button" data-act="all">Select all</button>` +
         `<button class="fb-link" type="button" data-act="none">Clear</button>` +
-      `</div>`;
+      `</div>` +
+      `<div class="fb-list fb-date-list"><div class="fb-empty">Loading…</div></div>` +
+      `<details class="fb-custom">` +
+        `<summary>Custom range</summary>` +
+        `<div class="fb-range">` +
+          `<label>From<input type="date" class="fb-date-from"></label>` +
+          `<label>To<input type="date" class="fb-date-to"></label>` +
+        `</div>` +
+      `</details>`;
 
     panel.addEventListener('click', e => e.stopPropagation());
+    // Presets: mutually exclusive with the date list + custom range.
     panel.querySelectorAll('.fb-preset').forEach(btn => btn.addEventListener('click', () => {
       const on = !btn.classList.contains('is-on');
       panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
       if (on) btn.classList.add('is-on');
-      // preset, rango manual y día puntual son mutuamente excluyentes
+      drafts.date = new Set();                     // clear specific-date selection
       panel.querySelector('.fb-date-from').value = '';
       panel.querySelector('.fb-date-to').value = '';
-      panel.querySelector('.fb-date-single').value = '';
-      commitDate(panel);                          // aplica al instante
+      commitDate(panel);
+      renderDateList();
     }));
+    // Specific-date list: search + select all / clear.
+    panel.querySelector('.fb-search input').addEventListener('input', e => filterList('date', e.target.value));
+    panel.querySelector('[data-act="all"]').addEventListener('click', () => dateSelectAll(true));
+    panel.querySelector('[data-act="none"]').addEventListener('click', () => dateSelectAll(false));
+    // Custom range → mutually exclusive with preset + date list.
     const onRangeInput = () => {
       panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
-      panel.querySelector('.fb-date-single').value = '';   // rango y día son excluyentes
+      drafts.date = new Set();
+      renderDateList();
       commitDate(panel);
     };
     panel.querySelector('.fb-date-from').addEventListener('input', onRangeInput);
     panel.querySelector('.fb-date-to').addEventListener('input', onRangeInput);
-    // Día puntual → filtra solo las sesiones de ESE día (from === to).
-    panel.querySelector('.fb-date-single').addEventListener('input', () => {
-      panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
+    return panel;
+  }
+
+  // Render the real-dates checkbox list, pruned by the cascade (like rival/position).
+  function renderDateList() {
+    const list = root?.querySelector('.fb-drop[data-key="date"] .fb-date-list');
+    if (!list) return;
+    const opts = options.date || [];
+    if (!opts.length) { list.innerHTML = `<div class="fb-empty">No dates with data yet.</div>`; return; }
+    const draft = drafts.date || (drafts.date = new Set());
+    const valid = _validCache && _validCache.date;    // dates possible under the OTHER filters
+    const shown = opts.filter(o => !valid || valid.has(o.value) || draft.has(o.value));
+    if (!shown.length) { list.innerHTML = `<div class="fb-empty">No dates for the current filters.</div>`; return; }
+    list.innerHTML = shown.map(o =>
+      `<label class="fb-opt"><input type="checkbox" value="${escAttr(o.value)}"${draft.has(o.value) ? ' checked' : ''}>` +
+      `<span>${escHtml(o.label)}</span></label>`
+    ).join('');
+    list.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
+      if (inp.checked) draft.add(inp.value); else draft.delete(inp.value);
+      const panel = list.closest('.fb-panel');
+      panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));  // days ⇒ no preset
       panel.querySelector('.fb-date-from').value = '';
       panel.querySelector('.fb-date-to').value = '';
       commitDate(panel);
+    }));
+  }
+
+  function dateSelectAll(on) {
+    const draft = drafts.date || (drafts.date = new Set());
+    const panel = root.querySelector('.fb-drop[data-key="date"] .fb-panel');
+    panel.querySelectorAll('.fb-date-list .fb-opt').forEach(opt => {
+      if (opt.classList.contains('is-hidden')) return;   // respect the search filter
+      const inp = opt.querySelector('input');
+      inp.checked = on;
+      if (on) draft.add(inp.value); else draft.delete(inp.value);
     });
-    panel.querySelector('[data-act="none"]').addEventListener('click', () => { clearOne('date'); syncDatePanel(); });
-    return panel;
+    panel.querySelectorAll('.fb-preset').forEach(b => b.classList.remove('is-on'));
+    panel.querySelector('.fb-date-from').value = '';
+    panel.querySelector('.fb-date-to').value = '';
+    commitDate(panel);
   }
 
   // ── Render de la lista de checkboxes desde datos reales ─────────────────
@@ -446,16 +519,17 @@
   }
   function commitDate(panel) {
     const presetBtn = panel.querySelector('.fb-preset.is-on');
-    const single = panel.querySelector('.fb-date-single').value || null;
-    const from = panel.querySelector('.fb-date-from').value || null;
-    const to   = panel.querySelector('.fb-date-to').value || null;
-    // Prioridad: preset > día puntual (from===to) > rango manual. Excluyentes.
+    const days = Array.from(drafts.date || []).sort((a, b) => b.localeCompare(a));   // newest first
+    const from = panel.querySelector('.fb-date-from')?.value || null;
+    const to   = panel.querySelector('.fb-date-to')?.value || null;
+    // Priority: preset > specific days > custom range. Mutually exclusive. When days are
+    // selected, from/to are set to their min/max as a compat bound for from/to-only consumers.
     state.date = presetBtn
-      ? { preset: presetBtn.dataset.preset, from: null, to: null }
-      : single
-        ? { preset: null, from: single, to: single }
-        : { preset: null, from, to };
-    _afterChange();   // la fecha también acota MD/jugador/posición/microciclo
+      ? { preset: presetBtn.dataset.preset, from: null, to: null, days: [] }
+      : days.length
+        ? { preset: null, from: days[days.length - 1], to: days[0], days }
+        : { preset: null, from, to, days: [] };
+    _afterChange();   // date also narrows MD/player/position/microcycle/rival (symmetric cascade)
   }
 
   // ── Triggers (estados cerrado/activo) ───────────────────────────────────
@@ -486,15 +560,20 @@
   }
 
   function dateLabel() {
+    const days = state.date.days || [];
+    if (days.length) {
+      if (days.length === 1) return _fmtDateLabel(days[0]);
+      return `${days.length} dates`;
+    }
     if (state.date.preset) {
       const p = DATE_PRESETS.find(x => x.id === state.date.preset);
       return p ? p.label : state.date.preset;
     }
     const f = state.date.from, t = state.date.to;
-    if (f && t && f === t) return `Day: ${f}`;     // fecha individual
-    if (f && t) return `${f} → ${t}`;
-    if (f) return `From ${f}`;
-    if (t) return `To ${t}`;
+    if (f && t && f === t) return _fmtDateLabel(f);     // single day
+    if (f && t) return `${_fmtDateLabel(f)} → ${_fmtDateLabel(t)}`;
+    if (f) return `From ${_fmtDateLabel(f)}`;
+    if (t) return `To ${_fmtDateLabel(t)}`;
     return '';
   }
 
@@ -509,9 +588,9 @@
 
   // ── Limpiar ─────────────────────────────────────────────────────────────
   function clearOne(key) {
-    if (key === 'date') state.date = { preset: null, from: null, to: null };
+    if (key === 'date') state.date = { preset: null, from: null, to: null, days: [] };
     else state[key] = [];
-    drafts[key] = key === 'date' ? null : new Set();
+    drafts[key] = new Set();
     applyChaining();                                  // recalcula opciones válidas (al limpiar, se amplían)
     if (openKey === key) { renderListOrDate(key); }
     DROPS.forEach(d => updateTrigger(d.key));
@@ -520,9 +599,9 @@
   }
   function clearAll_() {
     DROPS.forEach(d => {
-      if (d.key === 'date') state.date = { preset: null, from: null, to: null };
+      if (d.key === 'date') state.date = { preset: null, from: null, to: null, days: [] };
       else state[d.key] = [];
-      drafts[d.key] = d.date ? null : new Set();
+      drafts[d.key] = new Set();
     });
     applyChaining();                                  // sin filtros → _validCache null → todas habilitadas
     DROPS.forEach(d => updateTrigger(d.key));
@@ -626,13 +705,17 @@
   }
   function syncDatePanel() {
     const panel = root.querySelector('.fb-drop[data-key="date"] .fb-panel');
+    if (!panel) return;
     panel.querySelectorAll('.fb-preset').forEach(b =>
       b.classList.toggle('is-on', state.date.preset === b.dataset.preset));
-    const f = state.date.from, t = state.date.to;
-    const isSingle = f && t && f === t;            // fecha individual → va en su input
-    panel.querySelector('.fb-date-from').value   = isSingle ? '' : (f || '');
-    panel.querySelector('.fb-date-to').value     = isSingle ? '' : (t || '');
-    panel.querySelector('.fb-date-single').value = isSingle ? f  : '';
+    const days = state.date.days || [];
+    // Custom range inputs only reflect a manual from/to (not the days' compat bound).
+    const isCustom = !state.date.preset && !days.length && (state.date.from || state.date.to);
+    panel.querySelector('.fb-date-from').value = isCustom ? (state.date.from || '') : '';
+    panel.querySelector('.fb-date-to').value   = isCustom ? (state.date.to   || '') : '';
+    // Date list draft mirrors the selected days.
+    drafts.date = new Set(days);
+    renderDateList();
   }
 
   // ── Carga de opciones REALES desde Supabase ─────────────────────────────
@@ -744,6 +827,11 @@
       };
     }).filter(x => x.d);
 
+    // Real dates with data → the date filter's list (distinct, newest first).
+    options.date = [...new Set(_rows.map(r => r.d))].filter(Boolean)
+      .sort((a, b) => b.localeCompare(a))
+      .map(d => ({ value: d, label: _fmtDateLabel(d) }));
+
     // Rivals reales agrupados por ENTIDAD (opponent_id / nombre canónico), con escudo.
     // key = nombre normalizado (lo que matchea el resolver); label = nombre canónico.
     const rivalMap = new Map();   // key → { label, crest }
@@ -757,7 +845,8 @@
     applyChaining();   // si había filtros restaurados, deja _validCache listo
 
     // re-render del panel abierto si corresponde
-    if (openKey && openKey !== 'date') renderList(openKey);
+    if (openKey === 'date') syncDatePanel();
+    else if (openKey) renderList(openKey);
   }
 
   // Orden natural de MD codes: MD-4 < MD-3 < … < MD < MD+1 < MD+2
