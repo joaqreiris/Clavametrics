@@ -121,6 +121,22 @@ function getBodyCoords(area) {
   let _editingEpDetail = null;  // existing detail jsonb preserved across an edit
   let _surgeries = [];          // surgeries rows
   let _editingSurgId = null;    // id being edited in the surgery form, or null (insert)
+  let _studies = [];            // medical_studies rows
+  let _editingStudyId = null;   // id being edited in the study form, or null (insert)
+
+  // shared "— None — + one option per player injury" filler for related-injury selects
+  function fillInjurySelect(selId, selected) {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    const opts = ['<option value="">— None —</option>'];
+    arr(_injuries).forEach(i => {
+      if (!i || !i.id) return;
+      const label = (i.sub_classification || i.injury_type || 'Injury') +
+        (i.body_area ? ' · ' + i.body_area : '') + (i.start_date ? ' · ' + (fmtDate(i.start_date) || '') : '');
+      opts.push('<option value="' + esc(i.id) + '"' + (String(selected) === String(i.id) ? ' selected' : '') + '>' + esc(label) + '</option>');
+    });
+    sel.innerHTML = opts.join('');
+  }
 
   // small inline edit (pencil) button for table rows — data-id + given class
   const editBtn = (id, cls) => '<button type="button" class="' + cls + '" data-id="' + esc(id) +
@@ -330,19 +346,6 @@ function getBodyCoords(area) {
     renderSurgeries(_surgeries);
   }
 
-  function fillSurgInjurySelect(selected) {
-    const sel = document.getElementById('surg-injury');
-    if (!sel) return;
-    const opts = ['<option value="">— None —</option>'];
-    arr(_injuries).forEach(i => {
-      if (!i || !i.id) return;
-      const label = (i.sub_classification || i.injury_type || 'Injury') +
-        (i.body_area ? ' · ' + i.body_area : '') + (i.start_date ? ' · ' + (fmtDate(i.start_date) || '') : '');
-      opts.push('<option value="' + esc(i.id) + '"' + (String(selected) === String(i.id) ? ' selected' : '') + '>' + esc(label) + '</option>');
-    });
-    sel.innerHTML = opts.join('');
-  }
-
   function openSurgeryModal(id) {
     const err = document.getElementById('surg-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
     const s = (id != null) ? (arr(_surgeries).find(x => String(x.id) === String(id)) || null) : null;
@@ -354,7 +357,7 @@ function getBodyCoords(area) {
     setVal('surg-clinic', s ? s.clinic : '');
     setVal('surg-implants', s ? s.implants : '');
     setVal('surg-outcome', s ? s.outcome : '');
-    fillSurgInjurySelect(s ? s.related_injury_id : '');
+    fillInjurySelect('surg-injury', s ? s.related_injury_id : '');
     setVal('surg-notes', s ? s.notes : '');
     const title = document.getElementById('surg-modal-title'); if (title) title.textContent = s ? 'Edit procedure' : 'Add procedure';
     const del = document.getElementById('surg-delete'); if (del) del.style.display = s ? '' : 'none';
@@ -745,15 +748,16 @@ function getBodyCoords(area) {
     }
     grid.innerHTML = rows.map(s => {
       const label = MODALITY_LABEL[s.modality] || (s.modality ? cap(s.modality) : 'Study');
-      const isImg = s.file_url && IMG_RE.test(String(s.file_url));
-      const thumb = isImg
+      // file_url is a bucket PATH; only legacy http(s) links are used as a thumbnail
+      const isHttp = s.file_url && /^https?:\/\//i.test(String(s.file_url));
+      const thumb = isHttp
         ? '<div class="cr-img-thumb" style="background-image:url(\'' + esc(s.file_url) + '\');background-size:cover;background-position:center"></div>'
         : '<div class="cr-img-thumb"><i class="ti ' + (MODALITY_ICON[s.modality] || 'ti-photo') + '"></i></div>';
       const find = s.finding
         ? '<div class="cr-img-find" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.finding) + '</div>'
         : '';
       const open = s.file_url
-        ? '<a class="cr-img-open" href="' + esc(s.file_url) + '" target="_blank" rel="noopener" style="font:500 12px/1 var(--cm-font-sans)">Open</a>'
+        ? '<span class="cr-img-open study-open" data-url="' + esc(s.file_url) + '" style="cursor:pointer;font:500 12px/1 var(--cm-font-sans)">Open</span>'
         : '';
       return '<div class="cm-card cr-img-card">' +
         thumb +
@@ -765,9 +769,135 @@ function getBodyCoords(area) {
           '<div class="cr-img-area">' + esc(s.body_area || '—') + '</div>' +
           find +
         '</div>' +
-        open +
+        '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 12px">' +
+          open + editBtn(s.id, 'study-edit-btn') +
+        '</div>' +
         '</div>';
     }).join('');
+  }
+
+  // ── Imaging studies management (CRUD) modal, with file upload ───────────────
+  const MEDIA_BUCKET = 'medical-documents';
+  const studyFileName = url => (String(url || '').split('/').pop() || '').split('?')[0] || String(url || '');
+  function sanitizeName(name) {
+    let base = String(name || 'file');
+    if (base.normalize) base = base.normalize('NFD').replace(/[̀-ͯ]/g, ''); // strip accents
+    return base.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || 'file';
+  }
+
+  async function loadStudies() {
+    try {
+      const { data } = await window.sb.from('medical_studies')
+        .select('id,modality,study_date,body_area,finding,file_url,related_injury_id,notes')
+        .eq('club_id', _clubId).eq('player_id', _playerId)
+        .order('study_date', { ascending: false });
+      _studies = arr(data);
+    } catch (_) { _studies = []; }
+    renderStudies(_studies);
+  }
+
+  function openStudyModal(id) {
+    const err = document.getElementById('study-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const s = (id != null) ? (arr(_studies).find(x => String(x.id) === String(id)) || null) : null;
+    _editingStudyId = s ? s.id : null;
+    setVal('study-modality', s ? (s.modality || '') : '');
+    setVal('study-date', s ? s.study_date : '');
+    setVal('study-area', s ? s.body_area : '');
+    setVal('study-finding', s ? s.finding : '');
+    fillInjurySelect('study-injury', s ? s.related_injury_id : '');
+    setVal('study-notes', s ? s.notes : '');
+    const fileInput = document.getElementById('study-file'); if (fileInput) fileInput.value = '';
+    const cur = document.getElementById('study-current');
+    if (cur) {
+      if (s && s.file_url) { cur.style.display = ''; cur.textContent = 'Current file: ' + studyFileName(s.file_url) + ' — uploading a new file replaces it.'; }
+      else { cur.style.display = 'none'; cur.textContent = ''; }
+    }
+    const title = document.getElementById('study-modal-title'); if (title) title.textContent = s ? 'Edit study' : 'Add study';
+    const del = document.getElementById('study-delete'); if (del) del.style.display = s ? '' : 'none';
+    const ov = document.getElementById('modalStudy'); if (ov) ov.classList.add('is-open');
+  }
+  function closeStudyModal() {
+    const ov = document.getElementById('modalStudy'); if (ov) ov.classList.remove('is-open');
+  }
+
+  async function saveStudy() {
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const nn = s => (s === '' ? null : s);
+    const err = document.getElementById('study-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const fail = msg => { if (err) { err.textContent = msg; err.style.display = 'block'; } };
+
+    const modality = val('study-modality');
+    if (!modality) { fail('Modality is required.'); return; }
+
+    const fileInput = document.getElementById('study-file');
+    const file = (fileInput && fileInput.files && fileInput.files[0]) || null;
+
+    const btn = document.getElementById('study-save'); if (btn) btn.disabled = true;
+    try {
+      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+
+      let file_url;
+      if (file) {
+        const okType = /^image\//.test(file.type) || file.type === 'application/pdf';
+        if (!okType) { fail('File must be an image or PDF.'); return; }
+        if (file.size > 15 * 1024 * 1024) { fail('File must be ≤ 15MB.'); return; }
+        const path = _clubId + '/' + _playerId + '/studies/' + Date.now() + '_' + sanitizeName(file.name);
+        const { error: upErr } = await window.sb.storage.from(MEDIA_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
+        if (upErr) { fail('Upload failed: ' + ((upErr && upErr.message) || 'unknown error')); return; }
+        file_url = path;
+      } else if (_editingStudyId) {
+        const cur = arr(_studies).find(x => String(x.id) === String(_editingStudyId)) || {};
+        file_url = cur.file_url || null; // preserve existing on edit
+      } else {
+        file_url = null;
+      }
+
+      const fields = {
+        modality: modality,
+        study_date: nn(val('study-date')),
+        body_area: nn(val('study-area')),
+        finding: nn(val('study-finding')),
+        related_injury_id: nn(val('study-injury')),
+        file_url: file_url,
+        notes: nn(val('study-notes')),
+      };
+
+      let error;
+      if (_editingStudyId) {
+        ({ error } = await window.sb.from('medical_studies').update(fields).eq('id', _editingStudyId));
+      } else {
+        ({ error } = await window.sb.from('medical_studies')
+          .insert(Object.assign({ club_id: _clubId, player_id: _playerId }, fields)));
+      }
+      if (error) throw error;
+      closeStudyModal();
+      await loadStudies();
+    } catch (e) {
+      console.error('[Clinical record] save study failed', e);
+      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function deleteStudy(id) {
+    if (!window.confirm('Delete this study?')) return;
+    const s = arr(_studies).find(x => String(x.id) === String(id));
+    const err = document.getElementById('study-error');
+    try {
+      const { error } = await window.sb.from('medical_studies').delete().eq('id', id);
+      if (error) throw error;
+      // best-effort: remove the stored file (bucket paths only, not legacy http links)
+      if (s && s.file_url && !/^https?:\/\//i.test(s.file_url)) {
+        try { await window.sb.storage.from(MEDIA_BUCKET).remove([s.file_url]); }
+        catch (remErr) { console.warn('[Clinical record] study file remove failed', remErr); }
+      }
+      closeStudyModal();
+      await loadStudies();
+    } catch (e) {
+      console.error('[Clinical record] delete study failed', e);
+      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    }
   }
 
   // ── Documents tab (signed URLs generated on-demand at click) ────────────────
@@ -1530,6 +1660,33 @@ function getBodyCoords(area) {
     });
   })();
 
+  // ── Imaging study modal wiring ──────────────────────────────────────────────
+  (function () {
+    const on = (id, ev, fn) => { const e = document.getElementById(id); if (e) e.addEventListener(ev, fn); };
+    on('cr-study-add', 'click', () => openStudyModal());
+    on('study-close', 'click', closeStudyModal);
+    on('study-cancel', 'click', closeStudyModal);
+    on('study-save', 'click', saveStudy);
+    on('study-delete', 'click', () => { if (_editingStudyId) deleteStudy(_editingStudyId); });
+    on('modalStudy', 'click', e => { if (e.target.id === 'modalStudy') closeStudyModal(); });
+    const grid = document.getElementById('img-grid');
+    if (grid) grid.addEventListener('click', async e => {
+      const open = e.target.closest('.study-open');
+      if (open) {
+        const url = open.getAttribute('data-url');
+        if (!url) return;
+        if (/^https?:\/\//i.test(url)) { window.open(url, '_blank'); return; }
+        try {
+          const { data } = await window.sb.storage.from(MEDIA_BUCKET).createSignedUrl(url, 3600);
+          if (data && data.signedUrl) window.open(data.signedUrl, '_blank');
+        } catch (err) { console.error('[Clinical record] open study failed', err); }
+        return;
+      }
+      const edit = e.target.closest('.study-edit-btn');
+      if (edit) openStudyModal(edit.getAttribute('data-id'));
+    });
+  })();
+
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
   applySexActive(); // default 'male' active until the profile row resolves
   document.querySelectorAll('#cr-sexToggle button[data-sex]').forEach(btn => {
@@ -1777,14 +1934,8 @@ function getBodyCoords(area) {
         renderTreatments(rows, nameMap);
       } catch (_) { renderTreatments([], {}); }
 
-      // ── Imaging & studies (fetched once) ──
-      try {
-        const { data } = await window.sb.from('medical_studies')
-          .select('modality,study_date,body_area,finding,file_url,related_injury_id')
-          .eq('club_id', clubId).eq('player_id', playerId)
-          .order('study_date', { ascending: false });
-        renderStudies(data);
-      } catch (_) { renderStudies([]); }
+      // ── Imaging & studies (loads _studies, renders #img-grid) ──
+      await loadStudies();
 
       // ── Documents (fetched once; signed URLs generated on click) ──
       try {

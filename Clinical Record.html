@@ -676,7 +676,7 @@
 
           <!-- PANEL · IMAGING -->
           <div class="cr-panel" id="panel-imaging">
-            <div class="cr-table-head" style="padding-left:4px;padding-right:4px;"><h2>Imaging &amp; studies</h2><span class="count" id="img-count">5 studies</span></div>
+            <div class="cr-table-head" style="padding-left:4px;padding-right:4px;"><h2>Imaging &amp; studies</h2><div style="display:flex;align-items:center;gap:10px"><span class="count" id="img-count">5 studies</span><button class="cm-btn is-sm" id="cr-study-add"><i class="ti ti-plus"></i>Add study</button></div></div>
             <div id="img-grid"></div>
           </div>
 
@@ -975,6 +975,52 @@
       <button type="button" class="cm-btn" id="surg-delete" style="margin-right:auto;display:none;color:var(--cm-danger)">Delete</button>
       <button type="button" class="cm-btn" id="surg-cancel">Cancel</button>
       <button type="button" class="cm-btn is-primary" id="surg-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL · IMAGING STUDY ══ -->
+<div class="cr-modal-ov" id="modalStudy">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3 id="study-modal-title">Add study</h3>
+      <button type="button" id="study-close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field">
+          <label class="cm-label" for="study-modality">Modality *</label>
+          <select id="study-modality" class="cm-select">
+            <option value="">— Select —</option>
+            <option value="mri">MRI</option>
+            <option value="ultrasound">Ultrasound</option>
+            <option value="xray">X-ray</option>
+            <option value="ct">CT</option>
+            <option value="lab">Lab</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="cm-field"><label class="cm-label" for="study-date">Study date</label><input id="study-date" type="date" class="cm-input"></div>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="study-area">Body area</label><input id="study-area" class="cm-input"></div>
+      <div class="cm-field"><label class="cm-label" for="study-finding">Finding</label><textarea id="study-finding" class="cm-textarea"></textarea></div>
+      <div class="cm-field">
+        <label class="cm-label" for="study-injury">Related injury</label>
+        <select id="study-injury" class="cm-select"><option value="">— None —</option></select>
+      </div>
+      <div class="cm-field">
+        <label class="cm-label" for="study-file">File</label>
+        <input id="study-file" type="file" accept="image/*,application/pdf" class="cm-input">
+        <div class="cm-hint">PNG/JPG/WEBP/PDF, ≤15MB</div>
+        <div id="study-current" style="display:none;margin-top:6px;font:500 11.5px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)"></div>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="study-notes">Notes</label><textarea id="study-notes" class="cm-textarea"></textarea></div>
+      <div id="study-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="study-delete" style="margin-right:auto;display:none;color:var(--cm-danger)">Delete</button>
+      <button type="button" class="cm-btn" id="study-cancel">Cancel</button>
+      <button type="button" class="cm-btn is-primary" id="study-save">Save</button>
     </div>
   </div>
 </div>
