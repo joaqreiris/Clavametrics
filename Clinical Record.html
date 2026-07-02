@@ -430,7 +430,7 @@
                 </div>
               </div>
               <div class="cr-base">
-                <div class="cr-mini-lab">Medications &amp; supplements</div>
+                <div class="cr-mini-lab" style="display:flex;align-items:center">Medications &amp; supplements<button class="cm-btn is-sm" id="cr-meds-edit" style="margin-left:auto"><i class="ti ti-pencil"></i>Manage</button></div>
                 <div class="cr-taglist" id="cr-meds">
                   <span class="cr-tag">Salbutamol · PRN <span class="cr-tue">TUE</span></span>
                   <span class="cr-tag">Vitamin D3</span>
@@ -779,6 +779,49 @@
     <div class="cr-modal-foot">
       <button type="button" class="cm-btn" id="bf-cancel">Cancel</button>
       <button type="button" class="cm-btn is-primary" id="bf-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL · MEDICATIONS (CRUD) ══ -->
+<div class="cr-modal-ov" id="modalMeds">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3>Medications &amp; supplements</h3>
+      <button type="button" id="cr-meds-close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div class="cr-rep-list" id="meds-list"></div>
+
+      <div id="med-form" style="border-top:1px solid var(--cm-border-soft);padding-top:14px;display:flex;flex-direction:column;gap:13px">
+        <div class="cm-field">
+          <label class="cm-label" for="med-name">Name *</label>
+          <input id="med-name" class="cm-input" placeholder="e.g. Salbutamol">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+          <div class="cm-field"><label class="cm-label" for="med-dose">Dose</label><input id="med-dose" class="cm-input" placeholder="e.g. 100 mcg"></div>
+          <div class="cm-field"><label class="cm-label" for="med-freq">Frequency</label><input id="med-freq" class="cm-input" placeholder="e.g. daily / PRN"></div>
+        </div>
+        <div class="cm-field"><label class="cm-label" for="med-reason">Reason</label><input id="med-reason" class="cm-input"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+          <div class="cm-field"><label class="cm-label" for="med-start">Start date</label><input id="med-start" type="date" class="cm-input"></div>
+          <div class="cm-field"><label class="cm-label" for="med-end">End date</label><input id="med-end" type="date" class="cm-input"></div>
+        </div>
+        <div style="display:flex;gap:18px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);cursor:pointer"><input type="checkbox" id="med-supp">Supplement</label>
+          <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);cursor:pointer"><input type="checkbox" id="med-tue">TUE / therapeutic use exemption</label>
+          <label style="display:flex;align-items:center;gap:7px;font:var(--cm-body-sm);color:var(--cm-fg);cursor:pointer"><input type="checkbox" id="med-active" checked>Active</label>
+        </div>
+        <div class="cm-field"><label class="cm-label" for="med-notes">Notes</label><textarea id="med-notes" class="cm-textarea"></textarea></div>
+        <div id="med-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="cm-btn" id="med-clear">Clear</button>
+          <button type="button" class="cm-btn is-primary" id="med-save">Save medication</button>
+        </div>
+      </div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="cr-meds-close2">Close</button>
     </div>
   </div>
 </div>

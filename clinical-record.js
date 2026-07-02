@@ -16,6 +16,8 @@
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
   const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
+  const setVal = (id, v) => { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
+  const setChk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = !!v; };
   const arr = v => Array.isArray(v) ? v : [];
   const emptyRow = cols => '<tr><td colspan="' + cols + '" class="cr-empty">No records</td></tr>';
   const emptyBlock = () => '<div class="cr-empty">No records</div>';
@@ -108,6 +110,8 @@ function getBodyCoords(area) {
   let _bodySex = 'male';        // silhouette sex: 'male' | 'female'
   let _playerId = null;
   let _clubId = null;
+  let _meds = [];               // player_medications rows (for the manage modal)
+  let _editingMedId = null;     // id being edited in the meds form, or null (insert)
   const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
   const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
 
@@ -758,6 +762,129 @@ function getBodyCoords(area) {
     }
   }
 
+  // ── Medications management (CRUD) modal ─────────────────────────────────────
+  async function loadMeds() {
+    try {
+      const { data } = await window.sb.from('player_medications').select('*')
+        .eq('club_id', _clubId).eq('player_id', _playerId)
+        .order('active', { ascending: false }).order('name');
+      _meds = arr(data);
+    } catch (_) { _meds = []; }
+    renderMedsList();
+    renderMeds(_meds); // re-render the baseline card chips (prompt 3 fn, reused)
+  }
+
+  function renderMedsList() {
+    const list = document.getElementById('meds-list');
+    if (!list) return;
+    const rows = arr(_meds);
+    if (!rows.length) {
+      list.innerHTML = '<div class="cr-empty" style="padding:8px 0">No medications recorded</div>';
+      return;
+    }
+    list.innerHTML = rows.map(m => {
+      const meta = [m.dose, m.frequency, m.reason].filter(Boolean).join(' · ');
+      const tue = m.tue ? ' <span class="cr-tue">TUE</span>' : '';
+      const inactive = m.active === false
+        ? ' <span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">Inactive</span>' : '';
+      return '<div class="cr-med-row" data-id="' + esc(m.id) + '" style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--cm-border-soft)">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font:600 13px/1.3 var(--cm-font-sans);color:var(--cm-fg-strong)">' + esc(m.name || '—') + tue + inactive + '</div>' +
+          (meta ? '<div style="font:500 11.5px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">' + esc(meta) + '</div>' : '') +
+        '</div>' +
+        '<button type="button" class="cr-rep-del bf-med-edit" title="Edit"><i class="ti ti-pencil"></i></button>' +
+        '<button type="button" class="cr-rep-del bf-med-del" title="Delete"><i class="ti ti-trash"></i></button>' +
+        '</div>';
+    }).join('');
+  }
+
+  function clearMedForm() {
+    _editingMedId = null;
+    ['med-name', 'med-dose', 'med-freq', 'med-reason', 'med-start', 'med-end', 'med-notes'].forEach(id => setVal(id, ''));
+    setChk('med-supp', false); setChk('med-tue', false); setChk('med-active', true);
+    const btn = document.getElementById('med-save'); if (btn) btn.textContent = 'Save medication';
+    const err = document.getElementById('med-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+  }
+
+  function editMed(id) {
+    const m = arr(_meds).find(x => String(x.id) === String(id));
+    if (!m) return;
+    _editingMedId = m.id;
+    setVal('med-name', m.name); setVal('med-dose', m.dose); setVal('med-freq', m.frequency);
+    setVal('med-reason', m.reason); setVal('med-start', m.start_date); setVal('med-end', m.end_date);
+    setChk('med-supp', m.is_supplement); setChk('med-tue', m.tue); setChk('med-active', m.active !== false);
+    setVal('med-notes', m.notes);
+    const btn = document.getElementById('med-save'); if (btn) btn.textContent = 'Update medication';
+    const form = document.getElementById('med-form'); if (form && form.scrollIntoView) form.scrollIntoView({ block: 'nearest' });
+  }
+
+  async function deleteMed(id) {
+    if (!window.confirm('Delete this medication?')) return;
+    const err = document.getElementById('med-error');
+    try {
+      const { error } = await window.sb.from('player_medications').delete().eq('id', id);
+      if (error) throw error;
+      if (String(_editingMedId) === String(id)) clearMedForm();
+      await loadMeds();
+    } catch (e) {
+      console.error('[Clinical record] delete medication failed', e);
+      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    }
+  }
+
+  async function saveMed() {
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const chk = id => { const e = document.getElementById(id); return !!(e && e.checked); };
+    const nn = s => (s === '' ? null : s);
+    const err = document.getElementById('med-error');
+    if (err) { err.style.display = 'none'; err.textContent = ''; }
+
+    const name = val('med-name');
+    if (!name) { if (err) { err.textContent = 'Name is required.'; err.style.display = 'block'; } return; }
+
+    const fields = {
+      name: name,
+      dose: nn(val('med-dose')),
+      frequency: nn(val('med-freq')),
+      reason: nn(val('med-reason')),
+      start_date: nn(val('med-start')),
+      end_date: nn(val('med-end')),
+      is_supplement: chk('med-supp'),
+      tue: chk('med-tue'),
+      active: chk('med-active'),
+      notes: nn(val('med-notes')),
+    };
+
+    const btn = document.getElementById('med-save'); if (btn) btn.disabled = true;
+    try {
+      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      let error;
+      if (_editingMedId) {
+        ({ error } = await window.sb.from('player_medications').update(fields).eq('id', _editingMedId));
+      } else {
+        ({ error } = await window.sb.from('player_medications')
+          .insert(Object.assign({ club_id: _clubId, player_id: _playerId }, fields)));
+      }
+      if (error) throw error;
+      clearMedForm();
+      await loadMeds();
+    } catch (e) {
+      console.error('[Clinical record] save medication failed', e);
+      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function openMedsModal() {
+    clearMedForm();
+    renderMedsList();
+    const ov = document.getElementById('modalMeds'); if (ov) ov.classList.add('is-open');
+  }
+  function closeMedsModal() {
+    const ov = document.getElementById('modalMeds'); if (ov) ov.classList.remove('is-open');
+  }
+
   // ── Synchronous reset: blank every mock/data-driven region BEFORE any fetch ──
   function resetRegions() {
     const m = mainEl(); if (m) m.classList.add('is-loading');
@@ -897,6 +1024,26 @@ function getBodyCoords(area) {
     });
     // click on the dimmed backdrop closes the modal
     on('modalBaseline', 'click', e => { if (e.target.id === 'modalBaseline') closeBaselineModal(); });
+  })();
+
+  // ── Medications manage modal wiring ─────────────────────────────────────────
+  (function () {
+    const on = (id, ev, fn) => { const e = document.getElementById(id); if (e) e.addEventListener(ev, fn); };
+    on('cr-meds-edit', 'click', openMedsModal);
+    on('cr-meds-close', 'click', closeMedsModal);
+    on('cr-meds-close2', 'click', closeMedsModal);
+    on('med-save', 'click', saveMed);
+    on('med-clear', 'click', clearMedForm);
+    const list = document.getElementById('meds-list');
+    if (list) list.addEventListener('click', e => {
+      const row = e.target.closest('.cr-med-row');
+      if (!row) return;
+      const id = row.getAttribute('data-id');
+      if (!id) return;
+      if (e.target.closest('.bf-med-edit')) editMed(id);
+      else if (e.target.closest('.bf-med-del')) deleteMed(id);
+    });
+    on('modalMeds', 'click', e => { if (e.target.id === 'modalMeds') closeMedsModal(); });
   })();
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
@@ -1103,14 +1250,8 @@ function getBodyCoords(area) {
       setSilhouette(overviewCard(), _bodyView);
       setSilhouette(injuriesCard(), _injView);
 
-      // ── Medications & supplements ──
-      try {
-        const { data } = await window.sb.from('player_medications')
-          .select('name,dose,frequency,reason,is_supplement,tue,active')
-          .eq('club_id', clubId).eq('player_id', playerId)
-          .order('active', { ascending: false }).order('name');
-        renderMeds(data);
-      } catch (_) { renderMeds([]); }
+      // ── Medications & supplements (loads _meds, baseline chips + manage list) ──
+      await loadMeds();
 
       // ── Cardiac & PCMA screenings ──
       try {
