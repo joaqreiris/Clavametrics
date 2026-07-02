@@ -2253,15 +2253,19 @@
     const labels    = ms.map(s => (s.name || s.label || '').split(' ').slice(0, 2).join(' '));
     const units     = ms.map(s => s.unit || '');
     const realVals  = ms.map(s => s.points[0]?.y ?? 0);
-    const refs      = ms.map((s, i) => {
-      const b = baselineMap ? baselineMap.get(s.label) : null;
-      return (b != null && b > 0) ? b : (realVals[i] || 1);   // fallback: own value → 100%
-    });
+    // rawRef = the REAL per-axis baseline (null when there's none for that metric → the
+    // axis falls back to the player's own value = 100%). refHas flags a real reference so
+    // the tooltip only shows "(ref: X)" when X is a genuine baseline, not the fallback.
+    const rawRef    = ms.map(s => { const b = baselineMap ? baselineMap.get(s.label) : null; return (b != null && b > 0) ? b : null; });
+    const refs      = rawRef.map((b, i) => b != null ? b : (realVals[i] || 1));
+    const refHas    = rawRef.map(b => b != null);
     const pct        = realVals.map((v, i) => Math.round((v / refs[i]) * 100));
-    const realLabels = realVals.map((v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : ''));
+    const fmtVal     = (v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : '');
+    const realLabels = realVals.map(fmtVal);
+    const refLabels  = refs.map(fmtVal);
     const rMax       = Math.ceil(Math.max(120, ...(pct.length ? pct : [120])) / 30) * 30;
 
-    return { labels, pct, realLabels, units, realVals, refs, hasBaseline, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
+    return { labels, pct, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
   }
 
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
@@ -2306,8 +2310,13 @@
         pointRadius: 4, pointHoverRadius: 6,
         pointBackgroundColor: d.color, pointBorderColor: '#fff', pointBorderWidth: 1.5,
       }];
+      // Ring legend: when the radar shows a SINGLE metric with a real baseline, append the
+      // absolute reference value so the "(100%)" ring isn't an abstract number.
+      const ringLabel = (!d.grouped && d.labels.length === 1 && d.refHas[0])
+        ? `${d.baselineName} · ${d.refLabels[0]}`
+        : d.baselineName;
       if (!d.grouped && d.hasBaseline) datasets.push({
-        label: d.baselineName,
+        label: ringLabel,
         data: d.pct.map(() => 100),
         borderColor: 'rgba(148,163,184,0.75)',
         backgroundColor: 'transparent',
@@ -2332,9 +2341,12 @@
                 return `${ctx.dataset.label} — ${ctx.chart.data.labels[ctx.dataIndex]}: ${real}`;
               }
               if (ctx.datasetIndex !== 0) return `${ctx.dataset.label}: ${ctx.raw}%`;
-              // Real value + % of baseline, e.g. "HSR: 640 m · 78% del pico"
+              // Player value + reference value + % of baseline, e.g.
+              //   "HSR: 640 m · 78% del pico (ref: 820 m)"  ← the % never appears bare.
               const lbl = ctx.chart.data.labels[ctx.dataIndex], real = d.realLabels[ctx.dataIndex];
-              return d.hasBaseline ? `${lbl}: ${real} · ${ctx.raw}% ${d.baselineOf}` : `${lbl}: ${real}`;
+              if (!d.hasBaseline) return `${lbl}: ${real}`;
+              const refTxt = d.refHas[ctx.dataIndex] ? ` (ref: ${d.refLabels[ctx.dataIndex]})` : '';
+              return `${lbl}: ${real} · ${ctx.raw}% ${d.baselineOf}${refTxt}`;
             } } },
             gpbRadarLabels: { show: !d.grouped && d.showLbl, labels: d.realLabels, color: d.color },
           },
@@ -3214,17 +3226,19 @@
       const aggName = AGG[m.agg]?.name || '';
       const cat     = catalogMap.get(m.id);
       const icon    = cat ? metIcon(cat) : VIZ_TYPES.kpi.icon;
-      let delta = null;
+      let delta = null, refVal = null;
       if (p.diff != null && isFinite(p.diff)) {                    // vs microciclo
         delta = { dir: p.diff >= 0 ? 'up' : 'down', pct: p.diff };
+        if (p.ref != null && isFinite(p.ref)) refVal = p.ref;      // the ref MC's absolute value
       } else if (baselineMap) {                                    // role / match
         const bv = baselineMap.get(m.id);
         if (bv != null && bv > 0 && isFinite(value)) {
           const diff = value - bv;
           delta = { dir: diff >= 0 ? 'up' : 'down', pct: (diff / bv) * 100 };
+          refVal = bv;                                             // the baseline absolute value
         }
       }
-      return { value, unit, name, aggName, scope, icon, cmpName, delta };
+      return { value, unit, name, aggName, scope, icon, cmpName, delta, refVal };
     });
     return { items, single: items.length <= 1 };
   }
@@ -3235,7 +3249,9 @@
     let tLine = '';
     if (d.delta) {
       const sign = d.delta.dir === 'up' ? '+' : '−';
-      tLine = `<div class="t"><span class="d ${d.delta.dir}"><i class="ti ti-arrow-${d.delta.dir}-right"></i>${sign}${Math.abs(d.delta.pct).toFixed(0)}%</span>${d.cmpName ? ' ' + esc(d.cmpName) : ''}</div>`;
+      // % + the reference ABSOLUTE, so the delta never floats without a magnitude.
+      const refTxt = d.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmt(Math.round(d.refVal * 10) / 10)}${d.unit ? ' ' + esc(d.unit) : ''})</span>` : '';
+      tLine = `<div class="t"><span class="d ${d.delta.dir}"><i class="ti ti-arrow-${d.delta.dir}-right"></i>${sign}${Math.abs(d.delta.pct).toFixed(0)}%</span>${d.cmpName ? ' ' + esc(d.cmpName) : ''}${refTxt}</div>`;
     } else if (d.cmpName) {
       tLine = `<div class="t">${esc(d.cmpName)}</div>`;
     } else if (d.name) {
@@ -3254,7 +3270,8 @@
       let t = '';
       if (it.delta) {
         const sign = it.delta.dir === 'up' ? '+' : '−';
-        t = `<div class="kt"><span class="kd ${it.delta.dir}"><i class="ti ti-arrow-${it.delta.dir}-right"></i>${sign}${Math.abs(it.delta.pct).toFixed(0)}%</span>${it.cmpName ? ' ' + esc(it.cmpName) : ''}</div>`;
+        const refTxt = it.refVal != null ? ` <span style="opacity:.65;font-weight:500">(ref: ${fmt(Math.round(it.refVal * 10) / 10)}${it.unit ? ' ' + esc(it.unit) : ''})</span>` : '';
+        t = `<div class="kt"><span class="kd ${it.delta.dir}"><i class="ti ti-arrow-${it.delta.dir}-right"></i>${sign}${Math.abs(it.delta.pct).toFixed(0)}%</span>${it.cmpName ? ' ' + esc(it.cmpName) : ''}${refTxt}</div>`;
       } else if (it.cmpName) {
         t = `<div class="kt">${esc(it.cmpName)}</div>`;
       }
