@@ -636,9 +636,9 @@
           <!-- PANEL · ILLNESS & EPISODES -->
           <div class="cr-panel" id="panel-illness">
             <div class="cm-card">
-              <div class="cr-table-head"><h2>Illness &amp; non-injury episodes</h2><span class="count" id="ill-count">3 episodes</span></div>
+              <div class="cr-table-head"><h2>Illness &amp; non-injury episodes</h2><div style="display:flex;align-items:center;gap:10px"><span class="count" id="ill-count">3 episodes</span><button class="cm-btn is-sm" id="cr-ep-add"><i class="ti ti-plus"></i>Add episode</button></div></div>
               <table class="cr-table">
-                <thead><tr><th>Date</th><th>System</th><th>Diagnosis</th><th class="num">Days lost</th><th>Status</th></tr></thead>
+                <thead><tr><th>Date</th><th>System</th><th>Diagnosis</th><th class="num">Days lost</th><th>Status</th><th></th></tr></thead>
                 <tbody id="ill-tbody"></tbody>
               </table>
             </div>
@@ -878,6 +878,61 @@
     </div>
     <div class="cr-modal-foot">
       <button type="button" class="cm-btn" id="cr-scr-close2">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL · MEDICAL EPISODE (illness / concussion / other) ══ -->
+<div class="cr-modal-ov" id="modalEpisode">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3 id="ep-modal-title">Add episode</h3>
+      <button type="button" id="ep-close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field">
+          <label class="cm-label" for="ep-category">Category *</label>
+          <select id="ep-category" class="cm-select">
+            <option value="illness">Illness</option>
+            <option value="concussion">Concussion</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="cm-field">
+          <label class="cm-label" for="ep-status">Status *</label>
+          <select id="ep-status" class="cm-select">
+            <option value="active">Active</option>
+            <option value="monitoring">Monitoring</option>
+            <option value="resolved">Resolved</option>
+          </select>
+        </div>
+      </div>
+      <div class="cm-field" id="ep-system-field">
+        <label class="cm-label" for="ep-system">System</label>
+        <input id="ep-system" class="cm-input" placeholder="e.g. Respiratory / GI">
+      </div>
+      <div class="cm-field">
+        <label class="cm-label" for="ep-diagnosis">Diagnosis *</label>
+        <input id="ep-diagnosis" class="cm-input">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field"><label class="cm-label" for="ep-start">Start date *</label><input id="ep-start" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="ep-end">End date</label><input id="ep-end" type="date" class="cm-input"></div>
+      </div>
+      <div class="cm-field">
+        <label class="cm-label" for="ep-days">Days lost</label>
+        <input id="ep-days" type="number" min="0" class="cm-input" placeholder="auto from dates if empty">
+        <div class="cm-hint">Auto from dates if empty</div>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="ep-notes">Notes</label><textarea id="ep-notes" class="cm-textarea"></textarea></div>
+      <div id="ep-conc-note" style="display:none;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Return-to-sport steps are managed from the concussion log after saving.</div>
+      <div id="ep-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="ep-delete" style="margin-right:auto;display:none;color:var(--cm-danger)">Delete</button>
+      <button type="button" class="cm-btn" id="ep-cancel">Cancel</button>
+      <button type="button" class="cm-btn is-primary" id="ep-save">Save</button>
     </div>
   </div>
 </div>

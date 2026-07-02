@@ -114,6 +114,9 @@ function getBodyCoords(area) {
   let _editingMedId = null;     // id being edited in the meds form, or null (insert)
   let _screenings = [];         // medical_screenings rows (for the manage modal)
   let _editingScrId = null;     // id being edited in the screenings form, or null (insert)
+  let _episodes = [];           // medical_episodes rows
+  let _editingEpId = null;      // id being edited in the episode form, or null (insert)
+  let _editingEpDetail = null;  // existing detail jsonb preserved across an edit
   const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
   const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
 
@@ -308,6 +311,8 @@ function getBodyCoords(area) {
 
   // ── Illness & episodes tab (illness/other → table, concussion → GRTP log) ────
   const EP_STATUS_PILL = { active: ['is-danger', 'Active'], monitoring: ['is-warning', 'Monitoring'], resolved: ['is-success', 'Resolved'] };
+  const epEditBtn = id => '<button type="button" class="ep-edit-btn" data-id="' + esc(id) +
+    '" title="Edit" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-pencil"></i></button>';
   const GRTP_STEPS = [
     'Symptom-limited activity', 'Light aerobic', 'Sport-specific',
     'Non-contact drills', 'Full-contact practice', 'Return to sport',
@@ -361,7 +366,7 @@ function getBodyCoords(area) {
     if (tbody) {
       setText('ill-count', illness.length + ' ' + (illness.length === 1 ? 'episode' : 'episodes'));
       if (!illness.length) {
-        tbody.innerHTML = '<tr><td colspan="5" class="cr-empty">No episodes recorded</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">No episodes recorded</td></tr>';
       } else {
         tbody.innerHTML = illness.map(e => {
           const st = EP_STATUS_PILL[e.status] || ['', e.status || '—'];
@@ -374,6 +379,7 @@ function getBodyCoords(area) {
             '<td class="c-dx">' + esc(e.diagnosis || '—') + '</td>' +
             '<td class="num">' + esc(String(days)) + '</td>' +
             '<td>' + statusPill + '</td>' +
+            '<td style="text-align:right;width:1%">' + epEditBtn(e.id) + '</td>' +
             '</tr>';
         }).join('');
       }
@@ -392,6 +398,7 @@ function getBodyCoords(area) {
             : (e.end_date ? String(daysBetween(e.start_date, e.end_date) ?? '—') : '—');
           const warn = e.status !== 'resolved' ? ' class="is-warn"' : '';
           return '<div class="cr-conc-card">' +
+            '<div style="display:flex;justify-content:flex-end;margin-bottom:2px">' + epEditBtn(e.id) + '</div>' +
             '<div class="cr-kv"><span>Concussion</span><b>' + esc(fmtDate(e.start_date) || '—') + '</b></div>' +
             '<div class="cr-kv"><span>Days lost</span><b' + warn + '>' + esc(days) + '</b></div>' +
             '<div class="cr-kv" style="margin-bottom:6px"><span>Status</span><b>' + statusPill + '</b></div>' +
@@ -401,6 +408,126 @@ function getBodyCoords(area) {
             '</div>';
         }).join('') + '</div>';
       }
+    }
+  }
+
+  // ── Medical episodes management (CRUD) modal ────────────────────────────────
+  const CONC_GRTP_INIT = () => ({
+    grtp: [
+      { step: 1, label: 'Symptom-limited activity', done: false, date: null },
+      { step: 2, label: 'Light aerobic exercise', done: false, date: null },
+      { step: 3, label: 'Sport-specific exercise', done: false, date: null },
+      { step: 4, label: 'Non-contact training drills', done: false, date: null },
+      { step: 5, label: 'Full-contact practice', done: false, date: null },
+      { step: 6, label: 'Return to sport', done: false, date: null },
+    ],
+  });
+
+  async function loadEpisodes() {
+    try {
+      const { data } = await window.sb.from('medical_episodes')
+        .select('id,category,system,diagnosis,start_date,end_date,days_lost,status,detail,notes')
+        .eq('club_id', _clubId).eq('player_id', _playerId)
+        .order('start_date', { ascending: false });
+      _episodes = arr(data);
+    } catch (_) { _episodes = []; }
+    renderEpisodes(_episodes);
+  }
+
+  function epToggleCategory() {
+    const cat = (document.getElementById('ep-category') || {}).value;
+    const sf = document.getElementById('ep-system-field'); if (sf) sf.style.display = cat === 'concussion' ? 'none' : '';
+    const note = document.getElementById('ep-conc-note'); if (note) note.style.display = cat === 'concussion' ? 'block' : 'none';
+  }
+
+  function openEpisodeModal(id) {
+    const err = document.getElementById('ep-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const ep = (id != null) ? (arr(_episodes).find(x => String(x.id) === String(id)) || null) : null;
+    _editingEpId = ep ? ep.id : null;
+    _editingEpDetail = ep ? (ep.detail || null) : null;
+    setVal('ep-category', ep ? (ep.category || 'illness') : 'illness');
+    setVal('ep-status', ep ? (ep.status || 'active') : 'active');
+    setVal('ep-system', ep ? ep.system : '');
+    setVal('ep-diagnosis', ep ? ep.diagnosis : '');
+    setVal('ep-start', ep ? ep.start_date : '');
+    setVal('ep-end', ep ? ep.end_date : '');
+    setVal('ep-days', ep && ep.days_lost != null ? ep.days_lost : '');
+    setVal('ep-notes', ep ? ep.notes : '');
+    const title = document.getElementById('ep-modal-title'); if (title) title.textContent = ep ? 'Edit episode' : 'Add episode';
+    const del = document.getElementById('ep-delete'); if (del) del.style.display = ep ? '' : 'none';
+    epToggleCategory();
+    const ov = document.getElementById('modalEpisode'); if (ov) ov.classList.add('is-open');
+  }
+  function closeEpisodeModal() {
+    const ov = document.getElementById('modalEpisode'); if (ov) ov.classList.remove('is-open');
+  }
+
+  async function saveEpisode() {
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const nn = s => (s === '' ? null : s);
+    const err = document.getElementById('ep-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+
+    const category = val('ep-category'), diagnosis = val('ep-diagnosis'), start = val('ep-start'), status = val('ep-status');
+    if (!category || !diagnosis || !start || !status) {
+      if (err) { err.textContent = 'Category, diagnosis, start date and status are required.'; err.style.display = 'block'; }
+      return;
+    }
+    const end = nn(val('ep-end'));
+    let days_lost;
+    const daysRaw = val('ep-days');
+    if (daysRaw !== '') { const n = parseInt(daysRaw, 10); days_lost = isNaN(n) ? null : Math.max(0, n); }
+    else if (end) { days_lost = daysBetween(start, end); }
+    else days_lost = null;
+
+    let detail;
+    if (_editingEpId) detail = _editingEpDetail || null;                  // preserve on edit
+    else if (category === 'concussion') detail = CONC_GRTP_INIT();        // seed GRTP on new concussion
+    else detail = null;
+
+    const fields = {
+      category: category,
+      system: category === 'concussion' ? null : nn(val('ep-system')),
+      diagnosis: diagnosis,
+      start_date: start,
+      end_date: end,
+      days_lost: days_lost,
+      status: status,
+      detail: detail,
+      notes: nn(val('ep-notes')),
+    };
+
+    const btn = document.getElementById('ep-save'); if (btn) btn.disabled = true;
+    try {
+      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      let error;
+      if (_editingEpId) {
+        ({ error } = await window.sb.from('medical_episodes').update(fields).eq('id', _editingEpId));
+      } else {
+        ({ error } = await window.sb.from('medical_episodes')
+          .insert(Object.assign({ club_id: _clubId, player_id: _playerId }, fields)));
+      }
+      if (error) throw error;
+      closeEpisodeModal();
+      await loadEpisodes();
+    } catch (e) {
+      console.error('[Clinical record] save episode failed', e);
+      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function deleteEpisode(id) {
+    if (!window.confirm('Delete this episode?')) return;
+    const err = document.getElementById('ep-error');
+    try {
+      const { error } = await window.sb.from('medical_episodes').delete().eq('id', id);
+      if (error) throw error;
+      closeEpisodeModal();
+      await loadEpisodes();
+    } catch (e) {
+      console.error('[Clinical record] delete episode failed', e);
+      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
     }
   }
 
@@ -1058,7 +1185,7 @@ function getBodyCoords(area) {
 
     // detail tables (not yet wired) → empty state
     setHTML('inj-tbody', emptyRow(9));
-    setHTML('ill-tbody', emptyRow(5));
+    setHTML('ill-tbody', emptyRow(6));
     setHTML('surg-tbody', emptyRow(6));
     setHTML('tx-tbody', emptyRow(6));
     setHTML('img-grid', emptyBlock());
@@ -1197,6 +1324,26 @@ function getBodyCoords(area) {
       else if (e.target.closest('.bf-scr-del')) deleteScreening(id);
     });
     on('modalScreenings', 'click', e => { if (e.target.id === 'modalScreenings') closeScreeningsModal(); });
+  })();
+
+  // ── Medical episode modal wiring ────────────────────────────────────────────
+  (function () {
+    const on = (id, ev, fn) => { const e = document.getElementById(id); if (e) e.addEventListener(ev, fn); };
+    on('cr-ep-add', 'click', () => openEpisodeModal());
+    on('ep-close', 'click', closeEpisodeModal);
+    on('ep-cancel', 'click', closeEpisodeModal);
+    on('ep-save', 'click', saveEpisode);
+    on('ep-delete', 'click', () => { if (_editingEpId) deleteEpisode(_editingEpId); });
+    on('ep-category', 'change', epToggleCategory);
+    on('modalEpisode', 'click', e => { if (e.target.id === 'modalEpisode') closeEpisodeModal(); });
+    // edit buttons live inside the illness table and concussion cards (delegated)
+    ['ill-tbody', 'concussion-body'].forEach(id => {
+      const host = document.getElementById(id);
+      if (host) host.addEventListener('click', e => {
+        const b = e.target.closest('.ep-edit-btn');
+        if (b) openEpisodeModal(b.getAttribute('data-id'));
+      });
+    });
   })();
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
@@ -1431,14 +1578,8 @@ function getBodyCoords(area) {
         renderSurgeries(data);
       } catch (_) { renderSurgeries([]); }
 
-      // ── Illness & episodes + concussion log (fetched once) ──
-      try {
-        const { data } = await window.sb.from('medical_episodes')
-          .select('category,system,diagnosis,start_date,end_date,days_lost,status,detail,notes')
-          .eq('club_id', clubId).eq('player_id', playerId)
-          .order('start_date', { ascending: false });
-        renderEpisodes(data);
-      } catch (_) { renderEpisodes([]); }
+      // ── Illness & episodes + concussion log (loads _episodes, table + log) ──
+      await loadEpisodes();
 
       // ── Treatment log (fetched once; performer names resolved from profiles) ──
       try {
