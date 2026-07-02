@@ -119,6 +119,12 @@ function getBodyCoords(area) {
   let _episodes = [];           // medical_episodes rows
   let _editingEpId = null;      // id being edited in the episode form, or null (insert)
   let _editingEpDetail = null;  // existing detail jsonb preserved across an edit
+  let _surgeries = [];          // surgeries rows
+  let _editingSurgId = null;    // id being edited in the surgery form, or null (insert)
+
+  // small inline edit (pencil) button for table rows — data-id + given class
+  const editBtn = (id, cls) => '<button type="button" class="' + cls + '" data-id="' + esc(id) +
+    '" title="Edit" style="border:1px solid var(--cm-border);background:transparent;color:var(--cm-fg-muted);border-radius:var(--cm-r-2);width:28px;height:28px;cursor:pointer;line-height:1"><i class="ti ti-pencil"></i></button>';
   const SEV_RANK = { minor: 1, moderate: 2, severe: 3 };
   const SEV_COLOR = { severe: 'var(--cm-danger)', moderate: 'var(--cm-warning)', minor: '#EA580C' };
 
@@ -287,7 +293,7 @@ function getBodyCoords(area) {
     if (!tbody) return;
     setText('surg-count', rows.length + ' ' + (rows.length === 1 ? 'procedure' : 'procedures'));
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="cr-empty">No procedures recorded</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="cr-empty">No procedures recorded</td></tr>';
       return;
     }
     const byId = {};
@@ -307,8 +313,111 @@ function getBodyCoords(area) {
         '<td>' + (s.implants ? esc(s.implants) : '—') + '</td>' +
         '<td>' + (s.outcome ? esc(s.outcome) : '—') + '</td>' +
         '<td class="c-muted">' + rel + '</td>' +
+        '<td style="text-align:right;width:1%">' + editBtn(s.id, 'surg-edit-btn') + '</td>' +
         '</tr>';
     }).join('');
+  }
+
+  // ── Surgical history management (CRUD) modal ────────────────────────────────
+  async function loadSurgeries() {
+    try {
+      const { data } = await window.sb.from('surgeries')
+        .select('id,procedure,surgery_date,laterality,surgeon,clinic,implants,outcome,related_injury_id,notes')
+        .eq('club_id', _clubId).eq('player_id', _playerId)
+        .order('surgery_date', { ascending: false });
+      _surgeries = arr(data);
+    } catch (_) { _surgeries = []; }
+    renderSurgeries(_surgeries);
+  }
+
+  function fillSurgInjurySelect(selected) {
+    const sel = document.getElementById('surg-injury');
+    if (!sel) return;
+    const opts = ['<option value="">— None —</option>'];
+    arr(_injuries).forEach(i => {
+      if (!i || !i.id) return;
+      const label = (i.sub_classification || i.injury_type || 'Injury') +
+        (i.body_area ? ' · ' + i.body_area : '') + (i.start_date ? ' · ' + (fmtDate(i.start_date) || '') : '');
+      opts.push('<option value="' + esc(i.id) + '"' + (String(selected) === String(i.id) ? ' selected' : '') + '>' + esc(label) + '</option>');
+    });
+    sel.innerHTML = opts.join('');
+  }
+
+  function openSurgeryModal(id) {
+    const err = document.getElementById('surg-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+    const s = (id != null) ? (arr(_surgeries).find(x => String(x.id) === String(id)) || null) : null;
+    _editingSurgId = s ? s.id : null;
+    setVal('surg-procedure', s ? s.procedure : '');
+    setVal('surg-date', s ? s.surgery_date : '');
+    setVal('surg-laterality', s ? (s.laterality === 'na' ? '' : s.laterality) : '');
+    setVal('surg-surgeon', s ? s.surgeon : '');
+    setVal('surg-clinic', s ? s.clinic : '');
+    setVal('surg-implants', s ? s.implants : '');
+    setVal('surg-outcome', s ? s.outcome : '');
+    fillSurgInjurySelect(s ? s.related_injury_id : '');
+    setVal('surg-notes', s ? s.notes : '');
+    const title = document.getElementById('surg-modal-title'); if (title) title.textContent = s ? 'Edit procedure' : 'Add procedure';
+    const del = document.getElementById('surg-delete'); if (del) del.style.display = s ? '' : 'none';
+    const ov = document.getElementById('modalSurgery'); if (ov) ov.classList.add('is-open');
+  }
+  function closeSurgeryModal() {
+    const ov = document.getElementById('modalSurgery'); if (ov) ov.classList.remove('is-open');
+  }
+
+  async function saveSurgery() {
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const nn = s => (s === '' ? null : s);
+    const err = document.getElementById('surg-error'); if (err) { err.style.display = 'none'; err.textContent = ''; }
+
+    const procedure = val('surg-procedure');
+    if (!procedure) { if (err) { err.textContent = 'Procedure is required.'; err.style.display = 'block'; } return; }
+
+    const lat = val('surg-laterality');
+    const fields = {
+      procedure: procedure,
+      surgery_date: nn(val('surg-date')),
+      laterality: lat === '' ? 'na' : lat,
+      surgeon: nn(val('surg-surgeon')),
+      clinic: nn(val('surg-clinic')),
+      implants: nn(val('surg-implants')),
+      outcome: nn(val('surg-outcome')),
+      related_injury_id: nn(val('surg-injury')),
+      notes: nn(val('surg-notes')),
+    };
+
+    const btn = document.getElementById('surg-save'); if (btn) btn.disabled = true;
+    try {
+      if (!_clubId || !_playerId) throw new Error('Missing club or player context.');
+      let error;
+      if (_editingSurgId) {
+        ({ error } = await window.sb.from('surgeries').update(fields).eq('id', _editingSurgId));
+      } else {
+        ({ error } = await window.sb.from('surgeries')
+          .insert(Object.assign({ club_id: _clubId, player_id: _playerId }, fields)));
+      }
+      if (error) throw error;
+      closeSurgeryModal();
+      await loadSurgeries();
+    } catch (e) {
+      console.error('[Clinical record] save surgery failed', e);
+      if (err) { err.textContent = 'Could not save: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function deleteSurgery(id) {
+    if (!window.confirm('Delete this procedure?')) return;
+    const err = document.getElementById('surg-error');
+    try {
+      const { error } = await window.sb.from('surgeries').delete().eq('id', id);
+      if (error) throw error;
+      closeSurgeryModal();
+      await loadSurgeries();
+    } catch (e) {
+      console.error('[Clinical record] delete surgery failed', e);
+      if (err) { err.textContent = 'Could not delete: ' + ((e && e.message) || 'unknown error'); err.style.display = 'block'; }
+    }
   }
 
   // ── Illness & episodes tab (illness/other → table, concussion → GRTP log) ────
@@ -1233,7 +1342,7 @@ function getBodyCoords(area) {
     // detail tables (not yet wired) → empty state
     setHTML('inj-tbody', emptyRow(9));
     setHTML('ill-tbody', emptyRow(6));
-    setHTML('surg-tbody', emptyRow(6));
+    setHTML('surg-tbody', emptyRow(7));
     setHTML('tx-tbody', emptyRow(6));
     setHTML('img-grid', emptyBlock());
     setHTML('doc-list', emptyBlock());
@@ -1403,6 +1512,22 @@ function getBodyCoords(area) {
         if (inp) grtpDateChange(inp.getAttribute('data-ep'), parseInt(inp.getAttribute('data-step'), 10), inp.value);
       });
     }
+  })();
+
+  // ── Surgery modal wiring ────────────────────────────────────────────────────
+  (function () {
+    const on = (id, ev, fn) => { const e = document.getElementById(id); if (e) e.addEventListener(ev, fn); };
+    on('cr-surg-add', 'click', () => openSurgeryModal());
+    on('surg-close', 'click', closeSurgeryModal);
+    on('surg-cancel', 'click', closeSurgeryModal);
+    on('surg-save', 'click', saveSurgery);
+    on('surg-delete', 'click', () => { if (_editingSurgId) deleteSurgery(_editingSurgId); });
+    on('modalSurgery', 'click', e => { if (e.target.id === 'modalSurgery') closeSurgeryModal(); });
+    const host = document.getElementById('surg-tbody');
+    if (host) host.addEventListener('click', e => {
+      const b = e.target.closest('.surg-edit-btn');
+      if (b) openSurgeryModal(b.getAttribute('data-id'));
+    });
   })();
 
   // ── Overview heatmap Male/Female silhouette toggle (persisted on profile) ────
@@ -1628,14 +1753,8 @@ function getBodyCoords(area) {
       renderInjuryTable();
       renderOverview(player);
 
-      // ── Surgical history tab (fetched once; related injury looked up in _injuries) ──
-      try {
-        const { data } = await window.sb.from('surgeries')
-          .select('procedure,surgery_date,laterality,surgeon,clinic,implants,outcome,related_injury_id,notes')
-          .eq('club_id', clubId).eq('player_id', playerId)
-          .order('surgery_date', { ascending: false });
-        renderSurgeries(data);
-      } catch (_) { renderSurgeries([]); }
+      // ── Surgical history (loads _surgeries; related injury looked up in _injuries) ──
+      await loadSurgeries();
 
       // ── Illness & episodes + concussion log (loads _episodes, table + log) ──
       await loadEpisodes();

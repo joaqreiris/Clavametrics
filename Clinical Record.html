@@ -651,10 +651,10 @@
           <!-- PANEL · SURGICAL -->
           <div class="cr-panel" id="panel-surgical">
             <div class="cm-card">
-              <div class="cr-table-head"><h2>Surgical history</h2><span class="count" id="surg-count">1 procedure</span></div>
+              <div class="cr-table-head"><h2>Surgical history</h2><div style="display:flex;align-items:center;gap:10px"><span class="count" id="surg-count">1 procedure</span><button class="cm-btn is-sm" id="cr-surg-add"><i class="ti ti-plus"></i>Add procedure</button></div></div>
               <div style="overflow-x:auto;">
               <table class="cr-table">
-                <thead><tr><th>Date</th><th>Procedure</th><th>Surgeon / clinic</th><th>Implants</th><th>Outcome</th><th>Related injury</th></tr></thead>
+                <thead><tr><th>Date</th><th>Procedure</th><th>Surgeon / clinic</th><th>Implants</th><th>Outcome</th><th>Related injury</th><th></th></tr></thead>
                 <tbody id="surg-tbody"></tbody>
               </table>
               </div>
@@ -933,6 +933,48 @@
       <button type="button" class="cm-btn" id="ep-delete" style="margin-right:auto;display:none;color:var(--cm-danger)">Delete</button>
       <button type="button" class="cm-btn" id="ep-cancel">Cancel</button>
       <button type="button" class="cm-btn is-primary" id="ep-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL · SURGERY ══ -->
+<div class="cr-modal-ov" id="modalSurgery">
+  <div class="cr-modal-box">
+    <div class="cr-modal-h">
+      <h3 id="surg-modal-title">Add procedure</h3>
+      <button type="button" id="surg-close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="cr-modal-body">
+      <div class="cm-field"><label class="cm-label" for="surg-procedure">Procedure *</label><input id="surg-procedure" class="cm-input"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field"><label class="cm-label" for="surg-date">Surgery date</label><input id="surg-date" type="date" class="cm-input"></div>
+        <div class="cm-field">
+          <label class="cm-label" for="surg-laterality">Laterality</label>
+          <select id="surg-laterality" class="cm-select">
+            <option value="">—</option>
+            <option value="left">Left</option>
+            <option value="right">Right</option>
+            <option value="bilateral">Bilateral</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+        <div class="cm-field"><label class="cm-label" for="surg-surgeon">Surgeon</label><input id="surg-surgeon" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="surg-clinic">Clinic</label><input id="surg-clinic" class="cm-input"></div>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="surg-implants">Implants</label><input id="surg-implants" class="cm-input" placeholder="e.g. interference screw"></div>
+      <div class="cm-field"><label class="cm-label" for="surg-outcome">Outcome</label><input id="surg-outcome" class="cm-input"></div>
+      <div class="cm-field">
+        <label class="cm-label" for="surg-injury">Related injury</label>
+        <select id="surg-injury" class="cm-select"><option value="">— None —</option></select>
+      </div>
+      <div class="cm-field"><label class="cm-label" for="surg-notes">Notes</label><textarea id="surg-notes" class="cm-textarea"></textarea></div>
+      <div id="surg-error" style="display:none;font:500 12.5px/1.4 var(--cm-font-sans);color:var(--cm-danger)"></div>
+    </div>
+    <div class="cr-modal-foot">
+      <button type="button" class="cm-btn" id="surg-delete" style="margin-right:auto;display:none;color:var(--cm-danger)">Delete</button>
+      <button type="button" class="cm-btn" id="surg-cancel">Cancel</button>
+      <button type="button" class="cm-btn is-primary" id="surg-save">Save</button>
     </div>
   </div>
 </div>
