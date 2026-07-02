@@ -1704,18 +1704,19 @@
       //   · position → narrows rows to players in the chosen positions
       //   · microcycle → narrows rows to the chosen microcycle_id set
       const FB = window.gpFilterBar?.getState?.() || null;
-      // A PINNED player card (config.scope.playerId set) is an explicit player override —
-      // the bar's PLAYER filter must NOT re-narrow its rows, or picking another player in
-      // the bar would empty/override the pin (defeating "pinned card wins"). fetchReports
-      // already restricts to the pinned player; here we just drop the bar's player narrowing
-      // for this card. Every other bar filter (date/MD/rival/position/microcycle) still applies.
+      // A PINNED player card (config.scope.playerId set) is a TOTAL OVERRIDE — an "island"
+      // that shows THAT player with THEIR data using the card's OWN config, ignoring the
+      // bar completely (player, position, MD, rival, microcycle, and the date/range override).
+      // FBcard = null for pinned cards → every bar-filter step below no-ops for this card.
+      // Non-pinned cards keep following the whole bar. fetchReports still scopes to the pin.
       const _isPinned = config.scope?.level === 'player' && !!config.scope?.playerId;
-      const FBrows = (_isPinned && FB && FB.playerIds?.length) ? { ...FB, playerIds: [] } : FB;
+      const FBcard = _isPinned ? null : FB;
 
-      // Step 1: session IDs — a date filter, if active, wins over the card range.
-      let sessionIds = await getSessionIds(_fbEffectiveRange(FB, config.range), ctx, sb);
+      // Step 1: session IDs — a date filter, if active, wins over the card range (but NOT
+      // for a pinned card: FBcard is null, so it keeps its own config.range).
+      let sessionIds = await getSessionIds(_fbEffectiveRange(FBcard, config.range), ctx, sb);
       if (stale()) return;
-      if ((FB?.mdCodes?.length || FB?.rivals?.length) && sessionIds.length) {
+      if ((FBcard?.mdCodes?.length || FBcard?.rivals?.length) && sessionIds.length) {
         // MD and Rival are both session_attributes → one fetch, AND-filter sessions.
         const wantMd = FB?.mdCodes?.length ? new Set(FB.mdCodes.map(String)) : null;
         const wantRv = FB?.rivals?.length  ? new Set(FB.rivals)              : null;
@@ -1733,14 +1734,14 @@
         }).map(s => s.id);
       }
       if (!sessionIds.length) {
-        _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', effectiveRange: _fbEffectiveRange(FB, config.range), sessionIds: 0 });
+        _gpbDiag(config, FB, ctx, { stage: 'NO SESSIONS', pinned: _isPinned, effectiveRange: _fbEffectiveRange(FBcard, config.range), sessionIds: 0 });
         _showCardState(cardEl, body, 'nodata', 'No sessions match the active filters.', config);
         return;
       }
 
       // Step 2: reports — then narrow rows by player / position (AND).
       const rawRows = await fetchReports(sessionIds, config, ctx, catalogMap, sb);
-      const rows = _fbFilterRows(rawRows, FBrows, config.source);
+      const rows = _fbFilterRows(rawRows, FBcard, config.source);
       if (stale()) return;
       if (!rows.length) {
         _gpbDiag(config, FB, ctx, { stage: 'NO ROWS', sessionIds: sessionIds.length, rowsBeforeFbFilter: rawRows.length, rowsAfter: 0 });
