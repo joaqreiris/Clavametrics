@@ -125,7 +125,30 @@
           "additionalProperties": false,
           "required": ["baseline"],
           "properties": {
-            "baseline": { "type": "string", "enum": ["role", "match", "md", "mc"] },
+            "baseline": { "type": "string", "enum": ["role", "position", "match", "md", "self", "mc"] },
+            "method": { "type": "string", "enum": ["avg", "wavg", "zscore"] },
+            "refWindow": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["type"],
+                  "properties": {
+                    "type": { "type": "string", "enum": ["season", "lastN"] },
+                    "days": { "type": "integer", "minimum": 1 }
+                  }
+                }
+              ]
+            },
+            "opts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "topN": { "type": "integer", "minimum": 1 },
+                "mdLookback": { "type": "integer", "minimum": 1 }
+              }
+            },
             "refMcId": { "type": ["string", "null"] }
           }
         }

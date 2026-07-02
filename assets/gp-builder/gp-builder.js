@@ -136,13 +136,47 @@
     { id:'season',  name:'Season to date',icon:'ti-calendar-stats', d:'Current season' },
     { id:'allTime', name:'All time',      icon:'ti-infinity',       d:'Every session on record' },
   ];
+  // Unified comparison model (STEP 1). Reference type + method + type-specific opts +
+  // an independent reference window (comparison.refWindow) so the baseline is FIXED and
+  // does NOT move with the card's visible range. Legacy 'role' ⇒ 'position' (same logic).
   const COMPARES = [
-    { id:'role',  name:'vs role baseline', icon:'ti-users',          d:'Same position group' },
-    { id:'match', name:'vs match peak',    icon:'ti-ball-football',  d:'Last match reference' },
-    { id:'mc',    name:'vs microciclo',    icon:'ti-calendar-stats', d:'Diferencia vs otro MC' },
-    { id:'md',    name:'vs same MD code',  icon:'ti-calendar-event', d:'Matchday-minus code' },
-    { id:'none',  name:'No comparison',   icon:'ti-circle-off',     d:'Raw values only' },
+    { id:'none',     name:'No comparison', icon:'ti-circle-off',     d:'Raw values only' },
+    { id:'match',    name:'vs Match',      icon:'ti-ball-football',  d:'Best N matches reference' },
+    { id:'md',       name:'vs MD code',    icon:'ti-calendar-event', d:'Same matchday-minus code' },
+    { id:'position', name:'vs Position',   icon:'ti-users',          d:'Same position group' },
+    { id:'self',     name:'vs Self',       icon:'ti-user',           d:'The player’s own history' },
+    { id:'mc',       name:'vs microcycle', icon:'ti-calendar-stats', d:'Diff vs another MC' },
   ];
+  // How the reference set is aggregated (STEP 2 wires the heavy logic; STEP 1 = model + UI).
+  const CMP_METHODS = [
+    { id:'avg',    name:'Average',      d:'Mean of the reference set' },
+    { id:'wavg',   name:'Weighted avg', d:'Recency-weighted mean' },
+    { id:'zscore', name:'Z-score',      d:'Std deviations from the mean' },
+  ];
+  // Reference WINDOW for position/self (independent of the card range → a fixed baseline).
+  const CMP_WINDOWS = [
+    { id:'season', name:'Season',       d:'All sessions this season' },
+    { id:'last28', name:'Last 28 days', d:'Rolling 4-week window' },
+    { id:'last90', name:'Last 90 days', d:'Rolling 3-month window' },
+  ];
+  // refWindow object ↔ picker id
+  function _winFromId(id) {
+    if (id === 'last28') return { type: 'lastN', days: 28 };
+    if (id === 'last90') return { type: 'lastN', days: 90 };
+    return { type: 'season' };
+  }
+  function _winId(win) {
+    if (win?.type === 'lastN') return win.days === 90 ? 'last90' : 'last28';
+    return 'season';
+  }
+  function _winLabel(win) { return CMP_WINDOWS.find(w => w.id === _winId(win))?.name || 'Season'; }
+  /** Internal canonical baseline: legacy 'role' AND new 'position' share the SAME logic
+   *  (position-group baseline). Every computation read normalizes through this so the
+   *  existing role pipeline keeps working while the model/UI use 'position'. */
+  function _cmpBase(config) {
+    const b = config?.comparison?.baseline;
+    return b === 'position' ? 'role' : b;
+  }
 
   // Real microcycles for the "vs microciclo" reference picker — { id, name, start_date },
   // newest first. Loaded once in init() from the `microcycles` table.
@@ -160,22 +194,40 @@
     return typeof v === 'string' && v !== '' && v !== 'null' && v !== 'undefined';
   }
 
-  /** gp.card/v1 `comparison` block for the active state (centralizes mc + refMcId). */
+  function _clampInt(v, def, lo, hi) {
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return def;
+    return Math.max(lo, Math.min(n, hi));
+  }
+
+  /** gp.card/v1 `comparison` block for the active state. Unified model:
+   *  { baseline, method, refWindow, opts:{ topN?, mdLookback? }, refMcId? }. */
   function cmpConfig(S) {
     if (!S || S.compare === 'none') return null;
     if (S.compare === 'mc') return { baseline: 'mc', refMcId: _validMcId(S.refMcId) ? S.refMcId : null };
-    return { baseline: S.compare };
+    const baseline = S.compare === 'role' ? 'position' : S.compare;   // safety normalize
+    const c = { baseline, method: S.compareMethod || 'avg' };
+    const opts = {};
+    if (baseline === 'match') opts.topN       = _clampInt(S.compareOpts?.topN, 5, 1, 20);
+    if (baseline === 'md')    opts.mdLookback = _clampInt(S.compareOpts?.mdLookback, 4, 1, 20);
+    if (Object.keys(opts).length) c.opts = opts;
+    // Reference window is FIXED and independent of the card range (position/self).
+    if (baseline === 'position' || baseline === 'self') c.refWindow = S.refWindow || { type: 'season' };
+    return c;
   }
 
-  /** Subtitle suffix that makes the active comparison explicit on the card header, e.g.
-   *  ' · vs role baseline'. Empty when the card shows RAW values (compare === 'none'),
-   *  so the user never wonders whether they're reading values or %. */
+  /** Subtitle suffix that makes the active comparison + method explicit on the card
+   *  header, e.g. ' · vs Match · top 5 · avg'. Empty for raw cards (compare === 'none'). */
   function cmpBadge(S) {
     if (!S || S.compare === 'none') return '';
-    const name = (S.compare === 'mc')
-      ? `vs ${mcLabel(S.refMcId)}`
-      : (COMPARES.find(c => c.id === S.compare)?.name || S.compare);
-    return name ? ` · ${name}` : '';
+    if (S.compare === 'mc') return ` · vs ${mcLabel(S.refMcId)}`;
+    const ref = COMPARES.find(c => c.id === S.compare)?.name || S.compare;
+    const parts = [ref];
+    if (S.compare === 'match') parts.push(`top ${S.compareOpts?.topN ?? 5}`);
+    if (S.compare === 'md')    parts.push(`last ${S.compareOpts?.mdLookback ?? 4}`);
+    if (S.compare === 'position' || S.compare === 'self') parts.push(_winLabel(S.refWindow));
+    parts.push(S.compareMethod === 'wavg' ? 'wavg' : S.compareMethod === 'zscore' ? 'z-score' : 'avg');
+    return ` · ${parts.join(' · ')}`;
   }
 
   /** Current microcycle id (from the page context), if any. */
@@ -620,7 +672,8 @@
     else if (p === 'currentMC' && (window._gpMcId || window.gpState?.mcId)) range = 'mc';
     // Default: NO comparison → the card shows RAW values, not %. Comparison is opt-in
     // per card (the Comparison dropdown writes config.comparison; null = raw).
-    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false, compare:'none', refMcId:null, range,
+    return { type:'bars', source:'session', metrics:[], dimensions:[], scope:'player', scopeTouched:false,
+             compare:'none', compareMethod:'avg', compareOpts:{ topN:5, mdLookback:4 }, refWindow:{ type:'season' }, refMcId:null, range,
              size:'md', color:'#15803D', palette:'pitch', title:'', axes:true, legend:true, labels:false,
              points:true, area:false, horizontal:false, stacked:false, sort:null };
   }
@@ -956,8 +1009,11 @@
       S.source  = cfg.source || 'session';
       S.scope   = cfg.scope;
       S.range   = cfg.range;
-      S.compare = cfg.compare;
+      S.compare = cfg.compare === 'role' ? 'position' : cfg.compare;
       S.refMcId = cfg.refMcId || null;
+      S.compareMethod = cfg.compareMethod || 'avg';
+      S.compareOpts   = cfg.compareOpts || { topN:5, mdLookback:4 };
+      S.refWindow     = cfg.refWindow || { type:'season' };
       S.size    = cfg.size;
       S.color   = cfg.color;
       S.palette = cfg.palette;
@@ -977,8 +1033,11 @@
       S.source  = rawConfig.source || 'session';
       S.scope   = rawConfig.scope?.level         || 'player';
       S.range   = rawConfig.range?.type          || 'mc';
-      S.compare = rawConfig.comparison?.baseline || 'none';
+      S.compare = (rawConfig.comparison?.baseline === 'role' ? 'position' : rawConfig.comparison?.baseline) || 'none';
       S.refMcId = rawConfig.comparison?.refMcId  || null;
+      S.compareMethod = rawConfig.comparison?.method || 'avg';
+      S.compareOpts   = { topN: rawConfig.comparison?.opts?.topN ?? 5, mdLookback: rawConfig.comparison?.opts?.mdLookback ?? 4 };
+      S.refWindow     = rawConfig.comparison?.refWindow || { type:'season' };
       S.size    = rawConfig.style?.size          || 'md';
       S.color   = rawConfig.style?.color         || '#15803D';
       S.palette = rawConfig.style?.palette       || 'pitch';
@@ -1902,7 +1961,7 @@
         // Single-metric, player-scope line vs role → append a flat dashed reference
         // line at the role baseline. Multi-metric is left un-referenced (mixed units).
         let lineSeries = series;
-        if (config.comparison?.baseline === 'role' && config.scope.level === 'player'
+        if (_cmpBase(config) === 'role' && config.scope.level === 'player'
             && fetchRoleBaseline && series.length === 1 && series[0].points.length) {
           try {
             const bmap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb);
@@ -1924,7 +1983,7 @@
         //  · role  → fetchRoleBaseline returns a per-metric map (use it directly).
         //  · match → getMatchBaseline per metric (player scope) → map.
         // mc's ref name (for the "vs MC ref" caption) comes from Step 5a.
-        const cmp = config.comparison?.baseline;
+        const cmp = _cmpBase(config);
         drawOpts.mcRefName = mcNamesForDraw?.ref || null;
         if ((cmp === 'role' || cmp === 'match') && config.metrics?.length) {
           const bmap = new Map();
@@ -1957,7 +2016,7 @@
         // Heatmap colours each cell by diff% when a comparison is set. mc already
         // enriched the points (.diff) in Step 5a; role/match need a per-metric
         // baseline map — same source as the KPI — handed to the renderer via opts.
-        const cmp = config.comparison?.baseline;
+        const cmp = _cmpBase(config);
         if ((cmp === 'role' || cmp === 'match') && config.metrics?.length) {
           const bmap = new Map();
           try {
@@ -2166,7 +2225,7 @@
       match: { ring: 'Pico de partido (100%)',  of: 'del pico' },
       md:    { ring: 'Mismo MD (100%)',          of: 'del MD' },
     };
-    const baselineInfo = hasBaseline ? BASELINE_LABELS[config.comparison.baseline] : null;
+    const baselineInfo = hasBaseline ? BASELINE_LABELS[_cmpBase(config)] : null;
     const baselineName = baselineInfo
       ? baselineInfo.ring
       : (hasBaseline ? (COMPARES.find(c => c.id === config.comparison.baseline)?.name || 'Baseline') : null);
@@ -2854,10 +2913,10 @@
     const cats = (S.dimensions && S.dimensions.length) ? dimMockLabels(S) : DIM_MOCK.microcycle;
     const series = ms.map((m, idx) => ({ label: m.id, name: m.name, unit: m.unit,
       points: cats.map((c, r) => ({ x: c, y: Math.round(metSample(m) * (0.5 + 0.42 * Math.abs(Math.sin(r * 1.1 + idx + 1)))) })) }));
-    // single-metric + role comparison → flat dashed reference line, mirrors the saved card
-    if (S.compare === 'role' && ms.length === 1) {
+    // single-metric + position comparison → flat dashed reference line, mirrors the saved card
+    if ((S.compare === 'position' || S.compare === 'role') && ms.length === 1) {
       const base = Math.round(metSample(ms[0]) * 0.7);
-      series.push({ label: '__baseline', name: 'Role baseline', unit: ms[0].unit, dashed: true,
+      series.push({ label: '__baseline', name: 'Position baseline', unit: ms[0].unit, dashed: true,
         points: cats.map(c => ({ x: c, y: base })) });
     }
     const cfg = {
@@ -4128,8 +4187,9 @@
         <span class="ic"><i class="ti ${c.icon}"></i></span>
         <span class="tx"><span class="t">${esc(c.name)}</span><span class="d">${esc(c.d)}</span></span>
         <i class="ti ti-check ck"></i></button>`).join('');
-      // "vs microciclo" reveals a reference-MC sub-list (the MC we diff against).
-      let mcPicker = '';
+      // Compare sub-panel: mc → reference-MC list; any other reference → Method + the
+      // type-specific options (Match top-N / MD lookback / Position·Self reference window).
+      let sub = '';
       if (kind === 'compare' && S.compare === 'mc') {
         const curId = currentMcId();
         const mcRows = _mcList.length
@@ -4138,13 +4198,35 @@
               const lbl = m.name || (m.start_date ? `MC ${String(m.start_date).slice(0,10)}` : m.id);
               return `<button class="rb-opt ${String(S.refMcId)===String(m.id)?'is-on':''} ${isCur?'is-disabled':''}" data-mc="${esc(m.id)}">
                 <span class="ic"><i class="ti ti-calendar-week"></i></span>
-                <span class="tx"><span class="t">${esc(lbl)}</span>${isCur?'<span class="d">microciclo actual</span>':''}</span>
-                ${isCur?'<span class="tag no">actual</span>':'<i class="ti ti-check ck"></i>'}</button>`;
+                <span class="tx"><span class="t">${esc(lbl)}</span>${isCur?'<span class="d">current microcycle</span>':''}</span>
+                ${isCur?'<span class="tag no">current</span>':'<i class="ti ti-check ck"></i>'}</button>`;
             }).join('')
-          : `<div class="rb-note"><i class="ti ti-info-circle"></i>No hay microciclos cargados.</div>`;
-        mcPicker = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Microciclo de referencia</div></div><div class="rb-pop-b">${mcRows}</div>`;
+          : `<div class="rb-note"><i class="ti ti-info-circle"></i>No microcycles loaded.</div>`;
+        sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Reference microcycle</div></div><div class="rb-pop-b">${mcRows}</div>`;
+      } else if (kind === 'compare' && S.compare !== 'none') {
+        const numStyle = 'width:72px;padding:6px 8px;border:1px solid var(--cm-border);border-radius:6px;background:var(--cm-surface-2);color:var(--cm-fg);font:600 12px/1 var(--cm-font-mono);box-sizing:border-box';
+        const methodRows = CMP_METHODS.map(m => `<button class="rb-opt ${(S.compareMethod||'avg')===m.id?'is-on':''}" data-method="${esc(m.id)}">
+          <span class="ic"><i class="ti ti-adjustments"></i></span>
+          <span class="tx"><span class="t">${esc(m.name)}</span><span class="d">${esc(m.d)}</span></span>
+          <i class="ti ti-check ck"></i></button>`).join('');
+        let opts = '';
+        if (S.compare === 'match') {
+          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Best matches (top N)</div></div>
+            <div class="rb-pop-b" style="padding:8px 13px"><input type="number" min="1" max="20" value="${S.compareOpts?.topN ?? 5}" data-opt="topN" style="${numStyle}"></div>`;
+        } else if (S.compare === 'md') {
+          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Lookback (last N same MD)</div></div>
+            <div class="rb-pop-b" style="padding:8px 13px"><input type="number" min="1" max="20" value="${S.compareOpts?.mdLookback ?? 4}" data-opt="mdLookback" style="${numStyle}"></div>`;
+        } else if (S.compare === 'position' || S.compare === 'self') {
+          const winId = _winId(S.refWindow);
+          const winRows = CMP_WINDOWS.map(w => `<button class="rb-opt ${winId===w.id?'is-on':''}" data-win="${esc(w.id)}">
+            <span class="ic"><i class="ti ti-calendar"></i></span>
+            <span class="tx"><span class="t">${esc(w.name)}</span><span class="d">${esc(w.d)}</span></span>
+            <i class="ti ti-check ck"></i></button>`).join('');
+          opts = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Reference window (fixed)</div></div><div class="rb-pop-b">${winRows}</div>`;
+        }
+        sub = `<div class="rb-pop-h" style="margin-top:6px"><div class="t">Method</div></div><div class="rb-pop-b">${methodRows}</div>${opts}`;
       }
-      return `<div class="rb-pop-h"><div class="t">${kind==='range'?'Time range':'Comparison / baseline'}</div></div><div class="rb-pop-b">${rows}</div>${mcPicker}`;
+      return `<div class="rb-pop-h"><div class="t">${kind==='range'?'Time range':'Comparison / baseline'}</div></div><div class="rb-pop-b">${rows}</div>${sub}`;
     }
     if (kind === 'bars') {
       return `<div class="rb-pop-h"><div class="t">Bar options</div></div>
@@ -4186,15 +4268,13 @@
       e.stopPropagation();
       if (kind === 'range') { S.range = b.dataset.pick; syncSelects(); pulseNext = true; renderCard(); closePop(); return; }
       S.compare = b.dataset.pick;
-      if (S.compare === 'mc') {
-        // Keep the popover open and reveal the reference-MC list (default = previous MC).
-        if (!S.refMcId) S.refMcId = prevMcId();
-        const owner = popOwner;
-        syncSelects(); pulseNext = true; renderCard();
-        openPop(popHTML('compare'), owner, 'compare');
-        return;
-      }
-      syncSelects(); pulseNext = true; renderCard(); closePop();
+      if (S.compare === 'none') { syncSelects(); pulseNext = true; renderCard(); closePop(); return; }
+      // Any real reference: default the MC ref (for mc) and KEEP the popover open so the
+      // Method + type-specific options sub-panel is revealed for the just-picked reference.
+      if (S.compare === 'mc' && !S.refMcId) S.refMcId = prevMcId();
+      const owner = popOwner;
+      syncSelects(); pulseNext = true; renderCard();
+      openPop(popHTML('compare'), owner, 'compare');
     });
     popEl.querySelectorAll('[data-mc]').forEach(b => b.onclick = e => {
       e.stopPropagation();
@@ -4202,6 +4282,31 @@
       S.refMcId = b.dataset.mc;
       // Select → close ONLY the dropdown; the builder stays open and the label updates.
       syncSelects(); pulseNext = true; renderCard(); closePop();
+    });
+    // Method (avg / wavg / zscore) → keep the popover open, re-render to update the tick.
+    popEl.querySelectorAll('[data-method]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      S.compareMethod = b.dataset.method;
+      const owner = popOwner;
+      syncSelects(); pulseNext = true; renderCard();
+      openPop(popHTML('compare'), owner, 'compare');
+    });
+    // Reference window (position / self) → keep open, re-render.
+    popEl.querySelectorAll('[data-win]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      S.refWindow = _winFromId(b.dataset.win);
+      const owner = popOwner;
+      syncSelects(); pulseNext = true; renderCard();
+      openPop(popHTML('compare'), owner, 'compare');
+    });
+    // Type-specific numeric option (Match top-N / MD lookback) — update on input WITHOUT
+    // re-rendering the popover (keeps the field focused while typing); the label + card
+    // reflect it live.
+    popEl.querySelectorAll('[data-opt]').forEach(inp => inp.onchange = e => {
+      e.stopPropagation();
+      const key = inp.dataset.opt;
+      S.compareOpts = { ...(S.compareOpts || {}), [key]: _clampInt(inp.value, key === 'topN' ? 5 : 4, 1, 20) };
+      syncSelects(); pulseNext = true; renderCard();
     });
     popEl.querySelectorAll('[data-agg]').forEach(b => b.onclick = e => {
       e.stopPropagation();
@@ -5141,8 +5246,11 @@
     S.type    = config.viz                        || 'bars';
     S.scope   = config.scope?.level               || 'player';
     S.range   = config.range?.type                || 'mc';
-    S.compare = config.comparison?.baseline       || 'none';
+    S.compare = (config.comparison?.baseline === 'role' ? 'position' : config.comparison?.baseline) || 'none';
     S.refMcId = config.comparison?.refMcId        || null;
+    S.compareMethod = config.comparison?.method || 'avg';
+    S.compareOpts   = { topN: config.comparison?.opts?.topN ?? 5, mdLookback: config.comparison?.opts?.mdLookback ?? 4 };
+    S.refWindow     = config.comparison?.refWindow || { type:'season' };
     S.size    = config.style?.size                || 'md';
     S.color   = config.style?.color               || '#15803D';
     S.palette = config.style?.palette             || 'pitch';
