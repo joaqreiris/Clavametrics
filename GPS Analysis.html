@@ -312,8 +312,12 @@
   .gp-c-pick.is-accent { background:var(--cm-accent-soft); border-color:var(--cm-border-strong); color:var(--cm-fg-strong); }
   /* per-card player picker on a header-less (KPI) card → float top-left */
   .gp-c-pick.gp-card-player-pick-float { position:absolute; top:8px; left:8px; z-index:8; max-width:60%; overflow:hidden; }
-  .gp-c-pick.gp-card-player-pick { max-width:160px; }
+  .gp-c-pick.gp-card-player-pick { max-width:180px; }
   .gp-c-pick.gp-card-player-pick > i.ti-user { color:inherit; }
+  /* Unpin ✕ inside a pinned player chip → follow the bar filter again. */
+  .gp-c-pick .gp-c-unpin { display:inline-flex; align-items:center; margin:0 1px 0 2px; padding:0; border:0; background:transparent; color:inherit; cursor:pointer; opacity:.55; }
+  .gp-c-pick .gp-c-unpin:hover { opacity:1; color:var(--cm-danger); }
+  .gp-c-pick .gp-c-unpin .ti { font-size:11px; color:inherit; }
 
   .gp-add { grid-column: span 4; border:2px dashed var(--cm-border-strong); border-radius:var(--cm-r-4); background:transparent; color:var(--cm-fg-muted); font:500 13.5px/1.4 var(--cm-font-sans); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; cursor:pointer; min-height:220px; text-align:center; padding:20px; }
   .gp-add:hover { border-color:var(--cm-accent); color:var(--cm-fg); background:var(--cm-accent-soft); }
@@ -946,7 +950,7 @@
           <div class="gp-c is-table" data-size="full" id="card-zscore-matrix" data-card-id="zscore-matrix">
             <div class="gp-c-h">
               <span class="ttl">Z-score matrix</span>
-              <span class="sub">8 starters · 6 metrics · vs role baseline</span>
+              <span class="sub">8 starters · 6 metrics</span>
               <div class="right"><div class="size-toggle"><button>S</button><button>M</button><button>L</button><button class="is-on" style="width:30px">FULL</button></div><button><i class="ti ti-arrows-sort"></i></button><button><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="gp-zwrap">
@@ -2571,15 +2575,12 @@ window._gpEnsureCardPlayerPicker = function (cardEl, config) {
 
   const pid   = config.scope.playerId || null;
   const gIds  = window.gpFilterBar?.getState?.().playerIds || [];
-  const label = pid ? _gpPlayerLabelById(pid)
-              : (gIds.length === 1 ? `${_gpPlayerLabelById(gIds[0])} · global` : 'Auto · first in range');
 
   let chip = existing;
   if (!chip) {
     chip = document.createElement('span');
     chip.className = 'gp-c-pick gp-card-player-pick';
     chip.setAttribute('data-card-player-pick', '');
-    chip.title = 'Player shown by this card';
     const head = cardEl.querySelector(':scope > .gp-c-h');
     if (head) {
       let picks = head.querySelector('.gp-c-picks');
@@ -2595,30 +2596,61 @@ window._gpEnsureCardPlayerPicker = function (cardEl, config) {
       cardEl.appendChild(chip);
     }
   }
-  chip.classList.toggle('is-accent', !!pid);             // accent = explicitly pinned
-  chip.innerHTML = `<i class="ti ti-user"></i>${label} <i class="ti ti-chevron-down"></i>`;
+  // Two unambiguous states — the chip is a PIN, never a parallel filter:
+  //  · PINNED (config.scope.playerId set) → accent chip with a pin icon + name + an unpin
+  //    ✕ (clears the pin so the card follows the bar again). The chevron still opens the
+  //    picker to switch the pinned player.
+  //  · NOT PINNED → muted "Following filter" chip (+ the global player when the bar has
+  //    exactly one selected), making clear the card OBEYS the bar filter, not its own.
+  chip.classList.toggle('is-accent', !!pid);
+  if (pid) {
+    const label = _gpPlayerLabelById(pid);
+    chip.title = `Pinned to ${label} — ✕ to follow the bar filter`;
+    chip.innerHTML = `<i class="ti ti-pin"></i>${label}`
+      + `<button class="gp-c-unpin" data-card-unpin title="Unpin — follow the bar filter"><i class="ti ti-x"></i></button>`
+      + `<i class="ti ti-chevron-down"></i>`;
+  } else {
+    const gLabel = gIds.length === 1 ? _gpPlayerLabelById(gIds[0]) : null;
+    chip.title = 'Following the bar filter — click to pin this card to a player';
+    chip.innerHTML = `<i class="ti ti-filter"></i>Following filter${gLabel ? ` · ${gLabel}` : ''} <i class="ti ti-chevron-down"></i>`;
+  }
 };
 
-// Popover to choose this card's player (or "Follow global filter" → clear playerId).
+// Popover to PIN this card to a player (or "Follow the bar filter" → clear the pin).
+// The bar (gpFilterBar) is the only player FILTER; this only sets an explicit per-card pin.
 function _openCardPlayerPicker(anchor, cardEl) {
   const config = cardEl?.__config;
   if (!config) return;
   const cur     = config.scope?.playerId || null;
   const players = window.gpFilterBar?.getPlayerOptions?.() || [];
-  const opts = [{ value: null, label: 'Follow global filter' },
+  const opts = [{ value: null, label: 'Follow the bar filter' },
                 ...players.map(p => ({ value: p.value, label: p.label }))];
   makePopover(anchor, opts.map(o => ({ label: (o.value === cur ? '✓ ' : '') + o.label, value: o.value })), async item => {
     config.scope = config.scope || { level: 'player' };
     if (item.value) config.scope.playerId = item.value; else delete config.scope.playerId;
-    cardEl.__config = config;
-    window._gpEnsureCardPlayerPicker(cardEl, config);
-    const cardId = cardEl.dataset.cardId;
-    if (cardId && window.updateDashboardCard) {       // persists for saved (uuid) cards; no-op for slugs
-      window.updateDashboardCard(cardId, config, window.sb).catch(e => console.warn('card player persist:', e));
-    }
-    window.GpBuilder?.resolveAndRenderCard?.(cardEl, config);   // re-resolve ONLY this card
-    showToast(item.value ? `Card player → ${item.label}` : 'Card follows global filter');
+    _persistCardScope(cardEl, config);
+    showToast(item.value ? `Card pinned → ${item.label}` : 'Card follows the bar filter');
   });
+}
+
+// Clear a card's player pin → it follows the bar filter again. Wired to the chip's ✕.
+function _unpinCardPlayer(cardEl) {
+  const config = cardEl?.__config;
+  if (!config?.scope) return;
+  delete config.scope.playerId;
+  _persistCardScope(cardEl, config);
+  showToast('Card follows the bar filter');
+}
+
+// Shared: refresh the chip, persist (saved cards only) and re-resolve just this card.
+function _persistCardScope(cardEl, config) {
+  cardEl.__config = config;
+  window._gpEnsureCardPlayerPicker(cardEl, config);
+  const cardId = cardEl.dataset.cardId;
+  if (cardId && window.updateDashboardCard) {       // persists for saved (uuid) cards; no-op for slugs
+    window.updateDashboardCard(cardId, config, window.sb).catch(e => console.warn('card scope persist:', e));
+  }
+  window.GpBuilder?.resolveAndRenderCard?.(cardEl, config);   // re-resolve ONLY this card
 }
 
 function _openAcwrMetricPicker(anchor, card) {
@@ -3394,6 +3426,10 @@ if (_zSortBtn) {
 
 // ── 6. .gp-c-pick chips — delegated from .gp-page ────────────
 document.querySelector('.gp-page')?.addEventListener('click', e => {
+  // Unpin ✕ inside a player chip: clear the pin (runs before the chevron guard below,
+  // since the pinned chip's ✕ is not a chevron).
+  const unpin = e.target.closest('[data-card-unpin]');
+  if (unpin) { e.stopPropagation(); _unpinCardPlayer(unpin.closest('.gp-c')); return; }
   const pick = e.target.closest('.gp-c-pick');
   if (!pick?.querySelector('.ti-chevron-down')) return;
   e.stopPropagation();
@@ -3429,9 +3465,9 @@ document.querySelector('.gp-page')?.addEventListener('click', e => {
 
   if (/Role|Squad|Self|Match peak/i.test(txt)) {
     makePopover(pick, ['vs Role','vs Squad','vs Self (28d)','vs Match peak'].map(m => ({ label: m })), item => {
+      // Legacy static-card label only. Comparison is NOT global anymore — it lives per card
+      // in config.comparison (builder Comparison dropdown). This picker no longer mutates state.
       pick.innerHTML = `${item.label} <i class="ti ti-chevron-down"></i>`;
-      window.gpState.baseline = item.label;
-      // TODO: fire gp:cardconfig + recalculate z-scores
     });
   } else if (/MC\s*\d+\s*vs/i.test(txt)) {
     makePopover(pick, ['MC 14 vs MC 13','MC 13 vs MC 12','MC 12 vs MC 11'].map(m => ({ label: m })), item => {
