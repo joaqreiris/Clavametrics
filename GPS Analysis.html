@@ -2478,10 +2478,16 @@ async function _gpAssignRivalToDay(clubId, teamId, sessionId, date, rivalName, c
     const rivalAttrs = { rival: rivalName, ...(oppId ? { opponent_id: oppId } : {}), ...(finalCrest ? { rival_crest_url: finalCrest } : {}) };
 
     if (sessionId) {
-      // 2a. Existing session → merge rival into attributes (never overwrite session_id/type/is_historical).
-      const { data: s } = await window.sb.from('training_sessions').select('session_attributes').eq('id', sessionId).maybeSingle();
+      // 2a. Existing session → merge rival AND mark the day as a MATCH. A day with a rival
+      //     IS a match; without session_type='match' the vs-Match baseline (getMatchBaseline
+      //     filters session_type='match') never sees it → 0 matches. We remember the prior
+      //     type in _rivalPrevType so Remove can revert it. is_historical is left untouched.
+      const { data: s } = await window.sb.from('training_sessions').select('session_type, session_attributes').eq('id', sessionId).maybeSingle();
+      const prevType = s?.session_type || 'training';
       const attrs = { ...(s?.session_attributes || {}), ...rivalAttrs };
-      const { error } = await window.sb.from('training_sessions').update({ session_attributes: attrs }).eq('id', sessionId);
+      if (prevType !== 'match' && attrs._rivalPrevType == null) attrs._rivalPrevType = prevType;
+      const { error } = await window.sb.from('training_sessions')
+        .update({ session_attributes: attrs, session_type: 'match' }).eq('id', sessionId);
       if (error) throw error;
     } else if (date) {
       // 2b. No session for this day → create a HISTORICAL match container (invisible in
@@ -2542,8 +2548,13 @@ function _gpRemoveRivalFromDay(clubId, sessionId, rivalName) {
         if (error) throw error;
       } else {
         const attrs = { ...(s.session_attributes || {}) };
-        delete attrs.rival; delete attrs.opponent; delete attrs.opponent_id; delete attrs.rival_crest_url;
-        const { error } = await window.sb.from('training_sessions').update({ session_attributes: attrs }).eq('id', sessionId).eq('club_id', clubId);
+        // Revert the session_type we flipped to 'match' back to the stored original (only
+        // when WE flipped it — a genuine pre-existing match has no _rivalPrevType and stays).
+        const prevType = attrs._rivalPrevType;
+        delete attrs.rival; delete attrs.opponent; delete attrs.opponent_id; delete attrs.rival_crest_url; delete attrs._rivalPrevType;
+        const upd = { session_attributes: attrs };
+        if (prevType && s.session_type === 'match') upd.session_type = prevType;
+        const { error } = await window.sb.from('training_sessions').update(upd).eq('id', sessionId).eq('club_id', clubId);
         if (error) throw error;
       }
       showToast('Rival removed');

@@ -1956,16 +1956,27 @@
       const drawOpts = { editable: cardEl === draftCard, mcNames: mcNamesForDraw };
 
       if (config.viz === 'radar') {
-        // Per-axis role baseline drives the radial scale (so axes don't collapse).
-        // Fetched for any player-scope radar; the baseline RING is only drawn when
-        // comparison ≠ none (radarChartData keys that off config.comparison).
-        // Grouped radar (a dimension is set) normalizes per-axis itself — no role ring.
-        if (config.scope.level === 'player' && fetchRoleBaseline && !(config.dimensions || []).length) {
-          try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
-          catch (e) { console.warn('gpb role baseline:', e); }
-          // An empty/all-null baseline does NOT blank the radar — radarChartData falls back
-          // to the player's own value (100%) per axis. Logged so we can confirm the stage.
-          if (_isPinned) console.log('[PIN DEBUG] radar role baseline', { baselineMapSize: drawOpts.baselineMap?.size ?? 0, entries: drawOpts.baselineMap ? [...drawOpts.baselineMap.entries()] : null });
+        // Per-axis baseline drives the radial scale + the reference RING. Grouped radar
+        // (a dimension is set) normalizes per-axis itself → no baseline ring.
+        const cmp = _cmpBase(config);
+        if (config.scope.level === 'player' && !(config.dimensions || []).length) {
+          if (cmp === 'match' && ctx.playerId && window.getMatchBaseline) {
+            // vs Match → per-metric MATCH baseline (top-N matches). baseline:null means
+            // insufficient data → we DON'T invent a number: the metric is left out, so
+            // radarChartData falls back to the player's own value and the ring is
+            // suppressed (hasRealBaseline) + a note is shown, instead of a fake 100%.
+            const bmap = new Map();
+            for (const m of config.metrics) {
+              try { const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {}); if (r && r.baseline != null) bmap.set(m.id, r.baseline); }
+              catch (e) { console.warn('gpb match baseline:', e); }
+            }
+            if (bmap.size) drawOpts.baselineMap = bmap;
+          } else if (fetchRoleBaseline) {
+            // vs Position (role) — also the default radial scale for any player radar.
+            try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
+            catch (e) { console.warn('gpb role baseline:', e); }
+          }
+          if (_isPinned) console.log('[PIN DEBUG] radar baseline', { cmp, baselineMapSize: drawOpts.baselineMap?.size ?? 0 });
         }
       } else if (config.viz === 'line') {
         // Single-metric, player-scope line vs role → append a flat dashed reference
@@ -2279,7 +2290,16 @@
     const refLabels  = refs.map(fmtVal);
     const rMax       = Math.ceil(Math.max(120, ...(pct.length ? pct : [120])) / 30) * 30;
 
-    return { labels, pct, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
+    // A comparison is configured (hasBaseline) but NO axis resolved a real reference →
+    // don't draw a fake 100% ring; suppress it and surface a note instead of inventing.
+    const hasRealBaseline = refHas.some(Boolean);
+    const _MISS_NOTE = { match: 'No match baseline yet — need more matches',
+      role: 'No position baseline yet', position: 'No position baseline yet',
+      md: 'No MD baseline yet', self: 'No self baseline yet' };
+    const baselineMissingNote = (hasBaseline && !hasRealBaseline)
+      ? (_MISS_NOTE[config.comparison.baseline] || 'No baseline data yet') : null;
+
+    return { labels, pct, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, hasRealBaseline, baselineMissingNote, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
   }
 
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
@@ -2329,7 +2349,8 @@
       const ringLabel = (!d.grouped && d.labels.length === 1 && d.refHas[0])
         ? `${d.baselineName} · ${d.refLabels[0]}`
         : d.baselineName;
-      if (!d.grouped && d.hasBaseline) datasets.push({
+      // Draw the reference ring ONLY when a real baseline resolved — never a fake 100%.
+      if (!d.grouped && d.hasRealBaseline) datasets.push({
         label: ringLabel,
         data: d.pct.map(() => 100),
         borderColor: 'rgba(148,163,184,0.75)',
@@ -2346,7 +2367,7 @@
           responsive: true, maintainAspectRatio: false,
           animation: { duration: 320 },
           plugins: {
-            legend: { display: d.grouped ? d.showLeg : (d.showLeg && d.hasBaseline), position: 'bottom',
+            legend: { display: d.grouped ? d.showLeg : (d.showLeg && d.hasRealBaseline), position: 'bottom',
                       labels: { boxWidth: 10, padding: 12, font: { size: 10 }, usePointStyle: true } },
             tooltip: { callbacks: { label: ctx => {
               if (d.grouped) {
@@ -2358,9 +2379,10 @@
               // Player value + reference value + % of baseline, e.g.
               //   "HSR: 640 m · 78% del pico (ref: 820 m)"  ← the % never appears bare.
               const lbl = ctx.chart.data.labels[ctx.dataIndex], real = d.realLabels[ctx.dataIndex];
-              if (!d.hasBaseline) return `${lbl}: ${real}`;
-              const refTxt = d.refHas[ctx.dataIndex] ? ` (ref: ${d.refLabels[ctx.dataIndex]})` : '';
-              return `${lbl}: ${real} · ${ctx.raw}% ${d.baselineOf}${refTxt}`;
+              // No comparison, or no REAL baseline for this axis → raw value only (never a
+              // fabricated 100%). Only axes with a genuine reference show the % + ref value.
+              if (!d.hasBaseline || !d.refHas[ctx.dataIndex]) return `${lbl}: ${real}`;
+              return `${lbl}: ${real} · ${ctx.raw}% ${d.baselineOf} (ref: ${d.refLabels[ctx.dataIndex]})`;
             } } },
             gpbRadarLabels: { show: !d.grouped && d.showLbl, labels: d.realLabels, color: d.color },
           },
@@ -2376,6 +2398,14 @@
           },
         },
       });
+      // Comparison set but no real baseline → tell the user why there's no ring, instead
+      // of silently drawing raw values as if they were a comparison.
+      if (!d.grouped && d.baselineMissingNote) {
+        const note = document.createElement('div');
+        note.style.cssText = 'text-align:center;margin-top:4px;font:500 10.5px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted)';
+        note.innerHTML = `<i class="ti ti-info-circle" style="font-size:11px;vertical-align:-1px"></i> ${d.baselineMissingNote}`;
+        body.appendChild(note);
+      }
     };
     mount();
   }
