@@ -4793,15 +4793,13 @@
     </div>`;
   }
 
-  // Toolbar: segmented de tipo (refleja S.type; cosmético por ahora) + badge.
+  // Toolbar: segmented de tipo (refleja S.type; cosmético por ahora).
   function ddToolbarHTML() {
     const cur = S && S.type;
     return `<div class="bdd-bar">
       <span class="lbl">Tipo</span>
       <div class="bdd-seg" id="gpbDDSeg">${Object.keys(DD_TYPES).map(k =>
         `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}"><i class="ti ${DD_TYPES[k].icon}"></i>${DD_TYPES[k].name}</button>`).join('')}</div>
-      <span class="spacer"></span>
-      <span class="bdd-cfg"><i class="ti ti-check"></i>Same output as Classic</span>
     </div>`;
   }
 
