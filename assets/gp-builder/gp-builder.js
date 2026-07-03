@@ -3191,6 +3191,8 @@
     const _byId = id => (id != null && Array.isArray(series)) ? series.find(s => s && s.label === id) : null;
     const sX = _byId(xId) || null;
     const sY = _byId(yId) || null;
+    const sizeId = enc.size?.[0];                       // undefined when no Size role is assigned
+    const sSize  = sizeId != null ? _byId(sizeId) : null;
     const empty = { datasets: [], avgX: null, avgY: null, showAxes, showLbl, showLeg: false,
                     xName: '', yName: '', xUnit: '', yUnit: '', xTitle: '', yTitle: '',
                     height: _SCATTER_SIZE_H[size] || 240 };
@@ -3204,8 +3206,13 @@
     const paired = [];
     for (let i = 0; i < n; i++) {
       const px = sX.points[i], py = sY.points[i];
-      paired.push({ name: px.x, x: px.y, y: py.y, cat: px.cat ?? null });   // px.y = X-axis value, py.y = Y-axis value
+      const psz = sSize ? sSize.points[i] : null;       // Size metric value for the SAME entity/index
+      const sizeVal = psz ? psz.y : null;
+      paired.push({ name: px.x, x: px.y, y: py.y, cat: px.cat ?? null, size: sizeVal });   // px.y = X-axis value, py.y = Y-axis value
     }
+    // Verification log (once per render): the Size value is now flowing per point. The bubble
+    // radius is still fixed — this only confirms the data pipeline before the render uses it.
+    console.log('[SCATTER SIZE]', { sizeId: sizeId || null, hasSizeSeries: !!sSize, sample: paired.slice(0, 3).map(p => ({ name: p.name, size: p.size })) });
     if (!paired.length) return empty;
 
     const hasCat = paired.some(p => p.cat != null);
@@ -3215,7 +3222,7 @@
       const col = colors[i];
       const pts = paired
         .filter(p => (hasCat ? (p.cat ?? '—') : null) === c)
-        .map(p => ({ x: p.x, y: p.y, name: p.name }));
+        .map(p => ({ x: p.x, y: p.y, name: p.name, size: p.size }));
       return {
         label: c ?? (sX.name + ' vs ' + sY.name),
         data: pts,
