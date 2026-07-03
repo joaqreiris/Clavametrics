@@ -1966,17 +1966,26 @@
             // radarChartData falls back to the player's own value and the ring is
             // suppressed (hasRealBaseline) + a note is shown, instead of a fake 100%.
             const bmap = new Map();
+            const _mDiag = [];   // per-metric baseline result (pinned diagnostics only)
             for (const m of config.metrics) {
-              try { const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {}); if (r && r.baseline != null) bmap.set(m.id, r.baseline); }
-              catch (e) { console.warn('gpb match baseline:', e); }
+              try {
+                const r = await window.getMatchBaseline(ctx.playerId, m.id, _clubId, {});
+                if (r && r.baseline != null) bmap.set(m.id, r.baseline);
+                if (_isPinned) _mDiag.push({ id: m.id, baseline: r?.baseline ?? null, count: r?.count ?? 0, source: r?.source || 'n/a', warning: r?.warning || null });
+              }
+              catch (e) { console.warn('gpb match baseline:', e); if (_isPinned) _mDiag.push({ id: m.id, error: e?.message || String(e) }); }
             }
             if (bmap.size) drawOpts.baselineMap = bmap;
+            // Diagnostics: WHY the map is (n)empty — per-metric baseline value/count/source.
+            // A null baseline here (count<3 / derived metric with no stored value) is the
+            // usual reason the "vs Match" ring doesn't draw — NOT a key mismatch (s.label IS m.id).
+            if (_isPinned) console.log('[PIN DEBUG] match baseline per-metric', { playerId: ctx.playerId, metrics: _mDiag });
           } else if (fetchRoleBaseline) {
             // vs Position (role) — also the default radial scale for any player radar.
             try { drawOpts.baselineMap = await fetchRoleBaseline(sessionIds, config, ctx, catalogMap, sb); }
             catch (e) { console.warn('gpb role baseline:', e); }
           }
-          if (_isPinned) console.log('[PIN DEBUG] radar baseline', { cmp, baselineMapSize: drawOpts.baselineMap?.size ?? 0 });
+          if (_isPinned) console.log('[PIN DEBUG] radar baseline', { cmp, playerId: ctx.playerId, baselineMapSize: drawOpts.baselineMap?.size ?? 0, metricIds: (config.metrics || []).map(m => m.id) });
         }
       } else if (config.viz === 'line') {
         // Single-metric, player-scope line vs role → append a flat dashed reference
@@ -2303,6 +2312,13 @@
     // A comparison is configured (hasBaseline) but NO axis resolved a real reference →
     // don't draw a fake 100% ring; suppress it and surface a note instead of inventing.
     const hasRealBaseline = refHas.some(Boolean);
+    // Diagnostics: the map HAD entries but the UNRELIABLE guard dropped every axis
+    // (player value > 4× baseline). This — not a key mismatch — is the other way the
+    // ring can vanish. Logged only in this rare case (low noise), keyed by s.label = m.id.
+    if (hasBaseline && baselineMap && baselineMap.size && !hasRealBaseline) {
+      console.log('[PIN DEBUG] radar guard dropped all axes', {
+        cap: UNRELIABLE_CAP, axes: ms.map((s, i) => ({ id: s.label, real: realVals[i], baseline: rawRef[i] })) });
+    }
     const _MISS_NOTE = { match: 'No match baseline yet — need more matches',
       role: 'No position baseline yet', position: 'No position baseline yet',
       md: 'No MD baseline yet', self: 'No self baseline yet' };
