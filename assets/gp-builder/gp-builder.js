@@ -4637,12 +4637,21 @@
   //  wiring de eventos vive en buildStaticPanel() (dragstart/over/drop/click/change).
   // ══════════════════════════════════════════════════════════════════════
 
-  // Etiquetas de eje por tipo (sólo las que muestra el toolbar D&D, como la
-  // maqueta). Para tipos fuera de estos 3 se usan las de barras por defecto.
+  // Per-type axis/zone labels for the D&D toolbar — one entry per VIZ_TYPES id, in the
+  // SAME order so the D&D selector matches the classic one. Icons mirror VIZ_TYPES (they
+  // already render in the classic toolbar). The RULES (min/max metrics, dimMax) are NOT
+  // duplicated here: ddSetType/ddAddField read them from VIZ_TYPES, so a drop in D&D
+  // respects exactly what the classic validates (scatter=2, ranking=1 dim+1 metric, kpi=no
+  // dim…). _ddAxes() still falls back to bars for any future type not listed here.
   const DD_TYPES = {
-    bars:  { name:'Barras', icon:'ti-chart-bar',  dimAx:'eje X · categorías',    metAx:'eje Y · valores' },
-    line:  { name:'Línea',  icon:'ti-chart-line', dimAx:'eje X · tiempo / dim.', metAx:'series · valores' },
-    table: { name:'Tabla',  icon:'ti-table',      dimAx:'filas',                 metAx:'columnas' },
+    kpi:     { name:'KPI',     icon:'ti-number-123',   dimAx:'(no dimension)',        metAx:'value(s)' },
+    bars:    { name:'Bars',    icon:'ti-chart-bar',    dimAx:'X axis · categories',   metAx:'Y axis · values' },
+    line:    { name:'Line',    icon:'ti-chart-line',   dimAx:'X axis · time / dim.',  metAx:'series · values' },
+    scatter: { name:'Scatter', icon:'ti-chart-dots',   dimAx:'point / colour (dim)',  metAx:'X axis, Y axis (2 metrics)' },
+    radar:   { name:'Radar',   icon:'ti-chart-radar',  dimAx:'group (optional dim)',  metAx:'axes (metrics)' },
+    ranking: { name:'Ranking', icon:'ti-list-numbers', dimAx:'entity (dim)',          metAx:'metric to rank' },
+    table:   { name:'Table',   icon:'ti-table',        dimAx:'rows',                  metAx:'columns' },
+    heatmap: { name:'Heatmap', icon:'ti-layout-grid',  dimAx:'rows (dim)',            metAx:'columns (metrics)' },
   };
   let _bMode   = 'classic';  // modo de construcción del builder: 'classic' | 'dd'
   let _ddQuery = '';         // texto del buscador del panel de campos
