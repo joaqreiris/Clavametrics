@@ -24,7 +24,16 @@
     kpi:     { name: 'KPI',     icon: 'ti-number-123',   min: 1, max: 8,  dimMax: 0 },
     bars:    { name: 'Bars',    icon: 'ti-chart-bar',    min: 1, max: 6,  dimMax: 1 },
     line:    { name: 'Line',    icon: 'ti-chart-line',   min: 1, max: 6,  dimMax: 1 },
-    scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1 },
+    // `roles`: ordered encoding table (data-driven role resolver — resolveEncodings()). Only
+    // scatter declares it for now; other types keep their current path (no `roles`). min/max/
+    // dimMax stay because ddAddField still reads them.
+    scatter: { name: 'Scatter', icon: 'ti-chart-dots',   min: 2, max: 2,  dimMax: 1,
+      roles: [
+        { role:'x',     kind:'metric', min:1, max:1 },
+        { role:'y',     kind:'metric', min:1, max:1 },
+        { role:'size',  kind:'metric', min:0, max:1 },
+        { role:'color', kind:'dim',    min:0, max:1 },
+      ] },
     radar:   { name: 'Radar',   icon: 'ti-chart-radar',  min: 3, max: 8,  dimMax: 1 },
     ranking: { name: 'Ranking', icon: 'ti-list-numbers', min: 1, max: 1,  dimMax: 1 },
     table:   { name: 'Table',   icon: 'ti-table',        min: 1, max: 12, dimMax: 4 },
@@ -3089,32 +3098,53 @@
     },
   };
 
-  /** Pure: (config, series) → Chart.js scatter payload (datasets per category, averages, axis titles). */
-  // Resolve the scatter field ROLES → metric/dimension ids. If items carry an explicit
-  // `role` ('x'|'y'|'size' on metrics; 'color' on dimensions) we honour it; otherwise we
-  // fall back to the CURRENT positional contract: metrics[0]→X, metrics[1]→Y (no size),
-  // dimensions[0]→colour. Pure + robust: any id may be null if the field is missing. This is
-  // the single seam for role-based (multi-metric) encoding — behaviour is unchanged until a
-  // config actually sets roles.
-  function scatterRoles(metrics, dimensions) {
-    const ms = Array.isArray(metrics)    ? metrics    : [];
-    const ds = Array.isArray(dimensions) ? dimensions : [];
-    const hasRoles = ms.some(m => m && m.role);
-    const roleId = r => ms.find(m => m && m.role === r)?.id ?? null;
-    const xId    = hasRoles ? roleId('x')    : (ms[0]?.id ?? null);
-    const yId    = hasRoles ? roleId('y')    : (ms[1]?.id ?? null);
-    const sizeId = hasRoles ? roleId('size') : null;
-    const colorId = (ds.find(d => d && d.role === 'color') || ds[0] || null)?.id ?? null;
-    return { xId, yId, sizeId, colorId };
+  // Generic, data-driven role/encoding resolver. Reads VIZ_TYPES[type].roles (an ordered
+  // table of { role, kind:'metric'|'dim', min, max }) and maps the card's metrics + dimensions
+  // onto those roles → { role: [fieldId, …] }. Items carrying an explicit `item.role` (that
+  // names a role of THEIR kind) are honoured first, up to that role's max; the remaining
+  // items fill the roles POSITIONALLY, in table order, per kind — which reproduces today's
+  // positional contract exactly. Types without a `roles` table return {} (they keep their
+  // current path). Pure (copies inputs, no throws): any role may resolve to an empty array.
+  function resolveEncodings(type, metrics, dimensions) {
+    const roles = VIZ_TYPES[type] && VIZ_TYPES[type].roles;
+    if (!Array.isArray(roles) || !roles.length) return {};
+    const pools = {
+      metric: (Array.isArray(metrics)    ? metrics    : []).filter(Boolean).map(x => ({ id: x.id, role: x.role })),
+      dim:    (Array.isArray(dimensions) ? dimensions : []).filter(Boolean).map(x => ({ id: x.id, role: x.role })),
+    };
+    const out = {};
+    for (const r of roles) out[r.role] = [];
+    const byName = new Map(roles.map(r => [r.role, r]));
+    // 1) explicit roles (kind-matched, respecting max)
+    for (const kind of ['metric', 'dim']) {
+      for (const it of pools[kind]) {
+        const r = it.role && byName.get(it.role);
+        if (r && r.kind === kind && out[r.role].length < r.max) { out[r.role].push(it.id); it._used = true; }
+      }
+    }
+    // 2) positional fallback: fill remaining slots, roles in table order, from unused items
+    for (const r of roles) {
+      if (out[r.role].length >= r.max) continue;
+      for (const it of pools[r.kind]) {
+        if (it._used) continue;
+        if (out[r.role].length >= r.max) break;
+        out[r.role].push(it.id); it._used = true;
+      }
+    }
+    return out;
   }
 
+  /** Pure: (config, series) → Chart.js scatter payload (datasets per category, averages, axis titles). */
   function scatterChartData(config, series) {
     const size     = config.style?.size || 'md';
     const showAxes = config.style?.axes   !== false;
     const showLbl  = !!config.style?.dataLabels;     // point name labels — OFF by default
-    // Roles → ids (positional fallback keeps existing scatters identical), then match each
-    // role to its series by metric id (series.label === metric.id) — NOT by array position.
-    const { xId, yId } = scatterRoles(config.metrics, config.dimensions);
+    // Roles → ids via the data-driven resolver (positional fallback keeps existing scatters
+    // identical), then match each role to its series by metric id (series.label === metric.id)
+    // — NOT by array position. size/color are resolved too but not yet consumed by the render.
+    const enc = resolveEncodings('scatter', config.metrics, config.dimensions);
+    const xId = enc.x?.[0] ?? null;
+    const yId = enc.y?.[0] ?? null;
     const _byId = id => (id != null && Array.isArray(series)) ? series.find(s => s && s.label === id) : null;
     const sX = _byId(xId) || null;
     const sY = _byId(yId) || null;
