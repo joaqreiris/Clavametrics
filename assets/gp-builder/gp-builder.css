@@ -490,24 +490,23 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .es-mode button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
 /* en modo D&D, los tabs Setup/Style (sólo del clásico) se ocultan */
 .es-panel.is-ddmode .es-tabs { display:none; }
-/* D&D usa un layout de 2 columnas (zonas+config | campos) → ensanchá el drawer y corré el
-   padding de la página para que el preview siga visible a la izquierda. */
-.es-panel.is-ddmode { width: min(760px, 96vw); }
-body.gpb-ddmode.gpb-open .gp-page { padding-right: min(760px, 96vw); }
+/* D&D usa un panel ANGOSTO y minimalista (~380px, no media pantalla) para que el gráfico en
+   edición quede cómodo al lado. El padding de la página se corre lo justo. */
+.es-panel.is-ddmode { width: min(380px, 96vw); }
+body.gpb-ddmode.gpb-open .gp-page { padding-right: min(380px, 96vw); }
 
 /* el pane D&D dentro del drawer: padding lateral propio + stack vertical */
-.es-p-b > .pane[data-pane="dd"] { padding:12px 14px 24px; }
-.bdd-wrap { display:flex; flex-direction:column; gap:14px; }
-/* Data Studio layout: LEFT = drop zones (+ compact config), RIGHT = the scrollable fields
-   pantry. Two columns side by side (needs the widened .is-ddmode drawer). */
-.bdd-dock { display:flex; flex-direction:row; align-items:flex-start; gap:14px; }
-.bdd-main { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:14px; }
-.bdd-panel { flex:0 0 264px; align-self:stretch; }
+.es-p-b > .pane[data-pane="dd"] { padding:10px 12px 20px; }
+.bdd-wrap { display:flex; flex-direction:column; gap:12px; }
+/* Data Studio, versión angosta: apilado vertical → ZONAS (trabajo) · CAMPOS (despensa con
+   scroll propio) · CONFIG. Nada lado a lado: a 380px se ve cómodo y el canvas gana espacio. */
+.bdd-dock { display:flex; flex-direction:column; gap:12px; }
+.bdd-panel { width:100%; }
 
 /* ── PARTE B · densidad compacta del panel (filas más finas → más campos sin
    scroll). Sólo tamaños/espaciado; la lógica, el tinte por tipo (dim azul /
    métrica verde) y los estados de drag (is-over/is-bad/is-placed) no cambian. */
-.bdd-dock .bdd-fields { gap:2px; max-height:62vh; }
+.bdd-dock .bdd-fields { gap:2px; max-height:36vh; }
 .bdd-dock .bdd-grp-h { padding:6px 6px 3px; }
 .bdd-dock .bdd-field { padding:3px 8px; gap:8px; }
 .bdd-dock .bdd-field .ic { width:18px; height:18px; font-size:11px; }
@@ -544,7 +543,7 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(760px, 96vw); }
 .bdd-cfg b { color:var(--cm-fg); font-weight:600; }
 
 .bdd-col { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); display:flex; flex-direction:column; overflow:hidden; }
-.bdd-col-h { display:flex; align-items:center; gap:8px; padding:11px 13px; border-bottom:1px solid var(--cm-border-soft); flex-shrink:0; }
+.bdd-col-h { display:flex; align-items:center; gap:8px; padding:8px 11px; border-bottom:1px solid var(--cm-border-soft); flex-shrink:0; }
 .bdd-col-h .ti { font-size:15px; color:var(--cm-fg-muted); }
 .bdd-col-h .t { font:600 13px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
 .bdd-col-h .ct { margin-left:auto; min-width:18px; height:18px; padding:0 6px; display:inline-flex; align-items:center; justify-content:center;
@@ -582,9 +581,9 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(760px, 96vw); }
 .bdd-field.is-dragging { opacity:0.45; border-style:dashed; }
 
 /* 2) ZONAS DE DESTINO (centro) */
-.bdd-zones { display:flex; flex-direction:column; gap:16px; }
+.bdd-zones { display:flex; flex-direction:column; gap:10px; }
 .bdd-zone { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; }
-.bdd-zone-h { display:flex; align-items:center; gap:9px; padding:10px 12px; border-bottom:1px solid var(--cm-border-soft); }
+.bdd-zone-h { display:flex; align-items:center; gap:9px; padding:7px 10px; border-bottom:1px solid var(--cm-border-soft); }
 .bdd-zone-h .badge { width:24px; height:24px; flex-shrink:0; border-radius:var(--cm-r-2); display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
 .bdd-zone[data-accept="dim"]    .bdd-zone-h .badge { background:var(--cm-info-bg);    color:var(--cm-info); }
 .bdd-zone[data-accept="metric"] .bdd-zone-h .badge { background:var(--cm-accent-soft); color:var(--cm-accent); }
@@ -593,12 +592,14 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(760px, 96vw); }
 .bdd-zone-h .ct { margin-left:auto; min-width:18px; height:18px; padding:0 6px; display:inline-flex; align-items:center; justify-content:center;
   border-radius:var(--cm-r-pill); background:var(--cm-bg-sunk); color:var(--cm-fg-faint); font:600 10px/1 var(--cm-font-mono); }
 
-.bdd-drop { padding:10px; min-height:96px; display:flex; flex-direction:column; gap:7px;
+.bdd-drop { padding:8px; min-height:auto; display:flex; flex-direction:column; gap:6px;
   transition:background var(--cm-dur-1) var(--cm-ease), box-shadow var(--cm-dur-1) var(--cm-ease); }
-.bdd-empty { flex:1; min-height:76px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+/* Empty zones are SHORT (a slim dashed strip) so they don't eat vertical space in the narrow
+   panel; they still highlight/grow on drag-over. */
+.bdd-empty { flex:1; min-height:38px; display:flex; flex-direction:row; align-items:center; justify-content:center; gap:6px;
   border:1.5px dashed var(--cm-border-strong); border-radius:var(--cm-r-3); background:var(--cm-bg-soft);
   color:var(--cm-fg-faint); text-align:center; }
-.bdd-empty .ti { font-size:18px; }
+.bdd-empty .ti { font-size:15px; }
 .bdd-empty .m { font:500 11.5px/1.3 var(--cm-font-sans); }
 /* estados de drop (clase en .bdd-zone, estilan el .bdd-drop) — mostrables para el prompt 2 */
 .bdd-zone.is-over  .bdd-drop { background:var(--cm-accent-soft); box-shadow:inset 0 0 0 2px var(--cm-accent); }
@@ -611,12 +612,12 @@ body.gpb-ddmode.gpb-open .gp-page { padding-right: min(760px, 96vw); }
    NOT drop targets: dropdowns + a segmented toggle, clearly separated from the zones.
    Reuses .es-seg / .es-select from the classic panel (same look, same handlers, same S). */
 .bdd-config { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; }
-.bdd-config-h { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--cm-border-soft); }
+.bdd-config-h { display:flex; align-items:center; gap:8px; padding:7px 11px; border-bottom:1px solid var(--cm-border-soft); }
 .bdd-config-h .ti { font-size:15px; color:var(--cm-fg-muted); }
-.bdd-config-h .t { font:600 13px/1.15 var(--cm-font-sans); color:var(--cm-fg-strong); }
+.bdd-config-h .t { font:600 12.5px/1.15 var(--cm-font-sans); color:var(--cm-fg-strong); }
 .bdd-config-h .s { margin-left:auto; font:500 10.5px/1 var(--cm-font-sans); color:var(--cm-fg-faint); }
-.bdd-cfg-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; padding:12px; }
-.bdd-cfg-f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.bdd-cfg-grid { display:grid; grid-template-columns:1fr; gap:9px; padding:10px 11px; }
+.bdd-cfg-f { display:flex; flex-direction:column; gap:4px; min-width:0; }
 .bdd-cfg-f .k { font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
 .bdd-cfg-sel .v { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
 

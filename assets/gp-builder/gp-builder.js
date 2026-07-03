@@ -4805,19 +4805,18 @@
     </div>`;
   }
 
-  // Render del pane D&D — layout tipo Data Studio: toolbar (tipos) arriba; debajo un dock de
-  // dos columnas → IZQUIERDA las zonas de arrastre + la config compacta; DERECHA la despensa
-  // de campos scrolleable (buscador arriba). El preview es la draft card del grid (compartida).
+  // Render del pane D&D — panel angosto (~380px) tipo Data Studio, apilado para que no tape
+  // el gráfico: toolbar (tipos) arriba; luego las ZONAS de arrastre (área de trabajo), la
+  // despensa de CAMPOS compacta (buscador + lista con scroll propio) y la CONFIG abajo. El
+  // preview es la draft card del grid (compartida con el clásico) y gana el espacio liberado.
   function renderDDPane() {
     const host = document.getElementById('gpbDDPane');
     if (!host) return;
     host.innerHTML = ddToolbarHTML() +
       `<div class="bdd-dock">
-        <div class="bdd-main">
-          ${ddZonesHTML()}
-          ${ddConfigHTML()}
-        </div>
+        ${ddZonesHTML()}
         <div class="bdd-col bdd-panel" id="gpbDDPanel">${ddPanelHTML()}</div>
+        ${ddConfigHTML()}
       </div>`;
   }
   function renderDDPanelOnly() {
