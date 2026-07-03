@@ -4127,6 +4127,26 @@ async function _detectSmartDefault(clubId, userId) {
     });
     document.querySelectorAll('.gp-grid').forEach(g => g.classList.add('layout-ready'));
   }
+  // ── TEMP FLASH DIAG: log any card whose size/placement changes AFTER reveal, to pinpoint
+  // the load "explosion". Remove once fixed. ────────────────────────────────────────────
+  try {
+    const _g = document.querySelector('.gp-view.is-on .gp-grid');
+    if (_g) {
+      const _snap = () => [...(_g.querySelectorAll(':scope > .gp-c'))].map(c => {
+        const cs = getComputedStyle(c);
+        return { id: c.dataset.cardId || c.id || '?', w: c.style.getPropertyValue('--gp-w').trim(),
+          h: c.style.getPropertyValue('--gp-h').trim(), span: c.style.getPropertyValue('--gp-span').trim(),
+          gc: cs.gridColumn, gr: cs.gridRow, ow: c.offsetWidth, oh: c.offsetHeight };
+      });
+      let _prev = JSON.stringify(_snap());
+      console.log('[FLASH DIAG t0 reveal] is-canvas=' + _g.classList.contains('is-canvas'), _snap());
+      const _iv = setInterval(() => {
+        const now = _snap(), s = JSON.stringify(now);
+        if (s !== _prev) { console.log('[FLASH DIAG change] is-canvas=' + _g.classList.contains('is-canvas'), now); _prev = s; }
+      }, 80);
+      setTimeout(() => { clearInterval(_iv); console.log('[FLASH DIAG done]'); }, 4500);
+    }
+  } catch (e) { console.warn('[FLASH DIAG]', e); }
   await window.refreshDashboard();
   // Backstop: saca cualquier skeleton huérfano (card que nunca renderizó)
   setTimeout(() => document.querySelectorAll('.gp-skel').forEach(s => s.remove()), 8000);
