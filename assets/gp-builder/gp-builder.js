@@ -1086,6 +1086,7 @@
     // default = modo clásico (red de seguridad); el D&D es opcional vía el toggle
     _bMode = 'classic';
     panelEl.classList.remove('is-ddmode');
+    document.body.classList.remove('gpb-ddmode');
     panelEl.querySelectorAll('#gpbMode button').forEach(b => b.classList.toggle('is-on', b.dataset.mode === 'classic'));
     // switch to setup tab
     panelEl.querySelector('.es-tabs button[data-tab="setup"]')?.click();
@@ -1094,6 +1095,7 @@
   function closePanel() {
     panelEl.classList.remove('is-open');
     document.body.classList.remove('gpb-open');
+    document.body.classList.remove('gpb-ddmode');
     setTimeout(() => { if (!S) panelEl.setAttribute('hidden',''); }, 220);
     closePop();
     closeFly();
@@ -1226,6 +1228,11 @@
         const cDel = e.target.closest('[data-calc-del]'); if (cDel) { e.stopPropagation(); unregisterCalcMetric(cDel.dataset.calcDel); ddSyncFromS(); return; }
         const typeBtn = e.target.closest('#gpbDDSeg button[data-type]');
         if (typeBtn) { ddSetType(typeBtn.dataset.type); return; }
+        // Config section (not draggable) — reuse the SAME classic logic on the SAME S.
+        const scBtn = e.target.closest('#gpbDDScope button[data-scope]');
+        if (scBtn) { if (!S) return; S.scope = scBtn.dataset.scope; S.scopeTouched = true; ddSyncFromS(); return; }
+        const ddPop = e.target.closest('[data-ddpop]');
+        if (ddPop) { togglePop(ddPop, ddPop.dataset.ddpop); return; }   // reuse the classic range/compare popover
         const rmDim = e.target.closest('[data-rmdim]');
         if (rmDim) { S.dimensions = (S.dimensions || []).filter(d => d.id !== rmDim.dataset.rmdim); ddSyncFromS(); return; }
         const rmMet = e.target.closest('[data-rm]');
@@ -1427,11 +1434,17 @@
 
   function syncSelects() {
     if (!S) return;
-    document.getElementById('gpbRangeName').textContent   = RANGES.find(r=>r.id===S.range)?.name  || S.range;
-    document.getElementById('gpbCompareName').textContent =
-      (S.compare === 'mc')
-        ? `vs ${mcLabel(S.refMcId)}`
-        : (COMPARES.find(c=>c.id===S.compare)?.name || S.compare);
+    const rangeName = RANGES.find(r=>r.id===S.range)?.name || S.range;
+    const cmpName   = (S.compare === 'mc') ? `vs ${mcLabel(S.refMcId)}`
+      : (COMPARES.find(c=>c.id===S.compare)?.name || S.compare);
+    document.getElementById('gpbRangeName').textContent   = rangeName;
+    document.getElementById('gpbCompareName').textContent = cmpName;
+    // D&D compact config mirrors the SAME S. Update the labels IN PLACE (don't rebuild the
+    // buttons) so an open range/compare popover stays anchored — exactly like the classic panel.
+    const ddR = document.getElementById('gpbDDRangeName');   if (ddR) ddR.textContent = rangeName;
+    const ddC = document.getElementById('gpbDDCompareName'); if (ddC) ddC.textContent = cmpName;
+    document.getElementById('gpbDDScope')?.querySelectorAll('button')
+      .forEach(b => b.classList.toggle('is-on', b.dataset.scope === S.scope));
   }
 
   function syncStyle() {
@@ -4678,15 +4691,15 @@
     const hit = (id, name) => !q || name.toLowerCase().includes(q) || id.toLowerCase().includes(q);
     const dimRows = DIMENSIONS.filter(d => dimAllowed(d, S?.source) && hit(d.id, d.name)).map(d => ddFieldRow(d.id, 'dim', d.name, d.icon, '', _dimPlaced(d.id)));
     const metRows = mets.filter(m => hit(m.id, m.name)).map(m => m.calculated ? ddCalcFieldHTML(m) : ddFieldRow(m.id, 'metric', m.name, metIcon(m), m.unit, _metPlaced(m.id)));
-    const none = '<div class="bdd-grp-h"><span class="hint">sin coincidencias</span></div>';
-    const addCalc = '<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>Métrica calculada</button>';
+    const none = '<div class="bdd-grp-h"><span class="hint">No matches</span></div>';
+    const addCalc = '<button class="cmf-addbtn" data-calc-add="1"><span class="ic"><i class="ti ti-plus"></i></span>Calculated metric</button>';
     return `
-      <div class="bdd-col-h"><i class="ti ti-list-details"></i><span class="t">Campos</span><span class="ct">${total}</span></div>
-      <div class="bdd-search"><i class="ti ti-search"></i><input id="gpbDDSearch" type="text" placeholder="Buscar campo…" value="${esc(_ddQuery)}"></div>
+      <div class="bdd-col-h"><i class="ti ti-list-details"></i><span class="t">Fields</span><span class="ct">${total}</span></div>
+      <div class="bdd-search"><i class="ti ti-search"></i><input id="gpbDDSearch" type="text" placeholder="Search field…" value="${esc(_ddQuery)}"></div>
       <div class="bdd-fields" id="gpbDDFields">
-        <div class="bdd-grp-h"><span class="k">Dimensiones</span><span class="ln"></span><span class="hint">cómo se agrupan</span></div>
+        <div class="bdd-grp-h"><span class="k">Dimensions</span><span class="ln"></span><span class="hint">how rows group</span></div>
         ${dimRows.join('') || none}
-        <div class="bdd-grp-h"><span class="k">Métricas</span><span class="ln"></span><span class="hint">qué se mide</span></div>
+        <div class="bdd-grp-h"><span class="k">Metrics</span><span class="ln"></span><span class="hint">what to measure</span></div>
         ${metRows.join('') || none}
         ${addCalc}
       </div>`;
@@ -4701,7 +4714,7 @@
       <span class="ic is-calc"><i class="ti ti-math-function"></i></span>
       <span class="nm">${esc(m.name)}</span>
       <span class="cmf-fx"><i class="ti ti-math-function"></i>fx</span>
-      <span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="Editar fórmula"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="Borrar"><i class="ti ti-trash"></i></button></span>
+      <span class="cmf-rowacts"><button data-calc-edit="${esc(m.id)}" title="Edit formula"><i class="ti ti-pencil"></i></button><button class="del" data-calc-del="${esc(m.id)}" title="Delete"><i class="ti ti-trash"></i></button></span>
     </div>`;
   }
 
@@ -4712,7 +4725,7 @@
       <span class="grip"><i class="ti ti-grip-vertical"></i></span>
       <span class="ic"><i class="ti ${esc(d.icon || 'ti-category-2')}"></i></span>
       <span class="nm">${esc(d.name)}</span>
-      <button class="x" data-rmdim="${esc(id)}" aria-label="Quitar"><i class="ti ti-x"></i></button>
+      <button class="x" data-rmdim="${esc(id)}" aria-label="Remove"><i class="ti ti-x"></i></button>
     </div>`;
   }
   function ddMetChip(m) {
@@ -4723,27 +4736,62 @@
       <span class="ic"><i class="ti ${esc(metIcon(cat))}"></i></span>
       <span class="nm">${esc(cat.name)}</span>
       <span class="bdd-agg"><select data-agg-for="${esc(m.id)}">${opts}</select><i class="ti ti-selector car"></i></span>
-      <button class="x" data-rm="${esc(m.id)}" aria-label="Quitar"><i class="ti ti-x"></i></button>
+      <button class="x" data-rm="${esc(m.id)}" aria-label="Remove"><i class="ti ti-x"></i></button>
     </div>`;
   }
 
-  function ddZoneHTML(accept) {
-    const ax    = _ddAxes();
-    const isDim = accept === 'dim';
-    const items = isDim ? (S ? S.dimensions || [] : []) : (S ? S.metrics || [] : []);
-    const title = isDim ? 'Dimensiones' : 'Métricas';
-    const axLbl = isDim ? ax.dimAx : ax.metAx;
-    const badge = isDim ? 'ti-category-2' : 'ti-ruler-measure';
-    const what  = isDim ? 'dimensiones' : 'métricas';
-    const body  = items.length
-      ? (isDim ? items.map(d => ddDimChip(d.id)).join('') : items.map(m => ddMetChip(m)).join(''))
-      : `<div class="bdd-empty"><i class="ti ti-arrow-down-to-arc"></i><span class="m">arrastrá ${what} aquí</span></div>`;
-    return `<div class="bdd-zone" data-accept="${accept}">
-      <div class="bdd-zone-h"><span class="badge"><i class="ti ${badge}"></i></span><span class="t">${title}</span><span class="ax">${axLbl}</span><span class="ct">${items.length}</span></div>
-      <div class="bdd-drop" data-accept="${accept}">${body}</div>
+  // Drop zones — EXTENSIBLE. Each spec declares one zone (accept + labels + where its chips
+  // come from). Today: dim + metric. Later, per chart type, extra zones (scatter → X, Y,
+  // Color, Size) are added by pushing specs here + a case in ddAddField — nothing else changes.
+  function ddZoneSpecs() {
+    const ax = _ddAxes();
+    return [
+      { accept:'dim',    title:'Dimensions', axLbl:ax.dimAx, badge:'ti-category-2',    what:'dimensions', items:(S && S.dimensions) || [] },
+      { accept:'metric', title:'Metrics',    axLbl:ax.metAx, badge:'ti-ruler-measure', what:'metrics',    items:(S && S.metrics)    || [] },
+    ];
+  }
+  function ddZoneHTML(z) {
+    const isDim = z.accept === 'dim';
+    const body  = z.items.length
+      ? (isDim ? z.items.map(d => ddDimChip(d.id)).join('') : z.items.map(m => ddMetChip(m)).join(''))
+      : `<div class="bdd-empty"><i class="ti ti-arrow-down-to-arc"></i><span class="m">drag ${z.what} here</span></div>`;
+    return `<div class="bdd-zone" data-accept="${z.accept}">
+      <div class="bdd-zone-h"><span class="badge"><i class="ti ${z.badge}"></i></span><span class="t">${z.title}</span><span class="ax">${z.axLbl}</span><span class="ct">${z.items.length}</span></div>
+      <div class="bdd-drop" data-accept="${z.accept}">${body}</div>
     </div>`;
   }
-  function ddZonesHTML() { return `<div class="bdd-zones">${ddZoneHTML('dim')}${ddZoneHTML('metric')}</div>`; }
+  function ddZonesHTML() { return `<div class="bdd-zones">${ddZoneSpecs().map(ddZoneHTML).join('')}</div>`; }
+
+  // Compact CONFIG under the zones — NOT draggable. Scope / time range / comparison, read
+  // from the SAME state S and driven by the SAME classic logic (togglePop for range/compare;
+  // scope writes S.scope). Value labels have stable ids so syncSelects() updates them in place
+  // (keeps the buttons — and any open popover anchor — alive), mirroring the classic panel.
+  function ddConfigHTML() {
+    if (!S) return '';
+    const rangeName = RANGES.find(r => r.id === S.range)?.name || S.range;
+    const cmpName = S.compare === 'none' ? 'No comparison'
+      : (S.compare === 'mc' ? `vs ${mcLabel(S.refMcId)}` : (COMPARES.find(c => c.id === S.compare)?.name || 'Comparison'));
+    return `<div class="bdd-config">
+      <div class="bdd-config-h"><i class="ti ti-adjustments-horizontal"></i><span class="t">Configuration</span><span class="s">Set, don't drag</span></div>
+      <div class="bdd-cfg-grid">
+        <div class="bdd-cfg-f">
+          <span class="k">Scope</span>
+          <div class="es-seg" id="gpbDDScope">
+            <button data-scope="player" class="${S.scope==='player'?'is-on':''}"><i class="ti ti-user"></i>Player</button>
+            <button data-scope="squad" class="${S.scope==='squad'?'is-on':''}"><i class="ti ti-users"></i>Squad</button>
+          </div>
+        </div>
+        <div class="bdd-cfg-f">
+          <span class="k">Time range</span>
+          <button class="es-select bdd-cfg-sel" data-ddpop="range"><i class="ti ti-calendar-week"></i><span class="v" id="gpbDDRangeName">${esc(rangeName)}</span><i class="ti ti-chevron-down cv"></i></button>
+        </div>
+        <div class="bdd-cfg-f">
+          <span class="k">Comparison</span>
+          <button class="es-select bdd-cfg-sel" data-ddpop="compare"><i class="ti ti-target"></i><span class="v" id="gpbDDCompareName">${esc(cmpName)}</span><i class="ti ti-chevron-down cv"></i></button>
+        </div>
+      </div>
+    </div>`;
+  }
 
   // Toolbar: segmented de tipo (refleja S.type; cosmético por ahora) + badge.
   function ddToolbarHTML() {
@@ -4757,15 +4805,19 @@
     </div>`;
   }
 
-  // Render del pane D&D dentro del drawer (stack vertical: toolbar + panel + zonas).
-  // El preview es la draft card del grid (compartida con el clásico).
+  // Render del pane D&D — layout tipo Data Studio: toolbar (tipos) arriba; debajo un dock de
+  // dos columnas → IZQUIERDA las zonas de arrastre + la config compacta; DERECHA la despensa
+  // de campos scrolleable (buscador arriba). El preview es la draft card del grid (compartida).
   function renderDDPane() {
     const host = document.getElementById('gpbDDPane');
     if (!host) return;
     host.innerHTML = ddToolbarHTML() +
       `<div class="bdd-dock">
+        <div class="bdd-main">
+          ${ddZonesHTML()}
+          ${ddConfigHTML()}
+        </div>
         <div class="bdd-col bdd-panel" id="gpbDDPanel">${ddPanelHTML()}</div>
-        ${ddZonesHTML()}
       </div>`;
   }
   function renderDDPanelOnly() {
@@ -4863,6 +4915,7 @@
     if (!panelEl) return;
     _bMode = m;
     panelEl.classList.toggle('is-ddmode', m === 'dd');
+    document.body.classList.toggle('gpb-ddmode', m === 'dd');   // widens the drawer for the 2-column D&D layout
     panelEl.querySelectorAll('#gpbMode button').forEach(b => b.classList.toggle('is-on', b.dataset.mode === m));
     if (m === 'dd') {
       panelEl.querySelectorAll('.es-p-b > .pane').forEach(p => p.classList.toggle('is-on', p.dataset.pane === 'dd'));

@@ -490,16 +490,24 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .es-mode button.is-on { background:var(--cm-surface); color:var(--cm-fg-strong); box-shadow:var(--cm-shadow-1); }
 /* en modo D&D, los tabs Setup/Style (sólo del clásico) se ocultan */
 .es-panel.is-ddmode .es-tabs { display:none; }
+/* D&D usa un layout de 2 columnas (zonas+config | campos) → ensanchá el drawer y corré el
+   padding de la página para que el preview siga visible a la izquierda. */
+.es-panel.is-ddmode { width: min(760px, 96vw); }
+body.gpb-ddmode.gpb-open .gp-page { padding-right: min(760px, 96vw); }
 
 /* el pane D&D dentro del drawer: padding lateral propio + stack vertical */
 .es-p-b > .pane[data-pane="dd"] { padding:12px 14px 24px; }
 .bdd-wrap { display:flex; flex-direction:column; gap:14px; }
-.bdd-dock { display:flex; flex-direction:column; gap:14px; }
+/* Data Studio layout: LEFT = drop zones (+ compact config), RIGHT = the scrollable fields
+   pantry. Two columns side by side (needs the widened .is-ddmode drawer). */
+.bdd-dock { display:flex; flex-direction:row; align-items:flex-start; gap:14px; }
+.bdd-main { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:14px; }
+.bdd-panel { flex:0 0 264px; align-self:stretch; }
 
 /* ── PARTE B · densidad compacta del panel (filas más finas → más campos sin
    scroll). Sólo tamaños/espaciado; la lógica, el tinte por tipo (dim azul /
    métrica verde) y los estados de drag (is-over/is-bad/is-placed) no cambian. */
-.bdd-dock .bdd-fields { gap:2px; max-height:328px; }
+.bdd-dock .bdd-fields { gap:2px; max-height:62vh; }
 .bdd-dock .bdd-grp-h { padding:6px 6px 3px; }
 .bdd-dock .bdd-field { padding:3px 8px; gap:8px; }
 .bdd-dock .bdd-field .ic { width:18px; height:18px; font-size:11px; }
@@ -597,7 +605,20 @@ body.gpb-open .gp-page { padding-right: 344px; transition: padding-right 220ms v
 .bdd-zone.is-over  .bdd-empty { border-color:var(--cm-accent); border-style:solid; color:var(--cm-accent); background:transparent; }
 .bdd-zone.is-bad   .bdd-drop { background:var(--cm-danger-bg); box-shadow:inset 0 0 0 2px var(--cm-danger); cursor:not-allowed; }
 .bdd-zone.is-bad   .bdd-empty { border-color:var(--cm-danger); color:var(--cm-danger); background:transparent; }
-.bdd-zone.is-bad   .bdd-empty .m::after { content:" · no permitido aquí"; }
+.bdd-zone.is-bad   .bdd-empty .m::after { content:" · not allowed here"; }
+
+/* 3) COMPACT CONFIG (below the zones, left column) — scope / time range / comparison.
+   NOT drop targets: dropdowns + a segmented toggle, clearly separated from the zones.
+   Reuses .es-seg / .es-select from the classic panel (same look, same handlers, same S). */
+.bdd-config { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); box-shadow:var(--cm-shadow-1); overflow:hidden; }
+.bdd-config-h { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--cm-border-soft); }
+.bdd-config-h .ti { font-size:15px; color:var(--cm-fg-muted); }
+.bdd-config-h .t { font:600 13px/1.15 var(--cm-font-sans); color:var(--cm-fg-strong); }
+.bdd-config-h .s { margin-left:auto; font:500 10.5px/1 var(--cm-font-sans); color:var(--cm-fg-faint); }
+.bdd-cfg-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; padding:12px; }
+.bdd-cfg-f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.bdd-cfg-f .k { font:600 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--cm-fg-faint); }
+.bdd-cfg-sel .v { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
 
 /* chip colocado */
 .bdd-chip { display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--cm-border); border-radius:var(--cm-r-3);
