@@ -2730,7 +2730,10 @@
       destroyBodyChart(body);
       body.innerHTML = '';
       const wrap = document.createElement('div');
-      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      // Fill the card body (flex column) so the chart tracks the card height — no dead white
+      // space when resized taller. The bucket height is a min-height floor for containers with
+      // an indefinite height (grid mode / preview), where flex has no free space to distribute.
+      wrap.style.cssText = `position:relative;width:100%;flex:1 1 auto;min-height:${d.height}px`;
       const canvas = document.createElement('canvas');   // no global id — unique per card body
       wrap.appendChild(canvas);
       body.appendChild(wrap);
@@ -2954,7 +2957,10 @@
       destroyBodyChart(body);
       body.innerHTML = '';
       const wrap = document.createElement('div');
-      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      // Fill the card body (flex column) so the chart tracks the card height — no dead white
+      // space when resized taller. The bucket height is a min-height floor for containers with
+      // an indefinite height (grid mode / preview), where flex has no free space to distribute.
+      wrap.style.cssText = `position:relative;width:100%;flex:1 1 auto;min-height:${d.height}px`;
       const canvas = document.createElement('canvas');   // no global id — unique per card body
       wrap.appendChild(canvas);
       // Example-data badge: shown only when the builder preview can't reach real data
@@ -3245,7 +3251,10 @@
       destroyBodyChart(body);
       body.innerHTML = '';
       const wrap = document.createElement('div');
-      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      // Fill the card body (flex column) so the chart tracks the card height — no dead white
+      // space when resized taller. The bucket height is a min-height floor for containers with
+      // an indefinite height (grid mode / preview), where flex has no free space to distribute.
+      wrap.style.cssText = `position:relative;width:100%;flex:1 1 auto;min-height:${d.height}px`;
       const canvas = document.createElement('canvas');   // no global id — unique per card body
       wrap.appendChild(canvas);
       // Example-data badge — only when the preview couldn't reach real GPS data.
