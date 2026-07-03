@@ -3690,6 +3690,12 @@ async function _mountSavedBuilderCards(clubId) {
       el.dataset.size = card.size || config.style?.size || 'md';
       el.querySelectorAll('.size-toggle button').forEach(b =>
         b.classList.toggle('is-on', b.textContent.trim() === ({ sm:'S', md:'M', lg:'L', full:'FULL' }[el.dataset.size] || 'M')));
+      // These cards mount AFTER the grid is already visible (layout-ready). A card WITHOUT
+      // saved free-canvas coords would paint once at the CSS default (span 6 / row 11 =
+      // huge) before gp-canvas auto-places it → visible "explosion". Hide it until it's
+      // sized/placed, then reveal on the next frame (after the canvas mutation observer +
+      // any applyCoords have run). The skeleton inside then shimmers at the FINAL size.
+      el.style.visibility = 'hidden';
 
       // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
       // first paint + placeCards keep the exact size/position instead of auto-flowing.
@@ -3700,6 +3706,7 @@ async function _mountSavedBuilderCards(clubId) {
       }
 
       grid.appendChild(el);
+      requestAnimationFrame(() => { el.style.visibility = ''; });
       grid.dataset.gptBuilderMounted = '1';
 
       // resolve real data (async, non-blocking)

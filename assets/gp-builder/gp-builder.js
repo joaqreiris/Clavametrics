@@ -605,8 +605,8 @@
         <div class="cfg-h">
           <span class="ic">{ }</span>
           <span class="tx">
-            <span class="t">gp.card/v1</span>
-            <span class="s">Card config — copy to use in seeds or AI</span>
+            <span class="t">Card config</span>
+            <span class="s">Copy to use in seeds or AI</span>
           </span>
           <button class="x" id="gpbCfgClose"><i class="ti ti-x"></i></button>
         </div>
@@ -618,7 +618,6 @@
           <pre class="cfg-json" id="gpbCfgJson"></pre>
         </div>
         <div class="cfg-foot">
-          <span class="meta">schema: <b>gp.card/v1</b></span>
           <span class="sp"></span>
           <button class="cm-btn is-ghost is-sm" id="gpbCfgCopy"><i class="ti ti-copy" style="font-size:13px"></i>Copy</button>
           <button class="cm-btn is-primary is-sm" id="gpbCfgSave">Add card</button>
@@ -4754,7 +4753,7 @@
       <div class="bdd-seg" id="gpbDDSeg">${Object.keys(DD_TYPES).map(k =>
         `<button data-type="${k}" class="${k === cur ? 'is-on' : ''}"><i class="ti ${DD_TYPES[k].icon}"></i>${DD_TYPES[k].name}</button>`).join('')}</div>
       <span class="spacer"></span>
-      <span class="bdd-cfg"><i class="ti ti-code"></i>config&nbsp;<b>gp.card/v1</b>&nbsp;· misma salida</span>
+      <span class="bdd-cfg"><i class="ti ti-check"></i>Same output as Classic</span>
     </div>`;
   }
 
