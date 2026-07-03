@@ -4612,12 +4612,13 @@
   if (document.readyState !== 'loading') init();
 
   // ══════════════════════════════════════════════════════════════════════
-  //  CHART BUILDER · MODO DRAG & DROP (dentro del builder — Prompt 1, solo UI)
+  //  CHART BUILDER · MODO DRAG & DROP (dentro del builder — funcional sobre S)
   //  Forma alternativa de armar el MISMO gráfico, vía un toggle Clásico/D&D
   //  dentro del drawer. Ambos modos editan el MISMO state S → la misma config
   //  gp.card/v1, y comparten el preview (la draft card del grid). El clásico
-  //  es el default. Por ahora el D&D es visual: refleja S (campos colocados +
-  //  chips en las zonas) pero todavía NO arrastra ni muta S (eso es Prompt 2).
+  //  es el default. El D&D arrastra y MUTA S de verdad (add/remove/reorder,
+  //  respetando VIZ_TYPES/dimAllowed) por el mismo camino que el clásico; el
+  //  wiring de eventos vive en buildStaticPanel() (dragstart/over/drop/click/change).
   // ══════════════════════════════════════════════════════════════════════
 
   // Etiquetas de eje por tipo (sólo las que muestra el toolbar D&D, como la
@@ -4757,6 +4758,7 @@
   // armar con dropdowns. renderDDPane() repinta además las zonas/panel del D&D.
   function ddSyncFromS() {
     if (!S) return;
+    pulseNext = true;                 // parity with classic add/remove/setType: pulse the preview card
     syncAll();
     renderDDPane();
   }
