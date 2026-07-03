@@ -2237,7 +2237,39 @@
   // is SHOWN (tooltip / data label) stays the REAL value, not the percentage.
 
   function destroyBodyChart(body) {
+    // Tear down the resize observer BEFORE destroying the chart (no dangling observer, no leak).
+    if (body && body.__chartRO) { try { body.__chartRO.disconnect(); } catch (e) {} body.__chartRO = null; }
     if (body && body.__chart) { try { body.__chart.destroy(); } catch (e) {} body.__chart = null; }
+  }
+
+  // Live-redraw a chart when its container (the .gp-c-b `body`) resizes — e.g. dragging the
+  // card's resize handle, which Chart.js' own responsive handler can miss mid-drag, leaving the
+  // canvas at the old size until the next re-render. Observe the BODY (not the canvas) and
+  // coalesce bursts into a single chart.resize() per animation frame. Exactly ONE observer per
+  // body: any previous one is disconnected first, and destroyBodyChart() disconnects it before
+  // the chart is destroyed. The callback no-ops if the chart was superseded by a newer mount.
+  function _attachChartResize(body, chart) {
+    if (!body || !chart || typeof ResizeObserver === 'undefined') return;
+    if (body.__chartRO) { try { body.__chartRO.disconnect(); } catch (e) {} body.__chartRO = null; }
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      if (raf) return;                                  // coalesce N callbacks → 1 resize/frame
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        if (body.__chart === chart) { try { chart.resize(); } catch (e) {} }   // skip if superseded
+      });
+    });
+    ro.observe(body);
+    chart.__ro = ro;                                    // link observer↔chart
+    body.__chartRO = ro;
+  }
+
+  // Single seam for every Chart.js mount (bars/line/scatter/radar/…): create the chart and
+  // wire its live-resize observer. Callers keep `body.__chart = _newChart(body, canvas, cfg)`.
+  function _newChart(body, canvas, cfg) {
+    const chart = new Chart(canvas, cfg);
+    _attachChartResize(body, chart);
+    return chart;
   }
   function showEmptyBody(body, msg) {
     body.innerHTML = `<div class="cb2-state empty"><div class="ic"><i class="ti ti-database-off"></i></div><div class="t">No data for this selection</div><div class="d">${esc(msg)}</div></div>`;
@@ -2406,7 +2438,7 @@
         pointRadius: 2, pointBackgroundColor: 'rgba(148,163,184,0.75)', pointBorderColor: '#fff',
       });
 
-      body.__chart = new Chart(canvas, {
+      body.__chart = _newChart(body, canvas, {
         type: 'radar',
         data: { labels: axisLabels, datasets },
         plugins: [_radarLabelPlugin],
@@ -2726,7 +2758,7 @@
           ticks: { stepSize: d.step1, font: { size: 10 }, color: '#9CA3AF', padding: 6, callback: v => kfmt(v) } };
       }
 
-      body.__chart = new Chart(canvas, {
+      body.__chart = _newChart(body, canvas, {
         type: 'bar',
         data: { labels: d.cats, datasets: d.datasets },
         plugins: [_barLabelPlugin, _mcDiffLabelPlugin],
@@ -2937,7 +2969,7 @@
       body.appendChild(wrap);
       Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
 
-      body.__chart = new Chart(canvas, {
+      body.__chart = _newChart(body, canvas, {
         type: 'line',
         data: { labels: d.cats, datasets: d.datasets },
         plugins: [_lineLabelPlugin],
@@ -3228,7 +3260,7 @@
       Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
 
       const gridCol = 'rgba(148,163,184,0.18)';
-      body.__chart = new Chart(canvas, {
+      body.__chart = _newChart(body, canvas, {
         type: 'scatter',
         data: { datasets: d.datasets },
         plugins: [_scatterAvgPlugin, _scatterLabelPlugin],
@@ -3442,7 +3474,7 @@
       if (!canvas || !body.isConnected || body.__kpiToken !== token) return;   // superseded
       if (!canvas.clientWidth) { requestAnimationFrame(mount); return; }
       Chart.getChart(canvas)?.destroy();
-      body.__chart = new Chart(canvas, {
+      body.__chart = _newChart(body, canvas, {
         type: 'line',
         data: { labels: ys.map(() => ''), datasets: [{
           data: ys, borderColor: color, borderWidth: 2,
