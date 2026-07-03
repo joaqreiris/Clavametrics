@@ -3205,7 +3205,7 @@
     const sY = _byId(yId) || null;
     const sizeId = enc.size?.[0];                       // undefined when no Size role is assigned
     const sSize  = sizeId != null ? _byId(sizeId) : null;
-    const empty = { datasets: [], avgX: null, avgY: null, showAxes, showLbl, showLeg: false,
+    const empty = { datasets: [], avgX: null, avgY: null, showAxes, showLbl, showLeg: false, hasSize: false,
                     xName: '', yName: '', xUnit: '', yUnit: '', xTitle: '', yTitle: '',
                     height: _SCATTER_SIZE_H[size] || 240 };
     if (!sX || !sY || !sX.points?.length || !sY.points?.length) return empty;
@@ -3222,10 +3222,25 @@
       const sizeVal = psz ? psz.y : null;
       paired.push({ name: px.x, x: px.y, y: py.y, cat: px.cat ?? null, size: sizeVal });   // px.y = X-axis value, py.y = Y-axis value
     }
-    // Verification log (once per render): the Size value is now flowing per point. The bubble
-    // radius is still fixed — this only confirms the data pipeline before the render uses it.
-    console.log('[SCATTER SIZE]', { sizeId: sizeId || null, hasSizeSeries: !!sSize, sample: paired.slice(0, 3).map(p => ({ name: p.name, size: p.size })) });
     if (!paired.length) return empty;
+
+    // ── Size encoding (L4): scale the bubble RADIUS by the Size metric, by AREA (area ∝ value →
+    // radius = sqrt(area)). Domain = min/max of the Size values over the VISIBLE points, ignoring
+    // null/NaN. No Size metric assigned → the fixed radius as before (no visual change).
+    const R_MIN = 4, R_MAX = 24;
+    const sizeVals = sizeId != null ? paired.map(p => p.size).filter(v => v != null && !isNaN(v)) : [];
+    const hasSize  = sizeVals.length > 0;
+    const sizeMin  = hasSize ? Math.min(...sizeVals) : null;
+    const sizeMax  = hasSize ? Math.max(...sizeVals) : null;
+    const radiusFor = v => {
+      if (v == null || isNaN(v)) return R_MIN;                       // missing → smallest (neutral)
+      if (sizeMax === sizeMin)   return (R_MIN + R_MAX) / 2;         // all equal → mid radius
+      let t = (v - sizeMin) / (sizeMax - sizeMin); t = Math.max(0, Math.min(1, t));
+      return Math.sqrt(R_MIN * R_MIN + t * (R_MAX * R_MAX - R_MIN * R_MIN));   // area-linear interpolation
+    };
+    const sizeCat  = sizeId != null ? (catalogMap.get(sizeId) || {}) : {};
+    const sizeName = sizeCat.name || sizeId || 'Size';
+    const sizeUnit = sizeCat.unit || '';
 
     const hasCat = paired.some(p => p.cat != null);
     const cats   = hasCat ? [...new Set(paired.map(p => p.cat ?? '—'))] : [null];
@@ -3241,8 +3256,9 @@
         backgroundColor: col + 'CC',                 // ~80% fill so overlaps read
         borderColor: '#fff',
         borderWidth: 1.2,
-        pointRadius: 5.5,
-        pointHoverRadius: 7.5,
+        // Per-point radius from the Size metric (area scale). No Size → fixed radius (as today).
+        pointRadius:      hasSize ? (ctx => radiusFor(ctx.raw?.size))     : 5.5,
+        pointHoverRadius: hasSize ? (ctx => radiusFor(ctx.raw?.size) + 2) : 7.5,
         pointHoverBackgroundColor: col,
         pointHoverBorderColor: col,
       };
@@ -3255,6 +3271,7 @@
     return {
       datasets, avgX, avgY, showAxes, showLbl,
       showLeg: hasCat && config.style?.legend !== false,
+      hasSize, sizeName, sizeUnit, sizeMin, sizeMax, rMin: R_MIN, rMax: R_MAX,
       xName: sX.name, yName: sY.name, xUnit, yUnit,
       xTitle: sX.name + (xUnit ? ` (${xUnit})` : ''),
       yTitle: sY.name + (yUnit ? ` (${yUnit})` : ''),
@@ -3295,6 +3312,19 @@
           + 'color:#9CA3AF;background:rgba(148,163,184,0.14);padding:3px 7px;border-radius:999px;pointer-events:none';
         wrap.appendChild(badge);
       }
+      // Size legend (L4): only when a Size metric is mapped. Two reference bubbles (min→max, at
+      // the real R_MIN/R_MAX) + the metric name. Absolutely positioned so it never affects layout.
+      if (d.hasSize) {
+        const dot = px => `<span style="display:inline-block;width:${px * 2}px;height:${px * 2}px;border-radius:50%;background:rgba(148,163,184,0.45);border:1px solid rgba(148,163,184,0.9);flex-shrink:0"></span>`;
+        const leg = document.createElement('div');
+        leg.style.cssText = 'position:absolute;top:6px;left:8px;z-index:2;display:flex;align-items:center;gap:12px;'
+          + 'padding:5px 10px;border-radius:9px;background:rgba(255,255,255,0.82);backdrop-filter:blur(2px);'
+          + 'border:1px solid var(--cm-border,#e5e7eb);font:500 10px/1 var(--cm-font-sans,sans-serif);color:var(--cm-fg-muted,#6B7280);pointer-events:none';
+        leg.innerHTML = `<span style="font-weight:600;color:var(--cm-fg,#374151)">${esc(d.sizeName)}${d.sizeUnit ? ` <span style="color:var(--cm-fg-faint,#9CA3AF)">(${esc(d.sizeUnit)})</span>` : ''}</span>`
+          + `<span style="display:inline-flex;align-items:center;gap:6px">${dot(d.rMin)}<span>${esc(fmt(Math.round(d.sizeMin * 10) / 10))}</span></span>`
+          + `<span style="display:inline-flex;align-items:center;gap:6px">${dot(d.rMax)}<span>${esc(fmt(Math.round(d.sizeMax * 10) / 10))}</span></span>`;
+        wrap.appendChild(leg);
+      }
       body.appendChild(wrap);
       Chart.getChart(canvas)?.destroy();                  // belt-and-suspenders before reuse
 
@@ -3327,8 +3357,13 @@
                 title: items => (items.length && items[0].raw?.name) ? String(items[0].raw.name) : '',
                 label: ctx => {
                   const x = Math.round(ctx.parsed.x * 10) / 10, y = Math.round(ctx.parsed.y * 10) / 10;
-                  return [`${d.xName}: ${fmt(x)}${d.xUnit ? ' ' + d.xUnit : ''}`,
-                          `${d.yName}: ${fmt(y)}${d.yUnit ? ' ' + d.yUnit : ''}`];
+                  const lines = [`${d.xName}: ${fmt(x)}${d.xUnit ? ' ' + d.xUnit : ''}`,
+                                 `${d.yName}: ${fmt(y)}${d.yUnit ? ' ' + d.yUnit : ''}`];
+                  if (d.hasSize && ctx.raw?.size != null) {
+                    const s = Math.round(ctx.raw.size * 10) / 10;
+                    lines.push(`${d.sizeName}: ${fmt(s)}${d.sizeUnit ? ' ' + d.sizeUnit : ''}`);
+                  }
+                  return lines;
                 },
               },
             },
