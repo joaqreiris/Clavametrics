@@ -3690,23 +3690,24 @@ async function _mountSavedBuilderCards(clubId) {
       el.dataset.size = card.size || config.style?.size || 'md';
       el.querySelectorAll('.size-toggle button').forEach(b =>
         b.classList.toggle('is-on', b.textContent.trim() === ({ sm:'S', md:'M', lg:'L', full:'FULL' }[el.dataset.size] || 'M')));
-      // These cards mount AFTER the grid is already visible (layout-ready). A card WITHOUT
-      // saved free-canvas coords would paint once at the CSS default (span 6 / row 11 =
-      // huge) before gp-canvas auto-places it → visible "explosion". Hide it until it's
-      // sized/placed, then reveal on the next frame (after the canvas mutation observer +
-      // any applyCoords have run). The skeleton inside then shimmers at the FINAL size.
-      el.style.visibility = 'hidden';
-
       // Restore saved free-canvas coords (dataset + --gp-* vars) BEFORE append, so the
       // first paint + placeCards keep the exact size/position instead of auto-flowing.
       const _co = _coordsById?.get(String(card.id));
       if (_co) {
         if (window.gpCanvas?.applyCoords) window.gpCanvas.applyCoords(el, _co);
         else { el.dataset.x = _co.x; el.dataset.y = _co.y; el.dataset.w = _co.w; el.dataset.h = _co.h; }
+      } else {
+        // No saved coords: these cards mount AFTER the grid is visible (layout-ready), so a
+        // card would paint once at the CSS default (span 6 / row 11 = huge) before gp-canvas
+        // assigns it a slot → the visual "explosion". Seed the SIZE from its bucket (same
+        // width cols + row heights gp-canvas uses) so it's born at its real size; gp-canvas
+        // then only sets x/y. NB: we never hide the card — it's always visible.
+        const _sz = el.dataset.size || 'md';
+        el.style.setProperty('--gp-w', { sm:4, md:6, lg:8, full:12 }[_sz] || 6);
+        el.style.setProperty('--gp-h', { sm:5, md:7, lg:10, full:13 }[_sz] || 7);
       }
 
       grid.appendChild(el);
-      requestAnimationFrame(() => { el.style.visibility = ''; });
       grid.dataset.gptBuilderMounted = '1';
 
       // resolve real data (async, non-blocking)
