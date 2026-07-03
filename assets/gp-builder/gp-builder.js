@@ -333,9 +333,10 @@
         if (m.format) out.format = m.format;
         else if (S.type === 'table') out.format = _defaultFormat(cat);
         if (m.line) out.line = true;               // combo: render this metric as a line (2nd axis)
+        if (m.role) out.role = m.role;             // encoding role (scatter: 'x'|'y'|'size')
         return out;
       }),
-      dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}) })),
+      dimensions: (S.dimensions || []).map(d => ({ id:d.id, ...(d.label ? { label:d.label } : {}), ...(d.align ? { align:d.align } : {}), ...(d.role ? { role:d.role } : {}) })),
       range:      { type: S.range },
       comparison: cmpConfig(S),
       style: { size:S.size, color:S.color, palette:S.palette, axes:S.axes, legend:S.legend, dataLabels:S.labels, area:S.area, points:S.points,
@@ -1221,11 +1222,15 @@
       });
       ddPane.addEventListener('drop', e => {
         const zone = e.target.closest('.bdd-zone');
+        // Kind must match the zone (metric→metric zone, dim→dim zone). For role zones the zone's
+        // accept already equals the role's kind, so this same check validates the role's kind.
         if (!zone || !_ddDrag || _ddDrag.kind !== zone.dataset.accept) { _ddClearFx(); return; }
         e.preventDefault();
-        const idx = _ddInsertIndex(zone.querySelector('.bdd-drop'), e.clientY);
-        if (_ddDrag.from === 'zone') ddMoveWithin(_ddDrag.kind, _ddDrag.id, idx);
-        else                         ddAddField(_ddDrag.kind, _ddDrag.id, idx);
+        const role = zone.dataset.role || null;                 // scatter role zones carry data-role
+        const idx  = _ddInsertIndex(zone.querySelector('.bdd-drop'), e.clientY);
+        if (role)                         ddAddField(_ddDrag.kind, _ddDrag.id, idx, role);  // add OR re-assign role
+        else if (_ddDrag.from === 'zone') ddMoveWithin(_ddDrag.kind, _ddDrag.id, idx);      // reorder (default zones)
+        else                              ddAddField(_ddDrag.kind, _ddDrag.id, idx);         // add (default zones)
         _ddDrag = null;
         ddSyncFromS();
       });
@@ -4836,8 +4841,56 @@
   // Drop zones — EXTENSIBLE. Each spec declares one zone (accept + labels + where its chips
   // come from). Today: dim + metric. Later, per chart type, extra zones (scatter → X, Y,
   // Color, Size) are added by pushing specs here + a case in ddAddField — nothing else changes.
+  // Titles/icons for the per-ROLE zones (scatter, …). Metric roles tint green, dim roles blue
+  // via the existing [data-accept] CSS — no CSS change needed.
+  const _ROLE_ZONE = {
+    x:     { title:'X axis', badge:'ti-arrow-right' },
+    y:     { title:'Y axis', badge:'ti-arrow-up' },
+    size:  { title:'Size',   badge:'ti-circle' },
+    color: { title:'Color',  badge:'ti-palette' },
+  };
+
+  // Make every placed field of a role-based type carry an explicit .role, so the drawer zones
+  // and the chart (which resolves via resolveEncodings) always agree and edits are stable.
+  // Idempotent: fields that already have a role keep it; unroled ones are assigned via the SAME
+  // positional-fallback resolveEncodings the render uses, then the role is pinned onto S. This
+  // keeps existing scatters (metrics without roles) showing/rendering exactly as before. No-op
+  // for types without a `roles` table.
+  function _ensureRolesForType(type) {
+    if (!S) return;
+    const roles = VIZ_TYPES[type] && VIZ_TYPES[type].roles;
+    if (!Array.isArray(roles) || !roles.length) return;
+    const enc = resolveEncodings(type, S.metrics, S.dimensions);
+    const pin = arr => (arr || []).forEach(it => {
+      if (it.role) return;
+      for (const r of roles) { if ((enc[r.role] || []).includes(it.id)) { it.role = r.role; break; } }
+    });
+    pin(S.metrics); pin(S.dimensions);
+  }
+
   function ddZoneSpecs() {
     const ax = _ddAxes();
+    const roles = S && VIZ_TYPES[S.type] && VIZ_TYPES[S.type].roles;
+    // Role-based type (scatter): one zone per role from the VIZ_TYPES table, in order. Each
+    // zone's `accept` = the role's kind ('metric'|'dim'); X and Y are both 'metric', so the
+    // zone is disambiguated by `role` (→ data-role) in the drop handler.
+    if (Array.isArray(roles) && roles.length) {
+      _ensureRolesForType(S.type);
+      return roles.map(r => {
+        const meta = _ROLE_ZONE[r.role] || {};
+        const src  = r.kind === 'dim' ? (S.dimensions || []) : (S.metrics || []);
+        return {
+          role:   r.role,
+          accept: r.kind,                                       // 'metric' | 'dim' — drag kind must match
+          title:  meta.title || r.role,
+          axLbl:  (r.kind === 'dim' ? 'dimension' : 'metric') + (r.min === 0 ? ' · optional' : ''),
+          badge:  meta.badge || (r.kind === 'dim' ? 'ti-category-2' : 'ti-ruler-measure'),
+          what:   r.kind === 'dim' ? 'a dimension' : 'a metric',
+          items:  src.filter(it => it.role === r.role),
+        };
+      });
+    }
+    // Default: the two generic zones (unchanged).
     return [
       { accept:'dim',    title:'Dimensions', axLbl:ax.dimAx, badge:'ti-category-2',    what:'dimensions', items:(S && S.dimensions) || [] },
       { accept:'metric', title:'Metrics',    axLbl:ax.metAx, badge:'ti-ruler-measure', what:'metrics',    items:(S && S.metrics)    || [] },
@@ -4848,9 +4901,10 @@
     const body  = z.items.length
       ? (isDim ? z.items.map(d => ddDimChip(d.id)).join('') : z.items.map(m => ddMetChip(m)).join(''))
       : `<div class="bdd-empty"><i class="ti ti-arrow-down-to-arc"></i><span class="m">drag ${z.what} here</span></div>`;
-    return `<div class="bdd-zone" data-accept="${z.accept}">
+    const roleAttr = z.role ? ` data-role="${z.role}"` : '';
+    return `<div class="bdd-zone" data-accept="${z.accept}"${roleAttr}>
       <div class="bdd-zone-h"><span class="badge"><i class="ti ${z.badge}"></i></span><span class="t">${z.title}</span><span class="ax">${z.axLbl}</span><span class="ct">${z.items.length}</span></div>
-      <div class="bdd-drop" data-accept="${z.accept}">${body}</div>
+      <div class="bdd-drop" data-accept="${z.accept}"${roleAttr}>${body}</div>
     </div>`;
   }
   function ddZonesHTML() { return `<div class="bdd-zones">${ddZoneSpecs().map(ddZoneHTML).join('')}</div>`; }
@@ -4944,9 +4998,33 @@
 
   // Agrega un campo a S respetando las restricciones reales del tipo (VIZ_TYPES).
   // Default de agg = defaultAgg(kind), idéntico al builder clásico → mismo S.
-  function ddAddField(kind, id, atIndex) {
+  function ddAddField(kind, id, atIndex, role) {
     if (!S) return;
     const t = VIZ_TYPES[S.type];
+    // ── Role-based types (scatter, …): fields still live in S.metrics/S.dimensions but carry
+    // a .role. Assign the dropped field to `role`, respecting the role's max (max:1 → replace
+    // the current holder, like dimMax:1 today). Only when the active type has a `roles` table.
+    if (role && Array.isArray(t && t.roles)) {
+      const rspec = t.roles.find(r => r.role === role);
+      if (!rspec || rspec.kind !== kind) return;               // the drop kind must match the role
+      if (kind === 'dim' ? !DIM_MAP.has(id) : !catalogMap.get(id)) return;
+      if (kind === 'dim' && !S.dimensions) S.dimensions = [];
+      const arr = kind === 'dim' ? S.dimensions : S.metrics;
+      // detach the incoming field from wherever it currently sits (ids are unique per array)
+      const cur  = arr.findIndex(x => x.id === id);
+      const item = cur >= 0 ? arr.splice(cur, 1)[0]
+                            : (kind === 'dim' ? { id } : { id, agg: defaultAgg(catalogMap.get(id).kind || 'accum') });
+      item.role = role;
+      // enforce the role's max: drop the oldest current holder(s) until this one fits
+      const max = rspec.max || 1;
+      while (arr.filter(x => x.role === role).length >= max) {
+        const vi = arr.indexOf(arr.find(x => x.role === role));
+        if (vi < 0) break;
+        arr.splice(vi, 1);
+      }
+      arr.push(item);
+      return;
+    }
     if (kind === 'dim') {
       if (!DIM_MAP.has(id)) return;
       if (!S.dimensions) S.dimensions = [];
