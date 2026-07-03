@@ -2735,7 +2735,16 @@
       destroyBodyChart(body);
       body.innerHTML = '';
       const wrap = document.createElement('div');
-      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      // Fill the card body in canvas mode so the chart tracks the card height — but via an
+      // ABSOLUTELY positioned wrap, which contributes ZERO to the card's size. So filling can
+      // never push the card past its saved grid slot (--gp-h) → the layout never shifts. Grid /
+      // preview contexts (indefinite height) keep the fixed bucket height as before.
+      if (body.closest && body.closest('.gp-grid.is-canvas')) {
+        body.style.position = 'relative';
+        wrap.style.cssText = 'position:absolute;inset:0';
+      } else {
+        wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      }
       const canvas = document.createElement('canvas');   // no global id — unique per card body
       wrap.appendChild(canvas);
       body.appendChild(wrap);
@@ -2959,7 +2968,16 @@
       destroyBodyChart(body);
       body.innerHTML = '';
       const wrap = document.createElement('div');
-      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      // Fill the card body in canvas mode so the chart tracks the card height — but via an
+      // ABSOLUTELY positioned wrap, which contributes ZERO to the card's size. So filling can
+      // never push the card past its saved grid slot (--gp-h) → the layout never shifts. Grid /
+      // preview contexts (indefinite height) keep the fixed bucket height as before.
+      if (body.closest && body.closest('.gp-grid.is-canvas')) {
+        body.style.position = 'relative';
+        wrap.style.cssText = 'position:absolute;inset:0';
+      } else {
+        wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      }
       const canvas = document.createElement('canvas');   // no global id — unique per card body
       wrap.appendChild(canvas);
       // Example-data badge: shown only when the builder preview can't reach real data
@@ -3257,7 +3275,16 @@
       destroyBodyChart(body);
       body.innerHTML = '';
       const wrap = document.createElement('div');
-      wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      // Fill the card body in canvas mode so the chart tracks the card height — but via an
+      // ABSOLUTELY positioned wrap, which contributes ZERO to the card's size. So filling can
+      // never push the card past its saved grid slot (--gp-h) → the layout never shifts. Grid /
+      // preview contexts (indefinite height) keep the fixed bucket height as before.
+      if (body.closest && body.closest('.gp-grid.is-canvas')) {
+        body.style.position = 'relative';
+        wrap.style.cssText = 'position:absolute;inset:0';
+      } else {
+        wrap.style.cssText = `position:relative;width:100%;height:${d.height}px`;
+      }
       const canvas = document.createElement('canvas');   // no global id — unique per card body
       wrap.appendChild(canvas);
       // Example-data badge — only when the preview couldn't reach real GPS data.
