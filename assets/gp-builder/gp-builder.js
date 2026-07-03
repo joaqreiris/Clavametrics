@@ -2281,14 +2281,24 @@
     // rawRef = the REAL per-axis baseline (null when there's none for that metric → the
     // axis falls back to the player's own value = 100%). refHas flags a real reference so
     // the tooltip only shows "(ref: X)" when X is a genuine baseline, not the fallback.
+    // A performance radar is unreadable if one axis explodes (a tiny / atypical match
+    // baseline → 200 / 0.5 = 40000%). Two guards keep the scale legible:
+    //  · UNRELIABLE: player > 4× baseline ⇒ that baseline is implausible (too few / outlier
+    //    matches) → drop it; the axis falls back to the player's own value (100%).
+    //  · CLAMP: a reliable-but-high ratio is DRAWN at most at DRAW_CAP; the TRUE % stays in
+    //    the tooltip. rMax is bounded so one outlier can't stretch the whole scale.
+    const DRAW_CAP = 200, UNRELIABLE_CAP = 400;
     const rawRef    = ms.map(s => { const b = baselineMap ? baselineMap.get(s.label) : null; return (b != null && b > 0) ? b : null; });
-    const refs      = rawRef.map((b, i) => b != null ? b : (realVals[i] || 1));
-    const refHas    = rawRef.map(b => b != null);
-    const pct        = realVals.map((v, i) => Math.round((v / refs[i]) * 100));
+    const refHas    = rawRef.map((b, i) => b != null && (realVals[i] / b) * 100 <= UNRELIABLE_CAP);
+    const refs      = rawRef.map((b, i) => refHas[i] ? b : (realVals[i] || 1));
+    const pctReal    = realVals.map((v, i) => Math.round((v / refs[i]) * 100));   // true %, kept for the tooltip
+    const pct        = pctReal.map(p => Math.min(p, DRAW_CAP));                    // clamped value actually drawn
+    const clamped    = pctReal.map((p, i) => refHas[i] && p > DRAW_CAP);
     const fmtVal     = (v, i) => fmt(Math.round(v * 10) / 10) + (units[i] ? ' ' + units[i] : '');
     const realLabels = realVals.map(fmtVal);
     const refLabels  = refs.map(fmtVal);
-    const rMax       = Math.ceil(Math.max(120, ...(pct.length ? pct : [120])) / 30) * 30;
+    const _peak      = pct.length ? Math.max(...pct) : 0;
+    const rMax       = Math.min(Math.max(120, Math.ceil(_peak / 30) * 30), DRAW_CAP + 20);
 
     // A comparison is configured (hasBaseline) but NO axis resolved a real reference →
     // don't draw a fake 100% ring; suppress it and surface a note instead of inventing.
@@ -2299,7 +2309,7 @@
     const baselineMissingNote = (hasBaseline && !hasRealBaseline)
       ? (_MISS_NOTE[config.comparison.baseline] || 'No baseline data yet') : null;
 
-    return { labels, pct, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, hasRealBaseline, baselineMissingNote, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
+    return { labels, pct, pctReal, clamped, realLabels, refLabels, refHas, units, realVals, refs, hasBaseline, hasRealBaseline, baselineMissingNote, baselineName, baselineOf, rMax, color, showAxes, showLeg, showLbl };
   }
 
   /** Mounts (or re-mounts) a Chart.js radar into `body`. Destroys any prior instance. */
@@ -2382,7 +2392,9 @@
               // No comparison, or no REAL baseline for this axis → raw value only (never a
               // fabricated 100%). Only axes with a genuine reference show the % + ref value.
               if (!d.hasBaseline || !d.refHas[ctx.dataIndex]) return `${lbl}: ${real}`;
-              return `${lbl}: ${real} · ${ctx.raw}% ${d.baselineOf} (ref: ${d.refLabels[ctx.dataIndex]})`;
+              // Show the TRUE % (not the clamped drawn value); note when it was capped.
+              const clampTxt = d.clamped[ctx.dataIndex] ? ' (capped)' : '';
+              return `${lbl}: ${real} · ${d.pctReal[ctx.dataIndex]}% ${d.baselineOf}${clampTxt} (ref: ${d.refLabels[ctx.dataIndex]})`;
             } } },
             gpbRadarLabels: { show: !d.grouped && d.showLbl, labels: d.realLabels, color: d.color },
           },
