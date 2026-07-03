@@ -3090,12 +3090,34 @@
   };
 
   /** Pure: (config, series) → Chart.js scatter payload (datasets per category, averages, axis titles). */
+  // Resolve the scatter field ROLES → metric/dimension ids. If items carry an explicit
+  // `role` ('x'|'y'|'size' on metrics; 'color' on dimensions) we honour it; otherwise we
+  // fall back to the CURRENT positional contract: metrics[0]→X, metrics[1]→Y (no size),
+  // dimensions[0]→colour. Pure + robust: any id may be null if the field is missing. This is
+  // the single seam for role-based (multi-metric) encoding — behaviour is unchanged until a
+  // config actually sets roles.
+  function scatterRoles(metrics, dimensions) {
+    const ms = Array.isArray(metrics)    ? metrics    : [];
+    const ds = Array.isArray(dimensions) ? dimensions : [];
+    const hasRoles = ms.some(m => m && m.role);
+    const roleId = r => ms.find(m => m && m.role === r)?.id ?? null;
+    const xId    = hasRoles ? roleId('x')    : (ms[0]?.id ?? null);
+    const yId    = hasRoles ? roleId('y')    : (ms[1]?.id ?? null);
+    const sizeId = hasRoles ? roleId('size') : null;
+    const colorId = (ds.find(d => d && d.role === 'color') || ds[0] || null)?.id ?? null;
+    return { xId, yId, sizeId, colorId };
+  }
+
   function scatterChartData(config, series) {
     const size     = config.style?.size || 'md';
     const showAxes = config.style?.axes   !== false;
     const showLbl  = !!config.style?.dataLabels;     // point name labels — OFF by default
-    const sX = series && series[0];
-    const sY = series && series[1];
+    // Roles → ids (positional fallback keeps existing scatters identical), then match each
+    // role to its series by metric id (series.label === metric.id) — NOT by array position.
+    const { xId, yId } = scatterRoles(config.metrics, config.dimensions);
+    const _byId = id => (id != null && Array.isArray(series)) ? series.find(s => s && s.label === id) : null;
+    const sX = _byId(xId) || null;
+    const sY = _byId(yId) || null;
     const empty = { datasets: [], avgX: null, avgY: null, showAxes, showLbl, showLeg: false,
                     xName: '', yName: '', xUnit: '', yUnit: '', xTitle: '', yTitle: '',
                     height: _SCATTER_SIZE_H[size] || 240 };
