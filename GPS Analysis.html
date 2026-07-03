@@ -4076,9 +4076,9 @@ async function _detectSmartDefault(clubId, userId) {
   if (typeof window.ensureDefaultDashboards === 'function' && window.sb) {
     window.ensureDefaultDashboards(clubId, profile?.id, window.sb).catch(e => console.warn('ensureDefaultDashboards:', e));
   }
-  if (typeof window.loadCardsForView === 'function' && window.sb) {
-    _mountSavedBuilderCards(clubId).catch(e => console.warn('_mountSavedBuilderCards:', e));
-  }
+  // NB: saved builder cards are mounted INSIDE the layout phase below (before the grid is
+  // revealed), not here — mounting them late into an already-visible grid made them pop in
+  // at the default size and then jump to their real slot.
 
   // Apply smart default / saved prefs
   const prefs = await _detectSmartDefault(clubId, window._gpUserId);
@@ -4098,9 +4098,22 @@ async function _detectSmartDefault(clubId, userId) {
       applyDefaultLayoutGeneric('mgrp', _MGRP_DEFAULTS),
       applyMcDefaultLayout()
     ]);
+    // Mount saved builder cards BEFORE the grid is revealed, so they appear directly at their
+    // final size/position (skeleton inside) instead of mounting late into a visible grid and
+    // then being re-placed — the "explosion" on load. Bounded by a timeout so a slow cards/
+    // layout fetch can't hold the whole dashboard blank.
+    if (window.loadCardsForView && window.sb) {
+      await Promise.race([
+        _mountSavedBuilderCards(clubId).catch(e => console.warn('_mountSavedBuilderCards:', e)),
+        new Promise(r => setTimeout(r, 1500)),
+      ]);
+    }
   } catch (e) {
     console.warn('applyLayout:', e);
   } finally {
+    // Final placement pass: every card (static + builder) gets its --gp-w/h/x/y set BEFORE the
+    // grid fades in, so nothing paints at the CSS default (span 6 / row 11) and then jumps.
+    window.gpCanvas?.renderAll?.();
     // Skeletons en bodies vacíos → el grid aparece con shimmer en vez de blanco
     document.querySelectorAll('.gp-c-b').forEach(b => {
       if (b.children.length || b.textContent.trim()) return;
