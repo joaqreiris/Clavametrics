@@ -474,8 +474,11 @@ async function boot(){
   let pctTopSpeed=null, pctDist=null, pctHsr=null, pctCmj=null, pctSprint=null;
   if(player.team_id && seasonStart && seasonEnd && window.evalBench){
     try {
-      const { data: mates } = await window.sb.from('players').select('id').eq('club_id',clubId).eq('team_id',player.team_id);
-      const ids=(mates||[]).map(p=>p.id);
+      // Cohorte por MEMBRESÍA (player_teams!inner) para incluir a los secundarios de la categoría.
+      // Se mantiene el equipo PRIMARIO del jugador (Dossier se abre por jugador, sin equipo activo).
+      const { data: mates } = await window.sb.from('players').select('id, player_teams!inner(team_id)').eq('club_id',clubId).eq('player_teams.team_id',player.team_id);
+      const _seenMates=new Set();
+      const ids=(mates||[]).filter(p=>_seenMates.has(p.id)?false:(_seenMates.add(p.id),true)).map(p=>p.id);
       if(ids.length){
         // teammates' physical tests (latest-first) → cohorts for per-test percentiles
         const [_mFt, _mEv] = await Promise.all([
