@@ -1408,8 +1408,12 @@
       _teamId = (saved && teams.some(function(t){ return t.id===saved; })) ? saved : teams[0].id;
       sel.innerHTML = teams.map(function(t){ return '<option value="'+t.id+'"'+(t.id===_teamId?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
       // resolve players for the active team (evaluations are scoped via player, not team_id)
-      var pr = await window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId).eq('team_id', _teamId).is('archived_at', null);
-      _ftPlayers = pr.data || [];
+      // Filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id (primario), para
+      // incluir jugadores multi-categoría en su categoría secundaria. _teamId nunca es null acá
+      // (si no hay equipos, se hizo return arriba).
+      var pr = await window.sb.from('players').select('id, first_name, last_name, player_teams!inner(team_id)').eq('club_id', _clubId).eq('player_teams.team_id', _teamId).is('archived_at', null);
+      var _seenFt = new Set();
+      _ftPlayers = (pr.data || []).filter(function(r){ return _seenFt.has(r.id) ? false : (_seenFt.add(r.id), true); });
       _teamPlayerIds = _ftPlayers.map(function(r){ return r.id; });
     } catch(e){ console.warn('[ev2] team scope failed', e); }
   }
@@ -4845,15 +4849,19 @@
   async function loadForceRoster() {
     if (!_clubId) return [];
     // external_force_id may not exist yet (migration 051) — fall back to name-only roster.
-    let q = window.sb.from('players').select('id, first_name, last_name, external_force_id').eq('club_id', _clubId).is('archived_at', null);
-    if (_teamId) q = q.eq('team_id', _teamId);
+    // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id (primario).
+    const _frSel1 = 'id, first_name, last_name, external_force_id' + (_teamId ? ', player_teams!inner(team_id)' : '');
+    let q = window.sb.from('players').select(_frSel1).eq('club_id', _clubId).is('archived_at', null);
+    if (_teamId) q = q.eq('player_teams.team_id', _teamId);
     let res = await q;
     if (res.error) {
-      let q2 = window.sb.from('players').select('id, first_name, last_name').eq('club_id', _clubId).is('archived_at', null);
-      if (_teamId) q2 = q2.eq('team_id', _teamId);
+      const _frSel2 = 'id, first_name, last_name' + (_teamId ? ', player_teams!inner(team_id)' : '');
+      let q2 = window.sb.from('players').select(_frSel2).eq('club_id', _clubId).is('archived_at', null);
+      if (_teamId) q2 = q2.eq('player_teams.team_id', _teamId);
       res = await q2;
     }
-    return res.data || [];
+    const _seenFr = new Set();
+    return (res.data || []).filter(function(p){ return _seenFr.has(p.id) ? false : (_seenFr.add(p.id), true); });
   }
 
   // Resolve a row to a player id: (1) external_force_id, (2) name (incl. swapped "Last First"), (3) manual map.
