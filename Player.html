@@ -423,6 +423,11 @@
         .forEach(key => setKpi(key, '—', ''));
     }
 
+    // Cohorte del benchmark = EQUIPO ACTIVO que se está viendo (no el primario del jugador),
+    // con fallback al primario solo si no hay equipo activo en sesión. Así, ver al jugador desde
+    // Primera lo compara contra el cohorte de Primera, y desde U19 contra el de U19.
+    const benchTeamId = sessionStorage.getItem('cal_active_team') || player.team_id;
+
     // Overview tab: build the 3 cards into its panel using the resolved season window.
     try {
       const mount = page.querySelector('.pp-panel[data-panel="overview"]');
@@ -430,7 +435,7 @@
         await window.playerOverview.render({
           playerId: player.id,
           clubId,
-          teamId: player.team_id,
+          teamId: benchTeamId,
           seasonStart: kpis ? kpis.seasonStart : null,
           seasonEnd: kpis ? kpis.seasonEnd : null,
           mount,
@@ -446,7 +451,7 @@
       physTab.addEventListener('click', async () => {
         if (_testsRendered || !window.playerTests) return;
         _testsRendered = true;
-        try { await window.playerTests.render({ playerId: player.id, clubId, teamId: player.team_id, mount: physPanel }); }
+        try { await window.playerTests.render({ playerId: player.id, clubId, teamId: benchTeamId, mount: physPanel }); }
         catch (e) { /* tests module is self-contained; ignore */ }
       });
     }

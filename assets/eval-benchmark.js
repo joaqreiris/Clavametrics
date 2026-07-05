@@ -8,8 +8,14 @@
 (function(){
   const sb = () => window.sb;
   async function _latestByPlayerType({ clubId, teamId, types, physicalOnly }){
-    const { data: players } = await sb().from('players').select('id').eq('club_id',clubId).eq('team_id',teamId).is('archived_at', null);
-    const ids = (players||[]).map(p=>p.id);
+    // Cohorte = miembros del EQUIPO (categoría) vía player_teams (M:N), incluyendo a quienes lo
+    // tienen como equipo SECUNDARIO — no solo primarios. Sigue siendo UN SOLO equipo: nunca se
+    // mezclan dos categorías en el pool (eso daría percentiles falsos). Dedup por id porque el
+    // inner join puede duplicar filas. El umbral de ≥4 peers lo aplica el caller.
+    const { data: players } = await sb().from('players').select('id, player_teams!inner(team_id)')
+      .eq('club_id',clubId).eq('player_teams.team_id',teamId).is('archived_at', null);
+    const _seen = new Set();
+    const ids = (players||[]).filter(p => _seen.has(p.id) ? false : (_seen.add(p.id), true)).map(p=>p.id);
     if (!ids.length) return {};
     let q = sb().from('evaluations').select('player_id, evaluation_type, value, test_date, unit')
       .eq('club_id',clubId).in('player_id', ids).order('test_date',{ascending:false});
