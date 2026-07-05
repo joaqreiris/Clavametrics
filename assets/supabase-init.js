@@ -384,15 +384,30 @@
   // Returns active players for the club (excludes inactive), ordered by number.
   // Pass teamId to restrict to a specific team/category.
   window.getActivePlayers = async function (clubId, teamId) {
+    // Con teamId filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id (primario),
+    // para que un player multi-categoría aparezca también en sus categorías secundarias.
+    const sel = 'id,first_name,last_name,number,position,status,team_id'
+      + (teamId ? ', player_teams!inner(team_id)' : '');
     let q = window.sb.from('players')
-      .select('id,first_name,last_name,number,position,status,team_id')
+      .select(sel)
       .eq('club_id', clubId)
       .neq('status', 'inactive')
       .is('archived_at', null)
       .order('number');
-    if (teamId) q = q.eq('team_id', teamId);
+    if (teamId) q = q.eq('player_teams.team_id', teamId);
     const { data } = await q;
-    return data || [];
+    if (!data) return [];
+    // Dedup por id por si el inner join devolviera filas repetidas, y quitar el
+    // player_teams anidado para devolver exactamente los mismos campos que antes.
+    const seen = new Set();
+    const out = [];
+    for (const p of data) {
+      if (seen.has(p.id)) continue;
+      seen.add(p.id);
+      delete p.player_teams;
+      out.push(p);
+    }
+    return out;
   };
 
   // Roster de players por MEMBRESÍA (junction player_teams), no por players.team_id.
