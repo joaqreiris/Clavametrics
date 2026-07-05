@@ -1916,13 +1916,14 @@ function _reorderGrid(grid, layout) {
   if (!grid || !layout?.length) return;
   const posMap = new Map(layout.map(c => [c.card_id, c.position]));
   const cards  = [...grid.querySelectorAll('.gp-c')];
-  cards.sort((a, b) => {
-    const ka = _deriveCardId(a, cards.indexOf(a));
-    const kb = _deriveCardId(b, cards.indexOf(b));
-    return (posMap.get(ka) ?? 9999) - (posMap.get(kb) ?? 9999);
-  });
+  // Derive each card's key + sort position ONCE, up front. Calling cards.indexOf(el) INSIDE the
+  // sort comparator read a live index from the array being mutated in place → an unstable fallback
+  // key for any card missing dataset.cardId/.ttl, so the order came out different across reloads.
+  // Tie-break by original index so cards that miss the layout (→9999) keep their prior relative order.
+  const keyed = cards.map((el, i) => ({ el, pos: posMap.get(_deriveCardId(el, i)) ?? 9999, i }));
+  keyed.sort((a, b) => (a.pos - b.pos) || (a.i - b.i));
   const addBtn = grid.querySelector('.gp-add');
-  cards.forEach(c => grid.appendChild(c));
+  keyed.forEach(k => grid.appendChild(k.el));
   if (addBtn) grid.appendChild(addBtn);
 }
 
@@ -3672,8 +3673,9 @@ async function _mountSavedBuilderCards(clubId) {
     // their x/y/w/h they'd lose size/position and fall back to the CSS default (span 6 /
     // row 11). Keyed by card_id (= the card's UUID = dataset.cardId).
     let _coordsById = null;
+    let _lay = null;
     try {
-      const _lay = await loadLayout(view);
+      _lay = await loadLayout(view);
       _coordsById = new Map((_lay || [])
         .filter(c => [c.x, c.y, c.w, c.h].every(Number.isFinite))
         .map(c => [String(c.card_id), { x: c.x, y: c.y, w: c.w, h: c.h }]));
@@ -3713,6 +3715,11 @@ async function _mountSavedBuilderCards(clubId) {
       // resolve real data (async, non-blocking)
       _resolveAndRenderSavedCard(el, config, clubId).catch(e => console.warn('resolve saved card:', e));
     }
+    // Builder cards were just appended at the END of the grid. The static-card reorder ran earlier
+    // (applyDefaultLayoutGeneric, before these existed), so without re-applying it here the builder
+    // cards keep dashboard_cards append order — and late mounts (after the 1500ms reveal race) land
+    // scrambled. Re-sort the full grid by the user's saved gps_dashboard_layouts order.
+    if (_lay?.length) _reorderGrid(grid, _lay);
   }
   } finally {
     window.__gptMountingCards = false;
