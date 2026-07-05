@@ -756,14 +756,21 @@ let _editingTreatmentId = null;
 
   // Load players ordered by last_name; filter inactive client-side to avoid null != issues
   console.log('club_id en Treatments:', _clubId);
+  // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id
+  // (primario), para incluir jugadores multi-categoría en su categoría secundaria.
+  const _phSel = 'id,first_name,last_name,number,position,status'
+    + (_phTeamId ? ', player_teams!inner(team_id)' : '');
   let _phPlQ = window.sb
     .from('players')
-    .select('id,first_name,last_name,number,position,status')
+    .select(_phSel)
     .eq('club_id', _clubId).is('archived_at', null);
-  if (_phTeamId) _phPlQ = _phPlQ.eq('team_id', _phTeamId);
+  if (_phTeamId) _phPlQ = _phPlQ.eq('player_teams.team_id', _phTeamId);
   const { data: players, error: playersErr } = await _phPlQ.order('last_name');
   console.log('players result:', players, playersErr);
-  _allPlayers = (players || []).filter(p => p.status !== 'inactive');
+  const _seenPh = new Set();
+  _allPlayers = (players || [])
+    .filter(p => _seenPh.has(p.id) ? false : (_seenPh.add(p.id), true))
+    .filter(p => p.status !== 'inactive');
 
   // Load staff/physio (profiles for the club)
   const { data: staff, error: staffErr } = await window.sb

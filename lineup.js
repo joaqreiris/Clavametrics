@@ -537,14 +537,19 @@
   // ── Player picker ─────────────────────────────────────────────
 
   async function loadSquadPlayers (clubId) {
+    // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id
+    // (primario), para incluir jugadores multi-categoría en su categoría secundaria.
+    const _luSel = 'id,first_name,last_name,number,position,positions,nationality'
+      + (_luTeamId ? ', player_teams!inner(team_id)' : '');
     let _luPlQ = window.sb
       .from('players')
-      .select('id,first_name,last_name,number,position,positions,nationality')
+      .select(_luSel)
       .eq('club_id', clubId)
       .neq('status', 'inactive');
-    if (_luTeamId) _luPlQ = _luPlQ.eq('team_id', _luTeamId);
+    if (_luTeamId) _luPlQ = _luPlQ.eq('player_teams.team_id', _luTeamId);
     const { data } = await _luPlQ.order('last_name');
-    _allPlayers = data || [];
+    const _seenLu = new Set();
+    _allPlayers = (data || []).filter(p => _seenLu.has(p.id) ? false : (_seenLu.add(p.id), true));
     _playersLoading = false;
   }
 

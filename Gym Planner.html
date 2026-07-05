@@ -1707,10 +1707,11 @@ async function gpExportPDF() {
   const initDate = (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) ? urlDate : today;
 
   const [playersRes, mcRes] = await Promise.all([
-    window.sb.from('players').select('id,first_name,last_name,number,position').eq('club_id', clubId).eq('team_id', _gpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
+    window.sb.from('players').select('id,first_name,last_name,number,position, player_teams!inner(team_id)').eq('club_id', clubId).eq('player_teams.team_id', _gpTeamId).neq('status','inactive').is('archived_at', null).order('number'),
     window.sb.from('microcycles').select('id,name,start_date,end_date,rival,home_away,match_date').eq('club_id', clubId).eq('team_id', _gpTeamId).order('start_date')
   ]);
-  _gpPlayers     = playersRes.data || [];
+  const _seenGp = new Set();
+  _gpPlayers     = (playersRes.data || []).filter(p => _seenGp.has(p.id) ? false : (_seenGp.add(p.id), true));
   _gpMicrocycles = mcRes.data || [];
 
   await gpLoadDay(initDate);

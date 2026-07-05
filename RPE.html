@@ -587,14 +587,19 @@ async function loadLastSession(clubId) {
 // ── PLAYERS ──
 async function loadPlayers(clubId) {
   const activeTeam = sessionStorage.getItem('cal_active_team');
+  // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id
+  // (primario), para incluir jugadores multi-categoría en su categoría secundaria.
+  const _rpeSel = 'id, first_name, last_name, position'
+    + (activeTeam ? ', player_teams!inner(team_id)' : '');
   let _rpePlQ = window.sb.from('players')
-    .select('id, first_name, last_name, position')
+    .select(_rpeSel)
     .eq('club_id', clubId)
     .eq('status', 'available')
     .is('archived_at', null);
-  if (activeTeam) _rpePlQ = _rpePlQ.eq('team_id', activeTeam);
+  if (activeTeam) _rpePlQ = _rpePlQ.eq('player_teams.team_id', activeTeam);
   const { data } = await _rpePlQ.order('last_name');
-  players = data || [];
+  const _seenRpe = new Set();
+  players = (data || []).filter(p => _seenRpe.has(p.id) ? false : (_seenRpe.add(p.id), true));
   const sel = document.getElementById('playerSelect');
   sel.innerHTML = '<option value="">Select player…</option>';
   players.forEach(p => {

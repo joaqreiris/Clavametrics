@@ -1524,12 +1524,17 @@ async function savePhaseStatus(status) {
   await injInitTeamSwitch();
 
   // Load players
+  // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id
+  // (primario), para incluir jugadores multi-categoría en su categoría secundaria.
+  const _injSel = 'id,first_name,last_name,position,number'
+    + (_injTeamId ? ', player_teams!inner(team_id)' : '');
   let _injPlQ = window.sb.from('players')
-    .select('id,first_name,last_name,position,number')
+    .select(_injSel)
     .eq('club_id', _clubId).neq('status','inactive').is('archived_at', null);
-  if (_injTeamId) _injPlQ = _injPlQ.eq('team_id', _injTeamId);
+  if (_injTeamId) _injPlQ = _injPlQ.eq('player_teams.team_id', _injTeamId);
   const { data: pData } = await _injPlQ.order('last_name');
-  _players = pData || [];
+  const _seenInj = new Set();
+  _players = (pData || []).filter(p => _seenInj.has(p.id) ? false : (_seenInj.add(p.id), true));
   _playersMap = Object.fromEntries(_players.map(p => [p.id, p]));
   populatePlayerSelect('logPlayer');
 

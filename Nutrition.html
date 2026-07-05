@@ -491,15 +491,20 @@
 
   if (club) window.applyClubTheme();
   await nuInitTeamSwitch(clubId);
+  // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id
+  // (primario), para incluir jugadores multi-categoría en su categoría secundaria.
+  const _nuSel = 'id,first_name,last_name,number,position,weight,height,date_of_birth'
+    + (_nuTeamId ? ', player_teams!inner(team_id)' : '');
   let _nuPlQ = window.sb.from('players')
-    .select('id,first_name,last_name,number,position,weight,height,date_of_birth')
+    .select(_nuSel)
     .eq('club_id', clubId)
     .neq('status', 'inactive')
     .is('archived_at', null);
-  if (_nuTeamId) _nuPlQ = _nuPlQ.eq('team_id', _nuTeamId);
+  if (_nuTeamId) _nuPlQ = _nuPlQ.eq('player_teams.team_id', _nuTeamId);
   const { data: players } = await _nuPlQ.order('last_name');
 
-  const list = players || [];
+  const _seenNu = new Set();
+  const list = (players || []).filter(p => _seenNu.has(p.id) ? false : (_seenNu.add(p.id), true));
   list.forEach(p => { p._name = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
 
   const ctEl  = document.getElementById('nuSquadCt');

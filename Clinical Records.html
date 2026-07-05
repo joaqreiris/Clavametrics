@@ -283,12 +283,16 @@
   }
 
   async function loadRoster() {
-    const { data: players } = await window.sb.from('players')
-      .select('id, first_name, last_name, number, position, status, photo_url')
-      .eq('club_id', _clubId).eq('team_id', _teamId)
+    // Filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id (primario),
+    // para incluir jugadores multi-categoría en su categoría secundaria.
+    const { data: playersRaw } = await window.sb.from('players')
+      .select('id, first_name, last_name, number, position, status, photo_url, player_teams!inner(team_id)')
+      .eq('club_id', _clubId).eq('player_teams.team_id', _teamId)
       .neq('status', 'inactive').is('archived_at', null)
       .order('number', { ascending: true });
-    const ids = (players || []).map(p => p.id);
+    const _seenCr = new Set();
+    const players = (playersRaw || []).filter(p => _seenCr.has(p.id) ? false : (_seenCr.add(p.id), true));
+    const ids = players.map(p => p.id);
     if (!ids.length) { _roster = []; return; }
 
     // latest active injury per player → active issue + days out
