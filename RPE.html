@@ -49,6 +49,7 @@
   .tr-page #pgSub { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+  .tr-gate-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
 </style>
 </head>
 <body class="cm">
@@ -184,6 +185,9 @@
         </div>
       </div>
 
+      <!-- Session gate: "choose today's session" (double day) or "no session today" -->
+      <div id="sessionGate" style="display:none;"></div>
+
       <!-- ── Late RPE — needs a session ── -->
       <div id="orphanWrap">
         <div class="tr-group-label" style="margin-top:34px;">
@@ -265,7 +269,8 @@
 
   const PAIN_LABELS = { hamstring:'Hamstring', quads:'Quads', calves:'Calves', groin:'Groin', knee:'Knee', ankle:'Ankle', shoulder:'Shoulder', back:'Lower back' };
   const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false,
-                  hasSessions:false, sessionsById:{}, recent:[], responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
+                  view:'board', todayStr:'', sessionsList:[], todaysSessions:[], sessionsById:{}, recent:[],
+                  responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
 
   const T = window.Triage;
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
@@ -276,6 +281,14 @@
   function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => PAIN_LABELS[String(a).toLowerCase()] || cap(a)); }
   function sessionLabel(s) { return `${s.session_date} · ${s.title || s.session_type || 'Session'}`; }
   function sessionLabelDur(s) { return `${sessionLabel(s)} (${s.duration || '?'}′)`; }
+  function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+  // Chooser button label for a same-day session: "AM · Gym · 07:30".
+  function todaySessionBtnLabel(s) {
+    const base = s.title || s.session_type || 'Session';
+    const t = s.session_time ? String(s.session_time).slice(0, 5) : '';
+    const ap = t ? (parseInt(t.slice(0, 2), 10) < 12 ? 'AM' : 'PM') : '';
+    return [ap, base, t].filter(Boolean).join(' · ');
+  }
   function modelFromRow(r) {
     const dur = numOrNull(r.duration);
     const load = numOrNull(r.load);
@@ -456,6 +469,34 @@
   }
 
   /* ── Render ── */
+  // ── Session gate builders (double-session chooser / no-session-today) ──
+  function chooserHTML() {
+    const list = state.todaysSessions;
+    const n = list.length;
+    const title = n === 2 ? 'Two sessions today' : `${n} sessions today`;
+    const btns = list.map(s =>
+      `<button class="cm-btn is-secondary" data-pick="${s.id}"><i class="ti ti-player-play"></i>${T.escape(todaySessionBtnLabel(s))}</button>`
+    ).join('');
+    return `<div class="tr-empty">
+      <span class="ic"><i class="ti ti-versions"></i></span>
+      <h3>${title}</h3>
+      <p>Which one do you want to review?</p>
+      <div class="tr-gate-actions">${btns}</div>
+    </div>`;
+  }
+  function noSessionHTML() {
+    const past = state.sessionsList[0]; // most recent overall — no today sessions in this branch
+    const reviewBtn = past
+      ? `<div class="tr-gate-actions"><button class="cm-btn is-secondary" data-review="${past.id}"><i class="ti ti-history"></i>Review last session · ${T.escape(sessionLabel(past))}</button></div>`
+      : '';
+    return `<div class="tr-empty">
+      <span class="ic"><i class="ti ti-calendar-off"></i></span>
+      <h3>No session today</h3>
+      <p>RPE is tied to a session. Player submissions are still captured and will appear below as unlinked — assign them once today has a session.</p>
+      ${reviewBtn}
+    </div>`;
+  }
+
   function renderRpe() {
     const respWrap = document.getElementById('respWrap');
     const pendWrap = document.getElementById('pendWrap');
@@ -465,23 +506,25 @@
     const orphanWrap = document.getElementById('orphanWrap');
     const summaryCard = document.getElementById('summaryCard');
     const toolbar = document.getElementById('toolbar');
+    const gate = document.getElementById('sessionGate');
 
-    // No-session gate: without a session there is no expected participant set, so
-    // don't render the summary/lists/counts — only an honest empty state. Capture
-    // (and the orphan section below) stays visible.
-    if (!state.hasSessions) {
+    // Session gate: on a double-session day (chooser) or a day with no session
+    // (empty state), there is no single expected participant set — hide the
+    // summary/lists/counts and show the gate. Capture + orphans stay visible.
+    if (state.view === 'chooser' || state.view === 'nosession') {
       summaryCard.style.display = 'none';
       toolbar.style.display = 'none';
       respWrap.style.display = 'none';
       pendWrap.style.display = 'none';
       skel.style.display = 'none';
+      empty.style.display = 'none';
       if (err) err.style.display = 'none';
-      document.getElementById('emptyH').textContent = 'No session yet';
-      document.getElementById('emptyP').textContent = 'RPE is tied to a session. Player submissions are still captured and will appear below as unlinked — assign them to a session once you create one.';
-      empty.style.display = '';
+      gate.style.display = '';
+      gate.innerHTML = (state.view === 'chooser') ? chooserHTML() : noSessionHTML();
       orphanWrap.style.display = state.orphans.length ? '' : 'none';
       return;
     }
+    gate.style.display = 'none';
     summaryCard.style.display = '';
     toolbar.style.display = '';
 
@@ -547,13 +590,20 @@
 
   async function loadRpe() {
     const sel = document.getElementById('rmSessionSelect');
-    if (sel.selectedIndex >= 0) document.getElementById('pgSub').textContent = sel.options[sel.selectedIndex].text;
     const sessionId = sel.value || null;
-    state.loading = true; state.error = false; renderRpe();
     if (!sessionId) {
+      // No concrete session picked → chooser (double-session day) or no-session-today.
+      // Never fall through to the latest past session.
+      state.view = (state.todaysSessions.length >= 2) ? 'chooser' : 'nosession';
+      document.getElementById('pgSub').textContent = (state.view === 'chooser') ? 'Today · choose a session' : 'Today · no session';
       state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1;
-      state.loading = false; renderRpe(); return;
+      state.loading = false; state.error = false;
+      renderRpe();
+      return;
     }
+    state.view = 'board';
+    if (sel.selectedIndex >= 0) document.getElementById('pgSub').textContent = sel.options[sel.selectedIndex].text;
+    state.loading = true; state.error = false; renderRpe();
     try {
       const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sessionId });
       if (error) throw error;
@@ -596,24 +646,54 @@
     if (e.detail.group === 'tab') { state.tab = e.detail.value; renderRpe(); }
   });
 
-  /* ── Session select — recent sessions for the active team ── */
+  /* ── Session select — anchor to TODAY; keep past sessions browsable ── */
   async function initSessionSelect() {
     const sel = document.getElementById('rmSessionSelect');
     const activeTeam = sessionStorage.getItem('cal_active_team');
     let q = window.sb.from('training_sessions')
-      .select('id, session_date, title, session_type, team_id')
+      .select('id, session_date, session_time, title, session_type, team_id, created_at')
       .eq('club_id', state.cid);
     if (activeTeam) q = q.eq('team_id', activeTeam);
     const { data, error } = await q.order('session_date', { ascending: false }).limit(8);
     const sessions = error ? [] : (data || []);
-    state.hasSessions = sessions.length > 0;
+    state.sessionsList = sessions;
     state.sessionsById = {};
     sessions.forEach(s => { state.sessionsById[s.id] = s; });
-    sel.innerHTML = sessions.length
-      ? sessions.map(s => `<option value="${s.id}">${T.escape(sessionLabel(s))}</option>`).join('')
-      : '<option value="">No recent sessions</option>';
+    state.todayStr = localToday();
+    // today's sessions, AM before PM (by session_time, then creation)
+    state.todaysSessions = sessions
+      .filter(s => s.session_date === state.todayStr)
+      .sort((a, b) => String(a.session_time || a.created_at || '').localeCompare(String(b.session_time || b.created_at || '')));
+
+    // Dropdown: neutral placeholder + every session (double sessions listed separately)
+    sel.innerHTML = `<option value="">${sessions.length ? 'Select a session…' : 'No sessions'}</option>` +
+      sessions.map(s => `<option value="${s.id}">${T.escape(sessionLabel(s))}</option>`).join('');
+
+    // Default selection anchored to TODAY — never fall through to the latest past session.
+    if (state.todaysSessions.length === 1) {
+      sel.value = state.todaysSessions[0].id;
+      state.view = 'board';
+    } else if (state.todaysSessions.length >= 2) {
+      sel.value = '';
+      state.view = 'chooser';
+    } else {
+      sel.value = '';
+      state.view = 'nosession';
+    }
+
     sel.addEventListener('change', () => { loadRpe(); });
   }
+
+  /* ── Session gate buttons: pick a today's session / review last session ── */
+  document.getElementById('sessionGate').addEventListener('click', e => {
+    const el = e.target.closest('[data-pick],[data-review]');
+    if (!el) return;
+    const id = el.getAttribute('data-pick') || el.getAttribute('data-review');
+    if (!id) return;
+    document.getElementById('rmSessionSelect').value = id;
+    state.view = 'board';
+    loadRpe();
+  });
 
   /* ── Teams (roles) for the share modal — identical to Wellness ── */
   async function initTeams() {
