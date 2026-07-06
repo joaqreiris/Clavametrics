@@ -873,8 +873,9 @@
     `Showing <strong style="color:var(--cm-fg)">${count}</strong> of ${count} members`;
 
   const ROLE_CSS = {
-    owner:'owner', admin:'admin', coach:'coach', head_coach:'coach', assistant_coach:'coach',
-    performance:'perf', analyst:'perf', strength:'perf',
+    owner:'owner', admin:'admin',
+    coach:'coach', head_coach:'coach', assistant_coach:'coach', gk_coach:'coach',
+    performance:'perf', analyst:'perf', strength:'perf', sc_coach:'perf', fitness_coach:'perf',
     medical:'medical', physio:'medical', doctor:'medical', nutritionist:'medical',
     player:'player'
   };
@@ -896,9 +897,18 @@
     const extra = keys.length > 4 ? `<span class="count">+ ${keys.length - 4}</span>` : `<span class="count">${keys.length}</span>`;
     return `<div class="ad-sections-cell">${chips}${extra}</div>`;
   }
+  const ROLE_LABELS = {
+    sc_coach:'S&C Coach', fitness_coach:'Fitness Coach',
+    gk_coach:'Goalkeeper Coach', assistant_coach:'Assistant Coach', head_coach:'Head Coach',
+  };
+  // Nice display name for a role slug: explicit label, or Title-Case the slug (underscores → spaces).
+  function prettyRole(s) {
+    if (!s) return s;
+    return ROLE_LABELS[s.toLowerCase()] || s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
   function roleLabel(p) {
     const parts = [p.role, p.club_role].filter(Boolean);
-    return parts.length ? parts.map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' · ') : 'Member';
+    return parts.length ? parts.map(prettyRole).join(' · ') : 'Member';
   }
 
   function relTime(iso) {
@@ -1065,7 +1075,11 @@
     const ROLE_DEFS = [
       { key:'owner',        label:'Owner',        desc:'Acceso total. Único que puede asignar el rol Owner.' },
       { key:'admin',        label:'Admin',        desc:'Acceso total a administración y a todos los módulos.' },
-      { key:'coach',        label:'Coach',        desc:'Staff técnico. Ve las secciones que se le asignen.' },
+      { key:'coach',           label:'Coach',            desc:'Staff técnico. Ve las secciones que se le asignen.' },
+      { key:'assistant_coach', label:'Assistant Coach',  desc:'Entrenador asistente. Ve las secciones que se le asignen.' },
+      { key:'gk_coach',        label:'Goalkeeper Coach', desc:'Entrenador de arqueros. Ve las secciones que se le asignen.' },
+      { key:'sc_coach',        label:'S&C Coach',        desc:'Preparación física (fuerza y acondicionamiento). Ve las secciones que se le asignen.' },
+      { key:'fitness_coach',   label:'Fitness Coach',    desc:'Preparación física. Ve las secciones que se le asignen.' },
       { key:'physio',       label:'Physio',       desc:'Cuerpo médico. Ve las secciones que se le asignen.' },
       { key:'analyst',      label:'Analyst',      desc:'Análisis de datos. Ve las secciones que se le asignen.' },
       { key:'nutritionist', label:'Nutritionist', desc:'Nutrición. Ve las secciones que se le asignen.' },
@@ -1342,7 +1356,7 @@
         <div class="ad-pending-row">
           <div class="info">
             <div class="em">${iv.email}</div>
-            <div class="meta">${(iv.role || 'viewer')} · invited ${relTime(iv.created_at)}</div>
+            <div class="meta">${(iv.role || 'viewer').replace(/_/g, ' ')} · invited ${relTime(iv.created_at)}</div>
           </div>
           <button class="cm-btn is-outline is-sm" data-revoke="${iv.id}"><i class="ti ti-trash" style="font-size:13px"></i>Revoke</button>
         </div>`).join('');
