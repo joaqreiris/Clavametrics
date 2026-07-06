@@ -1354,10 +1354,15 @@ function renderTasks(tasks, view = 'my') {
     const isDone = task.status === 'done';
     const color = priorityColor[task.priority] || 'var(--cm-fg-muted)';
     const label = priorityLabel[task.priority] || task.priority || '';
-    // My view: who created it ("from"). Team view: who it's for ("for").
-    const who = isTeam
-      ? (task.assigned_to_name ? ` · for ${task.assigned_to_name}` : '')
-      : (task.created_by_name  ? ` · from ${task.created_by_name}` : '');
+    // Role-assigned tasks show the roles ("for Physio, Analyst") in both tabs; individual tasks
+    // keep the existing "for {name}" (Team) / "from {creator}" (My).
+    const _roleLbl = r => r ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+    const _hasRoles = Array.isArray(task.assigned_roles) && task.assigned_roles.length;
+    const who = _hasRoles
+      ? ` · for ${task.assigned_roles.map(_roleLbl).join(', ')}`
+      : (isTeam
+          ? (task.assigned_to_name ? ` · for ${task.assigned_to_name}` : '')
+          : (task.created_by_name  ? ` · from ${task.created_by_name}` : ''));
     const el = document.createElement('div');
     el.className = 'task' + (isDone ? ' is-done' : '');
     el.dataset.taskId = task.id;
@@ -1448,6 +1453,8 @@ function renderTasks(tasks, view = 'my') {
 
   if (club) await window.applyClubTheme();
   window._hubProfileName = profile?.full_name || null;
+  const _myRole = (profile?.role || profile?.club_role || '').toLowerCase();
+  window._hubProfileRole = _myRole;
 
   // KPIs
   if (!clubId) return;
@@ -1486,9 +1493,10 @@ function renderTasks(tasks, view = 'my') {
       .lte('submitted_at', today + 'T23:59:59')),
     userId
       ? window.sb.from('tasks')
-          .select('id, title, priority, status, due_date, created_by_name')
+          .select('id, title, priority, status, due_date, created_by_name, assigned_to_name, assigned_roles, team_id')
           .eq('club_id', clubId)
-          .or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
+          // Mine: assigned to me, created by me, OR assigned to my role within my active team.
+          .or(`assigned_to.eq.${userId},created_by.eq.${userId}` + ((_hubTeamId && _myRole) ? `,and(team_id.eq.${_hubTeamId},assigned_roles.cs.{${_myRole}})` : ''))
           .in('status', ['pending', 'in_progress'])
           .order('due_date', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
@@ -1577,15 +1585,20 @@ function renderTasks(tasks, view = 'my') {
     if (window._hubTeamTasks) return window._hubTeamTasks;   // cached
     if (!_hubTeamId) return [];
     const { data, error } = await window.sb.from('tasks')
-      .select('id, title, priority, status, due_date, assigned_to_name, created_by_name')
+      .select('id, title, priority, status, due_date, assigned_to, assigned_to_name, created_by, created_by_name, assigned_roles')
       .eq('club_id', clubId)
       .eq('team_id', _hubTeamId)
       .in('status', ['pending', 'in_progress'])
-      .not('assigned_to', 'eq', userId)   // exclude mine (already under "My")
-      .not('created_by', 'eq', userId)
       .order('due_date', { ascending: true });
     if (error) console.warn('[Hub] team tasks:', error.message);
-    window._hubTeamTasks = error ? [] : (data ?? []);
+    const _rows = error ? [] : (data ?? []);
+    // Exclude tasks that are strictly mine (already under "My"); role-assigned tasks always stay
+    // here (a task of my role shows in both tabs by design). Done client-side because a PostgREST
+    // `.not('assigned_to','eq',userId)` would also drop role tasks (their assigned_to is null).
+    window._hubTeamTasks = _rows.filter(t => {
+      const isRole = Array.isArray(t.assigned_roles) && t.assigned_roles.length > 0;
+      return isRole || (t.assigned_to !== userId && t.created_by !== userId);
+    });
     return window._hubTeamTasks;
   }
 
