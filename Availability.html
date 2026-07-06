@@ -345,6 +345,11 @@
 </style>
 </head>
 <body class="cm">
+<div id="appBoot" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--cm-bg,var(--cm-surface,#fff))">
+  <div style="width:30px;height:30px;border:3px solid var(--cm-border,rgba(120,130,145,.3));border-top-color:var(--cm-accent,#16A34A);border-radius:50%;animation:appspin .7s linear infinite"></div>
+</div>
+<style>@keyframes appspin{to{transform:rotate(360deg)}}</style>
+<script>(function(){var d=false;function h(){if(d)return;d=true;var b=document.getElementById('appBoot');if(b){b.style.transition='opacity .18s';b.style.opacity='0';setTimeout(function(){b.remove();},220);}}window.__hideAppBoot=h;setTimeout(h,8000);})();</script>
 
 <div class="hub-shell" data-screen-label="06 Availability">
 
@@ -895,7 +900,8 @@
 
   // ── Init ──
   async function init() {
-    if (!(await window.guardModule())) return;
+    if (!(await window.guardModule())) return;   // guard redirect: keep the overlay, page navigates away
+    try {
     CLUB_ID = await window.getClubId();
     console.log('[Availability] CLUB_ID:', CLUB_ID, '| profile:', window.__cm_profile || null);
 
@@ -1136,6 +1142,10 @@
       .subscribe(status => {
         if (status === 'SUBSCRIBED') console.log('[Availability] realtime subscribed for club', CLUB_ID);
       });
+    } finally {
+      // Data painted (or errored) → drop the loading overlay. No-op on re-calls (overlay already gone).
+      if (window.__hideAppBoot) window.__hideAppBoot();
+    }
   }
 
   window.addEventListener('beforeunload', () => {
