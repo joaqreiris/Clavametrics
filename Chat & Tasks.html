@@ -543,7 +543,18 @@
   <div class="cm-panel-body">
     <div class="cm-field"><label>Title *</label><input type="text" id="newTaskTitle" placeholder="Task title…"></div>
     <div class="cm-field"><label>Description</label><textarea id="newTaskDesc" placeholder="Details, context…"></textarea></div>
-    <div class="cm-field"><label>Assign to</label><select id="newTaskAssignee"><option value="">— Unassigned —</option></select></div>
+    <div class="cm-field"><label>Assignment</label>
+      <div id="newTaskModeSeg" style="display:flex;gap:6px">
+        <button type="button" data-mode="me" class="cm-btn is-sm is-primary" onclick="setNewTaskMode('me')">For me</button>
+        <button type="button" data-mode="roles" class="cm-btn is-sm is-outline" onclick="setNewTaskMode('roles')">By role(s)</button>
+      </div>
+    </div>
+    <!-- Person dropdown kept in DOM (L1 shelves arbitrary-person assignment; decided later). -->
+    <div class="cm-field" id="newTaskAssigneeField" style="display:none"><label>Assign to</label><select id="newTaskAssignee"><option value="">— Unassigned —</option></select></div>
+    <div class="cm-field" id="newTaskRolesField" style="display:none"><label>Roles</label>
+      <div id="newTaskRoles" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      <div id="newTaskRolesHint" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:4px"></div>
+    </div>
     <div class="cm-field"><label>Due date</label><input type="date" id="newTaskDue"></div>
     <div class="cm-field"><label>Priority</label>
       <select id="newTaskPriority">
@@ -1342,6 +1353,7 @@ function openNewTask(prefillTitle) {
   document.getElementById('newTaskPriority').value = 'medium';
   document.getElementById('newTaskCategory').value = 'general';
   document.getElementById('newTaskAssignee').value = '';
+  setNewTaskMode('me');   // default to "For me" each time the modal opens
   document.getElementById('newTaskOverlay').classList.add('is-open');
   document.getElementById('newTaskPanel').classList.add('is-open');
 }
@@ -1352,14 +1364,37 @@ function closeNewTask() {
 async function saveNewTask() {
   const title = document.getElementById('newTaskTitle').value.trim();
   if (!title) { document.getElementById('newTaskTitle').focus(); return; }
-  const assigneeId = document.getElementById('newTaskAssignee').value;
-  const assignee   = members.find(m => m.id === assigneeId);
+
+  // Assignment mode: "me" (self, individual) or "roles" (staff role[], team-scoped).
+  const mode = _newTaskMode || 'me';
+  let assigned_to = null, assigned_to_name = null, assigned_roles = null;
+
+  if (mode === 'roles') {
+    // Role-assigned tasks need a team: the RLS role branch requires team_id IN my_team_ids().
+    if (!currentUser.teamId) {
+      alert('Select an active team before assigning a task by role.');
+      return;
+    }
+    const roles = [...document.querySelectorAll('#newTaskRoles .role-chip.is-on')].map(el => el.dataset.role);
+    if (!roles.length) {
+      const hint = document.getElementById('newTaskRolesHint');
+      if (hint) hint.textContent = 'Pick at least one role.';
+      return;
+    }
+    assigned_roles = roles;
+  } else {
+    // "For me": force self-assignment (ignores the shelved person dropdown).
+    assigned_to      = currentUser.id;
+    assigned_to_name = currentUser.name;
+  }
+
   const { data, error } = await window.sb.from('tasks').insert({
     club_id:          currentUser.clubId,
     created_by:       currentUser.id,
     created_by_name:  currentUser.name,
-    assigned_to:      assigneeId || null,
-    assigned_to_name: assignee?.full_name || null,
+    assigned_to,
+    assigned_to_name,
+    assigned_roles,
     title,
     description: document.getElementById('newTaskDesc').value.trim() || null,
     due_date:    document.getElementById('newTaskDue').value || null,
@@ -1396,6 +1431,51 @@ function populateAssigneeSelects() {
       sel.appendChild(o);
     });
   });
+}
+
+// ── Assign-by-role mode (new-task modal) ──
+let _newTaskMode = 'me';
+function roleLabel(r) { return r ? r.charAt(0).toUpperCase() + r.slice(1) : r; }
+function populateRoleChips() {
+  const box = document.getElementById('newTaskRoles');
+  if (!box) return;
+  // Available roles = unique roles present in the active-team member list.
+  const roles = [...new Set((members || []).map(m => (m.role || '').trim()).filter(Boolean))].sort();
+  box.innerHTML = '';
+  if (!roles.length) { box.innerHTML = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">No staff roles in this team.</span>'; return; }
+  roles.forEach(r => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'role-chip cm-btn is-sm is-outline';
+    b.dataset.role = r;
+    b.textContent = roleLabel(r);
+    b.onclick = () => {
+      b.classList.toggle('is-on');
+      const on = b.classList.contains('is-on');
+      b.classList.toggle('is-primary', on);
+      b.classList.toggle('is-outline', !on);
+      const hint = document.getElementById('newTaskRolesHint');
+      if (hint) hint.textContent = '';
+    };
+    box.appendChild(b);
+  });
+}
+function setNewTaskMode(mode) {
+  _newTaskMode = mode;
+  document.querySelectorAll('#newTaskModeSeg [data-mode]').forEach(btn => {
+    const on = btn.dataset.mode === mode;
+    btn.classList.toggle('is-primary', on);
+    btn.classList.toggle('is-outline', !on);
+  });
+  const assigneeField = document.getElementById('newTaskAssigneeField');
+  const rolesField    = document.getElementById('newTaskRolesField');
+  const hint          = document.getElementById('newTaskRolesHint');
+  if (assigneeField) assigneeField.style.display = 'none';   // person dropdown shelved for L1
+  if (rolesField)    rolesField.style.display = (mode === 'roles') ? '' : 'none';
+  if (mode === 'roles') {
+    populateRoleChips();   // rebuild fresh (all unselected) each time role mode is entered
+    if (hint) hint.textContent = currentUser.teamId ? '' : 'Select an active team to assign by role.';
+  }
 }
 
 // ── BADGES ──
