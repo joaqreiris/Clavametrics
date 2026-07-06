@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wellness check-in — ClavaMetrics</title>
+<title>Wellness Monitor — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
+<link rel="stylesheet" href="triage.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
   <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
@@ -13,478 +14,27 @@
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script defer src="triage.js"></script>
 <style>
-  /* Canvas page background (subtle) */
-  body.cm {
-    background:
-      radial-gradient(ellipse 60% 50% at 20% 0%, color-mix(in srgb, var(--cm-accent) 8%, transparent) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 40% at 80% 100%, color-mix(in srgb, var(--cm-info) 6%, transparent) 0%, transparent 60%),
-      var(--cm-bg-soft);
-    min-height: 100vh;
-  }
+  body.cm { background: var(--cm-bg); }
 
-  .canvas {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 40px 32px;
-    display: block;
-  }
-  @media (max-width: 1000px) { .canvas { padding: 24px; } }
+  /* Topbar (mirrors Load Monitor chrome) ------------------- */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search input::placeholder { color:var(--cm-fg-faint); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
 
-  /* Secondary collapsible zones — native-feeling */
-  .cm-fold {
-    border: 0.5px solid var(--cm-border);
-    border-radius: var(--cm-r-4);
-    margin-top: 24px;
-    padding: 0 18px;
-  }
-  .cm-fold > summary {
-    cursor: pointer;
-    padding: 14px 0;
-    font: 600 13.5px/1.2 var(--cm-font-sans);
-    color: var(--cm-fg-strong);
-  }
-  .cm-fold[open] > summary { margin-bottom: 14px; border-bottom: 0.5px solid var(--cm-border); }
-  .cm-fold > :not(summary):last-child { margin-bottom: 18px; }
-
-  /* Left rail — context */
-  .ctx h1 {
-    font: 600 32px/1.1 var(--cm-font-sans);
-    letter-spacing: -0.025em;
-    color: var(--cm-fg-strong);
-    margin-bottom: 12px;
-  }
-  .ctx p {
-    font: var(--cm-body);
-    color: var(--cm-fg-muted);
-    margin-bottom: 24px;
-  }
-  .ctx-link {
-    display: inline-flex; align-items: center; gap: 8px;
-    color: var(--cm-fg);
-    text-decoration: none;
-    font: 500 13.5px/1 var(--cm-font-sans);
-    padding: 8px 12px;
-    border: 1px solid var(--cm-border);
-    border-radius: 8px;
-    background: var(--cm-surface);
-    margin-bottom: 24px;
-  }
-  .ctx-link:hover { border-color: var(--cm-border-strong); }
-  .ctx-link .ti { font-size: 16px; color: var(--cm-fg-muted); }
-
-  .ctx-section { margin-top: 24px; }
-  .ctx-eyebrow { font: 500 11px/1 var(--cm-font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--cm-fg-muted); margin-bottom: 10px; }
-  .ctx-tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
-  .ctx-tag { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 9px; border-radius:999px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg); background:var(--cm-surface); border:1px solid var(--cm-border); }
-  .ctx-tag .ti { font-size: 13px; color: var(--cm-fg-muted); }
-
-  .ctx-card {
-    background: var(--cm-surface);
-    border: 1px solid var(--cm-border);
-    border-radius: var(--cm-r-4);
-    padding: 16px;
-    margin-bottom: 12px;
-    box-shadow: var(--cm-shadow-1);
-  }
-  .ctx-card h3 { font: 600 13.5px/1.2 var(--cm-font-sans); color: var(--cm-fg-strong); margin-bottom: 6px; }
-  .ctx-card p  { font: var(--cm-body-sm); color: var(--cm-fg-muted); }
-
-  /* Right rail — phones */
-  .phones {
-    display: flex;
-    gap: 36px;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: flex-start;
-  }
-
-  /* Inside-iPhone styles ----- */
-  .ph {
-    height: 100%;
-    overflow-y: auto;
-    background: linear-gradient(180deg, #FAFAF9 0%, #FFFFFF 100%);
-    color: #0A0A0A;
-    font: var(--cm-body);
-    padding-bottom: 32px;
-  }
-  .ph-dark {
-    background: linear-gradient(180deg, #0A0A0A 0%, #111111 100%);
-    color: #EDEDED;
-  }
-
-  .ph-header {
-    padding: 8px 20px 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .ph-header .date {
-    font: 500 12px/1 var(--cm-font-mono);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #6B7280;
-  }
-  .ph-dark .ph-header .date { color: #9CA3AF; }
-  .ph-header .avatar {
-    width: 32px; height: 32px;
-    border-radius: 50%;
-    background: rgba(34,197,94,0.18);
-    color: #15803D;
-    display: flex; align-items: center; justify-content: center;
-    font: 600 12px/1 var(--cm-font-sans);
-    border: 1px solid rgba(34,197,94,0.30);
-  }
-
-  .ph-hero {
-    padding: 4px 22px 18px;
-  }
-  .ph-hero .eyebrow {
-    font: 500 11px/1 var(--cm-font-mono);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #15803D;
-    margin-bottom: 10px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .ph-dark .ph-hero .eyebrow { color: #4ADE80; }
-  .ph-hero .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
-  .ph-hero h1 {
-    font: 600 28px/1.1 var(--cm-font-sans);
-    letter-spacing: -0.02em;
-    color: #0A0A0A;
-    margin-bottom: 6px;
-  }
-  .ph-dark .ph-hero h1 { color: #fff; }
-  .ph-hero p {
-    font: 400 14px/1.45 var(--cm-font-sans);
-    color: #6B7280;
-  }
-  .ph-dark .ph-hero p { color: #9CA3AF; }
-
-  .ph-context-row {
-    margin: 0 22px 22px;
-    display: flex;
-    gap: 8px;
-  }
-  .ph-context {
-    flex: 1;
-    background: rgba(0,0,0,0.04);
-    border-radius: 12px;
-    padding: 10px 12px;
-  }
-  .ph-dark .ph-context { background: rgba(255,255,255,0.05); }
-  .ph-context .l {
-    font: 500 10.5px/1 var(--cm-font-mono);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #6B7280;
-    margin-bottom: 4px;
-  }
-  .ph-dark .ph-context .l { color: #9CA3AF; }
-  .ph-context .v {
-    font: 600 14px/1.2 var(--cm-font-sans);
-    color: #0A0A0A;
-  }
-  .ph-dark .ph-context .v { color: #fff; }
-  .ph-context .v .accent { color: #15803D; }
-  .ph-dark .ph-context .v .accent { color: #4ADE80; }
-
-  /* Questions */
-  .ph-section {
-    padding: 0 22px;
-    margin-bottom: 22px;
-  }
-  .ph-section .q-label {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 12px;
-  }
-  .ph-section .q-label .ti {
-    width: 28px; height: 28px;
-    background: rgba(0,0,0,0.04);
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px;
-    color: #0A0A0A;
-  }
-  .ph-dark .ph-section .q-label .ti { background: rgba(255,255,255,0.05); color: #fff; }
-  .ph-section .q-label .title {
-    font: 600 15px/1.2 var(--cm-font-sans);
-    color: #0A0A0A;
-    flex: 1;
-  }
-  .ph-dark .ph-section .q-label .title { color: #fff; }
-  .ph-section .q-label .val {
-    font: 600 14px/1 var(--cm-font-mono);
-    color: #15803D;
-  }
-  .ph-dark .ph-section .q-label .val { color: #4ADE80; }
-
-  /* 1-10 scale */
-  .ph-scale {
-    display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 4px;
-  }
-  .ph-scale button {
-    appearance: none;
-    border: 0;
-    height: 36px;
-    border-radius: 8px;
-    background: rgba(0,0,0,0.05);
-    color: #6B7280;
-    font: 600 13px/1 var(--cm-font-mono);
-    cursor: pointer;
-    transition: background 120ms;
-  }
-  .ph-dark .ph-scale button { background: rgba(255,255,255,0.05); color: #9CA3AF; }
-  .ph-scale button:hover { background: rgba(0,0,0,0.08); }
-  .ph-dark .ph-scale button:hover { background: rgba(255,255,255,0.08); }
-  .ph-scale button.is-on {
-    background: #15803D;
-    color: #fff;
-    transform: scale(1.06);
-    box-shadow: 0 4px 12px rgba(21,128,61,0.30);
-  }
-  .ph-dark .ph-scale button.is-on { background: #4ADE80; color: #0A0A0A; box-shadow: 0 4px 12px rgba(74,222,128,0.30); }
-
-  .ph-scale-ends {
-    display: flex;
-    justify-content: space-between;
-    font: 500 11px/1 var(--cm-font-mono);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #9CA3AF;
-    margin-top: 6px;
-  }
-
-  /* Sleep hours selector */
-  .ph-hours {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding-bottom: 4px;
-  }
-  .ph-hours button {
-    appearance: none;
-    border: 0;
-    padding: 0 14px;
-    height: 40px;
-    border-radius: 12px;
-    background: rgba(0,0,0,0.05);
-    color: #6B7280;
-    font: 600 13px/1 var(--cm-font-sans);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .ph-dark .ph-hours button { background: rgba(255,255,255,0.05); color: #9CA3AF; }
-  .ph-hours button.is-on {
-    background: #0A0A0A;
-    color: #fff;
-  }
-  .ph-dark .ph-hours button.is-on { background: #fff; color: #0A0A0A; }
-
-  /* Body chips */
-  .ph-body-row {
-    display: flex; flex-wrap: wrap; gap: 6px;
-  }
-  .ph-body-chip {
-    appearance: none;
-    border: 1px solid rgba(0,0,0,0.10);
-    background: transparent;
-    padding: 7px 12px;
-    border-radius: 999px;
-    font: 500 12.5px/1 var(--cm-font-sans);
-    color: #6B7280;
-    cursor: pointer;
-    display: inline-flex; align-items: center; gap: 5px;
-  }
-  .ph-dark .ph-body-chip { border-color: rgba(255,255,255,0.10); color: #9CA3AF; }
-  .ph-body-chip .ti { font-size: 13px; opacity: 0.8; }
-  .ph-body-chip.is-on {
-    background: rgba(220,38,38,0.10);
-    border-color: rgba(220,38,38,0.40);
-    color: #B91C1C;
-  }
-  .ph-dark .ph-body-chip.is-on { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.40); color: #FCA5A5; }
-
-  /* Note */
-  .ph-note {
-    width: 100%;
-    border: 1px solid rgba(0,0,0,0.10);
-    border-radius: 12px;
-    padding: 10px 12px;
-    font: var(--cm-body-sm);
-    color: #0A0A0A;
-    background: transparent;
-    outline: none;
-    min-height: 60px;
-    resize: none;
-  }
-  .ph-dark .ph-note { border-color: rgba(255,255,255,0.10); color: #fff; }
-  .ph-note::placeholder { color: #9CA3AF; }
-
-  /* Submit */
-  .ph-submit-wrap {
-    padding: 8px 22px 0;
-    position: sticky; bottom: 0;
-    background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.95) 30%, #FFFFFF 100%);
-    padding-bottom: 18px;
-  }
-  .ph-dark .ph-submit-wrap { background: linear-gradient(180deg, transparent 0%, rgba(10,10,10,0.95) 30%, #0A0A0A 100%); }
-
-  .ph-submit {
-    width: 100%;
-    height: 50px;
-    border: 0;
-    border-radius: 14px;
-    background: #15803D;
-    color: #fff;
-    font: 600 15.5px/1 var(--cm-font-sans);
-    letter-spacing: -0.005em;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    box-shadow: 0 8px 24px rgba(21,128,61,0.30);
-  }
-  .ph-dark .ph-submit { background: #22C55E; color: #0A0A0A; box-shadow: 0 8px 24px rgba(34,197,94,0.30); }
-
-  /* Streak indicator */
-  .ph-streak {
-    margin: 0 22px 18px;
-    background: linear-gradient(135deg, rgba(34,197,94,0.10), rgba(34,197,94,0.04));
-    border: 1px solid rgba(34,197,94,0.25);
-    border-radius: 14px;
-    padding: 12px 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .ph-dark .ph-streak { background: linear-gradient(135deg, rgba(34,197,94,0.18), rgba(34,197,94,0.05)); border-color: rgba(74,222,128,0.30); }
-  .ph-streak .icon {
-    width: 36px; height: 36px;
-    border-radius: 10px;
-    background: rgba(34,197,94,0.20);
-    display: flex; align-items: center; justify-content: center;
-    color: #15803D;
-    flex-shrink: 0;
-  }
-  .ph-dark .ph-streak .icon { color: #4ADE80; background: rgba(34,197,94,0.25); }
-  .ph-streak .icon .ti { font-size: 18px; }
-  .ph-streak .l {
-    font: 600 14px/1.2 var(--cm-font-sans);
-    color: #0A0A0A;
-  }
-  .ph-dark .ph-streak .l { color: #fff; }
-  .ph-streak .sub {
-    font: 500 12px/1.2 var(--cm-font-mono);
-    color: #166534;
-    margin-top: 2px;
-  }
-  .ph-dark .ph-streak .sub { color: #86EFAC; }
-
-  /* SUCCESS phone -------------------- */
-  .ph-success {
-    padding: 28px 22px;
-    text-align: center;
-  }
-  .ph-success .checkmark {
-    width: 72px; height: 72px;
-    border-radius: 50%;
-    background: #15803D;
-    color: #fff;
-    margin: 32px auto 24px;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 12px 32px rgba(21,128,61,0.32);
-  }
-  .ph-success .checkmark .ti { font-size: 36px; }
-  .ph-success h2 {
-    font: 600 24px/1.15 var(--cm-font-sans);
-    letter-spacing: -0.02em;
-    color: #0A0A0A;
-    margin-bottom: 8px;
-  }
-  .ph-success p {
-    font: var(--cm-body);
-    color: #6B7280;
-    margin-bottom: 28px;
-  }
-
-  /* History bars */
-  .ph-history {
-    background: rgba(0,0,0,0.03);
-    border-radius: 16px;
-    padding: 16px;
-    margin: 0 8px;
-    text-align: left;
-  }
-  .ph-history .h-head {
-    display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px;
-  }
-  .ph-history .h-head .t { font: 600 14px/1 var(--cm-font-sans); color: #0A0A0A; }
-  .ph-history .h-head .s { font: 500 12px/1 var(--cm-font-mono); color: #6B7280; }
-
-  .ph-history .bars {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 5px;
-    align-items: end;
-    height: 88px;
-    margin-bottom: 8px;
-  }
-  .ph-history .bars .bar {
-    border-radius: 5px;
-    background: #D1D5DB;
-    position: relative;
-  }
-  .ph-history .bars .bar.today {
-    background: #15803D;
-  }
-  .ph-history .bars .bar.warn { background: #FCD34D; }
-  .ph-history .bars .bar.danger { background: #FCA5A5; }
-  .ph-history .labels {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 5px;
-    font: 500 10.5px/1 var(--cm-font-mono);
-    color: #9CA3AF;
-    text-align: center;
-  }
-  .ph-history .labels .lbl.today { color: #15803D; }
-
-  /* Tag list inside success */
-  .ph-meta-list {
-    background: rgba(0,0,0,0.03);
-    border-radius: 14px;
-    padding: 4px;
-    margin: 14px 8px 0;
-  }
-  .ph-meta-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(0,0,0,0.06);
-  }
-  .ph-meta-row:last-child { border-bottom: 0; }
-  .ph-meta-row .ic {
-    width: 26px; height: 26px;
-    border-radius: 7px;
-    background: rgba(0,0,0,0.05);
-    display: flex; align-items: center; justify-content: center;
-    color: #6B7280;
-    flex-shrink: 0;
-  }
-  .ph-meta-row .l { flex: 1; font: 500 13.5px/1.2 var(--cm-font-sans); color: #0A0A0A; text-align: left; }
-  .ph-meta-row .v { font: 600 13.5px/1 var(--cm-font-mono); color: #15803D; }
-
-  .canvas-legend {
-    text-align: center;
-    margin-top: 12px;
-    font: 500 12px/1 var(--cm-font-mono);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--cm-fg-muted);
-  }
+  /* Page --------------------------------------------------- */
+  .tr-page { padding:24px 28px 64px; max-width:1400px; width:100%; }
+  .tr-page > .cm-page-header { align-items:flex-start; margin-bottom:16px; }
+  .tr-page h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .tr-page #pgSub { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
 
   #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
 </style>
@@ -496,371 +46,437 @@
 <style>@keyframes appspin{to{transform:rotate(360deg)}}</style>
 <script>(function(){var d=false;function h(){if(d)return;d=true;var b=document.getElementById('appBoot');if(b){b.style.transition='opacity .18s';b.style.opacity='0';setTimeout(function(){b.remove();},220);}}var t=setTimeout(h,1200);if(window.MutationObserver){var mo=new MutationObserver(function(){clearTimeout(t);t=setTimeout(h,500);});document.addEventListener('DOMContentLoaded',function(){if(document.body)mo.observe(document.body,{childList:true,subtree:true});});}setTimeout(h,6000);})();</script>
 
-<div class="canvas" data-screen-label="07 Wellness check-in">
+<div class="hub-shell" data-screen-label="07 Wellness">
 
-  <!-- Zone 1: operating console (hero) -->
-  <aside class="ctx">
-    <a class="ctx-link" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to Staff Hub</a>
-    <h1>Daily wellness check-in</h1>
-    <div class="ctx-section">
-      <button class="cm-btn is-primary" style="width:100%" onclick="openShareWellness()">
-        <i class="ti ti-share" style="font-size:15px"></i>Share link with players
-      </button>
-      <div id="wellChecklistWrap" style="margin-top:18px">
-        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Today's check-in<button type="button" id="wellChkRefresh" onclick="refreshWellChecklist(this)" title="Refresh" style="margin-left:auto;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:transparent;border:1px solid var(--cm-border);border-radius:6px;color:var(--cm-fg-muted);cursor:pointer"><i class="ti ti-refresh" style="font-size:13px"></i></button></div>
-        <select id="wellChkTeam" onchange="if(this.value)sessionStorage.setItem('cal_active_team',this.value);loadWellChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px"></select>
-        <div id="wellChkBody" style="margin-top:10px"></div>
+  <!-- Sidebar (sidebar.js injects it) -->
+  <div id="hub-side-root"></div>
+
+  <!-- Main -->
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="wmTeamSelect" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer">
+          <option>Whole club</option>
+          <option selected>First team</option>
+          <option>U21 squad</option>
+          <option>U18 squad</option>
+        </select>
+      </div>
+      <div class="hub-crumb">
+        <i class="ti ti-heartbeat"></i><span>Performance</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Wellness</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, sessions…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn" id="wmRefresh" title="Refresh"><i class="ti ti-refresh"></i></button>
+        <button class="cm-btn is-primary is-sm" data-modal-open="wmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
-    <div id="shareWBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
-      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:440px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
-        <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
-          <i class="ti ti-share" style="font-size:18px;color:var(--cm-accent)"></i>
-          <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Share wellness</div>
-          <button onclick="closeShareWellness()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+
+    <section class="tr-page">
+
+      <header class="cm-page-header">
+        <div style="flex:1;">
+          <div class="cm-eyebrow" style="margin-bottom:8px;">Daily check-in</div>
+          <h1>Wellness</h1>
+          <p id="pgSub">Morning triage</p>
         </div>
-        <div style="padding:18px">
-          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Team</label>
-          <select id="shareWTeam" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px"></select>
-          <button class="cm-btn is-primary" style="width:100%" onclick="genShareWellness()"><i class="ti ti-link" style="font-size:14px"></i>Generate link</button>
-          <div id="shareWResult" style="display:none;margin-top:14px">
-            <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Link (valid until you revoke it):</div>
-            <div style="display:flex;gap:8px">
-              <input id="shareWUrl" readonly style="flex:1;height:38px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">
-              <button class="cm-btn is-outline is-sm" onclick="copyShareWellness()" id="shareWCopy"><i class="ti ti-copy" style="font-size:14px"></i>Copy</button>
-            </div>
-            <a id="shareWWa" target="_blank" class="cm-btn is-outline is-sm" style="width:100%;margin-top:8px;justify-content:center"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Share via WhatsApp</a>
+      </header>
+
+      <!-- Summary -->
+      <div class="cm-card tr-summary" style="margin-bottom:16px;">
+        <div class="tr-sum-lead">
+          <span class="num" id="sumDone">0</span><span class="den" id="sumDen">/ 0</span>
+          <span class="lab">Check-ins completed</span>
+        </div>
+        <div class="tr-sum-stats">
+          <div class="tr-sum-stat">
+            <div class="k"><i class="ti ti-alert-triangle"></i>Flagged</div>
+            <div class="v is-flag" id="sumFlag">0</div>
+          </div>
+          <div class="tr-sum-stat">
+            <div class="k"><i class="ti ti-body-scan"></i>Pain reports</div>
+            <div class="v" id="sumPain">0</div>
+          </div>
+          <div class="tr-sum-stat">
+            <div class="k"><i class="ti ti-clock-pause"></i>Missing</div>
+            <div class="v" id="sumMiss">0</div>
           </div>
         </div>
       </div>
+
+      <!-- Toolbar -->
+      <div class="tr-toolbar">
+        <div class="tr-seg" data-seg="tab">
+          <button class="is-active" data-tab="responded"><i class="ti ti-checks"></i>Responded<span class="pipn" id="pipResp">0</span></button>
+          <button data-tab="pending"><i class="ti ti-clock-hour-4"></i>Pending<span class="pipn" id="pipPend">0</span></button>
+        </div>
+        <div class="tr-spacer"></div>
+        <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i>Sorted worst-first</div>
+      </div>
+
+      <!-- Responded -->
+      <div id="respWrap">
+        <div class="tr-list" id="listResponded"></div>
+      </div>
+
+      <!-- Pending -->
+      <div id="pendWrap" style="display:none;">
+        <div class="tr-remind">
+          <span class="ic"><i class="ti ti-clock-pause"></i></span>
+          <div class="tx">
+            <div class="t" id="remindT">Some players haven't checked in yet</div>
+            <div class="s">Last reminder sent 25 min ago · Window closes at training (10:00)</div>
+          </div>
+          <button class="cm-btn is-wa" id="remindBtn" data-wa="Morning lads — quick wellness check-in before training. 30 seconds: clava.fc/w/9f3a-2k7 — thanks 🙏"><i class="ti ti-brand-whatsapp"></i>Remind missing (0)</button>
+        </div>
+        <div class="tr-list" id="listPending" style="gap:8px;"></div>
+      </div>
+
+      <!-- Loading skeleton (unused now — wired on refresh next step) -->
+      <div id="skeleton" style="display:none;">
+        <div class="tr-list"></div>
+      </div>
+
+      <!-- Empty (unused now — wired next step) -->
+      <div id="empty" style="display:none;">
+        <div class="tr-empty">
+          <span class="ic"><i class="ti ti-inbox"></i></span>
+          <h3 id="emptyH">No check-ins yet</h3>
+          <p id="emptyP">Waiting on the squad. Share the check-in link so players can fill it in before training.</p>
+          <button class="cm-btn is-primary" data-modal-open="wmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ── Share modal ── -->
+<div class="tr-overlay" id="wmShareModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <div class="tr-modal-head">
+      <span class="ic"><i class="ti ti-link"></i></span>
+      <div>
+        <h3 id="shareTitle">Share wellness check-in</h3>
+        <p>Players open the link, no login needed.</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
     </div>
-
-    <!-- Zone 2: secondary — preview, collapsed -->
-    <details class="cm-fold">
-      <summary>Preview — what players see</summary>
-      <section class="phones" id="phoneRow">
-
-        <!-- Phone 1 — Form -->
-        <div>
-          <div id="phone1"></div>
-          <div class="canvas-legend">Form · in-progress</div>
+    <div class="tr-modal-body">
+      <div>
+        <div class="tr-field-lab">Team</div>
+        <select class="cm-select" id="shareTeam" style="cursor:pointer;">
+          <option selected>First team</option>
+          <option>Whole club</option>
+          <option>U21 squad</option>
+          <option>U18 squad</option>
+        </select>
+      </div>
+      <div>
+        <div class="tr-field-lab">Tokenized link</div>
+        <div class="tr-linkrow is-empty" id="linkRow">
+          <span class="url" id="linkUrl">Generate a secure link for this team</span>
+          <button class="cm-btn is-secondary is-sm" id="btnGen"><i class="ti ti-sparkles"></i>Generate</button>
         </div>
-
-        <!-- Phone 2 — Success -->
-        <div>
-          <div id="phone2"></div>
-          <div class="canvas-legend">Submitted · streak day 6</div>
-        </div>
-
-      </section>
-    </details>
-
-    <!-- Zone 2: secondary — context, collapsed -->
-    <details class="cm-fold">
-      <summary>About this check-in</summary>
-      <p>The only player-facing surface in ClavaMetrics. Players get a unique link by SMS or WhatsApp each morning; the form takes under a minute and feeds straight into the Load Monitor.</p>
-
-      <div class="ctx-section">
-        <div class="ctx-eyebrow">What's measured</div>
-        <div class="ctx-tag-row">
-          <span class="ctx-tag"><i class="ti ti-moon"></i>Sleep</span>
-          <span class="ctx-tag"><i class="ti ti-mood-smile"></i>Mood</span>
-          <span class="ctx-tag"><i class="ti ti-battery-2"></i>Fatigue</span>
-          <span class="ctx-tag"><i class="ti ti-brain"></i>Stress</span>
-          <span class="ctx-tag"><i class="ti ti-bandage"></i>Soreness</span>
-          <span class="ctx-tag"><i class="ti ti-pin"></i>Body locations</span>
+        <div class="tr-token-note" id="tokNote" style="margin-top:9px; display:none;">
+          <i class="ti ti-shield-check"></i>One-time token · expires in 12h · valid for First team only
         </div>
       </div>
-
-      <div class="ctx-section">
-        <div class="ctx-eyebrow">Design notes</div>
-        <div class="ctx-card">
-          <h3>Two states shown</h3>
-          <p>Form (left) — what players see most days. Success (right) — confirmation with 7-day streak and history.</p>
-        </div>
-        <div class="ctx-card">
-          <h3>Mobile-first, no app</h3>
-          <p>Designed to work on any phone via a tokenized URL — no installs, no auth friction. Survives offline submission &amp; auto-retries.</p>
-        </div>
-        <div class="ctx-card">
-          <h3>Localized</h3>
-          <p>The form auto-translates EN ↔ ES at the SMS layer per club preference. Tap a number, tap submit — done.</p>
-        </div>
-      </div>
-
-      <div class="ctx-section">
-        <div class="ctx-eyebrow">Theme</div>
-        <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-bottom:10px">The check-in honors the workspace theme. Toggle below or switch from Settings.</p>
-        <button class="cm-btn is-outline is-sm" onclick="toggleDark()">
-          <i class="ti ti-moon" style="font-size:14px"></i><span id="darkLabel">Switch to dark</span>
-        </button>
-      </div>
-    </details>
-  </aside>
+    </div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i>Copy link</button>
+      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i>Share via WhatsApp</button>
+    </div>
+  </div>
 </div>
 
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
 <script>
-  window.__WELLNESS_CTX = { playerName: null, dateLabel: null, history: [], lastEntry: null, streak: 0 };
+/* ============================================================
+   Wellness Monitor — MOCK DATA ONLY (no Supabase wiring yet).
+   RESPONDED[] / PENDING[] are the seam the next step swaps for
+   the wellness_status RPC. Hooper index = sleep+fatigue+stress+
+   soreness (each 1–7, 4–28 total, HIGHER = worse).
+   ============================================================ */
+(function () {
+  // triage.js loads deferred, so window.Triage is only guaranteed at DOM-ready.
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); }
+  else { boot(); }
 
-  (async () => {
-    if (!(await window.guardModule())) return;
+  function boot() {
+  const PAIN_ICON = 'ti-body-scan';
 
-    const clubId    = await window.getClubId();
-    const urlParams = new URLSearchParams(window.location.search);
-    const playerId  = urlParams.get('player');
-    const now       = new Date();
-    const days      = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const months    = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    window.__WELLNESS_CTX.dateLabel = `${days[now.getDay()]} · ${now.getDate()} ${months[now.getMonth()]}`;
+  const RESPONDED = [
+    { name:'D. Okafor',   pos:'st', sleep:6, fatigue:6, stress:5, soreness:6, pain:['Hamstring','Groin'], time:'07:12', comment:'Right hamstring tight since yesterday’s finishing block. Slept badly, woke up twice.' },
+    { name:'S. Petrov',   pos:'cb', sleep:6, fatigue:5, stress:5, soreness:5, pain:['Lower back'], time:'06:58', comment:'Lower back stiff on waking, eases when I move.' },
+    { name:'K. Novak',    pos:'gk', sleep:5, fatigue:6, stress:4, soreness:5, pain:['Shoulder'], time:'07:31', comment:'' },
+    { name:'Y. Demir',    pos:'mf', sleep:5, fatigue:5, stress:4, soreness:3, pain:[], time:'07:05', comment:'Feeling run down, think I’m catching a cold.' },
+    { name:'T. Becker',   pos:'cb', sleep:4, fatigue:4, stress:3, soreness:5, pain:['Knee'], time:'07:44', comment:'' },
+    { name:'O. Bauer',    pos:'fb', sleep:4, fatigue:4, stress:4, soreness:3, pain:[], time:'06:40', comment:'Poor sleep — little one was up all night.' },
+    { name:'F. Castro',   pos:'wg', sleep:5, fatigue:4, stress:3, soreness:3, pain:[], time:'07:19', comment:'' },
+    { name:'H. Tanaka',   pos:'mf', sleep:4, fatigue:3, stress:3, soreness:3, pain:[], time:'07:02', comment:'' },
+    { name:'V. Lima',     pos:'wg', sleep:2, fatigue:3, stress:2, soreness:3, pain:['Calves'], time:'07:15', comment:'Calves a bit heavy from the double session.' },
+    { name:'A. Ferrari',  pos:'cb', sleep:2, fatigue:2, stress:2, soreness:3, pain:[], time:'07:08', comment:'' },
+    { name:'J. Silva',    pos:'fb', sleep:2, fatigue:2, stress:1, soreness:2, pain:[], time:'07:33', comment:'' },
+    { name:'L. Romano',   pos:'wg', sleep:1, fatigue:2, stress:1, soreness:2, pain:[], time:'06:47', comment:'Feeling sharp.' },
+  ];
+  const PENDING = [
+    { name:'B. Andersson', pos:'cb', elapsed:'reminded 25m ago' },
+    { name:'C. Nilsson',   pos:'gk', elapsed:'reminded 25m ago' },
+    { name:'I. Costa',     pos:'st', elapsed:'not yet reminded' },
+    { name:'M. Diallo',    pos:'wg', elapsed:'not yet reminded' },
+    { name:'R. Vidal',     pos:'mf', elapsed:'reminded 1h ago' },
+    { name:'L. Santos',    pos:'fb', elapsed:'not yet reminded' },
+  ];
+  const SUBS = [
+    { key:'sleep', lab:'Sleep', ab:'Sl' }, { key:'fatigue', lab:'Fatigue', ab:'Ft' },
+    { key:'stress', lab:'Stress', ab:'St' }, { key:'soreness', lab:'Soreness', ab:'So' },
+  ];
 
-    if (playerId && clubId) {
-      const { data: player } = await window.sb.from('players')
-        .select('first_name,last_name')
-        .eq('id', playerId)
-        .single();
-      if (player) window.__WELLNESS_CTX.playerName = player.first_name || player.last_name;
+  const T = window.Triage;
+  const hooper = p => p.sleep + p.fatigue + p.stress + p.soreness;
+  const initials = n => { const parts = n.replace('.','').split(/\s+/); return (parts[0][0] + (parts[parts.length-1][0]||'')).toUpperCase(); };
+  const POSLABEL = { gk:'GK', cb:'CB', fb:'FB', mf:'MF', wg:'WG', st:'ST' };
 
-      // Load last 7 days of wellness for this player (all fields needed for summary)
-      const since = new Date(now); since.setDate(since.getDate() - 6);
-      const { data: hist } = await window.sb.from('wellness')
-        .select('readiness,sleep_quality,mood,fatigue,stress,soreness,submitted_at')
-        .eq('player_id', playerId)
-        .eq('club_id', clubId)
-        .gte('submitted_at', since.toISOString().slice(0, 10))
-        .order('submitted_at', { ascending: true });
-      const entries = hist || [];
-      window.__WELLNESS_CTX.history   = entries;
-      window.__WELLNESS_CTX.lastEntry = entries.length ? entries[entries.length - 1] : null;
-      // Streak: consecutive days ending today that have an entry
-      let streak = 0;
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(now); d.setDate(d.getDate() - i);
-        const key = d.toISOString().slice(0, 10);
-        if (entries.find(e => e.submitted_at?.slice(0, 10) === key)) streak++;
-        else break;
-      }
-      window.__WELLNESS_CTX.streak = streak;
+  function subitemsHTML(p) {
+    return SUBS.map(s => {
+      const v = p[s.key];
+      const sev = T.subSev(v);
+      return `<div class="subitem ${sev}">${T.miniBars(v, sev)}<span class="lb">${s.ab}</span></div>`;
+    }).join('');
+  }
+  function painChipsHTML(pain, max) {
+    if (!pain.length) return '';
+    const shown = pain.slice(0, max);
+    let html = shown.map(z => `<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${z}</span>`).join('');
+    if (pain.length > max) html += `<span class="pain-chip more">+${pain.length - max}</span>`;
+    return `<div class="pain-set">${html}</div>`;
+  }
+  function subrowsHTML(p) {
+    return SUBS.map(s => {
+      const v = p[s.key];
+      const sev = T.subSev(v);
+      return `<div class="subrow ${sev}"><span class="name">${s.lab}</span><span class="track"><i style="width:${(v/7*100).toFixed(0)}%"></i></span><span class="n">${v}<span style="opacity:.5">/7</span></span></div>`;
+    }).join('');
+  }
+
+  function cardHTML(p) {
+    const h = hooper(p);
+    const b = T.bandHooper(h);
+    const hasNote = !!p.comment;
+    const flags = [];
+    if (p.pain.length) flags.push(painChipsHTML(p.pain, 2));
+    if (hasNote) flags.push(`<span class="pc-note-ic" title="Has a note"><i class="ti ti-message-2"></i></span>`);
+    const flagsHTML = flags.length ? flags.join('') : '<span style="font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint);">—</span>';
+
+    const painFull = p.pain.length
+      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${z}</span>`).join('')}</div></div>`
+      : '';
+    const noteFull = hasNote
+      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">Player note · submitted ${p.time}</div></div></div>`
+      : '';
+    const rightBlock = (p.pain.length || hasNote)
+      ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">Comment</div>${noteFull}</div>` : ''}`
+      : `<div class="pc-det-block"><div class="h">Flags</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">No pain areas or notes reported.</p></div>`;
+
+    return `
+    <article class="pc" data-sev="${b.sev}">
+      <div class="pc-head">
+        <div class="pc-id">
+          <span class="cm-avatar is-md">${initials(p.name)}</span>
+          <div class="pc-who">
+            <div class="pc-name">${p.name}</div>
+            <div class="pc-sub"><span class="pos-chip ${p.pos}">${POSLABEL[p.pos]}</span><span class="pc-time">${p.time}</span></div>
+          </div>
+        </div>
+        <div class="pc-metric">
+          <span class="val">${h}</span>
+          <div class="meta">
+            <span class="band ${b.sev}">${b.label}</span>
+            <span class="scale">Hooper · /28</span>
+          </div>
+        </div>
+        <div class="pc-mid"><div class="pc-subs">${subitemsHTML(p)}</div></div>
+        <div class="pc-flags">${flagsHTML}</div>
+      </div>
+      <div class="pc-detail">
+        <div class="pc-detail-grid">
+          <div class="pc-det-block">
+            <div class="h">Wellness breakdown · higher = worse</div>
+            ${subrowsHTML(p)}
+          </div>
+          <div>${rightBlock}
+            <div class="pc-det-actions">
+              <button class="cm-btn is-secondary is-sm" data-wa="Hi ${p.name.split(' ').pop()} — saw your check-in (Hooper ${h}). How are you feeling this morning?"><i class="ti ti-brand-whatsapp"></i>Message</button>
+              <button class="cm-btn is-ghost is-sm"><i class="ti ti-history"></i>7-day history</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function pendingCardHTML(p) {
+    return `
+    <article class="pc is-pending">
+      <div class="pc-pending-head">
+        <div class="pc-id">
+          <span class="cm-avatar is-md" style="opacity:.55;">${initials(p.name)}</span>
+          <div class="pc-who">
+            <div class="pc-name">${p.name}</div>
+            <div class="pc-sub"><span class="pos-chip ${p.pos}" style="opacity:.7;">${POSLABEL[p.pos]}</span></div>
+          </div>
+        </div>
+        <span class="status"><i class="ti ti-clock-x"></i>Not filled</span>
+        <div class="right">
+          <span class="pc-elapsed">${p.elapsed}</span>
+          <button class="cm-btn is-ghost is-sm" data-wa="Hi ${p.name.split(' ').pop()} — still need your wellness check-in before training: clava.fc/w/9f3a-2k7"><i class="ti ti-brand-whatsapp"></i>Remind</button>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function skeletonHTML() {
+    let rows = '';
+    for (let i = 0; i < 6; i++) {
+      rows += `<div class="sk"><div class="sk-row">
+        <div class="sk-id"><span class="sk-circle"></span><div style="flex:1"><div class="sk-b" style="height:13px;width:60%;margin-bottom:8px"></div><div class="sk-b" style="height:10px;width:38%"></div></div></div>
+        <div class="sk-b" style="height:34px;width:96px"></div>
+        <div class="sk-b" style="height:22px;width:70%"></div>
+        <div class="sk-b" style="height:24px;width:120px;justify-self:end"></div>
+      </div></div>`;
     }
+    return rows;
+  }
+
+  /* ── State + render ── */
+  const state = { tab: 'responded', loading: false };
+
+  function renderWellness() {
+    const respWrap = document.getElementById('respWrap');
+    const pendWrap = document.getElementById('pendWrap');
+    const skel = document.getElementById('skeleton');
+    const empty = document.getElementById('empty');
+
+    // summary + pips
+    const total = RESPONDED.length + PENDING.length;
+    const painCount = RESPONDED.filter(p => p.pain.length).length;
+    const flagCount = RESPONDED.filter(p => T.bandHooper(hooper(p)).sev === 'red').length;
+    document.getElementById('sumDone').textContent = RESPONDED.length;
+    document.getElementById('sumDen').textContent = '/ ' + total;
+    document.getElementById('sumFlag').textContent = flagCount;
+    document.getElementById('sumPain').textContent = painCount;
+    document.getElementById('sumMiss').textContent = PENDING.length;
+    document.getElementById('pipResp').textContent = RESPONDED.length;
+    document.getElementById('pipPend').textContent = PENDING.length;
+    document.getElementById('remindT').textContent = `${PENDING.length} players haven’t checked in yet`;
+    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${PENDING.length})`;
+
+    // reset visibility
+    respWrap.style.display = 'none';
+    pendWrap.style.display = 'none';
+    skel.style.display = 'none';
+    empty.style.display = 'none';
+
+    if (state.loading) {
+      skel.style.display = '';
+      skel.querySelector('.tr-list').innerHTML = skeletonHTML();
+      return;
+    }
+
+    if (state.tab === 'responded') {
+      respWrap.style.display = '';
+      document.getElementById('listResponded').innerHTML =
+        RESPONDED.slice().sort((a, b) => hooper(b) - hooper(a)).map(cardHTML).join('');
+    } else {
+      pendWrap.style.display = '';
+      document.getElementById('listPending').innerHTML = PENDING.map(pendingCardHTML).join('');
+    }
+  }
+  window.renderWellness = renderWellness;
+
+  /* ── Events ── */
+  document.addEventListener('tr:seg', e => {
+    if (e.detail.group === 'tab') { state.tab = e.detail.value; renderWellness(); }
+  });
+
+  const wmRefresh = document.getElementById('wmRefresh');
+  if (wmRefresh) wmRefresh.addEventListener('click', function () {
+    const icon = this.querySelector('.ti');
+    icon.style.transition = 'transform .8s cubic-bezier(.2,.7,.2,1)';
+    icon.style.transform = 'rotate(360deg)';
+    setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
+    state.loading = true; renderWellness();
+    setTimeout(() => {
+      state.loading = false; renderWellness();
+      T.toast(`Wellness refreshed · ${RESPONDED.length} of ${RESPONDED.length + PENDING.length} in`, 'ti-refresh');
+    }, 900);
+  });
+
+  /* ── Share modal link generation (mock) ── */
+  (function () {
+    const btnGen = document.getElementById('btnGen');
+    const linkUrl = document.getElementById('linkUrl');
+    const linkRow = document.getElementById('linkRow');
+    const tokNote = document.getElementById('tokNote');
+    const btnCopy = document.getElementById('btnCopy');
+    const btnWa = document.getElementById('btnWa');
+    const shareTeam = document.getElementById('shareTeam');
+    let currentUrl = '';
+
+    function gen() {
+      const token = T.makeToken();
+      currentUrl = 'https://clava.fc/w/' + token;
+      linkUrl.textContent = currentUrl;
+      linkRow.classList.remove('is-empty');
+      btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
+      tokNote.style.display = '';
+      tokNote.innerHTML = '<i class="ti ti-shield-check"></i>One-time token · expires in 12h · valid for ' + shareTeam.value;
+      btnCopy.disabled = false;
+      btnWa.disabled = false;
+    }
+    btnGen.addEventListener('click', gen);
+    shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
+    btnWa.addEventListener('click', () => {
+      if (currentUrl) T.whatsapp('Morning — wellness check-in for ' + shareTeam.value + ' before training. 30 seconds: ' + currentUrl);
+    });
   })();
 
-  // Called from React PhoneForm on submit
-  window.submitWellness = async function ({ sleepQ, mood, fatigue, stress, soreness, body, note }) {
-    try {
-      const clubId  = await window.getClubId();
-      const profile = await window.getProfile();
-      // Readiness: composite — high sleep/mood/fatigue minus high stress/soreness
-      const readiness = Math.round((sleepQ + mood + fatigue + (10 - stress) + (10 - soreness)) / 5);
-      // player_id from URL ?player=UUID (for tokenized links), or profile if staff submitting
-      const urlParams = new URLSearchParams(window.location.search);
-      const playerId  = urlParams.get('player') || profile?.id || null;
+  /* ── Page subtitle (live date) ── */
+  (function () {
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const now = new Date();
+    const sub = document.getElementById('pgSub');
+    if (sub) sub.textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()} · Morning triage`;
+  })();
 
-      await window.sb.from('wellness').insert({
-        player_id:     playerId,
-        club_id:       clubId,
-        sleep_quality: sleepQ,
-        mood,
-        fatigue,
-        stress,
-        soreness,
-        readiness,
-        submitted_at:  new Date().toISOString()
-      });
-      return { ok: true };
-    } catch (e) {
-      console.warn('Wellness submit:', e);
-      return { ok: false };
-    }
-  };
+  renderWellness();
+  } /* end boot() */
+})();
 
-  async function openShareWellness() {
-    const sel = document.getElementById('shareWTeam');
-    document.getElementById('shareWResult').style.display = 'none';
-    sel.innerHTML = '<option>Loading…</option>';
-    document.getElementById('shareWBackdrop').style.display = 'flex';
-    const cid = await window.getClubId();
-    const profile = await window.getProfile();
-    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
-    let fullAccess = bucket === 'admin' || bucket === 'owner';
-    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
-    let teams = await window.getTeams(cid);
-    if (!fullAccess) {
-      let mine = [];
-      try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
-      const s = new Set(mine);
-      teams = teams.filter(t => s.has(t.id));
-    }
-    if (!teams.length) { sel.innerHTML = '<option value="">No teams</option>'; return; }
-    sel.innerHTML = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-  }
-  function closeShareWellness() { document.getElementById('shareWBackdrop').style.display = 'none'; }
-  async function genShareWellness() {
-    const teamId = document.getElementById('shareWTeam').value;
-    if (!teamId) return;
-    const cid = await window.getClubId();
-    const token = crypto.randomUUID();
-    const { error } = await window.sb.from('share_links').insert({ club_id: cid, scope: 'wellness', token, team_id: teamId });
-    if (error) { alert('Error: ' + error.message); return; }
-    const url = location.origin + '/survey.html?token=' + token;
-    document.getElementById('shareWUrl').value = url;
-    document.getElementById('shareWWa').href = 'https://wa.me/?text=' + encodeURIComponent('Daily check-in: ' + url);
-    document.getElementById('shareWResult').style.display = 'block';
-  }
-  function copyShareWellness() {
-    const inp = document.getElementById('shareWUrl');
-    navigator.clipboard?.writeText(inp.value);
-    const btn = document.getElementById('shareWCopy');
-    const old = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i>Copied';
-    setTimeout(() => btn.innerHTML = old, 1500);
-  }
-  window.openShareWellness = openShareWellness;
-  window.closeShareWellness = closeShareWellness;
-  window.genShareWellness = genShareWellness;
-  window.copyShareWellness = copyShareWellness;
-
-  async function initWellChecklist() {
-    const sel = document.getElementById('wellChkTeam');
-    if (!sel) return;
-    const cid = await window.getClubId();
-    const profile = await window.getProfile();
-    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
-    let fullAccess = bucket === 'admin' || bucket === 'owner';
-    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
-    let teams = await window.getTeams(cid);
-    if (!fullAccess) {
-      let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
-      const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
-    }
-    const _savedTeam = sessionStorage.getItem('cal_active_team');
-    const _useTeam = (_savedTeam && teams.some(t => t.id === _savedTeam)) ? _savedTeam : (fullAccess ? '' : (teams[0]?.id || ''));
-    sel.innerHTML = (fullAccess ? '<option value="">Whole club</option>' : '') +
-      teams.map(t => `<option value="${t.id}" ${t.id === _useTeam ? 'selected' : ''}>${t.name}</option>`).join('');
-    loadWellChecklist();
-  }
-  // Cortes del Hooper Index (rango 4–28, alto = peor). Editables.
-  const HOOPER_BANDS = { amber: 12, red: 18 }; // < amber = verde · [amber,red) = ámbar · >= red = rojo
-  function hooperBand(h){
-    if (h == null) return null; // legacy / sin dato → neutro
-    if (h >= HOOPER_BANDS.red)   return { key:'red',   bg:'color-mix(in srgb,var(--cm-danger) 10%,transparent)',  fg:'var(--cm-danger)',  flag:true };
-    if (h >= HOOPER_BANDS.amber) return { key:'amber', bg:'color-mix(in srgb,var(--cm-warning) 10%,transparent)', fg:'var(--cm-warning)', flag:false };
-    return { key:'green', bg:'color-mix(in srgb,var(--cm-accent) 10%,transparent)', fg:'var(--cm-accent)', flag:false };
-  }
-  async function loadWellChecklist() {
-    const body = document.getElementById('wellChkBody');
-    const teamId = document.getElementById('wellChkTeam').value || null;
-    body.innerHTML = '<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>';
-    try {
-      const cid = await window.getClubId();
-      const { data, error } = await window.sb.rpc('wellness_status', { p_club_id: cid, p_team_id: teamId, p_date: null });
-      if (error) throw error;
-      const rows = data || [];
-      const done = rows.filter(r => r.responded).length;
-      const responders = rows.filter(r => r.responded);
-      const pending    = rows.filter(r => !r.responded);
-      // peores arriba: hooper_index DESC; respondieron sin hooper (null) van después de los numéricos
-      responders.sort((a, b) => {
-        if (a.hooper_index == null && b.hooper_index == null) return 0;
-        if (a.hooper_index == null) return 1;
-        if (b.hooper_index == null) return -1;
-        return b.hooper_index - a.hooper_index;
-      });
-      const redCount = responders.filter(r => { const bd = hooperBand(r.hooper_index); return bd && bd.flag; }).length;
-      const respRow = r => {
-        const bd = hooperBand(r.hooper_index);
-        const flagged = !!(bd && bd.flag);
-        const icon = flagged ? 'ti-alert-triangle' : 'ti-circle-check';
-        const iconColor = flagged ? bd.fg : 'var(--cm-accent)';
-        let badge = '';
-        if (r.hooper_index != null) {
-          badge = `<span style="font:600 11px/1 var(--cm-font-mono);color:${bd.fg};background:${bd.bg};padding:2px 7px;border-radius:999px">${r.hooper_index}</span>`;
-        } else if (r.readiness != null) {
-          badge = `<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);background:color-mix(in srgb,var(--cm-fg-muted) 14%,transparent);padding:2px 7px;border-radius:999px">${r.readiness}<span style="opacity:.55;font-weight:500"> ·old</span></span>`;
-        }
-        const rowBg = (bd && bd.key === 'red') ? `background:${bd.bg};border-radius:6px;padding:3px 6px;` : '';
-        return `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px;display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans);${rowBg}">
-          <i class="ti ${icon}" style="font-size:15px;color:${iconColor}"></i>
-          <span style="color:var(--cm-fg);flex:1">${r.player_name}</span>
-          ${badge}
-        </div>`;
-      };
-      const pendRow = r => `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px;display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
-          <i class="ti ti-circle" style="font-size:15px;color:var(--cm-fg-muted)"></i>
-          <span style="color:var(--cm-fg-muted);flex:1">${r.player_name}</span>
-        </div>`;
-      const _cols = Math.max(1, Math.ceil(rows.length / 12));
-      body.innerHTML =
-        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} completed${redCount?`<span style="color:var(--cm-danger)"> · ${redCount} flagged</span>`:''}</div>` +
-        `<div style="column-count:${_cols};column-gap:22px">` +
-        responders.map(respRow).join('') +
-        pending.map(pendRow).join('') +
-        '</div>';
-      if (pending.length) {
-        const names = pending.map(r => r.player_name).join(', ');
-        body.innerHTML += `<button onclick="remindWellMissing('${teamId||''}', this)" data-names="${names.replace(/"/g,'&quot;')}" style="margin-top:12px;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--cm-accent);color:#fff;border:none;border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Remind missing (${pending.length})</button>`;
-      }
-    } catch (e) {
-      body.innerHTML = `<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Couldn't load.</div>`;
-      console.warn('[Wellness] checklist:', e.message);
-    }
-  }
-  window.loadWellChecklist = loadWellChecklist;
-  async function remindWellMissing(teamId, btn) {
-    try {
-      const cid = await window.getClubId();
-      const ins = await window.sb.from('share_links').insert({
-        club_id: cid, scope: 'wellness', team_id: teamId || null,
-        token: crypto.randomUUID().replace(/-/g,''),
-        expires_at: new Date(Date.now()+7*86400000).toISOString()
-      }).select('token').single();
-      if (ins.error) throw ins.error;
-      const url = location.origin + '/survey.html?token=' + ins.data.token;
-      const names = btn.getAttribute('data-names');
-      const msg = `Daily check-in reminder.\nMissing: ${names}\nComplete it here: ${url}`;
-      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-    } catch (e) {
-      alert("Couldn't generate the reminder: " + e.message);
-    }
-  }
-  window.remindWellMissing = remindWellMissing;
-  // Refresco manual del checklist con mini indicador de carga
-  async function refreshWellChecklist(btn){
-    const ic = btn && btn.querySelector('i');
-    const prev = ic ? ic.className : null;
-    if (ic) ic.className = 'ti ti-loader-2';
-    if (btn) btn.disabled = true;
-    try { await loadWellChecklist(); }
-    finally { if (ic) ic.className = prev; if (btn) btn.disabled = false; }
-  }
-  window.refreshWellChecklist = refreshWellChecklist;
-  // Refresca solo si el select ya tiene opciones (init terminó); si no, inicializa.
-  function _wellRefreshIfReady(){
-    const sel = document.getElementById('wellChkTeam');
-    if (sel && sel.options.length) loadWellChecklist();
-    else initWellChecklist();
-  }
-  // Auto-refresh al volver a primer plano (una sola vez aunque el script corra dos veces)
-  if (!window._wellRefreshWired) {
-    window._wellRefreshWired = true;
-    window.addEventListener('focus', () => _wellRefreshIfReady());
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _wellRefreshIfReady(); });
-  }
-  // Polling suave: cada 60s, solo con pestaña visible. Id en variable de módulo para no duplicar.
-  if (window._wellPollId) clearInterval(window._wellPollId);
-  window._wellPollId = setInterval(() => { if (document.visibilityState === 'visible') loadWellChecklist(); }, 60000);
-  initWellChecklist();
+/* ── App-shell boot: auth guard + club theme (no data wiring) ── */
+(async () => {
+  try {
+    if (window.guardModule && !(await window.guardModule())) return;
+    if (window.getProfile && window.getClub) await Promise.all([window.getProfile(), window.getClub()]);
+    if (window.applyClubTheme) window.applyClubTheme();
+  } catch (e) { console.warn('[Wellness] shell boot:', e); }
+})();
 </script>
 
-<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
-<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
-<script defer src="ios-frame.js"></script>
 <script defer src="settings-drawer.js"></script>
 <script defer src="tweaks-panel.js"></script>
 <script defer src="theme-tweaks.js"></script>
-
-<script defer src="wellness-phone.js"></script>
 
 <script>
   if ('serviceWorker' in navigator) {
