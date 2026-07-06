@@ -933,26 +933,41 @@
     const yesterdayStr = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     let mcStart, mcEnd;
 
-    // Try active microcycle from Supabase
+    // ── Barrier A — window-independent, fire together: active microcycle (which defines the
+    //    date window) + players + active injuries. ──
     let mcMatchDate = null, mcRival = null;
-    try {
-      let _mcq = window.sb.from('microcycles')
-        .select('start_date, end_date, name, match_date, rival')
-        .eq('club_id', CLUB_ID)
-        .lte('start_date', todayStr)
-        .gte('end_date', todayStr)
-        .limit(1);
-      if (_avTeamId) _mcq = _mcq.eq('team_id', _avTeamId);
-      const { data: mcs } = await _mcq;
-      if (mcs?.length) {
-        mcStart = mcs[0].start_date; mcEnd = mcs[0].end_date;
-        mcMatchDate = mcs[0].match_date; mcRival = mcs[0].rival;
-        const nameEl = document.getElementById('avMcName');
-        const pickerEl = document.getElementById('avMcPickerName');
-        if (nameEl) nameEl.textContent = mcs[0].name || 'Current MC';
-        if (pickerEl) pickerEl.textContent = mcs[0].name || 'Current MC';
-      }
-    } catch(e) {}
+    const [mcs, playersRes, injuriesRes] = await Promise.all([
+      (async () => {
+        try {
+          let _mcq = window.sb.from('microcycles')
+            .select('start_date, end_date, name, match_date, rival')
+            .eq('club_id', CLUB_ID)
+            .lte('start_date', todayStr)
+            .gte('end_date', todayStr)
+            .limit(1);
+          if (_avTeamId) _mcq = _mcq.eq('team_id', _avTeamId);
+          const { data } = await _mcq;
+          return data || null;
+        } catch (e) { return null; }
+      })(),
+      window.cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number').order('last_name'),
+      window.sb.from('injuries').select('player_id, expected_return')
+        .eq('club_id', CLUB_ID).eq('status', 'active'),
+    ]);
+    const playersData = playersRes.data, playersErr = playersRes.error;
+    const injuriesData = injuriesRes.data;
+    console.log('[Availability] currentClubId en Availability:', CLUB_ID);
+    console.log('[Availability] players:', playersData, '| error:', playersErr?.message || null);
+
+    // Active microcycle → date window + labels.
+    if (mcs?.length) {
+      mcStart = mcs[0].start_date; mcEnd = mcs[0].end_date;
+      mcMatchDate = mcs[0].match_date; mcRival = mcs[0].rival;
+      const nameEl = document.getElementById('avMcName');
+      const pickerEl = document.getElementById('avMcPickerName');
+      if (nameEl) nameEl.textContent = mcs[0].name || 'Current MC';
+      if (pickerEl) pickerEl.textContent = mcs[0].name || 'Current MC';
+    }
 
     // Override de rango del selector (pisa el microciclo)
     if (_avRangeOverride) {
@@ -977,55 +992,88 @@
     const end = new Date(mcEnd + 'T00:00:00Z');
     while (cur <= end) { MC_DATES.push(cur.toISOString().slice(0, 10)); cur = new Date(cur.getTime() + 86400000); }
 
-    // ── Seasons nexus: drop days inside phases that don't count for availability ──
-    // (break / offseason). Phases live in season_phases, scoped per category via seasons.team_id.
+    // ── Barrier B — with mcStart/mcEnd known, fire the rest in parallel.
+    //    seasons→season_phases stays a chain (phases needs the season ids); the rest are independent. ──
     NON_COUNTING_DATES = new Set();
-    try {
-      let sq = window.sb.from('seasons').select('id');
-      if (_avTeamId) sq = sq.eq('team_id', _avTeamId); else sq = sq.eq('club_id', CLUB_ID);
-      const { data: seas } = await sq;
-      const seasonIds = (seas || []).map(s => s.id);
-      if (seasonIds.length) {
-        const { data: phs } = await window.sb.from('season_phases')
-          .select('start_date,end_date,counts_availability')
-          .in('season_id', seasonIds)
-          .eq('counts_availability', false)
-          .lte('start_date', mcEnd)
-          .gte('end_date', mcStart);
-        (phs || []).forEach(ph => {
-          MC_DATES.forEach(d => { if (d >= ph.start_date && d <= ph.end_date) NON_COUNTING_DATES.add(d); });
-        });
-      }
-    } catch (e) { console.warn('[Availability] seasons phase filter skipped:', e?.message); }
+    MC_RANGES = [];
+    DAYOFF_DATES = new Set();
+    PLANNED_DATES = new Set();
+    const [phs, availRes, yesterdayRes, matchRes, mcRangesData, dayoffData, plannedData] = await Promise.all([
+      (async () => {   // seasons → season_phases (chain)
+        try {
+          let sq = window.sb.from('seasons').select('id');
+          if (_avTeamId) sq = sq.eq('team_id', _avTeamId); else sq = sq.eq('club_id', CLUB_ID);
+          const { data: seas } = await sq;
+          const seasonIds = (seas || []).map(s => s.id);
+          if (!seasonIds.length) return [];
+          const { data } = await window.sb.from('season_phases')
+            .select('start_date,end_date,counts_availability')
+            .in('season_id', seasonIds)
+            .eq('counts_availability', false)
+            .lte('start_date', mcEnd)
+            .gte('end_date', mcStart);
+          return data || [];
+        } catch (e) { console.warn('[Availability] seasons phase filter skipped:', e?.message); return []; }
+      })(),
+      window.sb.from('availability').select('player_id, date, status, minutes')
+        .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd),
+      window.sb.from('availability').select('player_id, status')
+        .eq('club_id', CLUB_ID).eq('date', yesterdayStr),
+      window.sb.from('calendar_events').select('date, opponent, title')
+        .eq('club_id', CLUB_ID).eq('type', 'match')
+        .gte('date', mcStart).lte('date', mcEnd),
+      (async () => {   // microcycle ranges (MD labels)
+        try {
+          let mq = window.sb.from('microcycles')
+            .select('start_date,end_date,match_date,md_overrides')
+            .eq('club_id', CLUB_ID)
+            .lte('start_date', mcEnd).gte('end_date', mcStart);
+          if (_avTeamId) mq = mq.eq('team_id', _avTeamId);
+          const { data } = await mq;
+          return data || [];
+        } catch (e) { console.warn('[Availability] MD labels skipped:', e?.message); return []; }
+      })(),
+      (async () => {   // day-off (sessions + calendar events)
+        try {
+          let tq = window.sb.from('training_sessions')
+            .select('session_date')
+            .eq('club_id', CLUB_ID).eq('session_type', 'day_off').eq('is_historical', false)
+            .gte('session_date', mcStart).lte('session_date', mcEnd);
+          if (_avTeamId) tq = tq.eq('team_id', _avTeamId);
+          let cq = window.sb.from('calendar_events')
+            .select('date')
+            .eq('club_id', CLUB_ID).eq('type', 'day_off')
+            .gte('date', mcStart).lte('date', mcEnd);
+          if (_avTeamId) cq = cq.eq('team_id', _avTeamId);
+          const [{ data: offSess }, { data: offEvts }] = await Promise.all([tq, cq]);
+          return { offSess: offSess || [], offEvts: offEvts || [] };
+        } catch (e) { console.warn('[Availability] day-off skipped:', e?.message); return { offSess: [], offEvts: [] }; }
+      })(),
+      (async () => {   // planned sessions (not day-off)
+        try {
+          let sq = window.sb.from('training_sessions').select('session_date')
+            .eq('club_id', CLUB_ID).eq('is_historical', false)
+            .neq('session_type', 'day_off')
+            .gte('session_date', mcStart).lte('session_date', mcEnd);
+          if (_avTeamId) sq = sq.eq('team_id', _avTeamId);
+          const { data } = await sq;
+          return data || [];
+        } catch (e) { console.warn('[Availability] planned sessions skipped:', e?.message); return []; }
+      })(),
+    ]);
+    const availData = availRes.data;
+    const yesterdayData = yesterdayRes.data;
+    const matchEventsData = matchRes.data;
+    MC_RANGES = mcRangesData || [];
+
+    // ── Post-processing (same logic/order as before, now that B resolved) ──
+    // Seasons nexus: drop days inside non-counting phases (break / offseason).
+    (phs || []).forEach(ph => {
+      MC_DATES.forEach(d => { if (d >= ph.start_date && d <= ph.end_date) NON_COUNTING_DATES.add(d); });
+    });
     if (NON_COUNTING_DATES.size) MC_DATES = MC_DATES.filter(d => !NON_COUNTING_DATES.has(d));
 
     todayIdx = MC_DATES.indexOf(todayStr);
-
-    // Fetch all data
-    const { data: playersData, error: playersErr } = await window
-      .cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number').order('last_name');
-
-    console.log('[Availability] currentClubId en Availability:', CLUB_ID);
-    console.log('[Availability] players:', playersData, '| error:', playersErr?.message || null);
-
-    const { data: availData } = await window.sb
-      .from('availability').select('player_id, date, status, minutes')
-      .eq('club_id', CLUB_ID).gte('date', mcStart).lte('date', mcEnd);
-
-    // Fetch active injuries including expected_return for auto-fill range
-    const { data: injuriesData } = await window.sb
-      .from('injuries').select('player_id, expected_return')
-      .eq('club_id', CLUB_ID).eq('status', 'active');
-
-    const { data: yesterdayData } = await window.sb
-      .from('availability').select('player_id, status')
-      .eq('club_id', CLUB_ID).eq('date', yesterdayStr);
-
-    // Fetch match events for MD indicators
-    const { data: matchEventsData } = await window.sb
-      .from('calendar_events').select('date, opponent, title')
-      .eq('club_id', CLUB_ID).eq('type', 'match')
-      .gte('date', mcStart).lte('date', mcEnd);
 
     // Build match-dates map (date → opponent name for tooltip)
     const matchDates = {};
@@ -1037,46 +1085,12 @@
     // en la evolución (misma fuente que el matrix). NO query nueva.
     window.__avMatchDates = matchDates;
 
-    // ── Microcycle ranges (for MD labels) + planned day-off dates (read-only) ──
-    MC_RANGES = [];
-    try {
-      let mq = window.sb.from('microcycles')
-        .select('start_date,end_date,match_date,md_overrides')
-        .eq('club_id', CLUB_ID)
-        .lte('start_date', mcEnd).gte('end_date', mcStart);
-      if (_avTeamId) mq = mq.eq('team_id', _avTeamId);
-      const { data: mcRanges } = await mq;
-      MC_RANGES = mcRanges || [];
-    } catch (e) { MC_RANGES = []; console.warn('[Availability] MD labels skipped:', e?.message); }
+    // Day-off dates
+    (dayoffData.offSess || []).forEach(s => s.session_date && DAYOFF_DATES.add(String(s.session_date).slice(0, 10)));
+    (dayoffData.offEvts || []).forEach(e => e.date && DAYOFF_DATES.add(String(e.date).slice(0, 10)));
 
-    DAYOFF_DATES = new Set();
-    try {
-      let tq = window.sb.from('training_sessions')
-        .select('session_date')
-        .eq('club_id', CLUB_ID).eq('session_type', 'day_off').eq('is_historical', false)
-        .gte('session_date', mcStart).lte('session_date', mcEnd);
-      if (_avTeamId) tq = tq.eq('team_id', _avTeamId);
-      let cq = window.sb.from('calendar_events')
-        .select('date')
-        .eq('club_id', CLUB_ID).eq('type', 'day_off')
-        .gte('date', mcStart).lte('date', mcEnd);
-      if (_avTeamId) cq = cq.eq('team_id', _avTeamId);
-      const [{ data: offSess }, { data: offEvts }] = await Promise.all([tq, cq]);
-      (offSess || []).forEach(s => s.session_date && DAYOFF_DATES.add(String(s.session_date).slice(0, 10)));
-      (offEvts || []).forEach(e => e.date && DAYOFF_DATES.add(String(e.date).slice(0, 10)));
-    } catch (e) { DAYOFF_DATES = new Set(); console.warn('[Availability] day-off skipped:', e?.message); }
-
-    // ── Planned days: a real training session (not a day-off) or a match. Only these are tracked. ──
-    PLANNED_DATES = new Set();
-    try {
-      let sq = window.sb.from('training_sessions').select('session_date')
-        .eq('club_id', CLUB_ID).eq('is_historical', false)
-        .neq('session_type', 'day_off')
-        .gte('session_date', mcStart).lte('session_date', mcEnd);
-      if (_avTeamId) sq = sq.eq('team_id', _avTeamId);
-      const { data: planned } = await sq;
-      (planned || []).forEach(s => s.session_date && PLANNED_DATES.add(String(s.session_date).slice(0, 10)));
-    } catch (e) { console.warn('[Availability] planned sessions skipped:', e?.message); }
+    // Planned days: a real training session (not a day-off) or a match. Only these are tracked.
+    (plannedData || []).forEach(s => s.session_date && PLANNED_DATES.add(String(s.session_date).slice(0, 10)));
     Object.keys(matchDates).forEach(d => PLANNED_DATES.add(d)); // matches also count as planned
 
     renderHeader(matchDates);
@@ -1412,11 +1426,12 @@
   let _avTeamId = null;
   async function avInitTeamSwitch() {
     const clubId = CLUB_ID || await window.getClubId();
-    const prof = await window.getProfile();
+    // getProfile and getTeams are independent → fetch together.
+    const [prof, teamsAll] = await Promise.all([window.getProfile(), window.getTeams(clubId)]);
     const bucket = (prof?.role || prof?.club_role || '').toLowerCase();
     let full = bucket === 'admin' || bucket === 'owner';
     if (!full && window.isSuperAdmin) { try { full = await window.isSuperAdmin(); } catch {} }
-    let teams = await window.getTeams(clubId);
+    let teams = teamsAll;
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('avTeamSelect');
     if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
