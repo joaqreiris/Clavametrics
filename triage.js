@@ -92,6 +92,30 @@
       }
     });
 
+    // Card-layout toggle (numeric ↔ gauge) — persisted, shared across monitors
+    const LAYOUT_KEY = 'cm_card_layout';
+    function readLayout() {
+      try { return localStorage.getItem(LAYOUT_KEY) === 'gauge' ? 'gauge' : 'numeric'; }
+      catch (e) { return 'numeric'; }
+    }
+    function applyLayout(value) {
+      document.querySelectorAll('[data-layout-toggle]').forEach(group => {
+        const list = document.querySelector(group.getAttribute('data-layout-toggle'));
+        if (list) list.classList.toggle('layout-gauge', value === 'gauge');
+        group.querySelectorAll('button').forEach(b => b.classList.toggle('is-active', b.dataset.layout === value));
+      });
+    }
+    document.querySelectorAll('[data-layout-toggle]').forEach(group => {
+      group.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const value = btn.dataset.layout === 'gauge' ? 'gauge' : 'numeric';
+          try { localStorage.setItem(LAYOUT_KEY, value); } catch (e) {}
+          applyLayout(value);
+        });
+      });
+    });
+    applyLayout(readLayout());
+
     // Segmented tabs → dispatch tr:seg + toggle target sections
     document.querySelectorAll('[data-seg]').forEach(seg => {
       seg.querySelectorAll('button').forEach(btn => {

@@ -119,6 +119,13 @@
         </div>
         <div class="tr-spacer"></div>
         <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i>Sorted worst-first</div>
+        <div class="tr-layout-toggle">
+          <span class="lab">Card</span>
+          <div class="tr-seg" data-layout-toggle="#listResponded">
+            <button class="is-active" data-layout="numeric"><i class="ti ti-number-9"></i>Numeric</button>
+            <button data-layout="gauge"><i class="ti ti-gauge"></i>Gauge</button>
+          </div>
+        </div>
       </div>
 
       <!-- Responded -->
@@ -246,6 +253,14 @@
   const initials = n => { const parts = n.replace('.','').split(/\s+/); return (parts[0][0] + (parts[parts.length-1][0]||'')).toUpperCase(); };
   const POSLABEL = { gk:'GK', cb:'CB', fb:'FB', mf:'MF', wg:'WG', st:'ST' };
 
+  // Gauge zones for Hooper (range 4–28): green <12, amber 12–17, red ≥18.
+  function gaugeVars() {
+    const gGreen = ((12 - 4) / 24 * 100).toFixed(1) + '%';
+    const gAmber = ((18 - 4) / 24 * 100).toFixed(1) + '%';
+    return `--g-green:${gGreen}; --g-amber:${gAmber};`;
+  }
+  const markerLeft = v => Math.max(0, Math.min(100, (v - 4) / 24 * 100)).toFixed(1) + '%';
+
   function subitemsHTML(p) {
     return SUBS.map(s => {
       const v = p[s.key];
@@ -303,6 +318,10 @@
             <span class="band ${b.sev}">${b.label}</span>
             <span class="scale">Hooper · /28</span>
           </div>
+        </div>
+        <div class="pc-gauge">
+          <div class="row"><span class="val">${h}</span><span class="cap">${b.label} · Hooper</span></div>
+          <div class="gauge-track" style="${gaugeVars()}"><span class="marker" style="left:${markerLeft(h)}"></span></div>
         </div>
         <div class="pc-mid"><div class="pc-subs">${subitemsHTML(p)}</div></div>
         <div class="pc-flags">${flagsHTML}</div>

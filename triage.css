@@ -71,6 +71,12 @@
 .tr-seg button.is-active .pipn { background: var(--cm-accent-soft); color: var(--cm-accent); }
 
 .tr-toolbar .tr-spacer { flex: 1; }
+.tr-layout-toggle { display: inline-flex; align-items: center; gap: 8px; }
+.tr-layout-toggle > .lab {
+  font: 500 10.5px/1 var(--cm-font-sans);
+  letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase;
+  color: var(--cm-fg-faint);
+}
 .tr-sortnote { display: inline-flex; align-items: center; gap: 6px; font: var(--cm-body-sm); color: var(--cm-fg-faint); }
 .tr-sortnote .ti { font-size: 15px; }
 
@@ -150,6 +156,36 @@
 .band.red   { background: var(--cm-danger-bg);  color: var(--cm-danger);  border: 1px solid var(--cm-danger-bd); }
 .band.amber { background: var(--cm-warning-bg); color: var(--cm-warning); border: 1px solid var(--cm-warning-bd); }
 .band.green { background: var(--cm-success-bg); color: var(--cm-success); border: 1px solid var(--cm-success-bd); }
+
+/* ── Metric block — gauge (user-selectable via .layout-gauge) ─ */
+.pc-gauge { display: none; flex-direction: column; gap: 7px; }
+.pc-gauge .row { display: flex; align-items: baseline; gap: 8px; }
+.pc-gauge .val { font: 600 22px/1 var(--cm-font-mono); letter-spacing: -0.01em; font-feature-settings: "tnum"; }
+.pc-gauge .cap { font: 500 10px/1 var(--cm-font-sans); letter-spacing: var(--cm-tr-eyebrow); text-transform: uppercase; color: var(--cm-fg-faint); }
+.pc[data-sev="red"]   .pc-gauge .val { color: var(--cm-danger); }
+.pc[data-sev="amber"] .pc-gauge .val { color: var(--cm-warning); }
+.pc[data-sev="green"] .pc-gauge .val { color: var(--cm-success); }
+.gauge-track {
+  position: relative; height: 6px; border-radius: var(--cm-r-pill);
+  background: linear-gradient(to right,
+    var(--cm-success) 0 var(--g-green, 42%),
+    var(--cm-warning) var(--g-green, 42%) var(--g-amber, 68%),
+    var(--cm-danger)  var(--g-amber, 68%) 100%);
+  opacity: 0.85;
+}
+.gauge-track .marker {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--cm-surface); border: 2.5px solid var(--cm-fg-strong);
+  box-shadow: var(--cm-shadow-1);
+}
+.pc[data-sev="red"]   .gauge-track .marker { border-color: var(--cm-danger); }
+.pc[data-sev="amber"] .gauge-track .marker { border-color: var(--cm-warning); }
+.pc[data-sev="green"] .gauge-track .marker { border-color: var(--cm-success); }
+
+/* toggle which metric block shows */
+.tr-list.layout-gauge .pc-metric { display: none; }
+.tr-list.layout-gauge .pc-gauge  { display: flex; }
 
 /* ── Sub-item mini breakdown (wellness) ───────────────────── */
 .pc-mid { display: flex; align-items: center; gap: 18px; min-width: 0; flex-wrap: wrap; }
@@ -408,7 +444,7 @@
 @media (max-width: 980px) {
   .pc-head { grid-template-columns: 1fr auto; grid-template-areas: "id caret" "metric metric" "mid mid" "flags flags"; row-gap: 14px; }
   .pc-id { grid-area: id; }
-  .pc-metric { grid-area: metric; }
+  .pc-metric, .pc-gauge { grid-area: metric; }
   .pc-mid { grid-area: mid; }
   .pc-flags { grid-area: flags; justify-self: start; }
   .pc-caret { grid-area: caret; }
