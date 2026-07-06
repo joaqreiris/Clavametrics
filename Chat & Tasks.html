@@ -1274,7 +1274,7 @@ function updatePillCounts() {
 
 async function loadTasks() {
   let _tkQ = window.sb.from('tasks')
-    .select('id,title,description,status,priority,due_date,assigned_to,assigned_to_name,assigned_roles,category')
+    .select('id,title,description,status,priority,due_date,assigned_to,assigned_to_name,assigned_roles,created_by,category')
     .eq('club_id', currentUser.clubId);
   if (currentUser.teamId) _tkQ = _tkQ.eq('team_id', currentUser.teamId);
   const { data } = await _tkQ.order('created_at', { ascending: false });
@@ -1495,10 +1495,39 @@ async function saveDetail() {
     return;
   }
   const t = allTasks.find(x => x.id === taskId);
+  const _wasDone   = t && t.status === 'done';
+  const _createdBy = t && t.created_by;
   if (t) Object.assign(t, patch);
   renderKanban();
   renderChatRightTasks();
   updateTasksBadge();
+
+  // Notify everyone involved when a task transitions to done (not on every save of a done task).
+  // Involved = creator + assignee(s); the person who completed it is always excluded.
+  if (patch.status === 'done' && !_wasDone) {
+    try {
+      const ids = new Set();
+      if (_createdBy)  ids.add(_createdBy);
+      if (assigned_to) ids.add(assigned_to);
+      if (assigned_roles && assigned_roles.length) {
+        const want = new Set(assigned_roles.map(r => (r || '').toLowerCase()));
+        (members || []).forEach(m => { if (want.has((m.role || '').toLowerCase())) ids.add(m.id); });
+      }
+      ids.delete(currentUser.id);
+      const recipients = [...ids];
+      if (recipients.length) {
+        await window.sb.from('notifications').insert(recipients.map(uid => ({
+          user_id: uid,
+          club_id: currentUser.clubId,
+          type:    'task_completed',
+          title:   `Task completed: ${title}`,
+          body:    `Completed by ${currentUser.name}`,
+          link:    '/Chat & Tasks.html',
+        })));
+      }
+    } catch (e) { console.warn('[tasks] notify completed failed:', e.message); }
+  }
+
   closeTaskDetail();
 }
 

@@ -1255,7 +1255,7 @@ document.querySelectorAll('.task').forEach(el => {
     const _tid = window._hubTeamId, _role = window._hubProfileRole || '';
     if (_cid && _uid) {
       const { data: refreshed } = await window.sb.from('tasks')
-        .select('id, title, priority, status, due_date, created_by_name, assigned_to_name, assigned_roles, team_id')
+        .select('id, title, priority, status, due_date, created_by, created_by_name, assigned_to, assigned_to_name, assigned_roles, team_id')
         .eq('club_id', _cid)
         .or(`assigned_to.eq.${_uid},created_by.eq.${_uid}` + ((_tid && _role) ? `,and(team_id.eq.${_tid},assigned_roles.cs.{${_role}})` : ''))
         .neq('status', 'cancelled')
@@ -1460,6 +1460,35 @@ function renderAvailabilityPills(records) {
     `<span class="cm-pill is-danger"><span class="cm-dot"></span>${out} out</span>`;
 }
 
+// Notify everyone involved when a task is completed, minus the person who completed it.
+// Involved = creator + assignee (individual) + role-assignees (resolved from the active team).
+async function _hubNotifyCompleted(task, actorId, actorName, clubId, teamId) {
+  try {
+    const ids = new Set();
+    if (task.created_by)  ids.add(task.created_by);
+    if (task.assigned_to) ids.add(task.assigned_to);
+    if (Array.isArray(task.assigned_roles) && task.assigned_roles.length && teamId) {
+      const want = task.assigned_roles.map(r => (r || '').toLowerCase());
+      const { data: profs } = await window.sb.from('profiles')
+        .select('id, role, member_teams!inner(team_id)')
+        .eq('club_id', clubId)
+        .eq('member_teams.team_id', teamId);
+      (profs || []).forEach(p => { if (want.includes((p.role || '').toLowerCase())) ids.add(p.id); });
+    }
+    ids.delete(actorId);
+    const recipients = [...ids];
+    if (!recipients.length) return;
+    await window.sb.from('notifications').insert(recipients.map(uid => ({
+      user_id: uid,
+      club_id: clubId,
+      type:    'task_completed',
+      title:   `Task completed: ${task.title}`,
+      body:    `Completed by ${actorName || 'A teammate'}`,
+      link:    '/Chat & Tasks.html',
+    })));
+  } catch (e) { console.warn('[hub tasks] notify completed failed:', e.message); }
+}
+
 function renderTasks(tasks, view = 'my') {
   const container = document.querySelector('.tasks');
   if (!container) return;
@@ -1531,6 +1560,8 @@ function renderTasks(tasks, view = 'my') {
         el.classList.toggle('is-done');
         check.setAttribute('aria-checked', nowDone ? 'true' : 'false');
         await window.sb.from('tasks').update({ status: nowDone ? 'done' : 'pending' }).eq('id', task.id);
+        // Only notify on the transition to done (never when reverting to pending).
+        if (nowDone) _hubNotifyCompleted(task, window._hubUserId, window._hubProfileName, window._hubClubId, window._hubTeamId);
       }
       check.addEventListener('click', () => toggle());
       check.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggle(); } });
@@ -1639,7 +1670,7 @@ function renderTasks(tasks, view = 'my') {
       .lte('submitted_at', today + 'T23:59:59')),
     userId
       ? window.sb.from('tasks')
-          .select('id, title, priority, status, due_date, created_by_name, assigned_to_name, assigned_roles, team_id')
+          .select('id, title, priority, status, due_date, created_by, created_by_name, assigned_to, assigned_to_name, assigned_roles, team_id')
           .eq('club_id', clubId)
           // Mine: assigned to me, created by me, OR assigned to my role within my active team.
           .or(`assigned_to.eq.${userId},created_by.eq.${userId}` + ((_hubTeamId && _myRole) ? `,and(team_id.eq.${_hubTeamId},assigned_roles.cs.{${_myRole}})` : ''))
