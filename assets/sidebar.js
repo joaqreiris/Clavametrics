@@ -151,7 +151,7 @@
     { label: 'Overview', items: [
       { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub' },
       { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar' },
-      { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner' },
+      { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner',   key: 'annual-planner' },
       { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks' },
     ]},
     { label: 'Technical', items: [
@@ -159,7 +159,7 @@
       { href: 'Exercises%20Library.html',icon: 'ti-list-tree',         label: 'Exercises Library', key: 'sessions-lib' },
       { href: 'Daily%20Planning.html',  icon: 'ti-soccer-field',     label: 'Daily planning',   key: 'daily-planning' },
       { href: 'Sessions%20History.html',icon: 'ti-history',           label: 'Sessions history', key: 'sessions-history' },
-      { href: 'Video%20Room.html',      icon: 'ti-video',            label: 'Video room' },
+      { href: 'Video%20Room.html',      icon: 'ti-video',            label: 'Video room',       key: 'video-room' },
       { href: 'Squad.html',             icon: 'ti-users-group',      label: 'Squad',            key: 'squad' },
       { href: 'Lineup.html',            icon: 'ti-clipboard-check',  label: 'Lineup', count: 'XI', key: 'lineup' },
       { href: 'Availability.html',      icon: 'ti-user-check',       label: 'Availability',     key: 'availability' },

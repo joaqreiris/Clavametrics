@@ -187,6 +187,7 @@
     { key:'individual-sc',    href:'Individual Plans.html',    icon:'ti-user-cog',          name:'Individual S&C',        feature:'individual_planner' },
     { key:'gym-library',      href:'Gym Library.html',         icon:'ti-books',             name:'Gym library',           feature:'gym' },
     { key:'nutrition',        href:'Nutrition.html',           icon:'ti-apple',             name:'Nutrition',             feature:'nutrition' },
+    { key:'clinical',         href:'Clinical Records.html',    icon:'ti-clipboard-heart',   name:'Clinical records',      feature:null },
     { key:'injuries',         href:'Injuries.html',            icon:'ti-bandage',           name:'Injuries',              feature:'injuries' },
     { key:'treatments',       href:'Physio.html',              icon:'ti-stethoscope',       name:'Treatments',            feature:'physio' },
     { key:'rehab',            href:'Rehab & Preventives.html', icon:'ti-activity-heartbeat',name:'Rehab & preventives',   feature:'rehab_planner' },
