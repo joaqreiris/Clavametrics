@@ -103,7 +103,7 @@
       </header>
 
       <!-- Summary -->
-      <div class="cm-card tr-summary" style="margin-bottom:16px;">
+      <div class="cm-card tr-summary" id="summaryCard" style="margin-bottom:16px;">
         <div class="tr-sum-lead">
           <span class="num" id="sumDone">0</span><span class="den" id="sumDen">/ 0</span>
           <span class="lab">RPE submitted</span>
@@ -125,7 +125,7 @@
       </div>
 
       <!-- Toolbar -->
-      <div class="tr-toolbar">
+      <div class="tr-toolbar" id="toolbar">
         <div class="tr-seg" data-seg="tab">
           <button class="is-active" data-tab="responded"><i class="ti ti-checks"></i>Responded<span class="pipn" id="pipResp">0</span></button>
           <button data-tab="pending"><i class="ti ti-clock-hour-4"></i>Pending<span class="pipn" id="pipPend">0</span></button>
@@ -265,7 +265,7 @@
 
   const PAIN_LABELS = { hamstring:'Hamstring', quads:'Quads', calves:'Calves', groin:'Groin', knee:'Knee', ankle:'Ankle', shoulder:'Shoulder', back:'Lower back' };
   const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false,
-                  sessionsById:{}, recent:[], responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
+                  hasSessions:false, sessionsById:{}, recent:[], responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
 
   const T = window.Triage;
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
@@ -419,8 +419,13 @@
 
   function orphanHTML(o) {
     const b = T.bandRpe(o.rpe);
-    const opts = state.recent.slice(0, 5).map(s => `<option value="${s.id}">${T.escape(sessionLabelDur(s))}</option>`).join('')
-      || '<option value="">No recent sessions</option>';
+    const canAssign = state.recent.length > 0;
+    const opts = state.recent.slice(0, 5).map(s => `<option value="${s.id}">${T.escape(sessionLabelDur(s))}</option>`).join('');
+    const assignInner = canAssign
+      ? `<select class="cm-select" aria-label="Session for ${T.escape(o.name)}">${opts}</select>
+        <button class="cm-btn is-primary is-sm o-assign-btn"><i class="ti ti-plug-connected"></i>Assign</button>`
+      : `<span style="font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-faint);">Create a session to assign</span>
+        <button class="cm-btn is-primary is-sm o-assign-btn" disabled><i class="ti ti-plug-connected"></i>Assign</button>`;
     return `
     <div class="orphan" data-id="${o.id}">
       <div class="pc-id">
@@ -432,8 +437,7 @@
       <div class="o-rpe ${b.sev}"><span class="v">${o.rpe}</span><span class="u">RPE</span></div>
       <div class="o-sent"><i class="ti ti-send" style="font-size:13px; margin-right:5px;"></i>Sent ${o.sent}</div>
       <div class="o-assign">
-        <select class="cm-select" aria-label="Session for ${T.escape(o.name)}">${opts}</select>
-        <button class="cm-btn is-primary is-sm o-assign-btn"><i class="ti ti-plug-connected"></i>Assign</button>
+        ${assignInner}
       </div>
     </div>`;
   }
@@ -459,6 +463,27 @@
     const empty = document.getElementById('empty');
     const err = document.getElementById('errState');
     const orphanWrap = document.getElementById('orphanWrap');
+    const summaryCard = document.getElementById('summaryCard');
+    const toolbar = document.getElementById('toolbar');
+
+    // No-session gate: without a session there is no expected participant set, so
+    // don't render the summary/lists/counts — only an honest empty state. Capture
+    // (and the orphan section below) stays visible.
+    if (!state.hasSessions) {
+      summaryCard.style.display = 'none';
+      toolbar.style.display = 'none';
+      respWrap.style.display = 'none';
+      pendWrap.style.display = 'none';
+      skel.style.display = 'none';
+      if (err) err.style.display = 'none';
+      document.getElementById('emptyH').textContent = 'No session yet';
+      document.getElementById('emptyP').textContent = 'RPE is tied to a session. Player submissions are still captured and will appear below as unlinked — assign them to a session once you create one.';
+      empty.style.display = '';
+      orphanWrap.style.display = state.orphans.length ? '' : 'none';
+      return;
+    }
+    summaryCard.style.display = '';
+    toolbar.style.display = '';
 
     const done = state.responders.length;
     const total = state.total;
@@ -581,6 +606,7 @@
     if (activeTeam) q = q.eq('team_id', activeTeam);
     const { data, error } = await q.order('session_date', { ascending: false }).limit(8);
     const sessions = error ? [] : (data || []);
+    state.hasSessions = sessions.length > 0;
     state.sessionsById = {};
     sessions.forEach(s => { state.sessionsById[s.id] = s; });
     sel.innerHTML = sessions.length
