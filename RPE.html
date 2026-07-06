@@ -3,278 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPE check-in — ClavaMetrics</title>
+<title>Session RPE Monitor — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
+<link rel="stylesheet" href="triage.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
   <link rel="apple-touch-icon" href="/assets/clava-app-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ClavaMetrics">
-<style>
-  body.cm {
-    background:
-      radial-gradient(ellipse 60% 50% at 80% 0%, color-mix(in srgb, var(--cm-warning) 8%, transparent) 0%, transparent 60%),
-      radial-gradient(ellipse 40% 40% at 20% 100%, color-mix(in srgb, var(--cm-accent) 6%, transparent) 0%, transparent 60%),
-      var(--cm-bg-soft);
-    min-height: 100vh;
-  }
-
-  .canvas {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 40px 32px;
-    display: block;
-  }
-  @media (max-width: 1000px) { .canvas { padding: 24px; } }
-
-  /* Secondary collapsible zones — native-feeling */
-  .cm-fold {
-    border: 0.5px solid var(--cm-border);
-    border-radius: var(--cm-r-4);
-    margin-top: 24px;
-    padding: 0 18px;
-  }
-  .cm-fold > summary {
-    cursor: pointer;
-    padding: 14px 0;
-    font: 600 13.5px/1.2 var(--cm-font-sans);
-    color: var(--cm-fg-strong);
-  }
-  .cm-fold[open] > summary { margin-bottom: 14px; border-bottom: 0.5px solid var(--cm-border); }
-  .cm-fold > :not(summary):last-child { margin-bottom: 18px; }
-
-  .ctx h1 { font: 600 32px/1.1 var(--cm-font-sans); letter-spacing: -0.025em; color: var(--cm-fg-strong); margin-bottom: 12px; }
-  .ctx p { font: var(--cm-body); color: var(--cm-fg-muted); margin-bottom: 20px; }
-  .ctx-link { display:inline-flex; align-items:center; gap:8px; color:var(--cm-fg); text-decoration:none; font:500 13.5px/1 var(--cm-font-sans); padding:8px 12px; border:1px solid var(--cm-border); border-radius:8px; background:var(--cm-surface); margin-bottom:24px; }
-  .ctx-link:hover { border-color:var(--cm-border-strong); }
-  .ctx-link .ti { font-size:16px; color:var(--cm-fg-muted); }
-
-  .ctx-card { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:16px; margin-bottom:12px; box-shadow:var(--cm-shadow-1); }
-  .ctx-card h3 { font:600 13.5px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); margin-bottom:6px; }
-  .ctx-card p { font:var(--cm-body-sm); color:var(--cm-fg-muted); }
-  .ctx-eyebrow { font:500 11px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); margin-bottom:10px; }
-  .ctx-section { margin-top:24px; }
-
-  /* Phones */
-  .phones { display:flex; gap:36px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
-
-  .ph {
-    width:386px; max-width:96vw;
-    background:linear-gradient(180deg, #FAFAF9 0%, #FFFFFF 100%);
-    color:#0A0A0A;
-    border-radius:44px;
-    border:8px solid #1a1a1a;
-    box-shadow: var(--cm-shadow-3);
-    overflow:hidden;
-    position:relative;
-    padding-bottom:8px;
-  }
-  .ph.dark { background:linear-gradient(180deg, #0A0A0A 0%, #111 100%); color:#EDEDED; }
-  .ph::before {
-    content:""; position:absolute; top:8px; left:50%; transform:translateX(-50%);
-    width:120px; height:28px; background:#1a1a1a; border-radius:0 0 16px 16px; z-index:5;
-  }
-  .ph-status { display:flex; align-items:center; justify-content:space-between; padding:14px 28px 6px; font:600 12.5px/1 var(--cm-font-sans); color:inherit; }
-  .ph-status .icons { display:flex; gap:5px; align-items:center; font-size:12px; }
-  .ph-body-inner {
-    height: 760px;
-    overflow-y:auto;
-    padding-bottom:24px;
-  }
-  .ph-body-inner::-webkit-scrollbar { width:0; }
-
-  .ph-header { padding:8px 22px 14px; display:flex; align-items:center; justify-content:space-between; }
-  .ph-header .date { font:500 12px/1 var(--cm-font-mono); letter-spacing:0.04em; text-transform:uppercase; color:#6B7280; }
-  .ph.dark .ph-header .date { color:#9CA3AF; }
-  .ph-header .avatar { width:32px; height:32px; border-radius:50%; background:rgba(245,158,11,0.18); color:#B45309; display:flex; align-items:center; justify-content:center; font:600 12px/1 var(--cm-font-sans); border:1px solid rgba(245,158,11,0.30); }
-
-  .ph-hero { padding:4px 22px 20px; }
-  .ph-hero .eyebrow {
-    font:500 11px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase;
-    color:#D97706; margin-bottom:10px; display:inline-flex; align-items:center; gap:6px;
-  }
-  .ph.dark .ph-hero .eyebrow { color:#FACC15; }
-  .ph-hero .eyebrow .dot { width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; }
-  .ph-hero h1 { font:600 26px/1.15 var(--cm-font-sans); letter-spacing:-0.02em; color:#0A0A0A; margin-bottom:6px; }
-  .ph.dark .ph-hero h1 { color:#fff; }
-  .ph-hero p { font:400 14px/1.45 var(--cm-font-sans); color:#6B7280; }
-  .ph.dark .ph-hero p { color:#9CA3AF; }
-
-  /* Session context card */
-  .session-card {
-    margin:0 22px 22px;
-    background:linear-gradient(135deg, rgba(245,158,11,0.10), rgba(245,158,11,0.04));
-    border:1px solid rgba(245,158,11,0.25);
-    border-radius:14px;
-    padding:14px;
-  }
-  .ph.dark .session-card { background:linear-gradient(135deg, rgba(245,158,11,0.18), rgba(245,158,11,0.05)); border-color:rgba(245,158,11,0.30); }
-  .session-card .row { display:flex; align-items:center; gap:10px; }
-  .session-card .ic { width:36px; height:36px; border-radius:9px; background:rgba(245,158,11,0.18); color:#B45309; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .ph.dark .session-card .ic { color:#FACC15; }
-  .session-card .ic .ti { font-size:18px; }
-  .session-card h3 { font:600 14px/1.2 var(--cm-font-sans); color:#0A0A0A; }
-  .ph.dark .session-card h3 { color:#fff; }
-  .session-card .meta { font:500 11.5px/1.3 var(--cm-font-mono); color:#9A6520; margin-top:2px; }
-  .ph.dark .session-card .meta { color:#FCD34D; }
-  .session-card .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
-  .session-card .stat { background:rgba(255,255,255,0.5); border-radius:8px; padding:8px 10px; }
-  .ph.dark .session-card .stat { background:rgba(255,255,255,0.06); }
-  .session-card .stat-l { font:500 10px/1 var(--cm-font-mono); letter-spacing:0.06em; text-transform:uppercase; color:#9A6520; margin-bottom:4px; }
-  .ph.dark .session-card .stat-l { color:#FCD34D; }
-  .session-card .stat-v { font:600 14px/1.2 var(--cm-font-sans); color:#0A0A0A; }
-  .ph.dark .session-card .stat-v { color:#fff; }
-
-  /* Main RPE scale (CR-10 Borg vertical) */
-  .rpe-section { padding:0 22px 18px; }
-  .rpe-q { font:600 16px/1.3 var(--cm-font-sans); color:#0A0A0A; margin-bottom:6px; }
-  .ph.dark .rpe-q { color:#fff; }
-  .rpe-q-sub { font:500 12.5px/1.4 var(--cm-font-sans); color:#6B7280; margin-bottom:18px; }
-  .ph.dark .rpe-q-sub { color:#9CA3AF; }
-
-  .rpe-vscale { display:flex; flex-direction:column; gap:6px; }
-  .rpe-row {
-    display:grid;
-    grid-template-columns: 50px 1fr;
-    align-items:center;
-    gap:10px;
-    padding:6px 10px;
-    border-radius:10px;
-    cursor:pointer;
-    border:1.5px solid transparent;
-    transition:background 120ms, border-color 120ms, transform 120ms;
-  }
-  .rpe-row:hover { background:rgba(0,0,0,0.03); }
-  .ph.dark .rpe-row:hover { background:rgba(255,255,255,0.04); }
-  .rpe-row.is-on {
-    background:rgba(245,158,11,0.10);
-    border-color:rgba(245,158,11,0.40);
-    transform:scale(1.02);
-  }
-  .ph.dark .rpe-row.is-on { background:rgba(245,158,11,0.18); }
-  .rpe-num {
-    width:42px; height:42px; border-radius:11px;
-    display:flex; align-items:center; justify-content:center;
-    font:700 18px/1 var(--cm-font-mono);
-    color:#fff;
-    flex-shrink:0;
-  }
-  .rpe-num.v0 { background:#9CA3AF; }
-  .rpe-num.v1, .rpe-num.v2 { background:#60A5FA; }
-  .rpe-num.v3, .rpe-num.v4 { background:#22C55E; }
-  .rpe-num.v5, .rpe-num.v6 { background:#FACC15; color:#0A0A0A; }
-  .rpe-num.v7, .rpe-num.v8 { background:#FB923C; }
-  .rpe-num.v9, .rpe-num.v10 { background:#EF4444; }
-  .rpe-row .lbl { display:flex; flex-direction:column; gap:2px; min-width:0; }
-  .rpe-row .lbl strong { font:600 13.5px/1.2 var(--cm-font-sans); color:#0A0A0A; }
-  .ph.dark .rpe-row .lbl strong { color:#fff; }
-  .rpe-row .lbl small { font:500 11.5px/1.3 var(--cm-font-sans); color:#6B7280; }
-  .ph.dark .rpe-row .lbl small { color:#9CA3AF; }
-
-  /* sRPE preview */
-  .srpe-preview {
-    margin:0 22px 18px;
-    padding:12px 14px;
-    background:rgba(0,0,0,0.04);
-    border-radius:12px;
-  }
-  .ph.dark .srpe-preview { background:rgba(255,255,255,0.05); }
-  .srpe-row { display:flex; align-items:baseline; justify-content:space-between; }
-  .srpe-row .l { font:500 11.5px/1 var(--cm-font-mono); color:#6B7280; letter-spacing:0.06em; text-transform:uppercase; }
-  .ph.dark .srpe-row .l { color:#9CA3AF; }
-  .srpe-row .v { font:600 22px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:#0A0A0A; }
-  .ph.dark .srpe-row .v { color:#fff; }
-  .srpe-row .v sub { font:500 12px/1 var(--cm-font-mono); color:#9CA3AF; margin-left:3px; }
-  .srpe-formula { margin-top:8px; font:500 11px/1.4 var(--cm-font-mono); color:#9CA3AF; }
-
-  /* Body parts (where did you feel it most?) */
-  .pp-chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 22px 20px; }
-  .pp-chip {
-    appearance:none;
-    border:1px solid rgba(0,0,0,0.12); background:transparent;
-    padding:7px 12px; border-radius:999px;
-    font:500 12.5px/1 var(--cm-font-sans); color:#6B7280;
-    cursor:pointer;
-  }
-  .ph.dark .pp-chip { border-color:rgba(255,255,255,0.12); color:#9CA3AF; }
-  .pp-chip.is-on {
-    background:rgba(220,38,38,0.10); border-color:rgba(220,38,38,0.40); color:#B91C1C;
-  }
-  .ph.dark .pp-chip.is-on { background:rgba(239,68,68,0.18); color:#FCA5A5; }
-
-  /* Note */
-  .ph-note {
-    margin:0 22px 18px;
-    width:calc(100% - 44px); padding:10px 12px;
-    border:1px solid rgba(0,0,0,0.10); border-radius:12px;
-    background:transparent; resize:none; min-height:60px;
-    font:var(--cm-body-sm); color:#0A0A0A; outline:none;
-  }
-  .ph.dark .ph-note { border-color:rgba(255,255,255,0.10); color:#fff; }
-
-  /* Submit */
-  .ph-submit-wrap { padding:8px 22px 18px; position:sticky; bottom:0; background:linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.95) 30%, #FFF 100%); }
-  .ph.dark .ph-submit-wrap { background:linear-gradient(180deg, transparent 0%, rgba(10,10,10,0.95) 30%, #0A0A0A 100%); }
-  .ph-submit { width:100%; height:50px; border:0; border-radius:14px; background:#D97706; color:#fff; font:600 15.5px/1 var(--cm-font-sans); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 8px 24px rgba(217,119,6,0.30); }
-  .ph.dark .ph-submit { background:#F59E0B; color:#0A0A0A; box-shadow:0 8px 24px rgba(245,158,11,0.30); }
-
-  /* === Confirmation phone === */
-  .ph-success { padding:20px 22px; text-align:center; }
-  .ph-success .ic-wrap { width:84px; height:84px; border-radius:50%; background:rgba(217,119,6,0.12); display:flex; align-items:center; justify-content:center; margin:32px auto 18px; }
-  .ph.dark .ph-success .ic-wrap { background:rgba(245,158,11,0.18); }
-  .ph-success .ic-wrap .num { font:700 36px/1 var(--cm-font-sans); color:#D97706; letter-spacing:-0.02em; }
-  .ph.dark .ph-success .ic-wrap .num { color:#FACC15; }
-  .ph-success h2 { font:600 22px/1.2 var(--cm-font-sans); letter-spacing:-0.02em; color:#0A0A0A; margin-bottom:6px; }
-  .ph.dark .ph-success h2 { color:#fff; }
-  .ph-success p { font:var(--cm-body-sm); color:#6B7280; margin-bottom:24px; }
-  .ph.dark .ph-success p { color:#9CA3AF; }
-
-  /* Score summary */
-  .summary-card { background:rgba(0,0,0,0.03); border-radius:14px; padding:14px; margin:0 8px 14px; text-align:left; }
-  .ph.dark .summary-card { background:rgba(255,255,255,0.05); }
-  .summary-row { display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid rgba(0,0,0,0.06); }
-  .ph.dark .summary-row { border-color:rgba(255,255,255,0.06); }
-  .summary-row:last-child { border-bottom:0; }
-  .summary-row .ic { width:30px; height:30px; border-radius:8px; background:rgba(0,0,0,0.05); display:flex; align-items:center; justify-content:center; color:#6B7280; flex-shrink:0; }
-  .ph.dark .summary-row .ic { background:rgba(255,255,255,0.06); color:#9CA3AF; }
-  .summary-row .ic .ti { font-size:15px; }
-  .summary-row .l { flex:1; font:500 13.5px/1.2 var(--cm-font-sans); color:#0A0A0A; }
-  .ph.dark .summary-row .l { color:#fff; }
-  .summary-row .v { font:600 14px/1 var(--cm-font-mono); color:#D97706; }
-  .ph.dark .summary-row .v { color:#FACC15; }
-
-  /* 7-day chart */
-  .history-card { background:rgba(0,0,0,0.03); border-radius:14px; padding:14px; margin:0 8px 14px; text-align:left; }
-  .ph.dark .history-card { background:rgba(255,255,255,0.05); }
-  .history-card .h-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; }
-  .history-card .h-head .t { font:600 13px/1 var(--cm-font-sans); color:#0A0A0A; }
-  .ph.dark .history-card .h-head .t { color:#fff; }
-  .history-card .h-head .s { font:500 11.5px/1 var(--cm-font-mono); color:#6B7280; }
-  .ph.dark .history-card .h-head .s { color:#9CA3AF; }
-  .history-bars { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; align-items:end; height:80px; margin-bottom:8px; }
-  .history-bars .bar { border-radius:5px; background:#D1D5DB; }
-  .history-bars .bar.med { background:#FACC15; }
-  .history-bars .bar.high { background:#FB923C; }
-  .history-bars .bar.peak { background:#EF4444; }
-  .history-bars .bar.today { background:#D97706; }
-  .history-labels { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; font:500 10.5px/1 var(--cm-font-mono); color:#9CA3AF; text-align:center; }
-  .history-labels .lbl.today { color:#D97706; font-weight:700; }
-
-  .canvas-legend { text-align:center; margin-top:14px; font:500 12px/1 var(--cm-font-mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--cm-fg-muted); }
-  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
-  .ph-select {
-    width:100%; padding:9px 12px;
-    border:1px solid rgba(0,0,0,0.12); border-radius:10px;
-    background:rgba(255,255,255,0.6); font:500 13.5px/1 var(--cm-font-sans);
-    color:#0A0A0A; outline:none; cursor:pointer; margin:0 22px 16px;
-    width:calc(100% - 44px);
-  }
-  .ph.dark .ph-select { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.12); color:#fff; color-scheme:dark; }
-  .ph-select:focus { border-color:rgba(217,119,6,0.5); }
-</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
+<script src="assets/sidebar.js"></script>
+<script defer src="triage.js"></script>
+<style>
+  body.cm { background: var(--cm-bg); }
+
+  /* Topbar (mirrors Load Monitor chrome) ------------------- */
+  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-crumb .ti { font-size:14px; }
+  .hub-crumb .sep { color:var(--cm-fg-faint); }
+  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
+  .hub-search input::placeholder { color:var(--cm-fg-faint); }
+  .hub-search .ti { font-size:16px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+
+  /* Page --------------------------------------------------- */
+  .tr-page { padding:24px 28px 64px; max-width:1400px; width:100%; }
+  .tr-page > .cm-page-header { align-items:flex-start; margin-bottom:16px; }
+  .tr-page h1 { font:600 26px/1.1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
+  .tr-page #pgSub { font:var(--cm-body); color:var(--cm-fg-muted); margin-top:4px; }
+
+  #tweaks-root { position: fixed; bottom: 16px; right: 16px; z-index: 1000; }
+</style>
 </head>
 <body class="cm">
 <div id="appBoot" aria-hidden="true" style="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--cm-bg,var(--cm-surface,#fff))">
@@ -283,693 +46,557 @@
 <style>@keyframes appspin{to{transform:rotate(360deg)}}</style>
 <script>(function(){var d=false;function h(){if(d)return;d=true;var b=document.getElementById('appBoot');if(b){b.style.transition='opacity .18s';b.style.opacity='0';setTimeout(function(){b.remove();},220);}}var t=setTimeout(h,1200);if(window.MutationObserver){var mo=new MutationObserver(function(){clearTimeout(t);t=setTimeout(h,500);});document.addEventListener('DOMContentLoaded',function(){if(document.body)mo.observe(document.body,{childList:true,subtree:true});});}setTimeout(h,6000);})();</script>
 
-<div class="canvas" data-screen-label="15 RPE">
+<div class="hub-shell" data-screen-label="15 RPE">
 
-  <aside class="ctx">
-    <a class="ctx-link" href="Hub.html"><i class="ti ti-arrow-left"></i>Back to Staff Hub</a>
-    <h1>Session RPE</h1>
-    <div class="ctx-section">
-      <button class="cm-btn is-outline" style="width:100%" onclick="linkPendingRpe(this)">
-        <i class="ti ti-link" style="font-size:15px"></i><span>Auto-link today's RPE</span>
-      </button>
-      <p style="font:400 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-top:6px">
-        Links today's submitted RPE to today's session and calculates load (sRPE).
-      </p>
-      <div id="pendingRpeWrap" style="margin-top:16px">
-        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px">
-          <i class="ti ti-clock-exclamation" style="font-size:14px"></i>Late RPE without a session
-        </div>
-        <div id="pendingRpeList" style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-          <div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
-        </div>
-      </div>
-      <div id="rpeChecklistWrap" style="margin-top:18px">
-        <div class="ctx-eyebrow" style="display:flex;align-items:center;gap:6px"><i class="ti ti-list-check" style="font-size:14px"></i>Checklist by session</div>
-        <select id="checklistSession" onchange="loadRpeChecklist()" style="width:100%;height:34px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 12px/1 var(--cm-font-sans);margin-top:8px">
-          <option value="">Pick a session…</option>
+  <!-- Sidebar (sidebar.js injects it) -->
+  <div id="hub-side-root"></div>
+
+  <!-- Main -->
+  <main class="hub-main">
+
+    <div class="hub-topbar">
+      <div style="display:flex;align-items:center;gap:7px">
+        <i class="ti ti-calendar-event" style="font-size:16px;color:var(--cm-fg-muted)"></i>
+        <select id="rmSessionSelect" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer">
+          <option selected>Sat Jul 5 · Field · MD-2 · 82'</option>
+          <option>Fri Jul 4 · AM Gym</option>
+          <option>Fri Jul 4 · PM Field</option>
+          <option>Thu Jul 3 · Field · MD-4</option>
         </select>
-        <div id="checklistBody" style="margin-top:10px"></div>
+      </div>
+      <div class="hub-crumb">
+        <i class="ti ti-activity-heartbeat"></i><span>Performance</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600">Session RPE</span>
+      </div>
+      <div class="hub-search">
+        <i class="ti ti-search"></i>
+        <input placeholder="Search players, sessions…">
+      </div>
+      <div class="actions">
+        <button class="cm-icon-btn" id="rmRefresh" title="Refresh"><i class="ti ti-refresh"></i></button>
+        <button class="cm-btn is-secondary is-sm" id="rmAutoLink"><i class="ti ti-link-plus"></i>Auto-link today's RPE</button>
+        <button class="cm-btn is-primary is-sm" data-modal-open="rmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
-    <div class="ctx-section">
-      <button class="cm-btn is-primary" style="width:100%" onclick="openShareRpe()">
-        <i class="ti ti-share" style="font-size:15px"></i>Share link with players
-      </button>
+
+    <section class="tr-page">
+
+      <header class="cm-page-header">
+        <div style="flex:1;">
+          <div class="cm-eyebrow" style="margin-bottom:8px;">Session load control</div>
+          <h1>Session RPE</h1>
+          <p id="pgSub">Post-session check</p>
+        </div>
+      </header>
+
+      <!-- Summary -->
+      <div class="cm-card tr-summary" style="margin-bottom:16px;">
+        <div class="tr-sum-lead">
+          <span class="num" id="sumDone">0</span><span class="den" id="sumDen">/ 0</span>
+          <span class="lab">RPE submitted</span>
+        </div>
+        <div class="tr-sum-stats">
+          <div class="tr-sum-stat">
+            <div class="k"><i class="ti ti-flame"></i>Avg sRPE</div>
+            <div class="v" id="sumSrpe">0</div>
+          </div>
+          <div class="tr-sum-stat">
+            <div class="k"><i class="ti ti-arrow-up-right"></i>High RPE (≥8)</div>
+            <div class="v is-flag" id="sumHigh">0</div>
+          </div>
+          <div class="tr-sum-stat">
+            <div class="k"><i class="ti ti-unlink"></i>Late / unlinked</div>
+            <div class="v" id="sumOrphan">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="tr-toolbar">
+        <div class="tr-seg" data-seg="tab">
+          <button class="is-active" data-tab="responded"><i class="ti ti-checks"></i>Responded<span class="pipn" id="pipResp">0</span></button>
+          <button data-tab="pending"><i class="ti ti-clock-hour-4"></i>Pending<span class="pipn" id="pipPend">0</span></button>
+        </div>
+        <div class="tr-spacer"></div>
+        <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i>Sorted highest RPE first</div>
+        <div class="tr-layout-toggle">
+          <span class="lab">Card</span>
+          <div class="tr-seg" data-layout-toggle="#listResponded">
+            <button class="is-active" data-layout="numeric"><i class="ti ti-number-9"></i>Numeric</button>
+            <button data-layout="gauge"><i class="ti ti-gauge"></i>Gauge</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Responded -->
+      <div id="respWrap">
+        <div class="tr-list" id="listResponded"></div>
+      </div>
+
+      <!-- Pending -->
+      <div id="pendWrap" style="display:none;">
+        <div class="tr-remind">
+          <span class="ic"><i class="ti ti-clock-pause"></i></span>
+          <div class="tx">
+            <div class="t" id="remindT">Some players haven't submitted RPE for this session</div>
+            <div class="s">Session ended recently · RPE window is best within 30 min of finishing.</div>
+          </div>
+          <button class="cm-btn is-wa" id="remindBtn"><i class="ti ti-brand-whatsapp"></i>Remind missing (0)</button>
+        </div>
+        <div class="tr-list" id="listPending" style="gap:8px;"></div>
+      </div>
+
+      <!-- Loading skeleton (wired next step) -->
+      <div id="skeleton" style="display:none;">
+        <div class="tr-list"></div>
+      </div>
+
+      <!-- Empty (wired next step) -->
+      <div id="empty" style="display:none;">
+        <div class="tr-empty">
+          <span class="ic"><i class="ti ti-inbox"></i></span>
+          <h3 id="emptyH">No RPE submitted yet</h3>
+          <p id="emptyP">The session just ended. Share the RPE link so players can rate it while it's fresh.</p>
+          <button class="cm-btn is-primary" data-modal-open="rmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+        </div>
+      </div>
+
+      <!-- ── Late RPE — needs a session ── -->
+      <div id="orphanWrap">
+        <div class="tr-group-label" style="margin-top:34px;">
+          <h2>Late RPE — needs a session</h2>
+          <span class="count" id="orphanCount">0 unlinked</span>
+          <span class="right"><span class="tr-sortnote"><i class="ti ti-info-circle"></i>Attach each to the right session to compute its load</span></span>
+        </div>
+        <div id="listOrphans"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ── Share modal ── -->
+<div class="tr-overlay" id="rmShareModal">
+  <div class="tr-modal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <div class="tr-modal-head">
+      <span class="ic"><i class="ti ti-link"></i></span>
+      <div>
+        <h3 id="shareTitle">Share RPE link</h3>
+        <p>Players rate the session, no login needed.</p>
+      </div>
+      <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
     </div>
-    <div id="shareRBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
-      <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:440px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
-        <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
-          <i class="ti ti-share" style="font-size:18px;color:var(--cm-accent)"></i>
-          <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Share RPE</div>
-          <button onclick="closeShareRpe()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    <div class="tr-modal-body">
+      <div>
+        <div class="tr-field-lab">Team</div>
+        <select class="cm-select" id="shareTeam" style="cursor:pointer;">
+          <option selected>First team</option>
+          <option>Whole club</option>
+          <option>U21 squad</option>
+          <option>U18 squad</option>
+        </select>
+      </div>
+      <div>
+        <div class="tr-field-lab">Attach to session (optional)</div>
+        <select class="cm-select" id="shareSession" style="cursor:pointer;">
+          <option selected>Sat Jul 5 · Field · MD-2</option>
+          <option>Don't attach — link now, assign later</option>
+          <option>Fri Jul 4 · PM Field</option>
+          <option>Fri Jul 4 · AM Gym</option>
+        </select>
+      </div>
+      <div>
+        <div class="tr-field-lab">Tokenized link</div>
+        <div class="tr-linkrow is-empty" id="linkRow">
+          <span class="url" id="linkUrl">Generate a secure link for this team</span>
+          <button class="cm-btn is-secondary is-sm" id="btnGen"><i class="ti ti-sparkles"></i>Generate</button>
         </div>
-        <div style="padding:18px">
-          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Team</label>
-          <select id="shareRTeam" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px"></select>
-          <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin:0 0 6px">Session (optional · for exact checklist)</label>
-          <select id="shareRSession" style="width:100%;height:38px;padding:0 10px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:8px;font:500 14px/1 var(--cm-font-sans);margin-bottom:14px">
-            <option value="">No session (linked by date)</option>
-          </select>
-          <button class="cm-btn is-primary" style="width:100%" onclick="genShareRpe()"><i class="ti ti-link" style="font-size:14px"></i>Generate link</button>
-          <div id="shareRResult" style="display:none;margin-top:14px">
-            <div style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Link (valid until you revoke it):</div>
-            <div style="display:flex;gap:8px">
-              <input id="shareRUrl" readonly style="flex:1;height:38px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:8px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg)">
-              <button class="cm-btn is-outline is-sm" onclick="copyShareRpe()" id="shareRCopy"><i class="ti ti-copy" style="font-size:14px"></i>Copy</button>
-            </div>
-            <a id="shareRWa" target="_blank" class="cm-btn is-outline is-sm" style="width:100%;margin-top:8px;justify-content:center"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Share via WhatsApp</a>
-          </div>
+        <div class="tr-token-note" id="tokNote" style="margin-top:9px; display:none;">
+          <i class="ti ti-shield-check"></i>One-time token · expires in 12h
         </div>
       </div>
     </div>
-    <!-- Zone 2: secondary — preview, collapsed -->
-    <details class="cm-fold">
-      <summary>Preview — what players see</summary>
-      <section class="phones">
-
-    <!-- Phone 1: FORM -->
-    <div>
-      <div class="ph">
-        <div class="ph-status">
-          <span>9:24</span>
-          <span class="icons"><i class="ti ti-signal-4"></i><i class="ti ti-wifi"></i><i class="ti ti-battery-3"></i></span>
-        </div>
-        <div class="ph-body-inner">
-          <div class="ph-header">
-            <span class="date" id="ph1Date">Wed · 14 May · 21:55</span>
-            <div class="avatar" id="ph1Avatar">—</div>
-          </div>
-
-          <div class="ph-hero">
-            <span class="eyebrow"><span class="dot"></span>Session RPE</span>
-            <h1 id="heroTitle">How hard was the session?</h1>
-            <p id="heroSub">Loading session…</p>
-          </div>
-
-          <select class="ph-select" id="playerSelect">
-            <option value="">Select player…</option>
-          </select>
-
-          <div class="session-card" id="sessionCard">
-            <div class="row">
-              <div class="ic"><i class="ti ti-ball-football" id="sessionIcon"></i></div>
-              <div>
-                <h3 id="sessionTitle">Loading…</h3>
-                <div class="meta" id="sessionMeta">—</div>
-              </div>
-            </div>
-            <div class="stats">
-              <div class="stat"><div class="stat-l">Duration</div><div class="stat-v" id="sessionDuration">—</div></div>
-              <div class="stat"><div class="stat-l">Type</div><div class="stat-v" id="sessionType">—</div></div>
-              <div class="stat"><div class="stat-l">Date</div><div class="stat-v" id="sessionDate">—</div></div>
-            </div>
-          </div>
-
-          <div class="rpe-section">
-            <div class="rpe-q">Rate the overall effort</div>
-            <div class="rpe-q-sub">Tap one number from 0 (rest) to 10 (maximal effort).</div>
-            <div class="rpe-vscale">
-              <div class="rpe-row"><div class="rpe-num v0">0</div><div class="lbl"><strong>Rest</strong><small>Nothing at all</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v1">1</div><div class="lbl"><strong>Very, very easy</strong><small>Just standing</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v2">2</div><div class="lbl"><strong>Easy</strong><small>Light walking</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v3">3</div><div class="lbl"><strong>Moderate</strong><small>Comfortable jog</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v4">4</div><div class="lbl"><strong>Somewhat hard</strong><small>Talking starts to break</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v5">5</div><div class="lbl"><strong>Hard</strong><small>Steady effort</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v6">6</div><div class="lbl"><strong>Hard +</strong><small>Hard to talk</small></div></div>
-              <div class="rpe-row is-on"><div class="rpe-num v7">7</div><div class="lbl"><strong>Very hard</strong><small>Sweating heavily · sustained</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v8">8</div><div class="lbl"><strong>Very hard +</strong><small>Hardly any conversation</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v9">9</div><div class="lbl"><strong>Extremely hard</strong><small>Almost maximal</small></div></div>
-              <div class="rpe-row"><div class="rpe-num v10">10</div><div class="lbl"><strong>Maximal</strong><small>Couldn't go harder</small></div></div>
-            </div>
-          </div>
-
-          <div class="srpe-preview">
-            <div class="srpe-row">
-              <span class="l">Session load (sRPE)</span>
-              <span class="v" id="srpeValue">— <sub>AU</sub></span>
-            </div>
-            <div class="srpe-formula" id="srpeFormula">Select RPE to calculate</div>
-          </div>
-
-          <div class="rpe-section">
-            <div class="rpe-q" style="font-size:14px">Where did you feel it most?</div>
-            <div class="rpe-q-sub" style="margin-bottom:12px">Optional · tag muscle groups that stood out</div>
-          </div>
-          <div class="pp-chips">
-            <button class="pp-chip">Hamstrings</button>
-            <button class="pp-chip is-on">Quadriceps</button>
-            <button class="pp-chip is-on">Calves</button>
-            <button class="pp-chip">Glutes</button>
-            <button class="pp-chip">Lower back</button>
-            <button class="pp-chip">Hip flexors</button>
-            <button class="pp-chip">Knees</button>
-            <button class="pp-chip">Ankles</button>
-            <button class="pp-chip">General fatigue</button>
-          </div>
-
-          <div class="rpe-section">
-            <div class="rpe-q" style="font-size:14px">Anything else?</div>
-            <div class="rpe-q-sub" style="margin-bottom:10px">Optional · only Dr. Acosta and Joaquín see this</div>
-          </div>
-          <textarea class="ph-note" placeholder="Slight tightness on the right quad late in the game, nothing serious."></textarea>
-
-          <div class="ph-submit-wrap">
-            <button class="ph-submit" id="submitBtn" onclick="submitRPE()" disabled>
-              <span id="submitLabel">Select player &amp; RPE</span> <i class="ti ti-arrow-right" style="font-size:16px"></i>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="canvas-legend">Form · CR-10 · score 7 picked</div>
+    <div class="tr-modal-foot">
+      <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i>Copy link</button>
+      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i>Share via WhatsApp</button>
     </div>
-
-    <!-- Phone 2: CONFIRMATION -->
-    <div>
-      <div class="ph">
-        <div class="ph-status">
-          <span>9:24</span>
-          <span class="icons"><i class="ti ti-signal-4"></i><i class="ti ti-wifi"></i><i class="ti ti-battery-3"></i></span>
-        </div>
-        <div class="ph-body-inner">
-          <div class="ph-header">
-            <span class="date" id="confDate">—</span>
-            <div class="avatar" id="confAvatar">—</div>
-          </div>
-
-          <div class="ph-success" id="confScreen">
-            <div class="ic-wrap"><span class="num" id="confRPE">—</span></div>
-            <h2 id="confTitle">Submit to record</h2>
-            <p id="confSub">Select a player and RPE value, then tap Send.</p>
-
-            <div class="summary-card">
-              <div class="summary-row"><div class="ic"><i class="ti ti-flame"></i></div><div class="l">RPE</div><div class="v" id="confRPEVal">—</div></div>
-              <div class="summary-row"><div class="ic"><i class="ti ti-clock"></i></div><div class="l">Duration</div><div class="v" id="confDuration">—</div></div>
-              <div class="summary-row"><div class="ic"><i class="ti ti-activity"></i></div><div class="l">Session load</div><div class="v" id="confLoad">—</div></div>
-              <div class="summary-row"><div class="ic"><i class="ti ti-user"></i></div><div class="l">Player</div><div class="v" id="confPlayer">—</div></div>
-            </div>
-
-            <div class="history-card">
-              <div class="h-head"><span class="t" id="confPlayerName">—</span><span class="s">sRPE · last 7</span></div>
-              <div class="history-bars" id="histBars"></div>
-              <div class="history-labels" id="histLabels">
-                <span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span>—</span><span class="lbl today">Today</span>
-              </div>
-            </div>
-
-            <div class="summary-card" style="background:linear-gradient(135deg, rgba(34,197,94,0.10), rgba(34,197,94,0.04)); border:1px solid rgba(34,197,94,0.25); margin-bottom:0">
-              <div style="display:flex; gap:10px; align-items:flex-start; padding:6px">
-                <div style="width:32px;height:32px;border-radius:8px;background:rgba(34,197,94,0.20);color:#15803D;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti ti-info-circle" style="font-size:16px"></i></div>
-                <div style="text-align:left;flex:1">
-                  <div style="font:600 13px/1.2 var(--cm-font-sans);color:#0A0A0A;margin-bottom:4px">ACWR this microcycle</div>
-                  <div style="font:500 12px/1.4 var(--cm-font-sans);color:#166534">1.12 · within the sweet spot. Stick to tomorrow's recovery plan.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="canvas-legend">Sent · sRPE 630 · ACWR 1.12</div>
-    </div>
-
-      </section>
-    </details>
-
-    <!-- Zone 2: secondary — context, collapsed -->
-    <details class="cm-fold">
-      <summary>About session RPE</summary>
-      <p>Posted to each player ~30 min after the final whistle. CR-10 Borg scale. Combined with session duration gives us <strong>sRPE = RPE × min</strong> — the daily load proxy that feeds the Load Monitor and ACWR.</p>
-
-      <div class="ctx-section">
-        <div class="ctx-eyebrow">Scale used</div>
-        <div class="ctx-card">
-          <h3>CR-10 Borg · adapted</h3>
-          <p>0 rest · 1-2 very easy · 3-4 moderate · 5-6 hard · 7-8 very hard · 9-10 maximal. Each row carries a verbal anchor in the player's language.</p>
-        </div>
-        <div class="ctx-card">
-          <h3>When &amp; how</h3>
-          <p>Auto-sent 30 min after session ends. Player picks one number, optionally tags body region + note. Total time on form: ~25 s.</p>
-        </div>
-        <div class="ctx-card">
-          <h3>Localized</h3>
-          <p>Anchors auto-translate EN ↔ ES per club preference. Designed for one-handed phone use during cool-down or on the bus.</p>
-        </div>
-      </div>
-
-      <div class="ctx-section">
-        <div class="ctx-eyebrow">Two states shown</div>
-        <p style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">Left: in-progress form with score 7 picked. Right: confirmation with sRPE result + 7-day history.</p>
-      </div>
-    </details>
-  </aside>
+  </div>
 </div>
 
 <div id="tweaks-root"></div>
 <div id="settings-host"></div>
 
-<script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
-<script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script>
+/* ============================================================
+   Session RPE Monitor — MOCK DATA ONLY (no Supabase wiring yet).
+   RESPONDED[] / PENDING[] / ORPHANS[] / SESSION_OPTIONS[] are the
+   seam the next step swaps for session_rpe_status / get_pending_rpe.
+   RPE 1–10; sRPE = RPE × session minutes. Band: green ≤4 · amber
+   5–7 · red ≥8.
+   ============================================================ */
+(function () {
+  // triage.js loads deferred, so window.Triage is only guaranteed at DOM-ready.
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); }
+  else { boot(); }
+
+  function boot() {
+  const PAIN_ICON = 'ti-body-scan';
+
+  const RESPONDED = [
+    { name:'T. Becker',  pos:'cb', rpe:9, min:88, pain:['Calves'], time:'12:41', comment:'Legs cooked after the running block, calves tight.' },
+    { name:'D. Okafor',  pos:'st', rpe:9, min:82, pain:[], time:'12:38', comment:'Hard one — cramped a bit near the end.' },
+    { name:'S. Petrov',  pos:'cb', rpe:8, min:90, pain:['Lower back'], time:'12:52', comment:'' },
+    { name:'K. Novak',   pos:'gk', rpe:8, min:70, pain:[], time:'12:35', comment:'Lot of high-intensity shot-stopping today.' },
+    { name:'Y. Demir',   pos:'mf', rpe:7, min:84, pain:[], time:'12:44', comment:'' },
+    { name:'F. Castro',  pos:'wg', rpe:7, min:80, pain:['Hamstring'], time:'12:49', comment:'Hamstring felt it on the last sprints.' },
+    { name:'O. Bauer',   pos:'fb', rpe:6, min:82, pain:[], time:'12:40', comment:'' },
+    { name:'P. Sorensen',pos:'st', rpe:6, min:78, pain:[], time:'12:47', comment:'' },
+    { name:'H. Tanaka',  pos:'mf', rpe:6, min:84, pain:[], time:'12:33', comment:'' },
+    { name:'G. Russo',   pos:'mf', rpe:5, min:80, pain:[], time:'12:42', comment:'' },
+    { name:'E. Moreau',  pos:'fb', rpe:5, min:82, pain:[], time:'12:36', comment:'' },
+    { name:'V. Lima',    pos:'wg', rpe:5, min:76, pain:[], time:'12:45', comment:'Felt good, sharp.' },
+    { name:'A. Ferrari', pos:'cb', rpe:4, min:82, pain:[], time:'12:39', comment:'' },
+    { name:'I. Costa',   pos:'st', rpe:4, min:60, pain:[], time:'12:31', comment:'Reduced load — return-to-play protocol.' },
+    { name:'N. Haddad',  pos:'mf', rpe:4, min:80, pain:[], time:'12:43', comment:'' },
+    { name:'J. Silva',   pos:'fb', rpe:4, min:82, pain:[], time:'12:37', comment:'' },
+    { name:'R. Mendes',  pos:'cb', rpe:3, min:84, pain:[], time:'12:34', comment:'' },
+    { name:'L. Romano',  pos:'wg', rpe:3, min:80, pain:[], time:'12:46', comment:'' },
+    { name:'M. Álvarez', pos:'st', rpe:3, min:82, pain:[], time:'12:32', comment:'' },
+    { name:'M. Diallo',  pos:'wg', rpe:2, min:45, pain:[], time:'12:29', comment:'Partial session — modified.' },
+  ];
+  const PENDING = [
+    { name:'B. Andersson', pos:'cb', elapsed:'has a late RPE below' },
+    { name:'R. Vidal',     pos:'mf', elapsed:'has a late RPE below' },
+    { name:'C. Nilsson',   pos:'gk', elapsed:'not yet submitted' },
+    { name:'L. Santos',    pos:'fb', elapsed:'not yet submitted' },
+  ];
+  // Orphan RPE submissions never tied to a session. Double-session days list each session separately.
+  const SESSION_OPTIONS = [
+    'Sat Jul 5 · Field · MD-2',
+    'Fri Jul 4 · PM Field',
+    'Fri Jul 4 · AM Gym',
+    'Thu Jul 3 · Field · MD-4',
+  ];
+  const ORPHANS = [
+    { name:'B. Andersson', pos:'cb', rpe:7, sent:'Fri Jul 4 · 21:14', suggest:'Fri Jul 4 · PM Field' },
+    { name:'R. Vidal',     pos:'mf', rpe:8, sent:'Fri Jul 4 · 20:58', suggest:'Fri Jul 4 · PM Field' },
+    { name:'L. Santos',    pos:'fb', rpe:4, sent:'Thu Jul 3 · 19:30', suggest:'Thu Jul 3 · Field · MD-4' },
+  ];
+
+  const T = window.Triage;
+  const srpe = p => p.rpe * p.min;
+  const SQUAD_AVG_SRPE = Math.round(RESPONDED.reduce((a, p) => a + srpe(p), 0) / RESPONDED.length);
+  const MAX_SRPE = Math.max(...RESPONDED.map(srpe));
+  const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
+  const POSLABEL = { gk:'GK', cb:'CB', fb:'FB', mf:'MF', wg:'WG', st:'ST' };
+
+  // Gauge zones for RPE (1–10): green ≤4, amber 5–7, red ≥8.
+  function gaugeVars() {
+    const gGreen = ((4.5 - 1) / 9 * 100).toFixed(1) + '%';
+    const gAmber = ((7.5 - 1) / 9 * 100).toFixed(1) + '%';
+    return `--g-green:${gGreen}; --g-amber:${gAmber};`;
+  }
+  const markerLeft = v => Math.max(0, Math.min(100, (v - 1) / 9 * 100)).toFixed(1) + '%';
+
+  function painChipsHTML(pain, max) {
+    if (!pain.length) return '';
+    const shown = pain.slice(0, max);
+    let html = shown.map(z => `<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${z}</span>`).join('');
+    if (pain.length > max) html += `<span class="pain-chip more">+${pain.length - max}</span>`;
+    return `<div class="pain-set">${html}</div>`;
+  }
+
+  function cardHTML(p) {
+    const b = T.bandRpe(p.rpe);
+    const load = srpe(p);
+    const hasNote = !!p.comment;
+    const flags = [];
+    if (p.pain.length) flags.push(painChipsHTML(p.pain, 2));
+    if (hasNote) flags.push(`<span class="pc-note-ic" title="Has a note"><i class="ti ti-message-2"></i></span>`);
+    const flagsHTML = flags.length ? flags.join('') : '<span style="font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint);">—</span>';
+
+    const painFull = p.pain.length
+      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${z}</span>`).join('')}</div></div>`
+      : '';
+    const noteFull = hasNote
+      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">RPE note · submitted ${p.time}</div></div></div>`
+      : '';
+    const rightBlock = (p.pain.length || hasNote)
+      ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">Comment</div>${noteFull}</div>` : ''}`
+      : `<div class="pc-det-block"><div class="h">Flags</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">No pain areas or notes added on the RPE form.</p></div>`;
+
+    const loadPct = (load / MAX_SRPE * 100).toFixed(0);
+    const avgPct = (SQUAD_AVG_SRPE / MAX_SRPE * 100).toFixed(0);
+    const hot = load > SQUAD_AVG_SRPE * 1.15;
+    const lastName = p.name.split(/\s+/).pop();
+
+    return `
+    <article class="pc" data-sev="${b.sev}">
+      <div class="pc-head">
+        <div class="pc-id">
+          <span class="cm-avatar is-md">${initials(p.name)}</span>
+          <div class="pc-who">
+            <div class="pc-name">${p.name}</div>
+            <div class="pc-sub"><span class="pos-chip ${p.pos}">${POSLABEL[p.pos]}</span><span class="pc-time">${p.time}</span></div>
+          </div>
+        </div>
+        <div class="pc-metric">
+          <span class="val">${p.rpe}</span>
+          <div class="meta">
+            <span class="band ${b.sev}">${b.label}</span>
+            <span class="scale">RPE · /10</span>
+          </div>
+        </div>
+        <div class="pc-gauge">
+          <div class="row"><span class="val">${p.rpe}</span><span class="cap">${b.label} · RPE</span></div>
+          <div class="gauge-track" style="${gaugeVars()}"><span class="marker" style="left:${markerLeft(p.rpe)}"></span></div>
+        </div>
+        <div class="pc-mid">
+          <div class="pc-secondary">
+            <div class="pc-fig"><span class="k">Session load</span><span class="v">${load}<small>au</small></span></div>
+            <div class="pc-fig"><span class="k">Duration</span><span class="v">${p.min}<small>′</small></span></div>
+          </div>
+        </div>
+        <div class="pc-flags">${flagsHTML}</div>
+      </div>
+      <div class="pc-detail">
+        <div class="pc-detail-grid">
+          <div class="pc-det-block">
+            <div class="h">Session load · sRPE</div>
+            <div class="load-eq">
+              <div class="cell"><span class="t">RPE</span><b>${p.rpe}</b></div>
+              <span class="op">×</span>
+              <div class="cell"><span class="t">Duration</span><b>${p.min}′</b></div>
+              <span class="op">=</span>
+              <div class="cell"><span class="t">sRPE</span><b class="hot">${load}<span style="font-size:12px;color:var(--cm-fg-faint);font-weight:500;"> au</span></b></div>
+            </div>
+            <div class="load-cmp">
+              <span class="name">This player</span>
+              <span class="track ${hot?'hot':''}"><i style="width:${loadPct}%"></i><span class="avg" style="left:${avgPct}%"></span></span>
+              <span class="n">${load}</span>
+            </div>
+            <div class="load-cmp" style="margin-top:10px;">
+              <span class="name">Squad avg</span>
+              <span class="track"><i style="width:${avgPct}%; background:var(--cm-fg-faint);"></i></span>
+              <span class="n">${SQUAD_AVG_SRPE}</span>
+            </div>
+          </div>
+          <div>${rightBlock}
+            <div class="pc-det-actions">
+              <button class="cm-btn is-secondary is-sm" data-wa="Hi ${lastName} — RPE ${p.rpe} logged for today (load ${load}). All good?"><i class="ti ti-brand-whatsapp"></i>Message</button>
+              <button class="cm-btn is-ghost is-sm" disabled title="Coming soon"><i class="ti ti-chart-line"></i>Load trend</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function pendingCardHTML(p) {
+    const lastName = p.name.split(/\s+/).pop();
+    return `
+    <article class="pc is-pending">
+      <div class="pc-pending-head">
+        <div class="pc-id">
+          <span class="cm-avatar is-md" style="opacity:.55;">${initials(p.name)}</span>
+          <div class="pc-who">
+            <div class="pc-name">${p.name}</div>
+            <div class="pc-sub"><span class="pos-chip ${p.pos}" style="opacity:.7;">${POSLABEL[p.pos]}</span></div>
+          </div>
+        </div>
+        <span class="status"><i class="ti ti-clock-x"></i>Not submitted</span>
+        <div class="right">
+          <span class="pc-elapsed">${p.elapsed}</span>
+          <button class="cm-btn is-ghost is-sm" data-wa="Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!"><i class="ti ti-brand-whatsapp"></i>Remind</button>
+        </div>
+      </div>
+    </article>`;
+  }
+
+  function orphanHTML(o, idx) {
+    const b = T.bandRpe(o.rpe);
+    const opts = SESSION_OPTIONS.map(s => `<option${s === o.suggest ? ' selected' : ''}>${s}</option>`).join('');
+    return `
+    <div class="orphan" data-idx="${idx}">
+      <div class="pc-id">
+        <span class="cm-avatar is-md">${initials(o.name)}</span>
+        <div class="pc-who">
+          <div class="pc-name">${o.name}</div>
+          <div class="pc-sub"><span class="pos-chip ${o.pos}">${POSLABEL[o.pos]}</span></div>
+        </div>
+      </div>
+      <div class="o-rpe ${b.sev}"><span class="v">${o.rpe}</span><span class="u">RPE</span></div>
+      <div class="o-sent"><i class="ti ti-send" style="font-size:13px; margin-right:5px;"></i>Sent ${o.sent}</div>
+      <div class="o-assign">
+        <select class="cm-select" aria-label="Session for ${o.name}">${opts}</select>
+        <button class="cm-btn is-primary is-sm o-assign-btn"><i class="ti ti-plug-connected"></i>Assign</button>
+      </div>
+    </div>`;
+  }
+
+  function skeletonHTML() {
+    let rows = '';
+    for (let i = 0; i < 6; i++) {
+      rows += `<div class="sk"><div class="sk-row">
+        <div class="sk-id"><span class="sk-circle"></span><div style="flex:1"><div class="sk-b" style="height:13px;width:60%;margin-bottom:8px"></div><div class="sk-b" style="height:10px;width:38%"></div></div></div>
+        <div class="sk-b" style="height:34px;width:96px"></div>
+        <div class="sk-b" style="height:22px;width:70%"></div>
+        <div class="sk-b" style="height:24px;width:120px;justify-self:end"></div>
+      </div></div>`;
+    }
+    return rows;
+  }
+
+  /* ── State + render ── */
+  const state = { tab: 'responded', loading: false };
+
+  function renderRpe() {
+    const respWrap = document.getElementById('respWrap');
+    const pendWrap = document.getElementById('pendWrap');
+    const skel = document.getElementById('skeleton');
+    const empty = document.getElementById('empty');
+    const orphanWrap = document.getElementById('orphanWrap');
+
+    // summary + pips
+    const total = RESPONDED.length + PENDING.length;
+    const highCount = RESPONDED.filter(p => p.rpe >= 8).length;
+    document.getElementById('sumDone').textContent = RESPONDED.length;
+    document.getElementById('sumDen').textContent = '/ ' + total;
+    document.getElementById('sumSrpe').textContent = SQUAD_AVG_SRPE;
+    document.getElementById('sumHigh').textContent = highCount;
+    document.getElementById('pipResp').textContent = RESPONDED.length;
+    document.getElementById('pipPend').textContent = PENDING.length;
+    document.getElementById('remindT').textContent = `${PENDING.length} player${PENDING.length === 1 ? '' : 's'} haven't submitted RPE for this session`;
+    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${PENDING.length})`;
+
+    // reset visibility
+    respWrap.style.display = 'none';
+    pendWrap.style.display = 'none';
+    skel.style.display = 'none';
+    empty.style.display = 'none';
+    orphanWrap.style.display = state.loading ? 'none' : '';
+
+    if (state.loading) {
+      skel.style.display = '';
+      skel.querySelector('.tr-list').innerHTML = skeletonHTML();
+      return;
+    }
+
+    if (state.tab === 'responded') {
+      respWrap.style.display = '';
+      document.getElementById('listResponded').innerHTML =
+        RESPONDED.slice().sort((a, b) => (b.rpe - a.rpe) || (srpe(b) - srpe(a))).map(cardHTML).join('');
+    } else {
+      pendWrap.style.display = '';
+      document.getElementById('listPending').innerHTML = PENDING.map(pendingCardHTML).join('');
+    }
+  }
+  window.renderRpe = renderRpe;
+
+  function renderOrphans() {
+    document.getElementById('listOrphans').innerHTML = ORPHANS.map(orphanHTML).join('');
+    document.getElementById('orphanCount').textContent = ORPHANS.length + ' unlinked';
+    document.getElementById('sumOrphan').textContent = ORPHANS.length;
+  }
+
+  /* ── Events ── */
+  document.addEventListener('tr:seg', e => {
+    if (e.detail.group === 'tab') { state.tab = e.detail.value; renderRpe(); }
+  });
+
+  // Session select → update subtitle + re-render (mock)
+  const sessionSel = document.getElementById('rmSessionSelect');
+  function syncSub() {
+    document.getElementById('pgSub').textContent = sessionSel.options[sessionSel.selectedIndex].text;
+  }
+  sessionSel.addEventListener('change', () => { syncSub(); renderRpe(); });
+  syncSub();
+
+  // Assign an orphan → mark linked (mock)
+  document.getElementById('listOrphans').addEventListener('click', e => {
+    const btn = e.target.closest('.o-assign-btn');
+    if (!btn) return;
+    const row = btn.closest('.orphan');
+    const sel = row.querySelector('.cm-select');
+    const session = sel.value;
+    const name = row.querySelector('.pc-name').textContent;
+    row.classList.add('is-done');
+    row.querySelector('.o-assign').innerHTML =
+      `<span class="o-linked"><i class="ti ti-circle-check-filled"></i>Linked to ${session}</span>`;
+    T.toast(name + ' → ' + session + ' · load computed', 'ti-plug-connected');
+  });
+
+  // Auto-link today's RPE (mock)
+  document.getElementById('rmAutoLink').addEventListener('click', function () {
+    const label = sessionSel.options[sessionSel.selectedIndex].text;
+    T.toast(`${RESPONDED.length} RPE linked to ${label} · avg load ${SQUAD_AVG_SRPE} au`, 'ti-link-plus');
+  });
+
+  // Refresh (mock skeleton flash)
+  const rmRefresh = document.getElementById('rmRefresh');
+  if (rmRefresh) rmRefresh.addEventListener('click', function () {
+    const icon = this.querySelector('.ti');
+    icon.style.transition = 'transform .8s cubic-bezier(.2,.7,.2,1)';
+    icon.style.transform = 'rotate(360deg)';
+    setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
+    state.loading = true; renderRpe();
+    setTimeout(() => {
+      state.loading = false; renderRpe();
+      T.toast(`RPE refreshed · ${RESPONDED.length} of ${RESPONDED.length + PENDING.length} in`, 'ti-refresh');
+    }, 900);
+  });
+
+  /* ── Share modal link generation (mock) ── */
+  (function () {
+    const btnGen = document.getElementById('btnGen');
+    const linkUrl = document.getElementById('linkUrl');
+    const linkRow = document.getElementById('linkRow');
+    const tokNote = document.getElementById('tokNote');
+    const btnCopy = document.getElementById('btnCopy');
+    const btnWa = document.getElementById('btnWa');
+    const shareTeam = document.getElementById('shareTeam');
+    const shareSession = document.getElementById('shareSession');
+    let currentUrl = '';
+
+    function gen() {
+      currentUrl = 'https://clava.fc/r/' + T.makeToken();
+      linkUrl.textContent = currentUrl;
+      linkRow.classList.remove('is-empty');
+      btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
+      tokNote.style.display = '';
+      const att = shareSession.value.startsWith("Don't") ? 'assign later' : 'auto-attaches to ' + shareSession.value;
+      tokNote.innerHTML = '<i class="ti ti-shield-check"></i>One-time token · expires in 12h · ' + att;
+      btnCopy.disabled = false;
+      btnWa.disabled = false;
+    }
+    btnGen.addEventListener('click', gen);
+    shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
+    shareSession.addEventListener('change', () => { if (currentUrl) gen(); });
+    btnWa.addEventListener('click', () => {
+      if (currentUrl) T.whatsapp("RPE for today's session (" + shareTeam.value + '). Rate 1–10: ' + currentUrl);
+    });
+  })();
+
+  renderRpe();
+  renderOrphans();
+  } /* end boot() */
+})();
+
+/* ── App-shell boot: auth guard + club theme (no data wiring) ── */
+(async () => {
+  try {
+    if (window.guardModule && !(await window.guardModule())) return;
+    if (window.getProfile && window.getClub) await Promise.all([window.getProfile(), window.getClub()]);
+    if (window.applyClubTheme) window.applyClubTheme();
+  } catch (e) { console.warn('[RPE] shell boot:', e); }
+})();
+</script>
+
 <script>window.__CM_TWEAK_DEFAULTS = { theme: "hybrid", accent: "green" };</script>
 <script defer src="settings-drawer.js"></script>
 <script defer src="tweaks-panel.js"></script>
 <script defer src="theme-tweaks.js"></script>
-<script>
-const RPE_LABELS = ['Rest','Very very easy','Easy','Moderate','Somewhat hard','Hard','Hard +','Very hard','Very hard +','Extremely hard','Maximal'];
-let selectedRPE    = null;
-let currentSession = null;
-let players        = [];
-let clubId         = null;
 
-// ── BOOT ──
-async function boot() {
-  if (!(await window.guardModule())) return;
-  clubId = await window.getClubId();
-  await window.applyClubTheme();
-
-  // Today in header (both phones)
-  const now = new Date();
-  const dateStr =
-    now.toLocaleDateString('en-US', { weekday:'short', day:'numeric', month:'short' }) + ' · ' +
-    now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-  document.getElementById('ph1Date').textContent  = dateStr;
-  document.getElementById('confDate').textContent = dateStr;
-
-  await Promise.all([loadLastSession(clubId), loadPlayers(clubId)]);
-  setupRPE();
-}
-
-// ── SESSION ──
-async function loadLastSession(clubId) {
-  const activeTeam = sessionStorage.getItem('cal_active_team');
-  let _rpeSessQ = window.sb.from('training_sessions')
-    .select('id, title, session_date, duration, session_type')
-    .eq('club_id', clubId);
-  if (activeTeam) _rpeSessQ = _rpeSessQ.eq('team_id', activeTeam);
-  const { data } = await _rpeSessQ
-    .order('session_date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!data) return;
-  currentSession = data;
-
-  const typeIcon = { match:'ti-ball-football', gym:'ti-barbell', recovery:'ti-activity', tactical:'ti-clipboard-list', conditioning:'ti-run' }[data.session_type] || 'ti-clipboard-list';
-  document.getElementById('sessionIcon').className = `ti ${typeIcon}`;
-  document.getElementById('sessionTitle').textContent  = data.title || data.session_type || 'Training session';
-  document.getElementById('sessionMeta').textContent   = data.session_date + (data.session_type ? ' · ' + data.session_type : '');
-  document.getElementById('sessionDuration').textContent = data.duration ? data.duration + '′' : '—';
-  document.getElementById('sessionType').textContent   = data.session_type || '—';
-  document.getElementById('sessionDate').textContent   = data.session_date || '—';
-  document.getElementById('heroTitle').textContent     = 'How hard was ' + (data.title || 'the session') + '?';
-  document.getElementById('heroSub').textContent       = data.session_date + (data.session_type ? ' · ' + data.session_type : '') + '. Tell us how it felt — one number.';
-  updateSRPE();
-}
-
-// ── PLAYERS ──
-async function loadPlayers(clubId) {
-  const activeTeam = sessionStorage.getItem('cal_active_team');
-  // Con equipo activo filtramos por MEMBRESÍA (player_teams!inner), no por players.team_id
-  // (primario), para incluir jugadores multi-categoría en su categoría secundaria.
-  const _rpeSel = 'id, first_name, last_name, position'
-    + (activeTeam ? ', player_teams!inner(team_id)' : '');
-  let _rpePlQ = window.sb.from('players')
-    .select(_rpeSel)
-    .eq('club_id', clubId)
-    .eq('status', 'available')
-    .is('archived_at', null);
-  if (activeTeam) _rpePlQ = _rpePlQ.eq('player_teams.team_id', activeTeam);
-  const { data } = await _rpePlQ.order('last_name');
-  const _seenRpe = new Set();
-  players = (data || []).filter(p => _seenRpe.has(p.id) ? false : (_seenRpe.add(p.id), true));
-  const sel = document.getElementById('playerSelect');
-  sel.innerHTML = '<option value="">Select player…</option>';
-  players.forEach(p => {
-    const o = document.createElement('option');
-    o.value = p.id;
-    o.textContent = p.first_name + ' ' + p.last_name + (p.position ? ' · ' + p.position : '');
-    sel.appendChild(o);
-  });
-  sel.addEventListener('change', onPlayerChange);
-}
-
-function onPlayerChange() {
-  const p = players.find(x => x.id === this.value);
-  document.getElementById('ph1Avatar').textContent = p
-    ? (p.first_name[0] + p.last_name[0]).toUpperCase()
-    : '—';
-  updateSRPE();
-  checkSubmit();
-  if (p) loadPlayerHistory(p.id);
-}
-
-// ── RPE SCALE ──
-function setupRPE() {
-  document.querySelectorAll('.rpe-vscale .rpe-row').forEach(r => {
-    r.addEventListener('click', () => {
-      document.querySelectorAll('.rpe-vscale .rpe-row').forEach(o => o.classList.remove('is-on'));
-      r.classList.add('is-on');
-      selectedRPE = parseInt(r.querySelector('.rpe-num').textContent);
-      updateSRPE();
-      checkSubmit();
-    });
-  });
-  document.querySelectorAll('.pp-chip').forEach(c => c.addEventListener('click', () => c.classList.toggle('is-on')));
-}
-
-function updateSRPE() {
-  const dur = currentSession?.duration || null;
-  if (selectedRPE !== null && dur) {
-    const load = selectedRPE * dur;
-    document.getElementById('srpeValue').innerHTML = `${load} <sub>AU</sub>`;
-    document.getElementById('srpeFormula').textContent = `${selectedRPE} RPE × ${dur}′ = ${load} AU · auto-calculated`;
-    document.getElementById('submitLabel').textContent = `Send RPE · ${selectedRPE} · sRPE ${load}`;
-    // Live-update confirmation phone
-    document.getElementById('confRPE').textContent     = selectedRPE;
-    document.getElementById('confRPEVal').textContent  = `${selectedRPE} · ${RPE_LABELS[selectedRPE] || ''}`;
-    document.getElementById('confDuration').textContent = dur + '′';
-    document.getElementById('confLoad').textContent    = `${load} AU`;
-    document.getElementById('confTitle').textContent   = `Got it. sRPE ${load} AU`;
-  } else if (selectedRPE !== null) {
-    document.getElementById('srpeValue').innerHTML = `— <sub>AU</sub>`;
-    document.getElementById('srpeFormula').textContent = `${selectedRPE} RPE × duration unknown`;
-    document.getElementById('submitLabel').textContent = `Send RPE · ${selectedRPE}`;
-    document.getElementById('confRPE').textContent = selectedRPE;
-    document.getElementById('confRPEVal').textContent = `${selectedRPE} · ${RPE_LABELS[selectedRPE] || ''}`;
-  } else {
-    document.getElementById('srpeValue').innerHTML = `— <sub>AU</sub>`;
-    document.getElementById('srpeFormula').textContent = 'Select RPE to calculate';
-    document.getElementById('submitLabel').textContent = 'Select player & RPE';
-  }
-}
-
-function checkSubmit() {
-  const playerId = document.getElementById('playerSelect').value;
-  document.getElementById('submitBtn').disabled = !(playerId && selectedRPE !== null);
-  if (playerId) {
-    const p = players.find(x => x.id === playerId);
-    if (p) {
-      const fullName = p.first_name + ' ' + p.last_name;
-      const initials = (p.first_name[0] + p.last_name[0]).toUpperCase();
-      document.getElementById('confPlayer').textContent     = fullName;
-      document.getElementById('confPlayerName').textContent = fullName;
-      document.getElementById('confAvatar').textContent     = initials;
-      document.getElementById('confSub').textContent = 'Your load is recorded — coaching staff can see it now.';
-    }
-  }
-}
-
-// ── HISTORY ──
-async function loadPlayerHistory(playerId) {
-  const { data } = await window.sb.from('rpe')
-    .select('rpe, duration, load, created_at')
-    .eq('player_id', playerId)
-    .eq('club_id', clubId)
-    .order('created_at', { ascending: false })
-    .limit(7);
-  if (!data || !data.length) return;
-  const entries = [...data].reverse(); // oldest first
-  const maxLoad = Math.max(...entries.map(e => e.load || e.rpe * (e.duration || 60)));
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const bars  = document.getElementById('histBars');
-  const lbls  = document.getElementById('histLabels');
-  bars.innerHTML = '';
-  lbls.innerHTML = '';
-  entries.forEach((e, i) => {
-    const load   = e.load || e.rpe * (e.duration || 60);
-    const pct    = maxLoad > 0 ? Math.max(8, Math.round((load / maxLoad) * 90)) : 10;
-    const isLast = i === entries.length - 1;
-    const cls    = isLast ? 'today' : e.rpe >= 8 ? 'peak' : e.rpe >= 6 ? 'high' : e.rpe >= 4 ? 'med' : '';
-    bars.innerHTML += `<div class="bar ${cls}" style="height:${pct}%" title="${load} AU"></div>`;
-    const d = new Date(e.created_at);
-    lbls.innerHTML += `<span${isLast ? ' class="lbl today"' : ''}>${isLast ? 'Today' : days[d.getDay()]}</span>`;
-  });
-  // Fill remaining slots if less than 7
-  const fill = 7 - entries.length;
-  for (let i = 0; i < fill; i++) {
-    bars.innerHTML = `<div class="bar" style="height:8%"></div>` + bars.innerHTML;
-    lbls.innerHTML = `<span>—</span>` + lbls.innerHTML;
-  }
-}
-
-// ── SUBMIT ──
-async function submitRPE() {
-  const playerId = document.getElementById('playerSelect').value;
-  if (!playerId || selectedRPE === null) return;
-
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = true;
-  btn.style.opacity = '0.7';
-
-  const dur  = currentSession?.duration || null;
-  const load = dur ? selectedRPE * dur : null;
-
-  const { error } = await window.sb.from('rpe').insert({
-    player_id:  playerId,
-    session_id: currentSession?.id || null,
-    club_id:    clubId,
-    rpe:        selectedRPE,
-    duration:   dur,
-    load:       load
-  });
-
-  btn.style.opacity = '1';
-
-  if (!error) {
-    // Update confirmation phone
-    document.getElementById('confRPE').textContent    = selectedRPE;
-    document.getElementById('confTitle').textContent  = `Got it. sRPE ${load || selectedRPE} AU`;
-    document.getElementById('confLoad').textContent   = load ? `${load} AU` : '—';
-    // Scroll confirmation phone to top
-    const confBody = document.querySelector('.ph:last-child .ph-body-inner');
-    if (confBody) confBody.scrollTop = 0;
-    // Reload history
-    await loadPlayerHistory(playerId);
-    // Flash submit button green
-    btn.style.background = '#16a34a';
-    btn.querySelector('span').textContent = 'Sent ✓';
-    setTimeout(() => {
-      btn.style.background = '';
-      btn.querySelector('span').textContent = `Send RPE · ${selectedRPE}${load ? ' · sRPE ' + load : ''}`;
-      btn.disabled = false;
-    }, 2500);
-  } else {
-    btn.disabled = false;
-    console.error('RPE submit error:', error);
-  }
-}
-
-  async function openShareRpe() {
-    const sel = document.getElementById('shareRTeam');
-    document.getElementById('shareRResult').style.display = 'none';
-    sel.innerHTML = '<option>Loading…</option>';
-    document.getElementById('shareRBackdrop').style.display = 'flex';
-    const cid = await window.getClubId();
-    const profile = await window.getProfile();
-    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
-    let fullAccess = bucket === 'admin' || bucket === 'owner';
-    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch {} }
-    let teams = await window.getTeams(cid);
-    if (!fullAccess) {
-      let mine = [];
-      try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch {}
-      const s = new Set(mine);
-      teams = teams.filter(t => s.has(t.id));
-    }
-    if (!teams.length) { sel.innerHTML = '<option value="">No teams</option>'; return; }
-    sel.innerHTML = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-    try {
-      const sess = await window.sb.rpc('recent_sessions', { p_club_id: cid, p_limit: 8 });
-      const ss = document.getElementById('shareRSession');
-      ss.innerHTML = '<option value="">No session (linked by date)</option>' +
-        (sess.data||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Session')} (${s.duration||'?'}′)</option>`).join('');
-    } catch {}
-  }
-  function closeShareRpe() { document.getElementById('shareRBackdrop').style.display = 'none'; }
-  async function genShareRpe() {
-    const teamId = document.getElementById('shareRTeam').value;
-    if (!teamId) return;
-    const cid = await window.getClubId();
-    const token = crypto.randomUUID();
-    const sessionId = document.getElementById('shareRSession').value || null;
-    const { error } = await window.sb.from('share_links').insert({ club_id: cid, scope: 'rpe', token, team_id: teamId, session_id: sessionId });
-    if (error) { alert('Error: ' + error.message); return; }
-    const url = location.origin + '/survey.html?token=' + token;
-    document.getElementById('shareRUrl').value = url;
-    document.getElementById('shareRWa').href = 'https://wa.me/?text=' + encodeURIComponent('RPE: ' + url);
-    document.getElementById('shareRResult').style.display = 'block';
-  }
-  function copyShareRpe() {
-    const inp = document.getElementById('shareRUrl');
-    navigator.clipboard?.writeText(inp.value);
-    const btn = document.getElementById('shareRCopy');
-    const old = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check" style="font-size:14px"></i>Copied';
-    setTimeout(() => btn.innerHTML = old, 1500);
-  }
-  window.openShareRpe = openShareRpe;
-  window.closeShareRpe = closeShareRpe;
-  window.genShareRpe = genShareRpe;
-  window.copyShareRpe = copyShareRpe;
-
-  async function linkPendingRpe(btn) {
-    const span = btn.querySelector('span');
-    const original = span.textContent;
-    btn.disabled = true; span.textContent = 'Linking…';
-    try {
-      const cid = await window.getClubId();
-      const { data, error } = await window.sb.rpc('link_pending_rpe', { p_club_id: cid, p_date: null });
-      if (error) { span.textContent = 'Error'; console.warn('[RPE] link_pending error:', error.message); }
-      else {
-        const n = data || 0;
-        span.textContent = n > 0 ? `✓ ${n} RPE linked` : 'No pending RPE';
-      }
-    } catch (e) {
-      span.textContent = 'Error'; console.warn('[RPE] link_pending:', e.message);
-    }
-    setTimeout(() => { span.textContent = original; btn.disabled = false; }, 2500);
-  }
-  window.linkPendingRpe = linkPendingRpe;
-
-  let _recentSessions = [];
-  function _sessIcon(t){ return ({match:'ti-ball-football',gym:'ti-barbell',recovery:'ti-activity',tactical:'ti-clipboard-list',conditioning:'ti-run'})[t] || 'ti-clipboard-list'; }
-
-  async function loadPendingRpe() {
-    const list = document.getElementById('pendingRpeList');
-    if (!list) return;
-    try {
-      const cid = await window.getClubId();
-      const [pend, sess] = await Promise.all([
-        window.sb.rpc('get_pending_rpe', { p_club_id: cid }),
-        window.sb.rpc('recent_sessions', { p_club_id: cid, p_limit: 5 })
-      ]);
-      _recentSessions = sess.data || [];
-      const rows = pend.data || [];
-      if (!rows.length) {
-        document.getElementById('pendingRpeWrap').style.display = 'none';
-        return;
-      }
-      document.getElementById('pendingRpeWrap').style.display = 'block';
-      const opts = _recentSessions.map(s =>
-        `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Session')} (${s.duration||'?'}′)</option>`
-      ).join('');
-      list.innerHTML = rows.map(r => {
-        const d = new Date(r.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-        return `<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <span style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${r.player_name}</span>
-            <span style="font:600 12px/1 var(--cm-font-mono);color:var(--cm-accent)">RPE ${Number(r.rpe)}</span>
-          </div>
-          <div style="font:400 11px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Sent ${d}</div>
-          <div style="display:flex;gap:6px">
-            <select id="sess_${r.id}" style="flex:1;height:32px;padding:0 8px;background:#fff;color:#0f172a;border:1px solid var(--cm-border);border-radius:6px;font:500 11.5px/1 var(--cm-font-sans)">
-              <option value="">Pick a session…</option>${opts}
-            </select>
-            <button class="cm-btn is-primary is-sm" onclick="assignRpe('${r.id}', this)"><i class="ti ti-check" style="font-size:13px"></i></button>
-          </div>
-        </div>`;
-      }).join('');
-    } catch (e) {
-      list.innerHTML = `<div style="font:400 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">Couldn't load.</div>`;
-      console.warn('[RPE] pending:', e.message);
-    }
-  }
-
-  async function assignRpe(rpeId, btn) {
-    const sel = document.getElementById('sess_' + rpeId);
-    const sessionId = sel?.value;
-    if (!sessionId) { sel?.focus(); return; }
-    btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:13px"></i>';
-    try {
-      const { data, error } = await window.sb.rpc('assign_rpe_session', { p_rpe_id: rpeId, p_session_id: sessionId });
-      if (error || data?.error) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>'; alert('Error: ' + (error?.message || data?.error)); return; }
-      btn.closest('div[style*="background"]').style.opacity = '0.4';
-      setTimeout(loadPendingRpe, 600);
-    } catch (e) {
-      btn.disabled = false; btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>';
-    }
-  }
-
-  window.loadPendingRpe = loadPendingRpe;
-  window.assignRpe = assignRpe;
-  loadPendingRpe();
-
-  async function initRpeChecklist() {
-    try {
-      const cid = await window.getClubId();
-      const activeTeam = sessionStorage.getItem('cal_active_team');
-      // Query directa filtrada por categoría activa (en vez del RPC que no filtra por team)
-      let _ssQ = window.sb.from('training_sessions')
-        .select('id, session_date, title, session_type, team_id')
-        .eq('club_id', cid);
-      if (activeTeam) _ssQ = _ssQ.eq('team_id', activeTeam);
-      const { data: sess } = await _ssQ
-        .order('session_date', { ascending: false })
-        .limit(8);
-      const sel = document.getElementById('checklistSession');
-      if (!sel) return;
-      sel.innerHTML = '<option value="">Pick a session…</option>' +
-        (sess||[]).map(s => `<option value="${s.id}">${s.session_date} · ${(s.title||s.session_type||'Session')}</option>`).join('');
-      if (sess && sess.length) { sel.value = sess[0].id; loadRpeChecklist(); }
-    } catch (e) { console.warn('[RPE] checklist init:', e.message); }
-  }
-  async function loadRpeChecklist() {
-    const sid = document.getElementById('checklistSession').value;
-    const body = document.getElementById('checklistBody');
-    if (!sid) { body.innerHTML = ''; return; }
-    body.innerHTML = '<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>';
-    try {
-      const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sid });
-      if (error) throw error;
-      const rows = data || [];
-      const done = rows.filter(r => r.responded).length;
-      const _selOpt = document.getElementById('checklistSession').selectedOptions[0];
-      const _sessLabel = (_selOpt && _selOpt.value) ? _selOpt.textContent : '';
-      const _cols = Math.max(1, Math.ceil(rows.length / 12));
-      body.innerHTML =
-        (_sessLabel ? `<div style="font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:4px">${_sessLabel}</div>` : '') +
-        `<div style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-bottom:8px">${done}/${rows.length} responded</div>` +
-        `<div style="column-count:${_cols};column-gap:22px">` +
-        rows.map(r => `<div style="break-inside:avoid;-webkit-column-break-inside:avoid;margin-bottom:4px;display:flex;align-items:center;gap:8px;font:500 12px/1.2 var(--cm-font-sans)">
-          <i class="ti ${r.responded?'ti-circle-check':'ti-circle'}" style="font-size:15px;color:${r.responded?'var(--cm-accent)':'var(--cm-fg-muted)'}"></i>
-          <span style="color:${r.responded?'var(--cm-fg)':'var(--cm-fg-muted)'};flex:1">${r.player_name}</span>
-          ${r.responded?`<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-accent)">${Number(r.rpe)}</span>`:''}
-        </div>`).join('') +
-        '</div>';
-      const pending = rows.filter(r => !r.responded);
-      if (pending.length) {
-        const names = pending.map(r => r.player_name).join(', ');
-        body.innerHTML += `<button onclick="remindRpeMissing('${sid}', this)" data-names="${names.replace(/"/g,'&quot;')}" style="margin-top:12px;width:100%;height:36px;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--cm-accent);color:#fff;border:none;border-radius:8px;font:600 12.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-brand-whatsapp" style="font-size:15px"></i>Remind missing (${pending.length})</button>`;
-      }
-    } catch (e) {
-      body.innerHTML = `<div style="font:400 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Couldn't load.</div>`;
-    }
-  }
-  async function remindRpeMissing(sessionId, btn) {
-    try {
-      const cid = await window.getClubId();
-      let teamId = null;
-      try {
-        const s = await window.sb.from('training_sessions').select('team_id').eq('id', sessionId).single();
-        teamId = s.data?.team_id || null;
-      } catch {}
-      const ins = await window.sb.from('share_links').insert({
-        club_id: cid, scope: 'rpe', team_id: teamId, session_id: sessionId,
-        token: crypto.randomUUID().replace(/-/g,''),
-        expires_at: new Date(Date.now()+7*86400000).toISOString()
-      }).select('token').single();
-      if (ins.error) throw ins.error;
-      const url = location.origin + '/survey.html?token=' + ins.data.token;
-      const names = btn.getAttribute('data-names');
-      const msg = `Session RPE reminder.\nMissing: ${names}\nComplete it here: ${url}`;
-      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-    } catch (e) {
-      alert("Couldn't generate the reminder: " + e.message);
-    }
-  }
-  window.remindRpeMissing = remindRpeMissing;
-  window.loadRpeChecklist = loadRpeChecklist;
-  initRpeChecklist();
-
-boot();
-</script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
