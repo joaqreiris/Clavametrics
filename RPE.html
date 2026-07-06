@@ -162,6 +162,16 @@
         </div>
       </div>
 
+      <!-- Error state -->
+      <div id="errState" style="display:none;">
+        <div class="tr-empty">
+          <span class="ic"><i class="ti ti-plug-connected-x"></i></span>
+          <h3>Couldn't load RPE</h3>
+          <p>Something went wrong fetching this session's RPE. Check your connection and try again.</p>
+          <button class="cm-btn is-primary" id="errRetry"><i class="ti ti-refresh"></i>Retry</button>
+        </div>
+      </div>
+
       <!-- ── Late RPE — needs a session ── -->
       <div id="orphanWrap">
         <div class="tr-group-label" style="margin-top:34px;">
@@ -228,11 +238,10 @@
 
 <script>
 /* ============================================================
-   Session RPE Monitor — MOCK DATA ONLY (no Supabase wiring yet).
-   RESPONDED[] / PENDING[] / ORPHANS[] / SESSION_OPTIONS[] are the
-   seam the next step swaps for session_rpe_status / get_pending_rpe.
-   RPE 1–10; sRPE = RPE × session minutes. Band: green ≤4 · amber
-   5–7 · red ≥8.
+   Session RPE Monitor — wired to session_rpe_status() +
+   get_pending_rpe / recent_sessions / assign_rpe_session /
+   link_pending_rpe. RPE 1–10; sRPE (load) = RPE × duration.
+   Band: green ≤4 · amber 5–7 · red ≥8.
    ============================================================ */
 (function () {
   // triage.js loads deferred, so window.Triage is only guaranteed at DOM-ready.
@@ -242,53 +251,32 @@
   function boot() {
   const PAIN_ICON = 'ti-body-scan';
 
-  const RESPONDED = [
-    { name:'T. Becker',  pos:'cb', rpe:9, min:88, pain:['Calves'], time:'12:41', comment:'Legs cooked after the running block, calves tight.' },
-    { name:'D. Okafor',  pos:'st', rpe:9, min:82, pain:[], time:'12:38', comment:'Hard one — cramped a bit near the end.' },
-    { name:'S. Petrov',  pos:'cb', rpe:8, min:90, pain:['Lower back'], time:'12:52', comment:'' },
-    { name:'K. Novak',   pos:'gk', rpe:8, min:70, pain:[], time:'12:35', comment:'Lot of high-intensity shot-stopping today.' },
-    { name:'Y. Demir',   pos:'mf', rpe:7, min:84, pain:[], time:'12:44', comment:'' },
-    { name:'F. Castro',  pos:'wg', rpe:7, min:80, pain:['Hamstring'], time:'12:49', comment:'Hamstring felt it on the last sprints.' },
-    { name:'O. Bauer',   pos:'fb', rpe:6, min:82, pain:[], time:'12:40', comment:'' },
-    { name:'P. Sorensen',pos:'st', rpe:6, min:78, pain:[], time:'12:47', comment:'' },
-    { name:'H. Tanaka',  pos:'mf', rpe:6, min:84, pain:[], time:'12:33', comment:'' },
-    { name:'G. Russo',   pos:'mf', rpe:5, min:80, pain:[], time:'12:42', comment:'' },
-    { name:'E. Moreau',  pos:'fb', rpe:5, min:82, pain:[], time:'12:36', comment:'' },
-    { name:'V. Lima',    pos:'wg', rpe:5, min:76, pain:[], time:'12:45', comment:'Felt good, sharp.' },
-    { name:'A. Ferrari', pos:'cb', rpe:4, min:82, pain:[], time:'12:39', comment:'' },
-    { name:'I. Costa',   pos:'st', rpe:4, min:60, pain:[], time:'12:31', comment:'Reduced load — return-to-play protocol.' },
-    { name:'N. Haddad',  pos:'mf', rpe:4, min:80, pain:[], time:'12:43', comment:'' },
-    { name:'J. Silva',   pos:'fb', rpe:4, min:82, pain:[], time:'12:37', comment:'' },
-    { name:'R. Mendes',  pos:'cb', rpe:3, min:84, pain:[], time:'12:34', comment:'' },
-    { name:'L. Romano',  pos:'wg', rpe:3, min:80, pain:[], time:'12:46', comment:'' },
-    { name:'M. Álvarez', pos:'st', rpe:3, min:82, pain:[], time:'12:32', comment:'' },
-    { name:'M. Diallo',  pos:'wg', rpe:2, min:45, pain:[], time:'12:29', comment:'Partial session — modified.' },
-  ];
-  const PENDING = [
-    { name:'B. Andersson', pos:'cb', elapsed:'has a late RPE below' },
-    { name:'R. Vidal',     pos:'mf', elapsed:'has a late RPE below' },
-    { name:'C. Nilsson',   pos:'gk', elapsed:'not yet submitted' },
-    { name:'L. Santos',    pos:'fb', elapsed:'not yet submitted' },
-  ];
-  // Orphan RPE submissions never tied to a session. Double-session days list each session separately.
-  const SESSION_OPTIONS = [
-    'Sat Jul 5 · Field · MD-2',
-    'Fri Jul 4 · PM Field',
-    'Fri Jul 4 · AM Gym',
-    'Thu Jul 3 · Field · MD-4',
-  ];
-  const ORPHANS = [
-    { name:'B. Andersson', pos:'cb', rpe:7, sent:'Fri Jul 4 · 21:14', suggest:'Fri Jul 4 · PM Field' },
-    { name:'R. Vidal',     pos:'mf', rpe:8, sent:'Fri Jul 4 · 20:58', suggest:'Fri Jul 4 · PM Field' },
-    { name:'L. Santos',    pos:'fb', rpe:4, sent:'Thu Jul 3 · 19:30', suggest:'Thu Jul 3 · Field · MD-4' },
-  ];
+  const PAIN_LABELS = { hamstring:'Hamstring', quads:'Quads', calves:'Calves', groin:'Groin', knee:'Knee', ankle:'Ankle', shoulder:'Shoulder', back:'Lower back' };
+  const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false,
+                  sessionsById:{}, recent:[], responders:[], pending:[], total:0, orphans:[], avgSrpe:0, maxSrpe:1 };
 
   const T = window.Triage;
-  const srpe = p => p.rpe * p.min;
-  const SQUAD_AVG_SRPE = Math.round(RESPONDED.reduce((a, p) => a + srpe(p), 0) / RESPONDED.length);
-  const MAX_SRPE = Math.max(...RESPONDED.map(srpe));
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
-  const POSLABEL = { gk:'GK', cb:'CB', fb:'FB', mf:'MF', wg:'WG', st:'ST' };
+  const numOrNull = v => (v === null || v === undefined || v === '') ? null : Number(v);
+  const cap = s => { s = String(s||''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; };
+  function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false }); }
+  function fmtDateTime(ts) { if (!ts) return ''; const d = new Date(ts); if (isNaN(d)) return ''; return d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' }) + ' · ' + fmtTime(ts); }
+  function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => PAIN_LABELS[String(a).toLowerCase()] || cap(a)); }
+  function sessionLabel(s) { return `${s.session_date} · ${s.title || s.session_type || 'Session'}`; }
+  function sessionLabelDur(s) { return `${sessionLabel(s)} (${s.duration || '?'}′)`; }
+  function modelFromRow(r) {
+    const dur = numOrNull(r.duration);
+    const load = numOrNull(r.load);
+    return {
+      name: r.player_name || 'Player',
+      rpe: numOrNull(r.rpe),
+      duration: dur,
+      load: (load != null) ? load : (r.rpe != null && dur != null ? r.rpe * dur : null),
+      pain: painLabels(r.body_areas),
+      comment: r.note || '',
+      time: fmtTime(r.submitted_at),
+    };
+  }
 
   // Gauge zones for RPE (1–10): green ≤4, amber 5–7, red ≥8.
   function gaugeVars() {
@@ -308,7 +296,9 @@
 
   function cardHTML(p) {
     const b = T.bandRpe(p.rpe);
-    const load = srpe(p);
+    const load = p.load;
+    const durTxt = p.duration != null ? p.duration : '?';
+    const loadTxt = load != null ? load : '—';
     const hasNote = !!p.comment;
     const flags = [];
     if (p.pain.length) flags.push(painChipsHTML(p.pain, 2));
@@ -316,19 +306,22 @@
     const flagsHTML = flags.length ? flags.join('') : '<span style="font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint);">—</span>';
 
     const painFull = p.pain.length
-      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${z}</span>`).join('')}</div></div>`
+      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${T.escape(z)}</span>`).join('')}</div></div>`
       : '';
     const noteFull = hasNote
-      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">RPE note · submitted ${p.time}</div></div></div>`
+      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">RPE note${p.time ? ` · submitted ${p.time}` : ''}</div></div></div>`
       : '';
     const rightBlock = (p.pain.length || hasNote)
       ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">Comment</div>${noteFull}</div>` : ''}`
       : `<div class="pc-det-block"><div class="h">Flags</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">No pain areas or notes added on the RPE form.</p></div>`;
 
-    const loadPct = (load / MAX_SRPE * 100).toFixed(0);
-    const avgPct = (SQUAD_AVG_SRPE / MAX_SRPE * 100).toFixed(0);
-    const hot = load > SQUAD_AVG_SRPE * 1.15;
+    const avg = state.avgSrpe || 0;
+    const max = state.maxSrpe || 1;
+    const loadPct = load != null ? (load / max * 100).toFixed(0) : 0;
+    const avgPct = (avg / max * 100).toFixed(0);
+    const hot = load != null && load > avg * 1.15;
     const lastName = p.name.split(/\s+/).pop();
+    const waMsg = T.escape(`Hi ${lastName} — RPE ${p.rpe} logged for today${load != null ? ` (load ${load})` : ''}. All good?`);
 
     return `
     <article class="pc" data-sev="${b.sev}">
@@ -336,8 +329,8 @@
         <div class="pc-id">
           <span class="cm-avatar is-md">${initials(p.name)}</span>
           <div class="pc-who">
-            <div class="pc-name">${p.name}</div>
-            <div class="pc-sub"><span class="pos-chip ${p.pos}">${POSLABEL[p.pos]}</span><span class="pc-time">${p.time}</span></div>
+            <div class="pc-name">${T.escape(p.name)}</div>
+            <div class="pc-sub">${p.time ? `<span class="pc-time">${p.time}</span>` : ''}</div>
           </div>
         </div>
         <div class="pc-metric">
@@ -353,8 +346,8 @@
         </div>
         <div class="pc-mid">
           <div class="pc-secondary">
-            <div class="pc-fig"><span class="k">Session load</span><span class="v">${load}<small>au</small></span></div>
-            <div class="pc-fig"><span class="k">Duration</span><span class="v">${p.min}<small>′</small></span></div>
+            <div class="pc-fig"><span class="k">Session load</span><span class="v">${loadTxt}<small>au</small></span></div>
+            <div class="pc-fig"><span class="k">Duration</span><span class="v">${durTxt}<small>′</small></span></div>
           </div>
         </div>
         <div class="pc-flags">${flagsHTML}</div>
@@ -366,24 +359,24 @@
             <div class="load-eq">
               <div class="cell"><span class="t">RPE</span><b>${p.rpe}</b></div>
               <span class="op">×</span>
-              <div class="cell"><span class="t">Duration</span><b>${p.min}′</b></div>
+              <div class="cell"><span class="t">Duration</span><b>${durTxt}′</b></div>
               <span class="op">=</span>
-              <div class="cell"><span class="t">sRPE</span><b class="hot">${load}<span style="font-size:12px;color:var(--cm-fg-faint);font-weight:500;"> au</span></b></div>
+              <div class="cell"><span class="t">sRPE</span><b class="hot">${loadTxt}<span style="font-size:12px;color:var(--cm-fg-faint);font-weight:500;"> au</span></b></div>
             </div>
             <div class="load-cmp">
               <span class="name">This player</span>
               <span class="track ${hot?'hot':''}"><i style="width:${loadPct}%"></i><span class="avg" style="left:${avgPct}%"></span></span>
-              <span class="n">${load}</span>
+              <span class="n">${loadTxt}</span>
             </div>
             <div class="load-cmp" style="margin-top:10px;">
               <span class="name">Squad avg</span>
               <span class="track"><i style="width:${avgPct}%; background:var(--cm-fg-faint);"></i></span>
-              <span class="n">${SQUAD_AVG_SRPE}</span>
+              <span class="n">${avg}</span>
             </div>
           </div>
           <div>${rightBlock}
             <div class="pc-det-actions">
-              <button class="cm-btn is-secondary is-sm" data-wa="Hi ${lastName} — RPE ${p.rpe} logged for today (load ${load}). All good?"><i class="ti ti-brand-whatsapp"></i>Message</button>
+              <button class="cm-btn is-secondary is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Message</button>
               <button class="cm-btn is-ghost is-sm" disabled title="Coming soon"><i class="ti ti-chart-line"></i>Load trend</button>
             </div>
           </div>
@@ -394,41 +387,40 @@
 
   function pendingCardHTML(p) {
     const lastName = p.name.split(/\s+/).pop();
+    const waMsg = T.escape(`Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!`);
     return `
     <article class="pc is-pending">
       <div class="pc-pending-head">
         <div class="pc-id">
           <span class="cm-avatar is-md" style="opacity:.55;">${initials(p.name)}</span>
           <div class="pc-who">
-            <div class="pc-name">${p.name}</div>
-            <div class="pc-sub"><span class="pos-chip ${p.pos}" style="opacity:.7;">${POSLABEL[p.pos]}</span></div>
+            <div class="pc-name">${T.escape(p.name)}</div>
           </div>
         </div>
         <span class="status"><i class="ti ti-clock-x"></i>Not submitted</span>
         <div class="right">
-          <span class="pc-elapsed">${p.elapsed}</span>
-          <button class="cm-btn is-ghost is-sm" data-wa="Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!"><i class="ti ti-brand-whatsapp"></i>Remind</button>
+          <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Remind</button>
         </div>
       </div>
     </article>`;
   }
 
-  function orphanHTML(o, idx) {
+  function orphanHTML(o) {
     const b = T.bandRpe(o.rpe);
-    const opts = SESSION_OPTIONS.map(s => `<option${s === o.suggest ? ' selected' : ''}>${s}</option>`).join('');
+    const opts = state.recent.slice(0, 5).map(s => `<option value="${s.id}">${T.escape(sessionLabelDur(s))}</option>`).join('')
+      || '<option value="">No recent sessions</option>';
     return `
-    <div class="orphan" data-idx="${idx}">
+    <div class="orphan" data-id="${o.id}">
       <div class="pc-id">
         <span class="cm-avatar is-md">${initials(o.name)}</span>
         <div class="pc-who">
-          <div class="pc-name">${o.name}</div>
-          <div class="pc-sub"><span class="pos-chip ${o.pos}">${POSLABEL[o.pos]}</span></div>
+          <div class="pc-name">${T.escape(o.name)}</div>
         </div>
       </div>
       <div class="o-rpe ${b.sev}"><span class="v">${o.rpe}</span><span class="u">RPE</span></div>
       <div class="o-sent"><i class="ti ti-send" style="font-size:13px; margin-right:5px;"></i>Sent ${o.sent}</div>
       <div class="o-assign">
-        <select class="cm-select" aria-label="Session for ${o.name}">${opts}</select>
+        <select class="cm-select" aria-label="Session for ${T.escape(o.name)}">${opts}</select>
         <button class="cm-btn is-primary is-sm o-assign-btn"><i class="ti ti-plug-connected"></i>Assign</button>
       </div>
     </div>`;
@@ -447,107 +439,263 @@
     return rows;
   }
 
-  /* ── State + render ── */
-  const state = { tab: 'responded', loading: false };
-
+  /* ── Render ── */
   function renderRpe() {
     const respWrap = document.getElementById('respWrap');
     const pendWrap = document.getElementById('pendWrap');
     const skel = document.getElementById('skeleton');
     const empty = document.getElementById('empty');
+    const err = document.getElementById('errState');
     const orphanWrap = document.getElementById('orphanWrap');
 
-    // summary + pips
-    const total = RESPONDED.length + PENDING.length;
-    const highCount = RESPONDED.filter(p => p.rpe >= 8).length;
-    document.getElementById('sumDone').textContent = RESPONDED.length;
-    document.getElementById('sumDen').textContent = '/ ' + total;
-    document.getElementById('sumSrpe').textContent = SQUAD_AVG_SRPE;
-    document.getElementById('sumHigh').textContent = highCount;
-    document.getElementById('pipResp').textContent = RESPONDED.length;
-    document.getElementById('pipPend').textContent = PENDING.length;
-    document.getElementById('remindT').textContent = `${PENDING.length} player${PENDING.length === 1 ? '' : 's'} haven't submitted RPE for this session`;
-    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${PENDING.length})`;
+    const done = state.responders.length;
+    const total = state.total;
+    const high = state.responders.filter(p => p.rpe != null && p.rpe >= 8).length;
+    const missing = state.pending.length;
 
-    // reset visibility
+    document.getElementById('sumDone').textContent = done;
+    document.getElementById('sumDen').textContent = '/ ' + total;
+    document.getElementById('sumSrpe').textContent = state.avgSrpe || 0;
+    document.getElementById('sumHigh').textContent = high;
+    document.getElementById('pipResp').textContent = done;
+    document.getElementById('pipPend').textContent = missing;
+    document.getElementById('remindT').textContent = missing
+      ? `${missing} player${missing === 1 ? '' : 's'} haven't submitted RPE for this session`
+      : 'Everyone has submitted RPE';
+    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${missing})`;
+
     respWrap.style.display = 'none';
     pendWrap.style.display = 'none';
     skel.style.display = 'none';
     empty.style.display = 'none';
-    orphanWrap.style.display = state.loading ? 'none' : '';
+    if (err) err.style.display = 'none';
+    // orphan section: hidden while loading / on error / when none
+    orphanWrap.style.display = (state.loading || state.error || state.orphans.length === 0) ? 'none' : '';
 
-    if (state.loading) {
-      skel.style.display = '';
-      skel.querySelector('.tr-list').innerHTML = skeletonHTML();
-      return;
+    if (state.loading) { skel.style.display = ''; skel.querySelector('.tr-list').innerHTML = skeletonHTML(); return; }
+    if (state.error) { if (err) err.style.display = ''; return; }
+    if (total === 0) {
+      document.getElementById('emptyH').textContent = 'No players in this session';
+      document.getElementById('emptyP').textContent = 'There are no players to show for the selected session.';
+      empty.style.display = ''; return;
     }
 
     if (state.tab === 'responded') {
       respWrap.style.display = '';
-      document.getElementById('listResponded').innerHTML =
-        RESPONDED.slice().sort((a, b) => (b.rpe - a.rpe) || (srpe(b) - srpe(a))).map(cardHTML).join('');
+      document.getElementById('listResponded').innerHTML = state.responders.map(cardHTML).join('');
     } else {
       pendWrap.style.display = '';
-      document.getElementById('listPending').innerHTML = PENDING.map(pendingCardHTML).join('');
+      document.getElementById('listPending').innerHTML = state.pending.map(pendingCardHTML).join('');
     }
   }
   window.renderRpe = renderRpe;
 
   function renderOrphans() {
-    document.getElementById('listOrphans').innerHTML = ORPHANS.map(orphanHTML).join('');
-    document.getElementById('orphanCount').textContent = ORPHANS.length + ' unlinked';
-    document.getElementById('sumOrphan').textContent = ORPHANS.length;
+    const wrap = document.getElementById('orphanWrap');
+    document.getElementById('sumOrphan').textContent = state.orphans.length;
+    document.getElementById('orphanCount').textContent = state.orphans.length + ' unlinked';
+    if (!state.orphans.length) { wrap.style.display = 'none'; document.getElementById('listOrphans').innerHTML = ''; return; }
+    if (!state.loading && !state.error) wrap.style.display = '';
+    document.getElementById('listOrphans').innerHTML = state.orphans.map(orphanHTML).join('');
   }
 
-  /* ── Events ── */
+  /* ── Loads ── */
+  async function loadRecentSessions() {
+    try {
+      const { data, error } = await window.sb.rpc('recent_sessions', { p_club_id: state.cid, p_limit: 8 });
+      if (error) throw error;
+      state.recent = data || [];
+    } catch (e) { console.warn('[RPE] recent_sessions:', e && e.message); state.recent = []; }
+  }
+
+  async function loadRpe() {
+    const sel = document.getElementById('rmSessionSelect');
+    if (sel.selectedIndex >= 0) document.getElementById('pgSub').textContent = sel.options[sel.selectedIndex].text;
+    const sessionId = sel.value || null;
+    state.loading = true; state.error = false; renderRpe();
+    if (!sessionId) {
+      state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1;
+      state.loading = false; renderRpe(); return;
+    }
+    try {
+      const { data, error } = await window.sb.rpc('session_rpe_status', { p_session_id: sessionId });
+      if (error) throw error;
+      const rows = data || [];
+      const responders = rows.filter(r => r.responded).map(modelFromRow);
+      const pending = rows.filter(r => !r.responded).map(modelFromRow);
+      // highest-first: rpe DESC, then load (sRPE) DESC
+      responders.sort((a, b) => (b.rpe - a.rpe) || ((b.load || 0) - (a.load || 0)));
+      const loads = responders.map(p => p.load).filter(v => v != null);
+      state.avgSrpe = loads.length ? Math.round(loads.reduce((a, b) => a + b, 0) / loads.length) : 0;
+      state.maxSrpe = loads.length ? Math.max(...loads) : 1;
+      state.responders = responders;
+      state.pending = pending;
+      state.total = rows.length;
+      state.loading = false; state.error = false;
+      renderRpe();
+    } catch (e) {
+      console.warn('[RPE] load:', e && e.message);
+      state.loading = false; state.error = true;
+      renderRpe();
+    }
+  }
+  window.loadRpe = loadRpe;
+
+  async function loadOrphans() {
+    try {
+      if (!state.recent.length) await loadRecentSessions();
+      const { data, error } = await window.sb.rpc('get_pending_rpe', { p_club_id: state.cid });
+      if (error) throw error;
+      state.orphans = (data || []).map(o => ({ id: o.id, name: o.player_name || 'Player', rpe: numOrNull(o.rpe), sent: fmtDateTime(o.created_at) }));
+    } catch (e) {
+      console.warn('[RPE] orphans:', e && e.message);
+      state.orphans = [];
+    }
+    renderOrphans();
+  }
+
+  /* ── Tab switch ── */
   document.addEventListener('tr:seg', e => {
     if (e.detail.group === 'tab') { state.tab = e.detail.value; renderRpe(); }
   });
 
-  // Session select → update subtitle + re-render (mock)
-  const sessionSel = document.getElementById('rmSessionSelect');
-  function syncSub() {
-    document.getElementById('pgSub').textContent = sessionSel.options[sessionSel.selectedIndex].text;
+  /* ── Session select — recent sessions for the active team ── */
+  async function initSessionSelect() {
+    const sel = document.getElementById('rmSessionSelect');
+    const activeTeam = sessionStorage.getItem('cal_active_team');
+    let q = window.sb.from('training_sessions')
+      .select('id, session_date, title, session_type, team_id')
+      .eq('club_id', state.cid);
+    if (activeTeam) q = q.eq('team_id', activeTeam);
+    const { data, error } = await q.order('session_date', { ascending: false }).limit(8);
+    const sessions = error ? [] : (data || []);
+    state.sessionsById = {};
+    sessions.forEach(s => { state.sessionsById[s.id] = s; });
+    sel.innerHTML = sessions.length
+      ? sessions.map(s => `<option value="${s.id}">${T.escape(sessionLabel(s))}</option>`).join('')
+      : '<option value="">No recent sessions</option>';
+    sel.addEventListener('change', () => { loadRpe(); });
   }
-  sessionSel.addEventListener('change', () => { syncSub(); renderRpe(); });
-  syncSub();
 
-  // Assign an orphan → mark linked (mock)
-  document.getElementById('listOrphans').addEventListener('click', e => {
+  /* ── Teams (roles) for the share modal — identical to Wellness ── */
+  async function initTeams() {
+    const profile = await window.getProfile();
+    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
+    let fullAccess = bucket === 'admin' || bucket === 'owner';
+    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch (e) {} }
+    let teams = await window.getTeams(state.cid);
+    if (!fullAccess) {
+      let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch (e) {}
+      const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
+    }
+    state.teams = teams; state.fullAccess = fullAccess;
+  }
+
+  /* ── Assign an orphan → session (real) ── */
+  document.getElementById('listOrphans').addEventListener('click', async e => {
     const btn = e.target.closest('.o-assign-btn');
     if (!btn) return;
     const row = btn.closest('.orphan');
+    const rpeId = row.getAttribute('data-id');
     const sel = row.querySelector('.cm-select');
-    const session = sel.value;
-    const name = row.querySelector('.pc-name').textContent;
-    row.classList.add('is-done');
-    row.querySelector('.o-assign').innerHTML =
-      `<span class="o-linked"><i class="ti ti-circle-check-filled"></i>Linked to ${session}</span>`;
-    T.toast(name + ' → ' + session + ' · load computed', 'ti-plug-connected');
+    const sessionId = sel.value;
+    const label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : 'session';
+    if (!sessionId) return;
+    btn.disabled = true;
+    try {
+      const { error } = await window.sb.rpc('assign_rpe_session', { p_rpe_id: rpeId, p_session_id: sessionId });
+      if (error) throw error;
+      row.classList.add('is-done');
+      row.querySelector('.o-assign').innerHTML =
+        `<span class="o-linked"><i class="ti ti-circle-check-filled"></i>Linked to ${T.escape(label)}</span>`;
+      T.toast(row.querySelector('.pc-name').textContent + ' → ' + label + ' · load computed', 'ti-plug-connected');
+      loadOrphans(); loadRpe();
+    } catch (err) {
+      console.warn('[RPE] assign:', err && err.message);
+      T.toast("Couldn't assign session", 'ti-alert-triangle');
+      btn.disabled = false;
+    }
   });
 
-  // Auto-link today's RPE (mock)
-  document.getElementById('rmAutoLink').addEventListener('click', function () {
-    const label = sessionSel.options[sessionSel.selectedIndex].text;
-    T.toast(`${RESPONDED.length} RPE linked to ${label} · avg load ${SQUAD_AVG_SRPE} au`, 'ti-link-plus');
+  /* ── Auto-link today's RPE (real) ── */
+  document.getElementById('rmAutoLink').addEventListener('click', async function () {
+    const btn = this;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    try {
+      const { data, error } = await window.sb.rpc('link_pending_rpe', { p_club_id: state.cid, p_date: null });
+      if (error) throw error;
+      const n = (typeof data === 'number') ? data : ((data && (data.count ?? data.linked)) || 0);
+      btn.innerHTML = n ? `<i class="ti ti-check"></i>${n} RPE linked` : `<i class="ti ti-check"></i>No pending RPE`;
+      T.toast(n ? `${n} RPE linked to sessions` : 'No pending RPE to link', 'ti-link-plus');
+      await Promise.all([loadRpe(), loadOrphans()]);
+    } catch (e) {
+      console.warn('[RPE] autolink:', e && e.message);
+      T.toast("Couldn't auto-link RPE", 'ti-alert-triangle');
+    } finally {
+      setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1600);
+    }
   });
 
-  // Refresh (mock skeleton flash)
-  const rmRefresh = document.getElementById('rmRefresh');
-  if (rmRefresh) rmRefresh.addEventListener('click', function () {
-    const icon = this.querySelector('.ti');
-    icon.style.transition = 'transform .8s cubic-bezier(.2,.7,.2,1)';
-    icon.style.transform = 'rotate(360deg)';
-    setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
-    state.loading = true; renderRpe();
-    setTimeout(() => {
-      state.loading = false; renderRpe();
-      T.toast(`RPE refreshed · ${RESPONDED.length} of ${RESPONDED.length + PENDING.length} in`, 'ti-refresh');
-    }, 900);
-  });
+  /* ── Refresh ── */
+  function wireRefresh() {
+    const btn = document.getElementById('rmRefresh');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const icon = btn.querySelector('.ti');
+      icon.style.transition = 'transform .8s cubic-bezier(.2,.7,.2,1)';
+      icon.style.transform = 'rotate(360deg)';
+      setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
+      await Promise.all([loadRpe(), loadOrphans()]);
+      if (!state.error) T.toast(`RPE refreshed · ${state.responders.length} of ${state.total} in`, 'ti-refresh');
+    });
+  }
 
-  /* ── Share modal link generation (mock) ── */
-  (function () {
+  /* ── Remind missing (bulk) — insert an rpe share_link + WhatsApp ── */
+  function wireRemind() {
+    const btn = document.getElementById('remindBtn');
+    btn.addEventListener('click', async () => {
+      if (!state.pending.length) return;
+      btn.disabled = true;
+      try {
+        const sessionId = document.getElementById('rmSessionSelect').value || null;
+        const sess = sessionId ? state.sessionsById[sessionId] : null;
+        const teamId = sess ? (sess.team_id || null) : null;
+        const token = crypto.randomUUID().replace(/-/g, '');
+        const { error } = await window.sb.from('share_links').insert({
+          club_id: state.cid, scope: 'rpe', team_id: teamId, session_id: sessionId, token,
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString()
+        });
+        if (error) throw error;
+        const url = location.origin + '/survey.html?token=' + token;
+        const names = state.pending.map(p => p.name).join(', ');
+        const msg = `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`;
+        window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+      } catch (e) {
+        console.warn('[RPE] remind:', e && e.message);
+        T.toast("Couldn't create reminder", 'ti-alert-triangle');
+      } finally { btn.disabled = false; }
+    });
+  }
+
+  /* ── Live refresh: focus + visibility + 60s poll (each wired once) ── */
+  function wireLiveRefresh() {
+    function reloadIfReady() { if (state.inited) { loadRpe(); loadOrphans(); } }
+    if (!window._rpeRefreshWired) {
+      window._rpeRefreshWired = true;
+      window.addEventListener('focus', reloadIfReady);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reloadIfReady(); });
+    }
+    if (window._rpePollId) clearInterval(window._rpePollId);
+    window._rpePollId = setInterval(() => { if (document.visibilityState === 'visible') reloadIfReady(); }, 60000);
+  }
+
+  /* ── Retry (error state) ── */
+  const errRetry = document.getElementById('errRetry');
+  if (errRetry) errRetry.addEventListener('click', () => { loadRpe(); loadOrphans(); });
+
+  /* ── Share modal — real share_links (copy handled by triage [data-copy]) ── */
+  function wireShareModal() {
     const btnGen = document.getElementById('btnGen');
     const linkUrl = document.getElementById('linkUrl');
     const linkRow = document.getElementById('linkRow');
@@ -558,37 +706,59 @@
     const shareSession = document.getElementById('shareSession');
     let currentUrl = '';
 
-    function gen() {
-      currentUrl = 'https://clava.fc/r/' + T.makeToken();
-      linkUrl.textContent = currentUrl;
-      linkRow.classList.remove('is-empty');
-      btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
-      tokNote.style.display = '';
-      const att = shareSession.value.startsWith("Don't") ? 'assign later' : 'auto-attaches to ' + shareSession.value;
-      tokNote.innerHTML = '<i class="ti ti-shield-check"></i>One-time token · expires in 12h · ' + att;
-      btnCopy.disabled = false;
-      btnWa.disabled = false;
+    shareTeam.innerHTML = (state.fullAccess ? '<option value="">Whole club</option>' : '') +
+      state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
+    shareSession.innerHTML = '<option value="">No session (linked by date)</option>' +
+      state.recent.map(s => `<option value="${s.id}">${T.escape(sessionLabel(s))}</option>`).join('');
+    const curSess = document.getElementById('rmSessionSelect').value;
+    if (curSess && [...shareSession.options].some(o => o.value === curSess)) shareSession.value = curSess;
+
+    async function gen() {
+      const teamId = shareTeam.value || null;
+      const sessionId = shareSession.value || null;
+      btnGen.disabled = true;
+      try {
+        const token = crypto.randomUUID();
+        const { error } = await window.sb.from('share_links').insert({ club_id: state.cid, scope: 'rpe', token, team_id: teamId, session_id: sessionId });
+        if (error) throw error;
+        currentUrl = location.origin + '/survey.html?token=' + token;
+        linkUrl.textContent = currentUrl;
+        linkRow.classList.remove('is-empty');
+        btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
+        tokNote.style.display = '';
+        const att = sessionId ? ('attached to ' + shareSession.options[shareSession.selectedIndex].text) : 'linked by date, assign later';
+        tokNote.innerHTML = '<i class="ti ti-shield-check"></i>Secure link · valid until revoked · ' + T.escape(att);
+        btnCopy.disabled = false; btnWa.disabled = false;
+      } catch (e) {
+        console.warn('[RPE] share:', e && e.message);
+        T.toast("Couldn't generate link", 'ti-alert-triangle');
+      } finally { btnGen.disabled = false; }
     }
     btnGen.addEventListener('click', gen);
     shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
     shareSession.addEventListener('change', () => { if (currentUrl) gen(); });
-    btnWa.addEventListener('click', () => {
-      if (currentUrl) T.whatsapp("RPE for today's session (" + shareTeam.value + '). Rate 1–10: ' + currentUrl);
-    });
+    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp('RPE: ' + currentUrl); });
+  }
+
+  /* ── Boot: auth guard → club → sessions/teams → wire → load ── */
+  (async () => {
+    try {
+      if (!(await window.guardModule())) return;
+      state.cid = await window.getClubId();
+      if (window.applyClubTheme) await window.applyClubTheme();
+      await Promise.all([initSessionSelect(), initTeams(), loadRecentSessions()]);
+      wireShareModal();
+      wireRemind();
+      wireRefresh();
+      wireLiveRefresh();
+      state.inited = true;
+      await Promise.all([loadRpe(), loadOrphans()]);
+    } catch (e) {
+      console.warn('[RPE] boot:', e && e.message);
+      state.error = true; renderRpe();
+    }
   })();
-
-  renderRpe();
-  renderOrphans();
   } /* end boot() */
-})();
-
-/* ── App-shell boot: auth guard + club theme (no data wiring) ── */
-(async () => {
-  try {
-    if (window.guardModule && !(await window.guardModule())) return;
-    if (window.getProfile && window.getClub) await Promise.all([window.getProfile(), window.getClub()]);
-    if (window.applyClubTheme) window.applyClubTheme();
-  } catch (e) { console.warn('[RPE] shell boot:', e); }
 })();
 </script>
 
