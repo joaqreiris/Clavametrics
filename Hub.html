@@ -1428,6 +1428,25 @@ async function renderActivity() {
         who = player; role = 'Player';
         what = `Submitted <span class="target">RPE ${s.rpe ?? ''}</span>`;
         break;
+      case 'task.created': {
+        icon = 'ti-checkbox';
+        who = actor?.name || 'Staff'; role = actor?.role || 'Staff';
+        let assignee = '';
+        if (s.mode === 'role') {
+          const labels = (s.assigned_roles || []).filter(Boolean)
+            .map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(', ');
+          if (labels) assignee = ` · assigned to ${labels}`;
+        } else if (s.assigned_to_name) {
+          assignee = ` · assigned to ${s.assigned_to_name}`;
+        }
+        what = `Created task: <span class="target">${s.title ?? ''}</span>${assignee}`;
+        break;
+      }
+      case 'task.completed':
+        icon = 'ti-checkbox'; color = 'var(--cm-success)';
+        who = actor?.name || 'Staff'; role = actor?.role || 'Staff';
+        what = `Completed task: <span class="target">${s.title ?? ''}</span>`;
+        break;
       default:
         return;
     }
