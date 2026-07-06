@@ -564,9 +564,13 @@
   let MC_RANGES  = [];              // all microcycles overlapping the window (for MD labels)
   let DAYOFF_DATES = new Set();     // YYYY-MM-DD planned as day off — read-only
   let NON_COUNTING_DATES = new Set();  // days inside season phases with counts_availability=false (break/offseason)
-  let todayCountable = true;           // false when today is outside every active season, or in a non-counting phase
-  let countableReason = null;          // 'no-season' | 'non-counting-phase' | null
+  let PLANNED_DATES = new Set();    // days with a planned training session or a match — the only tracked days
   let todayIdx   = -1;
+
+  // A day is tracked only when a session/match is planned and it isn't a day-off / non-counting phase.
+  function dayCountable(date) {
+    return PLANNED_DATES.has(date) && !NON_COUNTING_DATES.has(date) && !DAYOFF_DATES.has(date);
+  }
   let avMap             = {};   // player_id|date → availability row — shared across init + handlers
   let players           = [];   // current club players
   let injuredIds        = new Set(); // player IDs with active injury
@@ -664,7 +668,11 @@
     if (!row) return;
     const statuses = MC_DATES.map((date, i) => {
       const e = avMap[playerId + '|' + date];
-      if (!e) return (todayIdx >= 0 && i > todayIdx) ? null : (injuredIds.has(playerId) ? 'unavailable' : 'available');
+      if (!e) {
+        if (todayIdx >= 0 && i > todayIdx) return null;   // future: blank
+        if (!dayCountable(date)) return null;             // not planned → neutral/blank
+        return injuredIds.has(playerId) ? 'unavailable' : 'available';
+      }
       return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
     });
     const sumCell = row.querySelector('.col-sum');
@@ -740,6 +748,7 @@
           const e = avMap[p.id + '|' + date];
           if (!e) {
             if (todayIdx >= 0 && i > todayIdx) return null; // future: blank, no assumed status
+            if (!dayCountable(date)) return null;           // not planned → neutral/blank
             return injuredIds.has(p.id) ? 'unavailable' : 'available';
           }
           return e.minutes > 0 ? 'match:' + e.minutes : (e.status || 'available');
@@ -811,24 +820,35 @@
     }
   }
 
-  // ── Today-KPI gate: on a non-countable day, hide the KPI strip and show an
-  // honest empty-state panel instead of a fake full-strength count. ──
+  // ── Today-KPI gate: only track when today is a planned, countable day.
+  // Otherwise hide the KPI strip and show an honest empty-state panel. ──
   function renderTodayKpiGate() {
     const strip = document.getElementById('avKpiStrip');
     const emptyP = document.getElementById('avKpiEmpty');
     if (!strip || !emptyP) return;
-    if (todayCountable) {
+    if (dayCountable(todayStr)) {
       strip.style.display = '';
       emptyP.style.display = 'none';
       return;
     }
     strip.style.display = 'none';
-    const isPhase = countableReason === 'non-counting-phase';
-    document.getElementById('avKpiEmptyIcon').className = 'ti ' + (isPhase ? 'ti-beach' : 'ti-calendar-off');
-    document.getElementById('avKpiEmptyTitle').textContent = isPhase ? 'Off-season / break' : 'No active season';
-    document.getElementById('avKpiEmptyBody').textContent = isPhase
-      ? 'This period is set to not count for availability.'
-      : "Availability isn't being counted today. Create an active season for this team to start tracking.";
+    let icon, title, body;
+    if (NON_COUNTING_DATES.has(todayStr)) {
+      icon = 'ti-beach';
+      title = 'Off-season / break';
+      body = 'This period is set to not count for availability.';
+    } else if (DAYOFF_DATES.has(todayStr)) {
+      icon = 'ti-coffee';
+      title = 'Day off';
+      body = 'No availability tracking on a scheduled day off.';
+    } else {
+      icon = 'ti-calendar-off';
+      title = 'Nothing planned today';
+      body = "There's no session or match scheduled for today, so availability isn't being tracked. It activates automatically when a session or match is planned.";
+    }
+    document.getElementById('avKpiEmptyIcon').className = 'ti ' + icon;
+    document.getElementById('avKpiEmptyTitle').textContent = title;
+    document.getElementById('avKpiEmptyBody').textContent = body;
     emptyP.style.display = '';
   }
 
@@ -975,20 +995,6 @@
 
     todayIdx = MC_DATES.indexOf(todayStr);
 
-    // ── Countable-day gate: only count/autofill 'today' when it falls inside an
-    // ACTIVE season (scoped to the team, or a club-wide season) and not on a
-    // non-counting phase day. Otherwise there is no expected participant set. ──
-    let todayInActiveSeason = false;
-    try {
-      let sq = window.sb.from('seasons').select('start_date,end_date')
-                .eq('status', 'active').eq('club_id', CLUB_ID);
-      if (_avTeamId) sq = sq.or(`team_id.eq.${_avTeamId},team_id.is.null`);
-      const { data: actSeasons } = await sq;
-      todayInActiveSeason = (actSeasons || []).some(s => todayStr >= s.start_date && todayStr <= s.end_date);
-    } catch (e) { console.warn('[Availability] active-season check skipped:', e?.message); }
-    todayCountable  = todayInActiveSeason && !NON_COUNTING_DATES.has(todayStr);
-    countableReason = !todayInActiveSeason ? 'no-season' : (NON_COUNTING_DATES.has(todayStr) ? 'non-counting-phase' : null);
-
     // Fetch all data
     const { data: playersData, error: playersErr } = await window
       .cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number').order('last_name');
@@ -1054,6 +1060,19 @@
       (offEvts || []).forEach(e => e.date && DAYOFF_DATES.add(String(e.date).slice(0, 10)));
     } catch (e) { DAYOFF_DATES = new Set(); console.warn('[Availability] day-off skipped:', e?.message); }
 
+    // ── Planned days: a real training session (not a day-off) or a match. Only these are tracked. ──
+    PLANNED_DATES = new Set();
+    try {
+      let sq = window.sb.from('training_sessions').select('session_date')
+        .eq('club_id', CLUB_ID).eq('is_historical', false)
+        .neq('session_type', 'day_off')
+        .gte('session_date', mcStart).lte('session_date', mcEnd);
+      if (_avTeamId) sq = sq.eq('team_id', _avTeamId);
+      const { data: planned } = await sq;
+      (planned || []).forEach(s => s.session_date && PLANNED_DATES.add(String(s.session_date).slice(0, 10)));
+    } catch (e) { console.warn('[Availability] planned sessions skipped:', e?.message); }
+    Object.keys(matchDates).forEach(d => PLANNED_DATES.add(d)); // matches also count as planned
+
     renderHeader(matchDates);
 
     players    = playersData || [];
@@ -1066,7 +1085,7 @@
 
     // Auto-fill: fill injury range first, then today's defaults
     await autofillInjuryRange(injuriesData || [], avMap, todayStr);
-    if (todayCountable) await autofillToday(players, avMap, injuredIds, todayStr);
+    if (dayCountable(todayStr)) await autofillToday(players, avMap, injuredIds, todayStr);
 
     // Update toolbar counts
     const posCounts = { gk:0, cb:0, fb:0, mf:0, wg:0, st:0 };
@@ -1149,7 +1168,11 @@
     if (!pid) return;
     const statuses = MC_DATES.map((date, i) => {
       const ent = avMap[pid + '|' + date];
-      if (!ent) return (todayIdx >= 0 && i > todayIdx) ? null : (injuredIds.has(pid) ? 'unavailable' : 'available');
+      if (!ent) {
+        if (todayIdx >= 0 && i > todayIdx) return null;   // future: blank
+        if (!dayCountable(date)) return null;             // not planned → neutral/blank
+        return injuredIds.has(pid) ? 'unavailable' : 'available';
+      }
       return ent.minutes > 0 ? 'match:' + ent.minutes : (ent.status || 'available');
     });
     const html = summaryTooltip(statuses, MC_DATES);
