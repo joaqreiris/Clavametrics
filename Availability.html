@@ -51,6 +51,11 @@
   /* KPI strip ---- */
   .av-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
   .av-kpi { background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:14px 16px 16px; box-shadow:var(--cm-shadow-1); position:relative; }
+  .av-kpi-empty { display:flex; align-items:center; gap:14px; background:var(--cm-surface); border:1px solid var(--cm-border); border-radius:var(--cm-r-4); padding:16px 18px; box-shadow:var(--cm-shadow-1); margin-bottom:18px; }
+  .av-kpi-empty .ic { display:flex; align-items:center; justify-content:center; flex-shrink:0; width:40px; height:40px; border-radius:var(--cm-r-3); background:var(--cm-bg-soft); border:1px solid var(--cm-border); color:var(--cm-fg-muted); }
+  .av-kpi-empty .ic .ti { font-size:20px; }
+  .av-kpi-empty .t { font:600 14px/1.2 var(--cm-font-sans); color:var(--cm-fg-strong); }
+  .av-kpi-empty .s { font:500 12.5px/1.4 var(--cm-font-sans); color:var(--cm-fg-muted); margin-top:3px; max-width:560px; }
   .av-kpi-l { display:flex; align-items:center; gap:6px; font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-muted); margin-bottom:10px; }
   .av-kpi-l .ti { font-size:14px; }
   .av-kpi-v { font:600 28px/1 var(--cm-font-sans); letter-spacing:-0.02em; color:var(--cm-fg-strong); }
@@ -402,7 +407,7 @@
       </header>
 
       <!-- KPI strip -->
-      <div class="av-kpis">
+      <div class="av-kpis" id="avKpiStrip">
         <div class="av-kpi">
           <div class="av-kpi-l"><i class="ti ti-circle-check"></i>Available today</div>
           <div class="av-kpi-v" id="kpiAvail">— <sub>/ —</sub></div>
@@ -428,6 +433,15 @@
           <div class="av-kpi-l"><i class="ti ti-flag"></i>National-team duty</div>
           <div class="av-kpi-v" id="kpiAvailNat">—</div>
           <div class="av-kpi-t"><span id="kpiNatDetail" style="color:var(--cm-fg-muted)"></span></div>
+        </div>
+      </div>
+
+      <!-- Today-KPI empty state (shown when today is not a countable day) -->
+      <div class="av-kpi-empty" id="avKpiEmpty" style="display:none">
+        <span class="ic"><i class="ti ti-calendar-off" id="avKpiEmptyIcon"></i></span>
+        <div class="tx">
+          <div class="t" id="avKpiEmptyTitle">No active season</div>
+          <div class="s" id="avKpiEmptyBody"></div>
         </div>
       </div>
 
@@ -550,6 +564,8 @@
   let MC_RANGES  = [];              // all microcycles overlapping the window (for MD labels)
   let DAYOFF_DATES = new Set();     // YYYY-MM-DD planned as day off — read-only
   let NON_COUNTING_DATES = new Set();  // days inside season phases with counts_availability=false (break/offseason)
+  let todayCountable = true;           // false when today is outside every active season, or in a non-counting phase
+  let countableReason = null;          // 'no-season' | 'non-counting-phase' | null
   let todayIdx   = -1;
   let avMap             = {};   // player_id|date → availability row — shared across init + handlers
   let players           = [];   // current club players
@@ -795,6 +811,27 @@
     }
   }
 
+  // ── Today-KPI gate: on a non-countable day, hide the KPI strip and show an
+  // honest empty-state panel instead of a fake full-strength count. ──
+  function renderTodayKpiGate() {
+    const strip = document.getElementById('avKpiStrip');
+    const emptyP = document.getElementById('avKpiEmpty');
+    if (!strip || !emptyP) return;
+    if (todayCountable) {
+      strip.style.display = '';
+      emptyP.style.display = 'none';
+      return;
+    }
+    strip.style.display = 'none';
+    const isPhase = countableReason === 'non-counting-phase';
+    document.getElementById('avKpiEmptyIcon').className = 'ti ' + (isPhase ? 'ti-beach' : 'ti-calendar-off');
+    document.getElementById('avKpiEmptyTitle').textContent = isPhase ? 'Off-season / break' : 'No active season';
+    document.getElementById('avKpiEmptyBody').textContent = isPhase
+      ? 'This period is set to not count for availability.'
+      : "Availability isn't being counted today. Create an active season for this team to start tracking.";
+    emptyP.style.display = '';
+  }
+
   // ── Auto-fill: upsert today's status for players with no manual record ──
   // Uses ignoreDuplicates so existing manual edits are never overwritten.
   async function autofillToday(players, avMap, injuredIds, todayStr) {
@@ -938,6 +975,20 @@
 
     todayIdx = MC_DATES.indexOf(todayStr);
 
+    // ── Countable-day gate: only count/autofill 'today' when it falls inside an
+    // ACTIVE season (scoped to the team, or a club-wide season) and not on a
+    // non-counting phase day. Otherwise there is no expected participant set. ──
+    let todayInActiveSeason = false;
+    try {
+      let sq = window.sb.from('seasons').select('start_date,end_date')
+                .eq('status', 'active').eq('club_id', CLUB_ID);
+      if (_avTeamId) sq = sq.or(`team_id.eq.${_avTeamId},team_id.is.null`);
+      const { data: actSeasons } = await sq;
+      todayInActiveSeason = (actSeasons || []).some(s => todayStr >= s.start_date && todayStr <= s.end_date);
+    } catch (e) { console.warn('[Availability] active-season check skipped:', e?.message); }
+    todayCountable  = todayInActiveSeason && !NON_COUNTING_DATES.has(todayStr);
+    countableReason = !todayInActiveSeason ? 'no-season' : (NON_COUNTING_DATES.has(todayStr) ? 'non-counting-phase' : null);
+
     // Fetch all data
     const { data: playersData, error: playersErr } = await window
       .cmTeamPlayers(_avTeamId, 'id, first_name, last_name, position, number').order('last_name');
@@ -1015,7 +1066,7 @@
 
     // Auto-fill: fill injury range first, then today's defaults
     await autofillInjuryRange(injuriesData || [], avMap, todayStr);
-    if (!NON_COUNTING_DATES.has(todayStr)) await autofillToday(players, avMap, injuredIds, todayStr);
+    if (todayCountable) await autofillToday(players, avMap, injuredIds, todayStr);
 
     // Update toolbar counts
     const posCounts = { gk:0, cb:0, fb:0, mf:0, wg:0, st:0 };
@@ -1037,6 +1088,7 @@
     const _statsVisible = document.getElementById('viewStats') && document.getElementById('viewStats').style.display !== 'none';
     if (_statsVisible && typeof avRenderStats === 'function') avRenderStats();
     recalcKPIs();
+    renderTodayKpiGate(); // show honest empty-state instead of fake counts on non-countable days
     updateBulk(); // hide bulk bar (starts with is-on in HTML)
 
     // ── Realtime subscription ──
