@@ -828,8 +828,12 @@
   const playerCount = playersRes.count ?? 0;
 
   const count = members.length;
-  const sectionMap = {};
-  (memberModsRes.data || []).forEach(r => { (sectionMap[r.profile_id] ||= []).push(r.module_key); });
+  const sectionMap = {};        // profile_id -> [allowed page keys] (excludes the '__managed__' sentinel)
+  const managedSet = new Set(); // profile_ids with any member_modules row (managed = access restricted)
+  (memberModsRes.data || []).forEach(r => {
+    managedSet.add(r.profile_id);
+    if (r.module_key !== '__managed__') (sectionMap[r.profile_id] ||= []).push(r.module_key);
+  });
   let invites = invitesRes.data || [];
 
   // ── Org / workspace bar ──────────────────────────────────────────
@@ -1161,8 +1165,11 @@
     _secEditId = id;
     document.getElementById('secModalName').textContent = m.full_name || m.email || 'Member';
     const current = new Set(sectionMap[id] || []);
+    const _managed = managedSet.has(id);   // has any member_modules row (incl. the '__managed__' sentinel)
+    const _help = document.getElementById('secModalHelp');
     const _bucket = (m.role || m.club_role || '').toLowerCase();
     if (_bucket === 'admin' || _bucket === 'owner') {
+      if (_help) _help.style.display = 'none';   // full access by role — nothing to configure
       document.getElementById('secModalList').innerHTML =
         `<div style="padding:28px 20px;text-align:center;color:var(--cm-fg-muted)">
           <i class="ti ti-shield-check" style="font-size:26px;color:var(--cm-accent);opacity:.7"></i>
@@ -1174,13 +1181,16 @@
       document.getElementById('secModalBackdrop').style.display = 'flex';
       return;
     }
-    // (para roles normales, restaurar el Save por si quedó oculto)
+    // (para roles normales, restaurar el Save y la ayuda por si quedaron ocultos)
     const _sv2 = document.getElementById('secModalSave'); if (_sv2) _sv2.style.display = '';
+    if (_help) _help.style.display = '';
+    // Not managed yet → start with everything ON ("all allowed; toggle off to block").
+    // Managed → reflect the currently-allowed pages.
     document.getElementById('secModalList').innerHTML = SECTIONS.map(s => `
       <div class="ad-module-row" data-sec="${s.key}">
         <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ${s.icon}"></i></div>
         <div class="info"><div class="name">${s.name}</div></div>
-        <div class="ad-toggle${current.has(s.key) ? ' is-on' : ''}"></div>
+        <div class="ad-toggle${(_managed ? current.has(s.key) : true) ? ' is-on' : ''}"></div>
       </div>`).join('');
     document.querySelectorAll('#secModalList .ad-toggle').forEach(t =>
       t.addEventListener('click', () => t.classList.toggle('is-on')));
@@ -1193,12 +1203,14 @@
       .filter(r => r.querySelector('.ad-toggle').classList.contains('is-on'))
       .map(r => r.dataset.sec);
     await window.sb.from('member_modules').delete().eq('club_id', clubId).eq('profile_id', _secEditId);
-    if (keys.length) {
-      const rows = keys.map(k => ({ club_id: clubId, profile_id: _secEditId, module_key: k }));
-      const { error } = await window.sb.from('member_modules').insert(rows);
-      if (error) { alert('Save failed: ' + error.message); return; }
-    }
+    // Always write the '__managed__' sentinel so the member stays managed even with zero allowed
+    // pages (avoids the fail-open where 0 rows = full access). The sentinel is not a page.
+    const rows = [{ club_id: clubId, profile_id: _secEditId, module_key: '__managed__' },
+                  ...keys.map(k => ({ club_id: clubId, profile_id: _secEditId, module_key: k }))];
+    const { error } = await window.sb.from('member_modules').insert(rows);
+    if (error) { alert('Save failed: ' + error.message); return; }
     sectionMap[_secEditId] = keys;
+    managedSet.add(_secEditId);
     window.sb.rpc('log_audit', { p_table: 'member_modules', p_op: 'UPDATE', p_changes: { member: _secEditId, sections: keys }, p_club_id: clubId });
     closeMemberSectionsModal();
     applyFilters();
@@ -1630,6 +1642,7 @@
       <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Sections · <span id="secModalName">—</span></div>
       <button id="secModalClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
     </div>
+    <div id="secModalHelp" style="padding:12px 16px 0;font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">Toggle off the pages this member should <strong>not</strong> access. Staff Hub, Calendar and Chat &amp; tasks are always available.</div>
     <div id="secModalList" style="padding:14px 16px;max-height:60vh;overflow:auto;display:grid;grid-template-columns:1fr;gap:8px"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-outline is-sm" id="secModalCancel">Cancel</button>

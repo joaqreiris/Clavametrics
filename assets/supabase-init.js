@@ -208,8 +208,11 @@
         if (!clubId || !user) return { all: true, keys: new Set() }; // fail-open
         const { data } = await window.sb.from('member_modules')
           .select('module_key').eq('club_id', clubId).eq('profile_id', user.id);
-        const keys = new Set((data || []).map(r => r.module_key));
-        return { all: keys.size === 0, keys }; // sin filas = no gestionado = acceso completo
+        const rows = data || [];
+        // '__managed__' es un centinela: su presencia = usuario GESTIONADO (restringido),
+        // sin importar cuántas páginas tenga permitidas. No es en sí una página.
+        const keys = new Set(rows.map(r => r.module_key).filter(k => k !== '__managed__'));
+        return { all: rows.length === 0, keys }; // sin filas = no gestionado = acceso completo (fail-open)
       } catch (e) {
         return { all: true, keys: new Set() }; // ante error, no bloquear navegación
       }
