@@ -1246,7 +1246,7 @@ function updatePillCounts() {
 
 async function loadTasks() {
   let _tkQ = window.sb.from('tasks')
-    .select('id,title,description,status,priority,due_date,assigned_to,assigned_to_name,category')
+    .select('id,title,description,status,priority,due_date,assigned_to,assigned_to_name,assigned_roles,category')
     .eq('club_id', currentUser.clubId);
   if (currentUser.teamId) _tkQ = _tkQ.eq('team_id', currentUser.teamId);
   const { data } = await _tkQ.order('created_at', { ascending: false });
@@ -1288,6 +1288,51 @@ function renderKanban(tasks) {
   document.getElementById('tasksSub').textContent = sub;
 }
 
+// ── Role → people resolution + per-role color (assign-by-role rendering) ──
+// Colores estables por rol, usando tokens semánticos existentes del design system.
+const ROLE_COLORS = {
+  owner:        { bg:'var(--cm-accent-soft)', bd:'var(--cm-border)',      fg:'var(--cm-accent)'  },
+  admin:        { bg:'var(--cm-warning-bg)',  bd:'var(--cm-warning-bd)',  fg:'var(--cm-warning)' },
+  coach:        { bg:'var(--cm-info-bg)',     bd:'var(--cm-info-bd)',     fg:'var(--cm-info)'    },
+  physio:       { bg:'var(--cm-danger-bg)',   bd:'var(--cm-danger-bd)',   fg:'var(--cm-danger)'  },
+  analyst:      { bg:'var(--cm-violet-bg)',   bd:'var(--cm-violet-bd)',   fg:'var(--cm-violet)'  },
+  nutritionist: { bg:'var(--cm-success-bg)',  bd:'var(--cm-success-bd)',  fg:'var(--cm-success)' },
+  staff:        { bg:'var(--cm-bg-soft)',     bd:'var(--cm-border-soft)', fg:'var(--cm-fg-muted)'},
+};
+function roleColor(role) { return ROLE_COLORS[(role || '').toLowerCase()] || ROLE_COLORS.staff; }
+// Resolve a roles array → active-team people with those roles (deduped by id).
+function resolveRoleNames(roles) {
+  const want = new Set((roles || []).map(r => (r || '').toLowerCase()));
+  const seen = new Set(), out = [];
+  for (const m of (members || [])) {
+    const r = (m.role || '').toLowerCase();
+    if (want.has(r) && !seen.has(m.id)) { seen.add(m.id); out.push({ id: m.id, full_name: m.full_name || '?', role: r }); }
+  }
+  return out;
+}
+// Foot HTML for a role-assigned task: up to 3 person chips (colored by role) + "+N";
+// roles matching nobody in the active team fall back to a grey role-label chip.
+function roleAssigneeHTML(t) {
+  const people = resolveRoleNames(t.assigned_roles);
+  const chips = [];
+  people.slice(0, 3).forEach(p => {
+    const c = roleColor(p.role);
+    chips.push(`<div class="av tn" title="${esc(p.full_name)} · ${esc(roleLabel(p.role))}" style="background:${c.bg};border:1px solid ${c.bd};color:${c.fg}">${initials(p.full_name)}</div>`);
+  });
+  if (people.length > 3) {
+    const rest = people.slice(3).map(p => p.full_name).join(', ');
+    chips.push(`<div class="av tn" title="${esc(rest)}" style="background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);color:var(--cm-fg-muted)">+${people.length - 3}</div>`);
+  }
+  const matched = new Set(people.map(p => p.role));
+  (t.assigned_roles || []).forEach(r => {
+    const rl = (r || '').toLowerCase();
+    if (rl && !matched.has(rl)) {
+      chips.push(`<div class="av tn" title="No ${esc(roleLabel(rl))} in this team" style="width:auto;padding:0 7px;border-radius:9px;background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);color:var(--cm-fg-muted)">${esc(roleLabel(rl))}</div>`);
+    }
+  });
+  return chips.join('');
+}
+
 function renderTaskCardHTML(t) {
   const prio = { urgent:'hi', high:'hi', medium:'md', low:'lo' }[t.priority] || 'lo';
   const due  = t.due_date ? formatDate(t.due_date) : '';
@@ -1302,7 +1347,9 @@ function renderTaskCardHTML(t) {
     <div class="foot">
       ${due ? `<span class="due${ov?' overdue':tod?' today':''}">${esc(due)}</span>` : ''}
       <div class="grow"></div>
-      ${t.assigned_to_name ? `<div class="av tn" title="${esc(t.assigned_to_name)}">${initials(t.assigned_to_name)}</div>` : ''}
+      ${ (t.assigned_roles && t.assigned_roles.length)
+           ? `<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end">${roleAssigneeHTML(t)}</div>`
+           : (t.assigned_to_name ? `<div class="av tn" title="${esc(t.assigned_to_name)}">${initials(t.assigned_to_name)}</div>` : '') }
     </div>
   </div>`;
 }
@@ -1314,7 +1361,25 @@ function openTaskDetail(taskId) {
   document.getElementById('detailTitle').textContent    = t.title;
   document.getElementById('detailDesc').textContent     = t.description || '—';
   document.getElementById('detailStatus').value        = t.status || 'pending';
-  document.getElementById('detailAssignee').textContent = t.assigned_to_name || 'Unassigned';
+  const _detAss = document.getElementById('detailAssignee');
+  if (t.assigned_roles && t.assigned_roles.length) {
+    // Role-assigned: show the full resolved person list (name + role), colored by role.
+    const people = resolveRoleNames(t.assigned_roles);
+    const parts = people.map(p => {
+      const c = roleColor(p.role);
+      return `<span style="display:inline-flex;align-items:center;gap:5px">`
+        + `<span style="width:8px;height:8px;border-radius:50%;background:${c.fg};display:inline-block"></span>`
+        + `${esc(p.full_name)} <span style="color:var(--cm-fg-muted);font-size:11px">${esc(roleLabel(p.role))}</span></span>`;
+    });
+    const matched = new Set(people.map(p => p.role));
+    (t.assigned_roles || []).forEach(r => {
+      const rl = (r || '').toLowerCase();
+      if (rl && !matched.has(rl)) parts.push(`<span style="color:var(--cm-fg-muted)">${esc(roleLabel(rl))} (no one in team)</span>`);
+    });
+    _detAss.innerHTML = parts.length ? parts.join('<br>') : '—';
+  } else {
+    _detAss.textContent = t.assigned_to_name || 'Unassigned';
+  }
   document.getElementById('detailDue').textContent      = t.due_date ? formatDate(t.due_date) : '—';
   document.getElementById('detailPriority').textContent = t.priority || '—';
   document.getElementById('detailPanel').dataset.taskId = taskId;
