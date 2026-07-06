@@ -1394,10 +1394,29 @@
   renderInvites();
 
   // ── Invite staff modal ──
+  async function loadInviteTeams() {
+    const list = document.getElementById('inviteTeamsList');
+    if (!list) return;
+    list.innerHTML = '';
+    const { data: teams } = await window.sb.from('teams')
+      .select('id,name').eq('club_id', clubId).is('archived_at', null).order('name');
+    if (!teams || !teams.length) {
+      list.innerHTML = `<div style="padding:12px;text-align:center;color:var(--cm-fg-muted);font:500 12px/1 var(--cm-font-sans)">No teams yet — you can assign teams later.</div>`;
+      return;
+    }
+    list.innerHTML = teams.map(t => `
+      <div class="ad-module-row" data-team="${t.id}">
+        <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ti-users-group"></i></div>
+        <div class="info"><div class="name">${t.name}</div></div>
+        <div class="ad-toggle"></div>
+      </div>`).join('');
+    list.querySelectorAll('.ad-toggle').forEach(tg => tg.addEventListener('click', () => tg.classList.toggle('is-on')));
+  }
   function openInviteModal() {
     document.getElementById('inviteEmail').value = '';
     document.getElementById('inviteRole').value = 'viewer';
     const msg = document.getElementById('inviteMsg'); if (msg) msg.style.display = 'none';
+    loadInviteTeams();
     document.getElementById('inviteBackdrop').style.display = 'flex';
   }
   function closeInviteModal() { document.getElementById('inviteBackdrop').style.display = 'none'; }
@@ -1409,9 +1428,12 @@
       if (msg) { msg.textContent = 'Enter a valid email.'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
       return;
     }
+    const teamIds = [...document.querySelectorAll('#inviteTeamsList [data-team]')]
+      .filter(r => r.querySelector('.ad-toggle').classList.contains('is-on'))
+      .map(r => r.dataset.team);
     const redirectTo = new URL('auth-callback.html', window.location.href).href;
     const { data: res, error } = await window.sb.functions.invoke('invite-staff', {
-      body: { email, role, redirectTo, clubId },
+      body: { email, role, redirectTo, clubId, teamIds },
     });
     if (error || res?.error) {
       if (msg) { msg.textContent = (res?.error) || error.message || 'Invite failed'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
@@ -1593,6 +1615,11 @@
           <option value="nutritionist">Nutritionist</option>
           <option value="staff" selected>Staff</option>
         </select>
+      </div>
+      <div>
+        <label style="display:block;font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">Teams</label>
+        <div style="font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint);margin:-2px 0 8px">Select the teams this member will join.</div>
+        <div id="inviteTeamsList" style="display:grid;grid-template-columns:1fr;gap:8px;max-height:200px;overflow:auto"></div>
       </div>
       <div id="inviteMsg" style="font:500 12px/1.3 var(--cm-font-sans);margin-top:2px;display:none"></div>
     </div>

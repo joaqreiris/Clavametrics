@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     if (!caller?.club_id && !isSuper) return json({ error: 'Not authorized' }, 403);
     if (!isAdmin && !isSuper) return json({ error: 'Not authorized' }, 403);
 
-    const { email, role, redirectTo, clubId } = await req.json();
+    const { email, role, redirectTo, clubId, teamIds } = await req.json();
     let targetClub = caller?.club_id;
     if (clubId && (isSuper || clubId === caller?.club_id)) targetClub = clubId;
     if (!targetClub) return json({ error: 'No target club' }, 400);
@@ -39,6 +39,17 @@ Deno.serve(async (req) => {
     const cleanEmail = String(email || '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanEmail)) return json({ error: 'Invalid email' }, 400);
     const cleanRole = String(role || 'staff');
+
+    // Keep only team ids that actually belong to the target club (drop anything else).
+    let cleanTeamIds: string[] | null = null;
+    const reqTeamIds = Array.isArray(teamIds) ? teamIds.map(String) : [];
+    if (reqTeamIds.length) {
+      const { data: clubTeams } = await admin.from('teams')
+        .select('id').eq('club_id', targetClub).in('id', reqTeamIds);
+      const valid = new Set((clubTeams || []).map(t => t.id));
+      const filtered = reqTeamIds.filter(id => valid.has(id));
+      cleanTeamIds = filtered.length ? filtered : null;
+    }
 
     const { error: invErr } = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
       data: { club_id: targetClub, role: cleanRole },
@@ -49,7 +60,7 @@ Deno.serve(async (req) => {
 
     const { data: row, error: rowErr } = await admin.from('invitations')
       .upsert({ club_id: targetClub, email: cleanEmail, role: cleanRole,
-                status: 'pending', invited_by: user.id }, { onConflict: 'club_id,email' })
+                status: 'pending', invited_by: user.id, team_ids: cleanTeamIds }, { onConflict: 'club_id,email' })
       .select('id, email, role, status, created_at').single();
     if (rowErr) return json({ error: rowErr.message }, 400);
 
