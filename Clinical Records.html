@@ -440,6 +440,7 @@
   document.getElementById('cr-search').addEventListener('input', render);
 
   async function boot() {
+    if (!(await window.guardModule())) return;   // URL guard: redirect to Hub if no access to this page
     try {
       _clubId = await window.getClubId();
       if (!_clubId) { document.getElementById('cr-subtitle').textContent = 'No club found for this account.'; return; }

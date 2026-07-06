@@ -5824,8 +5824,11 @@
   });
 
   // ── boot ──
-  renderCatalog();
-  loadStatuses();
+  (async () => {
+    if (!(await window.guardModule())) return;   // URL guard: redirect to Hub if no access to this page
+    renderCatalog();
+    loadStatuses();
+  })();
 })();
 </script>
 

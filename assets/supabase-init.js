@@ -296,7 +296,10 @@
       if (!ok) return false;
       const k = key || window.moduleKeyForPage();
       if (!k) return true;                 // página no gateable → pasa
-      if (!(await window.canAccess(k))) { window.location.replace('Hub.html'); return false; }   // RBAC
+      if (!(await window.canAccess(k))) {
+        try { sessionStorage.setItem('cm_denied', k); } catch (_) {}   // Hub shows a notice on arrival
+        window.location.replace('Hub.html'); return false;             // RBAC
+      }
       if (!(await window.planAllows(k))) { window.location.replace('Plan Picker.html'); return false; } // plan
       return true;
     } catch (e) {

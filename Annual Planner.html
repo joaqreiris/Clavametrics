@@ -2079,6 +2079,7 @@ function apPickDay(ds){
 
 /* ── Init ─────────────────────────────────────────────────── */
 (async function apInit(){
+  if (!(await window.guardModule())) return;   // URL guard: redirect to Hub if no access to this page
   _apClubId = await window.getClubId();
   try { window.applyClubTheme(); } catch(_){}
   try { const club = await window.getClub(); if (club?.name) document.getElementById('apClubName').textContent = club.name; } catch(_){}

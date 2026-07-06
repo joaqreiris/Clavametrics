@@ -1057,6 +1057,15 @@ function showHubToast(msg) {
   t.textContent = msg; t.classList.add('is-show');
   setTimeout(() => t.classList.remove('is-show'), 2800);
 }
+// Notice when the page-access guard redirected the user here (access denied).
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    if (sessionStorage.getItem('cm_denied')) {
+      sessionStorage.removeItem('cm_denied');
+      showHubToast("You don't have access to that page.");
+    }
+  } catch (_) {}
+});
 
 // ── Task toggle (with accessibility) ─────────────────────────────────────────
 document.querySelectorAll('.task').forEach(el => {
