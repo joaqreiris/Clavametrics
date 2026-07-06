@@ -20,15 +20,27 @@
   body.cm { background: var(--cm-bg); }
 
   /* Topbar (mirrors Load Monitor chrome) ------------------- */
-  .hub-topbar { display:flex; align-items:center; gap:14px; height:56px; padding:0 24px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; }
-  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); }
+  .hub-main { min-width: 0; }  /* let main shrink inside the shell so the topbar never forces a page-wide scroll */
+  .hub-topbar { display:flex; align-items:center; gap:12px; height:56px; padding:0 20px; border-bottom:1px solid var(--cm-border); background:color-mix(in srgb, var(--cm-bg) 92%, transparent); backdrop-filter:saturate(160%) blur(10px); position:sticky; top:0; z-index:50; min-width:0; }
+  .tb-session { display:flex; align-items:center; gap:7px; min-width:0; flex-shrink:1; }
+  #rmSessionSelect { min-width:0; max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hub-crumb { display:flex; align-items:center; gap:8px; color:var(--cm-fg-muted); font:var(--cm-body-sm); white-space:nowrap; min-width:0; }
   .hub-crumb .ti { font-size:14px; }
   .hub-crumb .sep { color:var(--cm-fg-faint); }
-  .hub-search { margin-left:auto; width:280px; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
+  .hub-search { margin-left:auto; flex:0 1 260px; min-width:0; display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:var(--cm-bg-soft); border:1px solid var(--cm-border); border-radius:var(--cm-r-3); color:var(--cm-fg-muted); }
   .hub-search input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:var(--cm-body-sm); color:var(--cm-fg); }
   .hub-search input::placeholder { color:var(--cm-fg-faint); }
   .hub-search .ti { font-size:16px; }
-  .hub-topbar .actions { display:flex; align-items:center; gap:8px; }
+  .hub-topbar .actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .hub-topbar .actions .cm-btn { white-space:nowrap; }
+
+  /* Progressive collapse so the topbar never scrolls horizontally */
+  @media (max-width: 1200px){ .hub-crumb { display:none; } }
+  @media (max-width: 1040px){ .hub-search { display:none; } .hub-topbar .actions { margin-left:auto; } }
+  @media (max-width: 900px){
+    #rmAutoLink, .hub-topbar .actions .cm-btn.is-primary { font-size:0; gap:0; padding-left:11px; padding-right:11px; }
+    #rmAutoLink .ti, .hub-topbar .actions .cm-btn.is-primary .ti { font-size:16px; }
+  }
 
   /* Page --------------------------------------------------- */
   .tr-page { padding:24px 28px 64px; max-width:1400px; width:100%; }
@@ -55,7 +67,7 @@
   <main class="hub-main">
 
     <div class="hub-topbar">
-      <div style="display:flex;align-items:center;gap:7px">
+      <div class="tb-session">
         <i class="ti ti-calendar-event" style="font-size:16px;color:var(--cm-fg-muted)"></i>
         <select id="rmSessionSelect" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer">
           <option selected>Sat Jul 5 · Field · MD-2 · 82'</option>
@@ -74,8 +86,8 @@
       </div>
       <div class="actions">
         <button class="cm-icon-btn" id="rmRefresh" title="Refresh"><i class="ti ti-refresh"></i></button>
-        <button class="cm-btn is-secondary is-sm" id="rmAutoLink"><i class="ti ti-link-plus"></i>Auto-link today's RPE</button>
-        <button class="cm-btn is-primary is-sm" data-modal-open="rmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+        <button class="cm-btn is-secondary is-sm" id="rmAutoLink" title="Auto-link today's RPE"><i class="ti ti-link-plus"></i>Auto-link today's RPE</button>
+        <button class="cm-btn is-primary is-sm" data-modal-open="rmShareModal" title="Share link with players"><i class="ti ti-link"></i>Share link with players</button>
         <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
