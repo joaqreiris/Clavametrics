@@ -1003,6 +1003,9 @@
     <label>Title
       <input type="text" id="atTitle" placeholder="Task title…" maxlength="200">
     </label>
+    <label>Description
+      <textarea id="atDesc" placeholder="Details, context…" rows="3"></textarea>
+    </label>
     <div class="hub-modal-row">
       <label>Priority
         <select id="atPriority">
@@ -1014,6 +1017,24 @@
       <label>Due date
         <input type="date" id="atDue">
       </label>
+    </div>
+    <label>Category
+      <select id="atCategory">
+        <option value="general">General</option>
+        <option value="match_day">Match day</option>
+        <option value="medical">Medical</option>
+        <option value="routine">Routine</option>
+        <option value="event">Event</option>
+      </select>
+    </label>
+    <label style="margin-bottom:4px">Assignment</label>
+    <div id="atModeSeg" style="display:flex;gap:6px;margin-bottom:8px">
+      <button type="button" data-mode="me" id="atModeMe">For me</button>
+      <button type="button" data-mode="roles" id="atModeRoles">By role(s)</button>
+    </div>
+    <div id="atRolesField" style="display:none;margin-bottom:8px">
+      <div id="atRoles" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      <div id="atRolesHint" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:4px"></div>
     </div>
     <div class="hub-modal-actions">
       <button class="btn-cancel" id="atCancelBtn">Cancel</button>
@@ -1058,14 +1079,88 @@ document.querySelectorAll('.task').forEach(el => {
   const dueInput   = document.getElementById('atDue');
   const saveBtn    = document.getElementById('atSaveBtn');
 
-  function openModal() {
+  // ── Assign-by-role (mirrors the Chat & Tasks model) ──
+  let _atMode = 'me';
+  // Active-team members with their role (same filtering as Chat & Tasks loadMembers):
+  // club profiles, minus platform_admins, restricted to the active team via member_teams.
+  async function _loadMembers() {
+    const clubId = window._hubClubId;
+    window._hubMembers = [];
+    if (!clubId) return;
+    const { data: allProfiles } = await window.sb.from('profiles')
+      .select('id, full_name, role, avatar_url').eq('club_id', clubId);
+    let list = allProfiles || [];
+    try {
+      const { data: padmins } = await window.sb.from('platform_admins').select('user_id');
+      const superIds = new Set((padmins || []).map(r => r.user_id));
+      list = list.filter(p => !superIds.has(p.id));
+    } catch (_) {}
+    const teamId = window._hubTeamId;
+    if (teamId) {
+      try {
+        const { data: mt } = await window.sb.from('member_teams')
+          .select('profile_id').eq('club_id', clubId).eq('team_id', teamId);
+        const assigned = new Set((mt || []).map(r => r.profile_id));
+        list = list.filter(p => assigned.has(p.id) || p.id === window._hubUserId);
+      } catch (_) {}
+    }
+    window._hubMembers = list;
+  }
+  function _atRoleLabel(r) { return r ? r.charAt(0).toUpperCase() + r.slice(1) : r; }
+  function _atStyleBtn(btn, on) {
+    btn.style.cssText = 'padding:5px 10px;border-radius:7px;font:var(--cm-body-sm);cursor:pointer;'
+      + (on ? 'background:var(--cm-accent-soft);border:1px solid var(--cm-accent);color:var(--cm-accent)'
+            : 'background:var(--cm-bg-soft);border:1px solid var(--cm-border-soft);color:var(--cm-fg)');
+  }
+  function _atPopulateRoleChips() {
+    const box = document.getElementById('atRoles');
+    if (!box) return;
+    const roles = [...new Set((window._hubMembers || []).map(m => (m.role || '').trim()).filter(Boolean))].sort();
+    box.innerHTML = '';
+    if (!roles.length) { box.innerHTML = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">No staff roles in this team.</span>'; return; }
+    roles.forEach(r => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'at-chip';
+      b.dataset.role = r;
+      b.textContent = _atRoleLabel(r);
+      _atStyleBtn(b, false);
+      b.onclick = () => {
+        const on = !b.classList.contains('is-on');
+        b.classList.toggle('is-on', on);
+        _atStyleBtn(b, on);
+        const h = document.getElementById('atRolesHint');
+        if (h) h.textContent = '';
+      };
+      box.appendChild(b);
+    });
+  }
+  function _atSetMode(mode) {
+    _atMode = mode;
+    document.querySelectorAll('#atModeSeg [data-mode]').forEach(btn => _atStyleBtn(btn, btn.dataset.mode === mode));
+    const rolesField = document.getElementById('atRolesField');
+    const hint       = document.getElementById('atRolesHint');
+    if (rolesField) rolesField.style.display = (mode === 'roles') ? '' : 'none';
+    if (mode === 'roles') {
+      _atPopulateRoleChips();
+      if (hint) hint.textContent = window._hubTeamId ? '' : 'Select an active team to assign by role';
+    }
+  }
+
+  async function openModal() {
     titleInput.value = '';
+    document.getElementById('atDesc').value = '';
     document.getElementById('atPriority').value = 'medium';
+    document.getElementById('atCategory').value = 'general';
     dueInput.value = new Date().toISOString().split('T')[0];
+    await _loadMembers();
+    _atSetMode('me');   // default to "For me" each time the modal opens
     backdrop.classList.add('is-open');
     titleInput.focus();
   }
   function closeModal() { backdrop.classList.remove('is-open'); }
+  document.getElementById('atModeMe').addEventListener('click', () => _atSetMode('me'));
+  document.getElementById('atModeRoles').addEventListener('click', () => _atSetMode('roles'));
 
   document.getElementById('btnAddTask')?.addEventListener('click', openModal);
   document.getElementById('atCancelBtn').addEventListener('click', closeModal);
@@ -1074,10 +1169,31 @@ document.querySelectorAll('.task').forEach(el => {
 
   saveBtn.addEventListener('click', async () => {
     const title = titleInput.value.trim();
-    if (!title) { titleInput.focus(); return; }
+    if (!title) { titleInput.focus(); alert('Title is required'); return; }
     const clubId = window._hubClubId;
     const userId = window._hubUserId;
     if (!clubId) return;
+
+    // Assignment: strictly one or the other (never both).
+    const mode = _atMode || 'me';
+    let assigned_to = null, assigned_to_name = null, assigned_roles = null;
+    if (mode === 'roles') {
+      if (!window._hubTeamId) {
+        const h = document.getElementById('atRolesHint');
+        if (h) h.textContent = 'Select an active team to assign by role';
+        return;
+      }
+      const roles = [...document.querySelectorAll('#atRoles .at-chip.is-on')].map(el => el.dataset.role);
+      if (!roles.length) {
+        const h = document.getElementById('atRolesHint');
+        if (h) h.textContent = 'Pick at least one role';
+        return;
+      }
+      assigned_roles = roles;
+    } else {
+      assigned_to      = userId;
+      assigned_to_name = window._hubProfileName || null;
+    }
 
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving…';
@@ -1085,12 +1201,13 @@ document.querySelectorAll('.task').forEach(el => {
     const { error } = await window.sb.from('tasks').insert({
       club_id:          clubId,
       team_id:          window._hubTeamId || null,
-      assigned_to:      userId,
-      assigned_to_name: window._hubProfileName || null,
+      assigned_to, assigned_to_name, assigned_roles,
       created_by:       userId,
       created_by_name:  window._hubProfileName || null,
       title,
+      description:      document.getElementById('atDesc').value.trim() || null,
       priority:         document.getElementById('atPriority').value,
+      category:         document.getElementById('atCategory').value || 'general',
       status:           'pending',
       due_date:         dueInput.value || null,
     });
@@ -1106,18 +1223,22 @@ document.querySelectorAll('.task').forEach(el => {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save task';
 
+    // Refresh "My" (include role-assigned tasks, consistent with the list queries) and drop the
+    // cached Team list so a role task shows there too on next switch.
+    window._hubTeamTasks = null;
     const _cid = window._hubClubId, _uid = window._hubUserId;
+    const _tid = window._hubTeamId, _role = window._hubProfileRole || '';
     if (_cid && _uid) {
       const { data: refreshed } = await window.sb.from('tasks')
-        .select('id, title, priority, status, due_date, created_by_name')
+        .select('id, title, priority, status, due_date, created_by_name, assigned_to_name, assigned_roles, team_id')
         .eq('club_id', _cid)
-        .or(`assigned_to.eq.${_uid},created_by.eq.${_uid}`)
+        .or(`assigned_to.eq.${_uid},created_by.eq.${_uid}` + ((_tid && _role) ? `,and(team_id.eq.${_tid},assigned_roles.cs.{${_role}})` : ''))
         .neq('status', 'cancelled')
         .order('due_date', { ascending: true })
         .limit(10);
       if (refreshed) {
         window._hubMyTasks = refreshed;
-        // Only repaint if the user is on the "My" view; the new task is theirs.
+        // Only repaint if the user is on the "My" view.
         if ((window._hubTaskView || 'my') === 'my') renderTasks(refreshed, 'my');
       }
     }
