@@ -583,11 +583,22 @@
 <div class="cm-panel-overlay" id="detailOverlay" onclick="if(event.target===this)closeTaskDetail()"></div>
 <div class="cm-panel" id="detailPanel">
   <div class="cm-panel-head">
-    <h3 id="detailTitle">Task</h3>
+    <h3 id="detailTitle">Edit task</h3>
     <button class="close" onclick="closeTaskDetail()"><i class="ti ti-x" style="font-size:14px"></i></button>
   </div>
   <div class="cm-panel-body">
-    <div class="cm-field"><label>Description</label><div class="val" id="detailDesc">—</div></div>
+    <div class="cm-field"><label>Title *</label><input type="text" id="detailTitleInput" placeholder="Task title…"></div>
+    <div class="cm-field"><label>Description</label><textarea id="detailDescInput" placeholder="Details, context…"></textarea></div>
+    <div class="cm-field"><label>Assignment</label>
+      <div id="detailModeSeg" style="display:flex;gap:6px">
+        <button type="button" data-mode="me" class="cm-btn is-sm is-primary" onclick="setDetailMode('me')">For me</button>
+        <button type="button" data-mode="roles" class="cm-btn is-sm is-outline" onclick="setDetailMode('roles')">By role(s)</button>
+      </div>
+    </div>
+    <div class="cm-field" id="detailRolesField" style="display:none"><label>Roles</label>
+      <div id="detailRoles" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      <div id="detailRolesHint" style="font:var(--cm-body-sm);color:var(--cm-fg-muted);margin-top:4px"></div>
+    </div>
     <div class="cm-field"><label>Status</label>
       <select id="detailStatus">
         <option value="pending">Backlog</option>
@@ -596,13 +607,30 @@
         <option value="done">Done</option>
       </select>
     </div>
-    <div class="cm-field"><label>Assigned to</label><div class="val" id="detailAssignee">—</div></div>
-    <div class="cm-field"><label>Due date</label><div class="val" id="detailDue">—</div></div>
-    <div class="cm-field"><label>Priority</label><div class="val" id="detailPriority">—</div></div>
+    <div class="cm-field"><label>Due date</label><input type="date" id="detailDueInput"></div>
+    <div class="cm-field"><label>Priority</label>
+      <select id="detailPriority">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="urgent">Urgent</option>
+      </select>
+    </div>
+    <div class="cm-field"><label>Category</label>
+      <select id="detailCategory">
+        <option value="general">General</option>
+        <option value="match_day">Match day</option>
+        <option value="medical">Medical</option>
+        <option value="routine">Routine</option>
+        <option value="event">Event</option>
+      </select>
+    </div>
   </div>
   <div class="cm-panel-foot">
     <button class="cm-btn is-outline is-sm" onclick="closeTaskDetail()">Cancel</button>
-    <button class="cm-btn is-primary is-sm" onclick="saveDetailStatus()">Save</button>
+    <div style="flex:1"></div>
+    <button class="cm-btn is-sm" id="detailDeleteBtn" onclick="deleteDetailTask()" style="color:var(--cm-danger);border:1px solid var(--cm-danger-bd);background:var(--cm-danger-bg)">Delete</button>
+    <button class="cm-btn is-primary is-sm" onclick="saveDetail()">Save</button>
   </div>
 </div>
 
@@ -1358,30 +1386,24 @@ function renderTaskCardHTML(t) {
 function openTaskDetail(taskId) {
   const t = allTasks.find(x => x.id === taskId);
   if (!t) return;
-  document.getElementById('detailTitle').textContent    = t.title;
-  document.getElementById('detailDesc').textContent     = t.description || '—';
-  document.getElementById('detailStatus').value        = t.status || 'pending';
-  const _detAss = document.getElementById('detailAssignee');
+  // Populate the editable fields with the task's current values.
+  document.getElementById('detailTitleInput').value = t.title || '';
+  document.getElementById('detailDescInput').value  = t.description || '';
+  document.getElementById('detailStatus').value     = t.status || 'pending';
+  document.getElementById('detailDueInput').value   = t.due_date || '';
+  document.getElementById('detailPriority').value   = t.priority || 'medium';
+  document.getElementById('detailCategory').value   = t.category || 'general';
+  // Assignment mode: role mode (with the task's roles preselected) if it carries roles,
+  // otherwise "For me" / individual.
   if (t.assigned_roles && t.assigned_roles.length) {
-    // Role-assigned: show the full resolved person list (name + role), colored by role.
-    const people = resolveRoleNames(t.assigned_roles);
-    const parts = people.map(p => {
-      const c = roleColor(p.role);
-      return `<span style="display:inline-flex;align-items:center;gap:5px">`
-        + `<span style="width:8px;height:8px;border-radius:50%;background:${c.fg};display:inline-block"></span>`
-        + `${esc(p.full_name)} <span style="color:var(--cm-fg-muted);font-size:11px">${esc(roleLabel(p.role))}</span></span>`;
-    });
-    const matched = new Set(people.map(p => p.role));
-    (t.assigned_roles || []).forEach(r => {
-      const rl = (r || '').toLowerCase();
-      if (rl && !matched.has(rl)) parts.push(`<span style="color:var(--cm-fg-muted)">${esc(roleLabel(rl))} (no one in team)</span>`);
-    });
-    _detAss.innerHTML = parts.length ? parts.join('<br>') : '—';
+    setDetailMode('roles', t.assigned_roles);
   } else {
-    _detAss.textContent = t.assigned_to_name || 'Unassigned';
+    setDetailMode('me');
   }
-  document.getElementById('detailDue').textContent      = t.due_date ? formatDate(t.due_date) : '—';
-  document.getElementById('detailPriority').textContent = t.priority || '—';
+  // Reset the delete confirmation state each time the modal opens.
+  const _del = document.getElementById('detailDeleteBtn');
+  if (_del) _del.textContent = 'Delete';
+  _detailDeleteArmed = false;
   document.getElementById('detailPanel').dataset.taskId = taskId;
   document.getElementById('detailOverlay').classList.add('is-open');
   document.getElementById('detailPanel').classList.add('is-open');
@@ -1390,20 +1412,114 @@ function closeTaskDetail() {
   document.getElementById('detailOverlay').classList.remove('is-open');
   document.getElementById('detailPanel').classList.remove('is-open');
 }
-async function saveDetailStatus() {
-  const panel  = document.getElementById('detailPanel');
-  const taskId = panel.dataset.taskId;
-  const status = document.getElementById('detailStatus').value;
-  const { error } = await window.sb.from('tasks')
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq('id', taskId);
+// ── Detail assignment mode (reuses the L1 model: "For me" vs "By role(s)") ──
+let _detailMode = 'me';
+function populateDetailRoleChips(preselected) {
+  const box = document.getElementById('detailRoles');
+  if (!box) return;
+  const pre = new Set((preselected || []).map(r => (r || '').toLowerCase()));
+  const roles = [...new Set((members || []).map(m => (m.role || '').trim()).filter(Boolean))].sort();
+  box.innerHTML = '';
+  if (!roles.length) { box.innerHTML = '<span style="font:var(--cm-body-sm);color:var(--cm-fg-muted)">No staff roles in this team.</span>'; return; }
+  roles.forEach(r => {
+    const on = pre.has(r.toLowerCase());
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'role-chip cm-btn is-sm ' + (on ? 'is-primary is-on' : 'is-outline');
+    b.dataset.role = r;
+    b.textContent = roleLabel(r);
+    b.onclick = () => {
+      b.classList.toggle('is-on');
+      const o = b.classList.contains('is-on');
+      b.classList.toggle('is-primary', o);
+      b.classList.toggle('is-outline', !o);
+      const h = document.getElementById('detailRolesHint');
+      if (h) h.textContent = '';
+    };
+    box.appendChild(b);
+  });
+}
+function setDetailMode(mode, preselectedRoles) {
+  _detailMode = mode;
+  document.querySelectorAll('#detailModeSeg [data-mode]').forEach(btn => {
+    const on = btn.dataset.mode === mode;
+    btn.classList.toggle('is-primary', on);
+    btn.classList.toggle('is-outline', !on);
+  });
+  const rolesField = document.getElementById('detailRolesField');
+  const hint       = document.getElementById('detailRolesHint');
+  if (rolesField) rolesField.style.display = (mode === 'roles') ? '' : 'none';
+  if (mode === 'roles') {
+    populateDetailRoleChips(preselectedRoles);
+    if (hint) hint.textContent = currentUser.teamId ? '' : 'Select an active team to assign by role.';
+  }
+}
+
+async function saveDetail() {
+  const taskId = document.getElementById('detailPanel').dataset.taskId;
+  if (!taskId) return;
+  const title = document.getElementById('detailTitleInput').value.trim();
+  if (!title) { document.getElementById('detailTitleInput').focus(); alert('Title is required'); return; }
+
+  // Assignment: strictly one or the other (never both).
+  const mode = _detailMode || 'me';
+  let assigned_to = null, assigned_to_name = null, assigned_roles = null;
+  if (mode === 'roles') {
+    if (!currentUser.teamId) { alert('Select an active team to assign by role'); return; }
+    const roles = [...document.querySelectorAll('#detailRoles .role-chip.is-on')].map(el => el.dataset.role);
+    if (!roles.length) {
+      const h = document.getElementById('detailRolesHint');
+      if (h) h.textContent = 'Pick at least one role.';
+      return;
+    }
+    assigned_roles = roles;
+  } else {
+    assigned_to      = currentUser.id;
+    assigned_to_name = currentUser.name;
+  }
+
+  const patch = {
+    title,
+    description: document.getElementById('detailDescInput').value.trim() || null,
+    due_date:    document.getElementById('detailDueInput').value || null,
+    priority:    document.getElementById('detailPriority').value,
+    category:    document.getElementById('detailCategory').value || 'general',
+    status:      document.getElementById('detailStatus').value,
+    assigned_to, assigned_to_name, assigned_roles,
+    updated_at:  new Date().toISOString(),
+  };
+  const { error } = await window.sb.from('tasks').update(patch).eq('id', taskId);
   if (error) {
     console.error('Task update error:', error);
-    alert('Error saving status: ' + error.message);
+    alert('Error saving task: ' + error.message);
     return;
   }
   const t = allTasks.find(x => x.id === taskId);
-  if (t) t.status = status;
+  if (t) Object.assign(t, patch);
+  renderKanban();
+  renderChatRightTasks();
+  updateTasksBadge();
+  closeTaskDetail();
+}
+
+// Delete with a two-step inline confirm on the button (reset on modal open).
+let _detailDeleteArmed = false;
+async function deleteDetailTask() {
+  const btn = document.getElementById('detailDeleteBtn');
+  if (!_detailDeleteArmed) {
+    _detailDeleteArmed = true;
+    if (btn) btn.textContent = "Delete this task? This can't be undone.";
+    return;
+  }
+  const taskId = document.getElementById('detailPanel').dataset.taskId;
+  if (!taskId) return;
+  const { error } = await window.sb.from('tasks').delete().eq('id', taskId);
+  if (error) {
+    console.error('Task delete error:', error);
+    alert('Error deleting task: ' + error.message);
+    return;
+  }
+  allTasks = allTasks.filter(x => x.id !== taskId);
   renderKanban();
   renderChatRightTasks();
   updateTasksBadge();
