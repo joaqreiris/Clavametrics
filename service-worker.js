@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'clava-v2';
+const CACHE_VERSION = 'clava-v3';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 
 // Solo assets inmutables. NUNCA cachear HTML ni llamadas a Supabase.
