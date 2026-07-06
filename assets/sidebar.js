@@ -52,6 +52,16 @@
 .hub-nav-item.is-active .count{color:var(--cm-side-item-active-fg);opacity:0.8}
 .hub-nav-item.is-locked{opacity:.55}
 .hub-nav-lock{margin-left:auto;font-size:14px;opacity:.85}
+/* Drag-to-reorder affordance (desktop expanded only) */
+.hub-nav-item{position:relative}
+.hub-nav-grip{position:absolute;left:10px;top:50%;transform:translateY(-50%);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity var(--cm-dur-1);pointer-events:none;color:var(--cm-side-fg-muted)}
+.hub-nav-grip .ti{opacity:1}
+.hub-nav-item[draggable="true"]:hover{cursor:grab}
+.hub-nav-item[draggable="true"]:hover>.ti:first-child{opacity:0}
+.hub-nav-item[draggable="true"]:hover .hub-nav-grip{opacity:.7}
+.hub-nav-item.is-dragging{opacity:.4}
+.hub-nav-drop-line{height:2px;margin:2px 8px;border-radius:2px;background:var(--cm-accent,var(--cm-side-item-active-fg));opacity:.85;pointer-events:none}
+html.cm-rail .hub-nav-grip{display:none}
 .hub-side-foot{border-top:1px solid var(--cm-side-border);padding:10px}
 .hub-user{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--cm-r-3);cursor:pointer}
 .hub-user:hover{background:var(--cm-side-item-active-bg)}
@@ -201,18 +211,38 @@
     return page === target || (page === '' && target === 'Hub.html');
   }
 
+  // ── NAV ORDER (drag-to-reorder persistence) ──────────────────
+  const NAV_ORDER_KEY = 'cm_nav_order';
+  function _navOrder() {
+    try { return JSON.parse(localStorage.getItem(NAV_ORDER_KEY) || '{}') || {}; }
+    catch (_) { return {}; }
+  }
+  // Reorder a group's items by a saved [href,...]: saved items first (in that order),
+  // then any item not in the saved list keeps its original relative order and is appended.
+  // Never drops items; item objects (and all their attributes) are only reordered.
+  function _orderItems(items, saved) {
+    if (!Array.isArray(saved) || !saved.length) return items;
+    const byHref = new Map(items.map(it => [it.href, it]));
+    const used = new Set();
+    const out = [];
+    saved.forEach(href => { const it = byHref.get(href); if (it && !used.has(href)) { out.push(it); used.add(href); } });
+    items.forEach(it => { if (!used.has(it.href)) out.push(it); });
+    return out;
+  }
+
   // ── RENDER ───────────────────────────────────────────────────
   function renderNav() {
+    const savedAll = _navOrder();
     return NAV_GROUPS.map(g => `
       <div class="hub-nav-group">
         <div class="hub-nav-label">${g.label}</div>
-        ${g.items.map(item => {
+        ${_orderItems(g.items, savedAll[g.label]).map(item => {
           const active = isActive(item.href) ? ' is-active' : '';
           const extra  = item.extra ? ` ${item.extra}` : '';
           const adm    = item.adminOnly ? ' data-admin-only' : '';
           const mod    = item.key ? ` data-mod="${item.key}"` : '';
           const plt    = item.platformOnly ? ' data-platform-only' : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}"${extra}${adm}${mod}${plt} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt">${item.label}</span></a>`;
+          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${mod}${plt} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt">${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -250,6 +280,83 @@
         </button>
       </div>
     </aside>`;
+  }
+
+  // ── DRAG-TO-REORDER (desktop expanded sidebar only) ──────────
+  function _dndEnabled() {
+    if (document.documentElement.classList.contains('cm-rail')) return false;      // collapsed rail
+    if (window.innerWidth <= 768) return false;                                    // mobile width
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return false; // touch
+    return true;
+  }
+
+  // Read the current DOM order per group (via the stable data-nav-href, which loadData()
+  // never mutates) and persist { groupLabel: [href,...] }.
+  function _persistNavOrder(nav) {
+    const order = {};
+    nav.querySelectorAll('.hub-nav-group').forEach(group => {
+      const label = group.querySelector('.hub-nav-label');
+      if (!label) return;
+      order[label.textContent.trim()] = [...group.querySelectorAll('.hub-nav-item')]
+        .map(a => a.getAttribute('data-nav-href'))
+        .filter(Boolean);
+    });
+    try { localStorage.setItem(NAV_ORDER_KEY, JSON.stringify(order)); } catch (_) {}
+  }
+
+  function _initNavDnD() {
+    const nav = document.querySelector('.hub-side .hub-nav');
+    if (!nav) return;
+
+    function applyDraggable() {
+      const on = _dndEnabled();
+      nav.querySelectorAll('.hub-nav-item').forEach(a => { a.draggable = on; });
+    }
+    applyDraggable();
+    window.addEventListener('resize', applyDraggable);
+    document.getElementById('cmCollapseBtn')?.addEventListener('click', () => setTimeout(applyDraggable, 0));
+
+    let dragEl = null, dragGroup = null, line = null;
+    const clearLine = () => { if (line && line.parentNode) line.parentNode.removeChild(line); };
+
+    nav.addEventListener('dragstart', e => {
+      const item = e.target.closest('.hub-nav-item');
+      if (!item || !_dndEnabled()) return;
+      dragEl = item;
+      dragGroup = item.closest('.hub-nav-group');
+      item.classList.add('is-dragging');
+      if (!line) { line = document.createElement('div'); line.className = 'hub-nav-drop-line'; }
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.getAttribute('data-nav-href') || ''); } catch (_) {}
+    });
+
+    nav.addEventListener('dragover', e => {
+      if (!dragEl) return;
+      const group = e.target.closest('.hub-nav-group');
+      if (!group || group !== dragGroup) { clearLine(); return; } // different group → revert (no drop)
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      const over = e.target.closest('.hub-nav-item');
+      if (over === dragEl) return;
+      if (!over) { const first = group.querySelector('.hub-nav-item'); if (first) first.before(line); else group.appendChild(line); return; }
+      const rect = over.getBoundingClientRect();
+      if (e.clientY > rect.top + rect.height / 2) over.after(line); else over.before(line);
+    });
+
+    nav.addEventListener('drop', e => {
+      if (!dragEl) return;
+      const group = e.target.closest('.hub-nav-group');
+      if (!group || group !== dragGroup) { clearLine(); return; } // ignore cross-group drops
+      e.preventDefault();
+      if (line && line.parentNode === group) group.insertBefore(dragEl, line);
+      clearLine();
+      _persistNavOrder(nav);
+    });
+
+    nav.addEventListener('dragend', () => {
+      if (dragEl) dragEl.classList.remove('is-dragging');
+      clearLine();
+      dragEl = null; dragGroup = null;
+    });
   }
 
   // ── INJECT ───────────────────────────────────────────────────
@@ -339,6 +446,9 @@
       try { localStorage.setItem('cm_sidebar_collapsed', on ? '1' : '0'); } catch (_) {}
       _syncCollapseBtn();
     });
+
+    // Drag-to-reorder nav items (desktop expanded sidebar only)
+    _initNavDnD();
   }
 
   // ── LOGO HELPER ──────────────────────────────────────────────
