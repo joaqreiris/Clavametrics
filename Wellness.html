@@ -139,9 +139,9 @@
           <span class="ic"><i class="ti ti-clock-pause"></i></span>
           <div class="tx">
             <div class="t" id="remindT">Some players haven't checked in yet</div>
-            <div class="s">Last reminder sent 25 min ago · Window closes at training (10:00)</div>
+            <div class="s">Generate a check-in link and message everyone still missing.</div>
           </div>
-          <button class="cm-btn is-wa" id="remindBtn" data-wa="Morning lads — quick wellness check-in before training. 30 seconds: clava.fc/w/9f3a-2k7 — thanks 🙏"><i class="ti ti-brand-whatsapp"></i>Remind missing (0)</button>
+          <button class="cm-btn is-wa" id="remindBtn"><i class="ti ti-brand-whatsapp"></i>Remind missing (0)</button>
         </div>
         <div class="tr-list" id="listPending" style="gap:8px;"></div>
       </div>
@@ -158,6 +158,16 @@
           <h3 id="emptyH">No check-ins yet</h3>
           <p id="emptyP">Waiting on the squad. Share the check-in link so players can fill it in before training.</p>
           <button class="cm-btn is-primary" data-modal-open="wmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+        </div>
+      </div>
+
+      <!-- Error state -->
+      <div id="errState" style="display:none;">
+        <div class="tr-empty">
+          <span class="ic"><i class="ti ti-plug-connected-x"></i></span>
+          <h3>Couldn't load wellness</h3>
+          <p>Something went wrong fetching today's check-ins. Check your connection and try again.</p>
+          <button class="cm-btn is-primary" id="errRetry"><i class="ti ti-refresh"></i>Retry</button>
         </div>
       </div>
     </section>
@@ -208,10 +218,10 @@
 
 <script>
 /* ============================================================
-   Wellness Monitor — MOCK DATA ONLY (no Supabase wiring yet).
-   RESPONDED[] / PENDING[] are the seam the next step swaps for
-   the wellness_status RPC. Hooper index = sleep+fatigue+stress+
-   soreness (each 1–7, 4–28 total, HIGHER = worse).
+   Wellness Monitor — wired to wellness_status() RPC.
+   Hooper index (each item 1–7, 4–28 total, HIGHER = worse):
+   green <12 · amber 12–17 · red ≥18. Legacy rows (null hooper)
+   fall back to readiness with neutral treatment.
    ============================================================ */
 (function () {
   // triage.js loads deferred, so window.Triage is only guaranteed at DOM-ready.
@@ -221,37 +231,35 @@
   function boot() {
   const PAIN_ICON = 'ti-body-scan';
 
-  const RESPONDED = [
-    { name:'D. Okafor',   pos:'st', sleep:6, fatigue:6, stress:5, soreness:6, pain:['Hamstring','Groin'], time:'07:12', comment:'Right hamstring tight since yesterday’s finishing block. Slept badly, woke up twice.' },
-    { name:'S. Petrov',   pos:'cb', sleep:6, fatigue:5, stress:5, soreness:5, pain:['Lower back'], time:'06:58', comment:'Lower back stiff on waking, eases when I move.' },
-    { name:'K. Novak',    pos:'gk', sleep:5, fatigue:6, stress:4, soreness:5, pain:['Shoulder'], time:'07:31', comment:'' },
-    { name:'Y. Demir',    pos:'mf', sleep:5, fatigue:5, stress:4, soreness:3, pain:[], time:'07:05', comment:'Feeling run down, think I’m catching a cold.' },
-    { name:'T. Becker',   pos:'cb', sleep:4, fatigue:4, stress:3, soreness:5, pain:['Knee'], time:'07:44', comment:'' },
-    { name:'O. Bauer',    pos:'fb', sleep:4, fatigue:4, stress:4, soreness:3, pain:[], time:'06:40', comment:'Poor sleep — little one was up all night.' },
-    { name:'F. Castro',   pos:'wg', sleep:5, fatigue:4, stress:3, soreness:3, pain:[], time:'07:19', comment:'' },
-    { name:'H. Tanaka',   pos:'mf', sleep:4, fatigue:3, stress:3, soreness:3, pain:[], time:'07:02', comment:'' },
-    { name:'V. Lima',     pos:'wg', sleep:2, fatigue:3, stress:2, soreness:3, pain:['Calves'], time:'07:15', comment:'Calves a bit heavy from the double session.' },
-    { name:'A. Ferrari',  pos:'cb', sleep:2, fatigue:2, stress:2, soreness:3, pain:[], time:'07:08', comment:'' },
-    { name:'J. Silva',    pos:'fb', sleep:2, fatigue:2, stress:1, soreness:2, pain:[], time:'07:33', comment:'' },
-    { name:'L. Romano',   pos:'wg', sleep:1, fatigue:2, stress:1, soreness:2, pain:[], time:'06:47', comment:'Feeling sharp.' },
-  ];
-  const PENDING = [
-    { name:'B. Andersson', pos:'cb', elapsed:'reminded 25m ago' },
-    { name:'C. Nilsson',   pos:'gk', elapsed:'reminded 25m ago' },
-    { name:'I. Costa',     pos:'st', elapsed:'not yet reminded' },
-    { name:'M. Diallo',    pos:'wg', elapsed:'not yet reminded' },
-    { name:'R. Vidal',     pos:'mf', elapsed:'reminded 1h ago' },
-    { name:'L. Santos',    pos:'fb', elapsed:'not yet reminded' },
-  ];
+  const PAIN_LABELS = { hamstring:'Hamstring', quads:'Quads', calves:'Calves', groin:'Groin', knee:'Knee', ankle:'Ankle', shoulder:'Shoulder', back:'Lower back' };
   const SUBS = [
     { key:'sleep', lab:'Sleep', ab:'Sl' }, { key:'fatigue', lab:'Fatigue', ab:'Ft' },
     { key:'stress', lab:'Stress', ab:'St' }, { key:'soreness', lab:'Soreness', ab:'So' },
   ];
 
   const T = window.Triage;
-  const hooper = p => p.sleep + p.fatigue + p.stress + p.soreness;
-  const initials = n => { const parts = n.replace('.','').split(/\s+/); return (parts[0][0] + (parts[parts.length-1][0]||'')).toUpperCase(); };
-  const POSLABEL = { gk:'GK', cb:'CB', fb:'FB', mf:'MF', wg:'WG', st:'ST' };
+  const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false, responders:[], pending:[], total:0 };
+
+  const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
+  const numOrNull = v => (v === null || v === undefined || v === '') ? null : Number(v);
+  const cap = s => { s = String(s||''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; };
+  function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false }); }
+  function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => PAIN_LABELS[String(a).toLowerCase()] || cap(a)); }
+  function modelFromRow(r) {
+    return {
+      name: r.player_name || 'Player',
+      hooper: numOrNull(r.hooper_index),
+      readiness: numOrNull(r.readiness),
+      sleep: numOrNull(r.sleep_quality),
+      fatigue: numOrNull(r.fatigue),
+      stress: numOrNull(r.stress),
+      soreness: numOrNull(r.soreness),
+      mood: numOrNull(r.mood),
+      pain: painLabels(r.body_areas),
+      comment: r.note || '',
+      time: fmtTime(r.submitted_at),
+    };
+  }
 
   // Gauge zones for Hooper (range 4–28): green <12, amber 12–17, red ≥18.
   function gaugeVars() {
@@ -278,14 +286,22 @@
   function subrowsHTML(p) {
     return SUBS.map(s => {
       const v = p[s.key];
-      const sev = T.subSev(v);
-      return `<div class="subrow ${sev}"><span class="name">${s.lab}</span><span class="track"><i style="width:${(v/7*100).toFixed(0)}%"></i></span><span class="n">${v}<span style="opacity:.5">/7</span></span></div>`;
+      const sev = v == null ? '' : T.subSev(v);
+      const w = v == null ? 0 : Math.min(100, v / 7 * 100);
+      const shown = v == null ? '—' : v;
+      return `<div class="subrow ${sev}"><span class="name">${s.lab}</span><span class="track"><i style="width:${w.toFixed(0)}%"></i></span><span class="n">${shown}<span style="opacity:.5">/7</span></span></div>`;
     }).join('');
   }
 
   function cardHTML(p) {
-    const h = hooper(p);
-    const b = T.bandHooper(h);
+    const isLegacy = p.hooper == null;
+    const b = isLegacy ? { sev: '', label: (p.readiness != null ? 'Legacy' : 'No data') } : T.bandHooper(p.hooper);
+    const displayVal = isLegacy ? (p.readiness != null ? p.readiness : '—') : p.hooper;
+    const scaleText = isLegacy ? 'Readiness · /10' : 'Hooper · /28';
+    const bandStyle = isLegacy ? 'background:var(--cm-neutral-bg);color:var(--cm-fg-muted);border:1px solid var(--cm-neutral-bd);' : '';
+    const markerPos = isLegacy ? '0%' : markerLeft(p.hooper);
+    const lastName = p.name.split(/\s+/).pop();
+
     const hasNote = !!p.comment;
     const flags = [];
     if (p.pain.length) flags.push(painChipsHTML(p.pain, 2));
@@ -293,14 +309,19 @@
     const flagsHTML = flags.length ? flags.join('') : '<span style="font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint);">—</span>';
 
     const painFull = p.pain.length
-      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${z}</span>`).join('')}</div></div>`
+      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${T.escape(z)}</span>`).join('')}</div></div>`
       : '';
     const noteFull = hasNote
-      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">Player note · submitted ${p.time}</div></div></div>`
+      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">Player note${p.time ? ` · submitted ${p.time}` : ''}</div></div></div>`
       : '';
     const rightBlock = (p.pain.length || hasNote)
       ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">Comment</div>${noteFull}</div>` : ''}`
       : `<div class="pc-det-block"><div class="h">Flags</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">No pain areas or notes reported.</p></div>`;
+
+    const moodRow = p.mood != null
+      ? `<div class="subrow"><span class="name">Mood</span><span class="track"><i style="width:${Math.min(100, p.mood/7*100).toFixed(0)}%"></i></span><span class="n">${p.mood}<span style="opacity:.5">/7</span></span></div>`
+      : '';
+    const waMsg = T.escape(`Hi ${lastName} — saw your check-in${isLegacy ? '' : ` (Hooper ${p.hooper})`}. How are you feeling this morning?`);
 
     return `
     <article class="pc" data-sev="${b.sev}">
@@ -308,20 +329,20 @@
         <div class="pc-id">
           <span class="cm-avatar is-md">${initials(p.name)}</span>
           <div class="pc-who">
-            <div class="pc-name">${p.name}</div>
-            <div class="pc-sub"><span class="pos-chip ${p.pos}">${POSLABEL[p.pos]}</span><span class="pc-time">${p.time}</span></div>
+            <div class="pc-name">${T.escape(p.name)}</div>
+            <div class="pc-sub">${p.time ? `<span class="pc-time">${p.time}</span>` : ''}</div>
           </div>
         </div>
         <div class="pc-metric">
-          <span class="val">${h}</span>
+          <span class="val">${displayVal}</span>
           <div class="meta">
-            <span class="band ${b.sev}">${b.label}</span>
-            <span class="scale">Hooper · /28</span>
+            <span class="band ${b.sev}" style="${bandStyle}">${b.label}</span>
+            <span class="scale">${scaleText}</span>
           </div>
         </div>
         <div class="pc-gauge">
-          <div class="row"><span class="val">${h}</span><span class="cap">${b.label} · Hooper</span></div>
-          <div class="gauge-track" style="${gaugeVars()}"><span class="marker" style="left:${markerLeft(h)}"></span></div>
+          <div class="row"><span class="val">${displayVal}</span><span class="cap">${b.label} · ${isLegacy ? 'Readiness' : 'Hooper'}</span></div>
+          <div class="gauge-track" style="${gaugeVars()}"><span class="marker" style="left:${markerPos}"></span></div>
         </div>
         <div class="pc-mid"><div class="pc-subs">${subitemsHTML(p)}</div></div>
         <div class="pc-flags">${flagsHTML}</div>
@@ -331,11 +352,12 @@
           <div class="pc-det-block">
             <div class="h">Wellness breakdown · higher = worse</div>
             ${subrowsHTML(p)}
+            ${moodRow}
           </div>
           <div>${rightBlock}
             <div class="pc-det-actions">
-              <button class="cm-btn is-secondary is-sm" data-wa="Hi ${p.name.split(' ').pop()} — saw your check-in (Hooper ${h}). How are you feeling this morning?"><i class="ti ti-brand-whatsapp"></i>Message</button>
-              <button class="cm-btn is-ghost is-sm"><i class="ti ti-history"></i>7-day history</button>
+              <button class="cm-btn is-secondary is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Message</button>
+              <button class="cm-btn is-ghost is-sm" disabled title="Coming soon"><i class="ti ti-history"></i>7-day history</button>
             </div>
           </div>
         </div>
@@ -344,20 +366,19 @@
   }
 
   function pendingCardHTML(p) {
+    const waMsg = T.escape(`Hi ${p.name.split(/\s+/).pop()} — we're still missing your wellness check-in before training today. Please fill it in when you can, thanks!`);
     return `
     <article class="pc is-pending">
       <div class="pc-pending-head">
         <div class="pc-id">
           <span class="cm-avatar is-md" style="opacity:.55;">${initials(p.name)}</span>
           <div class="pc-who">
-            <div class="pc-name">${p.name}</div>
-            <div class="pc-sub"><span class="pos-chip ${p.pos}" style="opacity:.7;">${POSLABEL[p.pos]}</span></div>
+            <div class="pc-name">${T.escape(p.name)}</div>
           </div>
         </div>
         <span class="status"><i class="ti ti-clock-x"></i>Not filled</span>
         <div class="right">
-          <span class="pc-elapsed">${p.elapsed}</span>
-          <button class="cm-btn is-ghost is-sm" data-wa="Hi ${p.name.split(' ').pop()} — still need your wellness check-in before training: clava.fc/w/9f3a-2k7"><i class="ti ti-brand-whatsapp"></i>Remind</button>
+          <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Remind</button>
         </div>
       </div>
     </article>`;
@@ -376,72 +397,172 @@
     return rows;
   }
 
-  /* ── State + render ── */
-  const state = { tab: 'responded', loading: false };
-
-  function renderWellness() {
+  /* ── Render ── */
+  function renderBoard() {
     const respWrap = document.getElementById('respWrap');
     const pendWrap = document.getElementById('pendWrap');
     const skel = document.getElementById('skeleton');
     const empty = document.getElementById('empty');
+    const err  = document.getElementById('errState');
 
-    // summary + pips
-    const total = RESPONDED.length + PENDING.length;
-    const painCount = RESPONDED.filter(p => p.pain.length).length;
-    const flagCount = RESPONDED.filter(p => T.bandHooper(hooper(p)).sev === 'red').length;
-    document.getElementById('sumDone').textContent = RESPONDED.length;
+    const done = state.responders.length;
+    const total = state.total;
+    const flagged = state.responders.filter(p => p.hooper != null && p.hooper >= 18).length;
+    const painReports = state.responders.filter(p => p.pain.length > 0).length;
+    const missing = state.pending.length;
+
+    document.getElementById('sumDone').textContent = done;
     document.getElementById('sumDen').textContent = '/ ' + total;
-    document.getElementById('sumFlag').textContent = flagCount;
-    document.getElementById('sumPain').textContent = painCount;
-    document.getElementById('sumMiss').textContent = PENDING.length;
-    document.getElementById('pipResp').textContent = RESPONDED.length;
-    document.getElementById('pipPend').textContent = PENDING.length;
-    document.getElementById('remindT').textContent = `${PENDING.length} players haven’t checked in yet`;
-    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${PENDING.length})`;
+    document.getElementById('sumFlag').textContent = flagged;
+    document.getElementById('sumPain').textContent = painReports;
+    document.getElementById('sumMiss').textContent = missing;
+    document.getElementById('pipResp').textContent = done;
+    document.getElementById('pipPend').textContent = missing;
+    document.getElementById('remindT').textContent = missing
+      ? `${missing} player${missing === 1 ? '' : 's'} haven’t checked in yet`
+      : 'Everyone has checked in';
+    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${missing})`;
 
-    // reset visibility
     respWrap.style.display = 'none';
     pendWrap.style.display = 'none';
     skel.style.display = 'none';
     empty.style.display = 'none';
+    err.style.display = 'none';
 
-    if (state.loading) {
-      skel.style.display = '';
-      skel.querySelector('.tr-list').innerHTML = skeletonHTML();
-      return;
+    if (state.loading) { skel.style.display = ''; skel.querySelector('.tr-list').innerHTML = skeletonHTML(); return; }
+    if (state.error)   { err.style.display = ''; return; }
+    if (total === 0) {
+      document.getElementById('emptyH').textContent = 'No players in this team';
+      document.getElementById('emptyP').textContent = 'There are no active players to show for the selected team.';
+      empty.style.display = ''; return;
     }
 
     if (state.tab === 'responded') {
       respWrap.style.display = '';
-      document.getElementById('listResponded').innerHTML =
-        RESPONDED.slice().sort((a, b) => hooper(b) - hooper(a)).map(cardHTML).join('');
+      document.getElementById('listResponded').innerHTML = state.responders.map(cardHTML).join('');
     } else {
       pendWrap.style.display = '';
-      document.getElementById('listPending').innerHTML = PENDING.map(pendingCardHTML).join('');
+      document.getElementById('listPending').innerHTML = state.pending.map(pendingCardHTML).join('');
     }
   }
-  window.renderWellness = renderWellness;
+  window.renderWellness = renderBoard;
 
-  /* ── Events ── */
+  /* ── Load from wellness_status() ── */
+  async function loadWellness() {
+    state.loading = true; state.error = false; renderBoard();
+    try {
+      const teamId = document.getElementById('wmTeamSelect').value || null;
+      const { data, error } = await window.sb.rpc('wellness_status', { p_club_id: state.cid, p_team_id: teamId, p_date: null });
+      if (error) throw error;
+      const rows = data || [];
+      const responders = rows.filter(r => r.responded);
+      const pending = rows.filter(r => !r.responded);
+      // worst-first: hooper_index DESC, null hooper last
+      responders.sort((a, b) => {
+        if (a.hooper_index == null && b.hooper_index == null) return 0;
+        if (a.hooper_index == null) return 1;
+        if (b.hooper_index == null) return -1;
+        return b.hooper_index - a.hooper_index;
+      });
+      state.responders = responders.map(modelFromRow);
+      state.pending = pending.map(modelFromRow);
+      state.total = rows.length;
+      state.loading = false; state.error = false;
+      renderBoard();
+    } catch (e) {
+      console.warn('[Wellness] load:', e && e.message);
+      state.loading = false; state.error = true;
+      renderBoard();
+    }
+  }
+  window.loadWellness = loadWellness;
+
+  /* ── Tab switch ── */
   document.addEventListener('tr:seg', e => {
-    if (e.detail.group === 'tab') { state.tab = e.detail.value; renderWellness(); }
+    if (e.detail.group === 'tab') { state.tab = e.detail.value; renderBoard(); }
   });
 
-  const wmRefresh = document.getElementById('wmRefresh');
-  if (wmRefresh) wmRefresh.addEventListener('click', function () {
-    const icon = this.querySelector('.ti');
-    icon.style.transition = 'transform .8s cubic-bezier(.2,.7,.2,1)';
-    icon.style.transform = 'rotate(360deg)';
-    setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
-    state.loading = true; renderWellness();
-    setTimeout(() => {
-      state.loading = false; renderWellness();
-      T.toast(`Wellness refreshed · ${RESPONDED.length} of ${RESPONDED.length + PENDING.length} in`, 'ti-refresh');
-    }, 900);
-  });
+  /* ── Team select (roles) — replicates the app's existing pattern ── */
+  async function initTeamSelect() {
+    const sel = document.getElementById('wmTeamSelect');
+    const profile = await window.getProfile();
+    const bucket = (profile?.role || profile?.club_role || '').toLowerCase();
+    let fullAccess = bucket === 'admin' || bucket === 'owner';
+    if (!fullAccess && window.isSuperAdmin) { try { fullAccess = await window.isSuperAdmin(); } catch (e) {} }
+    let teams = await window.getTeams(state.cid);
+    if (!fullAccess) {
+      let mine = []; try { mine = (await window.sb.rpc('my_team_ids')).data || []; } catch (e) {}
+      const s = new Set(mine); teams = teams.filter(t => s.has(t.id));
+    }
+    state.teams = teams; state.fullAccess = fullAccess;
+    const saved = sessionStorage.getItem('cal_active_team');
+    const useTeam = (saved && teams.some(t => t.id === saved)) ? saved : (fullAccess ? '' : (teams[0]?.id || ''));
+    sel.innerHTML = (fullAccess ? '<option value="">Whole club</option>' : '') +
+      teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
+    sel.value = useTeam;
+    sel.addEventListener('change', () => {
+      if (sel.value) sessionStorage.setItem('cal_active_team', sel.value);
+      loadWellness();
+    });
+  }
 
-  /* ── Share modal link generation (mock) ── */
-  (function () {
+  /* ── Refresh ── */
+  function wireRefresh() {
+    const btn = document.getElementById('wmRefresh');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const icon = btn.querySelector('.ti');
+      icon.style.transition = 'transform .8s cubic-bezier(.2,.7,.2,1)';
+      icon.style.transform = 'rotate(360deg)';
+      setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
+      await loadWellness();
+      if (!state.error) T.toast(`Wellness refreshed · ${state.responders.length} of ${state.total} in`, 'ti-refresh');
+    });
+  }
+
+  /* ── Remind missing (bulk) — insert a wellness share_link + WhatsApp ── */
+  function wireRemind() {
+    const btn = document.getElementById('remindBtn');
+    btn.addEventListener('click', async () => {
+      if (!state.pending.length) return;
+      btn.disabled = true;
+      try {
+        const teamId = document.getElementById('wmTeamSelect').value || null;
+        const token = crypto.randomUUID().replace(/-/g, '');
+        const { error } = await window.sb.from('share_links').insert({
+          club_id: state.cid, scope: 'wellness', team_id: teamId, token,
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString()
+        });
+        if (error) throw error;
+        const url = location.origin + '/survey.html?token=' + token;
+        const names = state.pending.map(p => p.name).join(', ');
+        const msg = `Daily wellness check-in reminder.\nMissing: ${names}\nComplete it here: ${url}`;
+        window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+      } catch (e) {
+        console.warn('[Wellness] remind:', e && e.message);
+        T.toast("Couldn't create reminder", 'ti-alert-triangle');
+      } finally { btn.disabled = false; }
+    });
+  }
+
+  /* ── Live refresh: focus + visibility + 60s poll (each wired once) ── */
+  function wireLiveRefresh() {
+    function reloadIfReady() { if (state.inited) loadWellness(); }
+    if (!window._wellRefreshWired) {
+      window._wellRefreshWired = true;
+      window.addEventListener('focus', reloadIfReady);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reloadIfReady(); });
+    }
+    if (window._wellPollId) clearInterval(window._wellPollId);
+    window._wellPollId = setInterval(() => { if (document.visibilityState === 'visible') reloadIfReady(); }, 60000);
+  }
+
+  /* ── Retry (error state) ── */
+  const errRetry = document.getElementById('errRetry');
+  if (errRetry) errRetry.addEventListener('click', () => loadWellness());
+
+  /* ── Share modal — real share_links (copy handled by triage [data-copy]) ── */
+  function wireShareModal() {
     const btnGen = document.getElementById('btnGen');
     const linkUrl = document.getElementById('linkUrl');
     const linkRow = document.getElementById('linkRow');
@@ -451,23 +572,35 @@
     const shareTeam = document.getElementById('shareTeam');
     let currentUrl = '';
 
-    function gen() {
-      const token = T.makeToken();
-      currentUrl = 'https://clava.fc/w/' + token;
-      linkUrl.textContent = currentUrl;
-      linkRow.classList.remove('is-empty');
-      btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
-      tokNote.style.display = '';
-      tokNote.innerHTML = '<i class="ti ti-shield-check"></i>One-time token · expires in 12h · valid for ' + shareTeam.value;
-      btnCopy.disabled = false;
-      btnWa.disabled = false;
+    shareTeam.innerHTML = (state.fullAccess ? '<option value="">Whole club</option>' : '') +
+      state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
+    const cur = document.getElementById('wmTeamSelect').value;
+    if ([...shareTeam.options].some(o => o.value === cur)) shareTeam.value = cur;
+
+    async function gen() {
+      const teamId = shareTeam.value || null;
+      btnGen.disabled = true;
+      try {
+        const token = crypto.randomUUID();
+        const { error } = await window.sb.from('share_links').insert({ club_id: state.cid, scope: 'wellness', token, team_id: teamId });
+        if (error) throw error;
+        currentUrl = location.origin + '/survey.html?token=' + token;
+        linkUrl.textContent = currentUrl;
+        linkRow.classList.remove('is-empty');
+        btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
+        tokNote.style.display = '';
+        const label = teamId ? shareTeam.options[shareTeam.selectedIndex].text : 'the whole club';
+        tokNote.innerHTML = '<i class="ti ti-shield-check"></i>Secure link · valid until revoked · ' + T.escape(label);
+        btnCopy.disabled = false; btnWa.disabled = false;
+      } catch (e) {
+        console.warn('[Wellness] share:', e && e.message);
+        T.toast("Couldn't generate link", 'ti-alert-triangle');
+      } finally { btnGen.disabled = false; }
     }
     btnGen.addEventListener('click', gen);
     shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
-    btnWa.addEventListener('click', () => {
-      if (currentUrl) T.whatsapp('Morning — wellness check-in for ' + shareTeam.value + ' before training. 30 seconds: ' + currentUrl);
-    });
-  })();
+    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp('Daily check-in: ' + currentUrl); });
+  }
 
   /* ── Page subtitle (live date) ── */
   (function () {
@@ -478,17 +611,25 @@
     if (sub) sub.textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()} · Morning triage`;
   })();
 
-  renderWellness();
+  /* ── Boot: auth guard → club → team select → wire actions → load ── */
+  (async () => {
+    try {
+      if (!(await window.guardModule())) return;
+      state.cid = await window.getClubId();
+      try { await Promise.all([window.getProfile(), window.getClub()]); if (window.applyClubTheme) window.applyClubTheme(); } catch (e) {}
+      await initTeamSelect();
+      wireShareModal();
+      wireRemind();
+      wireRefresh();
+      wireLiveRefresh();
+      state.inited = true;
+      await loadWellness();
+    } catch (e) {
+      console.warn('[Wellness] boot:', e && e.message);
+      state.error = true; renderBoard();
+    }
+  })();
   } /* end boot() */
-})();
-
-/* ── App-shell boot: auth guard + club theme (no data wiring) ── */
-(async () => {
-  try {
-    if (window.guardModule && !(await window.guardModule())) return;
-    if (window.getProfile && window.getClub) await Promise.all([window.getProfile(), window.getClub()]);
-    if (window.applyClubTheme) window.applyClubTheme();
-  } catch (e) { console.warn('[Wellness] shell boot:', e); }
 })();
 </script>
 
