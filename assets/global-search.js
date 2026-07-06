@@ -92,7 +92,7 @@
     drop.hidden = false;
 
     const like = `%${q}%`;
-    const [pRes, sRes, cRes, mRes, eRes] = await Promise.all([
+    const [pRes, sRes, cRes, mRes, eRes, dRes] = await Promise.all([
       window.sb.from('players')
         .select('id,first_name,last_name,number,position')
         .eq('club_id', clubId)
@@ -120,6 +120,11 @@
         .select('id,name,category,muscle_group')
         .eq('club_id', clubId)
         .ilike('name', like)
+        .limit(5),
+      window.sb.from('exercises')
+        .select('id,name,players_count,field_width,field_height')
+        .eq('club_id', clubId)
+        .ilike('name', like)
         .limit(5)
     ]);
 
@@ -128,8 +133,9 @@
     const matches     = cRes.data  || [];
     const microcycles = mRes.data  || [];
     const exercises   = eRes.data  || [];
+    const drills      = dRes.data  || [];
 
-    if (![players, sessions, matches, microcycles, exercises].some(a => a.length)) {
+    if (![players, sessions, matches, microcycles, exercises, drills].some(a => a.length)) {
       drop.innerHTML = `<div class="hub-search-empty">No results for &ldquo;${esc(q)}&rdquo;</div>`;
       return;
     }
@@ -151,6 +157,14 @@
       });
     }
 
+    if (drills.length) {
+      html += '<div class="hub-search-group-label">Drills</div>';
+      drills.forEach(d => {
+        const meta = d.players_count ? `${d.players_count}p` : '';
+        html += `<a class="hub-search-item" href="Exercises%20Library.html?highlight=${d.id}"><i class="ti ti-soccer-field"></i><span>${esc(d.name)}</span><span class="hub-search-meta">${esc(meta)}</span></a>`;
+      });
+    }
+
     if (matches.length) {
       html += '<div class="hub-search-group-label">Matches</div>';
       matches.forEach(m => {
@@ -169,7 +183,7 @@
     }
 
     if (exercises.length) {
-      html += '<div class="hub-search-group-label">Exercises</div>';
+      html += '<div class="hub-search-group-label">Gym</div>';
       exercises.forEach(ex => {
         const meta = ex.muscle_group || ex.category || '';
         html += `<a class="hub-search-item" href="Gym%20Library.html?highlight=${ex.id}"><i class="ti ti-barbell"></i><span>${esc(ex.name)}</span><span class="hub-search-meta">${esc(meta)}</span></a>`;
