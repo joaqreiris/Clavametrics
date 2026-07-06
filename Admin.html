@@ -1439,6 +1439,15 @@
       if (msg) { msg.textContent = (res?.error) || error.message || 'Invite failed'; msg.style.color = 'var(--cm-danger,#DC2626)'; msg.style.display = 'block'; }
       return;
     }
+    // Already-registered user was auto-joined server-side: no pending invite,
+    // the member is live now → reload to refresh the members list.
+    if (res.autoJoined) {
+      window.sb.rpc('log_audit', { p_table: 'invitations', p_op: 'INSERT', p_changes: { email, role, auto_joined: true }, p_club_id: clubId });
+      closeInviteModal();
+      alert('User already had an account — added to the club directly.');
+      location.reload();
+      return;
+    }
     const data = res.invitation;
     invites = [data, ...invites.filter(x => x.id !== data.id)];
     window.sb.rpc('log_audit', { p_table: 'invitations', p_op: 'INSERT', p_changes: { email: data.email, role: data.role }, p_club_id: clubId });
