@@ -1223,6 +1223,31 @@ document.querySelectorAll('.task').forEach(el => {
     saveBtn.disabled = false;
     saveBtn.textContent = 'Save task';
 
+    // Notify assignees on creation (role-assigned only; "For me" is self → no notification).
+    if (mode === 'roles' && assigned_roles && assigned_roles.length) {
+      try {
+        const want = new Set(assigned_roles.map(r => (r || '').toLowerCase()));
+        const seen = new Set();
+        const recipients = (window._hubMembers || []).filter(m => {
+          const r = (m.role || '').toLowerCase();
+          if (m.id === userId) return false;                // don't notify the creator
+          if (!want.has(r) || seen.has(m.id)) return false;
+          seen.add(m.id);
+          return true;
+        });
+        if (recipients.length) {
+          await window.sb.from('notifications').insert(recipients.map(m => ({
+            user_id: m.id,
+            club_id: clubId,
+            type:    'task_assigned',
+            title:   `New task: ${title}`,
+            body:    `Assigned to you · ${_atRoleLabel(m.role)}`,
+            link:    '/Chat & Tasks.html',
+          })));
+        }
+      } catch (e) { console.warn('[hub tasks] notify assignees failed:', e.message); }
+    }
+
     // Refresh "My" (include role-assigned tasks, consistent with the list queries) and drop the
     // cached Team list so a role task shows there too on next switch.
     window._hubTeamTasks = null;
