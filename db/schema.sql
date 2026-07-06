@@ -2,10 +2,10 @@
 -- ClavaMetrics — ESQUEMA COMPLETO de la DB (fuente de verdad unica)
 -- Reconstruido por introspeccion en vivo via Supabase Management API
 -- (proyecto xesrumijvdmqjrufgeka / Kime-app, PostgreSQL 17.6).
--- Generado: 2026-06-26.  NO editar a mano: regenerar desde la DB.
+-- Generado: 2026-07-05.  NO editar a mano: regenerar desde la DB.
 --
--- 104 tablas | 220 FKs | 4 vistas | 60 funciones
--- | 29 triggers | 209 politicas RLS
+-- 112 tablas | 238 FKs | 5 vistas | 63 funciones
+-- | 29 triggers | 227 politicas RLS
 -- Incluye: tablas, tipos, PK/UNIQUE/CHECK, FK (con ON DELETE), indices,
 --          vistas, funciones (cuerpos reales), triggers, RLS + politicas.
 -- No incluye: GRANTs por rol, datos/seeds, objetos de schemas auth/storage.
@@ -27,9 +27,9 @@ create table if not exists public.activity_log (
   created_at timestamp with time zone default now() not null,
   constraint activity_log_pkey primary key (id)
 );
-CREATE UNIQUE INDEX activity_log_gps_session_day_uidx ON public.activity_log USING btree (entity_id, (((created_at AT TIME ZONE 'UTC'::text))::date)) WHERE (action = 'gps.imported'::text);
-CREATE INDEX activity_log_team_idx ON public.activity_log USING btree (team_id);
 CREATE INDEX activity_log_club_created_idx ON public.activity_log USING btree (club_id, created_at DESC);
+CREATE INDEX activity_log_team_idx ON public.activity_log USING btree (team_id);
+CREATE UNIQUE INDEX activity_log_gps_session_day_uidx ON public.activity_log USING btree (entity_id, (((created_at AT TIME ZONE 'UTC'::text))::date)) WHERE (action = 'gps.imported'::text);
 
 create table if not exists public.ai_card_generations (
   id uuid default gen_random_uuid() not null,
@@ -64,7 +64,7 @@ create table if not exists public.availability (
   minutes integer default 0,
   club_id uuid,
   notes text,
-  constraint availability_pkey primary key (date, player_id),
+  constraint availability_pkey primary key (player_id, date),
   constraint availability_player_date_unique UNIQUE (player_id, date),
   constraint availability_status_check CHECK ((status = ANY (ARRAY['available'::text, 'partial'::text, 'limited'::text, 'unavailable'::text, 'away'::text, 'injured'::text, 'sick'::text])))
 );
@@ -84,8 +84,8 @@ create table if not exists public.body_composition (
   constraint body_composition_pkey primary key (id),
   constraint body_composition_method_check CHECK ((method = ANY (ARRAY['skinfold'::text, 'bia'::text, 'dexa'::text, 'scale'::text])))
 );
-CREATE INDEX idx_body_composition_player_date ON public.body_composition USING btree (player_id, measured_date DESC);
 CREATE INDEX idx_body_composition_club ON public.body_composition USING btree (club_id);
+CREATE INDEX idx_body_composition_player_date ON public.body_composition USING btree (player_id, measured_date DESC);
 
 create table if not exists public.calendar_events (
   id uuid default gen_random_uuid() not null,
@@ -114,13 +114,13 @@ create table if not exists public.calendar_events (
   competition_id uuid,
   season_id uuid,
   constraint calendar_events_pkey primary key (id),
-  constraint calendar_events_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
-  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text]))),
   constraint calendar_events_competition_check CHECK ((competition = ANY (ARRAY['league'::text, 'cup'::text, 'international'::text, 'friendly'::text]))),
-  constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10)))
+  constraint calendar_events_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
+  constraint calendar_events_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
+  constraint calendar_events_type_check CHECK ((type = ANY (ARRAY['tactical'::text, 'gym'::text, 'recovery'::text, 'other'::text, 'match'::text, 'travel'::text, 'meeting'::text, 'evaluation'::text, 'video_session'::text, 'breakfast'::text, 'lunch'::text, 'dinner'::text, 'hotel_checkin'::text, 'hotel_checkout'::text, 'bus_departure'::text, 'bus_arrival'::text, 'press'::text, 'medical_check'::text, 'walkthrough'::text, 'scouting'::text, 'day_off'::text])))
 );
-CREATE INDEX idx_calendar_events_competition ON public.calendar_events USING btree (competition_id);
 CREATE INDEX idx_calendar_events_recurrence_group ON public.calendar_events USING btree (recurrence_group_id) WHERE (recurrence_group_id IS NOT NULL);
+CREATE INDEX idx_calendar_events_competition ON public.calendar_events USING btree (competition_id);
 CREATE UNIQUE INDEX calendar_events_match_uniq ON public.calendar_events USING btree (team_id, date, opponent) WHERE (type = 'match'::text);
 
 create table if not exists public.card_accumulations (
@@ -154,7 +154,7 @@ create table if not exists public.channel_reads (
   club_id uuid not null,
   last_read_at timestamp with time zone default now() not null,
   team_id uuid,
-  constraint channel_reads_pkey primary key (channel_key, user_id, club_id)
+  constraint channel_reads_pkey primary key (user_id, channel_key, club_id)
 );
 CREATE INDEX idx_channel_reads_team ON public.channel_reads USING btree (team_id);
 
@@ -255,9 +255,9 @@ create table if not exists public.dashboard_cards (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint dashboard_cards_pkey primary key (id),
-  constraint cfg_schema CHECK (((config ->> 'schema'::text) = 'gp.card/v1'::text)),
+  constraint dashboard_cards_size_check CHECK ((size = ANY (ARRAY['sm'::text, 'md'::text, 'lg'::text, 'full'::text]))),
   constraint dashboard_cards_source_check CHECK ((source = ANY (ARRAY['catalog'::text, 'builder'::text, 'ai'::text]))),
-  constraint dashboard_cards_size_check CHECK ((size = ANY (ARRAY['sm'::text, 'md'::text, 'lg'::text, 'full'::text])))
+  constraint cfg_schema CHECK (((config ->> 'schema'::text) = 'gp.card/v1'::text))
 );
 CREATE INDEX idx_dashboard_cards_pos ON public.dashboard_cards USING btree (dashboard_id, "position");
 
@@ -324,8 +324,8 @@ create table if not exists public.drills (
   updated_at timestamp with time zone default now() not null,
   constraint drills_pkey primary key (id)
 );
-CREATE INDEX drills_session_id_idx ON public.drills USING btree (session_id);
 CREATE INDEX drills_club_id_idx ON public.drills USING btree (club_id);
+CREATE INDEX drills_session_id_idx ON public.drills USING btree (session_id);
 
 create table if not exists public.evaluations (
   id uuid default gen_random_uuid() not null,
@@ -343,10 +343,10 @@ create table if not exists public.evaluations (
   title text,
   constraint evaluations_pkey primary key (id)
 );
-CREATE INDEX evaluations_date_idx ON public.evaluations USING btree (test_date DESC);
-CREATE INDEX evaluations_type_idx ON public.evaluations USING btree (club_id, evaluation_type);
-CREATE INDEX evaluations_club_id_idx ON public.evaluations USING btree (club_id);
 CREATE INDEX evaluations_player_id_idx ON public.evaluations USING btree (player_id);
+CREATE INDEX evaluations_club_id_idx ON public.evaluations USING btree (club_id);
+CREATE INDEX evaluations_type_idx ON public.evaluations USING btree (club_id, evaluation_type);
+CREATE INDEX evaluations_date_idx ON public.evaluations USING btree (test_date DESC);
 
 create table if not exists public.exercise_drills (
   id uuid default gen_random_uuid() not null,
@@ -386,12 +386,12 @@ create table if not exists public.exercises (
   preview_svg text,
   preview_png text,
   preview_path text,
-  source_type text not null default 'canvas',
+  source_type text default 'canvas'::text not null,
   constraint exercises_pkey primary key (id),
-  constraint exercises_game_type_check CHECK ((game_type = ANY (ARRAY['SSG'::text, 'MSG'::text, 'LSG'::text]))),
-  constraint exercises_source_type_check CHECK ((source_type = ANY (ARRAY['canvas'::text, 'image'::text]))),
+  constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text]))),
   constraint exercises_intensity_check CHECK ((intensity = ANY (ARRAY['LOW'::text, 'MEDIUM'::text, 'HIGH'::text, 'VERY_HIGH'::text]))),
-  constraint exercises_orientation_check CHECK ((orientation = ANY (ARRAY['ACTIVATION'::text, 'STRENGTH'::text, 'VELOCITY'::text, 'ENDURANCE'::text])))
+  constraint exercises_game_type_check CHECK ((game_type = ANY (ARRAY['SSG'::text, 'MSG'::text, 'LSG'::text]))),
+  constraint exercises_source_type_check CHECK ((source_type = ANY (ARRAY['canvas'::text, 'image'::text])))
 );
 
 create table if not exists public.foods (
@@ -412,8 +412,8 @@ create table if not exists public.foods (
   constraint foods_category_check CHECK ((category = ANY (ARRAY['protein'::text, 'carb'::text, 'fat'::text, 'vegetable'::text, 'fruit'::text, 'dairy'::text, 'supplement'::text, 'other'::text]))),
   constraint foods_default_unit_check CHECK ((default_unit = ANY (ARRAY['g'::text, 'ml'::text, 'unit'::text])))
 );
-CREATE INDEX idx_foods_name ON public.foods USING btree (lower(name));
 CREATE INDEX idx_foods_category ON public.foods USING btree (category);
+CREATE INDEX idx_foods_name ON public.foods USING btree (lower(name));
 
 create table if not exists public.force_column_mappings (
   id uuid default gen_random_uuid() not null,
@@ -437,11 +437,11 @@ create table if not exists public.force_metric_definitions (
   category text default 'custom'::text not null,
   created_at timestamp with time zone default now() not null,
   constraint force_metric_definitions_pkey primary key (id),
-  constraint force_metric_definitions_category_check CHECK ((category = ANY (ARRAY['jump'::text, 'force'::text, 'power'::text, 'velocity'::text, 'time'::text, 'asymmetry'::text, 'count'::text, 'custom'::text]))),
-  constraint force_metric_definitions_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text))
+  constraint force_metric_definitions_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text)),
+  constraint force_metric_definitions_category_check CHECK ((category = ANY (ARRAY['jump'::text, 'force'::text, 'power'::text, 'velocity'::text, 'time'::text, 'asymmetry'::text, 'count'::text, 'custom'::text])))
 );
-CREATE UNIQUE INDEX uq_force_metric_club ON public.force_metric_definitions USING btree (club_id, key) WHERE (club_id IS NOT NULL);
 CREATE UNIQUE INDEX uq_force_metric_global ON public.force_metric_definitions USING btree (key) WHERE (club_id IS NULL);
+CREATE UNIQUE INDEX uq_force_metric_club ON public.force_metric_definitions USING btree (club_id, key) WHERE (club_id IS NOT NULL);
 
 create table if not exists public.force_test_metrics (
   id uuid default gen_random_uuid() not null,
@@ -479,9 +479,9 @@ create table if not exists public.force_tests (
   constraint force_tests_pkey primary key (id)
 );
 CREATE INDEX idx_force_tests_club ON public.force_tests USING btree (club_id);
-CREATE INDEX idx_force_tests_type_date ON public.force_tests USING btree (club_id, test_type, test_date);
-CREATE INDEX idx_force_tests_player ON public.force_tests USING btree (player_id);
 CREATE INDEX idx_force_tests_team ON public.force_tests USING btree (team_id);
+CREATE INDEX idx_force_tests_player ON public.force_tests USING btree (player_id);
+CREATE INDEX idx_force_tests_type_date ON public.force_tests USING btree (club_id, test_type, test_date);
 
 create table if not exists public.gps_column_mappings (
   id uuid default gen_random_uuid() not null,
@@ -506,9 +506,9 @@ create table if not exists public.gps_dashboard_layouts (
   club_id uuid not null,
   dashboard_id text not null,
   layout jsonb default '{}'::jsonb not null,
-  locked boolean default false not null,
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
+  locked boolean default false not null,
   constraint gps_dashboard_layouts_pkey primary key (id),
   constraint gps_dashboard_layouts_user_id_club_id_dashboard_id_key UNIQUE (user_id, club_id, dashboard_id)
 );
@@ -547,8 +547,8 @@ create table if not exists public.gps_integrations (
   updated_at timestamp with time zone default now(),
   constraint gps_integrations_pkey primary key (id),
   constraint gps_integrations_club_id_provider_key UNIQUE (club_id, provider),
-  constraint gps_integrations_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'configured'::text, 'connected'::text, 'error'::text, 'disabled'::text]))),
-  constraint gps_integrations_provider_check CHECK ((provider = ANY (ARRAY['catapult'::text, 'statsports'::text])))
+  constraint gps_integrations_provider_check CHECK ((provider = ANY (ARRAY['catapult'::text, 'statsports'::text]))),
+  constraint gps_integrations_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'configured'::text, 'connected'::text, 'error'::text, 'disabled'::text])))
 );
 CREATE INDEX idx_gps_integrations_club ON public.gps_integrations USING btree (club_id);
 
@@ -569,11 +569,11 @@ create table if not exists public.gps_metric_definitions (
   kind text,
   squad_rollup boolean default true not null,
   constraint gps_metric_definitions_pkey primary key (id),
-  constraint gps_metric_definitions_kind_check CHECK ((kind = ANY (ARRAY['accum'::text, 'peak'::text]))),
-  constraint gps_metric_definitions_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text)),
-  constraint gps_metric_definitions_decimals_check CHECK (((decimals >= 0) AND (decimals <= 4))),
   constraint gps_metric_definitions_club_id_key_key UNIQUE (club_id, key),
-  constraint gps_metric_definitions_category_check CHECK ((category = ANY (ARRAY['distance'::text, 'speed'::text, 'acceleration'::text, 'load'::text, 'time'::text, 'count'::text, 'custom'::text])))
+  constraint gps_metric_definitions_key_check CHECK ((key ~ '^[a-z][a-z0-9_]*$'::text)),
+  constraint gps_metric_definitions_category_check CHECK ((category = ANY (ARRAY['distance'::text, 'speed'::text, 'acceleration'::text, 'load'::text, 'time'::text, 'count'::text, 'custom'::text]))),
+  constraint gps_metric_definitions_decimals_check CHECK (((decimals >= 0) AND (decimals <= 4))),
+  constraint gps_metric_definitions_kind_check CHECK ((kind = ANY (ARRAY['accum'::text, 'peak'::text])))
 );
 CREATE INDEX idx_gps_metric_def_club ON public.gps_metric_definitions USING btree (club_id);
 
@@ -601,11 +601,13 @@ create table if not exists public.gps_period_reports (
   extra_metrics jsonb default '{}'::jsonb not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
+  is_flagged boolean default false not null,
+  flag_reason text,
   constraint gps_period_reports_pkey primary key (id),
   constraint gps_period_reports_club_id_session_id_period_id_player_id_key UNIQUE (club_id, session_id, period_id, player_id)
 );
-CREATE INDEX idx_gps_period_reports_player ON public.gps_period_reports USING btree (club_id, player_id);
 CREATE INDEX idx_gps_period_reports_session ON public.gps_period_reports USING btree (club_id, session_id);
+CREATE INDEX idx_gps_period_reports_player ON public.gps_period_reports USING btree (club_id, player_id);
 CREATE INDEX idx_gps_period_reports_period ON public.gps_period_reports USING btree (club_id, period_id);
 
 create table if not exists public.gps_report_metrics (
@@ -618,9 +620,9 @@ create table if not exists public.gps_report_metrics (
   constraint gps_report_metrics_pkey primary key (id),
   constraint gps_report_metrics_report_id_metric_key_key UNIQUE (report_id, metric_key)
 );
+CREATE INDEX idx_gps_rm_report ON public.gps_report_metrics USING btree (report_id);
 CREATE INDEX idx_gps_rm_club_metric ON public.gps_report_metrics USING btree (club_id, metric_key);
 CREATE INDEX idx_gps_rm_club_key_report ON public.gps_report_metrics USING btree (club_id, metric_key, report_id);
-CREATE INDEX idx_gps_rm_report ON public.gps_report_metrics USING btree (report_id);
 
 create table if not exists public.gps_reports (
   id uuid default gen_random_uuid() not null,
@@ -646,12 +648,12 @@ create table if not exists public.gps_reports (
   constraint gps_reports_pkey primary key (id),
   constraint gps_reports_player_id_session_id_key UNIQUE (player_id, session_id)
 );
-CREATE INDEX gps_reports_created_idx ON public.gps_reports USING btree (created_at DESC);
-CREATE INDEX idx_gps_reports_session ON public.gps_reports USING btree (session_id, player_id);
-CREATE INDEX idx_gps_reports_club_session ON public.gps_reports USING btree (club_id, session_id);
 CREATE INDEX gps_reports_player_id_idx ON public.gps_reports USING btree (player_id);
 CREATE INDEX gps_reports_session_id_idx ON public.gps_reports USING btree (session_id);
 CREATE INDEX gps_reports_club_id_idx ON public.gps_reports USING btree (club_id);
+CREATE INDEX gps_reports_created_idx ON public.gps_reports USING btree (created_at DESC);
+CREATE INDEX idx_gps_reports_club_session ON public.gps_reports USING btree (club_id, session_id);
+CREATE INDEX idx_gps_reports_session ON public.gps_reports USING btree (session_id, player_id);
 
 create table if not exists public.gym_exercises (
   id uuid default gen_random_uuid() not null,
@@ -684,17 +686,17 @@ create table if not exists public.gym_exercises (
   constraint gym_exercises_complexity_check CHECK ((complexity = ANY (ARRAY['Low'::text, 'Medium'::text, 'High'::text]))),
   constraint gym_exercises_media_type_check CHECK (((media_type IS NULL) OR (media_type = ANY (ARRAY['image'::text, 'youtube'::text]))))
 );
-CREATE INDEX gym_exercises_speeds_gin ON public.gym_exercises USING gin (movement_speeds);
-CREATE INDEX gym_exercises_contraction_gin ON public.gym_exercises USING gin (contraction_types);
-CREATE UNIQUE INDEX gym_exercises_club_video_uq ON public.gym_exercises USING btree (club_id, video_id);
 CREATE UNIQUE INDEX gym_exercises_default_uq ON public.gym_exercises USING btree (club_id, default_key) WHERE (default_key IS NOT NULL);
 CREATE INDEX gym_exercises_purposes_gin ON public.gym_exercises USING gin (purposes);
 CREATE INDEX gym_exercises_equipment_tags_gin ON public.gym_exercises USING gin (equipment_tags);
-CREATE INDEX gym_exercises_primary_purpose_idx ON public.gym_exercises USING btree (primary_purpose);
-CREATE INDEX gym_exercises_planes_gin ON public.gym_exercises USING gin (planes);
 CREATE INDEX gym_exercises_muscle_groups_gin ON public.gym_exercises USING gin (muscle_groups);
 CREATE INDEX gym_exercises_movement_patterns_gin ON public.gym_exercises USING gin (movement_patterns);
 CREATE INDEX gym_exercises_myofascial_gin ON public.gym_exercises USING gin (myofascial_chains);
+CREATE INDEX gym_exercises_contraction_gin ON public.gym_exercises USING gin (contraction_types);
+CREATE INDEX gym_exercises_speeds_gin ON public.gym_exercises USING gin (movement_speeds);
+CREATE INDEX gym_exercises_planes_gin ON public.gym_exercises USING gin (planes);
+CREATE INDEX gym_exercises_primary_purpose_idx ON public.gym_exercises USING btree (primary_purpose);
+CREATE UNIQUE INDEX gym_exercises_club_video_uq ON public.gym_exercises USING btree (club_id, video_id);
 
 create table if not exists public.gym_session_templates (
   id uuid default gen_random_uuid() not null,
@@ -736,11 +738,11 @@ create table if not exists public.individual_plan_blocks (
   created_at timestamp with time zone default now(),
   constraint individual_plan_blocks_pkey primary key (id),
   constraint individual_plan_blocks_day_of_week_check CHECK (((day_of_week >= 0) AND (day_of_week <= 6))),
-  constraint individual_plan_blocks_intensity_check CHECK ((intensity = ANY (ARRAY['low'::text, 'moderate'::text, 'high'::text, 'max'::text]))),
-  constraint individual_plan_blocks_block_type_check CHECK ((block_type = ANY (ARRAY['warmup'::text, 'strength'::text, 'power'::text, 'plyo'::text, 'speed'::text, 'mobility'::text, 'cardio'::text, 'cooldown'::text, 'technical'::text])))
+  constraint individual_plan_blocks_block_type_check CHECK ((block_type = ANY (ARRAY['warmup'::text, 'strength'::text, 'power'::text, 'plyo'::text, 'speed'::text, 'mobility'::text, 'cardio'::text, 'cooldown'::text, 'technical'::text]))),
+  constraint individual_plan_blocks_intensity_check CHECK ((intensity = ANY (ARRAY['low'::text, 'moderate'::text, 'high'::text, 'max'::text])))
 );
-CREATE INDEX idx_ipb_plan_week ON public.individual_plan_blocks USING btree (plan_id, week_index, day_of_week, sort_order);
 CREATE INDEX idx_ipb_plan ON public.individual_plan_blocks USING btree (plan_id);
+CREATE INDEX idx_ipb_plan_week ON public.individual_plan_blocks USING btree (plan_id, week_index, day_of_week, sort_order);
 
 create table if not exists public.individual_plans (
   id uuid default gen_random_uuid() not null,
@@ -759,9 +761,9 @@ create table if not exists public.individual_plans (
   constraint individual_plans_focus_check CHECK ((focus = ANY (ARRAY['strength'::text, 'power'::text, 'speed'::text, 'endurance'::text, 'mobility'::text, 'return_to_play'::text, 'general'::text]))),
   constraint individual_plans_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'paused'::text, 'completed'::text, 'archived'::text])))
 );
+CREATE INDEX idx_individual_plans_club ON public.individual_plans USING btree (club_id);
 CREATE INDEX idx_individual_plans_player ON public.individual_plans USING btree (player_id);
 CREATE INDEX idx_individual_plans_status ON public.individual_plans USING btree (status);
-CREATE INDEX idx_individual_plans_club ON public.individual_plans USING btree (club_id);
 
 create table if not exists public.injuries (
   id uuid default gen_random_uuid() not null,
@@ -785,15 +787,15 @@ create table if not exists public.injuries (
   injury_category text,
   sub_classification text,
   constraint injuries_pkey primary key (id),
+  constraint injuries_severity_check CHECK ((severity = ANY (ARRAY['minor'::text, 'moderate'::text, 'severe'::text]))),
   constraint injuries_injury_mechanism_check CHECK ((injury_mechanism = ANY (ARRAY['contact'::text, 'non_contact'::text, 'overuse'::text, 'unknown'::text]))),
   constraint injuries_injury_category_check CHECK ((injury_category = ANY (ARRAY['muscular'::text, 'acl'::text, 'ligament'::text, 'tendon'::text, 'bone'::text, 'other'::text]))),
-  constraint injuries_severity_check CHECK ((severity = ANY (ARRAY['minor'::text, 'moderate'::text, 'severe'::text]))),
   constraint injuries_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cleared'::text, 'returning'::text])))
 );
+CREATE INDEX injuries_player_id_idx ON public.injuries USING btree (player_id);
+CREATE INDEX injuries_club_id_idx ON public.injuries USING btree (club_id);
 CREATE INDEX injuries_status_idx ON public.injuries USING btree (club_id, status);
 CREATE INDEX injuries_date_idx ON public.injuries USING btree (start_date DESC);
-CREATE INDEX injuries_club_id_idx ON public.injuries USING btree (club_id);
-CREATE INDEX injuries_player_id_idx ON public.injuries USING btree (player_id);
 
 create table if not exists public.injury_phases (
   id uuid default gen_random_uuid() not null,
@@ -826,12 +828,13 @@ create table if not exists public.invitations (
   id uuid default gen_random_uuid() not null,
   club_id uuid not null,
   email text not null,
-  role text default 'viewer'::text not null,
+  role text default 'staff'::text not null,
   status text default 'pending'::text not null,
   invited_by uuid,
   created_at timestamp with time zone default now() not null,
   constraint invitations_pkey primary key (id),
-  constraint invitations_club_id_email_key UNIQUE (club_id, email)
+  constraint invitations_club_id_email_key UNIQUE (club_id, email),
+  constraint invitations_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text])))
 );
 
 create table if not exists public.invoices (
@@ -849,8 +852,8 @@ create table if not exists public.invoices (
   pdf_url text,
   created_at timestamp with time zone default now(),
   constraint invoices_pkey primary key (id),
-  constraint invoices_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text, 'refunded'::text, 'void'::text]))),
-  constraint invoices_provider_invoice_id_key UNIQUE (provider_invoice_id)
+  constraint invoices_provider_invoice_id_key UNIQUE (provider_invoice_id),
+  constraint invoices_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'failed'::text, 'refunded'::text, 'void'::text])))
 );
 CREATE INDEX idx_invoices_club ON public.invoices USING btree (club_id);
 CREATE INDEX idx_invoices_status ON public.invoices USING btree (status);
@@ -885,14 +888,14 @@ create table if not exists public.lineup_players (
   notes text,
   created_at timestamp with time zone default now(),
   constraint lineup_players_pkey primary key (id),
+  constraint lineup_players_lineup_id_player_id_role_key UNIQUE (lineup_id, player_id, role),
+  constraint uq_lineup_players_slot UNIQUE (lineup_id, role, slot_index),
   constraint lineup_players_role_check CHECK ((role = ANY (ARRAY['starter'::text, 'substitute'::text, 'reserve'::text, 'injured'::text]))),
   constraint lineup_players_x_pct_check CHECK (((x_pct IS NULL) OR ((x_pct >= (0)::numeric) AND (x_pct <= (100)::numeric)))),
-  constraint lineup_players_y_pct_check CHECK (((y_pct IS NULL) OR ((y_pct >= (0)::numeric) AND (y_pct <= (100)::numeric)))),
-  constraint uq_lineup_players_slot UNIQUE (lineup_id, role, slot_index),
-  constraint lineup_players_lineup_id_player_id_role_key UNIQUE (lineup_id, player_id, role)
+  constraint lineup_players_y_pct_check CHECK (((y_pct IS NULL) OR ((y_pct >= (0)::numeric) AND (y_pct <= (100)::numeric))))
 );
-CREATE INDEX idx_lineup_players_role ON public.lineup_players USING btree (lineup_id, role, slot_index);
 CREATE UNIQUE INDEX uq_lineup_players_captain ON public.lineup_players USING btree (lineup_id) WHERE (is_captain = true);
+CREATE INDEX idx_lineup_players_role ON public.lineup_players USING btree (lineup_id, role, slot_index);
 
 create table if not exists public.lineup_staff (
   id uuid default gen_random_uuid() not null,
@@ -927,14 +930,14 @@ create table if not exists public.lineups (
   language text default 'es'::text,
   style_config jsonb default '{}'::jsonb,
   constraint lineups_pkey primary key (id),
+  constraint lineups_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text, 'archived'::text]))),
   constraint lineups_poster_style_check CHECK ((poster_style = ANY (ARRAY['editorial'::text, 'stadium'::text, 'magazine'::text, 'ticket'::text]))),
-  constraint lineups_language_check CHECK ((language = ANY (ARRAY['es'::text, 'en'::text, 'pt'::text]))),
-  constraint lineups_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text, 'archived'::text])))
+  constraint lineups_language_check CHECK ((language = ANY (ARRAY['es'::text, 'en'::text, 'pt'::text])))
 );
 CREATE INDEX lineups_club_created_idx ON public.lineups USING btree (club_id, created_at DESC);
 CREATE INDEX idx_lineups_microcycle ON public.lineups USING btree (microcycle_id);
-CREATE INDEX idx_lineups_match_st ON public.lineups USING btree (match_id, status);
 CREATE INDEX idx_lineups_status ON public.lineups USING btree (status);
+CREATE INDEX idx_lineups_match_st ON public.lineups USING btree (match_id, status);
 
 create table if not exists public.load_templates (
   id uuid default gen_random_uuid() not null,
@@ -1001,8 +1004,8 @@ create table if not exists public.match_reports (
   pass_accuracy_them integer,
   positions jsonb default '[]'::jsonb,
   constraint match_reports_pkey primary key (id),
-  constraint match_reports_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'wyscout'::text, 'tracab'::text, 'other'::text]))),
-  constraint match_reports_venue_check CHECK ((venue = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text])))
+  constraint match_reports_venue_check CHECK ((venue = ANY (ARRAY['home'::text, 'away'::text, 'neutral'::text]))),
+  constraint match_reports_source_check CHECK ((source = ANY (ARRAY['manual'::text, 'wyscout'::text, 'tracab'::text, 'other'::text])))
 );
 CREATE INDEX match_reports_club_date_idx ON public.match_reports USING btree (club_id, match_date DESC);
 CREATE INDEX match_reports_session_idx ON public.match_reports USING btree (session_id);
@@ -1027,8 +1030,8 @@ create table if not exists public.match_results (
   constraint match_results_pkey primary key (id),
   constraint match_results_home_away_check CHECK ((home_away = ANY (ARRAY['home'::text, 'away'::text])))
 );
-CREATE INDEX idx_match_results_club_team_date ON public.match_results USING btree (club_id, team_id, match_date);
 CREATE UNIQUE INDEX ux_match_results_session ON public.match_results USING btree (session_id) WHERE (session_id IS NOT NULL);
+CREATE INDEX idx_match_results_club_team_date ON public.match_results USING btree (club_id, team_id, match_date);
 
 create table if not exists public.match_shots (
   id uuid default gen_random_uuid() not null,
@@ -1047,8 +1050,8 @@ create table if not exists public.match_shots (
   constraint match_shots_team_check CHECK ((team = ANY (ARRAY['us'::text, 'them'::text]))),
   constraint match_shots_outcome_check CHECK ((outcome = ANY (ARRAY['goal'::text, 'on_target'::text, 'off_target'::text, 'blocked'::text])))
 );
-CREATE INDEX match_shots_club_idx ON public.match_shots USING btree (club_id);
 CREATE INDEX match_shots_match_idx ON public.match_shots USING btree (match_id);
+CREATE INDEX match_shots_club_idx ON public.match_shots USING btree (club_id);
 
 create table if not exists public.meal_plan_items (
   id uuid default gen_random_uuid() not null,
@@ -1058,8 +1061,8 @@ create table if not exists public.meal_plan_items (
   note text,
   constraint meal_plan_items_pkey primary key (id)
 );
-CREATE INDEX idx_meal_plan_items_food ON public.meal_plan_items USING btree (food_id);
 CREATE INDEX idx_meal_plan_items_meal ON public.meal_plan_items USING btree (meal_id);
+CREATE INDEX idx_meal_plan_items_food ON public.meal_plan_items USING btree (food_id);
 
 create table if not exists public.meal_plan_meals (
   id uuid default gen_random_uuid() not null,
@@ -1085,6 +1088,84 @@ create table if not exists public.meal_plan_templates (
 );
 CREATE INDEX idx_meal_plan_templates_club ON public.meal_plan_templates USING btree (club_id);
 
+create table if not exists public.medical_documents (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  type text default 'report'::text not null,
+  title text not null,
+  file_path text,
+  doc_date date,
+  uploaded_by uuid,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  constraint medical_documents_pkey primary key (id),
+  constraint medical_documents_type_check CHECK ((type = ANY (ARRAY['report'::text, 'consent'::text, 'certificate'::text, 'insurance'::text, 'other'::text])))
+);
+CREATE INDEX idx_mdoc_club ON public.medical_documents USING btree (club_id);
+CREATE INDEX idx_mdoc_player ON public.medical_documents USING btree (player_id, doc_date DESC);
+
+create table if not exists public.medical_episodes (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  category text default 'illness'::text not null,
+  system text,
+  diagnosis text not null,
+  start_date date not null,
+  end_date date,
+  days_lost integer,
+  status text default 'active'::text not null,
+  detail jsonb,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  created_by uuid,
+  constraint medical_episodes_pkey primary key (id),
+  constraint medical_episodes_category_check CHECK ((category = ANY (ARRAY['illness'::text, 'concussion'::text, 'other'::text]))),
+  constraint medical_episodes_status_check CHECK ((status = ANY (ARRAY['active'::text, 'monitoring'::text, 'resolved'::text])))
+);
+CREATE INDEX idx_mepi_club ON public.medical_episodes USING btree (club_id);
+CREATE INDEX idx_mepi_player ON public.medical_episodes USING btree (player_id, start_date DESC);
+
+create table if not exists public.medical_screenings (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  type text not null,
+  performed_on date,
+  result text,
+  status text default 'ok'::text not null,
+  next_due date,
+  doc_url text,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  created_by uuid,
+  constraint medical_screenings_pkey primary key (id),
+  constraint medical_screenings_type_check CHECK ((type = ANY (ARRAY['ecg'::text, 'echo'::text, 'stress_test'::text, 'vision'::text, 'dental'::text, 'other'::text]))),
+  constraint medical_screenings_status_check CHECK ((status = ANY (ARRAY['ok'::text, 'warning'::text, 'abnormal'::text])))
+);
+CREATE INDEX idx_mscr_club ON public.medical_screenings USING btree (club_id);
+CREATE INDEX idx_mscr_player ON public.medical_screenings USING btree (player_id, type);
+
+create table if not exists public.medical_studies (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  modality text not null,
+  study_date date,
+  body_area text,
+  finding text,
+  file_url text,
+  related_injury_id uuid,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  created_by uuid,
+  constraint medical_studies_pkey primary key (id),
+  constraint medical_studies_modality_check CHECK ((modality = ANY (ARRAY['mri'::text, 'ultrasound'::text, 'xray'::text, 'ct'::text, 'lab'::text, 'other'::text])))
+);
+CREATE INDEX idx_mstu_club ON public.medical_studies USING btree (club_id);
+CREATE INDEX idx_mstu_player ON public.medical_studies USING btree (player_id, study_date DESC);
+
 create table if not exists public.member_modules (
   club_id uuid not null,
   profile_id uuid not null,
@@ -1097,10 +1178,10 @@ create table if not exists public.member_teams (
   team_id uuid not null,
   club_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint member_teams_pkey primary key (team_id, profile_id)
+  constraint member_teams_pkey primary key (profile_id, team_id)
 );
-CREATE INDEX idx_member_teams_team ON public.member_teams USING btree (team_id);
 CREATE INDEX idx_member_teams_profile ON public.member_teams USING btree (profile_id);
+CREATE INDEX idx_member_teams_team ON public.member_teams USING btree (team_id);
 
 create table if not exists public.mesocycles (
   id uuid default gen_random_uuid() not null,
@@ -1133,11 +1214,11 @@ create table if not exists public.messages (
   attachment_type text,
   link_preview jsonb,
   team_id uuid,
-  constraint messages_pkey primary key (id, inserted_at, id),
+  constraint messages_pkey primary key (id),
   constraint messages_message_type_check CHECK ((message_type = ANY (ARRAY['text'::text, 'task_ref'::text, 'report_share'::text, 'system'::text])))
 );
-CREATE INDEX idx_messages_recipient ON public.messages USING btree (club_id, recipient_id) WHERE (recipient_id IS NOT NULL);
 CREATE INDEX messages_club_created_idx ON public.messages USING btree (club_id, created_at DESC);
+CREATE INDEX idx_messages_recipient ON public.messages USING btree (club_id, recipient_id) WHERE (recipient_id IS NOT NULL);
 CREATE INDEX idx_messages_team ON public.messages USING btree (team_id);
 
 create table if not exists public.microcycles (
@@ -1171,9 +1252,9 @@ create table if not exists public.microcycles (
   md_overrides jsonb default '{}'::jsonb not null,
   constraint microcycles_pkey primary key (id)
 );
-CREATE INDEX idx_microcycles_meso ON public.microcycles USING btree (mesocycle_id);
 CREATE INDEX microcycles_club_id_idx ON public.microcycles USING btree (club_id);
 CREATE INDEX microcycles_dates_idx ON public.microcycles USING btree (club_id, start_date DESC);
+CREATE INDEX idx_microcycles_meso ON public.microcycles USING btree (mesocycle_id);
 
 create table if not exists public.notification_settings (
   id uuid default gen_random_uuid() not null,
@@ -1216,8 +1297,8 @@ create table if not exists public.nutrition (
   constraint nutrition_pkey primary key (id)
 );
 CREATE INDEX nutrition_player_id_idx ON public.nutrition USING btree (player_id);
-CREATE INDEX nutrition_date_idx ON public.nutrition USING btree (club_id, log_date DESC);
 CREATE INDEX nutrition_club_player_idx ON public.nutrition USING btree (club_id, player_id);
+CREATE INDEX nutrition_date_idx ON public.nutrition USING btree (club_id, log_date DESC);
 
 create table if not exists public.nutrition_targets (
   id uuid default gen_random_uuid() not null,
@@ -1241,9 +1322,9 @@ create table if not exists public.nutrition_targets (
   created_at timestamp with time zone default now(),
   sex text,
   constraint nutrition_targets_pkey primary key (id),
+  constraint nutrition_targets_player_id_key UNIQUE (player_id),
   constraint nutrition_targets_rmr_model_check CHECK ((rmr_model = ANY (ARRAY['ten_haaf'::text, 'cunningham'::text, 'de_lorenzo'::text, 'harris_benedict'::text, 'mifflin'::text]))),
-  constraint nutrition_targets_sex_check CHECK ((sex = ANY (ARRAY['male'::text, 'female'::text]))),
-  constraint nutrition_targets_player_id_key UNIQUE (player_id)
+  constraint nutrition_targets_sex_check CHECK ((sex = ANY (ARRAY['male'::text, 'female'::text])))
 );
 CREATE INDEX idx_nutrition_targets_club ON public.nutrition_targets USING btree (club_id);
 
@@ -1271,8 +1352,8 @@ create table if not exists public.payment_methods (
   is_default boolean default false,
   created_at timestamp with time zone default now(),
   constraint payment_methods_pkey primary key (id),
-  constraint payment_methods_type_check CHECK ((type = ANY (ARRAY['card'::text, 'paypal'::text, 'other'::text]))),
-  constraint payment_methods_provider_payment_method_id_key UNIQUE (provider_payment_method_id)
+  constraint payment_methods_provider_payment_method_id_key UNIQUE (provider_payment_method_id),
+  constraint payment_methods_type_check CHECK ((type = ANY (ARRAY['card'::text, 'paypal'::text, 'other'::text])))
 );
 CREATE INDEX idx_payment_methods_club ON public.payment_methods USING btree (club_id);
 
@@ -1356,8 +1437,8 @@ create table if not exists public.player_individual_assignments (
   active boolean default true,
   constraint player_individual_assignments_pkey primary key (id)
 );
-CREATE INDEX idx_pia_plan ON public.player_individual_assignments USING btree (plan_id);
 CREATE INDEX idx_pia_player_active ON public.player_individual_assignments USING btree (player_id) WHERE (active = true);
+CREATE INDEX idx_pia_plan ON public.player_individual_assignments USING btree (plan_id);
 
 create table if not exists public.player_match_stats (
   id uuid default gen_random_uuid() not null,
@@ -1375,8 +1456,8 @@ create table if not exists public.player_match_stats (
   created_at timestamp with time zone default now(),
   constraint player_match_stats_pkey primary key (id)
 );
-CREATE INDEX idx_player_match_stats_club_player ON public.player_match_stats USING btree (club_id, player_id);
 CREATE UNIQUE INDEX ux_player_match_stats_match_player ON public.player_match_stats USING btree (match_id, player_id);
+CREATE INDEX idx_player_match_stats_club_player ON public.player_match_stats USING btree (club_id, player_id);
 
 create table if not exists public.player_meal_assignments (
   id uuid default gen_random_uuid() not null,
@@ -1390,9 +1471,56 @@ create table if not exists public.player_meal_assignments (
   created_at timestamp with time zone default now(),
   constraint player_meal_assignments_pkey primary key (id)
 );
-CREATE INDEX idx_pma_template ON public.player_meal_assignments USING btree (template_id);
-CREATE INDEX idx_pma_player ON public.player_meal_assignments USING btree (player_id);
 CREATE INDEX idx_pma_club ON public.player_meal_assignments USING btree (club_id);
+CREATE INDEX idx_pma_player ON public.player_meal_assignments USING btree (player_id);
+CREATE INDEX idx_pma_template ON public.player_meal_assignments USING btree (template_id);
+
+create table if not exists public.player_medical_profile (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  blood_type text,
+  blood_phenotype text,
+  allergies jsonb default '[]'::jsonb not null,
+  chronic_conditions jsonb default '[]'::jsonb not null,
+  family_history text,
+  emergency_contact jsonb,
+  treating_physician text,
+  insurance text,
+  last_review_date date,
+  next_review_date date,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  created_by uuid,
+  sex text,
+  constraint player_medical_profile_pkey primary key (id),
+  constraint player_medical_profile_player_id_key UNIQUE (player_id),
+  constraint player_medical_profile_sex_check CHECK (((sex IS NULL) OR (sex = ANY (ARRAY['male'::text, 'female'::text]))))
+);
+CREATE INDEX idx_pmp_club ON public.player_medical_profile USING btree (club_id);
+CREATE INDEX idx_pmp_player ON public.player_medical_profile USING btree (player_id);
+
+create table if not exists public.player_medications (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  name text not null,
+  dose text,
+  frequency text,
+  reason text,
+  is_supplement boolean default false not null,
+  tue boolean default false not null,
+  start_date date,
+  end_date date,
+  active boolean default true not null,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  created_by uuid,
+  constraint player_medications_pkey primary key (id)
+);
+CREATE INDEX idx_pmed_club ON public.player_medications USING btree (club_id);
+CREATE INDEX idx_pmed_player ON public.player_medications USING btree (player_id, active);
 
 create table if not exists public.player_preventive_assignments (
   id uuid default gen_random_uuid() not null,
@@ -1447,13 +1575,13 @@ create table if not exists public.players (
   constraint players_status_check CHECK ((status = ANY (ARRAY['available'::text, 'injured'::text, 'modified'::text, 'unavailable'::text])))
 );
 CREATE INDEX players_club_id_idx ON public.players USING btree (club_id);
-CREATE INDEX idx_players_external_force ON public.players USING btree (club_id, external_force_id);
-CREATE INDEX players_number_idx ON public.players USING btree (club_id, number);
-CREATE INDEX idx_players_ext_gps ON public.players USING btree (club_id, external_gps_id) WHERE (external_gps_id IS NOT NULL);
-CREATE INDEX players_position_idx ON public.players USING btree (club_id, "position");
-CREATE INDEX players_name_idx ON public.players USING btree (club_id, first_name, last_name);
-CREATE INDEX players_team_id_idx ON public.players USING btree (team_id);
 CREATE INDEX players_status_idx ON public.players USING btree (club_id, status);
+CREATE INDEX players_name_idx ON public.players USING btree (club_id, first_name, last_name);
+CREATE INDEX players_position_idx ON public.players USING btree (club_id, "position");
+CREATE INDEX players_number_idx ON public.players USING btree (club_id, number);
+CREATE INDEX players_team_id_idx ON public.players USING btree (team_id);
+CREATE INDEX idx_players_ext_gps ON public.players USING btree (club_id, external_gps_id) WHERE (external_gps_id IS NOT NULL);
+CREATE INDEX idx_players_external_force ON public.players USING btree (club_id, external_force_id);
 
 create table if not exists public.preventive_routines (
   id uuid default gen_random_uuid() not null,
@@ -1473,8 +1601,8 @@ create table if not exists public.preventive_routines (
   constraint preventive_routines_target_type_check CHECK ((target_type = ANY (ARRAY['individual'::text, 'position'::text, 'squad'::text]))),
   constraint preventive_routines_frequency_check CHECK ((frequency = ANY (ARRAY['daily'::text, 'weekly'::text, 'pre_session'::text, 'post_session'::text])))
 );
-CREATE INDEX idx_preventive_routines_active ON public.preventive_routines USING btree (is_active) WHERE (is_active = true);
 CREATE INDEX idx_preventive_routines_club ON public.preventive_routines USING btree (club_id);
+CREATE INDEX idx_preventive_routines_active ON public.preventive_routines USING btree (is_active) WHERE (is_active = true);
 
 create table if not exists public.profiles (
   id uuid not null,
@@ -1534,8 +1662,8 @@ create table if not exists public.protocol_blocks (
   constraint protocol_blocks_block_type_check CHECK ((block_type = ANY (ARRAY['warmup'::text, 'strength'::text, 'mobility'::text, 'cardio'::text, 'plyo'::text, 'sport'::text, 'cooldown'::text, 'assessment'::text]))),
   constraint protocol_blocks_intensity_check CHECK ((intensity = ANY (ARRAY['low'::text, 'moderate'::text, 'high'::text, 'max'::text])))
 );
-CREATE INDEX idx_protocol_blocks_phase ON public.protocol_blocks USING btree (phase_id);
 CREATE INDEX idx_protocol_blocks_protocol ON public.protocol_blocks USING btree (protocol_id);
+CREATE INDEX idx_protocol_blocks_phase ON public.protocol_blocks USING btree (phase_id);
 CREATE INDEX idx_protocol_blocks_day ON public.protocol_blocks USING btree (protocol_id, day_index, sort_order);
 
 create table if not exists public.rehab_plan_owners (
@@ -1572,13 +1700,13 @@ create table if not exists public.rehab_plans (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   constraint rehab_plans_pkey primary key (id),
-  constraint rehab_plans_status_check CHECK ((status = ANY (ARRAY['on_track'::text, 'near_rtp'::text, 'blocked'::text, 'cleared'::text, 'archived'::text]))),
-  constraint rehab_plans_source_check CHECK ((source = ANY (ARRAY['injury'::text, 'evaluation'::text, 'gps'::text, 'manual'::text]))),
+  constraint rehab_plans_kind_check CHECK ((kind = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
   constraint rehab_plans_phase_type_check CHECK ((phase_type = ANY (ARRAY['acute'::text, 'subacute'::text, 'strength'::text, 'field'::text, 'foundation'::text, 'capacity'::text, 'neuromuscular'::text, 'running'::text, 'training'::text, 'competition'::text]))),
-  constraint rehab_plans_kind_check CHECK ((kind = ANY (ARRAY['rehab'::text, 'preventive'::text])))
+  constraint rehab_plans_source_check CHECK ((source = ANY (ARRAY['injury'::text, 'evaluation'::text, 'gps'::text, 'manual'::text]))),
+  constraint rehab_plans_status_check CHECK ((status = ANY (ARRAY['on_track'::text, 'near_rtp'::text, 'blocked'::text, 'cleared'::text, 'archived'::text])))
 );
-CREATE INDEX idx_rehab_plans_club_status ON public.rehab_plans USING btree (club_id, status);
 CREATE INDEX idx_rehab_plans_club ON public.rehab_plans USING btree (club_id);
+CREATE INDEX idx_rehab_plans_club_status ON public.rehab_plans USING btree (club_id, status);
 
 create table if not exists public.rehab_protocols (
   id uuid default gen_random_uuid() not null,
@@ -1595,8 +1723,8 @@ create table if not exists public.rehab_protocols (
   constraint rehab_protocols_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'completed'::text, 'archived'::text])))
 );
 CREATE INDEX idx_rehab_protocols_club ON public.rehab_protocols USING btree (club_id);
-CREATE INDEX idx_rehab_protocols_status ON public.rehab_protocols USING btree (status);
 CREATE INDEX idx_rehab_protocols_injury ON public.rehab_protocols USING btree (injury_id);
+CREATE INDEX idx_rehab_protocols_status ON public.rehab_protocols USING btree (status);
 
 create table if not exists public.rehab_sessions (
   id uuid default gen_random_uuid() not null,
@@ -1620,8 +1748,8 @@ create table if not exists public.rehab_sessions (
   exercises jsonb,
   constraint rehab_sessions_pkey primary key (id)
 );
-CREATE INDEX idx_rehab_sessions_club_date ON public.rehab_sessions USING btree (club_id, date);
 CREATE INDEX idx_rehab_sessions_plan_date ON public.rehab_sessions USING btree (plan_id, date);
+CREATE INDEX idx_rehab_sessions_club_date ON public.rehab_sessions USING btree (club_id, date);
 
 create table if not exists public.rpe (
   id uuid default gen_random_uuid() not null,
@@ -1640,10 +1768,10 @@ create table if not exists public.rpe (
   constraint rpe_player_id_session_id_key UNIQUE (player_id, session_id),
   constraint rpe_rpe_check CHECK (((rpe >= (0)::numeric) AND (rpe <= (10)::numeric)))
 );
+CREATE INDEX rpe_player_id_idx ON public.rpe USING btree (player_id);
 CREATE INDEX rpe_session_id_idx ON public.rpe USING btree (session_id);
 CREATE INDEX rpe_created_idx ON public.rpe USING btree (created_at DESC);
 CREATE INDEX rpe_club_id_idx ON public.rpe USING btree (club_id);
-CREATE INDEX rpe_player_id_idx ON public.rpe USING btree (player_id);
 
 create table if not exists public.season_phases (
   id uuid default gen_random_uuid() not null,
@@ -1701,8 +1829,8 @@ create table if not exists public.session_exercises (
   constraint session_exercises_pkey primary key (id),
   constraint session_exercises_phase_check CHECK ((phase = ANY (ARRAY['warmup'::text, 'main'::text, 'cooldown'::text, 'activation'::text])))
 );
-CREATE INDEX idx_session_exercises_club ON public.session_exercises USING btree (club_id);
 CREATE INDEX idx_session_exercises_session ON public.session_exercises USING btree (session_id);
+CREATE INDEX idx_session_exercises_club ON public.session_exercises USING btree (club_id);
 
 create table if not exists public.share_links (
   id uuid default gen_random_uuid() not null,
@@ -1742,13 +1870,34 @@ create table if not exists public.subscriptions (
   is_comp boolean default false not null,
   constraint subscriptions_pkey primary key (id),
   constraint subscriptions_provider_subscription_id_key UNIQUE (provider_subscription_id),
-  constraint subscriptions_billing_cycle_check CHECK ((billing_cycle = ANY (ARRAY['monthly'::text, 'yearly'::text]))),
-  constraint subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text])))
+  constraint subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'past_due'::text, 'canceled'::text, 'trialing'::text, 'paused'::text]))),
+  constraint subscriptions_billing_cycle_check CHECK ((billing_cycle = ANY (ARRAY['monthly'::text, 'yearly'::text])))
 );
 CREATE UNIQUE INDEX uniq_sub_active_per_team ON public.subscriptions USING btree (team_id) WHERE (status = ANY (ARRAY['active'::text, 'trialing'::text, 'past_due'::text, 'paused'::text]));
-CREATE INDEX idx_subscriptions_status ON public.subscriptions USING btree (status);
-CREATE INDEX idx_subscriptions_club ON public.subscriptions USING btree (club_id);
 CREATE INDEX idx_subscriptions_team ON public.subscriptions USING btree (team_id);
+CREATE INDEX idx_subscriptions_club ON public.subscriptions USING btree (club_id);
+CREATE INDEX idx_subscriptions_status ON public.subscriptions USING btree (status);
+
+create table if not exists public.surgeries (
+  id uuid default gen_random_uuid() not null,
+  club_id uuid not null,
+  player_id uuid not null,
+  procedure text not null,
+  surgery_date date,
+  laterality text default 'na'::text,
+  surgeon text,
+  clinic text,
+  implants text,
+  outcome text,
+  related_injury_id uuid,
+  notes text,
+  created_at timestamp with time zone default now() not null,
+  created_by uuid,
+  constraint surgeries_pkey primary key (id),
+  constraint surgeries_laterality_check CHECK ((laterality = ANY (ARRAY['left'::text, 'right'::text, 'bilateral'::text, 'na'::text])))
+);
+CREATE INDEX idx_surg_club ON public.surgeries USING btree (club_id);
+CREATE INDEX idx_surg_player ON public.surgeries USING btree (player_id, surgery_date DESC);
 
 create table if not exists public.tasks (
   id uuid default gen_random_uuid() not null,
@@ -1767,27 +1916,30 @@ create table if not exists public.tasks (
   category text default 'routine'::text,
   event_id uuid,
   team_id uuid,
+  assigned_roles text[],
   constraint tasks_pkey primary key (id),
-  constraint tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'done'::text, 'cancelled'::text]))),
   constraint tasks_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'urgent'::text]))),
-  constraint tasks_category_check CHECK ((category = ANY (ARRAY['general'::text, 'match_day'::text, 'medical'::text, 'routine'::text, 'event'::text])))
+  constraint tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'done'::text, 'cancelled'::text]))),
+  constraint tasks_category_check CHECK ((category = ANY (ARRAY['general'::text, 'match_day'::text, 'medical'::text, 'routine'::text, 'event'::text]))),
+  constraint tasks_assigned_roles_len CHECK (((assigned_roles IS NULL) OR (cardinality(assigned_roles) <= 10))),
+  constraint tasks_assigned_roles_valid CHECK (((assigned_roles IS NULL) OR (assigned_roles <@ ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text])))
 );
-CREATE INDEX idx_tasks_team ON public.tasks USING btree (team_id);
-CREATE INDEX tasks_event_id_idx ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
-CREATE INDEX tasks_club_event_idx ON public.tasks USING btree (club_id, event_id) WHERE (event_id IS NOT NULL);
-CREATE INDEX idx_tasks_event_id ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
-CREATE INDEX idx_tasks_club_status ON public.tasks USING btree (club_id, status) WHERE (status = 'pending'::text);
 CREATE INDEX tasks_club_idx ON public.tasks USING btree (club_id);
 CREATE INDEX tasks_assigned_idx ON public.tasks USING btree (assigned_to);
 CREATE INDEX tasks_status_idx ON public.tasks USING btree (club_id, status);
 CREATE INDEX tasks_due_idx ON public.tasks USING btree (due_date);
+CREATE INDEX tasks_event_id_idx ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
+CREATE INDEX tasks_club_event_idx ON public.tasks USING btree (club_id, event_id) WHERE (event_id IS NOT NULL);
+CREATE INDEX idx_tasks_event_id ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
+CREATE INDEX idx_tasks_club_status ON public.tasks USING btree (club_id, status) WHERE (status = 'pending'::text);
+CREATE INDEX idx_tasks_team ON public.tasks USING btree (team_id);
 CREATE INDEX idx_tasks_team_id ON public.tasks USING btree (team_id);
 
 create table if not exists public.taxonomy_aliases (
   dimension text not null,
   alias text not null,
   token text not null,
-  constraint taxonomy_aliases_pkey primary key (alias, dimension)
+  constraint taxonomy_aliases_pkey primary key (dimension, alias)
 );
 
 create table if not exists public.teams (
@@ -1837,14 +1989,14 @@ create table if not exists public.training_sessions (
   constraint training_sessions_estimated_rpe_check CHECK (((estimated_rpe >= 1) AND (estimated_rpe <= 10))),
   constraint training_sessions_session_type_check CHECK ((session_type = ANY (ARRAY['training'::text, 'match'::text, 'rehab'::text, 'conditioning'::text, 'recovery'::text, 'tactical'::text, 'gym'::text, 'other'::text])))
 );
+CREATE INDEX training_sessions_club_id_idx ON public.training_sessions USING btree (club_id);
 CREATE INDEX training_sessions_type_idx ON public.training_sessions USING btree (club_id, session_type);
 CREATE INDEX training_sessions_coach_idx ON public.training_sessions USING btree (coach_id);
+CREATE INDEX idx_training_sessions_club_date ON public.training_sessions USING btree (club_id, session_date);
+CREATE INDEX idx_training_sessions_historical ON public.training_sessions USING btree (club_id, is_historical, session_date);
+CREATE INDEX idx_training_sessions_attributes ON public.training_sessions USING gin (session_attributes);
 CREATE INDEX idx_training_sessions_club_microcycle ON public.training_sessions USING btree (club_id, microcycle_id);
 CREATE UNIQUE INDEX uq_training_sessions_club_activity ON public.training_sessions USING btree (club_id, external_activity_id) WHERE (external_activity_id IS NOT NULL);
-CREATE INDEX idx_training_sessions_attributes ON public.training_sessions USING gin (session_attributes);
-CREATE INDEX idx_training_sessions_historical ON public.training_sessions USING btree (club_id, is_historical, session_date);
-CREATE INDEX idx_training_sessions_club_date ON public.training_sessions USING btree (club_id, session_date);
-CREATE INDEX training_sessions_club_id_idx ON public.training_sessions USING btree (club_id);
 
 create table if not exists public.treatment_templates (
   id uuid default gen_random_uuid() not null,
@@ -1889,16 +2041,16 @@ create table if not exists public.treatments (
   notify_coaches boolean default false,
   constraint treatments_pkey primary key (id),
   constraint treatments_treatment_type_check CHECK ((treatment_type = ANY (ARRAY['rehab'::text, 'preventive'::text]))),
-  constraint treatments_player_status_check CHECK ((player_status = ANY (ARRAY['improving'::text, 'stable'::text, 'worsening'::text]))),
   constraint treatments_pain_pre_check CHECK (((pain_pre >= 0) AND (pain_pre <= 10))),
-  constraint treatments_pain_post_check CHECK (((pain_post >= 0) AND (pain_post <= 10)))
+  constraint treatments_pain_post_check CHECK (((pain_post >= 0) AND (pain_post <= 10))),
+  constraint treatments_player_status_check CHECK ((player_status = ANY (ARRAY['improving'::text, 'stable'::text, 'worsening'::text])))
 );
 
 create table if not exists public.video_matches (
   video_id uuid not null,
   event_id uuid not null,
   created_at timestamp with time zone default now() not null,
-  constraint video_matches_pkey primary key (event_id, video_id)
+  constraint video_matches_pkey primary key (video_id, event_id)
 );
 CREATE INDEX idx_video_matches_event ON public.video_matches USING btree (event_id);
 
@@ -1961,16 +2113,16 @@ create table if not exists public.wellness (
   acknowledged_by uuid,
   hooper_index numeric,
   constraint wellness_pkey primary key (id),
-  constraint wellness_mood_check CHECK (((mood >= (1)::numeric) AND (mood <= (10)::numeric))),
-  constraint wellness_readiness_check CHECK (((readiness >= (1)::numeric) AND (readiness <= (10)::numeric))),
   constraint wellness_sleep_quality_check CHECK (((sleep_quality >= (1)::numeric) AND (sleep_quality <= (10)::numeric))),
+  constraint wellness_fatigue_check CHECK (((fatigue >= (1)::numeric) AND (fatigue <= (10)::numeric))),
   constraint wellness_soreness_check CHECK (((soreness >= (1)::numeric) AND (soreness <= (10)::numeric))),
   constraint wellness_stress_check CHECK (((stress >= (1)::numeric) AND (stress <= (10)::numeric))),
-  constraint wellness_fatigue_check CHECK (((fatigue >= (1)::numeric) AND (fatigue <= (10)::numeric)))
+  constraint wellness_mood_check CHECK (((mood >= (1)::numeric) AND (mood <= (10)::numeric))),
+  constraint wellness_readiness_check CHECK (((readiness >= (1)::numeric) AND (readiness <= (10)::numeric)))
 );
 CREATE INDEX wellness_player_id_idx ON public.wellness USING btree (player_id);
-CREATE INDEX wellness_date_idx ON public.wellness USING btree (club_id, submitted_at DESC);
 CREATE INDEX wellness_club_player_idx ON public.wellness USING btree (club_id, player_id);
+CREATE INDEX wellness_date_idx ON public.wellness USING btree (club_id, submitted_at DESC);
 
 -- ======================= FOREIGN KEYS =======================
 
@@ -2084,6 +2236,15 @@ alter table public.meal_plan_items add constraint meal_plan_items_meal_id_fkey F
 alter table public.meal_plan_meals add constraint meal_plan_meals_template_id_fkey FOREIGN KEY (template_id) REFERENCES meal_plan_templates(id) ON DELETE CASCADE;
 alter table public.meal_plan_templates add constraint meal_plan_templates_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.meal_plan_templates add constraint meal_plan_templates_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
+alter table public.medical_documents add constraint medical_documents_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.medical_documents add constraint medical_documents_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.medical_episodes add constraint medical_episodes_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.medical_episodes add constraint medical_episodes_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.medical_screenings add constraint medical_screenings_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.medical_screenings add constraint medical_screenings_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.medical_studies add constraint medical_studies_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.medical_studies add constraint medical_studies_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.medical_studies add constraint medical_studies_related_injury_id_fkey FOREIGN KEY (related_injury_id) REFERENCES injuries(id) ON DELETE SET NULL;
 alter table public.member_modules add constraint member_modules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.member_modules add constraint member_modules_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
 alter table public.member_teams add constraint member_teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
@@ -2122,6 +2283,10 @@ alter table public.player_match_stats add constraint player_match_stats_player_i
 alter table public.player_meal_assignments add constraint player_meal_assignments_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.player_meal_assignments add constraint player_meal_assignments_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.player_meal_assignments add constraint player_meal_assignments_template_id_fkey FOREIGN KEY (template_id) REFERENCES meal_plan_templates(id) ON DELETE CASCADE;
+alter table public.player_medical_profile add constraint player_medical_profile_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.player_medical_profile add constraint player_medical_profile_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.player_medications add constraint player_medications_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.player_medications add constraint player_medications_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.player_preventive_assignments add constraint player_preventive_assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.player_preventive_assignments add constraint player_preventive_assignments_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
 alter table public.player_preventive_assignments add constraint player_preventive_assignments_routine_id_fkey FOREIGN KEY (routine_id) REFERENCES preventive_routines(id) ON DELETE CASCADE;
@@ -2167,6 +2332,9 @@ alter table public.share_links add constraint share_links_team_id_fkey FOREIGN K
 alter table public.subscriptions add constraint subscriptions_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.subscriptions add constraint subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES plans(id);
 alter table public.subscriptions add constraint subscriptions_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.surgeries add constraint surgeries_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
+alter table public.surgeries add constraint surgeries_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE;
+alter table public.surgeries add constraint surgeries_related_injury_id_fkey FOREIGN KEY (related_injury_id) REFERENCES injuries(id) ON DELETE SET NULL;
 alter table public.tasks add constraint tasks_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL;
 alter table public.tasks add constraint tasks_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.tasks add constraint tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL;
@@ -2210,7 +2378,8 @@ begin
      set status = 'accepted'
    where lower(email) = lower((select email from auth.users where id = auth.uid()))
      and status = 'pending';
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.acknowledge_wellness(p_wellness_id uuid)
  RETURNS void
@@ -2224,14 +2393,16 @@ begin
          acknowledged_by = auth.uid()
    where id = p_wellness_id
      and club_id = public.get_user_club_id();
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.activity_team_for_player(p_player uuid)
  RETURNS uuid
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public'
-AS $function$ select team_id from public.players where id = p_player $function$;
+AS $function$ select team_id from public.players where id = p_player $function$
+;
 
 CREATE OR REPLACE FUNCTION public.assign_rpe_session(p_rpe_id uuid, p_session_id uuid)
  RETURNS jsonb
@@ -2255,7 +2426,8 @@ begin
    where id = r.id;
 
   return jsonb_build_object('ok', true);
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.assign_user_to_club(p_user_id uuid, p_club_id uuid, p_role text DEFAULT 'staff'::text, p_email text DEFAULT ''::text)
  RETURNS void
@@ -2286,7 +2458,8 @@ BEGIN
     SET club_id = EXCLUDED.club_id,
         role    = EXCLUDED.role;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.calculate_player_load(p_player_id uuid, p_days_acute integer DEFAULT 7, p_days_chronic integer DEFAULT 28)
  RETURNS TABLE(acute_load numeric, chronic_load numeric, acwr numeric)
@@ -2315,7 +2488,8 @@ BEGIN
     END as acwr
   FROM acute_load_cte a, chronic_load_cte c;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.calculate_rpe_load()
  RETURNS trigger
@@ -2325,7 +2499,8 @@ BEGIN
   NEW.load := NEW.rpe * NEW.duration;
   RETURN NEW;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.clear_gps_credential(p_integration_id uuid)
  RETURNS void
@@ -2343,7 +2518,8 @@ begin
   update public.gps_integrations
      set status = 'disabled', updated_at = now()
    where id = p_integration_id;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.club_has_feature(p_club_id uuid, p_key text)
  RETURNS boolean
@@ -2355,7 +2531,8 @@ AS $function$
     SELECT 1 FROM public.teams t
     WHERE t.club_id = p_club_id AND public.team_has_feature(t.id, p_key)
   );
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.cm_norm(t text)
  RETURNS text
@@ -2371,7 +2548,8 @@ AS $function$
         '[-_/]+', ' ', 'g'),
       '\s+', ' ', 'g')
   );
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.enforce_single_primary_team()
  RETURNS trigger
@@ -2384,7 +2562,8 @@ begin
     where club_id = NEW.club_id and id <> NEW.id and is_primary = true;
   end if;
   return NEW;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_club_members(p_club_id uuid)
  RETURNS TABLE(id uuid, email text, name text, role text, club_id uuid)
@@ -2396,7 +2575,8 @@ AS $function$
   FROM   public.profiles
   WHERE  club_id = p_club_id
   ORDER  BY COALESCE(name, email);
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_pending_rpe(p_club_id uuid)
  RETURNS TABLE(id uuid, player_name text, rpe numeric, session_date date, created_at timestamp with time zone)
@@ -2413,7 +2593,8 @@ begin
     join public.players p on p.id = r.player_id
     where r.club_id = p_club_id and r.session_id is null
     order by r.created_at desc;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_player_availability(p_club_id uuid)
  RETURNS TABLE(player_id uuid, first_name text, last_name text, status text, current_injuries integer, last_wellness timestamp without time zone, readiness integer)
@@ -2437,7 +2618,8 @@ BEGIN
   GROUP BY p.id, p.first_name, p.last_name, p.status
   ORDER BY p.status DESC, p.last_name;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_shared_calendar(p_token text)
  RETURNS jsonb
@@ -2538,7 +2720,8 @@ BEGIN
     'events',     COALESCE(v_events, '[]'::jsonb)
   );
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_shared_nutrition(p_token text)
  RETURNS jsonb
@@ -2629,7 +2812,8 @@ begin
                                       'meals', coalesce(v_meals, '[]'::jsonb))
               else null end);
 end;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_survey_history(p_token text, p_player_id uuid)
  RETURNS jsonb
@@ -2670,7 +2854,8 @@ begin
   end if;
 
   return jsonb_build_object('scope', v_scope, 'history', coalesce(v_hist, '[]'::jsonb));
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_survey_meta(p_token text)
  RETURNS jsonb
@@ -2686,7 +2871,8 @@ begin
      and scope in ('wellness','rpe','survey');
   if not found then return jsonb_build_object('valid', false); end if;
   return jsonb_build_object('valid', true, 'scope', v_link.scope);
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_survey_players(p_token text)
  RETURNS TABLE(id uuid, name text)
@@ -2709,7 +2895,8 @@ begin
     where p.club_id = v_link.club_id
       and (v_link.team_id is null or p.team_id = v_link.team_id)
     order by p.last_name nulls last, p.first_name nulls last;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.get_user_club_id()
  RETURNS uuid
@@ -2719,7 +2906,50 @@ AS $function$
   SELECT club_id FROM public.profiles 
   WHERE id = auth.uid() 
   LIMIT 1;
-$function$;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_user_role()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT role FROM public.profiles WHERE id = auth.uid() LIMIT 1;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.gps_session_agg(p_club_id uuid, p_session_ids uuid[], p_player_ids uuid[] DEFAULT NULL::uuid[])
+ RETURNS TABLE(session_id uuid, n_players integer, total_distance_avg numeric, high_speed_distance_avg numeric, very_high_speed_distance_avg numeric, sprint_distance_avg numeric, sprint_count_avg numeric, max_speed_avg numeric, max_speed_max numeric, avg_speed_avg numeric, accelerations_avg numeric, decelerations_avg numeric, player_load_avg numeric, hmld_avg numeric, time_played_avg numeric, distance_per_minute_avg numeric)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  select
+    r.session_id,
+    count(*)::int                       as n_players,
+    avg(r.total_distance)               as total_distance_avg,
+    avg(r.high_speed_distance)          as high_speed_distance_avg,
+    avg(r.very_high_speed_distance)     as very_high_speed_distance_avg,
+    avg(r.sprint_distance)              as sprint_distance_avg,
+    avg(r.sprint_count)                 as sprint_count_avg,
+    avg(r.max_speed)                    as max_speed_avg,
+    max(r.max_speed)                    as max_speed_max,
+    avg(r.avg_speed)                    as avg_speed_avg,
+    avg(r.accelerations)                as accelerations_avg,
+    avg(r.decelerations)                as decelerations_avg,
+    avg(r.player_load)                  as player_load_avg,
+    avg(r.hmld)                         as hmld_avg,
+    avg(r.time_played)                  as time_played_avg,
+    avg(r.distance_per_minute)          as distance_per_minute_avg
+  from public.gps_reports r
+  where r.club_id = p_club_id
+    and r.is_invalid = false
+    and r.session_id = any(p_session_ids)
+    and (p_player_ids is null or r.player_id = any(p_player_ids))
+  group by r.session_id;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.grant_comp_subscription(p_team_id uuid, p_plan_slug text DEFAULT 'full'::text)
  RETURNS uuid
@@ -2752,7 +2982,8 @@ BEGIN
   RETURNING id INTO v_sub_id;
 
   RETURN v_sub_id;
-END; $function$;
+END; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.grant_comp_subscription_club(p_club_id uuid, p_plan_slug text DEFAULT 'full'::text)
  RETURNS integer
@@ -2770,7 +3001,8 @@ BEGIN
     v_count := v_count + 1;
   END LOOP;
   RETURN v_count;
-END; $function$;
+END; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
  RETURNS trigger
@@ -2791,7 +3023,8 @@ begin
   end if;
   return new;
 exception when others then return new;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.has_full_planning_access()
  RETURNS boolean
@@ -2803,7 +3036,21 @@ AS $function$
       or exists (select 1 from public.profiles p
                  where p.id = auth.uid()
                    and lower(coalesce(p.role,'')) in ('admin','owner'));
-$function$;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.has_medical_access()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select public.is_super_admin()
+      or exists (select 1 from public.profiles p
+                 where p.id = auth.uid()
+                   and lower(coalesce(p.role,'')) in ('admin','owner','physio'));
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_platform_admin()
  RETURNS boolean
@@ -2815,7 +3062,8 @@ AS $function$
     SELECT 1 FROM public.platform_admins
     WHERE user_id = auth.uid()
   );
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.is_super_admin()
  RETURNS boolean
@@ -2824,7 +3072,8 @@ CREATE OR REPLACE FUNCTION public.is_super_admin()
  SET search_path TO 'public'
 AS $function$
   select exists (select 1 from public.platform_admins where user_id = auth.uid());
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.link_pending_rpe(p_club_id uuid, p_date date DEFAULT NULL::date)
  RETURNS integer
@@ -2843,7 +3092,8 @@ begin
     n := n + 1;
   end loop;
   return n;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.link_rpe_to_session(p_rpe_id uuid)
  RETURNS void
@@ -2875,7 +3125,8 @@ begin
            load       = r.rpe * coalesce(s.duration, r.duration)
      where id = r.id;
   end if;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.log_audit(p_table text, p_op text, p_changes jsonb DEFAULT NULL::jsonb, p_club_id uuid DEFAULT NULL::uuid)
  RETURNS void
@@ -2894,7 +3145,8 @@ begin
   set local row_security = off;
   insert into public.audit_log (club_id, actor_id, table_name, operation, changes)
   values (v_club, auth.uid(), p_table, p_op, p_changes);
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.my_plan_features()
  RETURNS jsonb
@@ -2922,7 +3174,8 @@ BEGIN
    WHERE t.club_id = v_club;
 
   RETURN coalesce(v_feats,'[]'::jsonb);
-END; $function$;
+END; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.my_player_ids()
  RETURNS SETOF uuid
@@ -2935,9 +3188,14 @@ AS $function$
     and (
       exists (select 1 from public.profiles pr where pr.id = auth.uid()
               and (pr.role in ('admin','owner') or pr.club_role in ('admin','owner')))
-      or p.team_id in (select public.my_team_ids())
+      or exists (
+        select 1 from public.player_teams pt
+        where pt.player_id = p.id
+          and pt.team_id in (select public.my_team_ids())
+      )
     );
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.my_team_ids()
  RETURNS SETOF uuid
@@ -2946,7 +3204,8 @@ CREATE OR REPLACE FUNCTION public.my_team_ids()
  SET search_path TO 'public'
 AS $function$
   select team_id from public.member_teams where profile_id = auth.uid();
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.primary_team_id()
  RETURNS uuid
@@ -2958,7 +3217,8 @@ AS $function$
   where club_id = public.get_user_club_id()
   order by is_primary desc, created_at asc
   limit 1;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.recent_sessions(p_club_id uuid, p_limit integer DEFAULT 5)
  RETURNS TABLE(id uuid, title text, session_date date, duration integer, session_type text)
@@ -2973,7 +3233,8 @@ begin
     where ts.club_id = p_club_id
     order by ts.session_date desc
     limit p_limit;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.register_new_club(p_club_name text, p_country text)
  RETURNS uuid
@@ -3010,7 +3271,8 @@ BEGIN
 
   RETURN v_club_id;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.revoke_comp_subscription(p_team_id uuid)
  RETURNS void
@@ -3025,7 +3287,8 @@ BEGIN
   UPDATE public.subscriptions
      SET status = 'canceled', canceled_at = now()
    WHERE team_id = p_team_id AND is_comp = true AND status = 'active';
-END; $function$;
+END; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.role_bucket(p_role text)
  RETURNS text
@@ -3041,7 +3304,8 @@ AS $function$
     when 'coach' then 'coach' when 'head_coach' then 'coach' when 'assistant_coach' then 'coach' when 'gk_coach' then 'coach'
     when 'analyst' then 'analyst'
     else 'staff' end;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.seed_core_metrics_for_club()
  RETURNS trigger
@@ -3070,7 +3334,8 @@ BEGIN
   ON CONFLICT (club_id, key) DO NOTHING;
   RETURN NEW;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.seed_default_exercises_for_club()
  RETURNS trigger
@@ -3088,7 +3353,8 @@ BEGIN
   ON CONFLICT (club_id, default_key) WHERE default_key IS NOT NULL DO NOTHING;
   RETURN NEW;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.session_rpe_status(p_session_id uuid)
  RETURNS TABLE(player_id uuid, player_name text, responded boolean, rpe numeric)
@@ -3122,21 +3388,24 @@ begin
       order by p.id, r.created_at desc nulls last
     ) q
     order by q.responded, q.ln nulls last, q.fn nulls last;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.set_club_settings_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
 AS $function$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.set_drills_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
 AS $function$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.set_gps_credential(p_integration_id uuid, p_credential text)
  RETURNS void
@@ -3157,7 +3426,8 @@ begin
   update public.gps_integrations
      set status = 'configured', connected_at = null, updated_at = now()
    where id = p_integration_id;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.set_member_role(target_id uuid, new_role text)
  RETURNS void
@@ -3189,13 +3459,15 @@ begin
   end if;
 
   update public.profiles set role = new_role where id = target_id;
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
  RETURNS trigger
  LANGUAGE plpgsql
 AS $function$
-BEGIN NEW.updated_at = now(); RETURN NEW; END; $function$;
+BEGIN NEW.updated_at = now(); RETURN NEW; END; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.stamp_lineup_publish()
  RETURNS trigger
@@ -3208,7 +3480,8 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.submit_survey(p_token text, p_player_id uuid, p_payload jsonb)
  RETURNS jsonb
@@ -3315,7 +3588,8 @@ begin
   end if;
 
   return jsonb_build_object('ok', true);
-end; $function$;
+end; $function$
+;
 
 CREATE OR REPLACE FUNCTION public.sync_player_primary_team()
  RETURNS trigger
@@ -3336,7 +3610,8 @@ begin
   where p.id = affected;
   return coalesce(NEW, OLD);
 end;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.team_features(p_team_id uuid)
  RETURNS jsonb
@@ -3347,7 +3622,8 @@ AS $function$
   SELECT coalesce(pl.features, '[]'::jsonb)
     FROM public.plans pl
    WHERE pl.slug = public.team_plan_slug(p_team_id);
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.team_has_feature(p_team_id uuid, p_key text)
  RETURNS boolean
@@ -3356,7 +3632,8 @@ CREATE OR REPLACE FUNCTION public.team_has_feature(p_team_id uuid, p_key text)
  SET search_path TO 'public'
 AS $function$
   SELECT public.team_features(p_team_id) ? p_key;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.team_plan_slug(p_team_id uuid)
  RETURNS text
@@ -3374,7 +3651,8 @@ AS $function$
       LIMIT 1),
     'initiation'
   );
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.team_player_ids(p_team_id uuid)
  RETURNS SETOF uuid
@@ -3383,7 +3661,8 @@ CREATE OR REPLACE FUNCTION public.team_player_ids(p_team_id uuid)
  SET search_path TO 'public'
 AS $function$
   select id from public.players where team_id = p_team_id;
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.team_player_limit(p_team_id uuid)
  RETURNS integer
@@ -3394,7 +3673,8 @@ AS $function$
   SELECT pl.max_players
     FROM public.plans pl
    WHERE pl.slug = public.team_plan_slug(p_team_id);
-$function$;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION public.trg_act_gps()
  RETURNS trigger
@@ -3411,7 +3691,8 @@ begin
     where action = 'gps.imported'
     do nothing;
   return NEW;
-end $function$;
+end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.trg_act_injury()
  RETURNS trigger
@@ -3433,7 +3714,8 @@ begin
             jsonb_build_object('body_area', NEW.body_area, 'returned_date', NEW.returned_date));
   end if;
   return NEW;
-end $function$;
+end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.trg_act_rpe()
  RETURNS trigger
@@ -3447,7 +3729,8 @@ begin
           'rpe.submitted', 'rpe', NEW.id, NEW.player_id,
           jsonb_build_object('rpe', NEW.rpe, 'session_id', NEW.session_id, 'load', NEW.load));
   return NEW;
-end $function$;
+end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.trg_act_session()
  RETURNS trigger
@@ -3464,7 +3747,8 @@ begin
             jsonb_build_object('title', NEW.title, 'session_type', NEW.session_type));
   end if;
   return NEW;
-end $function$;
+end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.trg_act_treatment()
  RETURNS trigger
@@ -3494,7 +3778,8 @@ begin
             jsonb_build_object('adaptation', left(coalesce(NEW.adaptation, NEW.adaptation_notes, ''), 140)));
   end if;
   return NEW;
-end $function$;
+end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.trg_act_wellness()
  RETURNS trigger
@@ -3508,7 +3793,8 @@ begin
           'wellness.submitted', 'wellness', NEW.id, NEW.player_id,
           jsonb_build_object('hooper_index', NEW.hooper_index, 'readiness', NEW.readiness));
   return NEW;
-end $function$;
+end $function$
+;
 
 CREATE OR REPLACE FUNCTION public.wellness_status(p_club_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE)
  RETURNS TABLE(player_id uuid, player_name text, responded boolean, readiness numeric, hooper_index numeric)
@@ -3537,7 +3823,8 @@ begin
       order by p.id, w.submitted_at desc nulls last
     ) q
     order by q.responded, q.ln nulls last, q.fn nulls last;
-end; $function$;
+end; $function$
+;
 
 -- =========================== VISTAS ===========================
 
@@ -3545,16 +3832,16 @@ create or replace view public.v_exercise_gps_profile as
  SELECT r.club_id,
     m.exercise_id,
     count(*) AS n_instances,
-    (sum(r.duration_seconds) / 60.0) AS total_minutes,
-    avg((r.total_distance / (r.duration_seconds / 60.0))) AS total_distance_per_min,
-    avg((r.high_speed_distance / (r.duration_seconds / 60.0))) AS high_speed_distance_per_min,
-    avg((r.very_high_speed_distance / (r.duration_seconds / 60.0))) AS very_high_speed_distance_per_min,
-    avg((r.sprint_distance / (r.duration_seconds / 60.0))) AS sprint_distance_per_min,
-    avg((r.sprint_count / (r.duration_seconds / 60.0))) AS sprint_count_per_min,
-    avg((r.accelerations / (r.duration_seconds / 60.0))) AS accelerations_per_min,
-    avg((r.decelerations / (r.duration_seconds / 60.0))) AS decelerations_per_min,
-    avg((r.player_load / (r.duration_seconds / 60.0))) AS player_load_per_min,
-    avg((r.hmld / (r.duration_seconds / 60.0))) AS hmld_per_min,
+    sum(r.duration_seconds) / 60.0 AS total_minutes,
+    avg(r.total_distance / (r.duration_seconds / 60.0)) AS total_distance_per_min,
+    avg(r.high_speed_distance / (r.duration_seconds / 60.0)) AS high_speed_distance_per_min,
+    avg(r.very_high_speed_distance / (r.duration_seconds / 60.0)) AS very_high_speed_distance_per_min,
+    avg(r.sprint_distance / (r.duration_seconds / 60.0)) AS sprint_distance_per_min,
+    avg(r.sprint_count / (r.duration_seconds / 60.0)) AS sprint_count_per_min,
+    avg(r.accelerations / (r.duration_seconds / 60.0)) AS accelerations_per_min,
+    avg(r.decelerations / (r.duration_seconds / 60.0)) AS decelerations_per_min,
+    avg(r.player_load / (r.duration_seconds / 60.0)) AS player_load_per_min,
+    avg(r.hmld / (r.duration_seconds / 60.0)) AS hmld_per_min,
     avg(r.total_distance) AS total_distance_avg,
     avg(r.high_speed_distance) AS high_speed_distance_avg,
     avg(r.very_high_speed_distance) AS very_high_speed_distance_avg,
@@ -3564,21 +3851,76 @@ create or replace view public.v_exercise_gps_profile as
     avg(r.decelerations) AS decelerations_avg,
     avg(r.player_load) AS player_load_avg,
     avg(r.hmld) AS hmld_avg
-   FROM (gps_period_reports r
-     JOIN gps_drill_map m ON (((m.club_id = r.club_id) AND (m.period_name = r.period_name))))
-  WHERE ((m.exercise_id IS NOT NULL) AND (m.ignored = false)
-    AND (r.duration_seconds >= (30)::numeric)                                          -- duration floor: drop <30s junk (m/min explosion)
-    AND ((r.total_distance IS NULL) OR (((r.total_distance * 1000.0) / r.duration_seconds) <= (13)::numeric)))  -- defensive ≤13 m/s avg-speed cap
+   FROM gps_period_reports r
+     JOIN gps_drill_map m ON m.club_id = r.club_id AND m.period_name = r.period_name
+  WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.duration_seconds >= 30::numeric AND (r.total_distance IS NULL OR (r.total_distance / r.duration_seconds) <= 13::numeric)
   GROUP BY r.club_id, m.exercise_id;
 
 create or replace view public.v_gps_period_names as
  SELECT club_id,
     period_name,
     count(*) AS n_instances,
-    (avg(duration_seconds) FILTER (WHERE (duration_seconds > (0)::numeric)) / 60.0) AS avg_minutes
+    avg(duration_seconds) FILTER (WHERE duration_seconds > 0::numeric) / 60.0 AS avg_minutes
    FROM gps_period_reports
-  WHERE ((period_name IS NOT NULL) AND (period_name <> ''::text))
+  WHERE period_name IS NOT NULL AND period_name <> ''::text
   GROUP BY club_id, period_name;
+
+create or replace view public.v_gps_task_analysis as
+ SELECT r.id,
+    r.club_id,
+    r.session_id,
+    ts.session_date,
+    ts.team_id,
+    m.exercise_id,
+    e.name AS exercise_name,
+    e.field_width,
+    e.field_height,
+    e.players_count,
+        CASE
+            WHEN e.players_count > 0 AND e.field_width > 0::numeric AND e.field_height > 0::numeric THEN round(e.field_width * e.field_height / e.players_count::numeric)
+            ELSE NULL::numeric
+        END AS m2_per_player,
+        CASE
+            WHEN e.field_width > 0::numeric AND e.field_height > 0::numeric THEN (round(e.field_width)::integer::text || 'x'::text) || round(e.field_height)::integer::text
+            ELSE NULL::text
+        END AS field_size,
+        CASE
+            WHEN e.name ~* '\d+\s*vs\s*\d+'::text THEN lower(regexp_replace(regexp_replace("substring"(e.name, '\d+\s*[Vv][Ss]\s*\d+(?:\s*\+\s*(?:\d+\s*[Vv][Ss]\s*\d+|\d+|[Gg][Kk]))*'::text), '\s*[Vv][Ss]\s*'::text, 'v'::text, 'g'::text), '\s*\+\s*'::text, '+'::text, 'g'::text))
+            WHEN e.players_count > 0 THEN e.players_count::text || 'p'::text
+            ELSE NULL::text
+        END AS players_format,
+    r.player_id,
+    (p.first_name || ' '::text) || p.last_name AS player_name,
+    p."position",
+    p.number,
+    r.duration_seconds,
+    r.duration_seconds / 60.0 AS work_min,
+    r.total_distance,
+    r.high_speed_distance,
+    r.very_high_speed_distance,
+    r.sprint_distance,
+    r.sprint_count,
+    r.accelerations,
+    r.decelerations,
+    r.player_load,
+    r.hmld,
+    r.max_speed,
+    r.avg_speed,
+    r.total_distance / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS distance_per_minute,
+    r.total_distance / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS total_distance_per_min,
+    r.high_speed_distance / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS high_speed_distance_per_min,
+    r.very_high_speed_distance / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS very_high_speed_distance_per_min,
+    r.sprint_distance / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS sprint_distance_per_min,
+    r.player_load / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS player_load_per_min,
+    r.accelerations / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS accelerations_per_min,
+    r.decelerations / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS decelerations_per_min,
+    r.hmld / NULLIF(r.duration_seconds / 60.0, 0::numeric) AS hmld_per_min
+   FROM gps_period_reports r
+     JOIN gps_drill_map m ON m.club_id = r.club_id AND m.period_name = r.period_name
+     JOIN exercises e ON e.id = m.exercise_id
+     JOIN training_sessions ts ON ts.id = r.session_id
+     JOIN players p ON p.id = r.player_id
+  WHERE m.exercise_id IS NOT NULL AND m.ignored = false AND r.is_flagged = false AND r.duration_seconds >= 30::numeric AND (r.total_distance IS NULL OR (r.total_distance / NULLIF(r.duration_seconds, 0::numeric)) <= 13::numeric);
 
 create or replace view public.v_next_match_lineup as
  SELECT DISTINCT ON (mc.club_id) mc.club_id,
@@ -3594,9 +3936,9 @@ create or replace view public.v_next_match_lineup as
     l.status AS lineup_status,
     l.poster_style,
     l.language
-   FROM (microcycles mc
-     LEFT JOIN lineups l ON (((l.microcycle_id = mc.id) AND (l.status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text])))))
-  WHERE (mc.match_date >= CURRENT_DATE)
+   FROM microcycles mc
+     LEFT JOIN lineups l ON l.microcycle_id = mc.id AND (l.status = ANY (ARRAY['draft'::text, 'locked'::text, 'official'::text]))
+  WHERE mc.match_date >= CURRENT_DATE
   ORDER BY mc.club_id, mc.match_date;
 
 create or replace view public.wellness_latest as
@@ -3835,7 +4177,7 @@ create policy "Anyone authenticated can read default_exercises" on public.defaul
   using (true);
 
 alter table public.dossier_templates enable row level security;
-create policy "dossier_templates_select" on public.dossier_templates as permissive for select to public
+create policy "dossier_templates_delete" on public.dossier_templates as permissive for delete to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
@@ -3843,11 +4185,11 @@ create policy "dossier_templates_insert" on public.dossier_templates as permissi
   with check ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-create policy "dossier_templates_update" on public.dossier_templates as permissive for update to public
+create policy "dossier_templates_select" on public.dossier_templates as permissive for select to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
-create policy "dossier_templates_delete" on public.dossier_templates as permissive for delete to public
+create policy "dossier_templates_update" on public.dossier_templates as permissive for update to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
   WHERE (profiles.id = auth.uid()))));
@@ -3972,6 +4314,7 @@ create policy "gps_drill_map_write" on public.gps_drill_map as permissive for al
   with check (((club_id = get_user_club_id()) AND has_full_planning_access()));
 
 alter table public.gps_integration_secrets enable row level security;
+
 alter table public.gps_integrations enable row level security;
 create policy "gps_int_club_all" on public.gps_integrations as permissive for all to authenticated
   using ((club_id = get_user_club_id()))
@@ -4226,6 +4569,34 @@ create policy "meal_plan_templates_rw" on public.meal_plan_templates as permissi
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
 
+alter table public.medical_documents enable row level security;
+create policy "mdoc_select" on public.medical_documents as permissive for select to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()));
+create policy "mdoc_write" on public.medical_documents as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()))
+  with check (((club_id = get_user_club_id()) AND has_medical_access()));
+
+alter table public.medical_episodes enable row level security;
+create policy "mepi_select" on public.medical_episodes as permissive for select to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()));
+create policy "mepi_write" on public.medical_episodes as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()))
+  with check (((club_id = get_user_club_id()) AND has_medical_access()));
+
+alter table public.medical_screenings enable row level security;
+create policy "mscr_select" on public.medical_screenings as permissive for select to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()));
+create policy "mscr_write" on public.medical_screenings as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()))
+  with check (((club_id = get_user_club_id()) AND has_medical_access()));
+
+alter table public.medical_studies enable row level security;
+create policy "mstu_select" on public.medical_studies as permissive for select to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()));
+create policy "mstu_write" on public.medical_studies as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()))
+  with check (((club_id = get_user_club_id()) AND has_medical_access()));
+
 alter table public.member_modules enable row level security;
 create policy "member_modules_select" on public.member_modules as permissive for select to public
   using ((club_id IN ( SELECT profiles.club_id
@@ -4403,6 +4774,20 @@ create policy "player_meal_assignments_rw" on public.player_meal_assignments as 
   using ((club_id = get_user_club_id()))
   with check ((club_id = get_user_club_id()));
 
+alter table public.player_medical_profile enable row level security;
+create policy "pmp_select" on public.player_medical_profile as permissive for select to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()));
+create policy "pmp_write" on public.player_medical_profile as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()))
+  with check (((club_id = get_user_club_id()) AND has_medical_access()));
+
+alter table public.player_medications enable row level security;
+create policy "pmed_select" on public.player_medications as permissive for select to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()));
+create policy "pmed_write" on public.player_medications as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()))
+  with check (((club_id = get_user_club_id()) AND has_medical_access()));
+
 alter table public.player_preventive_assignments enable row level security;
 create policy "player_preventive_assignments_all" on public.player_preventive_assignments as permissive for all to authenticated
   using ((player_id IN ( SELECT players.id
@@ -4422,7 +4807,9 @@ alter table public.players enable row level security;
 create policy "players_scoped_delete" on public.players as permissive for delete to public
   using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
-  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (EXISTS ( SELECT 1
+   FROM player_teams pt
+  WHERE ((pt.player_id = players.id) AND (pt.team_id IN ( SELECT my_team_ids() AS my_team_ids))))))));
 create policy "players_scoped_insert" on public.players as permissive for insert to authenticated
   with check (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
@@ -4430,14 +4817,20 @@ create policy "players_scoped_insert" on public.players as permissive for insert
 create policy "players_scoped_select" on public.players as permissive for select to public
   using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
-  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (EXISTS ( SELECT 1
+   FROM player_teams pt
+  WHERE ((pt.player_id = players.id) AND (pt.team_id IN ( SELECT my_team_ids() AS my_team_ids))))))));
 create policy "players_scoped_update" on public.players as permissive for update to public
   using (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
-  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))))
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (EXISTS ( SELECT 1
+   FROM player_teams pt
+  WHERE ((pt.player_id = players.id) AND (pt.team_id IN ( SELECT my_team_ids() AS my_team_ids))))))))
   with check (((club_id = get_user_club_id()) AND ((EXISTS ( SELECT 1
    FROM profiles p
-  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)))));
+  WHERE ((p.id = auth.uid()) AND ((p.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (p.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))) OR (EXISTS ( SELECT 1
+   FROM player_teams pt
+  WHERE ((pt.player_id = players.id) AND (pt.team_id IN ( SELECT my_team_ids() AS my_team_ids))))))));
 create policy "players_super_select" on public.players as permissive for select to public
   using (is_super_admin());
 create policy "players_super_write" on public.players as permissive for all to authenticated
@@ -4580,6 +4973,13 @@ create policy "subs_superadmin_read" on public.subscriptions as permissive for s
 create policy "subscriptions_select" on public.subscriptions as permissive for select to authenticated
   using ((club_id = get_user_club_id()));
 
+alter table public.surgeries enable row level security;
+create policy "surg_select" on public.surgeries as permissive for select to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()));
+create policy "surg_write" on public.surgeries as permissive for all to authenticated
+  using (((club_id = get_user_club_id()) AND has_medical_access()))
+  with check (((club_id = get_user_club_id()) AND has_medical_access()));
+
 alter table public.tasks enable row level security;
 create policy "Club members can create tasks" on public.tasks as permissive for insert to authenticated
   with check ((club_id IN ( SELECT profiles.club_id
@@ -4598,7 +4998,7 @@ create policy "Club members can update tasks" on public.tasks as permissive for 
 create policy "Team-scoped task visibility" on public.tasks as permissive for select to public
   using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()) OR (assigned_to = auth.uid()))));
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()) OR (assigned_to = auth.uid()) OR ((assigned_roles IS NOT NULL) AND (get_user_role() = ANY (assigned_roles)) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))))));
 
 alter table public.taxonomy_aliases enable row level security;
 create policy "Anyone authenticated can read taxonomy_aliases" on public.taxonomy_aliases as permissive for select to authenticated
