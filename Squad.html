@@ -1144,8 +1144,96 @@
   <span class="sq-bulk-sep"></span>
   <button class="cm-btn is-outline is-sm" id="sqBulkArchive"><i class="ti ti-archive" style="font-size:14px"></i><span>Archive</span></button>
   <button class="cm-btn is-outline is-sm" id="sqBulkExport"><i class="ti ti-file-export" style="font-size:14px"></i><span>Export</span></button>
-  <button class="cm-btn is-outline is-sm" id="sqBulkMove" disabled title="Coming soon"><i class="ti ti-arrows-exchange" style="font-size:14px"></i><span>Move to team</span></button>
-  <button class="cm-btn is-outline is-sm" id="sqBulkEdit" disabled title="Coming soon"><i class="ti ti-edit" style="font-size:14px"></i><span>Change position/status</span></button>
+  <button class="cm-btn is-outline is-sm" id="sqBulkMove"><i class="ti ti-arrows-exchange" style="font-size:14px"></i><span>Move to team</span></button>
+  <button class="cm-btn is-outline is-sm" id="sqBulkEdit"><i class="ti ti-edit" style="font-size:14px"></i><span>Change position/status</span></button>
+</div>
+
+<!-- Bulk: Move to team -->
+<div class="sq-modal-backdrop" id="sqMoveBackdrop">
+  <div class="sq-modal" role="dialog" aria-modal="true" aria-labelledby="sqMoveTitle" style="width:420px">
+    <div class="sq-modal-head">
+      <h2 id="sqMoveTitle">Move to team</h2>
+      <button class="sq-modal-close" id="sqMoveClose" title="Close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <div class="sq-modal-field">
+        <label for="sqMoveTeam">Team</label>
+        <select id="sqMoveTeam"></select>
+      </div>
+      <div class="sq-modal-field">
+        <label>Mode</label>
+        <div style="display:flex;gap:16px;padding:2px 0">
+          <label style="display:flex;align-items:center;gap:6px;font:var(--cm-body-sm);color:var(--cm-fg);cursor:pointer"><input type="radio" name="sqMoveMode" value="add" checked> Add to team</label>
+          <label style="display:flex;align-items:center;gap:6px;font:var(--cm-body-sm);color:var(--cm-fg);cursor:pointer"><input type="radio" name="sqMoveMode" value="move"> Move here</label>
+        </div>
+        <div style="font:var(--cm-meta);color:var(--cm-fg-muted)">Add to team keeps their other teams. Move here replaces all teams with this one.</div>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <button class="cm-btn is-ghost is-sm" id="sqMoveCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqMoveApply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk: Change position / status -->
+<div class="sq-modal-backdrop" id="sqChangeBackdrop">
+  <div class="sq-modal" role="dialog" aria-modal="true" aria-labelledby="sqChangeTitle" style="width:420px">
+    <div class="sq-modal-head">
+      <h2 id="sqChangeTitle">Update players</h2>
+      <button class="sq-modal-close" id="sqChangeClose" title="Close" aria-label="Close"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="sq-modal-body">
+      <div class="sq-modal-field">
+        <label for="sqChangePos">Position</label>
+        <select id="sqChangePos">
+          <option value="__nochange__">— No change —</option>
+          <optgroup label="Goalkeeper">
+            <option value="GK">GK — Goalkeeper</option>
+          </optgroup>
+          <optgroup label="Defenders">
+            <option value="CB">CB — Centre back</option>
+            <option value="LB">LB — Left back</option>
+            <option value="RB">RB — Right back</option>
+            <option value="LWB">LWB — Left wing back</option>
+            <option value="RWB">RWB — Right wing back</option>
+          </optgroup>
+          <optgroup label="Midfielders">
+            <option value="CDM">CDM — Defensive mid</option>
+            <option value="CM">CM — Central mid</option>
+            <option value="CAM">CAM — Attacking mid</option>
+          </optgroup>
+          <optgroup label="Wide">
+            <option value="LM">LM — Left mid</option>
+            <option value="RM">RM — Right mid</option>
+            <option value="LW">LW — Left winger</option>
+            <option value="RW">RW — Right winger</option>
+          </optgroup>
+          <optgroup label="Forwards">
+            <option value="SS">SS — Second striker</option>
+            <option value="CF">CF — Centre forward</option>
+            <option value="ST">ST — Striker</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="sq-modal-field">
+        <label for="sqChangeStatus">Status</label>
+        <select id="sqChangeStatus">
+          <option value="__nochange__">— No change —</option>
+          <option value="available">Available</option>
+          <option value="injured">Injured</option>
+          <option value="modified">Modified</option>
+          <option value="unavailable">Unavailable</option>
+        </select>
+      </div>
+    </div>
+    <div class="sq-modal-foot">
+      <div class="grow"></div>
+      <button class="cm-btn is-ghost is-sm" id="sqChangeCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="sqChangeApply">Apply</button>
+    </div>
+  </div>
 </div>
 
 <!-- Player picker (floating) -->
@@ -1775,6 +1863,94 @@ async function reloadPlayers() {
   document.getElementById('sqBulkArchive')?.addEventListener('click', bulkArchive);
   document.getElementById('sqBulkExport')?.addEventListener('click', bulkExport);
   document.getElementById('sqBulkClear')?.addEventListener('click', clearBulkSelection);
+
+  // ── Bulk: Move to team ─────────────────────────────────────────
+  async function openBulkMove() {
+    if (!getSelectedIds().length) return;
+    const teams = await window.getTeams(_currentClubId);
+    const sel = document.getElementById('sqMoveTeam');
+    if (sel) sel.innerHTML = teams.length
+      ? teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+      : `<option value="">${tt('squad.no_teams','No teams')}</option>`;
+    const addRadio = document.querySelector('input[name="sqMoveMode"][value="add"]');
+    if (addRadio) addRadio.checked = true;
+    document.getElementById('sqBulkBar')?.classList.remove('is-show'); // avoid the bar overlapping the modal
+    document.getElementById('sqMoveBackdrop').classList.add('is-open');
+  }
+  async function applyBulkMove() {
+    const ids = getSelectedIds();
+    if (!ids.length) { document.getElementById('sqMoveBackdrop').classList.remove('is-open'); return; }
+    const sel = document.getElementById('sqMoveTeam');
+    const teamId = sel && sel.value;
+    if (!teamId) { showToast(tt('squad.select_team','Select a team.')); return; }
+    const teamName = sel.options[sel.selectedIndex]?.text || '';
+    const mode = document.querySelector('input[name="sqMoveMode"]:checked')?.value || 'add';
+    const n = ids.length;
+    const verb = mode === 'move' ? tt('squad.move','Move') : tt('squad.add','Add');
+    if (!confirm(tt('squad.bulk_move_confirm', `${verb} ${n} player${n !== 1 ? 's' : ''} to ${teamName}?`, { count: n, team: teamName }))) return;
+    if (mode === 'move') {
+      // Replace: drop all current memberships, then keep only the chosen team (primary).
+      const { error: delErr } = await window.sb.from('player_teams').delete().eq('club_id', _currentClubId).in('player_id', ids);
+      if (delErr) { showToast(tt('squad.generic_error','Error: ' + delErr.message, { msg: delErr.message })); return; }
+      const rows = ids.map(pid => ({ club_id: _currentClubId, player_id: pid, team_id: teamId, is_primary: true }));
+      const { error: insErr } = await window.sb.from('player_teams').upsert(rows, { onConflict: 'player_id,team_id' });
+      if (insErr) { showToast(tt('squad.generic_error','Error: ' + insErr.message, { msg: insErr.message })); return; }
+    } else {
+      // Add: extra membership without touching other teams. Non-primary; skip duplicates.
+      const rows = ids.map(pid => ({ club_id: _currentClubId, player_id: pid, team_id: teamId, is_primary: false }));
+      const { error: insErr } = await window.sb.from('player_teams').upsert(rows, { onConflict: 'player_id,team_id', ignoreDuplicates: true });
+      if (insErr) { showToast(tt('squad.generic_error','Error: ' + insErr.message, { msg: insErr.message })); return; }
+    }
+    document.getElementById('sqMoveBackdrop').classList.remove('is-open');
+    clearBulkSelection();
+    await reloadPlayers();
+    showToast(mode === 'move'
+      ? tt('squad.bulk_moved', `${n} player${n !== 1 ? 's' : ''} moved to ${teamName}.`, { count: n, team: teamName })
+      : tt('squad.bulk_added', `${n} player${n !== 1 ? 's' : ''} added to ${teamName}.`, { count: n, team: teamName }));
+  }
+
+  // ── Bulk: Change position / status ─────────────────────────────
+  function openBulkChange() {
+    if (!getSelectedIds().length) return;
+    document.getElementById('sqChangePos').value = '__nochange__';
+    document.getElementById('sqChangeStatus').value = '__nochange__';
+    document.getElementById('sqBulkBar')?.classList.remove('is-show'); // avoid the bar overlapping the modal
+    document.getElementById('sqChangeBackdrop').classList.add('is-open');
+  }
+  async function applyBulkChange() {
+    const ids = getSelectedIds();
+    if (!ids.length) { document.getElementById('sqChangeBackdrop').classList.remove('is-open'); return; }
+    const pos = document.getElementById('sqChangePos').value;
+    const status = document.getElementById('sqChangeStatus').value;
+    const patch = {}, summary = [];
+    if (pos && pos !== '__nochange__') { patch.position = pos; summary.push('Position → ' + pos); }
+    if (status && status !== '__nochange__') { patch.status = status; summary.push('Status → ' + status); }
+    if (!Object.keys(patch).length) { showToast(tt('squad.nothing_to_update','Nothing to update.')); return; }
+    const n = ids.length;
+    if (!confirm(tt('squad.bulk_update_confirm', `Update ${n} player${n !== 1 ? 's' : ''}? ${summary.join(', ')}`, { count: n, changes: summary.join(', ') }))) return;
+    const { error } = await window.sb.from('players').update(patch).in('id', ids);
+    if (error) { showToast(tt('squad.generic_error','Error: ' + error.message, { msg: error.message })); return; }
+    document.getElementById('sqChangeBackdrop').classList.remove('is-open');
+    clearBulkSelection();
+    await reloadPlayers();
+    showToast(tt('squad.bulk_updated', `${n} player${n !== 1 ? 's' : ''} updated.`, { count: n }));
+  }
+
+  // Close a bulk modal without applying → restore the bar (selection is kept).
+  function closeBulkModal(backdropId) {
+    document.getElementById(backdropId)?.classList.remove('is-open');
+    updateBulkBar();
+  }
+  document.getElementById('sqBulkMove')?.addEventListener('click', openBulkMove);
+  document.getElementById('sqBulkEdit')?.addEventListener('click', openBulkChange);
+  document.getElementById('sqMoveApply')?.addEventListener('click', applyBulkMove);
+  document.getElementById('sqMoveCancel')?.addEventListener('click', () => closeBulkModal('sqMoveBackdrop'));
+  document.getElementById('sqMoveClose')?.addEventListener('click', () => closeBulkModal('sqMoveBackdrop'));
+  document.getElementById('sqMoveBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeBulkModal('sqMoveBackdrop'); });
+  document.getElementById('sqChangeApply')?.addEventListener('click', applyBulkChange);
+  document.getElementById('sqChangeCancel')?.addEventListener('click', () => closeBulkModal('sqChangeBackdrop'));
+  document.getElementById('sqChangeClose')?.addEventListener('click', () => closeBulkModal('sqChangeBackdrop'));
+  document.getElementById('sqChangeBackdrop')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeBulkModal('sqChangeBackdrop'); });
 
   async function openModal(player) {
     _editingId = player ? player.id : null;
