@@ -142,7 +142,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ RPE.html
 - ✅ Availability.html
 - ✅ Chat & Tasks.html
-- ⬜ Lineup.html
+- ✅ Lineup.html
 
 ### Fase 3 — Técnico
 - ⬜ Planner.html  *(Drill Designer)*

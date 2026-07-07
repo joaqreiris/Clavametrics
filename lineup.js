@@ -129,7 +129,7 @@
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('luTeamSelect');
     if (!sel) return;
-    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    if (!teams.length) { sel.innerHTML=`<option value="">${tt('lineup.no_teams', 'No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _luTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_luTeamId?'selected':''}>${t.name}</option>`).join('');
@@ -142,7 +142,14 @@
   let _playersLoading       = true;
   let _currentMatch  = null;
 
-  // ── Strings (English-only UI)
+  // ── i18n helper: t(key) with English fallback (already interpolated)
+  function tt (key, fallbackEN, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+
+  // ── Strings — resolved from i18n at render time (English is the fallback).
+  //    `tagline` is overridden at runtime by club branding (see loadClubInfo/loadBranding).
   const T = {
     en: {
       lineup: 'Lineup',
@@ -164,6 +171,24 @@
       official: 'Official',
     },
   };
+
+  // Current UI strings, pulled live from the i18n runtime (falls back to English).
+  // `tagline` keeps whatever club branding set on T.en (not translated).
+  function uiStrings () {
+    return {
+      lineup:       tt('lineup.lineup', 'Lineup'),
+      lineupHilite: tt('lineup.official', 'Official'),
+      starting:     tt('lineup.starting_xi', 'Starting XI'),
+      substitutes:  tt('lineup.substitutes', 'Substitutes'),
+      coach:        tt('lineup.head_coach', 'HEAD COACH'),
+      matchday:     tt('common.date', 'Date'),
+      kickoff:      tt('lineup.kick_off', 'Kick-off'),
+      venue:        tt('lineup.venue', 'Venue'),
+      competition:  tt('lineup.competition', 'Competition'),
+      tagline:      T.en.tagline,
+      official:     tt('lineup.official', 'Official'),
+    };
+  }
 
   // ── Render the poster spots (player circles on the pitch)
   function renderPitch () {
@@ -213,7 +238,7 @@
         <span class="handle"><i class="ti ti-grip-vertical"></i></span>
         <span class="num"><i class="ti ti-user-plus" style="font-size:13px"></i></span>
         <div class="body">
-          <div class="name lu-empty-label">Select player…</div>
+          <div class="name lu-empty-label">${tt('lineup.select_player', 'Select player…')}</div>
           <div class="meta">${posHint}</div>
         </div>
         <span class="role-tag ${posHint.toLowerCase()}">${posHint}</span>
@@ -262,7 +287,7 @@
 
   // ── Render the match meta cells on the poster
   function renderPosterMeta () {
-    const lang = T.en;
+    const lang = uiStrings();
     const set = (sel, v) => { const el = document.querySelector(sel); if (el) el.textContent = v; };
     set('[data-meta="matchday-l"]', lang.matchday);
     set('[data-meta="kickoff-l"]',  lang.kickoff);
@@ -433,7 +458,7 @@
     const poster = document.querySelector('.lu-poster');
     if (!poster) return;
     const btn = document.querySelector('[data-export="image"]');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2" style="font-size:14px"></i>Generating…'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="ti ti-loader-2" style="font-size:14px"></i>${tt('lineup.generating', 'Generating…')}`; }
     try {
       await ensureH2C();
       const canvas = await html2canvas(poster, {
@@ -471,9 +496,9 @@
       }, 'image/png');
     } catch (e) {
       console.warn('export failed', e);
-      alert('Could not export image. Try Print → Save as PDF.');
+      alert(tt('lineup.export_failed', 'Could not export image. Try Print → Save as PDF.'));
     } finally {
-      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-photo-down" style="font-size:14px"></i>Download PNG'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = `<i class="ti ti-photo-down" style="font-size:14px"></i>${tt('lineup.download_png', 'Download PNG')}`; }
     }
   }
 
@@ -493,10 +518,10 @@
 
     document.getElementById('luShareChat')?.addEventListener('click', async () => {
       closeShareModal();
-      if (!_lineupId) { showToast('No active lineup'); return; }
+      if (!_lineupId) { showToast(tt('lineup.no_active_lineup', 'No active lineup')); return; }
       const { error } = await window.sb.from('lineups').update({ status: 'official' }).eq('id', _lineupId);
-      if (error) { showToast('Error: ' + error.message); return; }
-      showToast('✓ Official lineup published to #match-day');
+      if (error) { showToast(tt('lineup.error_prefix', 'Error: {msg}', { msg: error.message })); return; }
+      showToast(tt('lineup.published_official', '✓ Official lineup published to #match-day'));
       renderPosterMeta();
     });
 
@@ -508,7 +533,7 @@
     document.getElementById('luShareLink')?.addEventListener('click', () => {
       closeShareModal();
       const url = `${location.origin}${location.pathname}?lineup=${_lineupId || ''}`;
-      navigator.clipboard.writeText(url).then(() => showToast('✓ Link copied to clipboard'));
+      navigator.clipboard.writeText(url).then(() => showToast(tt('lineup.link_copied', '✓ Link copied to clipboard')));
     });
   }
 
@@ -570,7 +595,7 @@
     panel.innerHTML = `
       <div class="lu-picker-search">
         <i class="ti ti-search"></i>
-        <input class="lu-picker-input" placeholder="Search player…">
+        <input class="lu-picker-input" placeholder="${tt('lineup.search_player', 'Search player…')}">
       </div>
       <div class="lu-picker-list"></div>`;
 
@@ -604,7 +629,7 @@
         : baseList;
 
       if (!players.length) {
-        list.innerHTML = '<div class="lu-picker-empty">No players found</div>';
+        list.innerHTML = `<div class="lu-picker-empty">${tt('lineup.no_players_found', 'No players found')}</div>`;
         return;
       }
       list.innerHTML = players.map(p => `
@@ -689,7 +714,7 @@
 
     // Persist in background — never blocks the UI
     persistSlot(slotIdx, kind, squadPlayer.id)
-      .catch(err => showToast('Save error: ' + err.message));
+      .catch(err => showToast(tt('lineup.save_error', 'Save error: {msg}', { msg: err.message })));
   }
 
   async function persistSlot (slotIdx, kind, playerId) {
@@ -825,22 +850,26 @@
         }).eq('id', _lineupId);
       }
       const saved = document.getElementById('luSaveStatus');
-      if (saved) saved.textContent = 'Saved · just now';
+      if (saved) saved.textContent = tt('lineup.saved_just_now', 'Saved · just now');
     }, 500);
   }
 
   // ── Competition label map (calendar_events uses lowercase enum values)
   const COMP_LABELS = { league: 'League', cup: 'Cup', international: 'International', friendly: 'Friendly' };
-  const fmtComp = c => COMP_LABELS[c] || (c ? c.charAt(0).toUpperCase() + c.slice(1) : '—');
+  const fmtComp = c => {
+    if (COMP_LABELS[c]) return tt('lineup.comp_' + c, COMP_LABELS[c]);
+    return c ? c.charAt(0).toUpperCase() + c.slice(1) : '—';
+  };
 
   // ── Banner: update .lu-mc + poster meta with calendar_event data
   function updateBanner (match) {
     const rival = match.opponent || match.title || '—';
     const set = (sel, val) => { const el = document.querySelector(sel); if (el) el.textContent = val; };
 
+    const loc = (window.CM_I18N && CM_I18N.current) ? CM_I18N.current : 'en-GB';
     const fmtDate = d => {
       if (!d) return '—';
-      return new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+      return new Date(d + 'T12:00:00').toLocaleDateString(loc, { weekday:'short', day:'numeric', month:'short', year:'numeric' });
     };
 
     // Banner top row
@@ -855,8 +884,8 @@
 
     const homeEl = document.querySelector('[data-home-away]');
     if (homeEl) homeEl.innerHTML = match.home_away === 'home'
-      ? '<i class="ti ti-home" style="font-size:11px"></i>Home'
-      : '<i class="ti ti-plane" style="font-size:11px"></i>Away';
+      ? `<i class="ti ti-home" style="font-size:11px"></i>${tt('lineup.home', 'Home')}`
+      : `<i class="ti ti-plane" style="font-size:11px"></i>${tt('lineup.away', 'Away')}`;
 
     // Banner meta strip
     set('[data-banner-date]',  fmtDate(match.date));
@@ -866,9 +895,9 @@
 
     // Poster meta cells
     const d = match.date ? new Date(match.date + 'T12:00:00') : null;
-    const dateStr = d ? d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' }) : '—';
+    const dateStr = d ? d.toLocaleDateString(loc, { weekday:'short', day:'numeric', month:'short' }) : '—';
     const yearStr = d ? d.getFullYear() : '';
-    const homeAway = match.home_away === 'home' ? 'Home' : match.home_away === 'away' ? 'Away' : '';
+    const homeAway = match.home_away === 'home' ? tt('lineup.home', 'Home') : match.home_away === 'away' ? tt('lineup.away', 'Away') : '';
 
     const setHtml = (sel, html) => { const el = document.querySelector(sel); if (el) el.innerHTML = html; };
     setHtml('[data-match-date]',  d ? `${dateStr}<small>${yearStr}</small>` : '—');
@@ -906,7 +935,8 @@
       document.querySelectorAll('[data-poster-tag]').forEach(el => { el.textContent = tag; });
     }
     const season = settings?.season_name;
-    const teamSub = season ? `First team · ${season}` : 'First team';
+    const firstTeam = tt('lineup.first_team', 'First team');
+    const teamSub = season ? `${firstTeam} · ${season}` : firstTeam;
     document.querySelectorAll('[data-club-team-sub]').forEach(el => { el.textContent = teamSub; });
   }
 
@@ -934,7 +964,11 @@
       .order('created_at');
     const list = document.getElementById('staffList');
     if (!list || !data?.length) return;
-    const roleLabel = r => ({ coach: 'Head coach', staff: 'Staff', admin: 'Director' }[r] || r);
+    const roleLabel = r => ({
+      coach: tt('lineup.role_head_coach', 'Head coach'),
+      staff: tt('lineup.role_staff', 'Staff'),
+      admin: tt('lineup.role_director', 'Director'),
+    }[r] || r);
     const roleTag   = r => ({ coach: 'HC', staff: 'AST', admin: 'MGR' }[r] || 'STF');
     list.innerHTML = data.map((p, i) => `
       <div class="lu-row" data-pos="mf">
@@ -945,7 +979,7 @@
           <div class="meta">${roleLabel(p.role)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
-          <input type="checkbox" class="lu-staff-check" data-pid="${p.id}" data-name="${(p.full_name || '').replace(/"/g,'&quot;')}" data-prole="${p.role}" title="Include in lineup">
+          <input type="checkbox" class="lu-staff-check" data-pid="${p.id}" data-name="${(p.full_name || '').replace(/"/g,'&quot;')}" data-prole="${p.role}" title="${tt('lineup.include_in_lineup', 'Include in lineup')}">
           <span class="role-tag" style="${p.role === 'coach' ? 'background:rgba(217,119,6,0.12);color:#B45309' : ''}">${roleTag(p.role)}</span>
         </div>
       </div>`).join('');
@@ -1009,7 +1043,7 @@
       const ext   = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z]/g, '') || 'png';
       const path  = `opponent-crests/${_clubId || 'default'}/${slug}.${ext}`;
       const { error } = await window.sb.storage.from('club-assets').upload(path, file, { upsert: true });
-      if (error) { showToast('Upload failed: ' + error.message); return; }
+      if (error) { showToast(tt('lineup.upload_failed', 'Upload failed: {msg}', { msg: error.message })); return; }
       const { data: { publicUrl } } = window.sb.storage.from('club-assets').getPublicUrl(path);
 
       // Persist to calendar_events + opponent_branding
@@ -1024,7 +1058,7 @@
       }
       if (window.invalidateCrestCache) window.invalidateCrestCache(_clubId, rival, matchId);
       document.querySelectorAll('.opp-crest').forEach(img => { img.src = publicUrl; });
-      showToast('Opponent crest updated');
+      showToast(tt('lineup.opponent_crest_updated', 'Opponent crest updated'));
     });
   }
 
@@ -1147,5 +1181,22 @@
     applyStyle();
     renderSubsBand();
     renderPosterMeta();
+  });
+
+  // ── Re-paint JS-rendered chrome when the language changes.
+  // Static [data-i18n] nodes are handled by the i18n runtime; here we only
+  // re-run the renderers that build text from JS strings. State (starters,
+  // subs, formation, drag) is untouched — we just repaint labels.
+  document.addEventListener('cm:langchanged', () => {
+    renderComposer();      // "Select player…" empty labels + tab counts
+    renderSubsBand();      // poster subs band
+    renderPosterMeta();    // poster meta labels (Date / Kick-off / Venue / Competition / titles)
+    if (_currentMatch) updateBanner(_currentMatch);  // date/home-away/competition in locale
+    if (_clubId) {
+      loadClubInfo(_clubId);                                   // "First team · season"
+      renderStaff(_clubId).then(() => {                        // staff role labels
+        if (_lineupId) loadLineupStaff(_lineupId);             // re-check saved staff
+      });
+    }
   });
 })();
