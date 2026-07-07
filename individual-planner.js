@@ -4,6 +4,11 @@
 (function () {
   'use strict';
 
+  function tt(key, fallbackEN, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+
   // ─── Sample week: Lautaro Vergara · CB · Capacity block W4 ───
   const WEEK = [
     {
@@ -69,23 +74,26 @@
     }
   ];
 
-  const TYPE_LABEL = {
+  const TYPE_LABEL_EN = {
     warmup: 'Warm-up', myo: 'Myofascial', mob: 'Mobility', act: 'Activation',
     str: 'Strength', plyo: 'Plyometrics', skills: 'Skills', field: 'On-field',
     cond: 'Conditioning', cool: 'Cooldown', assess: 'Assessment'
   };
+  const typeLabel = (t) => tt('individual_planner.type_' + t, TYPE_LABEL_EN[t] || t);
   const TYPE_COLOR = {
     warmup: '#10B981', myo: '#A78BFA', mob: '#06B6D4', act: '#22C55E',
     str: '#DC2626', plyo: '#F59E0B', skills: '#3B82F6', field: '#15803D',
     cond: '#EA580C', cool: '#64748B', assess: '#0EA5E9'
   };
-  const RESP_LABEL = { physio: 'Physio', sc: 'S&C', coach: 'Coach' };
+  const RESP_LABEL_EN = { physio: 'Physio', sc: 'S&C', coach: 'Coach' };
+  const respLabel = (r) => tt('individual_planner.resp_' + r, RESP_LABEL_EN[r] || r);
   const MODE_PILL = {
     pitch:  ['ti-soccer-field', 'is-pitch',  'Pitch'],
     gym:    ['ti-barbell',      'is-gym',    'Gym'],
     physio: ['ti-stethoscope',  'is-physio', 'Physio'],
     recov:  ['ti-droplet',      'is-recov',  'Recov']
   };
+  const modeLabel = (m) => tt('individual_planner.mode_' + m, (MODE_PILL[m] && MODE_PILL[m][2]) || m);
 
   const $  = (s, c) => (c || document).querySelector(s);
   const $$ = (s, c) => Array.from((c || document).querySelectorAll(s));
@@ -99,19 +107,19 @@
       head.className = 'rp-day-h';
       head.innerHTML = `
         <div class="top">
-          <span class="dow">${day.dow}${day.today ? ' · TODAY' : ''}</span>
+          <span class="dow">${day.dow}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</span>
           <span class="dom">${day.dom}</span>
         </div>
         <div class="pillrow">${(day.mode || []).map(m => {
-          const [icon, cls, label] = MODE_PILL[m];
-          return `<span class="rp-mini-pill ${cls}"><i class="ti ${icon}"></i>${label}</span>`;
+          const [icon, cls] = MODE_PILL[m];
+          return `<span class="rp-mini-pill ${cls}"><i class="ti ${icon}"></i>${modeLabel(m)}</span>`;
         }).join('')}</div>`;
       card.appendChild(head);
 
       const body = document.createElement('div');
       body.className = 'rp-day-body';
       if (day.rest) {
-        body.innerHTML = `<i class="ti ti-bed"></i><span>Rest day</span><span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Wellness check only</span>`;
+        body.innerHTML = `<i class="ti ti-bed"></i><span>${tt('individual_planner.rest_day', 'Rest day')}</span><span style="font:500 10.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('individual_planner.wellness_check_only', 'Wellness check only')}</span>`;
         card.appendChild(body);
         return root.appendChild(card);
       }
@@ -132,11 +140,11 @@
             <div class="rp-block-time">${b.dur}'</div>
           </div>
           <div class="rp-block-meta">
-            <span class="au">${b.au} AU</span>
+            <span class="au">${b.au} ${tt('individual_planner.au', 'AU')}</span>
             <span class="sep">·</span>
-            <span>${b.exercises || 0} ex</span>
+            <span>${b.exercises || 0} ${tt('individual_planner.ex_short', 'ex')}</span>
             <span class="sep">·</span>
-            <span class="resp ${b.resp}"><span class="dot"></span>${RESP_LABEL[b.resp]}</span>
+            <span class="resp ${b.resp}"><span class="dot"></span>${respLabel(b.resp)}</span>
           </div>
           ${gpsHtml}
           ${goalHtml}
@@ -145,13 +153,13 @@
       });
       const add = document.createElement('button');
       add.className = 'rp-add-block';
-      add.innerHTML = `<i class="ti ti-plus"></i> Add block`;
+      add.innerHTML = `<i class="ti ti-plus"></i> ${tt('individual_planner.add_block', 'Add block')}`;
       body.appendChild(add);
       card.appendChild(body);
 
       const foot = document.createElement('div');
       foot.className = 'rp-day-totals';
-      foot.innerHTML = `<span><strong>${totalDur}'</strong> total</span> <span><strong>${totalAu}</strong> AU</span>`;
+      foot.innerHTML = `<span><strong>${totalDur}'</strong> ${tt('individual_planner.total_short', 'total')}</span> <span><strong>${totalAu}</strong> ${tt('individual_planner.au', 'AU')}</span>`;
       card.appendChild(foot);
       root.appendChild(card);
     });
@@ -162,12 +170,12 @@
     WEEK.forEach(day => {
       const dh = document.createElement('tr');
       dh.className = 'is-day-h';
-      dh.innerHTML = `<td colspan="8">${day.dow}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · TODAY' : ''}</td>`;
+      dh.innerHTML = `<td colspan="8">${day.dow}, ${day.dom === 1 ? 'Jun' : 'May'} ${day.dom}${day.today ? ' · ' + tt('individual_planner.today_upper', 'TODAY') : ''}</td>`;
       tbody.appendChild(dh);
       if (day.rest) {
         const r = document.createElement('tr');
         r.className = 'is-rest';
-        r.innerHTML = `<td colspan="8">— Rest · wellness check only</td>`;
+        r.innerHTML = `<td colspan="8">— ${tt('individual_planner.rest_wellness_only', 'Rest · wellness check only')}</td>`;
         tbody.appendChild(r); return;
       }
       day.blocks.forEach(b => {
@@ -175,11 +183,11 @@
         if (b.selected) r.style.background = 'var(--cm-bg-soft)';
         const gpsStr = (b.gps || []).map(g => `${g.l} ${g.v}`).join(' · ') || '—';
         r.innerHTML = `
-          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${b.name}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${TYPE_LABEL[b.type]}</span></span></td>
+          <td><span class="nm"><span class="swatch" style="background:${TYPE_COLOR[b.type]}"></span>${b.name}<span style="color:var(--cm-fg-muted);font-weight:400;margin-left:8px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase">${typeLabel(b.type)}</span></span></td>
           <td class="mono">${b.dur}'</td>
-          <td><span style="display:inline-flex;align-items:center;gap:4px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg)"><span style="width:7px;height:7px;border-radius:50%;background:${b.resp==='physio'?'#B91C1C':b.resp==='sc'?'#1D4ED8':'#A16207'}"></span>${RESP_LABEL[b.resp]}</span></td>
-          <td class="mono">${b.exercises || 0} ex</td>
-          <td class="mono">${b.au < 50 ? 'Low' : b.au < 200 ? 'Mod' : 'High'}</td>
+          <td><span style="display:inline-flex;align-items:center;gap:4px;font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg)"><span style="width:7px;height:7px;border-radius:50%;background:${b.resp==='physio'?'#B91C1C':b.resp==='sc'?'#1D4ED8':'#A16207'}"></span>${respLabel(b.resp)}</span></td>
+          <td class="mono">${b.exercises || 0} ${tt('individual_planner.ex_short', 'ex')}</td>
+          <td class="mono">${b.au < 50 ? tt('individual_planner.int_low', 'Low') : b.au < 200 ? tt('individual_planner.int_mod', 'Mod') : tt('individual_planner.int_high', 'High')}</td>
           <td class="mono" style="color:var(--cm-fg-muted)">${gpsStr}</td>
           <td class="mono" style="color:var(--cm-fg-strong);font-weight:600">${b.au}</td>
           <td style="color:var(--cm-fg-muted);font:var(--cm-body-sm)">${b.goal ? '<span style="color:#1D4ED8"><i class="ti ti-target"></i> ' + b.goal + '</span>' : (b.notes || '—')}</td>
@@ -196,12 +204,12 @@
       row.className = 'rp-tl-row';
       const dayCol = document.createElement('div');
       dayCol.className = 'day';
-      dayCol.innerHTML = `<span class="dow">${day.dow}</span> ${day.dom}<div class="since">${day.today ? 'today' : ''}</div>`;
+      dayCol.innerHTML = `<span class="dow">${day.dow}</span> ${day.dom}<div class="since">${day.today ? tt('individual_planner.today_lower', 'today') : ''}</div>`;
       row.appendChild(dayCol);
       const track = document.createElement('div');
       track.className = 'rp-tl-track';
       if (day.rest) {
-        track.innerHTML = `<span class="rp-tl-rest"><i class="ti ti-bed"></i> Rest day</span>`;
+        track.innerHTML = `<span class="rp-tl-rest"><i class="ti ti-bed"></i> ${tt('individual_planner.rest_day', 'Rest day')}</span>`;
       } else {
         day.blocks.forEach(b => {
           const w = (b.dur / 120) * 100;
@@ -225,8 +233,12 @@
     $('#view-timeline').classList.toggle('rp-hidden', view !== 'timeline');
   }
 
+  function renderAll() { renderKanban(); renderTable(); renderTimeline(); }
+
+  document.addEventListener('cm:langchanged', renderAll);
+
   document.addEventListener('DOMContentLoaded', () => {
-    renderKanban(); renderTable(); renderTimeline();
+    renderAll();
 
     $$('#view-seg button').forEach(b => {
       b.addEventListener('click', () => showView(b.dataset.view));
