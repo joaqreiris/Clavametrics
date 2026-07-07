@@ -20,6 +20,13 @@ function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
 }
 
+/* i18n label helper — translated string, or the English fallback if the
+   runtime isn't loaded yet. UI copy stays English. */
+const _t = (k, fb) => {
+  try { return (window.CM_I18N && window.CM_I18N.t) ? window.CM_I18N.t(k) : fb; }
+  catch { return fb; }
+};
+
 /* --- Same token recipes as theme-tweaks (keep in sync) --- */
 const _ACCENT = {
   light: {
@@ -166,6 +173,9 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
   const [s, setS]       = React.useState(initSettings);
   const [tab, setTab]   = React.useState("appearance");
   const [resetConfirm, setResetConfirm] = React.useState(false);
+  // Language (wired to CM_I18N; "Auto" = no explicit choice → runtime detection)
+  const [curLang, setCurLang]           = React.useState(() => (window.CM_I18N ? window.CM_I18N.current : "en"));
+  const [langExplicit, setLangExplicit] = React.useState(() => { try { return !!localStorage.getItem("cm_lang"); } catch { return false; } });
 
   // Apply locally + persist localStorage + notify host for Supabase save
   const didMount = React.useRef(false);
@@ -198,9 +208,33 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
   }, [open]);
   // Reset confirm clears if drawer closes
   React.useEffect(() => { if (!open) setResetConfirm(false); }, [open]);
+  // Keep the language highlight in sync with runtime changes
+  React.useEffect(() => {
+    const h = (e) => setCurLang((e.detail && e.detail.lang) || (window.CM_I18N && window.CM_I18N.current) || "en");
+    document.addEventListener("cm:langchanged", h);
+    return () => document.removeEventListener("cm:langchanged", h);
+  }, []);
 
   const set = (patch) => setS((p) => ({ ...p, ...patch }));
   const setNotif = (key, val) => set({ notif: { ...s.notif, [key]: val } });
+  const langCodes = (window.CM_I18N && window.CM_I18N.langs) || ["en", "es", "pt"];
+  const langNames = (window.CM_I18N && window.CM_I18N.name) || { en:"English", es:"Español", pt:"Português" };
+  const chooseLang = (code) => {
+    if (window.CM_I18N) window.CM_I18N.setLang(code);   // persists local + cloud (via cloudSaver)
+    setCurLang(code); setLangExplicit(true);
+  };
+  const chooseAuto = async () => {
+    try { localStorage.removeItem("cm_lang"); } catch {}
+    // Drop the saved cloud pref so detection (user/club/browser) can take over.
+    try {
+      if (window.sb && profile?.id) {
+        const { data: r } = await window.sb.from("profiles").select("settings").eq("id", profile.id).single();
+        const next = { ...(r?.settings || {}) }; delete next.language;
+        await window.sb.from("profiles").update({ settings: next }).eq("id", profile.id);
+      }
+    } catch {}
+    window.location.reload();
+  };
   const themeBg = (t) => t === "dark" ? "#0A0A0A" : (t === "hybrid" ? "linear-gradient(90deg,#0E1116 0%,#0E1116 30%,#FBFBFA 30%,#FBFBFA 100%)" : "#FBFBFA");
   const themeBorder = (t) => t === "dark" ? "rgba(255,255,255,0.10)" : "#E5E7EB";
 
@@ -332,6 +366,22 @@ const SettingsDrawer = ({ open, onClose, profile, supabaseSettings, onSettingsCh
                   { v:"soft",    l:"Soft" },
                 ].map(o => (
                   <button key={o.v} className={`sd-chip ${s.radius === o.v ? "is-on" : ""}`} onClick={() => set({ radius: o.v })}>{o.l}</button>
+                ))}
+              </div>
+            </Section>
+
+            <Section label={_t("settings.language", "Language")} hint={_t("settings.language.hint", "Choose the language for the whole app.")}>
+              <div className="sd-chips">
+                <button className={`sd-chip ${!langExplicit ? "is-on" : ""}`} onClick={chooseAuto}>
+                  {_t("settings.language.auto", "Auto (detect)")}
+                </button>
+                {langCodes.map((code) => (
+                  <button
+                    key={code}
+                    className={`sd-chip ${langExplicit && curLang === code ? "is-on" : ""}`}
+                    onClick={() => chooseLang(code)}>
+                    {langNames[code] || code.toUpperCase()}
+                  </button>
                 ))}
               </div>
             </Section>
@@ -662,6 +712,16 @@ function SettingsHost() {
       if (!uid) return;
       setUserId(uid);
 
+      // ── i18n detection signals ──
+      if (window.CM_I18N) {
+        window.CM_I18N.setCloudSaver(async (lang) => {
+          const { data: r } = await window.sb.from('profiles').select('settings').eq('id', uid).single();
+          const next = { ...(r?.settings || {}), language: lang };
+          await window.sb.from('profiles').update({ settings: next }).eq('id', uid);
+        });
+      }
+      window.getClub && window.getClub().then(c => { if (c && window.CM_I18N) window.CM_I18N.setClubCountry(c.country); });
+
       // Load appearance + notification settings from Supabase
       window.sb.from('profiles')
         .select('settings, notification_settings')
@@ -669,6 +729,7 @@ function SettingsHost() {
         .single()
         .then(({ data: row }) => {
           if (!row) return;
+          if (window.CM_I18N && row.settings && row.settings.language) window.CM_I18N.setUserPref(row.settings.language);
           const sbSettings = {
             ...(row.settings || {}),
             notif: row.notification_settings || {},
@@ -726,6 +787,11 @@ function SettingsHost() {
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       const { notif, ...appearance } = s;
+      // The appearance save replaces the whole settings jsonb — preserve the
+      // language pref (owned by CM_I18N.cloudSaver) so it isn't wiped.
+      let _cm; try { _cm = localStorage.getItem('cm_lang'); } catch {}
+      if (window.CM_I18N && _cm) appearance.language = window.CM_I18N.current;
+      else delete appearance.language;
       const { error } = await window.sb.from('profiles').update({
         settings: appearance,
         notification_settings: notif || {},
