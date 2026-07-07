@@ -160,7 +160,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Load Monitor.html
 - ✅ Gym Planner.html
 - ✅ Gym Library.html
-- ⬜ GPS Analysis.html  *(la más grande — dividí en tandas por sección si hace falta)*
+- ✅ GPS Analysis.html  *(la más grande — dividí en tandas por sección si hace falta)*
 - ⬜ Nutrition.html
 
 ### Fase 5 — Médico
