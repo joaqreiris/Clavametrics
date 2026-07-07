@@ -159,7 +159,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 ### Fase 4 — Rendimiento
 - ✅ Load Monitor.html
 - ✅ Gym Planner.html
-- ⬜ Gym Library.html
+- ✅ Gym Library.html
 - ⬜ GPS Analysis.html  *(la más grande — dividí en tandas por sección si hace falta)*
 - ⬜ Nutrition.html
 
