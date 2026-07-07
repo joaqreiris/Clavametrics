@@ -362,6 +362,22 @@
     transition:opacity 200ms, transform 200ms;
   }
   .sq-toast.is-show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .sq-bulkbar {
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(12px);
+    display:flex; align-items:center; gap:10px;
+    background:var(--cm-surface); border:1px solid var(--cm-border-strong);
+    border-radius:var(--cm-r-3); box-shadow:var(--cm-shadow-3);
+    padding:8px 12px; z-index:490; opacity:0; pointer-events:none;
+    transition:opacity 200ms, transform 200ms;
+  }
+  .sq-bulkbar.is-show { opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
+  .sq-bulkbar .sq-bulk-count { font:600 13px/1 var(--cm-font-sans); color:var(--cm-fg); white-space:nowrap; }
+  .sq-bulkbar .sq-bulk-sep { width:1px; height:20px; background:var(--cm-border); }
+  .sq-bulkbar .sq-bulk-clear {
+    display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+    border-radius:var(--cm-r-2); border:none; background:transparent; color:var(--cm-fg-muted); cursor:pointer;
+  }
+  .sq-bulkbar .sq-bulk-clear:hover { background:var(--cm-bg-soft); color:var(--cm-fg); }
   @media (max-width: 768px) {
     .hub-topbar { padding-left: 56px; }
     .sq-page { padding: 16px 12px 48px; }
@@ -1121,6 +1137,17 @@
 
 <div class="sq-toast" id="sqToast"></div>
 
+<!-- Bulk actions bar (shown when ≥1 player is selected) -->
+<div class="sq-bulkbar" id="sqBulkBar">
+  <button class="sq-bulk-clear" id="sqBulkClear" title="Clear selection"><i class="ti ti-x"></i></button>
+  <span class="sq-bulk-count"><span id="sqBulkCount">0</span> selected</span>
+  <span class="sq-bulk-sep"></span>
+  <button class="cm-btn is-outline is-sm" id="sqBulkArchive"><i class="ti ti-archive" style="font-size:14px"></i><span>Archive</span></button>
+  <button class="cm-btn is-outline is-sm" id="sqBulkExport"><i class="ti ti-file-export" style="font-size:14px"></i><span>Export</span></button>
+  <button class="cm-btn is-outline is-sm" id="sqBulkMove" disabled title="Coming soon"><i class="ti ti-arrows-exchange" style="font-size:14px"></i><span>Move to team</span></button>
+  <button class="cm-btn is-outline is-sm" id="sqBulkEdit" disabled title="Coming soon"><i class="ti ti-edit" style="font-size:14px"></i><span>Change position/status</span></button>
+</div>
+
 <!-- Player picker (floating) -->
 <div id="sqLPicker" class="sq-picker" style="display:none">
   <input id="sqLPickerSearch" placeholder="Search player…" data-i18n-ph="squad.search_player" autocomplete="off">
@@ -1424,6 +1451,8 @@ function renderTable() {
   tbody.innerHTML = html;
   // Reset select-all when table re-renders (filter/search change)
   document.querySelector('thead [data-cb]')?.classList.remove('is-on');
+  // New rows have no selection → refresh (hide) the bulk bar.
+  if (typeof updateBulkBar === 'function') updateBulkBar();
 
   // Row actions: kebab menu (per-render open buttons; popover actions bound once)
   tbody.querySelectorAll('.sq-menu-btn').forEach(btn => btn.addEventListener('click', e => {
@@ -1448,6 +1477,7 @@ function renderTable() {
       cb.classList.toggle('is-on');
       const tr = cb.closest('tr');
       if (tr) tr.classList.toggle('is-selected', cb.classList.contains('is-on'));
+      if (typeof updateBulkBar === 'function') updateBulkBar();
     });
   });
 
@@ -1506,6 +1536,16 @@ function updateTeamsBtnLabel() {
 })();
 
 async function reloadPlayers() {
+  // Sin club activo resuelto (getClubId devolvió null) NO consultamos: .eq('club_id', null)
+  // rompe con "invalid input syntax for type uuid: null" (22P02). Estado vacío controlado.
+  if (!_currentClubId) {
+    console.warn('[Squad] no active club (getClubId returned null) — skipping players query');
+    _allPlayers = [];
+    const headP = document.getElementById('sqHeadP'); if (headP) headP.textContent = '0';
+    const listCt = document.getElementById('sqListCt'); if (listCt) listCt.textContent = '0';
+    renderTable();
+    return;
+  }
   // Roster por categoría vía la junction player_teams (un player puede pertenecer a varios equipos).
   // Sin filtro de equipo ("All teams") seguimos listando todos los players del club tal cual.
   const _cols = 'id,first_name,last_name,number,position,positions,nationality,date_of_birth,height,weight,dominant_foot,status,photo_url,team_id,archived_at';
@@ -1622,6 +1662,7 @@ async function reloadPlayers() {
       rowCb.classList.toggle('is-on', isNowOn);
       rowCb.closest('tr')?.classList.toggle('is-selected', isNowOn);
     });
+    if (typeof updateBulkBar === 'function') updateBulkBar();
   });
 
   // Filter pills
@@ -1666,6 +1707,74 @@ async function reloadPlayers() {
     t.classList.add('is-show');
     setTimeout(() => t.classList.remove('is-show'), 2800);
   }
+
+  // ── Bulk selection ─────────────────────────────────────────────
+  // Selection state is read on-demand from the DOM (checkbox .is-on classes).
+  function getSelectedIds() {
+    return [...document.querySelectorAll('#sqTbody tr [data-cb].is-on')]
+      .map(cb => cb.closest('tr')?.dataset.id).filter(Boolean);
+  }
+  // Show/hide the floating bar and refresh its count + Archive/Restore label.
+  function updateBulkBar() {
+    const bar = document.getElementById('sqBulkBar');
+    if (!bar) return;
+    const n = getSelectedIds().length;
+    const countEl = document.getElementById('sqBulkCount');
+    if (countEl) countEl.textContent = n;
+    bar.classList.toggle('is-show', n > 0);
+    // In the Archived view the primary action restores instead of archives.
+    const restoring = _currentTeamId === '__archived__';
+    const archBtn = document.getElementById('sqBulkArchive');
+    if (archBtn) {
+      archBtn.querySelector('span').textContent = restoring ? tt('squad.restore','Restore') : tt('squad.archive','Archive');
+      archBtn.querySelector('i').className = 'ti ' + (restoring ? 'ti-arrow-back-up' : 'ti-archive');
+    }
+  }
+  function clearBulkSelection() {
+    document.querySelectorAll('#sqTbody [data-cb].is-on').forEach(cb => {
+      cb.classList.remove('is-on');
+      cb.closest('tr')?.classList.remove('is-selected');
+    });
+    document.querySelector('thead [data-cb]')?.classList.remove('is-on');
+    updateBulkBar();
+  }
+  async function bulkArchive() {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+    const restoring = _currentTeamId === '__archived__';
+    const n = ids.length;
+    if (!restoring && !confirm(tt('squad.bulk_archive_confirm', `Archive ${n} player${n !== 1 ? 's' : ''}? They'll be hidden from all views.`, { count: n }))) return;
+    const patch = restoring ? { archived_at: null } : { archived_at: new Date().toISOString() };
+    const { error } = await window.sb.from('players').update(patch).in('id', ids);
+    if (error) { showToast(tt('squad.generic_error', 'Error: ' + error.message, { msg: error.message })); return; }
+    clearBulkSelection();
+    await reloadPlayers();
+    showToast(restoring
+      ? tt('squad.bulk_restored', `${n} player${n !== 1 ? 's' : ''} restored.`, { count: n })
+      : tt('squad.bulk_archived', `${n} player${n !== 1 ? 's' : ''} archived.`, { count: n }));
+  }
+  function bulkExport() {
+    const idSet = new Set(getSelectedIds());
+    const sel = _allPlayers.filter(p => idSet.has(p.id));
+    if (!sel.length) { showToast(tt('squad.no_players_to_export', 'No players to export.')); return; }
+    const cols = ['number','first_name','last_name','position','date_of_birth','nationality','height','weight','dominant_foot'];
+    const header = cols.join(',');
+    const rows = sel.map(p => cols.map(c => {
+      const v = String(p[c] ?? '');
+      return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g,'""')}"` : v;
+    }).join(','));
+    const csv = [header, ...rows].join('\n');
+    const date = new Date().toISOString().split('T')[0];
+    const club = (_currentClubName || 'squad').replace(/[^a-zA-Z0-9]/g,'_').toLowerCase();
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv], { type:'text/csv' })),
+      download: `squad_${club}_selected_${date}.csv`
+    });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+  document.getElementById('sqBulkArchive')?.addEventListener('click', bulkArchive);
+  document.getElementById('sqBulkExport')?.addEventListener('click', bulkExport);
+  document.getElementById('sqBulkClear')?.addEventListener('click', clearBulkSelection);
 
   async function openModal(player) {
     _editingId = player ? player.id : null;
