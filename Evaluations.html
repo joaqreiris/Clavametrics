@@ -932,6 +932,25 @@
                 <div id="evHfvpBulkMsg" style="margin-top:10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></div>
               </div>
 
+              <!-- Sprint splits (manual) → dedicated team grid with SELECTABLE distances (no model, no min-4) -->
+              <div id="evSprintBulk" class="ev-card" style="display:none;margin-bottom:14px">
+                <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+                  <div class="ev-frow" style="flex:0 0 150px;margin-bottom:0"><label class="ev-fl" data-i18n="common.date">Date</label><input id="evSprintBulkDate" type="date" class="ev-finput"></div>
+                  <div class="ev-frow" style="flex:0 0 200px;margin-bottom:0"><label class="ev-fl" data-i18n="evaluations.sprint_distances">Distances (m)</label><input id="evSprintDists" type="text" class="ev-finput" value="5,10,20,30,40" placeholder="5,10,20,30,40"></div>
+                  <button id="evSprintDistsApply" class="cm-btn is-outline is-sm"><i class="ti ti-adjustments" style="font-size:14px"></i><span data-i18n="evaluations.apply_distances">Apply</span></button>
+                  <div class="ev-spacer" style="flex:1"></div>
+                  <button id="evSprintBulkSave" class="cm-btn is-primary is-sm"><i class="ti ti-device-floppy" style="font-size:14px"></i><span data-i18n="evaluations.save_all">Save all</span></button>
+                </div>
+                <div style="font:500 11.5px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:10px" data-i18n="evaluations.sprint_bulk_hint">Pick the split distances your timing gates use. Enter cumulative times in seconds (measured from the start). Rows with fewer than 2 valid times are skipped.</div>
+                <div style="overflow-x:auto;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4)">
+                  <table style="width:100%;border-collapse:collapse;min-width:560px">
+                    <thead id="evSprintBulkHead"></thead>
+                    <tbody id="evSprintBulkBody"></tbody>
+                  </table>
+                </div>
+                <div id="evSprintBulkMsg" style="margin-top:10px;font:500 12px/1 var(--cm-font-mono);color:var(--cm-success);display:none"></div>
+              </div>
+
               <!-- force_tests → CSV import drawer -->
               <div id="evUploadForce" class="ev-card" style="display:none">
                 <div class="ev-placeholder">
@@ -1258,6 +1277,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="assets/supabase-init.js"></script>
 <script src="assets/hfvp-calc.js"></script>
+<script src="assets/sprint-splits-calc.js"></script>
 <script src="assets/sidebar.js"></script>
 <script src="assets/global-search.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -1604,6 +1624,20 @@
         tt('evaluations.hfvp_single_hint', 'Single player · enter sprint splits → full horizontal F-V profile. Use the team grid below, or Import CSV, for bulk.');
       setupHfvpBulk();
       resetHfvpCsv();
+    }
+
+    // Sprint splits (manual): dedicated grid with selectable distances (no CSV, no calc modal).
+    var isSprint = (t.key === 'sprint');
+    var upSeg = detail.querySelector('[data-mini="uploadMode"]');
+    if (upSeg) upSeg.style.display = isSprint ? 'none' : '';   // restore for other tests
+    document.getElementById('evSprintBulk').style.display = isSprint ? '' : 'none';
+    if (isSprint){
+      document.getElementById('evUploadReal').style.display = 'none';  // hide generic Player+Value grid
+      document.getElementById('evCsvReal').style.display     = 'none';  // hide generic CSV importer
+      if (entrySeg) entrySeg.style.display = 'none';                    // no Single/Bulk generic tabs
+      if (csvBtn) csvBtn.style.display = 'none';
+      activateMini('uploadMode', 'manual');                            // our grid lives in the manual pane
+      setupSprintBulk();
     }
 
     window.scrollTo(0,0);
@@ -3131,6 +3165,156 @@
     }
     var ib = document.getElementById('evHfvpCsvImportBtn'); if (ib) ib.addEventListener('click', saveHfvpCsv);
     var rb = document.getElementById('evHfvpCsvResetBtn'); if (rb) rb.addEventListener('click', resetHfvpCsv);
+  })();
+
+
+  // ════════════════════════════════════════════════════════════════════
+  //  SPRINT SPLITS (manual) — selectable distances, per-segment metrics.
+  //  Clones the H-FVP dedicated grid, minus mass/height and the model.
+  //  value = Vmax (km/h) → squad percentiles come for free via evalBench (L2).
+  //  Full metrics live in notes JSON. Reuses hfvpNum/esc/evToday/_ftPlayers/_clubId.
+  // ════════════════════════════════════════════════════════════════════
+  var SPRINT_DEFAULT_DISTS = [5, 10, 20, 30, 40];
+  var _sprintDists = SPRINT_DEFAULT_DISTS.slice();
+
+  // decimals allowed (e.g. 7.5) → safe class token
+  function sprintKey(d){ return String(d).replace('.', '_'); }
+
+  function parseSprintDists(str){
+    var seen = {}, out = [];
+    String(str || '').split(/[,;\s]+/).forEach(function(tok){
+      var n = parseFloat(String(tok).replace(',', '.'));
+      if (isFinite(n) && n > 0 && !(n in seen)){ seen[n] = 1; out.push(n); }
+    });
+    out.sort(function(a, b){ return a - b; });
+    return out;
+  }
+
+  async function setupSprintBulk(){
+    document.getElementById('evSprintBulkDate').value = evToday();
+    document.getElementById('evSprintBulkMsg').style.display = 'none';
+    var parsed = parseSprintDists(document.getElementById('evSprintDists').value);
+    _sprintDists = parsed.length ? parsed : SPRINT_DEFAULT_DISTS.slice();
+    document.getElementById('evSprintDists').value = _sprintDists.join(',');
+    renderSprintBulkRoster();
+  }
+
+  // Re-parse distances and re-render, preserving already-typed times for kept distances.
+  function applySprintDists(){
+    var prev = {};
+    document.querySelectorAll('#evSprintBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      _sprintDists.forEach(function(d){
+        var el = tr.querySelector('.sp-t' + sprintKey(d));
+        if (el && el.value) prev[pid + '|' + d] = el.value;
+      });
+    });
+    var parsed = parseSprintDists(document.getElementById('evSprintDists').value);
+    if (!parsed.length){ alert(tt('evaluations.enter_distances','Enter at least one distance (m).')); return; }
+    _sprintDists = parsed;
+    document.getElementById('evSprintDists').value = _sprintDists.join(',');
+    renderSprintBulkRoster(prev);
+  }
+
+  function renderSprintBulkRoster(preserve){
+    preserve = preserve || {};
+    var th = document.getElementById('evSprintBulkHead');
+    var tb = document.getElementById('evSprintBulkBody');
+    var thc = 'text-align:left;padding:10px 6px;font:500 10.5px/1 var(--cm-font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--cm-fg-muted);border-bottom:1px solid var(--cm-border)';
+    th.innerHTML = '<tr style="background:var(--cm-bg-soft)">'
+      + '<th style="'+thc+';white-space:nowrap">'+esc(tt('evaluations.player','Player'))+'</th>'
+      + _sprintDists.map(function(d){ return '<th style="'+thc+'">'+esc(d + ' m')+'</th>'; }).join('')
+      + '<th style="'+thc+';white-space:nowrap">'+esc(tt('evaluations.sprint_vmax','Vmax'))+'</th>'
+      + '</tr>';
+    var cell = 'padding:6px 6px;border-bottom:1px solid var(--cm-border-soft)';
+    tb.innerHTML = _ftPlayers.map(function(p){
+      var cols = _sprintDists.map(function(d){
+        var v = preserve[p.id + '|' + d] || '';
+        return '<td style="'+cell+'"><input type="number" step="0.01" min="0" class="ev-finput sp-t'+sprintKey(d)+'" style="height:30px;min-width:58px;padding:0 8px" value="'+v+'"></td>';
+      }).join('');
+      return '<tr data-pid="'+p.id+'">'
+        + '<td style="padding:8px 10px;border-bottom:1px solid var(--cm-border-soft);font:var(--cm-body-sm);color:var(--cm-fg-strong);white-space:nowrap">'+esc(p.first_name+' '+p.last_name)+'</td>'
+        + cols
+        + '<td style="'+cell+';font:600 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-muted);white-space:nowrap" class="sp-result">—</td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="'+(_sprintDists.length+2)+'" style="padding:20px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_players_in_team','No players in this team.'))+'</td></tr>';
+  }
+
+  function sprintRowSplits(tr){
+    var splits = [];
+    _sprintDists.forEach(function(d){
+      var el = tr.querySelector('.sp-t' + sprintKey(d));
+      var t = el ? hfvpNum(el.value) : NaN;   // comma-tolerant parse
+      if (!isNaN(t) && t > 0) splits.push({ distance_m: d, time_s: t });
+    });
+    return splits;
+  }
+
+  function buildSprintRecord(pid, splits, date){
+    var m = window.sprintSplitsMetrics(splits);
+    if (!m || !m.vmax) return null;
+    var rec = {
+      player_id: pid, club_id: _clubId, evaluation_type: 'Sprint splits',
+      value: +m.vmax.v_kmh.toFixed(2), unit: 'km/h', test_date: date,
+      notes: JSON.stringify({ splits: splits, metrics: m }),
+    };
+    return { rec: rec, m: m };
+  }
+
+  async function saveSprintRecords(records){
+    var natOf = function(pid, date){ return pid + '|Sprint splits|' + date; };
+    var pids = [...new Set(records.map(function(r){ return r.player_id; }))];
+    var ex = await window.sb.from('evaluations')
+      .select('id, player_id, test_date')
+      .eq('club_id', _clubId).eq('evaluation_type', 'Sprint splits').in('player_id', pids);
+    if (ex.error) return ex.error;
+    var keys = new Set(records.map(function(r){ return natOf(r.player_id, r.test_date); }));
+    var collide = (ex.data || [])
+      .filter(function(e){ return keys.has(natOf(e.player_id, String(e.test_date).slice(0,10))); })
+      .map(function(e){ return e.id; });
+    if (collide.length){
+      var del = await window.sb.from('evaluations').delete().in('id', collide);
+      if (del.error) return del.error;
+    }
+    var ins = await window.sb.from('evaluations').insert(records);
+    return ins.error || null;
+  }
+
+  async function saveSprintBulk(){
+    if (!_clubId) return;
+    if (typeof window.sprintSplitsMetrics !== 'function'){ alert(tt('evaluations.sprint_calc_not_loaded','sprint-splits-calc.js not loaded')); return; }
+    var date = document.getElementById('evSprintBulkDate').value;
+    if (!date){ alert(tt('evaluations.enter_date','Enter a date.')); return; }
+    var records = [], skipped = 0;
+    document.querySelectorAll('#evSprintBulkBody tr').forEach(function(tr){
+      var pid = tr.getAttribute('data-pid'); if (!pid) return;
+      var resCell = tr.querySelector('.sp-result');
+      var splits = sprintRowSplits(tr);
+      if (splits.length < 2){
+        if (resCell){ resCell.textContent = '—'; resCell.style.color = 'var(--cm-fg-faint)'; }
+        if (splits.length === 1) skipped++;   // a lone partial → skipped; fully blank rows ignored
+        return;
+      }
+      var built = buildSprintRecord(pid, splits, date);
+      if (!built){ if (resCell){ resCell.textContent = tt('evaluations.error_state','error'); resCell.style.color = 'var(--cm-danger)'; } skipped++; return; }
+      records.push(built.rec);
+      if (resCell){ resCell.style.color = 'var(--cm-fg-muted)'; resCell.textContent = built.m.vmax.v_kmh.toFixed(2) + ' km/h'; }
+    });
+    if (!records.length){ alert(tt('evaluations.no_rows_2_splits','No rows with at least 2 valid split times.')); return; }
+    var err = await saveSprintRecords(records);
+    if (err){ alert(tt('evaluations.err_prefix','Error: '+err.message,{msg:err.message})); return; }
+    var msg = document.getElementById('evSprintBulkMsg');
+    msg.textContent = tt('evaluations.n_records_saved','✓ '+records.length+' record'+(records.length>1?'s':'')+' saved',{count:records.length}) + (skipped ? tt('evaluations.n_skipped_suffix',' · '+skipped+' skipped',{count:skipped}) : '');
+    msg.style.display = '';
+    await reloadEvalViews();
+    loadStatuses();
+  }
+
+  (function initSprint(){
+    var bs = document.getElementById('evSprintBulkSave'); if (bs) bs.addEventListener('click', saveSprintBulk);
+    var ab = document.getElementById('evSprintDistsApply'); if (ab) ab.addEventListener('click', applySprintDists);
+    var di = document.getElementById('evSprintDists');
+    if (di) di.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); applySprintDists(); } });
   })();
 
 
