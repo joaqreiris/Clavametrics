@@ -128,7 +128,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 
 ### Fase 1 — Auth (sin sidebar → include manual)
 - ✅ Login.html
-- ⬜ Register.html
+- ✅ Register.html
 - ⬜ Onboarding.html
 - ⬜ set-password.html
 
