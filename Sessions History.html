@@ -216,50 +216,50 @@
     <div class="hub-topbar">
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
-        <select id="shTeamSelect" onchange="shOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+        <select id="shTeamSelect" onchange="shOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
       </div>
-      <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Sessions history</span></div>
-      <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
+      <div class="hub-crumb"><i class="ti ti-home"></i><span data-i18n="sessions_history.crumb_technical">Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="sessions_history.crumb_title">Sessions history</span></div>
+      <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="sessions_history.topbar_search_ph" placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions"><button class="cm-icon-btn"><i class="ti ti-bell"></i></button><button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button></div>
     </div>
 
     <section class="sh-page">
 
       <header class="sh-head">
-        <div><h1>Sessions history</h1><div class="ctx"><strong id="shTotalCount">—</strong> sessions logged · filtered by date, orientation, search</div></div>
+        <div><h1 data-i18n="sessions_history.title">Sessions history</h1><div class="ctx"><strong id="shTotalCount">—</strong> <span data-i18n="sessions_history.ctx_suffix">sessions logged · filtered by date, orientation, search</span></div></div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm" onclick="exportCSV()"><i class="ti ti-file-export" style="font-size:14px"></i>Export CSV</button>
-          <button class="cm-btn is-outline is-sm" data-compare onclick="openCompare()"><i class="ti ti-chart-bar" style="font-size:14px"></i>Compare sessions</button>
-          <button class="cm-btn is-primary is-sm" data-new-session onclick="goNewSession()"><i class="ti ti-plus" style="font-size:14px"></i>New session</button>
+          <button class="cm-btn is-outline is-sm" onclick="exportCSV()"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="sessions_history.export_csv">Export CSV</span></button>
+          <button class="cm-btn is-outline is-sm" data-compare onclick="openCompare()"><i class="ti ti-chart-bar" style="font-size:14px"></i><span data-i18n="sessions_history.compare_sessions">Compare sessions</span></button>
+          <button class="cm-btn is-primary is-sm" data-new-session onclick="goNewSession()"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="sessions_history.new_session">New session</span></button>
         </div>
       </header>
 
       <div class="sh-kpis">
-        <div class="sh-kpi"><div class="l"><i class="ti ti-clipboard-list"></i>Sessions YTD</div><div class="v" id="kpiSessions">—</div><div class="t" id="kpiSessionsTrend">Loading…</div></div>
-        <div class="sh-kpi"><div class="l"><i class="ti ti-clock"></i>Hours on pitch</div><div class="v" id="kpiHours">—</div><div class="t" id="kpiHoursTrend">—</div></div>
-        <div class="sh-kpi"><div class="l"><i class="ti ti-activity"></i>Avg session load</div><div class="v" id="kpiAvgLoad">—</div><div class="t" id="kpiLoadTrend">—</div></div>
-        <div class="sh-kpi"><div class="l"><i class="ti ti-target-arrow"></i>Compliance</div><div class="v">—<sub>%</sub></div><div class="t">planned ↔ delivered</div></div>
-        <div class="sh-kpi"><div class="l"><i class="ti ti-users"></i>Avg attendance</div><div class="v" id="kpiAttendance">—</div><div class="t" id="kpiAttTrend">squad participation</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-clipboard-list"></i><span data-i18n="sessions_history.kpi_sessions_ytd">Sessions YTD</span></div><div class="v" id="kpiSessions">—</div><div class="t" id="kpiSessionsTrend" data-i18n="common.loading">Loading…</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-clock"></i><span data-i18n="sessions_history.kpi_hours">Hours on pitch</span></div><div class="v" id="kpiHours">—</div><div class="t" id="kpiHoursTrend">—</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-activity"></i><span data-i18n="sessions_history.kpi_avg_load">Avg session load</span></div><div class="v" id="kpiAvgLoad">—</div><div class="t" id="kpiLoadTrend">—</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-target-arrow"></i><span data-i18n="sessions_history.kpi_compliance">Compliance</span></div><div class="v">—<sub>%</sub></div><div class="t" data-i18n="sessions_history.kpi_compliance_sub">planned ↔ delivered</div></div>
+        <div class="sh-kpi"><div class="l"><i class="ti ti-users"></i><span data-i18n="sessions_history.kpi_avg_attendance">Avg attendance</span></div><div class="v" id="kpiAttendance">—</div><div class="t" id="kpiAttTrend" data-i18n="sessions_history.kpi_att_sub">squad participation</div></div>
       </div>
 
       <div class="sh-layout">
 
         <!-- ===== FILTER RAIL ===== -->
         <aside class="sh-filter">
-          <h4>Date range <span class="clear">Clear</span></h4>
+          <h4><span data-i18n="sessions_history.date_range">Date range</span> <span class="clear" data-i18n="sessions_history.clear">Clear</span></h4>
           <div class="sh-chips" id="dateChips">
             <button class="sh-chip" data-days="7">7d</button>
             <button class="sh-chip is-on" data-days="30">30d</button>
             <button class="sh-chip" data-days="90">3m</button>
-            <button class="sh-chip" data-days="0">Season</button>
+            <button class="sh-chip" data-days="0" data-i18n="sessions_history.season">Season</button>
           </div>
 
-          <h4>Microcycle</h4>
-          <div id="shMcFilters" style="color:var(--cm-fg-muted);font:500 11.5px/1.4 var(--cm-font-sans);padding:2px 0">
+          <h4 data-i18n="sessions_history.microcycle">Microcycle</h4>
+          <div id="shMcFilters" style="color:var(--cm-fg-muted);font:500 11.5px/1.4 var(--cm-font-sans);padding:2px 0" data-i18n="sessions_history.mc_filter_hint">
             MC filter requires microcycle data — add microcycle_id to sessions query.
           </div>
 
-          <h4>MD position</h4>
+          <h4 data-i18n="sessions_history.md_position">MD position</h4>
           <div class="sh-chips" id="mdChips">
             <button class="sh-chip" data-md="MD-5">MD−5</button>
             <button class="sh-chip" data-md="MD-4">MD−4</button>
@@ -271,33 +271,33 @@
             <button class="sh-chip" data-md="MD+2">MD+2</button>
           </div>
 
-          <h4>Orientation <span class="clear">Clear</span></h4>
+          <h4><span data-i18n="sessions_history.orientation">Orientation</span> <span class="clear" data-i18n="sessions_history.clear">Clear</span></h4>
           <div id="shOrientFilters"><!-- populated by renderOrientFilters() --></div>
 
-          <h4 style="margin-top:16px">Data source</h4>
+          <h4 style="margin-top:16px" data-i18n="sessions_history.data_source">Data source</h4>
           <div>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted)">
               <input type="checkbox" id="shShowHistorical">
-              Show historical GPS imports
+              <span data-i18n="sessions_history.show_historical">Show historical GPS imports</span>
             </label>
           </div>
 
-          <h4>Focus</h4>
+          <h4 data-i18n="sessions_history.focus">Focus</h4>
           <div class="sh-chips" id="focusChips">
-            <button class="sh-chip" data-focus="tactical">Tactical</button>
-            <button class="sh-chip" data-focus="individual">Individual</button>
-            <button class="sh-chip" data-focus="physical">Physical</button>
-            <button class="sh-chip" data-focus="sectorial">Sectorial</button>
+            <button class="sh-chip" data-focus="tactical" data-i18n="sessions_history.focus_tactical">Tactical</button>
+            <button class="sh-chip" data-focus="individual" data-i18n="sessions_history.focus_individual">Individual</button>
+            <button class="sh-chip" data-focus="physical" data-i18n="sessions_history.focus_physical">Physical</button>
+            <button class="sh-chip" data-focus="sectorial" data-i18n="sessions_history.focus_sectorial">Sectorial</button>
           </div>
 
 <!-- Type (SSG/MSG/LSG) removed — no DB column in training_sessions -->
 
-          <h4>Load band</h4>
+          <h4 data-i18n="sessions_history.load_band">Load band</h4>
           <div class="sh-chips" id="bandChips">
-            <button class="sh-chip" data-band="low">Low</button>
-            <button class="sh-chip" data-band="moderate">Moderate</button>
-            <button class="sh-chip" data-band="high">High</button>
-            <button class="sh-chip" data-band="peak">Peak</button>
+            <button class="sh-chip" data-band="low" data-i18n="sessions_history.band_low">Low</button>
+            <button class="sh-chip" data-band="moderate" data-i18n="sessions_history.band_moderate">Moderate</button>
+            <button class="sh-chip" data-band="high" data-i18n="sessions_history.band_high">High</button>
+            <button class="sh-chip" data-band="peak" data-i18n="sessions_history.band_peak">Peak</button>
           </div>
         </aside>
 
@@ -305,32 +305,32 @@
         <div class="sh-list">
 
           <div class="sh-toolbar">
-            <div class="sh-search"><i class="ti ti-search"></i><input id="searchInput" placeholder="Search session name, type, notes…"></div>
+            <div class="sh-search"><i class="ti ti-search"></i><input id="searchInput" data-i18n-ph="sessions_history.search_ph" placeholder="Search session name, type, notes…"></div>
             <div class="sh-seg">
-              <button class="is-on"><i class="ti ti-list"></i>List</button>
-              <button><i class="ti ti-grid-dots"></i>Grid</button>
-              <button><i class="ti ti-calendar-stats"></i>Calendar</button>
+              <button class="is-on"><i class="ti ti-list"></i><span data-i18n="sessions_history.view_list">List</span></button>
+              <button><i class="ti ti-grid-dots"></i><span data-i18n="sessions_history.view_grid">Grid</span></button>
+              <button><i class="ti ti-calendar-stats"></i><span data-i18n="sessions_history.view_calendar">Calendar</span></button>
             </div>
           </div>
 
           <div class="sh-active">
-            <span class="lbl">Active filters:</span>
+            <span class="lbl" data-i18n="sessions_history.active_filters">Active filters:</span>
             <span id="shActiveChips"><!-- populated by renderActiveChips() --></span>
-            <span class="lbl" style="margin-left:auto"><strong id="shFilterCount" style="color:var(--cm-fg-strong)">—</strong> match filters</span>
+            <span class="lbl" style="margin-left:auto"><strong id="shFilterCount" style="color:var(--cm-fg-strong)">—</strong> <span data-i18n="sessions_history.match_filters">match filters</span></span>
           </div>
 
           <div id="shListView" style="max-height:760px;overflow-y:auto">
           <table class="sh-tbl">
             <thead>
               <tr>
-                <th class="sorted" style="width:80px">Date <i class="ti ti-arrow-down"></i></th>
-                <th style="width:70px">MD</th>
-                <th>Session</th>
-                <th style="width:130px">Focus</th>
-                <th style="width:120px">Orientation</th>
-                <th style="width:60px">Dur</th>
-                <th style="width:120px">Load</th>
-                <th style="width:80px">Attend</th>
+                <th class="sorted" style="width:80px"><span data-i18n="common.date">Date</span> <i class="ti ti-arrow-down"></i></th>
+                <th style="width:70px" data-i18n="sessions_history.col_md">MD</th>
+                <th data-i18n="sessions_history.col_session">Session</th>
+                <th style="width:130px" data-i18n="sessions_history.focus">Focus</th>
+                <th style="width:120px" data-i18n="sessions_history.orientation">Orientation</th>
+                <th style="width:60px" data-i18n="sessions_history.col_dur">Dur</th>
+                <th style="width:120px" data-i18n="sessions_history.col_load">Load</th>
+                <th style="width:80px" data-i18n="sessions_history.col_attend">Attend</th>
                 <th style="width:90px"></th>
               </tr>
             </thead>
@@ -350,18 +350,18 @@
                 <button id="shCalNext" class="cm-icon-btn"><i class="ti ti-chevron-right"></i></button>
               </div>
               <div class="sh-cal-hdr">
-                <div class="sh-cal-dh">Su</div><div class="sh-cal-dh">Mo</div><div class="sh-cal-dh">Tu</div>
-                <div class="sh-cal-dh">We</div><div class="sh-cal-dh">Th</div><div class="sh-cal-dh">Fr</div><div class="sh-cal-dh">Sa</div>
+                <div class="sh-cal-dh" data-i18n="sessions_history.dow_su">Su</div><div class="sh-cal-dh" data-i18n="sessions_history.dow_mo">Mo</div><div class="sh-cal-dh" data-i18n="sessions_history.dow_tu">Tu</div>
+                <div class="sh-cal-dh" data-i18n="sessions_history.dow_we">We</div><div class="sh-cal-dh" data-i18n="sessions_history.dow_th">Th</div><div class="sh-cal-dh" data-i18n="sessions_history.dow_fr">Fr</div><div class="sh-cal-dh" data-i18n="sessions_history.dow_sa">Sa</div>
               </div>
               <div class="sh-cal-grid" id="shCalGrid"></div>
             </div>
           </div>
 
           <div class="sh-foot" id="shFoot">
-            <span id="footCount">Loading…</span>
+            <span id="footCount" data-i18n="common.loading">Loading…</span>
             <span class="grow"></span>
             <span class="sh-pgr" id="paginationRoot"></span>
-            <span style="margin-left:12px">Per page: <strong>15</strong></span>
+            <span style="margin-left:12px" data-i18n-html="sessions_history.per_page">Per page: <strong>15</strong></span>
           </div>
         </div>
 
@@ -380,9 +380,9 @@
   <div class="sh-det-head">
     <div style="flex:1">
       <div id="shDetTitle" class="sh-det-title" contenteditable="false"></div>
-      <div id="shDetHint" class="sh-det-hint">↵ Enter or Tab to save · Esc to cancel</div>
+      <div id="shDetHint" class="sh-det-hint" data-i18n="sessions_history.edit_hint">↵ Enter or Tab to save · Esc to cancel</div>
     </div>
-    <button class="cm-icon-btn" onclick="closeDetailPanel()" title="Close"><i class="ti ti-x"></i></button>
+    <button class="cm-icon-btn" onclick="closeDetailPanel()" data-i18n-attr="title:common.close" title="Close"><i class="ti ti-x"></i></button>
   </div>
   <div class="sh-det-body" id="shDetBody"></div>
   <div class="sh-det-foot" id="shDetFoot"><!-- populated by openDetailPanel() --></div>
@@ -392,17 +392,17 @@
 <div id="shCompareModal" class="sh-compare-overlay" style="display:none">
   <div class="sh-compare-box">
     <div class="sh-compare-head">
-      <h2><i class="ti ti-chart-bar" style="font-size:16px;margin-right:6px"></i>Compare Sessions</h2>
+      <h2><i class="ti ti-chart-bar" style="font-size:16px;margin-right:6px"></i><span data-i18n="sessions_history.compare_title">Compare Sessions</span></h2>
       <button class="cm-icon-btn" onclick="closeCompare()"><i class="ti ti-x"></i></button>
     </div>
     <div class="sh-compare-body">
       <div class="sh-compare-selectors">
-        <select id="shCmp1" onchange="renderCompare()"><option value="">— Session 1 —</option></select>
-        <select id="shCmp2" onchange="renderCompare()"><option value="">— Session 2 —</option></select>
-        <select id="shCmp3" onchange="renderCompare()"><option value="">— Session 3 (optional) —</option></select>
+        <select id="shCmp1" onchange="renderCompare()"><option value="" data-i18n="sessions_history.cmp_session_1">— Session 1 —</option></select>
+        <select id="shCmp2" onchange="renderCompare()"><option value="" data-i18n="sessions_history.cmp_session_2">— Session 2 —</option></select>
+        <select id="shCmp3" onchange="renderCompare()"><option value="" data-i18n="sessions_history.cmp_session_3">— Session 3 (optional) —</option></select>
       </div>
       <table class="sh-compare-table" id="shCmpTable">
-        <tr><td colspan="4" style="text-align:center;color:var(--cm-fg-muted);padding:24px">Select sessions above to compare</td></tr>
+        <tr><td colspan="4" style="text-align:center;color:var(--cm-fg-muted);padding:24px" data-i18n="sessions_history.cmp_select_prompt">Select sessions above to compare</td></tr>
       </table>
     </div>
   </div>
@@ -428,11 +428,23 @@
   let activeFocusSet = new Set();
   let activeBandSet  = new Set();
 
-  const MONTHS      = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const DAYS_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  function tt(key, fallbackEN, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+  function i18nLocale() { return (window.CM_I18N && CM_I18N.current) || 'en'; }
+  // Locale-aware date helpers (no hardcoded month/day arrays).
+  function fmtDayMonth(dt)  { return dt.toLocaleDateString(i18nLocale(), { day:'numeric', month:'short' }); }
+  function fmtFullDate(dt)  { return dt.toLocaleDateString(i18nLocale(), { day:'numeric', month:'short', year:'numeric' }); }
+  function fmtWeekday(dt)   { return dt.toLocaleDateString(i18nLocale(), { weekday:'short' }); }
+  function fmtMonthYear(dt) { return dt.toLocaleDateString(i18nLocale(), { month:'long', year:'numeric' }); }
 
   const FOCUS_MAP = { tactical:'Tactical', individual:'Individual', physical:'Physical', sectorial:'Sectorial' };
+  // Translate a focus key for display (falls back to raw label).
+  function focusLabel(key) {
+    if (!key || !FOCUS_MAP[key]) return null;
+    return tt('sessions_history.focus_' + key, FOCUS_MAP[key]);
+  }
   const ORIENTATION_MAP = {
     introductory:   { cls:'intro', label:'Introductory'   },
     activation:     { cls:'act',   label:'Activation'      },
@@ -441,6 +453,19 @@
     duration:       { cls:'dur',   label:'Duration'        },
     recovery:       { cls:'rec',   label:'Recovery'        },
   };
+  const ORIENT_I18N = {
+    introductory:'sessions_history.orient_introductory', activation:'sessions_history.orient_activation',
+    muscle_tension:'sessions_history.orient_muscle_tension', speed:'sessions_history.orient_speed',
+    duration:'sessions_history.orient_duration', recovery:'sessions_history.orient_recovery',
+  };
+  // Translated orientation label for a session's orientation key.
+  function orientLabel(key) {
+    const o = ORIENTATION_MAP[key];
+    if (!o) return '—';
+    return ORIENT_I18N[key] ? tt(ORIENT_I18N[key], o.label) : o.label;
+  }
+  const BAND_I18N = { low:'sessions_history.band_low', moderate:'sessions_history.band_moderate', high:'sessions_history.band_high', peak:'sessions_history.band_peak' };
+  function bandLabel(band) { return band && BAND_I18N[band] ? tt(BAND_I18N[band], { low:'Low', moderate:'Moderate', high:'High', peak:'Peak' }[band]) : '—'; }
   const BAND_RANGES = { low:[0,300], moderate:[300,600], high:[600,900], peak:[900,Infinity] };
 
   function getSeasonStart() {
@@ -524,7 +549,7 @@
     const counts = {};
     allSessions.forEach(s => { const t = s.orientation || '—'; counts[t] = (counts[t]||0)+1; });
     if (!Object.keys(counts).length) {
-      container.innerHTML = '<span style="color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">No sessions yet</span>';
+      container.innerHTML = `<span style="color:var(--cm-fg-muted);font:500 11.5px/1 var(--cm-font-sans)">${tt('sessions_history.no_sessions_yet','No sessions yet')}</span>`;
       return;
     }
     container.innerHTML = Object.entries(counts).map(([orient, n]) => {
@@ -532,7 +557,7 @@
       return `<div class="sh-opt is-on" data-st="${orient}">
         <span class="cb"></span>
         ${o.cls ? `<span class="sh-orient" style="margin-right:2px"><span class="d ${o.cls}"></span></span>` : ''}
-        ${o.label} <span class="ct">${n}</span>
+        ${orientLabel(orient)} <span class="ct">${n}</span>
       </div>`;
     }).join('');
     container.querySelectorAll('.sh-opt').forEach(el =>
@@ -593,24 +618,24 @@
     document.getElementById('kpiSessions').textContent = ytd;
     document.getElementById('kpiHours').innerHTML = `${hrs}<sub>h</sub>`;
     document.getElementById('kpiAvgLoad').innerHTML = avgLd != null ? `${avgLd}<sub>AU</sub>` : '—';
-    document.getElementById('kpiSessionsTrend').textContent = `${ytd} sessions this year`;
-    document.getElementById('kpiHoursTrend').textContent = n ? `avg ${hrs ? Math.round(hrs/n*60) : 0} min/session` : '—';
-    document.getElementById('kpiLoadTrend').textContent = avgLd != null ? 'avg across players' : 'No RPE data';
+    document.getElementById('kpiSessionsTrend').textContent = tt('sessions_history.kpi_sessions_this_year', `${ytd} sessions this year`, { count: ytd });
+    document.getElementById('kpiHoursTrend').textContent = n ? tt('sessions_history.kpi_avg_min', `avg ${hrs ? Math.round(hrs/n*60) : 0} min/session`, { min: hrs ? Math.round(hrs/n*60) : 0 }) : '—';
+    document.getElementById('kpiLoadTrend').textContent = avgLd != null ? tt('sessions_history.kpi_avg_players','avg across players') : tt('sessions_history.no_rpe_data','No RPE data');
     document.getElementById('kpiAttendance').innerHTML = avgAtt != null ? `${avgAtt}<sub>%</sub>` : '—';
-    document.getElementById('kpiAttTrend').textContent = avgAtt != null ? `${sessWithRpe.length} sessions w/ data` : 'No RPE data';
+    document.getElementById('kpiAttTrend').textContent = avgAtt != null ? tt('sessions_history.kpi_sessions_w_data', `${sessWithRpe.length} sessions w/ data`, { count: sessWithRpe.length }) : tt('sessions_history.no_rpe_data','No RPE data');
   }
 
   function renderActiveChips() {
     const el = document.getElementById('shActiveChips'); if (!el) return;
     const chips = [];
-    if (activeDays === -1) chips.push({ label:'Season', key:'date' });
-    else if (activeDays > 0) chips.push({ label:`Last ${activeDays}d`, key:'date' });
+    if (activeDays === -1) chips.push({ label:tt('sessions_history.season','Season'), key:'date' });
+    else if (activeDays > 0) chips.push({ label:tt('sessions_history.last_days', `Last ${activeDays}d`, { days: activeDays }), key:'date' });
     const onTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt.is-on')];
     const allTypes = [...document.querySelectorAll('#shOrientFilters .sh-opt')];
     if (onTypes.length && onTypes.length < allTypes.length)
-      chips.push({ label: onTypes.map(e => ORIENTATION_MAP[e.dataset.st]?.label || '—').join(' · '), key:'orientation' });
-    if (activeFocusSet.size > 0 && activeFocusSet.size < 4) chips.push({ label:[...activeFocusSet].map(f => FOCUS_MAP[f] || f).join(' · '), key:'focus' });
-    if (activeBandSet.size  > 0 && activeBandSet.size  < 4) chips.push({ label:[...activeBandSet].join(' · '), key:'band' });
+      chips.push({ label: onTypes.map(e => orientLabel(e.dataset.st)).join(' · '), key:'orientation' });
+    if (activeFocusSet.size > 0 && activeFocusSet.size < 4) chips.push({ label:[...activeFocusSet].map(f => focusLabel(f) || f).join(' · '), key:'focus' });
+    if (activeBandSet.size  > 0 && activeBandSet.size  < 4) chips.push({ label:[...activeBandSet].map(b => bandLabel(b)).join(' · '), key:'band' });
     if (activeMdPos.size    > 0) chips.push({ label:[...activeMdPos].join(' · '), key:'md' });
     el.innerHTML = chips.map(c =>
       `<span class="sh-active-chip" data-key="${c.key}">${c.label} <i class="ti ti-x" style="font-size:11px"></i></span>`
@@ -642,12 +667,13 @@
   // ── List view ──
   function rowHTML(s) {
     const dt = new Date(s.session_date + 'T00:00:00');
-    const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
-    const dayStr  = DAYS_SHORT[dt.getDay()];
+    const dateStr = fmtDayMonth(dt);
+    const dayStr  = fmtWeekday(dt);
     const type    = s.session_type || 'Other';
     const focus    = (s.focus||'').toLowerCase();
     const focusCls = focus || '';
     const orient   = ORIENTATION_MAP[s.orientation] || { cls:'', label:'—' };
+    const orientLbl = ORIENTATION_MAP[s.orientation] ? orientLabel(s.orientation) : '—';
     const load  = avgLoad(s);
     const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
     const band  = getBand(load);
@@ -667,17 +693,17 @@
       <td><div class="sh-date"><span class="d">${dateStr}</span><span class="day">${dayStr}</span></div></td>
       <td><span class="sh-md ${mdCls}">${mdLabel}</span></td>
       <td>
-        <div class="sh-title">${s.title || '(untitled)'}</div>
+        <div class="sh-title">${s.title || tt('sessions_history.untitled','(untitled)')}</div>
         ${s.notes ? `<div class="sh-sub">${s.notes}</div>` : ''}
       </td>
-      <td><span class="sh-tag ${focusCls}">${FOCUS_MAP[focus] || '—'}</span></td>
-      <td><span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orient.label}</span></td>
+      <td><span class="sh-tag ${focusCls}">${focusLabel(focus) || '—'}</span></td>
+      <td><span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orientLbl}</span></td>
       <td>${durHTML}</td>
       <td>${loadHTML}</td>
       <td>${attHTML}</td>
       <td><div class="sh-actions">
-        <button title="Open" onclick="openSess(event)"><i class="ti ti-external-link"></i></button>
-        <button title="Copy" onclick="dupSess(event)"><i class="ti ti-copy"></i></button>
+        <button title="${tt('sessions_history.open','Open')}" onclick="openSess(event)"><i class="ti ti-external-link"></i></button>
+        <button title="${tt('sessions_history.copy','Copy')}" onclick="dupSess(event)"><i class="ti ti-copy"></i></button>
       </div></td>
     </tr>`;
   }
@@ -686,7 +712,7 @@
     const tbody = document.getElementById('sessionsBody');
     const slice = filteredSessions.slice(currentPage * PAGE_SIZE, (currentPage+1) * PAGE_SIZE);
     if (!slice.length) {
-      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--cm-fg-muted)">No sessions match the current filters</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--cm-fg-muted)">${tt('sessions_history.no_match','No sessions match the current filters')}</td></tr>`;
       return;
     }
     tbody.innerHTML = slice.map(rowHTML).join('');
@@ -701,17 +727,18 @@
     const container = document.getElementById('shGridItems'); if (!container) return;
     const slice = filteredSessions.slice(currentPage * PAGE_SIZE, (currentPage+1) * PAGE_SIZE);
     if (!slice.length) {
-      container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--cm-fg-muted)">No sessions match the current filters</div>`;
+      container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--cm-fg-muted)">${tt('sessions_history.no_match','No sessions match the current filters')}</div>`;
       return;
     }
     container.innerHTML = slice.map(s => {
       const dt = new Date(s.session_date + 'T00:00:00');
-      const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
-      const dayStr  = DAYS_SHORT[dt.getDay()];
+      const dateStr = fmtFullDate(dt);
+      const dayStr  = fmtWeekday(dt);
       const type    = s.session_type || 'Other';
       const focus    = (s.focus||'').toLowerCase();
       const focusCls = focus || '';
       const orient   = ORIENTATION_MAP[s.orientation] || { cls:'', label:'—' };
+      const orientLbl = ORIENTATION_MAP[s.orientation] ? orientLabel(s.orientation) : '—';
       const load  = avgLoad(s);
       const pct   = load ? Math.min(100, Math.round(load / 9)) : 0;
       const band  = getBand(load);
@@ -720,11 +747,11 @@
       return `<div class="sh-card" data-id="${s.id}">
         <div class="sh-card-top">
           <span class="sh-card-date">${dayStr}, ${dateStr}</span>
-          <span class="sh-tag ${focusCls}" style="margin-left:auto">${FOCUS_MAP[focus] || '—'}</span>
+          <span class="sh-tag ${focusCls}" style="margin-left:auto">${focusLabel(focus) || '—'}</span>
         </div>
-        <div class="sh-card-title">${s.title || '(untitled)'}</div>
+        <div class="sh-card-title">${s.title || tt('sessions_history.untitled','(untitled)')}</div>
         <div class="sh-card-meta">
-          <span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orient.label}</span>
+          <span class="sh-orient">${orient.cls ? `<span class="d ${orient.cls}"></span>` : ''}${orientLbl}</span>
           ${s._mdPos ? `<span class="sh-md" style="font-size:10px">${s._mdPos}</span>` : ''}
         </div>
         <div class="sh-card-row">
@@ -744,7 +771,7 @@
     const grid = document.getElementById('shCalGrid'); if (!grid) return;
     const titleEl = document.querySelector('.sh-cal-title');
     const year = calendarMonth.getFullYear(), month = calendarMonth.getMonth();
-    if (titleEl) titleEl.textContent = `${MONTHS_FULL[month]} ${year}`;
+    if (titleEl) titleEl.textContent = fmtMonthYear(calendarMonth);
 
     const sessMap = {};
     filteredSessions.forEach(s => { if (!sessMap[s.session_date]) sessMap[s.session_date] = []; sessMap[s.session_date].push(s); });
@@ -771,7 +798,8 @@
         <span class="sh-cal-dn">${displayDay}</span>`;
       sessions.forEach(s => {
         const focusCls = (s.focus||'').toLowerCase() || 'tactical';
-        html += `<div class="sh-cal-evt sh-tag ${focusCls}" data-id="${s.id}" title="${s.title||s.session_type||'Session'}">${s.title||s.session_type||'Session'}</div>`;
+        const evtLbl = s.title || s.session_type || tt('sessions_history.session','Session');
+        html += `<div class="sh-cal-evt sh-tag ${focusCls}" data-id="${s.id}" title="${evtLbl}">${evtLbl}</div>`;
       });
       html += '</div>';
     }
@@ -789,7 +817,9 @@
     const shown = Math.min(PAGE_SIZE, total - start);
     const pages = Math.ceil(total / PAGE_SIZE) || 1;
     document.getElementById('footCount').innerHTML =
-      `Showing <strong>${shown}</strong> of <strong>${total}</strong> filtered sessions · ${allSessions.length} total`;
+      tt('sessions_history.foot_showing',
+         `Showing <strong>${shown}</strong> of <strong>${total}</strong> filtered sessions · ${allSessions.length} total`,
+         { shown, total, all: allSessions.length });
     const pgr = document.getElementById('paginationRoot');
     let h = `<button ${currentPage===0?'disabled':''} onclick="goPage(${currentPage-1})"><i class="ti ti-chevron-left"></i></button>`;
     const rs = Math.max(0, Math.min(currentPage-2, pages-5));
@@ -823,11 +853,11 @@
     const btn = e.currentTarget; btn.disabled = true;
     const { error } = await window.sb.from('training_sessions').insert({
       club_id: sess.club_id, session_date: sess.session_date,
-      title: `Copy of ${sess.title||'Untitled'}`, notes: sess.notes,
+      title: tt('sessions_history.copy_of', `Copy of ${sess.title||'Untitled'}`, { name: sess.title || tt('sessions_history.untitled_plain','Untitled') }), notes: sess.notes,
       session_type: sess.session_type, duration: sess.duration,
       team_id: shTeamId || sess.team_id || null,
     });
-    if (error) { alert('Error: ' + error.message); btn.disabled = false; return; }
+    if (error) { alert(tt('sessions_history.error_msg', `Error: ${error.message}`, { msg: error.message })); btn.disabled = false; return; }
     btn.innerHTML = '<i class="ti ti-check"></i>';
     setTimeout(() => location.reload(), 800);
   }
@@ -837,10 +867,10 @@
     const headers = ['date','md_position','session_name','focus','orientation','duration_min','load_au','rpe_entries'];
     const rows = filteredSessions.map(s => {
       const load = avgLoad(s);
-      const orient = ORIENTATION_MAP[s.orientation]?.label || s.orientation || '';
+      const orient = (ORIENTATION_MAP[s.orientation] ? orientLabel(s.orientation) : null) || s.orientation || '';
       return [
         s.session_date, s._mdPos||'',
-        (s.title||'').replace(/,/g,';'), FOCUS_MAP[(s.focus||'').toLowerCase()] || s.focus || '',
+        (s.title||'').replace(/,/g,';'), focusLabel((s.focus||'').toLowerCase()) || s.focus || '',
         orient, s.duration||'', load!=null?load:'', s.rpe?.length||''
       ].join(',');
     });
@@ -858,12 +888,12 @@
     modal.style.display = 'flex';
     const opts = filteredSessions.map(s => {
       const dt = new Date(s.session_date + 'T00:00:00');
-      const label = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()} — ${s.title||s.session_type||'Untitled'}`;
+      const label = `${fmtFullDate(dt)} — ${s.title||s.session_type||tt('sessions_history.untitled_plain','Untitled')}`;
       return `<option value="${s.id}">${label}</option>`;
     }).join('');
-    const empty1 = '<option value="">— Session 1 —</option>';
-    const empty2 = '<option value="">— Session 2 —</option>';
-    const empty3 = '<option value="">— Session 3 (optional) —</option>';
+    const empty1 = `<option value="">${tt('sessions_history.cmp_session_1','— Session 1 —')}</option>`;
+    const empty2 = `<option value="">${tt('sessions_history.cmp_session_2','— Session 2 —')}</option>`;
+    const empty3 = `<option value="">${tt('sessions_history.cmp_session_3','— Session 3 (optional) —')}</option>`;
     document.getElementById('shCmp1').innerHTML = empty1 + opts;
     document.getElementById('shCmp2').innerHTML = empty2 + opts;
     document.getElementById('shCmp3').innerHTML = empty3 + opts;
@@ -879,22 +909,22 @@
     const sessions = ids.map(id => allSessions.find(s => s.id === id)).filter(Boolean);
     const table = document.getElementById('shCmpTable'); if (!table) return;
     if (!sessions.length) {
-      table.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--cm-fg-muted);padding:24px">Select sessions above to compare</td></tr>';
+      table.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--cm-fg-muted);padding:24px">${tt('sessions_history.cmp_select_prompt','Select sessions above to compare')}</td></tr>`;
       return;
     }
     const ROWS = [
-      ['Date',        s => s.session_date],
-      ['MD Position', s => s._mdPos||'—'],
-      ['Type',        s => s.session_type||'—'],
-      ['Duration',    s => s.duration!=null ? `${s.duration} min` : '—'],
-      ['Orientation', s => ORIENTATION_MAP[s.orientation]?.label||s.orientation||'—'],
-      ['Load (AU)',   s => { const l=avgLoad(s); return l!=null?`${l} AU`:'—'; }],
-      ['RPE entries', s => s.rpe?.length||'—'],
-      ['Notes',       s => s.notes||'—'],
+      [tt('common.date','Date'),                                       s => s.session_date],
+      [tt('sessions_history.md_position','MD Position'),               s => s._mdPos||'—'],
+      [tt('sessions_history.type','Type'),                             s => s.session_type||'—'],
+      [tt('sessions_history.duration','Duration'),                     s => s.duration!=null ? tt('sessions_history.n_min', `${s.duration} min`, { count: s.duration }) : '—'],
+      [tt('sessions_history.orientation','Orientation'),               s => (ORIENTATION_MAP[s.orientation]?orientLabel(s.orientation):null)||s.orientation||'—'],
+      [tt('sessions_history.load_au','Load (AU)'),                     s => { const l=avgLoad(s); return l!=null?`${l} AU`:'—'; }],
+      [tt('sessions_history.rpe_entries','RPE entries'),               s => s.rpe?.length||'—'],
+      [tt('sessions_history.notes','Notes'),                           s => s.notes||'—'],
     ];
     const headerCols = sessions.map(s => {
       const dt = new Date(s.session_date + 'T00:00:00');
-      return `<th>${dt.getDate()} ${MONTHS[dt.getMonth()]} — ${s.title||s.session_type||'Untitled'}</th>`;
+      return `<th>${fmtDayMonth(dt)} — ${s.title||s.session_type||tt('sessions_history.untitled_plain','Untitled')}</th>`;
     }).join('');
     const rowsHtml = ROWS.map(([label, fn]) =>
       `<tr><th style="text-align:left;width:130px">${label}</th>${sessions.map(s=>`<td>${fn(s)}</td>`).join('')}</tr>`
@@ -1014,22 +1044,22 @@
     if (foot) {
       if (isGym) {
         foot.innerHTML = `
-          <button class="cm-btn is-primary is-sm" id="shDetGymBtn"><i class="ti ti-barbell" style="font-size:13px"></i>Open in Gym Planner</button>
-          <button class="cm-btn is-outline is-sm" id="shDetEditDetailsBtn"><i class="ti ti-pencil" style="font-size:13px"></i>Edit details</button>
-          <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>Close</button>`;
+          <button class="cm-btn is-primary is-sm" id="shDetGymBtn"><i class="ti ti-barbell" style="font-size:13px"></i>${tt('sessions_history.open_gym_planner','Open in Gym Planner')}</button>
+          <button class="cm-btn is-outline is-sm" id="shDetEditDetailsBtn"><i class="ti ti-pencil" style="font-size:13px"></i>${tt('sessions_history.edit_details','Edit details')}</button>
+          <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>${tt('common.close','Close')}</button>`;
         document.getElementById('shDetGymBtn')?.addEventListener('click', () => { window.location.href = `Gym Planner.html?date=${sess.session_date}`; });
         document.getElementById('shDetEditDetailsBtn')?.addEventListener('click', () => openDetailEditMode(sessId));
       } else {
         foot.innerHTML = `
-          <button class="cm-btn is-primary is-sm" id="shDetEditBtn"><i class="ti ti-pencil" style="font-size:13px"></i>Edit session</button>
-          <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>Close</button>`;
+          <button class="cm-btn is-primary is-sm" id="shDetEditBtn"><i class="ti ti-pencil" style="font-size:13px"></i>${tt('sessions_history.edit_session','Edit session')}</button>
+          <button class="cm-btn is-outline is-sm" onclick="closeDetailPanel()"><i class="ti ti-x" style="font-size:13px"></i>${tt('common.close','Close')}</button>`;
         document.getElementById('shDetEditBtn')?.addEventListener('click', () => { closeDetailPanel(); window.location.href = `Daily Planning.html?date=${sess.session_date}`; });
       }
     }
 
     // Title — editable inline
     const titleEl = document.getElementById('shDetTitle');
-    titleEl.textContent = sess.title || sess.session_type || 'Untitled';
+    titleEl.textContent = sess.title || sess.session_type || tt('sessions_history.untitled_plain','Untitled');
     titleEl.contentEditable = 'false';
     document.getElementById('shDetHint').style.display = 'none';
 
@@ -1044,13 +1074,13 @@
     };
     titleEl.onkeydown = e => {
       if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
-      if (e.key === 'Escape') { titleEl.textContent = sess.title || sess.session_type || 'Untitled'; titleEl.blur(); }
+      if (e.key === 'Escape') { titleEl.textContent = sess.title || sess.session_type || tt('sessions_history.untitled_plain','Untitled'); titleEl.blur(); }
     };
     titleEl.onblur = async () => {
       titleEl.contentEditable = 'false';
       document.getElementById('shDetHint').style.display = 'none';
       const newTitle = titleEl.textContent.trim();
-      if (!newTitle || newTitle === (sess.title || sess.session_type || 'Untitled')) return;
+      if (!newTitle || newTitle === (sess.title || sess.session_type || tt('sessions_history.untitled_plain','Untitled'))) return;
       await window.sb.from('training_sessions').update({ title: newTitle }).eq('id', sessId).eq('club_id', shClubId);
       sess.title = newTitle; // update in-memory
       renderView(); // refresh list/grid
@@ -1077,33 +1107,33 @@
     const isGym   = sess.session_type === 'gym';
     const load    = avgLoad(sess);
     const band    = getBand(load);
-    const bandLabel = { low:'Low', moderate:'Moderate', high:'High', peak:'Peak' }[band] || '—';
+    const bandLbl = band ? bandLabel(band) : '—';
     const dt      = new Date(sess.session_date + 'T00:00:00');
-    const dateStr = `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
-    const dayStr  = DAYS_SHORT[dt.getDay()];
+    const dateStr = fmtFullDate(dt);
+    const dayStr  = fmtWeekday(dt);
     const type    = sess.session_type || '—';
-    const orient  = ORIENTATION_MAP[sess.orientation] || { label:'—' };
+    const orient  = ORIENTATION_MAP[sess.orientation] ? { label: orientLabel(sess.orientation) } : { label:'—' };
     const attCount = sess.rpe?.length;
     const attPct  = (attCount && totalActivePlayers) ? ` (${Math.round(attCount/totalActivePlayers*100)}%)` : '';
     const row3 = isGym
-      ? `<div class="sh-det-m"><div class="l">Category</div><div class="v">Gym</div></div>
-         <div class="sh-det-m"><div class="l">Muscle focus</div><div class="v" id="shDetMuscleFocus">—</div></div>`
-      : `<div class="sh-det-m"><div class="l">Type</div><div class="v">${type}</div></div>
-         <div class="sh-det-m"><div class="l">Orientation</div><div class="v">${orient.label}</div></div>`;
+      ? `<div class="sh-det-m"><div class="l">${tt('sessions_history.category','Category')}</div><div class="v">${tt('sessions_history.gym','Gym')}</div></div>
+         <div class="sh-det-m"><div class="l">${tt('sessions_history.muscle_focus','Muscle focus')}</div><div class="v" id="shDetMuscleFocus">—</div></div>`
+      : `<div class="sh-det-m"><div class="l">${tt('sessions_history.type','Type')}</div><div class="v">${type}</div></div>
+         <div class="sh-det-m"><div class="l">${tt('sessions_history.orientation','Orientation')}</div><div class="v">${orient.label}</div></div>`;
     document.getElementById('shDetBody').innerHTML = `
       <div class="sh-det-meta">
-        <div class="sh-det-m"><div class="l">Date</div><div class="v">${dayStr}, ${dateStr}</div></div>
-        <div class="sh-det-m"><div class="l">MD Position</div><div class="v">${sess._mdPos || '—'}</div></div>
+        <div class="sh-det-m"><div class="l">${tt('common.date','Date')}</div><div class="v">${dayStr}, ${dateStr}</div></div>
+        <div class="sh-det-m"><div class="l">${tt('sessions_history.md_position','MD Position')}</div><div class="v">${sess._mdPos || '—'}</div></div>
         ${row3}
-        <div class="sh-det-m"><div class="l">Duration</div><div class="v">${sess.duration != null ? sess.duration + ' min' : '—'}</div></div>
-        <div class="sh-det-m"><div class="l">Load (AU)</div><div class="v">${load != null ? load + ' AU' : '—'}<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${load != null ? bandLabel : ''}</span></div></div>
-        <div class="sh-det-m"><div class="l">Est. RPE</div><div class="v">${sess.estimated_rpe ? sess.estimated_rpe + '/10' : '—'}</div></div>
-        <div class="sh-det-m"><div class="l">${isGym ? 'Volume' : 'Attendance'}</div><div class="v" id="shDetVolumeAtt">${isGym ? '—' : (attCount ? attCount + ' players' + attPct : '—')}</div></div>
+        <div class="sh-det-m"><div class="l">${tt('sessions_history.duration','Duration')}</div><div class="v">${sess.duration != null ? tt('sessions_history.n_min', `${sess.duration} min`, { count: sess.duration }) : '—'}</div></div>
+        <div class="sh-det-m"><div class="l">${tt('sessions_history.load_au','Load (AU)')}</div><div class="v">${load != null ? load + ' AU' : '—'}<span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:4px">${load != null ? bandLbl : ''}</span></div></div>
+        <div class="sh-det-m"><div class="l">${tt('sessions_history.est_rpe','Est. RPE')}</div><div class="v">${sess.estimated_rpe ? sess.estimated_rpe + '/10' : '—'}</div></div>
+        <div class="sh-det-m"><div class="l">${isGym ? tt('sessions_history.volume','Volume') : tt('sessions_history.attendance','Attendance')}</div><div class="v" id="shDetVolumeAtt">${isGym ? '—' : (attCount ? tt('sessions_history.n_players', `${attCount} players`, { count: attCount }) + attPct : '—')}</div></div>
       </div>
-      ${sess.notes ? `<div class="sh-det-sec"><h3>Notes / Objective</h3><div style="font:var(--cm-body-sm);color:var(--cm-fg);line-height:1.5;background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px">${sess.notes}</div></div>` : ''}
+      ${sess.notes ? `<div class="sh-det-sec"><h3>${tt('sessions_history.notes_objective','Notes / Objective')}</h3><div style="font:var(--cm-body-sm);color:var(--cm-fg);line-height:1.5;background:var(--cm-bg-soft);border-radius:6px;padding:10px 12px">${sess.notes}</div></div>` : ''}
       <div class="sh-det-sec">
-        <h3>${isGym ? 'Gym exercises' : 'Exercises'}</h3>
-        <div id="shDetExList"><div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)"><i class="ti ti-loader sh-spin"></i> Loading…</div></div>
+        <h3>${isGym ? tt('sessions_history.gym_exercises','Gym exercises') : tt('sessions_history.exercises','Exercises')}</h3>
+        <div id="shDetExList"><div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)"><i class="ti ti-loader sh-spin"></i> ${tt('common.loading','Loading…')}</div></div>
       </div>`;
   }
 
@@ -1129,8 +1159,8 @@
       .order('position');
 
     if (error || !data?.length) {
-      const gymBtn = isGym ? `<button class="cm-btn is-sm is-outline" style="margin-top:12px" onclick="window.location.href='Gym Planner.html?date=${sess.session_date}'"><i class="ti ti-barbell" style="font-size:13px"></i>Open in Gym Planner</button>` : '';
-      exList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises recorded for this session${gymBtn ? '<br>' + gymBtn : ''}</div>`;
+      const gymBtn = isGym ? `<button class="cm-btn is-sm is-outline" style="margin-top:12px" onclick="window.location.href='Gym Planner.html?date=${sess.session_date}'"><i class="ti ti-barbell" style="font-size:13px"></i>${tt('sessions_history.open_gym_planner','Open in Gym Planner')}</button>` : '';
+      exList.innerHTML = `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('sessions_history.no_exercises','No exercises recorded for this session')}${gymBtn ? '<br>' + gymBtn : ''}</div>`;
       return;
     }
 
@@ -1142,9 +1172,9 @@
       const muscles = [...new Set(data.map(e => e.gym_exercises?.muscle_group).filter(Boolean))];
       const totalDur = data.reduce((s, e) => s + (e.duration || 0), 0);
       const mfEl = document.getElementById('shDetMuscleFocus');
-      if (mfEl) mfEl.textContent = muscles.length ? muscles.slice(0, 3).join(', ') + (muscles.length > 3 ? ' +more' : '') : '—';
+      if (mfEl) mfEl.textContent = muscles.length ? muscles.slice(0, 3).join(', ') + (muscles.length > 3 ? ' ' + tt('sessions_history.more','+more') : '') : '—';
       const volEl = document.getElementById('shDetVolumeAtt');
-      if (volEl) volEl.textContent = `${data.length} exercises · ${totalDur || '—'} min`;
+      if (volEl) volEl.textContent = tt('sessions_history.vol_summary', `${data.length} exercises · ${totalDur || '—'} min`, { count: data.length, min: totalDur || '—' });
     } else {
       // Fetch planner exercise details for focus, game_type, match_day
       const plannerIds = data.filter(e => e.planner_exercise_id).map(e => e.planner_exercise_id);
@@ -1185,17 +1215,17 @@
       }
 
       // Field/planner exercise card
-      const players = ex.players_count ? `${ex.players_count} pl` : null;
+      const players = ex.players_count ? tt('sessions_history.n_pl', `${ex.players_count} pl`, { count: ex.players_count }) : null;
       const dims    = (ex.field_width && ex.field_height) ? `${ex.field_width}×${ex.field_height}m` : null;
       const orient  = ex.calc_orientation || pData.orientation;
-      const orientLabel = _DET_ORIENT_LABEL[orient] || null;
+      const orientTxt = _DET_ORIENT_LABEL[orient] || null;
       const focus   = pData.focus || null;
       const gameType = pData.game_type_enabled ? pData.game_type : null;
       const mDay   = pData.match_day || null;
       const cat    = ex.gym_exercises?.category || null;
       const metaItems = [dur, players, dims].filter(Boolean).join(' <span style="color:var(--cm-border-strong);margin:0 2px">·</span> ');
       const badges = [
-        orientLabel ? `<span class="sh-tag tactical" style="font-size:10px">${orientLabel}</span>` : '',
+        orientTxt ? `<span class="sh-tag tactical" style="font-size:10px">${orientTxt}</span>` : '',
         intens ? `<span class="sh-tag ${_DET_INTENSITY_TAG[intens]||'individual'}" style="font-size:10px">${intens}</span>` : '',
         focus  ? `<span class="sh-tag ${_DET_FOCUS_TAG[focus]||'tactical'}" style="font-size:10px">${focus}</span>` : '',
         gameType ? `<span class="sh-tag ${_DET_GAME_TAG[gameType]||'positional'}" style="font-size:10px">${gameType}</span>` : '',
@@ -1213,14 +1243,14 @@
 
     let html = '';
     if (activationEx.length) {
-      html += `<div style="font:500 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:0 0 6px">Activation</div>`;
+      html += `<div style="font:500 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:0 0 6px">${tt('sessions_history.sec_activation','Activation')}</div>`;
       html += activationEx.map(renderExCard).join('');
     }
     if (mainEx.length) {
-      if (activationEx.length) html += `<div style="font:500 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:10px 0 6px">Field exercises</div>`;
+      if (activationEx.length) html += `<div style="font:500 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);margin:10px 0 6px">${tt('sessions_history.sec_field_exercises','Field exercises')}</div>`;
       html += mainEx.map(renderExCard).join('');
     }
-    exList.innerHTML = html || `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises recorded for this session</div>`;
+    exList.innerHTML = html || `<div style="text-align:center;padding:20px;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('sessions_history.no_exercises','No exercises recorded for this session')}</div>`;
   }
 
   // ── Detail inline edit mode ──
@@ -1235,36 +1265,36 @@
     document.getElementById('shDetBody').innerHTML = `
       <div style="display:flex;flex-direction:column;gap:14px">
         <div>
-          <label style="${_LBL}">Session name</label>
-          <input id="shEditTitle" type="text" value="${(sess.title||'').replace(/"/g,'&quot;')}" placeholder="Session name…" style="${_INP}">
+          <label style="${_LBL}">${tt('sessions_history.session_name','Session name')}</label>
+          <input id="shEditTitle" type="text" value="${(sess.title||'').replace(/"/g,'&quot;')}" placeholder="${tt('sessions_history.session_name_ph','Session name…')}" style="${_INP}">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div>
-            <label style="${_LBL}">Date</label>
+            <label style="${_LBL}">${tt('common.date','Date')}</label>
             <input id="shEditDate" type="date" value="${sess.session_date}" style="${_INP}">
           </div>
           <div>
-            <label style="${_LBL}">Duration (min)</label>
+            <label style="${_LBL}">${tt('sessions_history.duration_min','Duration (min)')}</label>
             <input id="shEditDuration" type="number" min="1" max="360" value="${sess.duration||''}" placeholder="60" style="${_INP}">
           </div>
         </div>
         <div>
-          <label style="${_LBL}">Est. RPE (1–10)</label>
+          <label style="${_LBL}">${tt('sessions_history.est_rpe_range','Est. RPE (1–10)')}</label>
           <select id="shEditRpe" style="${_INP.replace('height:34px','height:34px;padding:0 8px')}">
             <option value="">—</option>${rpeOpts}
           </select>
         </div>
         <div>
-          <label style="${_LBL}">Notes / Objective</label>
-          <textarea id="shEditNotes" rows="4" placeholder="Session objective, context, instructions…"
+          <label style="${_LBL}">${tt('sessions_history.notes_objective','Notes / Objective')}</label>
+          <textarea id="shEditNotes" rows="4" placeholder="${tt('sessions_history.notes_ph','Session objective, context, instructions…')}"
             style="width:100%;padding:8px 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;box-sizing:border-box;resize:vertical">${sess.notes||''}</textarea>
         </div>
       </div>`;
     const foot = document.getElementById('shDetFoot');
     if (foot) {
       foot.innerHTML = `
-        <button class="cm-btn is-primary is-sm" id="shDetSaveBtn"><i class="ti ti-check" style="font-size:13px"></i>Save</button>
-        <button class="cm-btn is-outline is-sm" id="shDetCancelBtn"><i class="ti ti-arrow-left" style="font-size:13px"></i>Cancel</button>`;
+        <button class="cm-btn is-primary is-sm" id="shDetSaveBtn"><i class="ti ti-check" style="font-size:13px"></i>${tt('common.save','Save')}</button>
+        <button class="cm-btn is-outline is-sm" id="shDetCancelBtn"><i class="ti ti-arrow-left" style="font-size:13px"></i>${tt('common.cancel','Cancel')}</button>`;
       document.getElementById('shDetSaveBtn')?.addEventListener('click', () => saveDetailEdit(sessId));
       document.getElementById('shDetCancelBtn')?.addEventListener('click', () => openDetailPanel(sessId));
     }
@@ -1281,11 +1311,11 @@
     const notesVal    = document.getElementById('shEditNotes')?.value?.trim() || null;
     const title       = titleVal || TYPE_DEFAULTS[sess.session_type] || 'Training';
     const saveBtn = document.getElementById('shDetSaveBtn');
-    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="ti ti-loader sh-spin" style="font-size:13px"></i>Saving…'; }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = `<i class="ti ti-loader sh-spin" style="font-size:13px"></i>${tt('common.saving','Saving…')}`; }
     const { error } = await window.sb.from('training_sessions')
       .update({ title, session_date: dateVal, duration: durationVal, estimated_rpe: rpeVal, notes: notesVal })
       .eq('id', sessId).eq('club_id', shClubId);
-    if (error) { alert('Error saving: ' + error.message); if (saveBtn) saveBtn.disabled = false; return; }
+    if (error) { alert(tt('sessions_history.error_saving', `Error saving: ${error.message}`, { msg: error.message })); if (saveBtn) saveBtn.disabled = false; return; }
     // Update in-memory record
     Object.assign(sess, { title, session_date: dateVal, duration: durationVal, estimated_rpe: rpeVal, notes: notesVal, _mdPos: computeMdPos(dateVal) });
     // Update panel title
@@ -1307,13 +1337,31 @@
     let teams = await window.getTeams(shClubId || await window.getClubId());
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('shTeamSelect');
-    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    if (!teams.length) { sel.innerHTML=`<option value="">${tt('sessions_history.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     shTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===shTeamId?'selected':''}>${t.name}</option>`).join('');
   }
   function shOnTeamChange(){ shTeamId=document.getElementById('shTeamSelect').value; sessionStorage.setItem('cal_active_team',shTeamId); location.reload(); }
   window.shOnTeamChange = shOnTeamChange;
+
+  // Re-render JS-built content on language change (static nodes handled by sidebar.js).
+  document.addEventListener('cm:langchanged', () => {
+    // Re-label orientation filter options in place, keeping current on/off state.
+    document.querySelectorAll('#shOrientFilters .sh-opt[data-st]').forEach(el => {
+      const key = el.dataset.st;
+      const o = ORIENTATION_MAP[key] || { cls:'', label:'—' };
+      const on = el.classList.contains('is-on');
+      el.innerHTML = `<span class="cb"></span>
+        ${o.cls ? `<span class="sh-orient" style="margin-right:2px"><span class="d ${o.cls}"></span></span>` : ''}
+        ${orientLabel(key)} <span class="ct">${el.querySelector('.ct')?.textContent || ''}</span>`;
+      el.classList.toggle('is-on', on);
+    });
+    // KPIs, active chips, current view and footer all rebuild from data.
+    if (allSessions.length || document.getElementById('sessionsBody')) applyFilters();
+    // If the detail panel is open, re-render it in the new language.
+    if (_detailSessId) openDetailPanel(_detailSessId);
+  });
 
   boot();
 </script>
