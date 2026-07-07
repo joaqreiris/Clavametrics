@@ -157,7 +157,15 @@
     try { return sessionStorage.getItem('cm_active_club') || null; } catch { return null; }
   };
   window.setActiveClubOverride = function (clubId) {
-    try { if (clubId) sessionStorage.setItem('cm_active_club', clubId); else sessionStorage.removeItem('cm_active_club'); } catch {}
+    try {
+      if (clubId) sessionStorage.setItem('cm_active_club', clubId);
+      else sessionStorage.removeItem('cm_active_club');
+      // Al cambiar de club el equipo activo del club anterior queda stale y filtraría
+      // por un equipo ajeno (Squad/Calendar/GPS verían vacío). Lo descartamos para que
+      // cada página re-resuelva el equipo por defecto del club nuevo (sidebar → teams[0]).
+      sessionStorage.removeItem('cal_active_team');
+      localStorage.removeItem('cal_active_team');
+    } catch {}
     window.resetSupabaseCache();
   };
 
