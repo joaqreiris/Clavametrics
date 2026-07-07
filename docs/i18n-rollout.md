@@ -138,7 +138,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Hub.html
 - ✅ Squad.html
 - ✅ Calendar.html
-- ⬜ Daily Planning.html
+- ✅ Daily Planning.html
 - ⬜ RPE.html
 - ⬜ Availability.html
 - ⬜ Chat & Tasks.html
