@@ -20,6 +20,7 @@ la página acá mismo y commitea**. Una página = un commit.
 - **Diff-first.** Leé la página entera antes de tocar. Mostrá el diff antes de aplicar.
 - **Atómico.** Una página por vez, un commit por página. **Nunca `git add -A`** — solo los archivos nombrados.
 - **UI en inglés como base.** El texto en el HTML queda en inglés; el runtime lo pisa.
+- **`es` = español neutro (sin voseo).** El `es.json` es español neutro/internacional para todos los mercados (AR, UY, MX, ES…): formas de **tú**, nunca de **vos**. `Crea`/`Elige`/`Revisa`/`Puedes`/`Selecciona`/`Ingresa`, **NO** `Creá`/`Elegí`/`Revisá`/`Podés`/`Seleccioná`/`Ingresá`. Sin regionalismos: `acá`→`aquí`, `vos@…`→`tu@…`. (El tono rioplatense de ESTE runbook da igual; la regla aplica solo a las cadenas de producto en los locales.)
 - **Reusá `common.*`** antes de inventar claves nuevas (`common.save`, `common.cancel`, `common.player`, `common.retry`, `common.loading`, etc.).
 - **Paridad de idiomas.** Toda clave nueva va en los **tres** archivos: `locales/en.json`, `es.json`, `pt.json`. `node scripts/i18n.mjs check` tiene que pasar.
 - **No rompas nada.** Si algo no cierra, pará y avisá antes de commitear.
