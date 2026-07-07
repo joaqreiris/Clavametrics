@@ -11,7 +11,12 @@
 (function(){
   'use strict';
   const $ = id => document.getElementById(id);
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function tt(key, fallbackEN, vars){
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+  function miLocale(){ return (window.CM_I18N && CM_I18N.current) || document.documentElement.lang || 'en'; }
+  function miMonthDay(dt){ try { return new Intl.DateTimeFormat(miLocale(), { day:'numeric', month:'short', year:'numeric' }).format(dt); } catch(_) { return dt.toDateString(); } }
 
   let _sessions = [], _clubId = null, _teamId = null;
   // player-stats import state
@@ -24,8 +29,8 @@
   function sessLabel(s){
     let d = '';
     if (s.session_date){ const dt = new Date(String(s.session_date).slice(0,10) + 'T00:00:00');
-      d = isNaN(dt) ? String(s.session_date).slice(0,10) : `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`; }
-    return [d, s.title].filter(Boolean).join(' · ') || 'Match session';
+      d = isNaN(dt) ? String(s.session_date).slice(0,10) : miMonthDay(dt); }
+    return [d, s.title].filter(Boolean).join(' · ') || tt('match_reports.match_session', 'Match session');
   }
 
   function showDrawer(){ const d=$('impDrawer'), o=$('impOverlay'); if(d)d.classList.add('is-open'); if(o)o.classList.add('is-open'); }
@@ -53,7 +58,7 @@
     showDrawer();
     injectStyles();
     _matchId = null; _parsed = null; _players = null; _provider = 'generic'; _mapping = {};
-    host.innerHTML = '<div style="padding:18px 4px;color:var(--cm-fg-faint);font:var(--cm-body-sm)">Loading…</div>';
+    host.innerHTML = `<div style="padding:18px 4px;color:var(--cm-fg-faint);font:var(--cm-body-sm)">${esc(tt('common.loading', 'Loading…'))}</div>`;
     try {
       _clubId = await window.getClubId();
       const teamSel = $('mrTeamSelect');
@@ -70,37 +75,37 @@
   }
 
   function renderForm(host){
-    const opts = ['<option value="">— No session (standalone) —</option>']
+    const opts = [`<option value="">${esc(tt('match_reports.no_session_standalone', '— No session (standalone) —'))}</option>`]
       .concat(_sessions.map(s => `<option value="${esc(s.id)}" data-date="${esc(s.session_date || '')}">${esc(sessLabel(s))}</option>`))
       .join('');
     host.innerHTML = `
       <div class="mi-form">
-        <label class="mi-field"><span class="mi-l">Match session</span>
+        <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.match_session', 'Match session'))}</span>
           <select id="miSession" class="cm-select">${opts}</select></label>
         <div class="mi-row">
-          <label class="mi-field"><span class="mi-l">Match date *</span><input id="miDate" type="date" class="cm-input" required></label>
-          <label class="mi-field"><span class="mi-l">Home / Away</span>
-            <select id="miHA" class="cm-select"><option value="">—</option><option value="home">Home</option><option value="away">Away</option></select></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.match_date_req', 'Match date *'))}</span><input id="miDate" type="date" class="cm-input" required></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.home_away', 'Home / Away'))}</span>
+            <select id="miHA" class="cm-select"><option value="">—</option><option value="home">${esc(tt('match_reports.home', 'Home'))}</option><option value="away">${esc(tt('match_reports.away', 'Away'))}</option></select></label>
         </div>
         <div class="mi-row">
-          <label class="mi-field"><span class="mi-l">Opponent</span><input id="miOpp" class="cm-input" placeholder="Opponent name"></label>
-          <label class="mi-field"><span class="mi-l">Competition</span><input id="miComp" class="cm-input" placeholder="League · Cup…"></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.opponent', 'Opponent'))}</span><input id="miOpp" class="cm-input" placeholder="${esc(tt('match_reports.opponent_name', 'Opponent name'))}"></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.competition', 'Competition'))}</span><input id="miComp" class="cm-input" placeholder="${esc(tt('match_reports.league_cup_ph', 'League · Cup…'))}"></label>
         </div>
         <div class="mi-row">
-          <label class="mi-field"><span class="mi-l">Score for</span><input id="miSF" type="number" min="0" step="1" class="cm-input"></label>
-          <label class="mi-field"><span class="mi-l">Score against</span><input id="miSA" type="number" min="0" step="1" class="cm-input"></label>
-          <label class="mi-field"><span class="mi-l">Possession %</span><input id="miPos" type="number" min="0" max="100" step="1" class="cm-input"></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.score_for', 'Score for'))}</span><input id="miSF" type="number" min="0" step="1" class="cm-input"></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.score_against', 'Score against'))}</span><input id="miSA" type="number" min="0" step="1" class="cm-input"></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.possession_label', 'Possession %'))}</span><input id="miPos" type="number" min="0" max="100" step="1" class="cm-input"></label>
         </div>
         <div class="mi-row">
-          <label class="mi-field"><span class="mi-l">Formation</span><input id="miForm" class="cm-input" placeholder="4-3-3"></label>
-          <label class="mi-field"><span class="mi-l">Venue</span><input id="miVenue" class="cm-input"></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.formation', 'Formation'))}</span><input id="miForm" class="cm-input" placeholder="4-3-3"></label>
+          <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.venue', 'Venue'))}</span><input id="miVenue" class="cm-input"></label>
         </div>
-        <label class="mi-field"><span class="mi-l">Notes</span><textarea id="miNotes" class="cm-input" rows="2"></textarea></label>
+        <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.notes', 'Notes'))}</span><textarea id="miNotes" class="cm-input" rows="2"></textarea></label>
         <div class="mi-actions">
           <span id="miMsg" class="mi-msg"></span>
           <span style="flex:1"></span>
-          <button id="miCancel" class="cm-btn is-outline is-sm" type="button">Cancel</button>
-          <button id="miSave" class="cm-btn is-primary is-sm" type="button"><i class="ti ti-device-floppy" style="font-size:14px"></i>Save</button>
+          <button id="miCancel" class="cm-btn is-outline is-sm" type="button">${esc(tt('common.cancel', 'Cancel'))}</button>
+          <button id="miSave" class="cm-btn is-primary is-sm" type="button"><i class="ti ti-device-floppy" style="font-size:14px"></i>${esc(tt('common.save', 'Save'))}</button>
         </div>
         <div id="miStatsSection" class="mi-stats"></div>
       </div>`;
@@ -148,7 +153,7 @@
   async function save(){
     const msg = $('miMsg'); if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = ''; }
     const date = $('miDate') && $('miDate').value;
-    if (!date) { if (msg) msg.textContent = 'Match date is required'; return; }
+    if (!date) { if (msg) msg.textContent = tt('match_reports.match_date_required', 'Match date is required'); return; }
 
     let uid = null; try { uid = (await window.sb.auth.getUser()).data.user?.id || null; } catch (_) {}
     const sid = ($('miSession') && $('miSession').value) || null;
@@ -174,10 +179,10 @@
         : await window.sb.from('match_results').insert(payload).select('id').single();
       if (res.error) throw res.error;
       _matchId = (res.data && res.data.id) || _matchId;
-      if (msg){ msg.style.color = 'var(--cm-success)'; msg.textContent = '✓ Saved — you can now import player stats below'; }
+      if (msg){ msg.style.color = 'var(--cm-success)'; msg.textContent = tt('match_reports.saved_import_below', '✓ Saved — you can now import player stats below'); }
       updateStatsSection();   // reveal the player-stats import with matchId in scope
     } catch (e) {
-      if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = 'Error: ' + (e.message || e); }
+      if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.error_prefix', 'Error: {msg}', { msg: (e.message || e) }); }
     }
   }
 
@@ -201,6 +206,8 @@
     ['rating','Rating'],
     ['position','Position'],
   ];
+  // Localized display label for a stat target key (falls back to the EN label above).
+  function statLabel(k, fallbackEN){ return tt('match_reports.stat_' + k, fallbackEN); }
   const TARGET_ORDER = STAT_TARGETS.map(t => t[0]); // autoMap priority
   const ALIASES_GENERIC = {
     player_name:['player','name','player name','jugador','nombre','full name'],
@@ -300,7 +307,7 @@
     if (name){ const id = lk.nameToId[_norm(name)]; if (id) return { id, name }; }
     const jersey = mappedVal(row, 'jersey');
     if (jersey){ const id = lk.numToId[String(jersey).replace(/[^0-9]/g, '')] || lk.numToId[String(jersey).trim()]; if (id) return { id, name: name || ('#' + jersey) }; }
-    return { id: null, name: name || (jersey ? ('#' + jersey) : '(unnamed)') };
+    return { id: null, name: name || (jersey ? ('#' + jersey) : tt('match_reports.unnamed', '(unnamed)')) };
   }
   function computeMatch(lk){
     let matched = 0, unmatched = 0; const unmatchedNames = [];
@@ -314,16 +321,16 @@
   function updateStatsSection(){
     const host = $('miStatsSection'); if (!host) return;
     if (!_matchId){
-      host.innerHTML = `<div class="mi-stats-h">Player stats import</div>
-        <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm)">Save the match details first.</div>`;
+      host.innerHTML = `<div class="mi-stats-h">${esc(tt('match_reports.player_stats_import', 'Player stats import'))}</div>
+        <div style="color:var(--cm-fg-faint);font:var(--cm-body-sm)">${esc(tt('match_reports.save_details_first', 'Save the match details first.'))}</div>`;
       return;
     }
     host.innerHTML = `
-      <div class="mi-stats-h">Player stats import</div>
+      <div class="mi-stats-h">${esc(tt('match_reports.player_stats_import', 'Player stats import'))}</div>
       <div class="mi-row" style="align-items:flex-end">
-        <label class="mi-field" style="flex:0 0 150px"><span class="mi-l">Provider</span>
-          <select id="miProvider" class="cm-select"><option value="generic">Generic</option><option value="wyscout">Wyscout</option></select></label>
-        <label class="mi-field"><span class="mi-l">File (.csv / .xlsx)</span>
+        <label class="mi-field" style="flex:0 0 150px"><span class="mi-l">${esc(tt('match_reports.provider', 'Provider'))}</span>
+          <select id="miProvider" class="cm-select"><option value="generic">${esc(tt('match_reports.provider_generic', 'Generic'))}</option><option value="wyscout">Wyscout</option></select></label>
+        <label class="mi-field"><span class="mi-l">${esc(tt('match_reports.file_csv_xlsx', 'File (.csv / .xlsx)'))}</span>
           <input id="miFile" type="file" accept=".csv,.xlsx,.xls" class="cm-input"></label>
       </div>
       <div id="miMapWrap" style="display:none"></div>
@@ -335,24 +342,24 @@
 
   async function onFile(e){
     const file = e.target.files && e.target.files[0]; if (!file) return;
-    const msg = $('miStatsMsg'); if (msg){ msg.style.color = 'var(--cm-fg-muted)'; msg.textContent = 'Parsing…'; }
+    const msg = $('miStatsMsg'); if (msg){ msg.style.color = 'var(--cm-fg-muted)'; msg.textContent = tt('match_reports.parsing', 'Parsing…'); }
     try {
       await fetchPlayers();
       _parsed = await parseFile(file);
-      if (!_parsed.headers.length){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = 'No columns found in file.'; } return; }
+      if (!_parsed.headers.length){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.no_columns_found', 'No columns found in file.'); } return; }
       autoMapAll();
       renderMapping();
       if (msg) msg.textContent = '';
-    } catch (err){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = 'Parse error: ' + (err.message || err); } }
+    } catch (err){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.parse_error', 'Parse error: {msg}', { msg: (err.message || err) }); } }
   }
 
   function renderMapping(){
     const wrap = $('miMapWrap'); if (!wrap || !_parsed) return;
     const optionsFor = sel => {
       let o = '';
-      STAT_TARGETS.forEach(([k, lab]) => o += `<option value="${k}" ${sel === k ? 'selected' : ''}>${esc(lab)}</option>`);
-      o += `<option value="__extra__" ${sel === '__extra__' ? 'selected' : ''}>Extra (store in jsonb)</option>`;
-      o += `<option value="__ignore__" ${sel === '__ignore__' ? 'selected' : ''}>— Ignore —</option>`;
+      STAT_TARGETS.forEach(([k, lab]) => o += `<option value="${k}" ${sel === k ? 'selected' : ''}>${esc(statLabel(k, lab))}</option>`);
+      o += `<option value="__extra__" ${sel === '__extra__' ? 'selected' : ''}>${esc(tt('match_reports.map_extra', 'Extra (store in jsonb)'))}</option>`;
+      o += `<option value="__ignore__" ${sel === '__ignore__' ? 'selected' : ''}>${esc(tt('match_reports.map_ignore', '— Ignore —'))}</option>`;
       return o;
     };
     const th = 'text-align:left;padding:6px 8px;font:600 10px/1 var(--cm-font-sans);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted);background:var(--cm-bg-soft)';
@@ -363,20 +370,20 @@
     wrap.style.display = '';
     wrap.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px">
-        <span class="mi-l">Column mapping</span><span style="flex:1"></span>
-        <button id="miReset" class="cm-btn is-outline is-sm" type="button">Reset to auto</button>
+        <span class="mi-l">${esc(tt('match_reports.column_mapping', 'Column mapping'))}</span><span style="flex:1"></span>
+        <button id="miReset" class="cm-btn is-outline is-sm" type="button">${esc(tt('match_reports.reset_to_auto', 'Reset to auto'))}</button>
       </div>
       <div style="max-height:240px;overflow:auto;border:1px solid var(--cm-border);border-radius:var(--cm-r-3)">
         <table style="width:100%;border-collapse:collapse">
-          <thead><tr><th style="${th}">Source column</th><th style="${th}">Maps to</th></tr></thead>
+          <thead><tr><th style="${th}">${esc(tt('match_reports.source_column', 'Source column'))}</th><th style="${th}">${esc(tt('match_reports.maps_to', 'Maps to'))}</th></tr></thead>
           <tbody>${rowsHTML}</tbody>
         </table>
       </div>
       <div id="miPreview" style="margin-top:8px;font:500 12px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)"></div>
       <div class="mi-actions" style="margin-top:8px">
         <span style="flex:1"></span>
-        <button id="miImportCancel" class="cm-btn is-outline is-sm" type="button">Cancel</button>
-        <button id="miImport" class="cm-btn is-primary is-sm" type="button"><i class="ti ti-database-import" style="font-size:14px"></i>Import</button>
+        <button id="miImportCancel" class="cm-btn is-outline is-sm" type="button">${esc(tt('common.cancel', 'Cancel'))}</button>
+        <button id="miImport" class="cm-btn is-primary is-sm" type="button"><i class="ti ti-database-import" style="font-size:14px"></i>${esc(tt('match_reports.import_btn', 'Import'))}</button>
       </div>`;
     wrap.querySelectorAll('.mi-map').forEach(s => s.addEventListener('change', ev => { _mapping[ev.target.dataset.h] = ev.target.value; updatePreview(); }));
     $('miReset').addEventListener('click', () => { autoMapAll(); renderMapping(); });
@@ -387,14 +394,14 @@
 
   function updatePreview(){
     const lk = playerLookups(), st = computeMatch(lk), pv = $('miPreview');
-    if (pv) pv.innerHTML = `${st.total} rows · ${st.matched} players matched · ${st.unmatched} unmatched`
+    if (pv) pv.innerHTML = tt('match_reports.preview_summary', `${st.total} rows · ${st.matched} players matched · ${st.unmatched} unmatched`, { total: st.total, matched: st.matched, unmatched: st.unmatched })
       + (st.unmatchedNames.length ? ` <span style="color:var(--cm-fg-faint)">(${st.unmatchedNames.map(esc).join(', ')}${st.unmatched > st.unmatchedNames.length ? '…' : ''})</span>` : '');
-    const btn = $('miImport'); if (btn) { btn.disabled = st.matched < 1; btn.textContent = ''; btn.innerHTML = `<i class="ti ti-database-import" style="font-size:14px"></i>Import ${st.matched} player${st.matched === 1 ? '' : 's'}`; }
+    const btn = $('miImport'); if (btn) { btn.disabled = st.matched < 1; btn.textContent = ''; btn.innerHTML = `<i class="ti ti-database-import" style="font-size:14px"></i>${esc(tt('match_reports.import_n_players', `Import ${st.matched} player${st.matched === 1 ? '' : 's'}`, { count: st.matched }))}`; }
   }
 
   async function doImport(){
     const msg = $('miStatsMsg'); if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = ''; }
-    if (!_matchId){ if (msg) msg.textContent = 'Save the match first.'; return; }
+    if (!_matchId){ if (msg) msg.textContent = tt('match_reports.save_match_first', 'Save the match first.'); return; }
     const lk = playerLookups();
     const byPlayer = {}; // dedupe by player_id — last row wins
     (_parsed.rows || []).forEach(row => {
@@ -414,14 +421,14 @@
       };
     });
     const payloads = Object.values(byPlayer);
-    if (!payloads.length){ if (msg) msg.textContent = 'No matched players to import.'; return; }
+    if (!payloads.length){ if (msg) msg.textContent = tt('match_reports.no_matched_players', 'No matched players to import.'); return; }
     try {
       const res = await window.sb.from('player_match_stats').upsert(payloads, { onConflict: 'match_id,player_id' });
       if (res.error) throw res.error;
-      if (msg){ msg.style.color = 'var(--cm-success)'; msg.textContent = `✓ Imported ${payloads.length} player${payloads.length === 1 ? '' : 's'}`; }
+      if (msg){ msg.style.color = 'var(--cm-success)'; msg.textContent = tt('match_reports.imported_n_players', `✓ Imported ${payloads.length} player${payloads.length === 1 ? '' : 's'}`, { count: payloads.length }); }
       close();
       location.reload();
-    } catch (e){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = 'Import error: ' + (e.message || e); } }
+    } catch (e){ if (msg){ msg.style.color = 'var(--cm-danger)'; msg.textContent = tt('match_reports.import_error', 'Import error: {msg}', { msg: (e.message || e) }); } }
   }
 
   window.matchImport = { open, close };
