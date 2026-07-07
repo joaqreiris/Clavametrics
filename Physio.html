@@ -1233,7 +1233,7 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
   const player = _allPlayers.find(p => p.id === playerId);
   const playerName = player ? `${player.first_name} ${player.last_name}` : 'Player';
   const physioName = _profile?.full_name || 'Physio';
-  const coachStaff = _allStaff.filter(s => /admin|coach|staff|head/i.test(s.role || ''));
+  const coachStaff = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc']);
   const todayFmt   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
   const ops = [
@@ -1254,7 +1254,7 @@ async function sendCoachNotifications(treatmentId, playerId, adaptText) {
     }));
     ops.push((async () => {
       const { error } = await window.sb.from('notifications').insert(notifications);
-      if (error) console.warn(error);
+      if (error) console.warn('[notif] physio_adaptation insert failed:', error.message);
     })());
   }
 
@@ -1276,7 +1276,7 @@ async function sendWorseningNotification(playerId) {
   const playerName = player ? `${player.first_name} ${player.last_name}` : 'Player';
   const physioName = _profile?.full_name || 'Physio';
   const todayFmt   = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const medStaff   = _allStaff.filter(s => /admin|coach|staff|head|physio|medical/i.test(s.role || ''));
+  const medStaff   = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc', 'medical']);
 
   const ops = [];
   if (medStaff.length) {
@@ -1290,7 +1290,7 @@ async function sendWorseningNotification(playerId) {
     }));
     ops.push((async () => {
       const { error } = await window.sb.from('notifications').insert(notifications);
-      if (error) console.warn(error);
+      if (error) console.warn('[notif] physio_worsening insert failed:', error.message);
     })());
   }
   ops.push((async () => {
@@ -1325,7 +1325,7 @@ async function registerClearance() {
 
   if (error) { alert('Error registering clearance: ' + error.message); return; }
 
-  const allStaff = _allStaff.filter(s => /admin|coach|staff|head/i.test(s.role || ''));
+  const allStaff = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc']);
   const ops = [];
   if (allStaff.length) {
     const notifications = allStaff.map(s => ({
@@ -1338,7 +1338,7 @@ async function registerClearance() {
     }));
     ops.push((async () => {
       const { error } = await window.sb.from('notifications').insert(notifications);
-      if (error) console.warn(error);
+      if (error) console.warn('[notif] physio_clearance insert failed:', error.message);
     })());
   }
   ops.push((async () => {

@@ -431,6 +431,41 @@
     return q;
   };
 
+  // ── Notification recipients by role bucket ──────────────────────────────────
+  // Mirrors the SQL role_bucket() mapping (db/schema.sql). Keep both in sync when
+  // roles change. Buckets: 'admin' (owner/admin), 'medical' (medical/physio/doctor/
+  // nutritionist), 'sc' (sc_coach/fitness_coach), 'coach' (coach/assistant_coach/
+  // gk_coach), 'analyst', 'staff' (anything else).
+  window.cmRoleBucket = function (role) {
+    switch ((role || '').toLowerCase()) {
+      case 'owner': case 'admin': return 'admin';
+      case 'medical': case 'physio': case 'doctor': case 'nutritionist': return 'medical';
+      case 'sc_coach': case 'fitness_coach': return 'sc';
+      case 'coach': case 'assistant_coach': case 'gk_coach': return 'coach';
+      case 'analyst': return 'analyst';
+      default: return 'staff';
+    }
+  };
+  // Club staff profiles whose bucket ∈ `buckets`, as [{id, role}]. Excludes platform
+  // super-admins AND any 'player' profile — players are not auth users, so their id
+  // would break the notifications.user_id → auth.users FK and fail the whole
+  // all-or-nothing insert. Returns [] on any error (never throws).
+  window.cmStaffByBuckets = async function (clubId, buckets) {
+    try {
+      if (!clubId || !Array.isArray(buckets) || !buckets.length) return [];
+      const want = new Set(buckets);
+      const { data: profs } = await window.sb.from('profiles')
+        .select('id, role').eq('club_id', clubId);
+      let list = (profs || []).filter(p => (p.role || '').toLowerCase() !== 'player');
+      try {
+        const { data: padmins } = await window.sb.from('platform_admins').select('user_id');
+        const superIds = new Set((padmins || []).map(r => r.user_id));
+        list = list.filter(p => !superIds.has(p.id));
+      } catch (_) { /* si no se puede leer platform_admins, seguir */ }
+      return list.filter(p => want.has(window.cmRoleBucket(p.role)));
+    } catch (_) { return []; }
+  };
+
   // ── GPS per-minute profile: catálogo de métricas + preferencia del usuario ──
   // Las columnas vienen de v_exercise_gps_profile. `mult` lleva total_distance de
   // Preferencia compartida entre pantallas (Exercises Library + Drill Designer) vía

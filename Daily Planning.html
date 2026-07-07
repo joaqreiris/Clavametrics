@@ -1711,18 +1711,20 @@ async function dpPublish() {
 
       // Notify all players in the club
       const dateFmt = new Date(_dpCurrentDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
-      const { data: playerProfiles } = await window.sb.from('profiles')
-        .select('id').eq('club_id', _dpClubId).eq('role', 'player');
-      if (playerProfiles?.length) {
-        const notifications = playerProfiles.map(p => ({
+      // Notify club staff (players have no login yet).
+      // TODO: when players get login, also notify player profiles.
+      const recips = await window.cmStaffByBuckets(_dpClubId, ['admin', 'coach', 'sc', 'analyst']);
+      if (recips.length) {
+        const notifications = recips.map(p => ({
           user_id: p.id,
           club_id: _dpClubId,
           type:    'training_plan_published',
-          title:   `Training plan available — ${dateFmt}`,
-          body:    'Your training plan has been published. Check the app for details.',
+          title:   `Training plan published — ${dateFmt}`,
+          body:    'The training plan for this day has been published.',
           link:    'Calendar.html',
         }));
-        await window.sb.from('notifications').insert(notifications).catch(e => console.warn('Notify error:', e.message));
+        const { error: nErr } = await window.sb.from('notifications').insert(notifications);
+        if (nErr) console.warn('[notif] training_plan_published insert failed:', nErr.message);
       }
     }
   }

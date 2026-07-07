@@ -2524,13 +2524,10 @@ async function confirmDischarge() {
     const pl    = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
     const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
     const retFmt = new Date(returnDate).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
-    const { data: staff } = await window.sb.from('profiles')
-      .select('id')
-      .eq('club_id', _clubId)
-      .in('role', ['admin', 'coach', 'staff']);
-    if (staff?.length) {
-      await window.sb.from('notifications').insert(
-        staff.map(p => ({
+    const recips = await window.cmStaffByBuckets(_clubId, ['admin', 'coach', 'sc', 'medical']);
+    if (recips.length) {
+      const { error: nErr } = await window.sb.from('notifications').insert(
+        recips.map(p => ({
           user_id: p.id,
           club_id: _clubId,
           type:    'medical_clearance',
@@ -2539,8 +2536,9 @@ async function confirmDischarge() {
           link:    '/Daily Planning.html'
         }))
       );
+      if (nErr) console.warn('[notif] medical_clearance insert failed:', nErr.message);
     }
-  } catch(e) { console.warn('[Injuries] notifications insert failed:', e.message); }
+  } catch(e) { console.warn('[notif] medical_clearance insert failed:', e.message); }
 
   // Step 4: post message to club chat
   try {
