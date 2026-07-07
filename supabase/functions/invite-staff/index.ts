@@ -94,6 +94,14 @@ Deno.serve(async (req) => {
             cleanTeamIds.map(t => ({ profile_id: existingId, team_id: t, club_id: targetClub })),
             { onConflict: 'profile_id,team_id', ignoreDuplicates: true });
         }
+
+        // 2c. Apply the role's permission template (normal flow does this via
+        //     accept_invitation → apply_role_template; auto-join must do it too).
+        //     Best-effort: default permissions are secondary to the join itself.
+        try {
+          await admin.rpc('apply_role_template', { p_club: targetClub, p_profile: existingId, p_role: cleanRole });
+        } catch (e) { console.warn('apply_role_template failed:', e?.message || e); }
+
         autoJoined = true;
       }
     }
