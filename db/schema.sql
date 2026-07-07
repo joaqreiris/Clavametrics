@@ -832,9 +832,10 @@ create table if not exists public.invitations (
   status text default 'pending'::text not null,
   invited_by uuid,
   created_at timestamp with time zone default now() not null,
+  team_ids uuid[],
   constraint invitations_pkey primary key (id),
   constraint invitations_club_id_email_key UNIQUE (club_id, email),
-  constraint invitations_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text])))
+  constraint invitations_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))
 );
 
 create table if not exists public.invoices (
@@ -1171,6 +1172,13 @@ create table if not exists public.member_modules (
   profile_id uuid not null,
   module_key text not null,
   constraint member_modules_pkey primary key (profile_id, module_key)
+);
+
+create table if not exists public.role_default_modules (
+  club_id uuid not null,
+  role text not null,
+  module_key text not null,
+  constraint role_default_modules_pkey primary key (club_id, role, module_key)
 );
 
 create table if not exists public.member_teams (
@@ -1618,7 +1626,7 @@ create table if not exists public.profiles (
   settings jsonb default '{}'::jsonb,
   notification_settings jsonb default '{}'::jsonb,
   constraint profiles_pkey primary key (id),
-  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text])))
+  constraint profiles_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))
 );
 CREATE INDEX profiles_club_id_idx ON public.profiles USING btree (club_id);
 CREATE INDEX profiles_email_idx ON public.profiles USING btree (email);
@@ -1674,7 +1682,7 @@ create table if not exists public.rehab_plan_owners (
   created_at timestamp with time zone default now(),
   constraint rehab_plan_owners_pkey primary key (id),
   constraint rehab_plan_owners_plan_id_profile_id_key UNIQUE (plan_id, profile_id),
-  constraint rehab_plan_owners_role_check CHECK ((role = ANY (ARRAY['physio'::text, 'sc'::text, 'coach'::text])))
+  constraint rehab_plan_owners_role_check CHECK ((role = ANY (ARRAY['physio'::text, 'sc_coach'::text, 'coach'::text])))
 );
 CREATE INDEX idx_rehab_owners_plan ON public.rehab_plan_owners USING btree (plan_id);
 
@@ -1921,8 +1929,7 @@ create table if not exists public.tasks (
   constraint tasks_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'urgent'::text]))),
   constraint tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'done'::text, 'cancelled'::text]))),
   constraint tasks_category_check CHECK ((category = ANY (ARRAY['general'::text, 'match_day'::text, 'medical'::text, 'routine'::text, 'event'::text]))),
-  constraint tasks_assigned_roles_len CHECK (((assigned_roles IS NULL) OR (cardinality(assigned_roles) <= 10))),
-  constraint tasks_assigned_roles_valid CHECK (((assigned_roles IS NULL) OR (assigned_roles <@ ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text])))
+  constraint tasks_assigned_roles_check CHECK (((assigned_roles IS NULL) OR (assigned_roles <@ ARRAY['owner'::text, 'admin'::text, 'coach'::text, 'physio'::text, 'analyst'::text, 'nutritionist'::text, 'staff'::text, 'sc_coach'::text, 'fitness_coach'::text, 'gk_coach'::text, 'assistant_coach'::text])))
 );
 CREATE INDEX tasks_club_idx ON public.tasks USING btree (club_id);
 CREATE INDEX tasks_assigned_idx ON public.tasks USING btree (assigned_to);
@@ -1930,6 +1937,18 @@ CREATE INDEX tasks_status_idx ON public.tasks USING btree (club_id, status);
 CREATE INDEX tasks_due_idx ON public.tasks USING btree (due_date);
 CREATE INDEX tasks_event_id_idx ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
 CREATE INDEX tasks_club_event_idx ON public.tasks USING btree (club_id, event_id) WHERE (event_id IS NOT NULL);
+
+create table if not exists public.task_reminders (
+  id uuid default gen_random_uuid() primary key,
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  club_id uuid not null,
+  remind_at timestamptz not null,   -- absolute fire time
+  sent_at timestamptz,               -- null = pending; set = already notified (idempotency)
+  created_by uuid,
+  created_at timestamptz default now() not null
+);
+create index if not exists task_reminders_due_idx on public.task_reminders (remind_at) where sent_at is null;
+-- Reminder engine: pg_cron job 'task-reminders' runs public.process_due_reminders() every minute.
 CREATE INDEX idx_tasks_event_id ON public.tasks USING btree (event_id) WHERE (event_id IS NOT NULL);
 CREATE INDEX idx_tasks_club_status ON public.tasks USING btree (club_id, status) WHERE (status = 'pending'::text);
 CREATE INDEX idx_tasks_team ON public.tasks USING btree (team_id);
@@ -2250,6 +2269,7 @@ alter table public.member_modules add constraint member_modules_profile_id_fkey 
 alter table public.member_teams add constraint member_teams_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.member_teams add constraint member_teams_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
 alter table public.member_teams add constraint member_teams_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+alter table public.role_default_modules add constraint role_default_modules_club_id_fkey FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE;
 alter table public.mesocycles add constraint mesocycles_macrocycle_id_fkey FOREIGN KEY (macrocycle_id) REFERENCES macrocycles(id) ON DELETE CASCADE;
 alter table public.messages add constraint messages_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.messages add constraint messages_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
@@ -2373,11 +2393,140 @@ CREATE OR REPLACE FUNCTION public.accept_invitation()
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
+declare
+  v_inv_id   uuid;
+  v_club     uuid;
+  v_role     text;
+  v_team_ids uuid[];
 begin
+  -- Primary goal: mark the caller's pending invitation as accepted.
   update public.invitations
      set status = 'accepted'
    where lower(email) = lower((select email from auth.users where id = auth.uid()))
-     and status = 'pending';
+     and status = 'pending'
+  returning id, club_id, role, team_ids
+       into v_inv_id, v_club, v_role, v_team_ids;
+
+  -- Not an invited user (or already accepted): nothing else to do.
+  if v_inv_id is null then
+    return;
+  end if;
+
+  -- Side-effects below are best-effort: a failure must never revert the
+  -- accepted status, so each block swallows its own exceptions.
+
+  -- (b) Assign the chosen teams to the new member.
+  begin
+    if v_team_ids is not null and array_length(v_team_ids, 1) > 0 then
+      insert into public.member_teams (profile_id, team_id, club_id)
+      select auth.uid(), unnest(v_team_ids), v_club
+      on conflict (profile_id, team_id) do nothing;
+    end if;
+  exception when others then null;
+  end;
+
+  -- (c) Record a club-level "joined" activity entry (team_id null = club event).
+  begin
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
+    values (v_club, null, auth.uid(), 'member.joined', 'profiles', auth.uid(),
+            jsonb_build_object('role', v_role, 'team_ids', v_team_ids,
+                               'email', (select email from auth.users where id = auth.uid())));
+  exception when others then null;
+  end;
+
+  -- (d) Notify the club admins/owners (skip the member who just joined).
+  begin
+    insert into public.notifications (user_id, club_id, type, title, body, link)
+    select p.id, v_club, 'member_joined',
+           'New member joined',
+           coalesce((select full_name from public.profiles where id = auth.uid()), 'A new member') || ' joined the club',
+           '/Admin.html'
+    from public.profiles p
+    where p.club_id = v_club
+      and (p.role in ('admin','owner') or p.club_role in ('admin','owner'))
+      and p.id <> auth.uid();
+  exception when others then null;
+  end;
+
+  -- (e) Copy the role's permission template into the new member's modules.
+  begin
+    perform public.apply_role_template(v_club, auth.uid(), v_role);
+  exception when others then null;
+  end;
+end; $function$
+;
+
+CREATE OR REPLACE FUNCTION public.apply_role_template(p_club uuid, p_profile uuid, p_role text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  -- Copy the club's per-role default modules into the member's own rows.
+  -- If the role has no template, nothing is written: 0 rows = fail-open = full
+  -- access (today's behaviour is preserved). The '__managed__' sentinel is only
+  -- copied when the admin included it in the saved template.
+  insert into public.member_modules (club_id, profile_id, module_key)
+  select p_club, p_profile, module_key
+  from public.role_default_modules
+  where club_id = p_club and role = p_role
+  on conflict (profile_id, module_key) do nothing;
+exception when others then null;
+end; $function$
+;
+
+-- Reminder engine: run by the pg_cron job 'task-reminders' every minute.
+-- Resolves recipients server-side (no auth.uid()) and inserts in-app notifications.
+CREATE OR REPLACE FUNCTION public.process_due_reminders()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  r record;
+begin
+  for r in
+    select tr.id as reminder_id, tr.club_id,
+           t.team_id, t.assigned_to, t.assigned_roles, t.title, t.created_by, t.status
+    from public.task_reminders tr
+    join public.tasks t on t.id = tr.task_id
+    where tr.sent_at is null and tr.remind_at <= now()
+  loop
+    -- Per-reminder isolation: one failure must not abort the rest of the batch.
+    begin
+      -- Skip closed tasks, but still stamp sent so they aren't re-evaluated forever.
+      if r.status not in ('done', 'cancelled') then
+        insert into public.notifications (user_id, club_id, type, title, body, link)
+        select uid, r.club_id, 'task_reminder',
+               'Reminder: ' || r.title, 'This task is due soon.', '/Chat & Tasks.html'
+        from (
+          -- assigned_to (individual)
+          select r.assigned_to as uid where r.assigned_to is not null
+          union
+          -- creator (covers "For me"/self-assigned tasks)
+          select r.created_by where r.created_by is not null
+          union
+          -- assigned_roles: club members with a matching role, team-scoped when set
+          select p.id
+          from public.profiles p
+          where r.assigned_roles is not null
+            and p.club_id = r.club_id
+            and lower(coalesce(p.role, '')) = any (r.assigned_roles)
+            and ( r.team_id is null
+                  or p.id in (select mt.profile_id from public.member_teams mt
+                              where mt.team_id = r.team_id) )
+        ) recips
+        where uid is not null;
+      end if;
+
+      update public.task_reminders set sent_at = now() where id = r.reminder_id;
+    exception when others then
+      -- Leave sent_at null so the next run retries this reminder.
+      null;
+    end;
+  end loop;
 end; $function$
 ;
 
@@ -2909,7 +3058,7 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.get_user_role()
+CREATE OR REPLACE FUNCTION public.my_role()
  RETURNS text
  LANGUAGE sql
  STABLE SECURITY DEFINER
@@ -3184,14 +3333,17 @@ CREATE OR REPLACE FUNCTION public.my_player_ids()
  SET search_path TO 'public'
 AS $function$
   select p.id from public.players p
-  where p.club_id = (select club_id from public.profiles where id = auth.uid())
-    and (
-      exists (select 1 from public.profiles pr where pr.id = auth.uid()
-              and (pr.role in ('admin','owner') or pr.club_role in ('admin','owner')))
-      or exists (
-        select 1 from public.player_teams pt
-        where pt.player_id = p.id
-          and pt.team_id in (select public.my_team_ids())
+  where public.is_super_admin()   -- super-admin: todos los players (el frontend acota por club activo + equipo)
+     or (
+      p.club_id = (select club_id from public.profiles where id = auth.uid())
+      and (
+        exists (select 1 from public.profiles pr where pr.id = auth.uid()
+                and (pr.role in ('admin','owner') or pr.club_role in ('admin','owner')))
+        or exists (
+          select 1 from public.player_teams pt
+          where pt.player_id = p.id
+            and pt.team_id in (select public.my_team_ids())
+        )
       )
     );
 $function$
@@ -3300,8 +3452,8 @@ AS $function$
     when 'owner' then 'admin'
     when 'admin' then 'admin'
     when 'medical' then 'medical' when 'physio' then 'medical' when 'doctor' then 'medical' when 'nutritionist' then 'medical'
-    when 'sc' then 'sc'
-    when 'coach' then 'coach' when 'head_coach' then 'coach' when 'assistant_coach' then 'coach' when 'gk_coach' then 'coach'
+    when 'sc_coach' then 'sc' when 'fitness_coach' then 'sc'
+    when 'coach' then 'coach' when 'assistant_coach' then 'coach' when 'gk_coach' then 'coach'
     when 'analyst' then 'analyst'
     else 'staff' end;
 $function$
@@ -3451,7 +3603,7 @@ begin
   if target_club is null then raise exception 'Target not found'; end if;
   if not caller_super and target_club <> caller_club then raise exception 'Target not in your club'; end if;
 
-  if new_role not in ('owner','admin','coach','physio','analyst','nutritionist','staff') then
+  if new_role not in ('owner','admin','coach','physio','analyst','nutritionist','staff','sc_coach','fitness_coach','gk_coach','assistant_coach') then
     raise exception 'Invalid role';
   end if;
   if new_role = 'owner' and not (caller_is_owner or caller_super) then
@@ -3796,6 +3948,41 @@ begin
 end $function$
 ;
 
+-- Feed de actividad para tasks (crear / completar). Se hace por TRIGGER, no por insert JS,
+-- por consistencia con el resto del feed: activity_log solo se escribe vía triggers SECURITY
+-- DEFINER (no hay policy de INSERT para usuarios). Espeja el estilo de trg_act_session:
+-- inserta solo en la transición relevante. team_id = NEW.team_id directo (la task ya lo tiene;
+-- NO se usa activity_team_for_player, que es para eventos ligados a un player). El trigger nunca
+-- debe hacer fallar el INSERT/UPDATE de la task.
+CREATE OR REPLACE FUNCTION public.trg_act_task()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if TG_OP = 'INSERT' then
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
+    values (NEW.club_id, NEW.team_id, NEW.created_by, 'task.created', 'tasks', NEW.id,
+            jsonb_build_object(
+              'title', NEW.title,
+              'mode', case when NEW.assigned_roles is not null and cardinality(NEW.assigned_roles) > 0
+                           then 'role' else 'individual' end,
+              'assigned_roles', NEW.assigned_roles,
+              'assigned_to_name', NEW.assigned_to_name
+            ));
+  elsif TG_OP = 'UPDATE'
+        and NEW.status = 'done' and OLD.status is distinct from 'done' then
+    -- actor = quien completó (usuario logueado). Si auth.uid() es null (proceso sin usuario),
+    -- queda actor_id null y el insert va igual; nunca rompe el UPDATE de la task.
+    insert into public.activity_log (club_id, team_id, actor_id, action, entity_table, entity_id, summary)
+    values (NEW.club_id, NEW.team_id, auth.uid(), 'task.completed', 'tasks', NEW.id,
+            jsonb_build_object('title', NEW.title));
+  end if;
+  return NEW;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.wellness_status(p_club_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE)
  RETURNS TABLE(player_id uuid, player_name text, responded boolean, readiness numeric, hooper_index numeric)
  LANGUAGE plpgsql
@@ -3986,6 +4173,7 @@ CREATE TRIGGER trg_single_primary BEFORE INSERT OR UPDATE OF is_primary ON publi
 CREATE TRIGGER act_session AFTER INSERT OR UPDATE ON public.training_sessions FOR EACH ROW EXECUTE FUNCTION trg_act_session();
 CREATE TRIGGER act_treatment AFTER INSERT OR UPDATE ON public.treatments FOR EACH ROW EXECUTE FUNCTION trg_act_treatment();
 CREATE TRIGGER act_wellness AFTER INSERT ON public.wellness FOR EACH ROW EXECUTE FUNCTION trg_act_wellness();
+CREATE TRIGGER act_task AFTER INSERT OR UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION trg_act_task();
 
 -- ===================== RLS Y POLITICAS =====================
 
@@ -4198,7 +4386,7 @@ alter table public.drills enable row level security;
 create policy "drills_delete" on public.drills as permissive for delete to public
   using ((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'owner'::text, 'coach'::text, 'head_coach'::text]))))));
+  WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['admin'::text, 'owner'::text, 'coach'::text]))))));
 create policy "drills_insert" on public.drills as permissive for insert to public
   with check ((club_id IN ( SELECT profiles.club_id
    FROM profiles
@@ -4613,6 +4801,22 @@ create policy "member_modules_write" on public.member_modules as permissive for 
    FROM profiles
   WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
 
+alter table public.role_default_modules enable row level security;
+create policy "role_default_modules_select" on public.role_default_modules as permissive for select to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE (profiles.id = auth.uid()))));
+create policy "role_default_modules_super_all" on public.role_default_modules as permissive for all to authenticated
+  using (is_super_admin())
+  with check (is_super_admin());
+create policy "role_default_modules_write" on public.role_default_modules as permissive for all to public
+  using ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))))
+  with check ((club_id IN ( SELECT profiles.club_id
+   FROM profiles
+  WHERE ((profiles.id = auth.uid()) AND ((profiles.role = ANY (ARRAY['admin'::text, 'owner'::text])) OR (profiles.club_role = ANY (ARRAY['admin'::text, 'owner'::text])))))));
+
 alter table public.member_teams enable row level security;
 create policy "member_teams_member_all" on public.member_teams as permissive for all to authenticated
   using ((club_id = ( SELECT profiles.club_id
@@ -4998,7 +5202,17 @@ create policy "Club members can update tasks" on public.tasks as permissive for 
 create policy "Team-scoped task visibility" on public.tasks as permissive for select to public
   using (((club_id IN ( SELECT profiles.club_id
    FROM profiles
-  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()) OR (assigned_to = auth.uid()) OR ((assigned_roles IS NOT NULL) AND (get_user_role() = ANY (assigned_roles)) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))))));
+  WHERE (profiles.id = auth.uid()))) AND (has_full_planning_access() OR (team_id IN ( SELECT my_team_ids() AS my_team_ids)) OR (created_by = auth.uid()) OR (assigned_to = auth.uid()) OR ((assigned_roles IS NOT NULL) AND (my_role() = ANY (assigned_roles)) AND (team_id IN ( SELECT my_team_ids() AS my_team_ids))))));
+
+alter table public.task_reminders enable row level security;
+create policy "Club members can view task_reminders" on public.task_reminders as permissive for select to public
+  using ((club_id = get_user_club_id()));
+create policy "Club members can insert task_reminders" on public.task_reminders as permissive for insert to public
+  with check ((club_id = get_user_club_id()));
+create policy "Club members can update task_reminders" on public.task_reminders as permissive for update to public
+  using ((club_id = get_user_club_id()));
+create policy "Club members can delete task_reminders" on public.task_reminders as permissive for delete to public
+  using ((club_id = get_user_club_id()));
 
 alter table public.taxonomy_aliases enable row level security;
 create policy "Anyone authenticated can read taxonomy_aliases" on public.taxonomy_aliases as permissive for select to authenticated
