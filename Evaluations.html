@@ -2685,7 +2685,18 @@
         + '<div id="evHfvpProfile" style="padding:14px 16px 16px"></div></div>';
     }
 
-    root.innerHTML = cards + vbtCard + hfvpCard + chart + table;
+    // Sprint splits: 4 metrics + per-segment speeds + parciales + squad percentile (from notes JSON).
+    var sprintCard = '';
+    var sprintData = (_ev.test && _ev.test.key === 'sprint') ? evParseComputed(latest.notes) : null;
+    if (_ev.test && _ev.test.key === 'sprint') {
+      sprintCard =
+        '<div class="ft-card" style="margin-bottom:14px"><div class="ft-chart-head">'
+        + '<div class="ft-chart-title">' + esc(tt('evaluations.sprint_profile','Sprint splits ·')) + ' ' + esc(label) + '</div>'
+        + '<div class="ft-legend"><span class="it" style="color:var(--cm-fg-muted)">' + esc(tt('evaluations.latest_dot','latest ·')) + ' ' + ftDateFull(latest.iso) + '</span></div></div>'
+        + '<div id="evSprintProfile" style="padding:14px 16px 16px"></div></div>';
+    }
+
+    root.innerHTML = cards + vbtCard + hfvpCard + sprintCard + chart + table;
 
     if (_ev.test && _ev.test.key === 'vbt') {
       var host = document.getElementById('evVbtProfile');
@@ -2699,6 +2710,13 @@
       if (hhost) {
         if (hfvpProfileData && typeof renderHFVPProfile === 'function') renderHFVPProfile(hfvpProfileData, hhost);
         else hhost.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_hfvp_profile_stored','No H-FVP profile stored for this entry.'))+'</div>';
+      }
+    }
+    if (_ev.test && _ev.test.key === 'sprint') {
+      var sphost = document.getElementById('evSprintProfile');
+      if (sphost) {
+        if (sprintData && sprintData.metrics && typeof renderSprintResult === 'function') renderSprintResult(sprintData, sphost, latest.value);
+        else sphost.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_sprint_stored','No sprint metrics stored for this entry.'))+'</div>';
       }
     }
   }
@@ -3316,6 +3334,65 @@
     var di = document.getElementById('evSprintDists');
     if (di) di.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); applySprintDists(); } });
   })();
+
+  // English ordinal for the percentile badge (72 → "72nd"); es/pt use the raw {pct}.
+  function sprintOrd(n){ var s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
+  // Result panel for a Sprint splits entry (L2): 4 metric KPI cards + splits table +
+  // per-segment speeds + squad percentile of Vmax (via window.evalBench). Clones the
+  // H-FVP hero styling (pa-result-hero / KPI cards / pa-zone-table). computed = {splits, metrics}.
+  async function renderSprintResult(computed, host, playerVmax){
+    var m = computed.metrics, splits = computed.splits || [];
+    if (!m || !m.vmax){ host.innerHTML = '<div style="padding:16px;text-align:center;color:var(--cm-fg-faint);font:var(--cm-body-sm)">'+esc(tt('evaluations.no_sprint_stored','No sprint metrics stored for this entry.'))+'</div>'; return; }
+    var f2 = function(x){ return (x == null || isNaN(x)) ? '—' : Number(x).toFixed(2); };
+
+    var kpis = [
+      [ tt('evaluations.sprint_vmax','Vmax'), f2(m.vmax.v_kmh), 'km/h', esc(m.vmax.from_m + '–' + m.vmax.to_m + ' m') ],
+      [ tt('evaluations.sprint_flying','Flying speed'), m.flying ? f2(m.flying.v_kmh) : '—', m.flying ? 'km/h' : '',
+        m.flying ? esc(m.flying.from_m + '–' + m.flying.to_m + ' m') : esc(tt('evaluations.sprint_need_3','≥3 splits')) ],
+      [ tt('evaluations.sprint_accel','Acceleration'), f2(m.accel.v_kmh), 'km/h',
+        esc(tt('evaluations.sprint_accel_desc','first {d} m · {t} s', { d: m.accel.to_m, t: f2(m.accel.time_s) })) ],
+    ];
+    var kpiGrid = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">'
+      + kpis.map(function(a){
+          return '<div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:8px;padding:8px 10px">'
+            + '<div style="font:500 10px/1 var(--cm-font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cm-fg-muted)">'+esc(a[0])+'</div>'
+            + '<div style="font:700 17px/1 var(--cm-font-sans);color:var(--cm-fg-strong);margin-top:3px">'+a[1]+'<span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-left:2px">'+esc(a[2])+'</span></div>'
+            + '<div style="font:500 10px/1.3 var(--cm-font-sans);color:var(--cm-fg-faint);margin-top:2px">'+a[3]+'</div></div>';
+        }).join('')
+      + '</div>';
+
+    var splitRows = splits.map(function(s){ return '<tr><td>'+esc(s.distance_m + ' m')+'</td><td class="r">'+esc(Number(s.time_s).toFixed(2) + ' s')+'</td></tr>'; }).join('');
+    var segRows = (m.segments || []).map(function(s){ return '<tr><td>'+esc(s.from_m + '–' + s.to_m + ' m')+'</td><td class="r">'+esc(s.v_kmh.toFixed(2))+'</td><td class="r">'+esc(s.v_ms.toFixed(2))+'</td></tr>'; }).join('');
+
+    // Squad percentile of Vmax (compares evaluations.value = Vmax). ≥4 peers required.
+    var pctHtml = esc(tt('evaluations.sprint_pct_na','Not enough peers to compare (need ≥4)'));
+    try {
+      if (window.evalBench && _teamId){
+        var stats = await window.evalBench.categoryStats({ clubId: _clubId, teamId: _teamId, types: ['Sprint splits'] });
+        var s = stats && stats['Sprint splits'];
+        if (s && s.values && s.values.length >= 4 && playerVmax != null){
+          var pct = window.evalBench.percentile(Number(playerVmax), s, false);
+          pctHtml = esc(tt('evaluations.sprint_pct_line', '{ord} percentile in squad · {n} peers', { ord: sprintOrd(pct), pct: pct, n: s.values.length }));
+        }
+      }
+    } catch (e) {}
+
+    host.innerHTML =
+      '<div class="pa-result-hero">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+      +   '<span style="font:600 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);text-transform:uppercase;letter-spacing:.05em">'+esc(tt('evaluations.sprint_vmax','Vmax'))+'</span>'
+      +   '<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;background:var(--cm-accent-soft);border:1px solid var(--cm-accent);font:600 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-strong)"><i class="ti ti-chart-bar" style="font-size:13px"></i>'+pctHtml+'</span>'
+      + '</div>'
+      + kpiGrid
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      +   '<div><div class="pa-section" style="margin-top:0">'+esc(tt('evaluations.sprint_splits_label','Splits'))+'</div>'
+      +     '<div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden"><table class="pa-zone-table"><thead><tr><th>'+esc(tt('evaluations.sprint_distance','Distance'))+'</th><th class="r">'+esc(tt('evaluations.sprint_time','Time'))+'</th></tr></thead><tbody>'+splitRows+'</tbody></table></div></div>'
+      +   '<div><div class="pa-section" style="margin-top:0">'+esc(tt('evaluations.sprint_segment_speeds','Segment speeds'))+'</div>'
+      +     '<div style="background:var(--cm-surface);border:1px solid var(--cm-border-soft);border-radius:8px;overflow:hidden"><table class="pa-zone-table"><thead><tr><th>'+esc(tt('evaluations.sprint_segment','Segment'))+'</th><th class="r">km/h</th><th class="r">m/s</th></tr></thead><tbody>'+segRows+'</tbody></table></div></div>'
+      + '</div>'
+      + '</div>';
+  }
 
 
   // ════════════════════════════════════════════════════════════════════
