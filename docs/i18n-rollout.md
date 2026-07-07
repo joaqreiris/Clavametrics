@@ -136,7 +136,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 ### Fase 2 — App de uso diario
 - ✅ Wellness.html
 - ✅ Hub.html
-- ⬜ Squad.html
+- ✅ Squad.html
 - ⬜ Calendar.html
 - ⬜ Daily Planning.html
 - ⬜ RPE.html
