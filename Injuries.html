@@ -304,19 +304,19 @@
     <div class="hub-topbar">
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
-        <select id="injTeamSelect" onchange="injOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+        <select id="injTeamSelect" onchange="injOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
       </div>
       <div class="hub-crumb">
-        <i class="ti ti-home"></i><span>Medical</span><span class="sep">/</span>
-        <span style="color:var(--cm-fg-strong);font-weight:600">Injuries</span>
+        <i class="ti ti-home"></i><span data-i18n="injuries.medical">Medical</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="injuries.title">Injuries</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input id="injSearch" placeholder="Search player, body area, type…" aria-label="Search injuries">
+        <input id="injSearch" placeholder="Search player, body area, type…" data-i18n-ph="injuries.searchPh" aria-label="Search injuries" data-i18n-attr="aria-label:injuries.searchAria">
       </div>
       <div class="actions">
-        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" title="Notifications" data-i18n-attr="title:injuries.notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings data-i18n-attr="title:injuries.settings"><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -324,60 +324,60 @@
 
       <header class="inj-head">
         <div>
-          <h1>Injuries</h1>
+          <h1 data-i18n="injuries.title">Injuries</h1>
           <div class="ctx" id="injCtx"><strong>— active</strong> · loading…</div>
         </div>
         <div class="meta">
-          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i>Export report</button>
-          <button class="cm-btn is-primary is-sm" onclick="openLogModal()"><i class="ti ti-plus" style="font-size:14px"></i>Log injury</button>
+          <button class="cm-btn is-outline is-sm"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="injuries.export_report">Export report</span></button>
+          <button class="cm-btn is-primary is-sm" onclick="openLogModal()"><i class="ti ti-plus" style="font-size:14px"></i><span data-i18n="injuries.log_injury">Log injury</span></button>
         </div>
       </header>
 
       <!-- KPIs -->
       <div class="inj-kpis">
         <div class="inj-kpi">
-          <div class="inj-kpi-l"><i class="ti ti-bandage"></i>Active cases</div>
+          <div class="inj-kpi-l"><i class="ti ti-bandage"></i><span data-i18n="injuries.active_cases">Active cases</span></div>
           <div class="inj-kpi-v" id="kpiInjActive">—</div>
-          <div class="inj-kpi-t" id="kpiActiveT"><span>Loading…</span></div>
+          <div class="inj-kpi-t" id="kpiActiveT"><span data-i18n="common.loading">Loading…</span></div>
           <svg class="inj-kpi-sp" viewBox="0 0 84 36" preserveAspectRatio="none">
             <polyline points="0,28 14,22 28,24 42,18 56,16 70,12 84,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </div>
         <div class="inj-kpi">
-          <div class="inj-kpi-l"><i class="ti ti-clock"></i>Days lost MTD</div>
-          <div class="inj-kpi-v" id="kpiDaysLost">— <sub>days</sub></div>
-          <div class="inj-kpi-t" id="kpiDaysT"><span>Across active injuries</span></div>
+          <div class="inj-kpi-l"><i class="ti ti-clock"></i><span data-i18n="injuries.days_lost_mtd">Days lost MTD</span></div>
+          <div class="inj-kpi-v" id="kpiDaysLost">— <sub data-i18n="injuries.days">days</sub></div>
+          <div class="inj-kpi-t" id="kpiDaysT"><span data-i18n="injuries.across_active_injuries">Across active injuries</span></div>
         </div>
         <div class="inj-kpi">
-          <div class="inj-kpi-l"><i class="ti ti-target-arrow"></i>Avg time to RTP</div>
-          <div class="inj-kpi-v" id="kpiAvgRTP">— <sub>days</sub></div>
-          <div class="inj-kpi-t"><span>Resolved injuries</span></div>
+          <div class="inj-kpi-l"><i class="ti ti-target-arrow"></i><span data-i18n="injuries.avg_time_to_rtp">Avg time to RTP</span></div>
+          <div class="inj-kpi-v" id="kpiAvgRTP">— <sub data-i18n="injuries.days">days</sub></div>
+          <div class="inj-kpi-t"><span data-i18n="injuries.resolved_injuries">Resolved injuries</span></div>
         </div>
         <div class="inj-kpi">
-          <div class="inj-kpi-l"><i class="ti ti-flame"></i>Re-injury rate</div>
-          <div class="inj-kpi-v" id="kpiReinjury">—% <sub>3-mo</sub></div>
-          <div class="inj-kpi-t"><span>Same player + area</span></div>
+          <div class="inj-kpi-l"><i class="ti ti-flame"></i><span data-i18n="injuries.re_injury_rate">Re-injury rate</span></div>
+          <div class="inj-kpi-v" id="kpiReinjury">—% <sub data-i18n="injuries.three_mo">3-mo</sub></div>
+          <div class="inj-kpi-t"><span data-i18n="injuries.same_player_area">Same player + area</span></div>
         </div>
       </div>
 
       <!-- Toolbar -->
       <div class="inj-toolbar">
         <div class="inj-segs">
-          <button class="inj-seg is-on" data-tab="active"><i class="ti ti-activity-heartbeat"></i>Active<span class="ct">—</span></button>
-          <button class="inj-seg" data-tab="returning"><i class="ti ti-progress"></i>Returning<span class="ct">—</span></button>
-          <button class="inj-seg" data-tab="cleared"><i class="ti ti-check"></i>Resolved<span class="ct">—</span></button>
+          <button class="inj-seg is-on" data-tab="active"><i class="ti ti-activity-heartbeat"></i><span data-i18n="injuries.tab_active">Active</span><span class="ct">—</span></button>
+          <button class="inj-seg" data-tab="returning"><i class="ti ti-progress"></i><span data-i18n="injuries.tab_returning">Returning</span><span class="ct">—</span></button>
+          <button class="inj-seg" data-tab="cleared"><i class="ti ti-check"></i><span data-i18n="injuries.tab_resolved">Resolved</span><span class="ct">—</span></button>
         </div>
         <div style="width:1px;height:24px;background:var(--cm-border)"></div>
-        <button class="inj-pill is-on" data-sev="all">All<span class="ct">—</span></button>
-        <button class="inj-pill" data-sev="minor"><span class="dot" style="background:var(--cm-warning)"></span>Minor<span class="ct">—</span></button>
-        <button class="inj-pill" data-sev="moderate"><span class="dot" style="background:#EA580C"></span>Moderate<span class="ct">—</span></button>
-        <button class="inj-pill" data-sev="severe"><span class="dot" style="background:var(--cm-danger)"></span>Severe<span class="ct">—</span></button>
+        <button class="inj-pill is-on" data-sev="all"><span data-i18n="common.all">All</span><span class="ct">—</span></button>
+        <button class="inj-pill" data-sev="minor"><span class="dot" style="background:var(--cm-warning)"></span><span data-i18n="injuries.sev_minor">Minor</span><span class="ct">—</span></button>
+        <button class="inj-pill" data-sev="moderate"><span class="dot" style="background:#EA580C"></span><span data-i18n="injuries.sev_moderate">Moderate</span><span class="ct">—</span></button>
+        <button class="inj-pill" data-sev="severe"><span class="dot" style="background:var(--cm-danger)"></span><span data-i18n="injuries.sev_severe">Severe</span><span class="ct">—</span></button>
         <div class="grow"></div>
         <div class="inj-region-wrap">
-          <button class="cm-btn is-outline is-sm" id="btnBodyRegion"><i class="ti ti-filter" style="font-size:14px"></i>Body region</button>
+          <button class="cm-btn is-outline is-sm" id="btnBodyRegion"><i class="ti ti-filter" style="font-size:14px"></i><span data-i18n="injuries.body_region">Body region</span></button>
           <div class="inj-region-dd" id="bodyRegionDd"></div>
         </div>
-        <button class="cm-btn is-outline is-sm" id="btnSort"><i class="ti ti-sort-descending-2" style="font-size:14px"></i>Sort: severity</button>
+        <button class="cm-btn is-outline is-sm" id="btnSort"><i class="ti ti-sort-descending-2" style="font-size:14px"></i><span data-i18n="injuries.sort_severity">Sort: severity</span></button>
       </div>
 
       <!-- Grid -->
@@ -386,13 +386,13 @@
         <!-- LEFT: injury list -->
         <div class="inj-card" id="injCardActive">
           <div class="inj-card-h">
-            <h3>Injury cases</h3>
+            <h3 data-i18n="injuries.injury_cases">Injury cases</h3>
             <span class="sub" id="injListSub">—</span>
             <div class="right">
               <button class="cm-icon-btn"><i class="ti ti-arrows-sort"></i></button>
             </div>
           </div>
-          <div id="injListBody" style="padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading injuries…</div>
+          <div id="injListBody" style="padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)" data-i18n="injuries.loading_injuries">Loading injuries…</div>
         </div>
 
         <!-- RIGHT rail -->
@@ -401,57 +401,57 @@
           <!-- Body map -->
           <div class="inj-card" id="bodyMapCard">
             <div class="inj-card-h">
-              <h3>Squad body map</h3>
+              <h3 data-i18n="injuries.squad_body_map">Squad body map</h3>
               <span class="sub" id="bodyMapSub">active injuries</span>
               <div class="right">
                 <div class="body-sex-toggle" id="bodySex">
-                  <button data-sex="male" class="is-on"><i class="ti ti-gender-male"></i>Male</button>
-                  <button data-sex="female"><i class="ti ti-gender-female"></i>Female</button>
+                  <button data-sex="male" class="is-on"><i class="ti ti-gender-male"></i><span data-i18n="injuries.male">Male</span></button>
+                  <button data-sex="female"><i class="ti ti-gender-female"></i><span data-i18n="injuries.female">Female</span></button>
                 </div>
               </div>
             </div>
             <div class="rail-bodymap-wrap">
               <div class="body-figure">
                 <div class="body-stage">
-                  <img class="body-img" id="bodyAnt" src="assets/body-male-front.png" alt="Anterior">
+                  <img class="body-img" id="bodyAnt" src="assets/body-male-front.png" alt="Anterior" data-i18n-attr="alt:injuries.anterior">
                   <svg class="body-hotspots" id="svgAnt" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet"></svg>
                 </div>
-                <span class="lbl">Anterior</span>
+                <span class="lbl" data-i18n="injuries.anterior">Anterior</span>
               </div>
               <div class="body-figure">
                 <div class="body-stage">
-                  <img class="body-img" id="bodyPost" src="assets/body-male-back.png" alt="Posterior">
+                  <img class="body-img" id="bodyPost" src="assets/body-male-back.png" alt="Posterior" data-i18n-attr="alt:injuries.posterior">
                   <svg class="body-hotspots" id="svgPost" viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet"></svg>
                 </div>
-                <span class="lbl">Posterior</span>
+                <span class="lbl" data-i18n="injuries.posterior">Posterior</span>
               </div>
             </div>
             <div style="padding:0 16px 14px;display:flex;align-items:center;gap:14px;font:500 11.5px/1 var(--cm-font-sans);color:var(--cm-fg-muted);flex-wrap:wrap">
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-danger)"></span>Active</span>
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#EA580C"></span>History</span>
-              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:16px;border-radius:50%;background:var(--cm-danger);display:inline-flex;align-items:center;justify-content:center;font:600 8px/1 var(--cm-font-mono);color:#fff">3</span>Count</span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:var(--cm-danger)"></span><span data-i18n="injuries.legend_active">Active</span></span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#EA580C"></span><span data-i18n="injuries.legend_history">History</span></span>
+              <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:16px;border-radius:50%;background:var(--cm-danger);display:inline-flex;align-items:center;justify-content:center;font:600 8px/1 var(--cm-font-mono);color:#fff">3</span><span data-i18n="injuries.legend_count">Count</span></span>
             </div>
           </div>
 
           <!-- Type breakdown -->
           <div class="inj-card">
             <div class="inj-card-h">
-              <h3>Type breakdown</h3>
+              <h3 data-i18n="injuries.type_breakdown">Type breakdown</h3>
               <span class="sub" id="typeBreakSub">season to date</span>
               <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
             </div>
             <div class="inj-card-b" id="injTypeBreakdown">
-              <div style="text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:12px 0">Loading…</div>
+              <div style="text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:12px 0" data-i18n="common.loading">Loading…</div>
             </div>
           </div>
 
           <!-- Recently resolved -->
           <div class="inj-card">
             <div class="inj-card-h">
-              <h3>Recently resolved</h3>
+              <h3 data-i18n="injuries.recently_resolved">Recently resolved</h3>
               <span class="sub" id="injResolvedSub">—</span>
             </div>
-            <div id="injResolved" style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center">Loading…</div>
+            <div id="injResolved" style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center" data-i18n="common.loading">Loading…</div>
           </div>
 
         </div>
@@ -465,54 +465,54 @@
 <div class="inj-modal-ov" id="modalLogInj">
   <div class="inj-modal-box">
     <div class="inj-modal-h">
-      <h3 id="modalLogInjTitle">Log injury</h3>
-      <button onclick="closeLogModal()" title="Close"><i class="ti ti-x"></i></button>
+      <h3 id="modalLogInjTitle" data-i18n="injuries.log_injury">Log injury</h3>
+      <button onclick="closeLogModal()" title="Close" data-i18n-attr="title:common.close"><i class="ti ti-x"></i></button>
     </div>
     <div class="inj-modal-body">
       <div class="inj-2col">
-        <div class="cm-field"><label class="cm-label" for="logPlayer">Player *</label><select id="logPlayer" class="cm-input"><option value="">Select player…</option></select></div>
-        <div class="cm-field"><label class="cm-label" for="logType">Diagnosis *</label><input id="logType" class="cm-input" placeholder="e.g. Distensión isquiotibial derecha"></div>
+        <div class="cm-field"><label class="cm-label" for="logPlayer" data-i18n="injuries.player_req">Player *</label><select id="logPlayer" class="cm-input"><option value="" data-i18n="injuries.select_player">Select player…</option></select></div>
+        <div class="cm-field"><label class="cm-label" for="logType" data-i18n="injuries.diagnosis_req">Diagnosis *</label><input id="logType" class="cm-input" placeholder="e.g. Distensión isquiotibial derecha" data-i18n-ph="injuries.diagnosis_ph"></div>
       </div>
       <div class="inj-2col">
-        <div class="cm-field"><label class="cm-label" for="logCategory">Injury category *</label>
+        <div class="cm-field"><label class="cm-label" for="logCategory" data-i18n="injuries.injury_category_req">Injury category *</label>
           <select id="logCategory" class="cm-input">
-            <option value="">Select category…</option>
-            <option value="muscular">Muscular</option>
-            <option value="acl">ACL</option>
-            <option value="ligament">Ligament (non-ACL)</option>
-            <option value="tendon">Tendon</option>
-            <option value="bone">Bone</option>
-            <option value="other">Other</option>
+            <option value="" data-i18n="injuries.select_category">Select category…</option>
+            <option value="muscular" data-i18n="injuries.cat_muscular">Muscular</option>
+            <option value="acl" data-i18n="injuries.cat_acl">ACL</option>
+            <option value="ligament" data-i18n="injuries.cat_ligament">Ligament (non-ACL)</option>
+            <option value="tendon" data-i18n="injuries.cat_tendon">Tendon</option>
+            <option value="bone" data-i18n="injuries.cat_bone">Bone</option>
+            <option value="other" data-i18n="injuries.cat_other">Other</option>
           </select>
         </div>
-        <div class="cm-field"><label class="cm-label" for="logSev">Severity *</label>
+        <div class="cm-field"><label class="cm-label" for="logSev" data-i18n="injuries.severity_req">Severity *</label>
           <select id="logSev" class="cm-input">
-            <option value="">Select…</option>
-            <option value="minor">Minor</option>
-            <option value="moderate">Moderate</option>
-            <option value="severe">Severe</option>
+            <option value="" data-i18n="injuries.select">Select…</option>
+            <option value="minor" data-i18n="injuries.sev_minor">Minor</option>
+            <option value="moderate" data-i18n="injuries.sev_moderate">Moderate</option>
+            <option value="severe" data-i18n="injuries.sev_severe">Severe</option>
           </select>
         </div>
       </div>
       <div class="inj-2col">
-        <div class="cm-field"><label class="cm-label" for="logStart">Start date *</label><input id="logStart" type="date" class="cm-input"></div>
-        <div class="cm-field"><label class="cm-label" for="logReturn">Est. return</label><input id="logReturn" type="date" class="cm-input"><div id="logReturnHint" style="display:none;margin-top:4px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-accent)"></div></div>
+        <div class="cm-field"><label class="cm-label" for="logStart" data-i18n="injuries.start_date_req">Start date *</label><input id="logStart" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" for="logReturn" data-i18n="injuries.est_return">Est. return</label><input id="logReturn" type="date" class="cm-input"><div id="logReturnHint" style="display:none;margin-top:4px;font:500 11px/1.3 var(--cm-font-sans);color:var(--cm-accent)"></div></div>
       </div>
       <div class="inj-2col">
-        <div class="cm-field"><label class="cm-label" for="logMechanism">Mechanism</label>
+        <div class="cm-field"><label class="cm-label" for="logMechanism" data-i18n="injuries.mechanism">Mechanism</label>
           <select id="logMechanism" class="cm-input">
-            <option value="">Select…</option>
-            <option value="contact">Contact</option>
-            <option value="non-contact">Non-contact</option>
-            <option value="overuse">Overuse</option>
-            <option value="training">Training load</option>
-            <option value="other">Other</option>
+            <option value="" data-i18n="injuries.select">Select…</option>
+            <option value="contact" data-i18n="injuries.mech_contact">Contact</option>
+            <option value="non-contact" data-i18n="injuries.mech_non_contact">Non-contact</option>
+            <option value="overuse" data-i18n="injuries.mech_overuse">Overuse</option>
+            <option value="training" data-i18n="injuries.mech_training_load">Training load</option>
+            <option value="other" data-i18n="injuries.mech_other">Other</option>
           </select>
         </div>
         <div class="cm-field">
-          <label class="cm-label" for="logAreaSel">Body area</label>
+          <label class="cm-label" for="logAreaSel" data-i18n="injuries.body_area">Body area</label>
           <select id="logAreaSel" class="cm-input">
-            <option value="">Select area…</option>
+            <option value="" data-i18n="injuries.select_area">Select area…</option>
             <optgroup label="Head &amp; Neck"><option>Head</option><option>Neck</option></optgroup>
             <optgroup label="Upper body"><option>Right Shoulder</option><option>Left Shoulder</option><option>Right Arm</option><option>Left Arm</option><option>Right Elbow</option><option>Left Elbow</option><option>Right Wrist</option><option>Left Wrist</option><option>Chest</option><option>Upper Back</option><option>Abdomen</option><option>Lower Back</option></optgroup>
             <optgroup label="Hip &amp; Groin"><option>Groin</option><option>Right Hip</option><option>Left Hip</option><option>Right Glute</option><option>Left Glute</option></optgroup>
@@ -528,7 +528,7 @@
       <div id="bamicSection" style="display:none">
         <div class="inj-2col">
           <div class="cm-field">
-            <label class="cm-label" for="logBamic">BAMIC Grade (Pollock 2014)</label>
+            <label class="cm-label" for="logBamic" data-i18n="injuries.bamic_grade_label">BAMIC Grade (Pollock 2014)</label>
             <select id="logBamic" class="cm-input">
               <option value="">Not classified</option>
               <optgroup label="Grade 0 — No structural injury">
@@ -556,8 +556,8 @@
             </select>
           </div>
           <div id="bamicAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
-            <strong style="margin-bottom:3px">⚠ Intratendinous injury</strong>
-            Elevated re-injury risk. Extended rehabilitation recommended.
+            <strong style="margin-bottom:3px" data-i18n="injuries.alert_intratendinous_title">⚠ Intratendinous injury</strong>
+            <span data-i18n="injuries.alert_intratendinous_body">Elevated re-injury risk. Extended rehabilitation recommended.</span>
           </div>
         </div>
       </div>
@@ -566,17 +566,17 @@
       <div id="ligamentSection" style="display:none">
         <div class="inj-2col">
           <div class="cm-field">
-            <label class="cm-label" for="logLigamentGrade">Ligament grade (JOSPT / Kerkhoffs 2012)</label>
+            <label class="cm-label" for="logLigamentGrade" data-i18n="injuries.ligament_grade_label">Ligament grade (JOSPT / Kerkhoffs 2012)</label>
             <select id="logLigamentGrade" class="cm-input">
-              <option value="">Not classified</option>
+              <option value="" data-i18n="injuries.not_classified">Not classified</option>
               <option value="grade_i">Grade I — Mild stretch, no tear (RTP: 7-14 days)</option>
               <option value="grade_ii">Grade II — Partial tear, moderate instability (RTP: 14-35 days)</option>
               <option value="grade_iii">Grade III — Complete tear, significant instability (RTP: 35-77 days)</option>
             </select>
           </div>
           <div id="ligamentGradeAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
-            <strong style="margin-bottom:3px">⚠ Grade III ligament tear</strong>
-            Significant instability. Consider surgical evaluation. Extended rehabilitation required.
+            <strong style="margin-bottom:3px" data-i18n="injuries.alert_ligament_iii_title">⚠ Grade III ligament tear</strong>
+            <span data-i18n="injuries.alert_ligament_iii_body">Significant instability. Consider surgical evaluation. Extended rehabilitation required.</span>
           </div>
         </div>
       </div>
@@ -585,17 +585,17 @@
       <div id="tendonSection" style="display:none">
         <div class="inj-2col">
           <div class="cm-field">
-            <label class="cm-label" for="logTendonStage">Tendon continuum stage (Cook &amp; Purdam 2009)</label>
+            <label class="cm-label" for="logTendonStage" data-i18n="injuries.tendon_stage_label">Tendon continuum stage (Cook &amp; Purdam 2009)</label>
             <select id="logTendonStage" class="cm-input">
-              <option value="">Not classified</option>
+              <option value="" data-i18n="injuries.not_classified">Not classified</option>
               <option value="reactive">Stage 1 — Reactive tendinopathy · acute overload, reversible (RTP: 14-28 days)</option>
               <option value="disrepair">Stage 2 — Tendon disrepair · structural changes (RTP: 28-56 days)</option>
               <option value="degenerative">Stage 3 — Degenerative tendinopathy · advanced, poor reversibility (RTP: 56-120 days)</option>
             </select>
           </div>
           <div id="tendonDegenerativeAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.30);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:#B45309">
-            <strong style="margin-bottom:3px">⚠ Degenerative tendinopathy</strong>
-            Poor reversibility. High recurrence risk. Long-term load management required.
+            <strong style="margin-bottom:3px" data-i18n="injuries.alert_tendon_degen_title">⚠ Degenerative tendinopathy</strong>
+            <span data-i18n="injuries.alert_tendon_degen_body">Poor reversibility. High recurrence risk. Long-term load management required.</span>
           </div>
         </div>
       </div>
@@ -604,28 +604,28 @@
       <div id="boneSection" style="display:none">
         <div class="inj-2col">
           <div class="cm-field">
-            <label class="cm-label" for="logBoneType">Fracture classification</label>
+            <label class="cm-label" for="logBoneType" data-i18n="injuries.fracture_classification_label">Fracture classification</label>
             <select id="logBoneType" class="cm-input">
-              <option value="">Not classified</option>
+              <option value="" data-i18n="injuries.not_classified">Not classified</option>
               <option value="stress_low">Stress fracture — Low risk (tibia, fibula) · RTP: 42-56 days</option>
               <option value="stress_high">Stress fracture — High risk (navicular, 5th MT, femoral neck) · RTP: 84-120 days</option>
               <option value="complete">Complete fracture · RTP: 84 days (orthopedic review required)</option>
             </select>
           </div>
           <div id="boneHighRiskAlert" style="display:none;flex-direction:column;justify-content:center;padding:10px 12px;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.25);border-radius:8px;font:500 12px/1.5 var(--cm-font-sans);color:var(--cm-danger)">
-            <strong style="margin-bottom:3px">⚠ High-risk stress fracture</strong>
-            Orthopedic evaluation required before return to loading. May require surgical intervention.
+            <strong style="margin-bottom:3px" data-i18n="injuries.alert_bone_highrisk_title">⚠ High-risk stress fracture</strong>
+            <span data-i18n="injuries.alert_bone_highrisk_body">Orthopedic evaluation required before return to loading. May require surgical intervention.</span>
           </div>
         </div>
       </div>
 
       <!-- Visual body selector -->
       <div>
-        <div class="cm-label" style="margin-bottom:6px">Click area on body map to select</div>
+        <div class="cm-label" style="margin-bottom:6px" data-i18n="injuries.click_area_body_map">Click area on body map to select</div>
         <div class="inj-body-sel">
           <div class="inj-body-fig">
             <div class="inj-body-stage">
-              <img src="assets/body-male-front.png" alt="Anterior">
+              <img src="assets/body-male-front.png" alt="Anterior" data-i18n-attr="alt:injuries.anterior">
               <svg viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet" id="formMapAnt">
                 <rect class="bz" data-area="Head"           x="42" y="2"   width="16" height="14" rx="3"/>
                 <rect class="bz" data-area="Neck"           x="44" y="16"  width="12" height="9"  rx="2"/>
@@ -652,11 +652,11 @@
                 <rect class="bz" data-area="Left Foot"      x="54" y="180" width="14" height="16" rx="3"/>
               </svg>
             </div>
-            <span class="lbl" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Anterior</span>
+            <span class="lbl" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)" data-i18n="injuries.anterior">Anterior</span>
           </div>
           <div class="inj-body-fig">
             <div class="inj-body-stage">
-              <img src="assets/body-male-back.png" alt="Posterior">
+              <img src="assets/body-male-back.png" alt="Posterior" data-i18n-attr="alt:injuries.posterior">
               <svg viewBox="0 0 100 200" preserveAspectRatio="xMidYMid meet" id="formMapPost">
                 <rect class="bz" data-area="Head"            x="42" y="2"   width="16" height="14" rx="3"/>
                 <rect class="bz" data-area="Neck"            x="44" y="16"  width="12" height="9"  rx="2"/>
@@ -678,16 +678,16 @@
                 <rect class="bz" data-area="Left Foot"       x="54" y="178" width="14" height="18" rx="3"/>
               </svg>
             </div>
-            <span class="lbl" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)">Posterior</span>
+            <span class="lbl" style="font:500 10px/1 var(--cm-font-mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--cm-fg-muted)" data-i18n="injuries.posterior">Posterior</span>
           </div>
         </div>
       </div>
 
-      <div class="cm-field"><label class="cm-label" for="logNotes">Notes / mechanism details</label><textarea id="logNotes" class="cm-input" rows="2" placeholder="Mechanism, context, initial assessment…"></textarea></div>
+      <div class="cm-field"><label class="cm-label" for="logNotes" data-i18n="injuries.notes_mechanism_details">Notes / mechanism details</label><textarea id="logNotes" class="cm-input" rows="2" placeholder="Mechanism, context, initial assessment…" data-i18n-ph="injuries.notes_mechanism_ph"></textarea></div>
     </div>
     <div class="inj-modal-foot">
-      <button class="cm-btn is-ghost" onclick="closeLogModal()">Cancel</button>
-      <button class="cm-btn is-primary" onclick="saveInjury()"><i class="ti ti-check" style="font-size:14px"></i>Save injury</button>
+      <button class="cm-btn is-ghost" onclick="closeLogModal()" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary" onclick="saveInjury()"><i class="ti ti-check" style="font-size:14px"></i><span data-i18n="injuries.save_injury">Save injury</span></button>
     </div>
   </div>
 </div>
@@ -696,17 +696,17 @@
 <div class="inj-modal-ov" id="modalDischarge">
   <div class="inj-modal-box" style="max-width:420px">
     <div class="inj-modal-h">
-      <h3>Discharge player</h3>
+      <h3 data-i18n="injuries.discharge_player">Discharge player</h3>
       <button onclick="closeDischarge()"><i class="ti ti-x"></i></button>
     </div>
     <div class="inj-modal-body">
       <p id="disInfo" style="color:var(--cm-fg-muted);font:var(--cm-body-sm);margin:0"></p>
-      <div class="cm-field"><label class="cm-label" for="disDate">Return date</label><input id="disDate" type="date" class="cm-input"></div>
-      <div class="cm-field"><label class="cm-label" for="disNotes">Discharge notes</label><textarea id="disNotes" class="cm-input" rows="2" placeholder="Final assessment, restrictions…"></textarea></div>
+      <div class="cm-field"><label class="cm-label" for="disDate" data-i18n="injuries.return_date">Return date</label><input id="disDate" type="date" class="cm-input"></div>
+      <div class="cm-field"><label class="cm-label" for="disNotes" data-i18n="injuries.discharge_notes">Discharge notes</label><textarea id="disNotes" class="cm-input" rows="2" placeholder="Final assessment, restrictions…" data-i18n-ph="injuries.discharge_notes_ph"></textarea></div>
     </div>
     <div class="inj-modal-foot">
-      <button class="cm-btn is-ghost" onclick="closeDischarge()">Cancel</button>
-      <button class="cm-btn is-primary" style="background:var(--cm-success);border-color:var(--cm-success)" onclick="confirmDischarge()"><i class="ti ti-check" style="font-size:14px"></i>Confirm discharge</button>
+      <button class="cm-btn is-ghost" onclick="closeDischarge()" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-primary" style="background:var(--cm-success);border-color:var(--cm-success)" onclick="confirmDischarge()"><i class="ti ti-check" style="font-size:14px"></i><span data-i18n="injuries.confirm_discharge">Confirm discharge</span></button>
     </div>
   </div>
 </div>
@@ -716,13 +716,13 @@
   <div class="inj-modal-box" style="width:min(640px,96vw)">
     <div class="inj-modal-h">
       <div style="flex:1;min-width:0">
-        <h3 id="phModalTitle">Phase</h3>
+        <h3 id="phModalTitle" data-i18n="injuries.phase">Phase</h3>
         <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span id="phModalStatusBadge" class="ph-status-badge"></span>
           <span id="phModalDates" style="font:500 11.5px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"></span>
         </div>
       </div>
-      <button onclick="closePhaseModal()" title="Close"><i class="ti ti-x"></i></button>
+      <button onclick="closePhaseModal()" title="Close" data-i18n-attr="title:common.close"><i class="ti ti-x"></i></button>
     </div>
     <div class="inj-modal-body">
 
@@ -736,15 +736,16 @@
 
       <!-- Criteria checkboxes -->
       <div>
-        <div class="cm-label">Progression criteria</div>
+        <div class="cm-label" data-i18n="injuries.progression_criteria">Progression criteria</div>
         <div id="phModalCriteria" class="ph-criteria-list"></div>
       </div>
 
       <!-- Override justification (shown when criteria not all met) -->
       <div id="phModalOverride" style="display:none">
-        <label class="cm-label" for="phOverrideReason">Override justification <span style="color:var(--cm-danger)">*</span></label>
+        <label class="cm-label" for="phOverrideReason"><span data-i18n="injuries.override_justification">Override justification</span> <span style="color:var(--cm-danger)">*</span></label>
         <textarea id="phOverrideReason" class="cm-input" rows="2"
           placeholder="Clinical justification for advancing without all criteria met…"
+          data-i18n-ph="injuries.override_justification_ph"
           oninput="updatePhaseCompleteBtn()"></textarea>
       </div>
 
@@ -752,36 +753,36 @@
       <div id="phRevertSection" style="display:none;flex-direction:column;gap:8px;padding:12px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.2);border-radius:8px">
         <div style="font:600 12.5px/1 var(--cm-font-sans);color:var(--cm-danger)" id="phRevertLabel">Revert phase status</div>
         <div class="cm-field" style="margin:0">
-          <label class="cm-label" for="phRevertReason">Reason for reverting <span style="color:var(--cm-danger)">*</span></label>
-          <textarea id="phRevertReason" class="cm-input" rows="2" placeholder="Clinical reason for reverting this phase status…"></textarea>
+          <label class="cm-label" for="phRevertReason"><span data-i18n="injuries.reason_for_reverting">Reason for reverting</span> <span style="color:var(--cm-danger)">*</span></label>
+          <textarea id="phRevertReason" class="cm-input" rows="2" placeholder="Clinical reason for reverting this phase status…" data-i18n-ph="injuries.reason_for_reverting_ph"></textarea>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button class="cm-btn is-ghost is-sm" onclick="cancelRevert()">Cancel</button>
-          <button class="cm-btn is-sm" style="background:var(--cm-danger);border-color:var(--cm-danger);color:#fff" onclick="confirmRevert()"><i class="ti ti-check" style="font-size:13px"></i>Confirm revert</button>
+          <button class="cm-btn is-ghost is-sm" onclick="cancelRevert()" data-i18n="common.cancel">Cancel</button>
+          <button class="cm-btn is-sm" style="background:var(--cm-danger);border-color:var(--cm-danger);color:#fff" onclick="confirmRevert()"><i class="ti ti-check" style="font-size:13px"></i><span data-i18n="injuries.confirm_revert">Confirm revert</span></button>
         </div>
       </div>
 
       <!-- Notes -->
       <div class="cm-field">
-        <label class="cm-label" for="phModalNotes">Physiotherapist notes</label>
-        <textarea id="phModalNotes" class="cm-input" rows="2" placeholder="Progress notes, clinical observations…"></textarea>
+        <label class="cm-label" for="phModalNotes" data-i18n="injuries.physiotherapist_notes">Physiotherapist notes</label>
+        <textarea id="phModalNotes" class="cm-input" rows="2" placeholder="Progress notes, clinical observations…" data-i18n-ph="injuries.progress_notes_ph"></textarea>
       </div>
 
       <!-- Dates grid -->
       <div class="inj-2col">
-        <div class="cm-field"><label class="cm-label">Est. start</label><input id="phModalEstStart" type="date" class="cm-input" style="opacity:0.7" readonly></div>
-        <div class="cm-field"><label class="cm-label">Est. end</label><input id="phModalEstEnd" type="date" class="cm-input" style="opacity:0.7" readonly></div>
+        <div class="cm-field"><label class="cm-label" data-i18n="injuries.est_start">Est. start</label><input id="phModalEstStart" type="date" class="cm-input" style="opacity:0.7" readonly></div>
+        <div class="cm-field"><label class="cm-label" data-i18n="injuries.est_end">Est. end</label><input id="phModalEstEnd" type="date" class="cm-input" style="opacity:0.7" readonly></div>
       </div>
       <div class="inj-2col">
-        <div class="cm-field"><label class="cm-label">Actual start</label><input id="phModalActStart" type="date" class="cm-input"></div>
-        <div class="cm-field"><label class="cm-label">Actual end</label><input id="phModalActEnd" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" data-i18n="injuries.actual_start">Actual start</label><input id="phModalActStart" type="date" class="cm-input"></div>
+        <div class="cm-field"><label class="cm-label" data-i18n="injuries.actual_end">Actual end</label><input id="phModalActEnd" type="date" class="cm-input"></div>
       </div>
     </div>
     <div class="inj-modal-foot">
-      <button class="cm-btn is-ghost" id="phBtnRevert" onclick="openRevertSection()" style="display:none;margin-right:auto;color:var(--cm-danger)"><i class="ti ti-arrow-back-up" style="font-size:13px"></i>Revert status</button>
-      <button class="cm-btn is-ghost" onclick="closePhaseModal()">Cancel</button>
-      <button class="cm-btn is-outline" id="phBtnInProgress" onclick="savePhaseStatus('in_progress')">Mark as in progress</button>
-      <button class="cm-btn is-primary" id="phBtnComplete" onclick="savePhaseStatus('done')" disabled>Mark as complete</button>
+      <button class="cm-btn is-ghost" id="phBtnRevert" onclick="openRevertSection()" style="display:none;margin-right:auto;color:var(--cm-danger)"><i class="ti ti-arrow-back-up" style="font-size:13px"></i><span data-i18n="injuries.revert_status">Revert status</span></button>
+      <button class="cm-btn is-ghost" onclick="closePhaseModal()" data-i18n="common.cancel">Cancel</button>
+      <button class="cm-btn is-outline" id="phBtnInProgress" onclick="savePhaseStatus('in_progress')" data-i18n="injuries.mark_in_progress">Mark as in progress</button>
+      <button class="cm-btn is-primary" id="phBtnComplete" onclick="savePhaseStatus('done')" disabled data-i18n="injuries.mark_complete">Mark as complete</button>
     </div>
   </div>
 </div>
@@ -789,7 +790,7 @@
 <!-- ═══════════════════ BODY MAP POPOVER ═══════════════════ -->
 <div id="bodyMapPopover" class="bmp-pop" style="display:none" onclick="event.stopPropagation()">
   <div class="bmp-pop-h">
-    <span class="bmp-pop-title" id="bmpAreaTitle">Area</span>
+    <span class="bmp-pop-title" id="bmpAreaTitle" data-i18n="injuries.area">Area</span>
     <button class="bmp-pop-close" onclick="hideBodyAreaPopover()"><i class="ti ti-x"></i></button>
   </div>
   <div id="bmpList"></div>
@@ -799,6 +800,19 @@
 <div id="settings-host"></div>
 
 <script>
+// ═══════════════ i18n HELPER ═══════════════
+function tt(key, fallbackEN, vars) {
+  const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+  return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+}
+// Locale-aware short date (day + month) for injury/phase UI; underlying dates stay data.
+function ttFmtDate(dateStr, opts) {
+  if (!dateStr) return '—';
+  const lang = (window.CM_I18N && CM_I18N.current) || 'en';
+  try { return new Date(dateStr).toLocaleDateString(lang, opts || { day:'numeric', month:'short' }); }
+  catch (e) { return new Date(dateStr).toLocaleDateString('en-GB', opts || { day:'numeric', month:'short' }); }
+}
+
 // ═══════════════ STATE ═══════════════
 let _allInjuries = [], _phasesMap = {}, _players = [], _playersMap = {};
 let _currentTab = 'active', _currentSev = 'all', _currentSort = 'severity', _currentRegion = null;
@@ -1138,6 +1152,11 @@ const PROTOCOL_REFS = {
 const CATEGORY_LABELS = {
   muscular:'Muscular', acl:'ACL', ligament:'Ligament', tendon:'Tendon', bone:'Bone', other:'Other'
 };
+// Translate a category value (data key) for display only; value stays canonical.
+function catLabel(cat) {
+  if (!cat) return '';
+  return tt('injuries.catchip_' + cat, CATEGORY_LABELS[cat] || cat);
+}
 
 function getProtocol(injuryType, injuryCategory, subClassification) {
   // Category-based selection takes priority
@@ -1235,9 +1254,7 @@ function calcEstimatedReturn(startDate, bamicGrade, injuryType, injuryCategory, 
 }
 
 function fmtHintDate(dateStr) {
-  return dateStr
-    ? new Date(dateStr).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})
-    : '';
+  return dateStr ? ttFmtDate(dateStr, { day:'numeric', month:'short', year:'numeric' }) : '';
 }
 
 function isMuscular(t) {
@@ -1343,17 +1360,17 @@ function openPhaseModal(phaseId, injId) {
   _phaseModalInjId   = injId;
 
   // Header
-  document.getElementById('phModalTitle').textContent = `Phase ${ph.phase_number} — ${ph.phase_name}`;
+  document.getElementById('phModalTitle').textContent = tt('injuries.phase_n_name', `Phase ${ph.phase_number} — ${ph.phase_name}`, { n: ph.phase_number, name: ph.phase_name });
   const badge = document.getElementById('phModalStatusBadge');
   badge.className = `ph-status-badge ${ph.status}`;
-  badge.textContent = ph.status === 'in_progress' ? 'In progress' : ph.status === 'done' ? 'Completed' : 'Pending';
+  badge.textContent = ph.status === 'in_progress' ? tt('injuries.status_in_progress','In progress') : ph.status === 'done' ? tt('injuries.status_completed','Completed') : tt('injuries.status_pending','Pending');
 
-  const fmtD = d => d ? new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '—';
-  document.getElementById('phModalDates').textContent = `Est. ${fmtD(ph.start_date)} → ${fmtD(ph.end_date)}`;
+  const fmtD = d => ttFmtDate(d);
+  document.getElementById('phModalDates').textContent = tt('injuries.est_range', `Est. ${fmtD(ph.start_date)} → ${fmtD(ph.end_date)}`, { start: fmtD(ph.start_date), end: fmtD(ph.end_date) });
 
-  // Description
+  // Description (clinical reference content — kept in English as medical data)
   document.getElementById('phModalDesc').textContent =
-    PHASE_DESCRIPTIONS[ph.phase_name] || 'Rehabilitation phase. Follow clinical criteria for progression.';
+    PHASE_DESCRIPTIONS[ph.phase_name] || tt('injuries.phase_desc_fallback','Rehabilitation phase. Follow clinical criteria for progression.');
 
   // ACL protocol warnings
   const injForPhase = _allInjuries.find(i => i.id === injId);
@@ -1365,10 +1382,10 @@ function openPhaseModal(phaseId, injId) {
   const aclWarnEl   = document.getElementById('phModalAclWarn');
   const aclWarnTxt  = document.getElementById('phModalAclWarnText');
   if (isAcl && ph.phase_number === 7) {
-    aclWarnTxt.textContent = 'ACL Return to competition requires medical staff final clearance. Ensure all functional tests passed.';
+    aclWarnTxt.textContent = tt('injuries.acl_warn_final','ACL Return to competition requires medical staff final clearance. Ensure all functional tests passed.');
     aclWarnEl.style.display = '';
   } else if (isAcl && daysEarlyAcl > 0) {
-    aclWarnTxt.textContent = `Advancing ${daysEarlyAcl}d ahead of minimum timeline for ACL protocol. Confirm all criteria are met before proceeding.`;
+    aclWarnTxt.textContent = tt('injuries.acl_warn_early', `Advancing ${daysEarlyAcl}d ahead of minimum timeline for ACL protocol. Confirm all criteria are met before proceeding.`, { days: daysEarlyAcl });
     aclWarnEl.style.display = '';
   } else {
     aclWarnEl.style.display = 'none';
@@ -1417,7 +1434,7 @@ function renderPhaseCriteria(ph) {
   }
 
   if (!items.length) {
-    container.innerHTML = '<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:4px 0">No specific criteria defined for this phase.</div>';
+    container.innerHTML = `<div style="color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:4px 0">${tt('injuries.no_criteria_defined','No specific criteria defined for this phase.')}</div>`;
     document.getElementById('phBtnComplete').disabled = false;
     return;
   }
@@ -1559,12 +1576,12 @@ async function savePhaseStatus(status) {
 
   // Sort toggle
   const SORT_OPTS = ['severity','date','days'];
-  const SORT_LBLS = ['Sort: severity','Sort: date','Sort: days'];
+  const sortLbl = i => [tt('injuries.sort_severity','Sort: severity'), tt('injuries.sort_date','Sort: date'), tt('injuries.sort_days','Sort: days')][i];
   let _si = 0;
   document.getElementById('btnSort')?.addEventListener('click', () => {
     _si = (_si + 1) % 3;
     _currentSort = SORT_OPTS[_si];
-    document.getElementById('btnSort').innerHTML = `<i class="ti ti-sort-descending-2" style="font-size:14px"></i>${SORT_LBLS[_si]}`;
+    document.getElementById('btnSort').innerHTML = `<i class="ti ti-sort-descending-2" style="font-size:14px"></i><span>${sortLbl(_si)}</span>`;
     applyFilters();
   });
 
@@ -1697,13 +1714,13 @@ async function savePhaseStatus(status) {
     if (est) {
       document.getElementById('logReturn').value = est;
       let lbl;
-      if (injCategory === 'acl' || /acl|cruciate/i.test(injType||'')) lbl = 'ACL protocol (270 days)';
+      if (injCategory === 'acl' || /acl|cruciate/i.test(injType||'')) lbl = tt('injuries.est_lbl_acl','ACL protocol (270 days)');
       else if (injCategory === 'muscular' && bamicGrade)               lbl = `BAMIC ${bamicGrade}`;
       else if (injCategory === 'ligament' && subCls)                   lbl = `Ligament ${subCls.replace('grade_','Grade ').toUpperCase()} — Kerkhoffs 2012`;
       else if (injCategory === 'tendon'   && subCls)                   lbl = `Tendon Stage ${subCls === 'reactive' ? '1' : subCls === 'disrepair' ? '2' : '3'} — Cook & Purdam`;
       else if (injCategory === 'bone'     && subCls)                   lbl = `Bone — ${subCls === 'stress_low' ? 'stress low risk' : subCls === 'stress_high' ? 'stress high risk' : 'complete fracture'}`;
-      else lbl = 'protocol estimate';
-      if (hintEl) { hintEl.textContent = `Estimated: ${fmtHintDate(est)} — ${lbl}`; hintEl.style.display = ''; }
+      else lbl = tt('injuries.est_lbl_generic','protocol estimate');
+      if (hintEl) { hintEl.textContent = tt('injuries.estimated_hint', `Estimated: ${fmtHintDate(est)} — ${lbl}`, { date: fmtHintDate(est), label: lbl }); hintEl.style.display = ''; }
     } else {
       if (hintEl) hintEl.style.display = 'none';
     }
@@ -1794,14 +1811,14 @@ function updateKPIs() {
     const to   = e > today   ? today   : e;
     if (from <= to) daysLost += Math.round((to - from) / 86400000);
   });
-  document.getElementById('kpiDaysLost').innerHTML = `${daysLost} <sub>days</sub>`;
+  document.getElementById('kpiDaysLost').innerHTML = `${daysLost} <sub>${tt('injuries.days','days')}</sub>`;
 
   // Avg RTP
   const resolved = _allInjuries.filter(i => (i.status === 'cleared' || i.status === 'resolved') && i.returned_date && i.start_date);
   const avgRTP = resolved.length
     ? Math.round(resolved.reduce((s, i) => s + Math.max(0, Math.round((new Date(i.returned_date) - new Date(i.start_date)) / 86400000)), 0) / resolved.length)
     : null;
-  document.getElementById('kpiAvgRTP').innerHTML = avgRTP != null ? `${avgRTP} <sub>days</sub>` : '— <sub>days</sub>';
+  document.getElementById('kpiAvgRTP').innerHTML = avgRTP != null ? `${avgRTP} <sub>${tt('injuries.days','days')}</sub>` : `— <sub>${tt('injuries.days','days')}</sub>`;
 
   // Re-injury rate (same player + same body_area, prior injury exists in last 90d)
   const ninety = new Date(today); ninety.setDate(today.getDate() - 90);
@@ -1812,7 +1829,7 @@ function updateKPIs() {
       new Date(o.start_date) < new Date(i.start_date))
   ).length;
   const rate = recent.length ? Math.round(reInj / recent.length * 100) : 0;
-  document.getElementById('kpiReinjury').innerHTML = `${rate}% <sub>3-mo</sub>`;
+  document.getElementById('kpiReinjury').innerHTML = `${rate}% <sub>${tt('injuries.three_mo','3-mo')}</sub>`;
 
   // Context header
   const nextWk = new Date(today); nextWk.setDate(today.getDate() + 7);
@@ -1822,7 +1839,9 @@ function updateKPIs() {
     return d >= today && d <= nextWk;
   }).length;
   const ctxEl = document.getElementById('injCtx');
-  if (ctxEl) ctxEl.innerHTML = `<strong>${active.length} active</strong> · ${soon} expected back this week · <strong>Days lost MTD</strong> ${daysLost}`;
+  if (ctxEl) ctxEl.innerHTML = tt('injuries.ctx_header',
+    `<strong>${active.length} active</strong> · ${soon} expected back this week · <strong>Days lost MTD</strong> ${daysLost}`,
+    { active: active.length, soon, daysLost });
 }
 
 // ═══════════════ DERIVED: RETURNING ═══════════════
@@ -1892,8 +1911,10 @@ function updateTabCounts() {
     if (!ct) return;
     ct.textContent = sev === 'all' ? inTab.length : inTab.filter(i => i.severity === sev).length;
   });
+  const _tabN = counts[_currentTab] ?? 0;
+  const _tabDisp = { active: tt('injuries.tab_active','Active'), returning: tt('injuries.tab_returning','Returning'), resolved: tt('injuries.tab_resolved','Resolved'), cleared: tt('injuries.tab_resolved','Resolved') }[_currentTab] || _currentTab;
   document.getElementById('injListSub').textContent =
-    `${counts[_currentTab] ?? 0} player${(counts[_currentTab] ?? 0) !== 1 ? 's' : ''} · ${_currentTab}`;
+    tt('injuries.list_sub', `${_tabN} player${_tabN !== 1 ? 's' : ''} · ${_currentTab}`, { count: _tabN, tab: _tabDisp });
 }
 
 function matchesTab(inj) {
@@ -1930,7 +1951,7 @@ function renderInjuries(list) {
   if (!body) return;
   if (!list.length) {
     body.style.cssText = 'padding:32px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)';
-    body.textContent = 'No injuries in this category.';
+    body.textContent = tt('injuries.none_in_category','No injuries in this category.');
     return;
   }
   body.style.cssText = '';
@@ -1940,7 +1961,7 @@ function renderInjuries(list) {
 // ═══════════════ CARD RENDERER ═══════════════
 function injCard(inj) {
   const pl  = inj.players || _playersMap[inj.player_id] || {};
-  const name     = `${pl.first_name || ''} ${pl.last_name || ''}`.trim() || 'Unknown Player';
+  const name     = `${pl.first_name || ''} ${pl.last_name || ''}`.trim() || tt('injuries.unknown_player','Unknown Player');
   const initials = name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
   const pos      = pl.position || '';
   const jersey   = pl.number ? ' · #' + pl.number : '';
@@ -1952,16 +1973,17 @@ function injCard(inj) {
   const totalD   = expected ? Math.max(1, Math.round((expected - start) / 86400000)) : null;
   const pct      = totalD ? Math.min(100, Math.round(elapsed / totalD * 100)) : 0;
   const daysLeft = expected ? Math.max(0, Math.round((expected - today) / 86400000)) : null;
-  const fmtDate  = d => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short' }) : '—';
+  const fmtDate  = d => ttFmtDate(d);
 
+  // severity value stays canonical (data-sev / DB); only the visible label is translated
   const sevClass = { minor:'minor', moderate:'moderate', severe:'severe' }[inj.severity] || 'moderate';
-  const sevLabel = inj.severity ? inj.severity.charAt(0).toUpperCase() + inj.severity.slice(1) : '—';
+  const sevLabel = inj.severity ? tt('injuries.sev_' + inj.severity, inj.severity.charAt(0).toUpperCase() + inj.severity.slice(1)) : '—';
 
   const _tab       = getInjuryTab(inj);
   const _tabColor  = _tab === 'active' ? 'var(--cm-danger)' : _tab === 'returning' ? '#EA580C' : 'var(--cm-success)';
   const _injPhs    = _phasesMap[inj.id];
   const _allPhsDone = _injPhs?.length && _injPhs.every(p => p.status === 'done') && inj.status === 'active';
-  const _tabLabel  = _allPhsDone ? 'Pending discharge' : _tab === 'active' ? 'Active' : _tab === 'returning' ? 'Returning' : 'Resolved';
+  const _tabLabel  = _allPhsDone ? tt('injuries.pending_discharge','Pending discharge') : _tab === 'active' ? tt('injuries.tab_active','Active') : _tab === 'returning' ? tt('injuries.tab_returning','Returning') : tt('injuries.tab_resolved','Resolved');
 
   // Phase timeline
   const phasesDB = _phasesMap[inj.id];
@@ -1974,13 +1996,13 @@ function injCard(inj) {
       const todayD  = new Date(); todayD.setHours(0,0,0,0);
       const estEnd  = ph.end_date ? new Date(ph.end_date) : null;
       const ahead   = ph.status === 'in_progress' && estEnd && todayD < estEnd;
-      const sTxt    = ph.status === 'done' ? 'Completed'
-        : ph.status === 'in_progress' ? `Day ${elapsed}${ahead ? ' · ahead' : ''}`
-        : dateTxt ? `est. ${dateTxt}` : 'Pending';
+      const sTxt    = ph.status === 'done' ? tt('injuries.tile_completed','Completed')
+        : ph.status === 'in_progress' ? tt('injuries.tile_day', `Day ${elapsed}`, { day: elapsed }) + (ahead ? ' · ' + tt('injuries.tile_ahead','ahead') : '')
+        : dateTxt ? tt('injuries.tile_est', `est. ${dateTxt}`, { date: dateTxt }) : tt('injuries.status_pending','Pending');
       const crTxt   = ph.criteria ? ph.criteria.slice(0,52) + (ph.criteria.length > 52 ? '…' : '') : '';
-      const tipAttr = ph.criteria ? ` title="${ph.criteria.replace(/"/g,'&quot;')}"` : ' title="Click to advance"';
+      const tipAttr = ph.criteria ? ` title="${ph.criteria.replace(/"/g,'&quot;')}"` : ` title="${tt('injuries.click_to_advance','Click to advance')}"`;
       return `<div class="tl-phase ${cls}" data-phase-id="${ph.id}" data-inj-id="${inj.id}"${tipAttr}>
-        <div class="h"><i class="ti ${icon}"></i><span class="ph">Ph.${ph.phase_number}</span></div>
+        <div class="h"><i class="ti ${icon}"></i><span class="ph">${tt('injuries.ph_abbr','Ph.')}${ph.phase_number}</span></div>
         <div class="l">${ph.phase_name}</div>
         <div class="s">${sTxt}</div>
         ${crTxt ? `<div class="cr">${crTxt}</div>` : ''}
@@ -1996,9 +2018,9 @@ function injCard(inj) {
       const isActive = !isDone && pct >= cumStart;
       const cls  = isDone ? 'done' : isActive ? 'active' : '';
       const icon = isDone ? 'ti-check' : (PHASE_TYPE_ICONS[ph.type] || 'ti-circle');
-      const sTxt = isDone ? 'Completed' : isActive ? `Day ${elapsed}` : totalD ? `est. ${fmtDate(new Date(start.getTime() + (cumEnd/100)*totalD*86400000))}` : '';
+      const sTxt = isDone ? tt('injuries.tile_completed','Completed') : isActive ? tt('injuries.tile_day', `Day ${elapsed}`, { day: elapsed }) : totalD ? tt('injuries.tile_est', `est. ${fmtDate(new Date(start.getTime() + (cumEnd/100)*totalD*86400000))}`, { date: fmtDate(new Date(start.getTime() + (cumEnd/100)*totalD*86400000)) }) : '';
       return `<div class="tl-phase ${cls}">
-        <div class="h"><i class="ti ${icon}"></i><span class="ph">Ph.${idx+1}</span></div>
+        <div class="h"><i class="ti ${icon}"></i><span class="ph">${tt('injuries.ph_abbr','Ph.')}${idx+1}</span></div>
         <div class="l">${ph.name}</div>
         <div class="s">${sTxt}</div>
       </div>`;
@@ -2013,7 +2035,7 @@ function injCard(inj) {
 
   const canDischarge = inj.status === 'active';
   const dischargeBtn = canDischarge
-    ? `<button class="cm-btn is-outline is-sm" style="color:var(--cm-success);border-color:var(--cm-success)" onclick="openDischarge('${inj.id}')"><i class="ti ti-check" style="font-size:14px"></i>Discharge</button>`
+    ? `<button class="cm-btn is-outline is-sm" style="color:var(--cm-success);border-color:var(--cm-success)" onclick="openDischarge('${inj.id}')"><i class="ti ti-check" style="font-size:14px"></i>${tt('injuries.discharge','Discharge')}</button>`
     : '';
 
   // Context menu SVG icons
@@ -2032,22 +2054,22 @@ function injCard(inj) {
         </div>
       </div>
       <div class="inj-fact">
-        <span class="inj-fact-l">Diagnosis</span>
-        <span class="inj-fact-v">${inj.injury_type || '—'} <small>${inj.body_area || ''}</small>${inj.injury_category ? `<span class="inj-cat-chip">${CATEGORY_LABELS[inj.injury_category] || inj.injury_category}</span>` : ''}</span>
+        <span class="inj-fact-l">${tt('injuries.diagnosis','Diagnosis')}</span>
+        <span class="inj-fact-v">${inj.injury_type || '—'} <small>${inj.body_area || ''}</small>${inj.injury_category ? `<span class="inj-cat-chip">${catLabel(inj.injury_category)}</span>` : ''}</span>
       </div>
       <div class="inj-fact">
-        <span class="inj-fact-l">Severity</span>
+        <span class="inj-fact-l">${tt('injuries.severity','Severity')}</span>
         <span><span class="inj-severity ${sevClass}"><span class="d"></span>${sevLabel}</span></span>
       </div>
       <div class="inj-row-actions">
         ${dischargeBtn}
         <div class="inj-ctx-wrap">
-          <button class="cm-icon-btn inj-ctx-btn" data-id="${inj.id}" title="Options"><i class="ti ti-dots"></i></button>
+          <button class="cm-icon-btn inj-ctx-btn" data-id="${inj.id}" title="${tt('injuries.options','Options')}"><i class="ti ti-dots"></i></button>
           <div class="inj-ctx-dd" id="ctx-${inj.id}">
-            <button class="inj-ctx-item" data-action="edit" data-id="${inj.id}">${svgPencil}<span>Edit</span></button>
-            <button class="inj-ctx-item" data-action="add-treatment" data-id="${inj.id}">${svgSteth}<span>Add treatment</span></button>
-            <button class="inj-ctx-item" data-action="view-treats" data-id="${inj.id}">${svgList}<span>View treatments</span></button>
-            <button class="inj-ctx-item is-danger" data-action="delete" data-id="${inj.id}">${svgTrash}<span>Delete</span></button>
+            <button class="inj-ctx-item" data-action="edit" data-id="${inj.id}">${svgPencil}<span>${tt('common.edit','Edit')}</span></button>
+            <button class="inj-ctx-item" data-action="add-treatment" data-id="${inj.id}">${svgSteth}<span>${tt('injuries.add_treatment','Add treatment')}</span></button>
+            <button class="inj-ctx-item" data-action="view-treats" data-id="${inj.id}">${svgList}<span>${tt('injuries.view_treatments','View treatments')}</span></button>
+            <button class="inj-ctx-item is-danger" data-action="delete" data-id="${inj.id}">${svgTrash}<span>${tt('common.delete','Delete')}</span></button>
           </div>
         </div>
       </div>
@@ -2056,13 +2078,13 @@ function injCard(inj) {
     const prior = getPriorInjury(inj);
     if (!prior) return '';
     const days = Math.round((new Date(inj.start_date) - new Date(prior.start_date)) / 86400000);
-    const catLabel = inj.injury_category ? (CATEGORY_LABELS[inj.injury_category] || inj.injury_category) : (prior.injury_type || inj.injury_type || 'injury');
-    return `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>Re-injury risk — previous ${catLabel} injury ${days}d ago. Extended protocol and load monitoring recommended.</span></div>`;
+    const catTxt = inj.injury_category ? catLabel(inj.injury_category) : (prior.injury_type || inj.injury_type || tt('injuries.injury_word','injury'));
+    return `<div style="padding:4px 16px 10px"><span class="inj-reinjury-badge"><i class="ti ti-alert-triangle" style="font-size:11px"></i>${tt('injuries.reinjury_badge', `Re-injury risk — previous ${catTxt} injury ${days}d ago. Extended protocol and load monitoring recommended.`, { cat: catTxt, days })}</span></div>`;
   })()}
     <div class="inj-timeline">${tlHtml}</div>
 
     <div class="inj-progress-row">
-      <span class="inj-progress-l">RTP progress</span>
+      <span class="inj-progress-l">${tt('injuries.rtp_progress','RTP progress')}</span>
       <span class="inj-progress-bar"><span class="inj-progress-fill ${fillCls}" style="width:${phasesDB ? donePct : pct}%"></span></span>
       <span class="inj-progress-r">${phasesDB ? donePct : pct}%${daysToRTP != null ? ` · <span style="font-size:10.5px;color:var(--cm-fg-muted)">~${daysToRTP}d</span>` : ''}</span>
     </div>
@@ -2070,19 +2092,19 @@ function injCard(inj) {
     <div class="inj-rtp">
       <div class="b">
         <div class="ic"><i class="ti ti-calendar-event"></i></div>
-        <div><div class="l">Injury date</div><div class="v">${fmtDate(inj.start_date)}</div></div>
+        <div><div class="l">${tt('injuries.injury_date','Injury date')}</div><div class="v">${fmtDate(inj.start_date)}</div></div>
       </div>
       <div class="b">
         <div class="ic" style="color:var(--cm-warning);background:var(--cm-warning-bg);border-color:var(--cm-warning-bd)"><i class="ti ti-target"></i></div>
-        <div><div class="l">Est. return</div><div class="v warn">${expected ? fmtDate(expected) + (daysLeft != null ? ' · ' + daysLeft + 'd' : '') : '—'}</div></div>
+        <div><div class="l">${tt('injuries.est_return','Est. return')}</div><div class="v warn">${expected ? fmtDate(expected) + (daysLeft != null ? ' · ' + daysLeft + 'd' : '') : '—'}</div></div>
       </div>
       <div class="b">
         <div class="ic"><i class="ti ti-clock"></i></div>
-        <div><div class="l">Days injured</div><div class="v">${elapsed}</div></div>
+        <div><div class="l">${tt('injuries.days_injured','Days injured')}</div><div class="v">${elapsed}</div></div>
       </div>
       <div class="b">
         <div class="ic"><i class="ti ti-notes"></i></div>
-        <div><div class="l">Notes</div><div class="v">${inj.notes ? inj.notes.slice(0,60) + (inj.notes.length > 60 ? '…':'') : '—'}</div></div>
+        <div><div class="l">${tt('injuries.notes','Notes')}</div><div class="v">${inj.notes ? inj.notes.slice(0,60) + (inj.notes.length > 60 ? '…':'') : '—'}</div></div>
       </div>
     </div>
     ${(() => {
@@ -2100,14 +2122,14 @@ function injCard(inj) {
         : proto === PROTOCOLS.bone_stress_low ? 'Bone — Stress fracture low risk'
         : proto === PROTOCOLS.bone_stress_high ? 'Bone — Stress fracture high risk'
         : proto === PROTOCOLS.bone_complete ? 'Bone — Complete fracture'
-        : 'Generic protocol';
-      if (!refs.length && protoLabel === 'Generic protocol') return '';
+        : tt('injuries.generic_protocol','Generic protocol');
+      if (!refs.length && proto === PROTOCOLS.generic) return '';
       const refList = refs.map(r => `<li>${r}</li>`).join('');
       return `<div class="inj-proto-row">
         <i class="ti ti-flask" style="font-size:12px"></i>
-        <span class="lbl">Protocol:</span>
+        <span class="lbl">${tt('injuries.protocol_label','Protocol:')}</span>
         <span class="name">${protoLabel}</span>
-        ${refs.length ? `<div class="inj-ref-wrap"><button class="inj-ref-btn" aria-label="References">ⓘ</button><div class="inj-ref-tooltip"><div class="ref-title">References</div><ul>${refList}</ul></div></div>` : ''}
+        ${refs.length ? `<div class="inj-ref-wrap"><button class="inj-ref-btn" aria-label="${tt('injuries.references','References')}">ⓘ</button><div class="inj-ref-tooltip"><div class="ref-title">${tt('injuries.references','References')}</div><ul>${refList}</ul></div></div>` : ''}
       </div>`;
     })()}
   </div>`;
@@ -2136,7 +2158,7 @@ function renderBodyMap() {
     const r        = n >= 3 ? 5.5 : 4;
     const areaKey  = group.area.toLowerCase().trim();
     const pulseCls = hasActive ? ' pulse' : '';
-    const tip      = `${group.area} · ${group.active} active · ${group.total} total`;
+    const tip      = tt('injuries.bodymap_tip', `${group.area} · ${group.active} active · ${group.total} total`, { area: group.area, active: group.active, total: group.total });
 
     const dot = (cx, cy) => {
       if (n <= 1) {
@@ -2155,7 +2177,7 @@ function renderBodyMap() {
   document.getElementById('svgAnt').innerHTML  = antHtml;
   document.getElementById('svgPost').innerHTML = postHtml;
   const activeCount = _allInjuries.filter(i => i.status !== 'cleared' && i.status !== 'resolved').length;
-  document.getElementById('bodyMapSub').textContent = `${activeCount} active · season`;
+  document.getElementById('bodyMapSub').textContent = tt('injuries.bodymap_sub', `${activeCount} active · season`, { count: activeCount });
 }
 
 // ═══════════════ BODY MAP POPOVER ═══════════════
@@ -2166,10 +2188,10 @@ function showBodyAreaPopover(areaKey, clientX, clientY) {
     .sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
   if (!injuries.length) return;
 
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '—';
-  const SEV_LABEL = { minor:'Minor', moderate:'Moderate', severe:'Severe' };
+  const fmtDate = d => ttFmtDate(d, { day:'numeric', month:'short', year:'numeric' });
+  const SEV_LABEL = { minor: tt('injuries.sev_minor','Minor'), moderate: tt('injuries.sev_moderate','Moderate'), severe: tt('injuries.sev_severe','Severe') };
   const statusColor = inj => (inj.status === 'cleared' || inj.status === 'resolved') ? 'var(--cm-success)' : getInjuryTab(inj) === 'returning' ? '#EA580C' : 'var(--cm-danger)';
-  const statusLabel = inj => (inj.status === 'cleared' || inj.status === 'resolved') ? 'Resolved' : getInjuryTab(inj) === 'returning' ? 'Returning' : 'Active';
+  const statusLabel = inj => (inj.status === 'cleared' || inj.status === 'resolved') ? tt('injuries.tab_resolved','Resolved') : getInjuryTab(inj) === 'returning' ? tt('injuries.tab_returning','Returning') : tt('injuries.tab_active','Active');
 
   document.getElementById('bmpAreaTitle').textContent = injuries[0].body_area || areaKey;
 
@@ -2178,7 +2200,7 @@ function showBodyAreaPopover(areaKey, clientX, clientY) {
 
   document.getElementById('bmpList').innerHTML = top3.map(inj => {
     const pl = inj.players || _playersMap[inj.player_id] || {};
-    const name     = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'Unknown';
+    const name     = `${pl.first_name||''} ${pl.last_name||''}`.trim() || tt('injuries.unknown','Unknown');
     const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
     const sev      = inj.severity || 'moderate';
     return `<div class="bmp-item" onclick="scrollToInjury('${inj.id}')">
@@ -2193,7 +2215,7 @@ function showBodyAreaPopover(areaKey, clientX, clientY) {
       </div>
     </div>`;
   }).join('') + (extra > 0
-    ? `<div class="bmp-more" onclick="filterByArea('${key}')">View all ${injuries.length} injuries in this area →</div>`
+    ? `<div class="bmp-more" onclick="filterByArea('${key}')">${tt('injuries.view_all_area', `View all ${injuries.length} injuries in this area →`, { count: injuries.length })}</div>`
     : '');
 
   const popover = document.getElementById('bodyMapPopover');
@@ -2249,7 +2271,7 @@ function renderTypeBreakdown() {
   const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5);
   const maxC   = sorted[0]?.[1] || 1;
   const COLORS = ['var(--cm-danger)','#EA580C','var(--cm-warning)','var(--cm-info)','var(--cm-neutral)'];
-  document.getElementById('typeBreakSub').textContent = `${_allInjuries.length} total · all time`;
+  document.getElementById('typeBreakSub').textContent = tt('injuries.type_break_sub', `${_allInjuries.length} total · all time`, { count: _allInjuries.length });
   el.innerHTML = `<div class="type-bars">${sorted.map(([t,c],i) =>
     `<div class="type-row"><span class="l">${t}</span><span class="b"><span class="bf" style="width:${Math.round(c/maxC*80)+20}%;background:${COLORS[i]||'var(--cm-neutral)'}"></span></span><span class="v">${c}</span></div>`
   ).join('')}</div>`;
@@ -2260,30 +2282,30 @@ function renderRecentlyResolved() {
   const el   = document.getElementById('injResolved');
   const sub  = document.getElementById('injResolvedSub');
   const list = _allInjuries.filter(i => i.status === 'cleared' || i.status === 'resolved').slice(0,6);
-  if (sub) sub.textContent = `${_allInjuries.filter(i => i.status === 'cleared' || i.status === 'resolved').length} total`;
+  if (sub) { const _n = _allInjuries.filter(i => i.status === 'cleared' || i.status === 'resolved').length; sub.textContent = tt('injuries.n_total', `${_n} total`, { count: _n }); }
   if (!el) return;
   if (!list.length) {
     el.style.cssText = 'color:var(--cm-fg-muted);font:var(--cm-body-sm);padding:16px;text-align:center';
-    el.textContent = 'No resolved injuries yet.';
+    el.textContent = tt('injuries.no_resolved_yet','No resolved injuries yet.');
     return;
   }
   el.style.cssText = '';
   el.innerHTML = list.map(i => {
     const pl   = i.players || _playersMap[i.player_id] || {};
-    const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'Unknown';
+    const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim() || tt('injuries.unknown','Unknown');
     const initials = pName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     const days  = (i.start_date && i.returned_date)
       ? Math.max(0, Math.round((new Date(i.returned_date) - new Date(i.start_date)) / 86400000))
       : '—';
-    const retDate = i.returned_date ? new Date(i.returned_date).toLocaleDateString('en-GB', {day:'numeric',month:'short'}) : '—';
+    const retDate = i.returned_date ? ttFmtDate(i.returned_date) : '—';
     return `<div class="closed-row">
       <div class="av">${initials}</div>
       <div class="body">
         <div class="name">${pName} · ${i.injury_type || '—'}</div>
-        <div class="meta">Returned ${retDate}</div>
+        <div class="meta">${tt('injuries.returned_date', `Returned ${retDate}`, { date: retDate })}</div>
       </div>
-      <span class="days">${days}<sub>d</sub></span>
-      <span class="ok"><i class="ti ti-check"></i>RTP</span>
+      <span class="days">${days}<sub>${tt('injuries.day_abbr','d')}</sub></span>
+      <span class="ok"><i class="ti ti-check"></i>${tt('injuries.rtp','RTP')}</span>
     </div>`;
   }).join('');
 }
@@ -2293,7 +2315,7 @@ function renderBodyRegionFilter() {
   const dd   = document.getElementById('bodyRegionDd');
   if (!dd) return;
   const areas = [...new Set(_allInjuries.map(i => i.body_area).filter(Boolean))].sort();
-  dd.innerHTML = `<button class="inj-dd-item is-on" data-area="">All regions</button>` +
+  dd.innerHTML = `<button class="inj-dd-item is-on" data-area="">${tt('injuries.all_regions','All regions')}</button>` +
     areas.map(a => `<button class="inj-dd-item" data-area="${a}">${a}</button>`).join('');
   dd.addEventListener('click', e => {
     const btn = e.target.closest('.inj-dd-item');
@@ -2310,7 +2332,7 @@ function renderBodyRegionFilter() {
 function populatePlayerSelect(selId) {
   const sel = document.getElementById(selId);
   if (!sel) return;
-  sel.innerHTML = '<option value="">Select player…</option>';
+  sel.innerHTML = `<option value="">${tt('injuries.select_player','Select player…')}</option>`;
   _players.forEach(p => {
     const o = document.createElement('option');
     o.value = p.id;
@@ -2333,7 +2355,7 @@ function _hideAllSubClsSections() {
 
 function openLogModal() {
   _editingInjuryId = null;
-  document.getElementById('modalLogInjTitle').textContent = 'Log injury';
+  document.getElementById('modalLogInjTitle').textContent = tt('injuries.log_injury','Log injury');
   document.getElementById('logPlayer').value    = '';
   document.getElementById('logType').value      = '';
   document.getElementById('logCategory').value  = '';
@@ -2358,7 +2380,7 @@ function openEditInjury(id) {
   const inj = _allInjuries.find(i => i.id === id);
   if (!inj) return;
   _editingInjuryId = id;
-  document.getElementById('modalLogInjTitle').textContent = 'Edit injury';
+  document.getElementById('modalLogInjTitle').textContent = tt('injuries.edit_injury','Edit injury');
   document.getElementById('logPlayer').value    = inj.player_id || '';
   document.getElementById('logType').value      = inj.injury_type || '';
   document.getElementById('logCategory').value  = inj.injury_category || '';
@@ -2424,7 +2446,7 @@ async function saveInjury() {
   const sub_classification = getSubClsFromModal(injury_category);
 
   if (!player_id || !injury_type || !injury_category || !severity || !start_date) {
-    alert('Please fill in Player, Diagnosis, Injury category, Severity and Start date.');
+    alert(tt('injuries.validation_required','Please fill in Player, Diagnosis, Injury category, Severity and Start date.'));
     return;
   }
 
@@ -2432,14 +2454,14 @@ async function saveInjury() {
 
   if (_editingInjuryId) {
     const { error } = await window.sb.from('injuries').update(payload).eq('id', _editingInjuryId);
-    if (error) { alert('Error updating: ' + error.message); return; }
+    if (error) { alert(tt('injuries.err_updating', `Error updating: ${error.message}`, { msg: error.message })); return; }
     const idx = _allInjuries.findIndex(i => i.id === _editingInjuryId);
     if (idx >= 0) Object.assign(_allInjuries[idx], payload);
   } else {
     const { data: newInj, error } = await window.sb.from('injuries')
       .insert({ ...payload, club_id: _clubId, status: 'active', created_by: _profile?.id || null })
       .select('*, players:player_id(first_name,last_name,number,position)').single();
-    if (error) { alert('Error saving: ' + error.message); return; }
+    if (error) { alert(tt('injuries.err_saving', `Error saving: ${error.message}`, { msg: error.message })); return; }
 
     // Auto-create phases
     try {
@@ -2468,7 +2490,9 @@ function openDischarge(id) {
   const pl   = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
   const pName = `${pl.first_name||''} ${pl.last_name||''}`.trim();
   const info = document.getElementById('disInfo');
-  if (info) info.textContent = pName ? `Clearing injury for ${pName} (${inj.injury_type || 'injury'}).` : 'Confirm discharge.';
+  if (info) info.textContent = pName
+    ? tt('injuries.discharge_info', `Clearing injury for ${pName} (${inj.injury_type || tt('injuries.injury_word','injury')}).`, { name: pName, type: inj.injury_type || tt('injuries.injury_word','injury') })
+    : tt('injuries.discharge_confirm','Confirm discharge.');
   document.getElementById('disDate').value  = new Date().toISOString().split('T')[0];
   document.getElementById('disNotes').value = '';
   document.getElementById('modalDischarge').classList.add('is-open');
@@ -2491,7 +2515,7 @@ async function confirmDischarge() {
   const { error } = await window.sb.from('injuries').update({
     status: 'cleared', returned_date: returnDate, notes
   }).eq('id', _dischargeId);
-  if (error) { alert('Error: ' + error.message); return; }
+  if (error) { alert(tt('injuries.err_generic', `Error: ${error.message}`, { msg: error.message })); return; }
 
   // Mark all phases done
   const phs = _phasesMap[_dischargeId];
@@ -2571,8 +2595,8 @@ function openRevertSection() {
   const phs = _phasesMap[_phaseModalInjId];
   const ph  = phs?.find(p => p.id === _phaseModalPhaseId);
   if (!ph) return;
-  const fromLabel = ph.status === 'done' ? 'Completed → In progress' : 'In progress → Pending';
-  document.getElementById('phRevertLabel').textContent     = `Revert: ${fromLabel}`;
+  const fromLabel = ph.status === 'done' ? tt('injuries.revert_done_to_inprog','Completed → In progress') : tt('injuries.revert_inprog_to_pending','In progress → Pending');
+  document.getElementById('phRevertLabel').textContent     = tt('injuries.revert_prefix', `Revert: ${fromLabel}`, { from: fromLabel });
   document.getElementById('phRevertReason').value          = '';
   document.getElementById('phRevertSection').style.display = 'flex';
   document.getElementById('phBtnRevert').style.display     = 'none';
@@ -2593,7 +2617,7 @@ function cancelRevert() {
 
 async function confirmRevert() {
   const reason = document.getElementById('phRevertReason').value.trim();
-  if (!reason) { alert('Please enter a reason for reverting.'); return; }
+  if (!reason) { alert(tt('injuries.revert_reason_required','Please enter a reason for reverting.')); return; }
 
   const phaseId = _phaseModalPhaseId; // capture before closePhaseModal clears globals
   const injId   = _phaseModalInjId;
@@ -2644,8 +2668,8 @@ async function togglePhase(phaseId, injuryId) {
     const estEnd  = ph.end_date ? new Date(ph.end_date) : null;
     if (estEnd && todayW < estEnd) {
       const daysEarly   = Math.round((estEnd - todayW) / 86400000);
-      const criteriaMsg = ph.criteria ? `\n\nCriteria to meet:\n"${ph.criteria}"` : '';
-      if (!confirm(`Advancing ${daysEarly} day${daysEarly !== 1 ? 's' : ''} ahead of expected timeline.${criteriaMsg}\n\nConfirm criteria met?`)) return;
+      const criteriaMsg = ph.criteria ? tt('injuries.criteria_to_meet', `\n\nCriteria to meet:\n"${ph.criteria}"`, { criteria: ph.criteria }) : '';
+      if (!confirm(tt('injuries.advance_confirm', `Advancing ${daysEarly} day${daysEarly !== 1 ? 's' : ''} ahead of expected timeline.${criteriaMsg}\n\nConfirm criteria met?`, { count: daysEarly, criteria: criteriaMsg }))) return;
     }
   }
 
@@ -2673,10 +2697,10 @@ async function togglePhase(phaseId, injuryId) {
 async function deleteInjury(id) {
   const inj  = _allInjuries.find(i => i.id === id);
   const pl   = inj ? (inj.players || _playersMap[inj.player_id] || {}) : {};
-  const name = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'this injury';
-  if (!confirm(`Delete injury for ${name}? This cannot be undone.`)) return;
+  const name = `${pl.first_name||''} ${pl.last_name||''}`.trim() || tt('injuries.this_injury','this injury');
+  if (!confirm(tt('injuries.delete_confirm', `Delete injury for ${name}? This cannot be undone.`, { name }))) return;
   const { error } = await window.sb.from('injuries').delete().eq('id', id);
-  if (error) { alert('Error: ' + error.message); return; }
+  if (error) { alert(tt('injuries.err_generic', `Error: ${error.message}`, { msg: error.message })); return; }
   _allInjuries = _allInjuries.filter(i => i.id !== id);
   delete _phasesMap[id];
   updateKPIs();
@@ -2698,13 +2722,27 @@ async function deleteInjury(id) {
     let teams = await window.getTeams(clubId);
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('injTeamSelect');
-    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    if (!teams.length) { sel.innerHTML=`<option value="">${tt('injuries.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _injTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_injTeamId?'selected':''}>${t.name}</option>`).join('');
   }
   function injOnTeamChange(){ _injTeamId=document.getElementById('injTeamSelect').value; sessionStorage.setItem('cal_active_team',_injTeamId); location.reload(); }
   window.injOnTeamChange = injOnTeamChange;
+
+  // Re-render JS-built UI on language change (static chrome handled by sidebar runtime)
+  document.addEventListener('cm:langchanged', () => {
+    try {
+      if (!_allInjuries) return;
+      updateKPIs();
+      updateTabCounts();
+      applyFilters();          // re-renders the injury cards
+      renderBodyMap();
+      renderTypeBreakdown();
+      renderRecentlyResolved();
+      renderBodyRegionFilter();
+    } catch (e) { console.warn('[Injuries] langchange re-render failed:', e.message); }
+  });
 </script>
 
 <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>

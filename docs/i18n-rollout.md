@@ -164,7 +164,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Nutrition.html
 
 ### Fase 5 — Médico
-- ⬜ Injuries.html
+- ✅ Injuries.html
 - ⬜ Clinical Records.html
 - ⬜ Clinical Record.html
 - ⬜ Physio.html  *(Treatments)*
