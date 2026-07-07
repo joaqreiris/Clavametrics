@@ -154,7 +154,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Individual Planner.html
 - ✅ Individual Plans.html
 - ✅ Video Room.html
-- ⬜ Video Detail.html
+- ✅ Video Detail.html
 
 ### Fase 4 — Rendimiento
 - ⬜ Load Monitor.html
