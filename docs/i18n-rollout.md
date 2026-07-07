@@ -127,7 +127,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Selector de idioma + detección usuario/club (`settings-drawer.jsx/.js`)
 
 ### Fase 1 — Auth (sin sidebar → include manual)
-- ⬜ Login.html
+- ✅ Login.html
 - ⬜ Register.html
 - ⬜ Onboarding.html
 - ⬜ set-password.html
