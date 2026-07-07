@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Session RPE Monitor — ClavaMetrics</title>
+<title data-i18n="rpe.pageTitle">Session RPE Monitor — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
 <link rel="stylesheet" href="triage.css">
   <link rel="manifest" href="/manifest.json">
@@ -78,18 +78,18 @@
         </select>
       </div>
       <div class="hub-crumb">
-        <i class="ti ti-activity-heartbeat"></i><span>Performance</span><span class="sep">/</span>
-        <span style="color:var(--cm-fg-strong);font-weight:600">Session RPE</span>
+        <i class="ti ti-activity-heartbeat"></i><span data-i18n="rpe.performance">Performance</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="rpe.sessionRpe">Session RPE</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search players, sessions…">
+        <input placeholder="Search players, sessions…" data-i18n-ph="rpe.searchPlaceholder">
       </div>
       <div class="actions">
-        <button class="cm-icon-btn" id="rmRefresh" title="Refresh"><i class="ti ti-refresh"></i></button>
-        <button class="cm-btn is-secondary is-sm" id="rmAutoLink" title="Auto-link today's RPE"><i class="ti ti-link-plus"></i>Auto-link today's RPE</button>
-        <button class="cm-btn is-primary is-sm" data-modal-open="rmShareModal" title="Share link with players"><i class="ti ti-link"></i>Share link with players</button>
-        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" id="rmRefresh" title="Refresh" data-i18n-attr="title:rpe.refresh"><i class="ti ti-refresh"></i></button>
+        <button class="cm-btn is-secondary is-sm" id="rmAutoLink" title="Auto-link today's RPE" data-i18n-attr="title:rpe.autoLinkTip"><i class="ti ti-link-plus"></i><span data-i18n="rpe.autoLink">Auto-link today's RPE</span></button>
+        <button class="cm-btn is-primary is-sm" data-modal-open="rmShareModal" title="Share link with players" data-i18n-attr="title:rpe.shareLinkTip"><i class="ti ti-link"></i><span data-i18n="rpe.shareLinkWithPlayers">Share link with players</span></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings data-i18n-attr="title:rpe.settings"><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -97,9 +97,9 @@
 
       <header class="cm-page-header">
         <div style="flex:1;">
-          <div class="cm-eyebrow" style="margin-bottom:8px;">Session load control</div>
-          <h1>Session RPE</h1>
-          <p id="pgSub">Post-session check</p>
+          <div class="cm-eyebrow" style="margin-bottom:8px;" data-i18n="rpe.sessionLoadControl">Session load control</div>
+          <h1 data-i18n="rpe.sessionRpe">Session RPE</h1>
+          <p id="pgSub" data-i18n="rpe.postSessionCheck">Post-session check</p>
         </div>
       </header>
 
@@ -107,19 +107,19 @@
       <div class="cm-card tr-summary" id="summaryCard" style="margin-bottom:16px;">
         <div class="tr-sum-lead">
           <span class="num" id="sumDone">0</span><span class="den" id="sumDen">/ 0</span>
-          <span class="lab">RPE submitted</span>
+          <span class="lab" data-i18n="rpe.rpeSubmitted">RPE submitted</span>
         </div>
         <div class="tr-sum-stats">
           <div class="tr-sum-stat">
-            <div class="k"><i class="ti ti-flame"></i>Avg sRPE</div>
+            <div class="k"><i class="ti ti-flame"></i><span data-i18n="rpe.avgSrpe">Avg sRPE</span></div>
             <div class="v" id="sumSrpe">0</div>
           </div>
           <div class="tr-sum-stat">
-            <div class="k"><i class="ti ti-arrow-up-right"></i>High RPE (≥8)</div>
+            <div class="k"><i class="ti ti-arrow-up-right"></i><span data-i18n="rpe.highRpe">High RPE (≥8)</span></div>
             <div class="v is-flag" id="sumHigh">0</div>
           </div>
           <div class="tr-sum-stat">
-            <div class="k"><i class="ti ti-unlink"></i>Late / unlinked</div>
+            <div class="k"><i class="ti ti-unlink"></i><span data-i18n="rpe.lateUnlinked">Late / unlinked</span></div>
             <div class="v" id="sumOrphan">0</div>
           </div>
         </div>
@@ -128,16 +128,16 @@
       <!-- Toolbar -->
       <div class="tr-toolbar" id="toolbar">
         <div class="tr-seg" data-seg="tab">
-          <button class="is-active" data-tab="responded"><i class="ti ti-checks"></i>Responded<span class="pipn" id="pipResp">0</span></button>
-          <button data-tab="pending"><i class="ti ti-clock-hour-4"></i>Pending<span class="pipn" id="pipPend">0</span></button>
+          <button class="is-active" data-tab="responded"><i class="ti ti-checks"></i><span data-i18n="rpe.responded">Responded</span><span class="pipn" id="pipResp">0</span></button>
+          <button data-tab="pending"><i class="ti ti-clock-hour-4"></i><span data-i18n="rpe.pending">Pending</span><span class="pipn" id="pipPend">0</span></button>
         </div>
         <div class="tr-spacer"></div>
-        <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i>Sorted highest RPE first</div>
+        <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i><span data-i18n="rpe.sortedHighestFirst">Sorted highest RPE first</span></div>
         <div class="tr-layout-toggle">
-          <span class="lab">Card</span>
+          <span class="lab" data-i18n="rpe.card">Card</span>
           <div class="tr-seg" data-layout-toggle="#listResponded">
-            <button class="is-active" data-layout="numeric"><i class="ti ti-number-9"></i>Numeric</button>
-            <button data-layout="gauge"><i class="ti ti-gauge"></i>Gauge</button>
+            <button class="is-active" data-layout="numeric"><i class="ti ti-number-9"></i><span data-i18n="rpe.numeric">Numeric</span></button>
+            <button data-layout="gauge"><i class="ti ti-gauge"></i><span data-i18n="rpe.gauge">Gauge</span></button>
           </div>
         </div>
       </div>
@@ -152,8 +152,8 @@
         <div class="tr-remind">
           <span class="ic"><i class="ti ti-clock-pause"></i></span>
           <div class="tx">
-            <div class="t" id="remindT">Some players haven't submitted RPE for this session</div>
-            <div class="s">Session ended recently · RPE window is best within 30 min of finishing.</div>
+            <div class="t" id="remindT" data-i18n="rpe.remindTitle">Some players haven't submitted RPE for this session</div>
+            <div class="s" data-i18n="rpe.remindSub">Session ended recently · RPE window is best within 30 min of finishing.</div>
           </div>
           <button class="cm-btn is-wa" id="remindBtn"><i class="ti ti-brand-whatsapp"></i>Remind missing (0)</button>
         </div>
@@ -169,9 +169,9 @@
       <div id="empty" style="display:none;">
         <div class="tr-empty">
           <span class="ic"><i class="ti ti-inbox"></i></span>
-          <h3 id="emptyH">No RPE submitted yet</h3>
-          <p id="emptyP">The session just ended. Share the RPE link so players can rate it while it's fresh.</p>
-          <button class="cm-btn is-primary" data-modal-open="rmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+          <h3 id="emptyH" data-i18n="rpe.emptyTitle">No RPE submitted yet</h3>
+          <p id="emptyP" data-i18n="rpe.emptySub">The session just ended. Share the RPE link so players can rate it while it's fresh.</p>
+          <button class="cm-btn is-primary" data-modal-open="rmShareModal"><i class="ti ti-link"></i><span data-i18n="rpe.shareLinkWithPlayers">Share link with players</span></button>
         </div>
       </div>
 
@@ -179,9 +179,9 @@
       <div id="errState" style="display:none;">
         <div class="tr-empty">
           <span class="ic"><i class="ti ti-plug-connected-x"></i></span>
-          <h3>Couldn't load RPE</h3>
-          <p>Something went wrong fetching this session's RPE. Check your connection and try again.</p>
-          <button class="cm-btn is-primary" id="errRetry"><i class="ti ti-refresh"></i>Retry</button>
+          <h3 data-i18n="rpe.errorTitle">Couldn't load RPE</h3>
+          <p data-i18n="rpe.errorSub">Something went wrong fetching this session's RPE. Check your connection and try again.</p>
+          <button class="cm-btn is-primary" id="errRetry"><i class="ti ti-refresh"></i><span data-i18n="common.retry">Retry</span></button>
         </div>
       </div>
 
@@ -191,9 +191,9 @@
       <!-- ── Late RPE — needs a session ── -->
       <div id="orphanWrap">
         <div class="tr-group-label" style="margin-top:34px;">
-          <h2>Late RPE — needs a session</h2>
+          <h2 data-i18n="rpe.lateGroupTitle">Late RPE — needs a session</h2>
           <span class="count" id="orphanCount">0 unlinked</span>
-          <span class="right"><span class="tr-sortnote"><i class="ti ti-info-circle"></i>Attach each to the right session to compute its load</span></span>
+          <span class="right"><span class="tr-sortnote"><i class="ti ti-info-circle"></i><span data-i18n="rpe.attachEach">Attach each to the right session to compute its load</span></span></span>
         </div>
         <div id="listOrphans"></div>
       </div>
@@ -207,14 +207,14 @@
     <div class="tr-modal-head">
       <span class="ic"><i class="ti ti-link"></i></span>
       <div>
-        <h3 id="shareTitle">Share RPE link</h3>
-        <p>Players rate the session, no login needed.</p>
+        <h3 id="shareTitle" data-i18n="rpe.shareTitle">Share RPE link</h3>
+        <p data-i18n="rpe.shareSub">Players rate the session, no login needed.</p>
       </div>
       <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
     </div>
     <div class="tr-modal-body">
       <div>
-        <div class="tr-field-lab">Team</div>
+        <div class="tr-field-lab" data-i18n="rpe.team">Team</div>
         <select class="cm-select" id="shareTeam" style="cursor:pointer;">
           <option selected>First team</option>
           <option>Whole club</option>
@@ -223,7 +223,7 @@
         </select>
       </div>
       <div>
-        <div class="tr-field-lab">Attach to session (optional)</div>
+        <div class="tr-field-lab" data-i18n="rpe.attachToSession">Attach to session (optional)</div>
         <select class="cm-select" id="shareSession" style="cursor:pointer;">
           <option selected>Sat Jul 5 · Field · MD-2</option>
           <option>Don't attach — link now, assign later</option>
@@ -232,19 +232,19 @@
         </select>
       </div>
       <div>
-        <div class="tr-field-lab">Tokenized link</div>
+        <div class="tr-field-lab" data-i18n="rpe.tokenizedLink">Tokenized link</div>
         <div class="tr-linkrow is-empty" id="linkRow">
-          <span class="url" id="linkUrl">Generate a secure link for this team</span>
-          <button class="cm-btn is-secondary is-sm" id="btnGen"><i class="ti ti-sparkles"></i>Generate</button>
+          <span class="url" id="linkUrl" data-i18n="rpe.generateSecureLink">Generate a secure link for this team</span>
+          <button class="cm-btn is-secondary is-sm" id="btnGen"><i class="ti ti-sparkles"></i><span data-i18n="rpe.generate">Generate</span></button>
         </div>
-        <div class="tr-token-note" id="tokNote" style="margin-top:9px; display:none;">
+        <div class="tr-token-note" id="tokNote" data-i18n-html="rpe.oneTimeToken" style="margin-top:9px; display:none;">
           <i class="ti ti-shield-check"></i>One-time token · expires in 12h
         </div>
       </div>
     </div>
     <div class="tr-modal-foot">
-      <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i>Copy link</button>
-      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i>Share via WhatsApp</button>
+      <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i><span data-i18n="rpe.copyLink">Copy link</span></button>
+      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i><span data-i18n="rpe.shareViaWhatsapp">Share via WhatsApp</span></button>
     </div>
   </div>
 </div>
@@ -266,6 +266,7 @@
 
   function boot() {
   const PAIN_ICON = 'ti-body-scan';
+  const tt = (k, fb, vars) => { const v = window.CM_I18N ? window.CM_I18N.t(k, vars) : null; return (v && v !== k) ? v : fb; };
 
   const PAIN_LABELS = { hamstring:'Hamstring', quads:'Quads', calves:'Calves', groin:'Groin', knee:'Knee', ankle:'Ankle', shoulder:'Shoulder', back:'Lower back' };
   const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false,
@@ -277,14 +278,14 @@
   const numOrNull = v => (v === null || v === undefined || v === '') ? null : Number(v);
   const cap = s => { s = String(s||''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; };
   function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false }); }
-  function fmtDateTime(ts) { if (!ts) return ''; const d = new Date(ts); if (isNaN(d)) return ''; return d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' }) + ' · ' + fmtTime(ts); }
-  function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => PAIN_LABELS[String(a).toLowerCase()] || cap(a)); }
-  function sessionLabel(s) { return `${s.session_date} · ${s.title || s.session_type || 'Session'}`; }
+  function fmtDateTime(ts) { if (!ts) return ''; const d = new Date(ts); if (isNaN(d)) return ''; const lang = (window.CM_I18N && window.CM_I18N.current) || undefined; return d.toLocaleDateString(lang, { weekday:'short', month:'short', day:'numeric' }) + ' · ' + fmtTime(ts); }
+  function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => { const k = String(a).toLowerCase(); return tt('rpe.pain.' + k, PAIN_LABELS[k] || cap(a)); }); }
+  function sessionLabel(s) { return `${s.session_date} · ${s.title || s.session_type || tt('rpe.sessionFallback', 'Session')}`; }
   function sessionLabelDur(s) { return `${sessionLabel(s)} (${s.duration || '?'}′)`; }
   function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
   // Chooser button label for a same-day session: "AM · Gym · 07:30".
   function todaySessionBtnLabel(s) {
-    const base = s.title || s.session_type || 'Session';
+    const base = s.title || s.session_type || tt('rpe.sessionFallback', 'Session');
     const t = s.session_time ? String(s.session_time).slice(0, 5) : '';
     const ap = t ? (parseInt(t.slice(0, 2), 10) < 12 ? 'AM' : 'PM') : '';
     return [ap, base, t].filter(Boolean).join(' · ');
@@ -293,7 +294,7 @@
     const dur = numOrNull(r.duration);
     const load = numOrNull(r.load);
     return {
-      name: r.player_name || 'Player',
+      name: r.player_name || tt('rpe.player', 'Player'),
       rpe: numOrNull(r.rpe),
       duration: dur,
       load: (load != null) ? load : (r.rpe != null && dur != null ? r.rpe * dur : null),
@@ -327,18 +328,19 @@
     const hasNote = !!p.comment;
     const flags = [];
     if (p.pain.length) flags.push(painChipsHTML(p.pain, 2));
-    if (hasNote) flags.push(`<span class="pc-note-ic" title="Has a note"><i class="ti ti-message-2"></i></span>`);
+    if (hasNote) flags.push(`<span class="pc-note-ic" title="${tt('rpe.hasNote','Has a note')}"><i class="ti ti-message-2"></i></span>`);
     const flagsHTML = flags.length ? flags.join('') : '<span style="font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint);">—</span>';
 
     const painFull = p.pain.length
-      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${T.escape(z)}</span>`).join('')}</div></div>`
+      ? `<div class="pc-det-block"><div class="h">${tt('rpe.painAreasFlagged','Pain areas flagged')}</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${T.escape(z)}</span>`).join('')}</div></div>`
       : '';
+    const noteMeta = p.time ? tt('rpe.rpeNoteSubmitted', `RPE note · submitted ${p.time}`, { time: p.time }) : tt('rpe.rpeNote', 'RPE note');
     const noteFull = hasNote
-      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">RPE note${p.time ? ` · submitted ${p.time}` : ''}</div></div></div>`
+      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">${noteMeta}</div></div></div>`
       : '';
     const rightBlock = (p.pain.length || hasNote)
-      ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">Comment</div>${noteFull}</div>` : ''}`
-      : `<div class="pc-det-block"><div class="h">Flags</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">No pain areas or notes added on the RPE form.</p></div>`;
+      ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">${tt('rpe.comment','Comment')}</div>${noteFull}</div>` : ''}`
+      : `<div class="pc-det-block"><div class="h">${tt('rpe.flags','Flags')}</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">${tt('rpe.noPainOrNotes','No pain areas or notes added on the RPE form.')}</p></div>`;
 
     const avg = state.avgSrpe || 0;
     const max = state.maxSrpe || 1;
@@ -346,7 +348,8 @@
     const avgPct = (avg / max * 100).toFixed(0);
     const hot = load != null && load > avg * 1.15;
     const lastName = p.name.split(/\s+/).pop();
-    const waMsg = T.escape(`Hi ${lastName} — RPE ${p.rpe} logged for today${load != null ? ` (load ${load})` : ''}. All good?`);
+    const loadStr = load != null ? tt('rpe.waLoad', ` (load ${load})`, { load }) : '';
+    const waMsg = T.escape(tt('rpe.waMessage', `Hi ${lastName} — RPE ${p.rpe} logged for today${loadStr}. All good?`, { name: lastName, rpe: p.rpe, load: loadStr }));
 
     return `
     <article class="pc" data-sev="${b.sev}">
@@ -362,17 +365,17 @@
           <span class="val">${p.rpe}</span>
           <div class="meta">
             <span class="band ${b.sev}">${b.label}</span>
-            <span class="scale">RPE · /10</span>
+            <span class="scale">${tt('rpe.scaleRpe','RPE · /10')}</span>
           </div>
         </div>
         <div class="pc-gauge">
-          <div class="row"><span class="val">${p.rpe}</span><span class="cap">${b.label} · RPE</span></div>
+          <div class="row"><span class="val">${p.rpe}</span><span class="cap">${b.label} · ${tt('rpe.rpeShort','RPE')}</span></div>
           <div class="gauge-track" style="${gaugeVars()}"><span class="marker" style="left:${markerLeft(p.rpe)}"></span></div>
         </div>
         <div class="pc-mid">
           <div class="pc-secondary">
-            <div class="pc-fig"><span class="k">Session load</span><span class="v">${loadTxt}<small>au</small></span></div>
-            <div class="pc-fig"><span class="k">Duration</span><span class="v">${durTxt}<small>′</small></span></div>
+            <div class="pc-fig"><span class="k">${tt('rpe.sessionLoad','Session load')}</span><span class="v">${loadTxt}<small>au</small></span></div>
+            <div class="pc-fig"><span class="k">${tt('rpe.duration','Duration')}</span><span class="v">${durTxt}<small>′</small></span></div>
           </div>
         </div>
         <div class="pc-flags">${flagsHTML}</div>
@@ -380,29 +383,29 @@
       <div class="pc-detail">
         <div class="pc-detail-grid">
           <div class="pc-det-block">
-            <div class="h">Session load · sRPE</div>
+            <div class="h">${tt('rpe.sessionLoadSrpe','Session load · sRPE')}</div>
             <div class="load-eq">
-              <div class="cell"><span class="t">RPE</span><b>${p.rpe}</b></div>
+              <div class="cell"><span class="t">${tt('rpe.rpeShort','RPE')}</span><b>${p.rpe}</b></div>
               <span class="op">×</span>
-              <div class="cell"><span class="t">Duration</span><b>${durTxt}′</b></div>
+              <div class="cell"><span class="t">${tt('rpe.duration','Duration')}</span><b>${durTxt}′</b></div>
               <span class="op">=</span>
-              <div class="cell"><span class="t">sRPE</span><b class="hot">${loadTxt}<span style="font-size:12px;color:var(--cm-fg-faint);font-weight:500;"> au</span></b></div>
+              <div class="cell"><span class="t">${tt('rpe.srpe','sRPE')}</span><b class="hot">${loadTxt}<span style="font-size:12px;color:var(--cm-fg-faint);font-weight:500;"> au</span></b></div>
             </div>
             <div class="load-cmp">
-              <span class="name">This player</span>
+              <span class="name">${tt('rpe.thisPlayer','This player')}</span>
               <span class="track ${hot?'hot':''}"><i style="width:${loadPct}%"></i><span class="avg" style="left:${avgPct}%"></span></span>
               <span class="n">${loadTxt}</span>
             </div>
             <div class="load-cmp" style="margin-top:10px;">
-              <span class="name">Squad avg</span>
+              <span class="name">${tt('rpe.squadAvg','Squad avg')}</span>
               <span class="track"><i style="width:${avgPct}%; background:var(--cm-fg-faint);"></i></span>
               <span class="n">${avg}</span>
             </div>
           </div>
           <div>${rightBlock}
             <div class="pc-det-actions">
-              <button class="cm-btn is-secondary is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Message</button>
-              <button class="cm-btn is-ghost is-sm" disabled title="Coming soon"><i class="ti ti-chart-line"></i>Load trend</button>
+              <button class="cm-btn is-secondary is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>${tt('rpe.message','Message')}</button>
+              <button class="cm-btn is-ghost is-sm" disabled title="${tt('rpe.comingSoon','Coming soon')}"><i class="ti ti-chart-line"></i>${tt('rpe.loadTrend','Load trend')}</button>
             </div>
           </div>
         </div>
@@ -412,7 +415,7 @@
 
   function pendingCardHTML(p) {
     const lastName = p.name.split(/\s+/).pop();
-    const waMsg = T.escape(`Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!`);
+    const waMsg = T.escape(tt('rpe.waRemind', `Hi ${lastName} — need your RPE for today's session (1–10) when you get a sec, thanks!`, { name: lastName }));
     return `
     <article class="pc is-pending">
       <div class="pc-pending-head">
@@ -422,9 +425,9 @@
             <div class="pc-name">${T.escape(p.name)}</div>
           </div>
         </div>
-        <span class="status"><i class="ti ti-clock-x"></i>Not submitted</span>
+        <span class="status"><i class="ti ti-clock-x"></i>${tt('rpe.notSubmitted','Not submitted')}</span>
         <div class="right">
-          <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Remind</button>
+          <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>${tt('rpe.remind','Remind')}</button>
         </div>
       </div>
     </article>`;
@@ -435,10 +438,10 @@
     const canAssign = state.recent.length > 0;
     const opts = state.recent.slice(0, 5).map(s => `<option value="${s.id}">${T.escape(sessionLabelDur(s))}</option>`).join('');
     const assignInner = canAssign
-      ? `<select class="cm-select" aria-label="Session for ${T.escape(o.name)}">${opts}</select>
-        <button class="cm-btn is-primary is-sm o-assign-btn"><i class="ti ti-plug-connected"></i>Assign</button>`
-      : `<span style="font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-faint);">Create a session to assign</span>
-        <button class="cm-btn is-primary is-sm o-assign-btn" disabled><i class="ti ti-plug-connected"></i>Assign</button>`;
+      ? `<select class="cm-select" aria-label="${T.escape(tt('rpe.sessionForPlayer', `Session for ${o.name}`, { name: o.name }))}">${opts}</select>
+        <button class="cm-btn is-primary is-sm o-assign-btn"><i class="ti ti-plug-connected"></i>${tt('rpe.assign','Assign')}</button>`
+      : `<span style="font:500 12px/1 var(--cm-font-sans); color:var(--cm-fg-faint);">${tt('rpe.createSessionToAssign','Create a session to assign')}</span>
+        <button class="cm-btn is-primary is-sm o-assign-btn" disabled><i class="ti ti-plug-connected"></i>${tt('rpe.assign','Assign')}</button>`;
     return `
     <div class="orphan" data-id="${o.id}">
       <div class="pc-id">
@@ -447,8 +450,8 @@
           <div class="pc-name">${T.escape(o.name)}</div>
         </div>
       </div>
-      <div class="o-rpe ${b.sev}"><span class="v">${o.rpe}</span><span class="u">RPE</span></div>
-      <div class="o-sent"><i class="ti ti-send" style="font-size:13px; margin-right:5px;"></i>Sent ${o.sent}</div>
+      <div class="o-rpe ${b.sev}"><span class="v">${o.rpe}</span><span class="u">${tt('rpe.rpeShort','RPE')}</span></div>
+      <div class="o-sent"><i class="ti ti-send" style="font-size:13px; margin-right:5px;"></i>${tt('rpe.sent', `Sent ${o.sent}`, { time: o.sent })}</div>
       <div class="o-assign">
         ${assignInner}
       </div>
@@ -473,26 +476,26 @@
   function chooserHTML() {
     const list = state.todaysSessions;
     const n = list.length;
-    const title = n === 2 ? 'Two sessions today' : `${n} sessions today`;
+    const title = n === 2 ? tt('rpe.twoSessionsToday', 'Two sessions today') : tt('rpe.nSessionsToday', `${n} sessions today`, { count: n });
     const btns = list.map(s =>
       `<button class="cm-btn is-secondary" data-pick="${s.id}"><i class="ti ti-player-play"></i>${T.escape(todaySessionBtnLabel(s))}</button>`
     ).join('');
     return `<div class="tr-empty">
       <span class="ic"><i class="ti ti-versions"></i></span>
       <h3>${title}</h3>
-      <p>Which one do you want to review?</p>
+      <p>${tt('rpe.whichReview','Which one do you want to review?')}</p>
       <div class="tr-gate-actions">${btns}</div>
     </div>`;
   }
   function noSessionHTML() {
     const past = state.sessionsList[0]; // most recent overall — no today sessions in this branch
     const reviewBtn = past
-      ? `<div class="tr-gate-actions"><button class="cm-btn is-secondary" data-review="${past.id}"><i class="ti ti-history"></i>Review last session · ${T.escape(sessionLabel(past))}</button></div>`
+      ? `<div class="tr-gate-actions"><button class="cm-btn is-secondary" data-review="${past.id}"><i class="ti ti-history"></i>${tt('rpe.reviewLastSession', `Review last session · ${sessionLabel(past)}`, { label: sessionLabel(past) })}</button></div>`
       : '';
     return `<div class="tr-empty">
       <span class="ic"><i class="ti ti-calendar-off"></i></span>
-      <h3>No session today</h3>
-      <p>RPE is tied to a session. Player submissions are still captured and will appear below as unlinked — assign them once today has a session.</p>
+      <h3>${tt('rpe.noSessionTitle','No session today')}</h3>
+      <p>${tt('rpe.noSessionSub','RPE is tied to a session. Player submissions are still captured and will appear below as unlinked — assign them once today has a session.')}</p>
       ${reviewBtn}
     </div>`;
   }
@@ -540,9 +543,9 @@
     document.getElementById('pipResp').textContent = done;
     document.getElementById('pipPend').textContent = missing;
     document.getElementById('remindT').textContent = missing
-      ? `${missing} player${missing === 1 ? '' : 's'} haven't submitted RPE for this session`
-      : 'Everyone has submitted RPE';
-    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${missing})`;
+      ? tt('rpe.remindTitle', "Some players haven't submitted RPE for this session")
+      : tt('rpe.everyoneSubmitted', 'Everyone has submitted RPE');
+    document.getElementById('remindBtn').lastChild.textContent = tt('rpe.remindMissing', `Remind missing (${missing})`, { count: missing });
 
     respWrap.style.display = 'none';
     pendWrap.style.display = 'none';
@@ -555,8 +558,8 @@
     if (state.loading) { skel.style.display = ''; skel.querySelector('.tr-list').innerHTML = skeletonHTML(); return; }
     if (state.error) { if (err) err.style.display = ''; return; }
     if (total === 0) {
-      document.getElementById('emptyH').textContent = 'No players in this session';
-      document.getElementById('emptyP').textContent = 'There are no players to show for the selected session.';
+      document.getElementById('emptyH').textContent = tt('rpe.noPlayersTitle', 'No players in this session');
+      document.getElementById('emptyP').textContent = tt('rpe.noPlayersSub', 'There are no players to show for the selected session.');
       empty.style.display = ''; return;
     }
 
@@ -573,7 +576,7 @@
   function renderOrphans() {
     const wrap = document.getElementById('orphanWrap');
     document.getElementById('sumOrphan').textContent = state.orphans.length;
-    document.getElementById('orphanCount').textContent = state.orphans.length + ' unlinked';
+    document.getElementById('orphanCount').textContent = tt('rpe.unlinkedCount', state.orphans.length + ' unlinked', { count: state.orphans.length });
     if (!state.orphans.length) { wrap.style.display = 'none'; document.getElementById('listOrphans').innerHTML = ''; return; }
     if (!state.loading && !state.error) wrap.style.display = '';
     document.getElementById('listOrphans').innerHTML = state.orphans.map(orphanHTML).join('');
@@ -595,7 +598,7 @@
       // No concrete session picked → chooser (double-session day) or no-session-today.
       // Never fall through to the latest past session.
       state.view = (state.todaysSessions.length >= 2) ? 'chooser' : 'nosession';
-      document.getElementById('pgSub').textContent = (state.view === 'chooser') ? 'Today · choose a session' : 'Today · no session';
+      document.getElementById('pgSub').textContent = (state.view === 'chooser') ? tt('rpe.todayChooseSession', 'Today · choose a session') : tt('rpe.todayNoSession', 'Today · no session');
       state.responders = []; state.pending = []; state.total = 0; state.avgSrpe = 0; state.maxSrpe = 1;
       state.loading = false; state.error = false;
       renderRpe();
@@ -633,7 +636,7 @@
       if (!state.recent.length) await loadRecentSessions();
       const { data, error } = await window.sb.rpc('get_pending_rpe', { p_club_id: state.cid });
       if (error) throw error;
-      state.orphans = (data || []).map(o => ({ id: o.id, name: o.player_name || 'Player', rpe: numOrNull(o.rpe), sent: fmtDateTime(o.created_at) }));
+      state.orphans = (data || []).map(o => ({ id: o.id, name: o.player_name || tt('rpe.player', 'Player'), rpe: numOrNull(o.rpe), sent: fmtDateTime(o.created_at) }));
     } catch (e) {
       console.warn('[RPE] orphans:', e && e.message);
       state.orphans = [];
@@ -666,7 +669,7 @@
       .sort((a, b) => String(a.session_time || a.created_at || '').localeCompare(String(b.session_time || b.created_at || '')));
 
     // Dropdown: neutral placeholder + every session (double sessions listed separately)
-    sel.innerHTML = `<option value="">${sessions.length ? 'Select a session…' : 'No sessions'}</option>` +
+    sel.innerHTML = `<option value="">${T.escape(sessions.length ? tt('rpe.selectSession', 'Select a session…') : tt('rpe.noSessions', 'No sessions'))}</option>` +
       sessions.map(s => `<option value="${s.id}">${T.escape(sessionLabel(s))}</option>`).join('');
 
     // Default selection anchored to TODAY — never fall through to the latest past session.
@@ -717,7 +720,7 @@
     const rpeId = row.getAttribute('data-id');
     const sel = row.querySelector('.cm-select');
     const sessionId = sel.value;
-    const label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : 'session';
+    const label = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : tt('rpe.session', 'session');
     if (!sessionId) return;
     btn.disabled = true;
     try {
@@ -725,12 +728,13 @@
       if (error) throw error;
       row.classList.add('is-done');
       row.querySelector('.o-assign').innerHTML =
-        `<span class="o-linked"><i class="ti ti-circle-check-filled"></i>Linked to ${T.escape(label)}</span>`;
-      T.toast(row.querySelector('.pc-name').textContent + ' → ' + label + ' · load computed', 'ti-plug-connected');
+        `<span class="o-linked"><i class="ti ti-circle-check-filled"></i>${tt('rpe.linkedTo', `Linked to ${label}`, { label: T.escape(label) })}</span>`;
+      const nm = row.querySelector('.pc-name').textContent;
+      T.toast(tt('rpe.assignedToast', `${nm} → ${label} · load computed`, { name: nm, label }), 'ti-plug-connected');
       loadOrphans(); loadRpe();
     } catch (err) {
       console.warn('[RPE] assign:', err && err.message);
-      T.toast("Couldn't assign session", 'ti-alert-triangle');
+      T.toast(tt('rpe.assignError', "Couldn't assign session"), 'ti-alert-triangle');
       btn.disabled = false;
     }
   });
@@ -744,12 +748,12 @@
       const { data, error } = await window.sb.rpc('link_pending_rpe', { p_club_id: state.cid, p_date: null });
       if (error) throw error;
       const n = (typeof data === 'number') ? data : ((data && (data.count ?? data.linked)) || 0);
-      btn.innerHTML = n ? `<i class="ti ti-check"></i>${n} RPE linked` : `<i class="ti ti-check"></i>No pending RPE`;
-      T.toast(n ? `${n} RPE linked to sessions` : 'No pending RPE to link', 'ti-link-plus');
+      btn.innerHTML = n ? `<i class="ti ti-check"></i>${tt('rpe.rpeLinked', `${n} RPE linked`, { count: n })}` : `<i class="ti ti-check"></i>${tt('rpe.noPendingRpe', 'No pending RPE')}`;
+      T.toast(n ? tt('rpe.rpeLinkedToast', `${n} RPE linked to sessions`, { count: n }) : tt('rpe.noPendingToLink', 'No pending RPE to link'), 'ti-link-plus');
       await Promise.all([loadRpe(), loadOrphans()]);
     } catch (e) {
       console.warn('[RPE] autolink:', e && e.message);
-      T.toast("Couldn't auto-link RPE", 'ti-alert-triangle');
+      T.toast(tt('rpe.autoLinkError', "Couldn't auto-link RPE"), 'ti-alert-triangle');
     } finally {
       setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1600);
     }
@@ -765,7 +769,7 @@
       icon.style.transform = 'rotate(360deg)';
       setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
       await Promise.all([loadRpe(), loadOrphans()]);
-      if (!state.error) T.toast(`RPE refreshed · ${state.responders.length} of ${state.total} in`, 'ti-refresh');
+      if (!state.error) T.toast(tt('rpe.refreshedToast', `RPE refreshed · ${state.responders.length} of ${state.total} in`, { n: state.responders.length, total: state.total }), 'ti-refresh');
     });
   }
 
@@ -787,11 +791,11 @@
         if (error) throw error;
         const url = location.origin + '/survey.html?token=' + token;
         const names = state.pending.map(p => p.name).join(', ');
-        const msg = `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`;
+        const msg = tt('rpe.waRemindBulk', `Session RPE reminder.\nMissing: ${names}\nRate it here (1–10): ${url}`, { names, url });
         window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
       } catch (e) {
         console.warn('[RPE] remind:', e && e.message);
-        T.toast("Couldn't create reminder", 'ti-alert-triangle');
+        T.toast(tt('rpe.reminderError', "Couldn't create reminder"), 'ti-alert-triangle');
       } finally { btn.disabled = false; }
     });
   }
@@ -824,9 +828,9 @@
     const shareSession = document.getElementById('shareSession');
     let currentUrl = '';
 
-    shareTeam.innerHTML = (state.fullAccess ? '<option value="">Whole club</option>' : '') +
+    shareTeam.innerHTML = (state.fullAccess ? `<option value="">${T.escape(tt('rpe.wholeClub','Whole club'))}</option>` : '') +
       state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
-    shareSession.innerHTML = '<option value="">No session (linked by date)</option>' +
+    shareSession.innerHTML = `<option value="">${T.escape(tt('rpe.noSessionLinkedByDate','No session (linked by date)'))}</option>` +
       state.recent.map(s => `<option value="${s.id}">${T.escape(sessionLabel(s))}</option>`).join('');
     const curSess = document.getElementById('rmSessionSelect').value;
     if (curSess && [...shareSession.options].some(o => o.value === curSess)) shareSession.value = curSess;
@@ -842,20 +846,21 @@
         currentUrl = location.origin + '/survey.html?token=' + token;
         linkUrl.textContent = currentUrl;
         linkRow.classList.remove('is-empty');
-        btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
+        btnGen.innerHTML = '<i class="ti ti-refresh"></i>' + T.escape(tt('rpe.newLink','New'));
         tokNote.style.display = '';
-        const att = sessionId ? ('attached to ' + shareSession.options[shareSession.selectedIndex].text) : 'linked by date, assign later';
-        tokNote.innerHTML = '<i class="ti ti-shield-check"></i>Secure link · valid until revoked · ' + T.escape(att);
+        const sessLabel = shareSession.options[shareSession.selectedIndex].text;
+        const att = sessionId ? tt('rpe.attachedTo', 'attached to ' + sessLabel, { label: sessLabel }) : tt('rpe.linkedByDate', 'linked by date, assign later');
+        tokNote.innerHTML = '<i class="ti ti-shield-check"></i>' + T.escape(tt('rpe.secureLinkValid', 'Secure link · valid until revoked · ' + att, { att }));
         btnCopy.disabled = false; btnWa.disabled = false;
       } catch (e) {
         console.warn('[RPE] share:', e && e.message);
-        T.toast("Couldn't generate link", 'ti-alert-triangle');
+        T.toast(tt('rpe.shareError', "Couldn't generate link"), 'ti-alert-triangle');
       } finally { btnGen.disabled = false; }
     }
     btnGen.addEventListener('click', gen);
     shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
     shareSession.addEventListener('change', () => { if (currentUrl) gen(); });
-    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp('RPE: ' + currentUrl); });
+    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp(tt('rpe.waShareLink', 'RPE: ' + currentUrl, { url: currentUrl })); });
   }
 
   /* ── Boot: auth guard → club → sessions/teams → wire → load ── */
@@ -876,6 +881,33 @@
       state.error = true; renderRpe();
     }
   })();
+
+  /* ── Re-render on language change (static tags handled by sidebar.js) ── */
+  document.addEventListener('cm:langchanged', () => {
+    try {
+      // Gate subtitle: fixed strings for chooser / no-session; board keeps the session label.
+      if (state.view === 'chooser' || state.view === 'nosession') {
+        const sub = document.getElementById('pgSub');
+        if (sub) sub.textContent = (state.view === 'chooser')
+          ? tt('rpe.todayChooseSession', 'Today · choose a session')
+          : tt('rpe.todayNoSession', 'Today · no session');
+      }
+      // Session dropdown placeholder (the DB-driven options stay as-is).
+      const sel = document.getElementById('rmSessionSelect');
+      if (sel && sel.options[0] && sel.options[0].value === '') {
+        sel.options[0].text = state.sessionsList.length
+          ? tt('rpe.selectSession', 'Select a session…')
+          : tt('rpe.noSessions', 'No sessions');
+      }
+      // Share modal "whole club" / "no session" placeholder options.
+      const st = document.getElementById('shareTeam');
+      if (st && state.fullAccess && st.options[0] && st.options[0].value === '') st.options[0].text = tt('rpe.wholeClub', 'Whole club');
+      const ss = document.getElementById('shareSession');
+      if (ss && ss.options[0] && ss.options[0].value === '') ss.options[0].text = tt('rpe.noSessionLinkedByDate', 'No session (linked by date)');
+      renderRpe();
+      renderOrphans();
+    } catch (e) {}
+  });
   } /* end boot() */
 })();
 </script>

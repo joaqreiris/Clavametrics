@@ -139,7 +139,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Squad.html
 - ✅ Calendar.html
 - ✅ Daily Planning.html
-- ⬜ RPE.html
+- ✅ RPE.html
 - ⬜ Availability.html
 - ⬜ Chat & Tasks.html
 - ⬜ Lineup.html
