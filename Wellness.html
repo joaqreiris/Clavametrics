@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wellness Monitor — ClavaMetrics</title>
+<title data-i18n="wellness.pageTitle">Wellness Monitor — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
 <link rel="stylesheet" href="triage.css">
   <link rel="manifest" href="/manifest.json">
@@ -65,17 +65,17 @@
         </select>
       </div>
       <div class="hub-crumb">
-        <i class="ti ti-heartbeat"></i><span>Performance</span><span class="sep">/</span>
-        <span style="color:var(--cm-fg-strong);font-weight:600">Wellness</span>
+        <i class="ti ti-heartbeat"></i><span data-i18n="wellness.performance">Performance</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="wellness.wellness">Wellness</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search players, sessions…">
+        <input placeholder="Search players, sessions…" data-i18n-ph="wellness.searchPlaceholder">
       </div>
       <div class="actions">
-        <button class="cm-icon-btn" id="wmRefresh" title="Refresh"><i class="ti ti-refresh"></i></button>
-        <button class="cm-btn is-primary is-sm" data-modal-open="wmShareModal"><i class="ti ti-link"></i>Share link with players</button>
-        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" id="wmRefresh" title="Refresh" data-i18n-attr="title:wellness.refresh"><i class="ti ti-refresh"></i></button>
+        <button class="cm-btn is-primary is-sm" data-modal-open="wmShareModal"><i class="ti ti-link"></i><span data-i18n="wellness.shareLinkWithPlayers">Share link with players</span></button>
+        <button class="cm-icon-btn" title="Settings" data-open-settings data-i18n-attr="title:wellness.settings"><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -83,9 +83,9 @@
 
       <header class="cm-page-header">
         <div style="flex:1;">
-          <div class="cm-eyebrow" style="margin-bottom:8px;">Daily check-in</div>
-          <h1>Wellness</h1>
-          <p id="pgSub">Morning triage</p>
+          <div class="cm-eyebrow" style="margin-bottom:8px;" data-i18n="wellness.dailyCheckIn">Daily check-in</div>
+          <h1 data-i18n="wellness.wellness">Wellness</h1>
+          <p id="pgSub" data-i18n="wellness.morningTriage">Morning triage</p>
         </div>
       </header>
 
@@ -93,19 +93,19 @@
       <div class="cm-card tr-summary" style="margin-bottom:16px;">
         <div class="tr-sum-lead">
           <span class="num" id="sumDone">0</span><span class="den" id="sumDen">/ 0</span>
-          <span class="lab">Check-ins completed</span>
+          <span class="lab" data-i18n="wellness.checkInsCompleted">Check-ins completed</span>
         </div>
         <div class="tr-sum-stats">
           <div class="tr-sum-stat">
-            <div class="k"><i class="ti ti-alert-triangle"></i>Flagged</div>
+            <div class="k"><i class="ti ti-alert-triangle"></i><span data-i18n="wellness.flagged">Flagged</span></div>
             <div class="v is-flag" id="sumFlag">0</div>
           </div>
           <div class="tr-sum-stat">
-            <div class="k"><i class="ti ti-body-scan"></i>Pain reports</div>
+            <div class="k"><i class="ti ti-body-scan"></i><span data-i18n="wellness.painReports">Pain reports</span></div>
             <div class="v" id="sumPain">0</div>
           </div>
           <div class="tr-sum-stat">
-            <div class="k"><i class="ti ti-clock-pause"></i>Missing</div>
+            <div class="k"><i class="ti ti-clock-pause"></i><span data-i18n="wellness.missing">Missing</span></div>
             <div class="v" id="sumMiss">0</div>
           </div>
         </div>
@@ -114,16 +114,16 @@
       <!-- Toolbar -->
       <div class="tr-toolbar">
         <div class="tr-seg" data-seg="tab">
-          <button class="is-active" data-tab="responded"><i class="ti ti-checks"></i>Responded<span class="pipn" id="pipResp">0</span></button>
-          <button data-tab="pending"><i class="ti ti-clock-hour-4"></i>Pending<span class="pipn" id="pipPend">0</span></button>
+          <button class="is-active" data-tab="responded"><i class="ti ti-checks"></i><span data-i18n="wellness.responded">Responded</span><span class="pipn" id="pipResp">0</span></button>
+          <button data-tab="pending"><i class="ti ti-clock-hour-4"></i><span data-i18n="wellness.pending">Pending</span><span class="pipn" id="pipPend">0</span></button>
         </div>
         <div class="tr-spacer"></div>
-        <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i>Sorted worst-first</div>
+        <div class="tr-sortnote"><i class="ti ti-sort-descending-2"></i><span data-i18n="wellness.sortedWorstFirst">Sorted worst-first</span></div>
         <div class="tr-layout-toggle">
-          <span class="lab">Card</span>
+          <span class="lab" data-i18n="wellness.card">Card</span>
           <div class="tr-seg" data-layout-toggle="#listResponded">
-            <button class="is-active" data-layout="numeric"><i class="ti ti-number-9"></i>Numeric</button>
-            <button data-layout="gauge"><i class="ti ti-gauge"></i>Gauge</button>
+            <button class="is-active" data-layout="numeric"><i class="ti ti-number-9"></i><span data-i18n="wellness.numeric">Numeric</span></button>
+            <button data-layout="gauge"><i class="ti ti-gauge"></i><span data-i18n="wellness.gauge">Gauge</span></button>
           </div>
         </div>
       </div>
@@ -138,8 +138,8 @@
         <div class="tr-remind">
           <span class="ic"><i class="ti ti-clock-pause"></i></span>
           <div class="tx">
-            <div class="t" id="remindT">Some players haven't checked in yet</div>
-            <div class="s">Generate a check-in link and message everyone still missing.</div>
+            <div class="t" id="remindT" data-i18n="wellness.remindTitle">Some players haven't checked in yet</div>
+            <div class="s" data-i18n="wellness.remindSub">Generate a check-in link and message everyone still missing.</div>
           </div>
           <button class="cm-btn is-wa" id="remindBtn"><i class="ti ti-brand-whatsapp"></i>Remind missing (0)</button>
         </div>
@@ -155,9 +155,9 @@
       <div id="empty" style="display:none;">
         <div class="tr-empty">
           <span class="ic"><i class="ti ti-inbox"></i></span>
-          <h3 id="emptyH">No check-ins yet</h3>
-          <p id="emptyP">Waiting on the squad. Share the check-in link so players can fill it in before training.</p>
-          <button class="cm-btn is-primary" data-modal-open="wmShareModal"><i class="ti ti-link"></i>Share link with players</button>
+          <h3 id="emptyH" data-i18n="wellness.emptyTitle">No check-ins yet</h3>
+          <p id="emptyP" data-i18n="wellness.emptySub">Waiting on the squad. Share the check-in link so players can fill it in before training.</p>
+          <button class="cm-btn is-primary" data-modal-open="wmShareModal"><i class="ti ti-link"></i><span data-i18n="wellness.shareLinkWithPlayers">Share link with players</span></button>
         </div>
       </div>
 
@@ -165,9 +165,9 @@
       <div id="errState" style="display:none;">
         <div class="tr-empty">
           <span class="ic"><i class="ti ti-plug-connected-x"></i></span>
-          <h3>Couldn't load wellness</h3>
-          <p>Something went wrong fetching today's check-ins. Check your connection and try again.</p>
-          <button class="cm-btn is-primary" id="errRetry"><i class="ti ti-refresh"></i>Retry</button>
+          <h3 data-i18n="wellness.errorTitle">Couldn't load wellness</h3>
+          <p data-i18n="wellness.errorSub">Something went wrong fetching today's check-ins. Check your connection and try again.</p>
+          <button class="cm-btn is-primary" id="errRetry"><i class="ti ti-refresh"></i><span data-i18n="common.retry">Retry</span></button>
         </div>
       </div>
     </section>
@@ -180,14 +180,14 @@
     <div class="tr-modal-head">
       <span class="ic"><i class="ti ti-link"></i></span>
       <div>
-        <h3 id="shareTitle">Share wellness check-in</h3>
-        <p>Players open the link, no login needed.</p>
+        <h3 id="shareTitle" data-i18n="wellness.shareTitle">Share wellness check-in</h3>
+        <p data-i18n="wellness.shareSub">Players open the link, no login needed.</p>
       </div>
       <button class="cm-icon-btn is-flush x" data-modal-close><i class="ti ti-x"></i></button>
     </div>
     <div class="tr-modal-body">
       <div>
-        <div class="tr-field-lab">Team</div>
+        <div class="tr-field-lab" data-i18n="wellness.team">Team</div>
         <select class="cm-select" id="shareTeam" style="cursor:pointer;">
           <option selected>First team</option>
           <option>Whole club</option>
@@ -196,10 +196,10 @@
         </select>
       </div>
       <div>
-        <div class="tr-field-lab">Tokenized link</div>
+        <div class="tr-field-lab" data-i18n="wellness.tokenizedLink">Tokenized link</div>
         <div class="tr-linkrow is-empty" id="linkRow">
-          <span class="url" id="linkUrl">Generate a secure link for this team</span>
-          <button class="cm-btn is-secondary is-sm" id="btnGen"><i class="ti ti-sparkles"></i>Generate</button>
+          <span class="url" id="linkUrl" data-i18n="wellness.generateSecureLink">Generate a secure link for this team</span>
+          <button class="cm-btn is-secondary is-sm" id="btnGen"><i class="ti ti-sparkles"></i><span data-i18n="wellness.generate">Generate</span></button>
         </div>
         <div class="tr-token-note" id="tokNote" style="margin-top:9px; display:none;">
           <i class="ti ti-shield-check"></i>One-time token · expires in 12h · valid for First team only
@@ -207,8 +207,8 @@
       </div>
     </div>
     <div class="tr-modal-foot">
-      <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i>Copy link</button>
-      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i>Share via WhatsApp</button>
+      <button class="cm-btn is-outline" id="btnCopy" data-copy="#linkUrl" disabled><i class="ti ti-copy"></i><span data-i18n="wellness.copyLink">Copy link</span></button>
+      <button class="cm-btn is-wa" id="btnWa" disabled><i class="ti ti-brand-whatsapp"></i><span data-i18n="wellness.shareViaWhatsapp">Share via WhatsApp</span></button>
     </div>
   </div>
 </div>
@@ -238,13 +238,16 @@
   ];
 
   const T = window.Triage;
+  // i18n: translated string with interpolation/plurals; English fallback when the runtime
+  // isn't ready or the key is missing. Pass a pre-interpolated English fallback for var strings.
+  const tt = (k, fb, vars) => { const v = window.CM_I18N ? window.CM_I18N.t(k, vars) : null; return (v && v !== k) ? v : fb; };
   const state = { tab:'responded', loading:false, error:false, inited:false, cid:null, teams:[], fullAccess:false, responders:[], pending:[], total:0 };
 
   const initials = n => { const parts = String(n||'').replace(/\./g,'').trim().split(/\s+/); return (((parts[0]||'')[0]||'') + (parts.length>1 ? (parts[parts.length-1][0]||'') : '')).toUpperCase() || '—'; };
   const numOrNull = v => (v === null || v === undefined || v === '') ? null : Number(v);
   const cap = s => { s = String(s||''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; };
   function fmtTime(ts) { if (!ts) return ''; const d = new Date(ts); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false }); }
-  function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => PAIN_LABELS[String(a).toLowerCase()] || cap(a)); }
+  function painLabels(areas) { return (Array.isArray(areas) ? areas : []).map(a => { const k = String(a).toLowerCase(); return tt('wellness.pain.' + k, PAIN_LABELS[k] || cap(a)); }); }
   function modelFromRow(r) {
     return {
       name: r.player_name || 'Player',
@@ -289,15 +292,15 @@
       const sev = v == null ? '' : T.subSev(v);
       const w = v == null ? 0 : Math.min(100, v / 7 * 100);
       const shown = v == null ? '—' : v;
-      return `<div class="subrow ${sev}"><span class="name">${s.lab}</span><span class="track"><i style="width:${w.toFixed(0)}%"></i></span><span class="n">${shown}<span style="opacity:.5">/7</span></span></div>`;
+      return `<div class="subrow ${sev}"><span class="name">${tt('wellness.sub.' + s.key, s.lab)}</span><span class="track"><i style="width:${w.toFixed(0)}%"></i></span><span class="n">${shown}<span style="opacity:.5">/7</span></span></div>`;
     }).join('');
   }
 
   function cardHTML(p) {
     const isLegacy = p.hooper == null;
-    const b = isLegacy ? { sev: '', label: (p.readiness != null ? 'Legacy' : 'No data') } : T.bandHooper(p.hooper);
+    const b = isLegacy ? { sev: '', label: (p.readiness != null ? tt('wellness.legacy','Legacy') : tt('wellness.noData','No data')) } : T.bandHooper(p.hooper);
     const displayVal = isLegacy ? (p.readiness != null ? p.readiness : '—') : p.hooper;
-    const scaleText = isLegacy ? 'Readiness · /10' : 'Hooper · /28';
+    const scaleText = isLegacy ? tt('wellness.scaleReadiness','Readiness · /10') : tt('wellness.scaleHooper','Hooper · /28');
     const bandStyle = isLegacy ? 'background:var(--cm-neutral-bg);color:var(--cm-fg-muted);border:1px solid var(--cm-neutral-bd);' : '';
     const markerPos = isLegacy ? '0%' : markerLeft(p.hooper);
     const lastName = p.name.split(/\s+/).pop();
@@ -305,23 +308,25 @@
     const hasNote = !!p.comment;
     const flags = [];
     if (p.pain.length) flags.push(painChipsHTML(p.pain, 2));
-    if (hasNote) flags.push(`<span class="pc-note-ic" title="Has a note"><i class="ti ti-message-2"></i></span>`);
+    if (hasNote) flags.push(`<span class="pc-note-ic" title="${tt('wellness.hasNote','Has a note')}"><i class="ti ti-message-2"></i></span>`);
     const flagsHTML = flags.length ? flags.join('') : '<span style="font:500 12px/1 var(--cm-font-mono); color:var(--cm-fg-faint);">—</span>';
 
     const painFull = p.pain.length
-      ? `<div class="pc-det-block"><div class="h">Pain areas flagged</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${T.escape(z)}</span>`).join('')}</div></div>`
+      ? `<div class="pc-det-block"><div class="h">${tt('wellness.painAreasFlagged','Pain areas flagged')}</div><div class="pc-pain-full">${p.pain.map(z=>`<span class="pain-chip"><i class="ti ${PAIN_ICON}"></i>${T.escape(z)}</span>`).join('')}</div></div>`
       : '';
+    const noteMeta = `${tt('wellness.playerNote','Player note')}${p.time ? ` · ${tt('wellness.submitted', 'submitted ' + p.time, { time: p.time })}` : ''}`;
     const noteFull = hasNote
-      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">Player note${p.time ? ` · submitted ${p.time}` : ''}</div></div></div>`
+      ? `<div class="pc-comment"><i class="ti ti-message-2"></i><div><p>${T.escape(p.comment)}</p><div class="meta">${noteMeta}</div></div></div>`
       : '';
     const rightBlock = (p.pain.length || hasNote)
-      ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">Comment</div>${noteFull}</div>` : ''}`
-      : `<div class="pc-det-block"><div class="h">Flags</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">No pain areas or notes reported.</p></div>`;
+      ? `${painFull}${hasNote ? `<div class="pc-det-block" style="margin-top:${p.pain.length?'16px':'0'}"><div class="h">${tt('wellness.comment','Comment')}</div>${noteFull}</div>` : ''}`
+      : `<div class="pc-det-block"><div class="h">${tt('wellness.flags','Flags')}</div><p style="font:var(--cm-body-sm); color:var(--cm-fg-muted);">${tt('wellness.noPainOrNotes','No pain areas or notes reported.')}</p></div>`;
 
     const moodRow = p.mood != null
-      ? `<div class="subrow"><span class="name">Mood</span><span class="track"><i style="width:${Math.min(100, p.mood/7*100).toFixed(0)}%"></i></span><span class="n">${p.mood}<span style="opacity:.5">/7</span></span></div>`
+      ? `<div class="subrow"><span class="name">${tt('wellness.mood','Mood')}</span><span class="track"><i style="width:${Math.min(100, p.mood/7*100).toFixed(0)}%"></i></span><span class="n">${p.mood}<span style="opacity:.5">/7</span></span></div>`
       : '';
-    const waMsg = T.escape(`Hi ${lastName} — saw your check-in${isLegacy ? '' : ` (Hooper ${p.hooper})`}. How are you feeling this morning?`);
+    const hooperStr = isLegacy ? '' : tt('wellness.waHooper', ` (Hooper ${p.hooper})`, { val: p.hooper });
+    const waMsg = T.escape(tt('wellness.waSeen', `Hi ${lastName} — saw your check-in${hooperStr}. How are you feeling this morning?`, { name: lastName, hooper: hooperStr }));
 
     return `
     <article class="pc" data-sev="${b.sev}">
@@ -350,14 +355,14 @@
       <div class="pc-detail">
         <div class="pc-detail-grid">
           <div class="pc-det-block">
-            <div class="h">Wellness breakdown · higher = worse</div>
+            <div class="h">${tt('wellness.breakdown','Wellness breakdown · higher = worse')}</div>
             ${subrowsHTML(p)}
             ${moodRow}
           </div>
           <div>${rightBlock}
             <div class="pc-det-actions">
-              <button class="cm-btn is-secondary is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Message</button>
-              <button class="cm-btn is-ghost is-sm" disabled title="Coming soon"><i class="ti ti-history"></i>7-day history</button>
+              <button class="cm-btn is-secondary is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>${tt('wellness.message','Message')}</button>
+              <button class="cm-btn is-ghost is-sm" disabled title="${tt('wellness.comingSoon','Coming soon')}"><i class="ti ti-history"></i>${tt('wellness.history7d','7-day history')}</button>
             </div>
           </div>
         </div>
@@ -366,7 +371,8 @@
   }
 
   function pendingCardHTML(p) {
-    const waMsg = T.escape(`Hi ${p.name.split(/\s+/).pop()} — we're still missing your wellness check-in before training today. Please fill it in when you can, thanks!`);
+    const _last = p.name.split(/\s+/).pop();
+    const waMsg = T.escape(tt('wellness.waRemind', `Hi ${_last} — we're still missing your wellness check-in before training today. Please fill it in when you can, thanks!`, { name: _last }));
     return `
     <article class="pc is-pending">
       <div class="pc-pending-head">
@@ -376,9 +382,9 @@
             <div class="pc-name">${T.escape(p.name)}</div>
           </div>
         </div>
-        <span class="status"><i class="ti ti-clock-x"></i>Not filled</span>
+        <span class="status"><i class="ti ti-clock-x"></i>${tt('wellness.notFilled','Not filled')}</span>
         <div class="right">
-          <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>Remind</button>
+          <button class="cm-btn is-ghost is-sm" data-wa="${waMsg}"><i class="ti ti-brand-whatsapp"></i>${tt('wellness.remind','Remind')}</button>
         </div>
       </div>
     </article>`;
@@ -419,9 +425,9 @@
     document.getElementById('pipResp').textContent = done;
     document.getElementById('pipPend').textContent = missing;
     document.getElementById('remindT').textContent = missing
-      ? `${missing} player${missing === 1 ? '' : 's'} haven’t checked in yet`
-      : 'Everyone has checked in';
-    document.getElementById('remindBtn').lastChild.textContent = `Remind missing (${missing})`;
+      ? tt('wellness.remindCount', missing === 1 ? "1 player hasn't checked in yet" : `${missing} players haven't checked in yet`, { count: missing })
+      : tt('wellness.everyoneCheckedIn', 'Everyone has checked in');
+    document.getElementById('remindBtn').lastChild.textContent = tt('wellness.remindMissing', `Remind missing (${missing})`, { count: missing });
 
     respWrap.style.display = 'none';
     pendWrap.style.display = 'none';
@@ -432,8 +438,8 @@
     if (state.loading) { skel.style.display = ''; skel.querySelector('.tr-list').innerHTML = skeletonHTML(); return; }
     if (state.error)   { err.style.display = ''; return; }
     if (total === 0) {
-      document.getElementById('emptyH').textContent = 'No players in this team';
-      document.getElementById('emptyP').textContent = 'There are no active players to show for the selected team.';
+      document.getElementById('emptyH').textContent = tt('wellness.noPlayersTitle', 'No players in this team');
+      document.getElementById('emptyP').textContent = tt('wellness.noPlayersSub', 'There are no active players to show for the selected team.');
       empty.style.display = ''; return;
     }
 
@@ -497,7 +503,7 @@
     state.teams = teams; state.fullAccess = fullAccess;
     const saved = sessionStorage.getItem('cal_active_team');
     const useTeam = (saved && teams.some(t => t.id === saved)) ? saved : (fullAccess ? '' : (teams[0]?.id || ''));
-    sel.innerHTML = (fullAccess ? '<option value="">Whole club</option>' : '') +
+    sel.innerHTML = (fullAccess ? `<option value="">${tt('wellness.wholeClub','Whole club')}</option>` : '') +
       teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     sel.value = useTeam;
     sel.addEventListener('change', () => {
@@ -516,7 +522,7 @@
       icon.style.transform = 'rotate(360deg)';
       setTimeout(() => { icon.style.transition = 'none'; icon.style.transform = 'none'; }, 820);
       await loadWellness();
-      if (!state.error) T.toast(`Wellness refreshed · ${state.responders.length} of ${state.total} in`, 'ti-refresh');
+      if (!state.error) T.toast(tt('wellness.refreshedToast', `Wellness refreshed · ${state.responders.length} of ${state.total} in`, { n: state.responders.length, total: state.total }), 'ti-refresh');
     });
   }
 
@@ -536,11 +542,11 @@
         if (error) throw error;
         const url = location.origin + '/survey.html?token=' + token;
         const names = state.pending.map(p => p.name).join(', ');
-        const msg = `Daily wellness check-in reminder.\nMissing: ${names}\nComplete it here: ${url}`;
+        const msg = tt('wellness.waRemindBulk', `Daily wellness check-in reminder.\nMissing: ${names}\nComplete it here: ${url}`, { names, url });
         window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
       } catch (e) {
         console.warn('[Wellness] remind:', e && e.message);
-        T.toast("Couldn't create reminder", 'ti-alert-triangle');
+        T.toast(tt('wellness.remindError', "Couldn't create reminder"), 'ti-alert-triangle');
       } finally { btn.disabled = false; }
     });
   }
@@ -572,7 +578,7 @@
     const shareTeam = document.getElementById('shareTeam');
     let currentUrl = '';
 
-    shareTeam.innerHTML = (state.fullAccess ? '<option value="">Whole club</option>' : '') +
+    shareTeam.innerHTML = (state.fullAccess ? `<option value="">${tt('wellness.wholeClub','Whole club')}</option>` : '') +
       state.teams.map(t => `<option value="${t.id}">${T.escape(t.name)}</option>`).join('');
     const cur = document.getElementById('wmTeamSelect').value;
     if ([...shareTeam.options].some(o => o.value === cur)) shareTeam.value = cur;
@@ -587,29 +593,35 @@
         currentUrl = location.origin + '/survey.html?token=' + token;
         linkUrl.textContent = currentUrl;
         linkRow.classList.remove('is-empty');
-        btnGen.innerHTML = '<i class="ti ti-refresh"></i>New';
+        btnGen.innerHTML = '<i class="ti ti-refresh"></i>' + T.escape(tt('wellness.newLink','New'));
         tokNote.style.display = '';
-        const label = teamId ? shareTeam.options[shareTeam.selectedIndex].text : 'the whole club';
-        tokNote.innerHTML = '<i class="ti ti-shield-check"></i>Secure link · valid until revoked · ' + T.escape(label);
+        const label = teamId ? shareTeam.options[shareTeam.selectedIndex].text : tt('wellness.theWholeClub','the whole club');
+        tokNote.innerHTML = '<i class="ti ti-shield-check"></i>' + T.escape(tt('wellness.secureLinkValid', 'Secure link · valid until revoked · ' + label, { label }));
         btnCopy.disabled = false; btnWa.disabled = false;
       } catch (e) {
         console.warn('[Wellness] share:', e && e.message);
-        T.toast("Couldn't generate link", 'ti-alert-triangle');
+        T.toast(tt('wellness.shareError', "Couldn't generate link"), 'ti-alert-triangle');
       } finally { btnGen.disabled = false; }
     }
     btnGen.addEventListener('click', gen);
     shareTeam.addEventListener('change', () => { if (currentUrl) gen(); });
-    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp('Daily check-in: ' + currentUrl); });
+    btnWa.addEventListener('click', () => { if (currentUrl) T.whatsapp(tt('wellness.waShareLink', 'Daily check-in: ' + currentUrl, { url: currentUrl })); });
   }
 
-  /* ── Page subtitle (live date) ── */
-  (function () {
-    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const now = new Date();
+  /* ── Page subtitle (live date, localized) ── */
+  function setSubtitle() {
     const sub = document.getElementById('pgSub');
-    if (sub) sub.textContent = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()} · Morning triage`;
-  })();
+    if (!sub) return;
+    const lang = (window.CM_I18N && window.CM_I18N.current) || undefined;
+    let dateStr;
+    try { dateStr = new Date().toLocaleDateString(lang, { weekday:'long', year:'numeric', month:'long', day:'numeric' }); }
+    catch (e) { dateStr = new Date().toDateString(); }
+    sub.textContent = `${dateStr} · ${tt('wellness.morningTriage','Morning triage')}`;
+  }
+  setSubtitle();
+
+  /* ── Re-render on language change (static tags handled globally by sidebar.js) ── */
+  document.addEventListener('cm:langchanged', () => { try { setSubtitle(); if (window.renderWellness) window.renderWellness(); } catch (e) {} });
 
   /* ── Boot: auth guard → club → team select → wire actions → load ── */
   (async () => {
