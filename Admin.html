@@ -1174,13 +1174,15 @@
           <div style="font:600 14px/1.4 var(--cm-font-sans);color:var(--cm-fg);margin-top:10px">Acceso total por rol</div>
           <div style="font:500 12.5px/1.5 var(--cm-font-sans);margin-top:4px">Los ${_bucket === 'owner' ? 'owners' : 'admins'} ven todas las secciones automáticamente. No hace falta asignar accesos.</div>
         </div>`;
-      // Ocultar el botón Save para este caso (no hay nada que guardar)
+      // Ocultar el botón Save y las acciones masivas para este caso (no hay nada que guardar)
       const sv = document.getElementById('secModalSave'); if (sv) sv.style.display = 'none';
+      const _tl = document.getElementById('secModalTools'); if (_tl) _tl.style.display = 'none';
       document.getElementById('secModalBackdrop').style.display = 'flex';
       return;
     }
-    // (para roles normales, restaurar el Save y la ayuda por si quedaron ocultos)
+    // (para roles normales, restaurar el Save, las acciones masivas y la ayuda por si quedaron ocultos)
     const _sv2 = document.getElementById('secModalSave'); if (_sv2) _sv2.style.display = '';
+    const _tl2 = document.getElementById('secModalTools'); if (_tl2) _tl2.style.display = 'flex';
     if (_help) _help.style.display = '';
     // Not managed yet → start with everything ON ("all allowed; toggle off to block").
     // Managed → reflect the currently-allowed pages.
@@ -1213,9 +1215,14 @@
     closeMemberSectionsModal();
     applyFilters();
   }
+  function memberSecToggleAll(on) {
+    document.querySelectorAll('#secModalList .ad-toggle').forEach(t => t.classList.toggle('is-on', on));
+  }
   document.getElementById('secModalClose') ?.addEventListener('click', closeMemberSectionsModal);
   document.getElementById('secModalCancel')?.addEventListener('click', closeMemberSectionsModal);
   document.getElementById('secModalSave')  ?.addEventListener('click', saveMemberSections);
+  document.getElementById('secModalAll')     ?.addEventListener('click', () => memberSecToggleAll(true));
+  document.getElementById('secModalClearAll')?.addEventListener('click', () => memberSecToggleAll(false));
 
   // ── Role access templates (per-role default modules) ──
   // owner/admin excluded: they see everything by role, no template applies.
@@ -1809,6 +1816,10 @@
       <button id="secModalClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
     </div>
     <div id="secModalHelp" style="padding:12px 16px 0;font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">Toggle off the pages this member should <strong>not</strong> access. Staff Hub, Calendar and Chat &amp; tasks are always available.</div>
+    <div id="secModalTools" style="display:flex;align-items:center;gap:8px;padding:10px 16px 0">
+      <button class="cm-btn is-outline is-sm" id="secModalAll"><i class="ti ti-checks" style="font-size:13px"></i>Assign all</button>
+      <button class="cm-btn is-outline is-sm" id="secModalClearAll"><i class="ti ti-square-off" style="font-size:13px"></i>Clear all</button>
+    </div>
     <div id="secModalList" style="padding:14px 16px;max-height:60vh;overflow:auto;display:grid;grid-template-columns:1fr;gap:8px"></div>
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-outline is-sm" id="secModalCancel">Cancel</button>
