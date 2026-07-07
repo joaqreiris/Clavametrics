@@ -604,8 +604,9 @@
 
         <!-- Right: module gates + recent audit -->
         <div>
-          <div class="ad-card">
+          <div class="ad-card is-collapsed" id="adModulesCard">
             <div class="ad-card-h">
+              <button class="ad-collapse" onclick="this.closest('.ad-card').classList.toggle('is-collapsed')" title="Collapse/expand"><i class="ti ti-chevron-down" style="font-size:16px"></i></button>
               <h3>Module toggles</h3>
               <span class="sub">enable per workspace</span>
               <div class="right"><button class="cm-icon-btn"><i class="ti ti-dots"></i></button></div>
@@ -1152,7 +1153,13 @@
     });
   }
 
-  await renderModules();
+  // Module toggles are plan-level: only owner or platform super-admin may see/edit them.
+  // Common admins never see the panel (nor its toggles).
+  if (_myRole === 'owner' || (await window.isSuperAdmin())) {
+    await renderModules();
+  } else {
+    const _mc = document.getElementById('adModulesCard'); if (_mc) _mc.style.display = 'none';
+  }
   if (window.__hideAppBoot) window.__hideAppBoot();   // data ready → drop the loading overlay
 
   // ── Member sections modal ──
