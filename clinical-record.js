@@ -1953,6 +1953,8 @@ function getBodyCoords(area) {
   }
 
   async function boot() {
+    // URL guard: inherit the parent module permission (Clinical Records). Redirects to Hub if no access.
+    if (!(await window.guardModule('clinical'))) return;
     try {
       const playerId = new URLSearchParams(location.search).get('player');
       if (!playerId) { showError('No player specified.'); return; }
