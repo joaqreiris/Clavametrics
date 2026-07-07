@@ -594,6 +594,15 @@
             </div>
           </div>
 
+          <!-- Role access templates card -->
+          <div class="ad-card">
+            <div class="ad-card-h">
+              <h3>Role access templates</h3>
+              <span class="sub">Default pages per role on join</span>
+            </div>
+            <div class="ad-pending" id="adRoleTemplates"></div>
+          </div>
+
           <!-- Subscription summary card -->
           <div class="ad-card">
             <div class="ad-card-h">
@@ -1220,6 +1229,71 @@
   document.getElementById('secModalCancel')?.addEventListener('click', closeMemberSectionsModal);
   document.getElementById('secModalSave')  ?.addEventListener('click', saveMemberSections);
 
+  // ── Role access templates (per-role default modules) ──
+  // owner/admin excluded: they see everything by role, no template applies.
+  const TEMPLATE_ROLES = ['coach','assistant_coach','gk_coach','sc_coach','fitness_coach','physio','analyst','nutritionist','staff'];
+  let _roleTplEditId = null;
+  function roleTplToggleAll(on) {
+    document.querySelectorAll('#roleTplList .ad-toggle').forEach(t => t.classList.toggle('is-on', on));
+  }
+  function renderRoleTemplates() {
+    const host = document.getElementById('adRoleTemplates');
+    if (!host) return;
+    host.innerHTML = TEMPLATE_ROLES.map(r => `
+      <div class="ad-pending-row">
+        <div class="info">
+          <div class="em">${prettyRole(r)}</div>
+          <div class="meta">Default pages for new ${prettyRole(r).toLowerCase()} members</div>
+        </div>
+        <button class="cm-btn is-outline is-sm" data-role-tpl="${r}"><i class="ti ti-layout-grid" style="font-size:13px"></i>Edit template</button>
+      </div>`).join('');
+    host.querySelectorAll('[data-role-tpl]').forEach(b =>
+      b.addEventListener('click', () => openRoleTemplateModal(b.dataset.roleTpl)));
+  }
+  async function openRoleTemplateModal(role) {
+    _roleTplEditId = role;
+    document.getElementById('roleTplName').textContent = prettyRole(role);
+    const { data: rows } = await window.sb.from('role_default_modules')
+      .select('module_key').eq('club_id', clubId).eq('role', role);
+    const hasTemplate = !!(rows && rows.length);
+    const current = new Set((rows || []).map(r => r.module_key).filter(k => k !== '__managed__'));
+    // No template yet → start all ON (a role with no template sees everything).
+    // Has template → reflect the saved pages (ignore the '__managed__' sentinel when painting).
+    document.getElementById('roleTplList').innerHTML = SECTIONS.map(s => `
+      <div class="ad-module-row" data-sec="${s.key}">
+        <div class="ic" style="background:var(--cm-bg-soft);color:var(--cm-fg-muted)"><i class="ti ${s.icon}"></i></div>
+        <div class="info"><div class="name">${s.name}</div></div>
+        <div class="ad-toggle${(hasTemplate ? current.has(s.key) : true) ? ' is-on' : ''}"></div>
+      </div>`).join('');
+    document.querySelectorAll('#roleTplList .ad-toggle').forEach(t =>
+      t.addEventListener('click', () => t.classList.toggle('is-on')));
+    document.getElementById('roleTplBackdrop').style.display = 'flex';
+  }
+  function closeRoleTemplateModal() { document.getElementById('roleTplBackdrop').style.display = 'none'; }
+  async function saveRoleTemplate() {
+    if (!_roleTplEditId) return;
+    const role = _roleTplEditId;
+    const keys = [...document.querySelectorAll('#roleTplList [data-sec]')]
+      .filter(r => r.querySelector('.ad-toggle').classList.contains('is-on'))
+      .map(r => r.dataset.sec);
+    await window.sb.from('role_default_modules').delete().eq('club_id', clubId).eq('role', role);
+    // Always write the '__managed__' sentinel so the template means "managed" and doesn't
+    // fall through to fail-open (full access) when copied to a new member.
+    const rows = [{ club_id: clubId, role, module_key: '__managed__' },
+                  ...keys.map(k => ({ club_id: clubId, role, module_key: k }))];
+    const { error } = await window.sb.from('role_default_modules').insert(rows);
+    if (error) { alert('Save failed: ' + error.message); return; }
+    window.sb.rpc('log_audit', { p_table: 'role_default_modules', p_op: 'UPDATE', p_changes: { role, sections: keys }, p_club_id: clubId });
+    closeRoleTemplateModal();
+  }
+  document.getElementById('roleTplClose') ?.addEventListener('click', closeRoleTemplateModal);
+  document.getElementById('roleTplCancel')?.addEventListener('click', closeRoleTemplateModal);
+  document.getElementById('roleTplSave')  ?.addEventListener('click', saveRoleTemplate);
+  document.getElementById('roleTplAll')   ?.addEventListener('click', () => roleTplToggleAll(true));
+  document.getElementById('roleTplClear') ?.addEventListener('click', () => roleTplToggleAll(false));
+  document.getElementById('roleTplBackdrop')?.addEventListener('click', e => { if (e.target.id === 'roleTplBackdrop') closeRoleTemplateModal(); });
+  renderRoleTemplates();
+
   // ── Member categories (teams) modal ──
   let _mtEditId = null;
   let _mtTeams = [];
@@ -1684,6 +1758,28 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
       <button class="cm-btn is-outline is-sm" id="secModalCancel">Cancel</button>
       <button class="cm-btn is-primary is-sm" id="secModalSave"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Role Template Modal -->
+<div id="roleTplBackdrop" style="display:none;position:fixed;inset:0;background:rgba(8,10,12,.5);backdrop-filter:blur(4px);z-index:900;align-items:center;justify-content:center">
+  <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:420px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2)">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--cm-border)">
+      <i class="ti ti-shield-cog" style="font-size:18px;color:var(--cm-accent)"></i>
+      <div style="font:600 15px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Default access · <span id="roleTplName">—</span></div>
+      <button id="roleTplClose" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:12px 16px 0;font:500 12px/1.45 var(--cm-font-sans);color:var(--cm-fg-muted)">Pages new members with this role can access by default. Applied when they join; you can still edit per member afterwards.</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 16px 0">
+      <button class="cm-btn is-outline is-sm" id="roleTplAll"><i class="ti ti-checks" style="font-size:13px"></i>Assign all</button>
+      <button class="cm-btn is-outline is-sm" id="roleTplClear"><i class="ti ti-square-off" style="font-size:13px"></i>Clear all</button>
+      <span style="margin-left:auto;font:500 11px/1.3 var(--cm-font-mono);color:var(--cm-fg-faint)">Changes apply to members who join from now on.</span>
+    </div>
+    <div id="roleTplList" style="padding:14px 16px;max-height:60vh;overflow:auto;display:grid;grid-template-columns:1fr;gap:8px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--cm-border)">
+      <button class="cm-btn is-outline is-sm" id="roleTplCancel">Cancel</button>
+      <button class="cm-btn is-primary is-sm" id="roleTplSave"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save</button>
     </div>
   </div>
 </div>
