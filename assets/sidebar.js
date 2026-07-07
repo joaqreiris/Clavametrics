@@ -7,6 +7,22 @@
   // before .hub-shell exists / first paint) so there's no expanded→collapsed flash.
   try { if (localStorage.getItem('cm_sidebar_collapsed') === '1') document.documentElement.classList.add('cm-rail'); } catch (_) {}
 
+  // ── i18n runtime ─────────────────────────────────────────────
+  // Load the shared i18n runtime once, on every app page that has a sidebar,
+  // so nav + chrome translate without touching each page's <head>.
+  if (!window.CM_I18N && !document.querySelector('script[src*="assets/i18n.js"]')) {
+    var _sbScript = document.currentScript;
+    var _i18nSrc = (_sbScript && _sbScript.src)
+      ? _sbScript.src.replace(/sidebar\.js(\?.*)?$/, 'i18n.js')
+      : 'assets/i18n.js';
+    var _i18nEl = document.createElement('script');
+    _i18nEl.src = _i18nSrc; _i18nEl.defer = true;
+    document.head.appendChild(_i18nEl);
+  }
+  function _applyI18n(root) {
+    if (window.CM_I18N) window.CM_I18N.applyTo(root || document);
+  }
+
   // ── CSS ──────────────────────────────────────────────────────
   if (!document.getElementById('cm-sidebar-css')) {
     const s = document.createElement('style');
@@ -159,10 +175,10 @@ html.cm-rail .hub-nav-grip{display:none}
   // ── NAV DEFINITION ───────────────────────────────────────────
   const NAV_GROUPS = [
     { label: 'Overview', items: [
-      { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub' },
-      { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar' },
+      { href: 'Hub.html',               icon: 'ti-home',             label: 'Staff Hub',        i18n: 'shell.nav.hub' },
+      { href: 'Calendar.html',          icon: 'ti-calendar-stats',   label: 'Calendar',         i18n: 'shell.nav.calendar' },
       { href: 'Annual%20Planner.html',  icon: 'ti-timeline',         label: 'Annual planner',   key: 'annual-planner' },
-      { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks' },
+      { href: 'Chat%20%26%20Tasks.html',icon: 'ti-message-circle',   label: 'Chat &amp; tasks', i18n: 'shell.nav.chat-tasks' },
     ]},
     { label: 'Technical', items: [
       { href: 'Planner.html',           icon: 'ti-clipboard-list',   label: 'Drill Designer',   key: 'planner' },
@@ -193,10 +209,10 @@ html.cm-rail .hub-nav-grip{display:none}
       { href: 'Rehab & Preventives.html',   icon: 'ti-activity-heartbeat',   label: 'Rehab & preventives', key: 'rehab' },
     ]},
     { label: 'Workspace', items: [
-      { href: '#',           icon: 'ti-settings',    label: 'Settings', extra: 'data-open-settings' },
-      { href: 'Admin.html',  icon: 'ti-user-shield', label: 'Admin',   adminOnly: true },
-      { href: 'Billing.html',icon: 'ti-credit-card', label: 'Billing', adminOnly: true },
-      { href: 'Platform.html', icon: 'ti-shield-lock', label: 'Platform Admin', platformOnly: true },
+      { href: '#',           icon: 'ti-settings',    label: 'Settings', extra: 'data-open-settings', i18n: 'shell.nav.settings' },
+      { href: 'Admin.html',  icon: 'ti-user-shield', label: 'Admin',   adminOnly: true, i18n: 'shell.nav.admin' },
+      { href: 'Billing.html',icon: 'ti-credit-card', label: 'Billing', adminOnly: true, i18n: 'shell.nav.billing' },
+      { href: 'Platform.html', icon: 'ti-shield-lock', label: 'Platform Admin', platformOnly: true, i18n: 'shell.nav.platform-admin' },
     ]},
   ];
 
@@ -235,14 +251,16 @@ html.cm-rail .hub-nav-grip{display:none}
     const savedAll = _navOrder();
     return NAV_GROUPS.map(g => `
       <div class="hub-nav-group">
-        <div class="hub-nav-label">${g.label}</div>
+        <div class="hub-nav-label" data-i18n="shell.group.${g.label.toLowerCase()}">${g.label}</div>
         ${_orderItems(g.items, savedAll[g.label]).map(item => {
           const active = isActive(item.href) ? ' is-active' : '';
           const extra  = item.extra ? ` ${item.extra}` : '';
           const adm    = item.adminOnly ? ' data-admin-only' : '';
           const mod    = item.key ? ` data-mod="${item.key}"` : '';
           const plt    = item.platformOnly ? ' data-platform-only' : '';
-          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${mod}${plt} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt">${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
+          const i18nKey = item.i18n || (item.key ? 'shell.nav.' + item.key : '');
+          const i18n   = i18nKey ? ` data-i18n="${i18nKey}"` : '';
+          return `<a class="hub-nav-item${active}" href="${item.href}" data-nav-href="${item.href}"${extra}${adm}${mod}${plt} title="${item.label}"><i class="ti ${item.icon}"></i><span class="hub-nav-txt"${i18n}>${item.label}</span><span class="hub-nav-grip"><i class="ti ti-grip-vertical"></i></span></a>`;
         }).join('')}
       </div>`).join('');
   }
@@ -276,7 +294,7 @@ html.cm-rail .hub-nav-grip{display:none}
           </div>
         </div>
         <button class="hub-logout-btn" id="sideLogoutBtn" aria-label="Sign out">
-          <i class="ti ti-logout"></i><span>Sign out</span>
+          <i class="ti ti-logout"></i><span data-i18n="shell.signout">Sign out</span>
         </button>
       </div>
     </aside>`;
@@ -449,6 +467,10 @@ html.cm-rail .hub-nav-grip{display:none}
 
     // Drag-to-reorder nav items (desktop expanded sidebar only)
     _initNavDnD();
+
+    // Translate the freshly rendered sidebar (no-op until the i18n runtime is ready;
+    // the cm:langchanged listener re-applies once it boots / on language switch).
+    _applyI18n(document.querySelector('.hub-side'));
   }
 
   // ── LOGO HELPER ──────────────────────────────────────────────
@@ -575,7 +597,8 @@ html.cm-rail .hub-nav-grip{display:none}
     const list = document.getElementById('cm-np-list');
     if (!list) return;
     if (!_notifData.length) {
-      list.innerHTML = '<div class="cm-np-empty">No notifications yet</div>';
+      list.innerHTML = '<div class="cm-np-empty" data-i18n="shell.nonotif">No notifications yet</div>';
+      _applyI18n(list);
       return;
     }
     list.innerHTML = _notifData.map(n => `
@@ -652,12 +675,13 @@ html.cm-rail .hub-nav-grip{display:none}
     panel.className = 'cm-np';
     panel.innerHTML = `
       <div class="cm-np-h">
-        <span class="ttl">Notifications</span>
-        <button class="mark-all" id="cm-mark-all">Mark all read</button>
+        <span class="ttl" data-i18n="shell.notifications">Notifications</span>
+        <button class="mark-all" id="cm-mark-all" data-i18n="shell.markallread">Mark all read</button>
       </div>
       <div class="cm-np-list" id="cm-np-list"></div>
-      <div class="cm-np-foot"><a href="#">View all</a></div>`;
+      <div class="cm-np-foot"><a href="#" data-i18n="shell.viewall">View all</a></div>`;
     wrap.appendChild(panel);
+    _applyI18n(panel);
 
     // Load last 30 notifications — bail silently if table doesn't exist
     const { data: notifs, error: notifErr } = await window.sb
@@ -786,7 +810,7 @@ html.cm-rail .hub-nav-grip{display:none}
     const unreadKeys = new Set(Object.keys(_chatUnread));
     const recentToShow = recentArr.filter(r => !unreadKeys.has(r.key)).slice(0, 4);
     if (recentToShow.length) {
-      html += `<div class="cm-cp-sect-lbl">Recent</div>`;
+      html += `<div class="cm-cp-sect-lbl" data-i18n="shell.recent">Recent</div>`;
       for (const r of recentToShow) {
         const ini = r.isGroup ? '' : (r.senderName || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
         const av = r.isGroup
@@ -807,6 +831,7 @@ html.cm-rail .hub-nav-grip{display:none}
       html = '<div class="cm-cp-empty">No conversations</div>';
     }
     list.innerHTML = html;
+    _applyI18n(list);
   }
 
   function _showChatToast(msg, senderName) {
@@ -860,10 +885,11 @@ html.cm-rail .hub-nav-grip{display:none}
     panel.id = 'cm-cp';
     panel.className = 'cm-cp';
     panel.innerHTML = `
-      <div class="cm-cp-h"><span class="ttl">Messages</span></div>
+      <div class="cm-cp-h"><span class="ttl" data-i18n="shell.messages">Messages</span></div>
       <div id="cm-cp-list" style="overflow-y:auto;flex:1;max-height:360px"></div>
       <div class="cm-cp-foot"><a href="Chat%20%26%20Tasks.html">Open Chat</a></div>`;
     wrap.appendChild(panel);
+    _applyI18n(panel);
 
     // Expose mark-read for Chat & Tasks to call
     window.cmChatMarkRead = key => {
@@ -966,6 +992,9 @@ html.cm-rail .hub-nav-grip{display:none}
   }
 
   // ── BOOT ─────────────────────────────────────────────────────
+  // Re-translate the whole shell whenever the i18n runtime boots or the user
+  // switches language (covers the sidebar + the dynamically-built chrome panels).
+  document.addEventListener('cm:langchanged', () => _applyI18n(document));
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { inject(); loadData(); _initNotifications(); _initChatNotif(); });
   } else {
