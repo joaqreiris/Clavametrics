@@ -146,7 +146,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 
 ### Fase 3 — Técnico
 - ✅ Planner.html  *(Drill Designer)*
-- ⬜ Exercises Library.html
+- ✅ Exercises Library.html
 - ⬜ Daily/Sessions History.html  → `Sessions History.html`
 - ⬜ Annual Planner.html
 - ⬜ Match Reports.html
