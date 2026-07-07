@@ -1085,19 +1085,34 @@
     }).join('');
   };
 
-  // ── Module toggles — persisted to club_settings table ────────────
-  const MODULES = [
-    { key:'planner',      icon:'ti-clipboard-list', bg:'var(--cm-info-bg)',    fg:'var(--cm-info)',    name:'Drill Designer',       defaultOn:true },
-    { key:'sessions-lib', icon:'ti-list-tree',      bg:'var(--cm-success-bg)', fg:'var(--cm-success)', name:'Exercises Library',  defaultOn:true },
-    { key:'squad',        icon:'ti-users-group',    bg:'var(--cm-violet-bg)',  fg:'var(--cm-violet)',  name:'Squad',         defaultOn:true },
-    { key:'availability', icon:'ti-user-check',     bg:'var(--cm-warning-bg)', fg:'var(--cm-warning)', name:'Availability',  defaultOn:true },
-    { key:'wellness',     icon:'ti-heartbeat',      bg:'var(--cm-success-bg)', fg:'var(--cm-success)', name:'Wellness',      defaultOn:true },
-    { key:'load-monitor', icon:'ti-chart-line',     bg:'var(--cm-warning-bg)', fg:'var(--cm-warning)', name:'Load monitor',  defaultOn:true },
-    { key:'gps',          icon:'ti-radar-2',        bg:'var(--cm-info-bg)',    fg:'var(--cm-info)',    name:'GPS analysis',  defaultOn:true },
-    { key:'injuries',     icon:'ti-bandage',        bg:'var(--cm-danger-bg)',  fg:'var(--cm-danger)',  name:'Injuries',      defaultOn:true },
-    { key:'nutrition',    icon:'ti-apple',          bg:'var(--cm-success-bg)', fg:'var(--cm-success)', name:'Nutrition',     defaultOn:false },
-    { key:'video',        icon:'ti-video',          bg:'var(--cm-violet-bg)',  fg:'var(--cm-violet)',  name:'Video room',    defaultOn:false, soon:true },
-  ];
+  // ── Module toggles — persisted to club_modules table ─────────────
+  // Derivado de CM_SECTIONS (fuente única, 23 páginas) para que nunca se desactualice.
+  // MOD_META = overrides de presentación/comportamiento por key (lo que el array viejo
+  // tenía distinto del default). Sin entrada → defaultOn:true + color de ícono neutro.
+  const MOD_META = {
+    'planner':      { bg:'var(--cm-info-bg)',    fg:'var(--cm-info)' },
+    'sessions-lib': { bg:'var(--cm-success-bg)', fg:'var(--cm-success)' },
+    'squad':        { bg:'var(--cm-violet-bg)',  fg:'var(--cm-violet)' },
+    'availability': { bg:'var(--cm-warning-bg)', fg:'var(--cm-warning)' },
+    'wellness':     { bg:'var(--cm-success-bg)', fg:'var(--cm-success)' },
+    'load-monitor': { bg:'var(--cm-warning-bg)', fg:'var(--cm-warning)' },
+    'gps':          { bg:'var(--cm-info-bg)',    fg:'var(--cm-info)' },
+    'injuries':     { bg:'var(--cm-danger-bg)',  fg:'var(--cm-danger)' },
+    'nutrition':    { bg:'var(--cm-success-bg)', fg:'var(--cm-success)', defaultOn:false },
+    'video-room':   { bg:'var(--cm-violet-bg)',  fg:'var(--cm-violet)',  defaultOn:false, soon:true },
+  };
+  const MODULES = (window.CM_SECTIONS || []).map(s => {
+    const o = MOD_META[s.key] || {};
+    return {
+      key: s.key,
+      icon: s.icon,
+      name: s.name,
+      bg: o.bg || 'var(--cm-bg-soft)',
+      fg: o.fg || 'var(--cm-fg-muted)',
+      defaultOn: o.defaultOn !== undefined ? o.defaultOn : true,
+      soon: o.soon || false,
+    };
+  });
 
   async function renderModules() {
     const [{ data: saved }, { data: memMods }] = await Promise.all([
