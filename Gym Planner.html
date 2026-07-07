@@ -146,12 +146,12 @@
     <div class="hub-topbar">
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
-        <select id="gpTeamSelect" onchange="gpOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+        <select id="gpTeamSelect" onchange="gpOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
       </div>
-      <div class="hub-crumb"><i class="ti ti-home"></i><span>Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600">Gym planner</span><span class="sep">/</span><span id="gpCrumbDate">—</span></div>
-      <div class="hub-search"><i class="ti ti-search"></i><input placeholder="Search players, sessions, microcycles…"></div>
+      <div class="hub-crumb"><i class="ti ti-home"></i><span data-i18n="gym_planner.technical">Technical</span><span class="sep">/</span><span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="gym_planner.title">Gym planner</span><span class="sep">/</span><span id="gpCrumbDate">—</span></div>
+      <div class="hub-search"><i class="ti ti-search"></i><input data-i18n-ph="gym_planner.search_ph" placeholder="Search players, sessions, microcycles…"></div>
       <div class="actions">
-        <button class="cm-icon-btn" title="Próximamente" disabled><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" data-i18n-attr="title:gym_planner.coming_soon" title="Próximamente" disabled><i class="ti ti-bell"></i></button>
         <button class="cm-icon-btn" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
@@ -160,58 +160,58 @@
 
       <header class="gp-head">
         <div>
-          <h1>Gym planner</h1>
-          <div class="ctx"><span class="save-dot"></span>Autosaved · <span id="gpUserName">…</span></div>
+          <h1 data-i18n="gym_planner.title">Gym planner</h1>
+          <div class="ctx"><span class="save-dot"></span><span data-i18n="gym_planner.autosaved">Autosaved</span> · <span id="gpUserName">…</span></div>
         </div>
         <div class="meta no-print">
           <div class="gp-pager"><button id="gpNavPrev"><i class="ti ti-chevron-left"></i></button><span class="label" id="gpPagerLabel"><i class="ti ti-calendar-event"></i>—</span><button id="gpNavNext"><i class="ti ti-chevron-right"></i></button></div>
-          <button class="cm-btn is-outline is-sm" onclick="gpPrint()"><i class="ti ti-printer" style="font-size:14px"></i>Print</button>
-          <button class="cm-btn is-outline is-sm" onclick="gpExportPDF()"><i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF</button>
-          <button class="cm-btn is-primary is-sm" id="gpPublishBtn" onclick="gpPublish()"><i class="ti ti-share-2" style="font-size:14px"></i>Publish</button>
+          <button class="cm-btn is-outline is-sm" onclick="gpPrint()"><i class="ti ti-printer" style="font-size:14px"></i><span data-i18n="common.print">Print</span></button>
+          <button class="cm-btn is-outline is-sm" onclick="gpExportPDF()"><i class="ti ti-file-type-pdf" style="font-size:14px"></i><span data-i18n="gym_planner.export_pdf">Export PDF</span></button>
+          <button class="cm-btn is-primary is-sm" id="gpPublishBtn" onclick="gpPublish()"><i class="ti ti-share-2" style="font-size:14px"></i><span data-i18n="gym_planner.publish">Publish</span></button>
         </div>
       </header>
 
       <!-- ===== SESSION INFO ===== -->
       <div class="gp-card">
         <div class="gp-card-h">
-          <h3>Session info</h3>
-          <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpOpenAi()"><i class="ti ti-sparkles" style="font-size:13px"></i>Generate with AI</button>
-    <button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i>Load template</button></div>
+          <h3 data-i18n="gym_planner.session_info">Session info</h3>
+          <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpOpenAi()"><i class="ti ti-sparkles" style="font-size:13px"></i><span data-i18n="gym_planner.generate_with_ai">Generate with AI</span></button>
+    <button class="cm-btn is-ghost is-sm" onclick="gpOpenTemplates()"><i class="ti ti-template" style="font-size:13px"></i><span data-i18n="gym_planner.load_template">Load template</span></button></div>
         </div>
         <div class="gp-card-b">
           <div class="gp-fg">
-            <div class="gp-f"><label>Date</label><input type="date" id="gpDateInput"></div>
-            <div class="gp-f"><label>Start time</label><input type="time" id="gpStartTime"></div>
-            <div class="gp-f"><label>Duration (min)</label><input type="number" id="gpDuration" min="1" max="300" oninput="gpUpdateAu()"></div>
-            <div class="gp-f"><label>Expected RPE <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(1–10)</span></label>
+            <div class="gp-f"><label data-i18n="common.date">Date</label><input type="date" id="gpDateInput"></div>
+            <div class="gp-f"><label data-i18n="gym_planner.start_time">Start time</label><input type="time" id="gpStartTime"></div>
+            <div class="gp-f"><label data-i18n="gym_planner.duration_min">Duration (min)</label><input type="number" id="gpDuration" min="1" max="300" oninput="gpUpdateAu()"></div>
+            <div class="gp-f"><label><span data-i18n="gym_planner.expected_rpe">Expected RPE</span> <span style="font:400 10px/1 var(--cm-font-mono);color:var(--cm-fg-faint)">(1–10)</span></label>
               <select id="gpEstRpe" onchange="gpUpdateAu()">
                 <option value="">—</option>
                 <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
                 <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
               </select>
             </div>
-            <div class="gp-f"><label>Microcycle</label>
+            <div class="gp-f"><label data-i18n="gym_planner.microcycle">Microcycle</label>
               <select id="gpMicrocycle"><option value="">— Loading… —</option></select>
             </div>
-            <div class="gp-f"><label>Match day</label>
+            <div class="gp-f"><label data-i18n="gym_planner.match_day">Match day</label>
               <select id="gpMatchDay"><option value="">—</option><option>MD−5</option><option>MD−4</option><option>MD−3</option><option>MD−2</option><option>MD−1</option><option>MD</option><option>MD+1</option><option>MD+2</option></select>
             </div>
-            <div class="gp-f col-2"><label>Location · equipment</label>
-              <input id="gpLocation" placeholder="Gym A · platforms…">
+            <div class="gp-f col-2"><label data-i18n="gym_planner.location_equipment">Location · equipment</label>
+              <input id="gpLocation" data-i18n-ph="gym_planner.location_ph" placeholder="Gym A · platforms…">
             </div>
-            <div class="gp-f"><label>Title / session name</label><input id="gpTitle" placeholder="e.g. Peak block · MD−4"></div>
-            <div class="gp-f col-4"><label>Orientation</label>
+            <div class="gp-f"><label data-i18n="gym_planner.title_session_name">Title / session name</label><input id="gpTitle" data-i18n-ph="gym_planner.title_ph" placeholder="e.g. Peak block · MD−4"></div>
+            <div class="gp-f col-4"><label data-i18n="gym_planner.orientation">Orientation</label>
               <div class="gp-orient-pills">
-                <button class="gp-or-pill"><span class="dot act"></span>Activation</button>
-                <button class="gp-or-pill"><span class="dot hyp"></span>Hypertrophy</button>
-                <button class="gp-or-pill is-on"><span class="dot str"></span>Max strength</button>
-                <button class="gp-or-pill is-on"><span class="dot pow"></span>Power</button>
-                <button class="gp-or-pill"><span class="dot rsi"></span>RSI · reactive</button>
-                <button class="gp-or-pill"><span class="dot rec"></span>Recovery</button>
+                <button class="gp-or-pill" data-orient="activation"><span class="dot act"></span><span data-i18n="gym_planner.orient_activation">Activation</span></button>
+                <button class="gp-or-pill" data-orient="hypertrophy"><span class="dot hyp"></span><span data-i18n="gym_planner.orient_hypertrophy">Hypertrophy</span></button>
+                <button class="gp-or-pill is-on" data-orient="max"><span class="dot str"></span><span data-i18n="gym_planner.orient_max_strength">Max strength</span></button>
+                <button class="gp-or-pill is-on" data-orient="power"><span class="dot pow"></span><span data-i18n="gym_planner.orient_power">Power</span></button>
+                <button class="gp-or-pill" data-orient="rsi"><span class="dot rsi"></span><span data-i18n="gym_planner.orient_rsi">RSI · reactive</span></button>
+                <button class="gp-or-pill" data-orient="recovery"><span class="dot rec"></span><span data-i18n="gym_planner.orient_recovery">Recovery</span></button>
               </div>
             </div>
-            <div class="gp-f col-4"><label>Notes · context</label>
-              <textarea id="gpNotes" placeholder="General notes…"></textarea>
+            <div class="gp-f col-4"><label data-i18n="gym_planner.notes_context">Notes · context</label>
+              <textarea id="gpNotes" data-i18n-ph="gym_planner.general_notes_ph" placeholder="General notes…"></textarea>
             </div>
           </div>
         </div>
@@ -219,20 +219,20 @@
 
       <!-- ===== TOTALS — order: Warm-up, Plyometrics, Main work, Tonnage, Athletes, AU ===== -->
       <div class="gp-totals">
-        <div class="t"><span class="l">Warm-up</span><span class="v" id="gpTotWarmup">—</span><span class="delta" id="gpTotWarmupDelta"></span></div>
-        <div class="t"><span class="l">Plyometrics</span><span class="v" id="gpTotPlyo">—</span><span class="delta" id="gpTotPlyoDelta"></span></div>
-        <div class="t"><span class="l">Main work</span><span class="v" id="gpTotMain">—</span><span class="delta" id="gpTotMainDelta"></span></div>
-        <div class="t"><span class="l">Tonnage</span><span class="v" id="gpTotTonnage">—<sub>kg</sub></span><span class="delta" id="gpTotTonDelta"></span></div>
-        <div class="t"><span class="l">Athletes</span><span class="v" id="gpTotAthletes">—</span><span class="delta" id="gpTotAthletesDelta"></span></div>
-        <div class="t"><span class="l">Planned AU</span><span class="v" id="gpTotAu">—<sub>AU</sub></span><span class="delta" id="gpTotAuNote" style="color:var(--cm-fg-muted)"></span></div>
+        <div class="t"><span class="l" data-i18n="gym_planner.warmup">Warm-up</span><span class="v" id="gpTotWarmup">—</span><span class="delta" id="gpTotWarmupDelta"></span></div>
+        <div class="t"><span class="l" data-i18n="gym_planner.plyometrics">Plyometrics</span><span class="v" id="gpTotPlyo">—</span><span class="delta" id="gpTotPlyoDelta"></span></div>
+        <div class="t"><span class="l" data-i18n="gym_planner.main_work">Main work</span><span class="v" id="gpTotMain">—</span><span class="delta" id="gpTotMainDelta"></span></div>
+        <div class="t"><span class="l" data-i18n="gym_planner.tonnage">Tonnage</span><span class="v" id="gpTotTonnage">—<sub>kg</sub></span><span class="delta" id="gpTotTonDelta"></span></div>
+        <div class="t"><span class="l" data-i18n="gym_planner.athletes">Athletes</span><span class="v" id="gpTotAthletes">—</span><span class="delta" id="gpTotAthletesDelta"></span></div>
+        <div class="t"><span class="l" data-i18n="gym_planner.planned_au">Planned AU</span><span class="v" id="gpTotAu">—<sub>AU</sub></span><span class="delta" id="gpTotAuNote" style="color:var(--cm-fg-muted)"></span></div>
       </div>
 
       <!-- ===== ATHLETES ===== -->
       <div class="gp-card">
         <div class="gp-card-h">
-          <h3>Athletes</h3>
+          <h3 data-i18n="gym_planner.athletes">Athletes</h3>
           <span class="ct" id="gymAthCt">—</span>
-          <div class="right no-print"><button class="cm-btn is-ghost is-sm" onclick="gpOpenGroups()"><i class="ti ti-layout-grid" style="font-size:13px"></i>Load groups</button><button class="cm-btn is-ghost is-sm" onclick="gpOpenSquad()"><i class="ti ti-users-plus" style="font-size:13px"></i>Pick from squad</button></div>
+          <div class="right no-print"><button class="cm-btn is-ghost is-sm" onclick="gpOpenGroups()"><i class="ti ti-layout-grid" style="font-size:13px"></i><span data-i18n="gym_planner.load_groups">Load groups</span></button><button class="cm-btn is-ghost is-sm" onclick="gpOpenSquad()"><i class="ti ti-users-plus" style="font-size:13px"></i><span data-i18n="gym_planner.pick_from_squad">Pick from squad</span></button></div>
         </div>
         <div class="gp-athletes" id="gymAthPills">
           <!-- Populated by gpLoadAthletes() -->
@@ -242,95 +242,95 @@
       <!-- ===== WARM-UP ===== -->
       <div class="gp-card warmup">
         <div class="gp-card-h">
-          <h3>Warm-up &amp; mobility</h3>
+          <h3 data-i18n="gym_planner.warmup_mobility">Warm-up &amp; mobility</h3>
           <span class="ct" id="gpWarmupCt">—</span>
-          <span class="sub">RAMP protocol · raise-activate-mobilise-potentiate</span>
+          <span class="sub" data-i18n="gym_planner.ramp_protocol">RAMP protocol · raise-activate-mobilise-potentiate</span>
           <div class="right">
-            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
             <input type="number" id="gpWarmupMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'warmup'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'warmup'})"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">From library</span></button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
           <table class="gp-tbl">
             <thead>
               <tr>
-                <th></th><th style="min-width:220px">Exercise</th>
-                <th>Sets</th><th>Reps / time</th><th>Tempo</th><th>Notes</th><th></th>
+                <th></th><th style="min-width:220px" data-i18n="gym_planner.exercise">Exercise</th>
+                <th data-i18n="gym_planner.sets">Sets</th><th data-i18n="gym_planner.reps_time">Reps / time</th><th data-i18n="gym_planner.tempo">Tempo</th><th data-i18n="gym_planner.notes">Notes</th><th></th>
               </tr>
             </thead>
             <tbody id="gpWarmupBody">
             </tbody>
           </table>
-          <button class="gp-add-row no-print" onclick="gpAddWarmupRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add warm-up</button>
+          <button class="gp-add-row no-print" onclick="gpAddWarmupRow()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_warmup">Add warm-up</span></button>
         </div>
       </div>
 
       <!-- ===== PLYOMETRICS (before Main work) ===== -->
       <div class="gp-card plyo">
         <div class="gp-card-h">
-          <h3>Plyometrics &amp; power</h3>
+          <h3 data-i18n="gym_planner.plyometrics_power">Plyometrics &amp; power</h3>
           <span class="ct" id="gpPlyCt">—</span>
-          <span class="sub">Track contact type (extensive / intensive)</span>
+          <span class="sub" data-i18n="gym_planner.track_contact_type">Track contact type (extensive / intensive)</span>
           <div class="right">
-            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
             <input type="number" id="gpPlyoMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'plyo'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'plyo'})"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">From library</span></button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
           <table class="gp-tbl">
             <thead>
               <tr>
-                <th></th><th style="min-width:220px">Exercise</th>
-                <th>Contact</th><th>Sets × Reps</th><th>Contacts</th><th>Box / height</th><th>Rest</th><th>Notes</th><th></th>
+                <th></th><th style="min-width:220px" data-i18n="gym_planner.exercise">Exercise</th>
+                <th data-i18n="gym_planner.contact">Contact</th><th data-i18n="gym_planner.sets_reps">Sets × Reps</th><th data-i18n="gym_planner.contacts">Contacts</th><th data-i18n="gym_planner.box_height">Box / height</th><th data-i18n="gym_planner.rest">Rest</th><th data-i18n="gym_planner.notes">Notes</th><th></th>
               </tr>
             </thead>
             <tbody id="gpPlyoBody">
             </tbody>
           </table>
-          <button class="gp-add-row no-print" onclick="gpAddPlyoRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add plyometric</button>
+          <button class="gp-add-row no-print" onclick="gpAddPlyoRow()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_plyometric">Add plyometric</span></button>
         </div>
       </div>
 
       <!-- ===== MAIN WORK ===== -->
       <div class="gp-card">
         <div class="gp-card-h">
-          <h3>Main work</h3>
+          <h3 data-i18n="gym_planner.main_work">Main work</h3>
           <span class="ct" id="gpMainCt">—</span>
-          <span class="sub">Mode toggle per row: SR = sets×reps · VBT = velocity-based</span>
+          <span class="sub" data-i18n="gym_planner.mode_toggle_hint">Mode toggle per row: SR = sets×reps · VBT = velocity-based</span>
           <div class="right">
-            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Duration</span>
+            <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)" data-i18n="gym_planner.duration">Duration</span>
             <input type="number" id="gpMainMin" min="0" max="120" style="width:46px;height:26px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:5px;font:600 12px/1 var(--cm-font-mono);color:var(--cm-fg-strong);text-align:center;outline:none" placeholder="—" oninput="gpRecalcTotals()">
-            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'main'})"><i class="ti ti-list-tree" style="font-size:13px"></i>From library</button>
+            <button class="cm-btn is-outline is-sm no-print" onclick="gpOpenLib({section:'main'})"><i class="ti ti-list-tree" style="font-size:13px"></i><span data-i18n="gym_planner.from_library">From library</span></button>
           </div>
         </div>
         <div class="gp-card-b" style="padding:6px 16px 14px">
           <table class="gp-tbl">
             <thead>
               <tr>
-                <th></th><th style="min-width:220px">Exercise</th>
-                <th>Mode</th><th>Sets × Reps</th><th>Load</th><th>%1RM / vel</th><th>Rest</th><th>Tempo</th><th>RPE</th><th></th>
+                <th></th><th style="min-width:220px" data-i18n="gym_planner.exercise">Exercise</th>
+                <th data-i18n="gym_planner.mode">Mode</th><th data-i18n="gym_planner.sets_reps">Sets × Reps</th><th data-i18n="gym_planner.load">Load</th><th data-i18n="gym_planner.pct_1rm_vel">%1RM / vel</th><th data-i18n="gym_planner.rest">Rest</th><th data-i18n="gym_planner.tempo">Tempo</th><th data-i18n="gym_planner.rpe">RPE</th><th></th>
               </tr>
             </thead>
             <tbody id="gpMainBody">
             </tbody>
           </table>
-          <button class="gp-add-row no-print" onclick="gpAddMainRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add main exercise</button>
+          <button class="gp-add-row no-print" onclick="gpAddMainRow()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_main_exercise">Add main exercise</span></button>
         </div>
       </div>
 
       <!-- ===== ADAPTATIONS ===== -->
       <div class="gp-card adapt">
         <div class="gp-card-h">
-          <h3>Individual adaptations</h3>
+          <h3 data-i18n="gym_planner.individual_adaptations">Individual adaptations</h3>
           <span class="ct" id="gpAdaptCt">—</span>
-          <span class="sub">From Physio · today</span>
-          <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpAddAdaptRow()"><i class="ti ti-plus" style="font-size:13px"></i>Add adaptation</button></div>
+          <span class="sub" data-i18n="gym_planner.from_physio_today">From Physio · today</span>
+          <div class="right no-print"><button class="cm-btn is-outline is-sm" onclick="gpAddAdaptRow()"><i class="ti ti-plus" style="font-size:13px"></i><span data-i18n="gym_planner.add_adaptation">Add adaptation</span></button></div>
         </div>
         <div class="gp-card-b">
           <table class="gp-tbl">
-            <thead><tr><th style="min-width:160px">Player</th><th style="min-width:200px">Affected exercises</th><th>Replacement</th><th>Reason / physio notes</th></tr></thead>
+            <thead><tr><th style="min-width:160px" data-i18n="common.player">Player</th><th style="min-width:200px" data-i18n="gym_planner.affected_exercises">Affected exercises</th><th data-i18n="gym_planner.replacement">Replacement</th><th data-i18n="gym_planner.reason_physio_notes">Reason / physio notes</th></tr></thead>
             <tbody id="gpAdaptBody">
               <!-- Populated by gpRenderAdaptations() -->
             </tbody>
@@ -348,6 +348,7 @@
 <div id="settings-host"></div>
 
 <script>
+function tt(key, fallbackEN, vars){ const v=(window.CM_I18N&&CM_I18N.t)?CM_I18N.t(key,vars):null; return (v&&v!==key)?v:(fallbackEN!=null?fallbackEN:key); }
 let _gpClubId = null, _gpCurrentDate = null, _gpCurrentSessionId = null;
 let _gpTeamId = null, _gpTeams = [];
 let _gpPlayers = [], _gpMicrocycles = [], _gpPublished = false, _gpSavedAdapt = [];
@@ -359,7 +360,8 @@ const _GP_POS_MAP = { GK:'GK', CB:'CB', LB:'LB', RB:'RB', FB:'FB', MF:'MF', DM:'
 
 function _gpFmt(dateStr) {
   const d = new Date(dateStr + 'T12:00:00');
-  return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+  const loc = (window.CM_I18N && CM_I18N.current) || 'en-GB';
+  return d.toLocaleDateString(loc, { weekday:'short', day:'numeric', month:'short' });
 }
 function _gpAddDays(dateStr, n) {
   const d = new Date(dateStr + 'T12:00:00');
@@ -447,33 +449,35 @@ function gpRecalcTotals() {
   const elTonD = document.getElementById('gpTotTonDelta');
 
   // .v shows duration (min) when the coach fills it in, otherwise exercise count
-  if (elWu)  elWu.innerHTML  = warmupMin ? `${warmupMin}<sub>min</sub>` : (warmupRows ? `${warmupRows}` : '—');
-  if (elWuD) elWuD.textContent = warmupRows ? `${warmupRows} movements · ${warmupSets} sets` : '';
+  const numLoc = (window.CM_I18N && CM_I18N.current) || 'en-US';
+  const _min = n => tt('gym_planner.n_min', `${n} min`, { count:n }).replace('{count}', n);
+  if (elWu)  elWu.innerHTML  = warmupMin ? `${warmupMin}<sub>${tt('gym_planner.unit_min','min')}</sub>` : (warmupRows ? `${warmupRows}` : '—');
+  if (elWuD) elWuD.textContent = warmupRows ? `${tt('gym_planner.n_movements', `${warmupRows} movements`, { count:warmupRows })} · ${tt('gym_planner.n_sets', `${warmupSets} sets`, { count:warmupSets })}` : '';
 
-  if (elPl)  elPl.innerHTML  = plyoMin ? `${plyoMin}<sub>min</sub>` : (plyoRows ? `${plyoRows}` : '—');
-  if (elPlD) elPlD.textContent = plyoRows ? `${plyoRows} jumps · ${plyoContacts} contacts` : '';
+  if (elPl)  elPl.innerHTML  = plyoMin ? `${plyoMin}<sub>${tt('gym_planner.unit_min','min')}</sub>` : (plyoRows ? `${plyoRows}` : '—');
+  if (elPlD) elPlD.textContent = plyoRows ? `${tt('gym_planner.n_jumps', `${plyoRows} jumps`, { count:plyoRows })} · ${tt('gym_planner.n_contacts', `${plyoContacts} contacts`, { count:plyoContacts })}` : '';
 
-  if (elMw)  elMw.innerHTML  = mainMin ? `${mainMin}<sub>min</sub>` : (mainRows ? `${mainRows}` : '—');
-  if (elMwD) elMwD.textContent = mainRows ? `${mainRows} exercises · ${mainSets} sets` : '';
+  if (elMw)  elMw.innerHTML  = mainMin ? `${mainMin}<sub>${tt('gym_planner.unit_min','min')}</sub>` : (mainRows ? `${mainRows}` : '—');
+  if (elMwD) elMwD.textContent = mainRows ? `${tt('gym_planner.n_exercises', `${mainRows} exercises`, { count:mainRows })} · ${tt('gym_planner.n_sets', `${mainSets} sets`, { count:mainSets })}` : '';
 
-  if (elTon)  elTon.innerHTML  = tonnage ? `${Math.round(tonnage).toLocaleString('en-US')}<sub>kg</sub>` : '—<sub>kg</sub>';
-  if (elTonD) elTonD.textContent = avgPct ? `avg ${avgPct}% 1RM` : '';
+  if (elTon)  elTon.innerHTML  = tonnage ? `${Math.round(tonnage).toLocaleString(numLoc)}<sub>kg</sub>` : '—<sub>kg</sub>';
+  if (elTonD) elTonD.textContent = avgPct ? tt('gym_planner.avg_pct_1rm', `avg ${avgPct}% 1RM`, { pct:avgPct }) : '';
 
   // ── Update card header badges ──
   const wuCt   = document.getElementById('gpWarmupCt');
   const plCt   = document.getElementById('gpPlyCt');
   const mainCt = document.getElementById('gpMainCt');
 
-  const _wuParts = [`${warmupRows} movements`];
-  if (warmupMin) _wuParts.push(`${warmupMin} min`);
+  const _wuParts = [tt('gym_planner.n_movements', `${warmupRows} movements`, { count:warmupRows })];
+  if (warmupMin) _wuParts.push(_min(warmupMin));
   if (wuCt) wuCt.textContent = warmupRows ? _wuParts.join(' · ') : '—';
 
-  const _plParts = [`${plyoRows} jumps`, `${plyoContacts} contacts`];
-  if (plyoMin) _plParts.push(`${plyoMin} min`);
+  const _plParts = [tt('gym_planner.n_jumps', `${plyoRows} jumps`, { count:plyoRows }), tt('gym_planner.n_contacts', `${plyoContacts} contacts`, { count:plyoContacts })];
+  if (plyoMin) _plParts.push(_min(plyoMin));
   if (plCt) plCt.textContent = plyoRows ? _plParts.join(' · ') : '—';
 
-  const _mwParts = [`${mainRows} exercises`, `${mainSets} sets`];
-  if (mainMin) _mwParts.push(`${mainMin} min`);
+  const _mwParts = [tt('gym_planner.n_exercises', `${mainRows} exercises`, { count:mainRows }), tt('gym_planner.n_sets', `${mainSets} sets`, { count:mainSets })];
+  if (mainMin) _mwParts.push(_min(mainMin));
   if (mainCt) mainCt.textContent = mainRows ? _mwParts.join(' · ') : '—';
 
   gpUpdateAu();
@@ -589,8 +593,8 @@ function gpBuildLibModal() {
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:560px;max-width:94vw;max-height:78vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
       <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
         <i class="ti ti-list-tree" style="font-size:16px;color:var(--cm-accent)"></i>
-        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Exercises Library</div>
-        <input id="gpLibSearch" type="text" placeholder="Search exercises…" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:200px">
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.exercises_library','Exercises Library')}</div>
+        <input id="gpLibSearch" type="text" placeholder="${tt('gym_planner.search_exercises_ph','Search exercises…')}" style="margin-left:auto;height:30px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;width:200px">
         <button onclick="gpCloseLib()" style="background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
       <style>
@@ -600,7 +604,7 @@ function gpBuildLibModal() {
       </style>
       <div id="gpLibChips" style="padding-top:8px;border-bottom:1px solid var(--cm-border-soft)"></div>
       <div id="gpLibList" style="overflow-y:auto;flex:1;padding:8px"></div>
-      <div id="gpLibFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
+      <div id="gpLibFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('common.loading','Loading…')}</div>
     </div>`;
   document.body.appendChild(ov);
   ov.querySelector('#gpLibSearch').addEventListener('input', gpRenderLibList);
@@ -611,8 +615,8 @@ function gpRenderLibChips() {
   const cats = [...new Set((_gpLib||[]).map(e => e.category).filter(Boolean))].sort();
   const muscles = [...new Set((_gpLib||[]).filter(e => !_gpLibCat || e.category === _gpLibCat).map(e => e.muscle_group).filter(Boolean))].sort();
   const chip = (label, val, on, kind) => `<button class="gp-lib-chip${on?' is-on':''}" data-kind="${kind}" data-val="${(val||'').replace(/"/g,'&quot;')}">${label}</button>`;
-  let html = `<div class="gp-lib-chiprow">${chip('All', '', _gpLibCat==='', 'cat')}${cats.map(c => chip(cap(c), c, _gpLibCat===c, 'cat')).join('')}</div>`;
-  if (muscles.length) html += `<div class="gp-lib-chiprow">${chip('All muscles', '', _gpLibMuscle==='', 'muscle')}${muscles.map(m => chip(cap(m), m, _gpLibMuscle===m, 'muscle')).join('')}</div>`;
+  let html = `<div class="gp-lib-chiprow">${chip(tt('common.all','All'), '', _gpLibCat==='', 'cat')}${cats.map(c => chip(cap(c), c, _gpLibCat===c, 'cat')).join('')}</div>`;
+  if (muscles.length) html += `<div class="gp-lib-chiprow">${chip(tt('gym_planner.all_muscles','All muscles'), '', _gpLibMuscle==='', 'muscle')}${muscles.map(m => chip(cap(m), m, _gpLibMuscle===m, 'muscle')).join('')}</div>`;
   wrap.innerHTML = html;
   wrap.querySelectorAll('.gp-lib-chip').forEach(b => b.onclick = () => {
     if (b.dataset.kind === 'cat') { _gpLibCat = b.dataset.val; _gpLibMuscle = ''; }
@@ -627,7 +631,7 @@ function gpRenderLibList() {
     (!_gpLibCat || e.category === _gpLibCat) &&
     (!_gpLibMuscle || e.muscle_group === _gpLibMuscle) &&
     (!q || (`${e.name} ${e.muscle_group||''} ${e.category||''}`).toLowerCase().includes(q)));
-  if (!items.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No exercises found.</div>`; foot.textContent = '0 exercises'; return; }
+  if (!items.length) { list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_exercises_found','No exercises found.')}</div>`; foot.textContent = tt('gym_planner.n_exercises_count', '0 exercises', { count:0 }); return; }
   list.innerHTML = items.map(e => {
     const meta = [e.muscle_group, e.category, e.complexity].filter(Boolean).join(' · ');
     return `<button class="gp-lib-item" data-id="${e.id}" data-name="${(e.name||'').replace(/"/g,'&quot;')}" style="display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;cursor:pointer">
@@ -635,7 +639,7 @@ function gpRenderLibList() {
       ${meta?`<div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${meta}</div>`:''}
     </button>`;
   }).join('');
-  foot.textContent = `${items.length} exercise${items.length>1?'s':''}`;
+  foot.textContent = tt('gym_planner.n_exercises_count', `${items.length} exercise${items.length>1?'s':''}`, { count:items.length });
   list.querySelectorAll('.gp-lib-item').forEach(b => {
     b.onmouseenter = () => b.style.background = 'var(--cm-bg-soft)';
     b.onmouseleave = () => b.style.background = 'transparent';
@@ -646,7 +650,7 @@ async function gpOpenLib(ctx) {
   _gpLibCtx = ctx; gpBuildLibModal();
   document.getElementById('gpLibOv').style.display = 'flex';
   const s = document.getElementById('gpLibSearch'); s.value = ''; s.focus();
-  document.getElementById('gpLibFoot').textContent = 'Loading…';
+  document.getElementById('gpLibFoot').textContent = tt('common.loading','Loading…');
   document.getElementById('gpLibList').innerHTML = '';
   _gpLibCat = 'strength'; _gpLibMuscle = '';
   await gpEnsureLib();
@@ -687,17 +691,17 @@ function gpBuildAiModal() {
     <div style="width:560px;max-width:92vw;background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);box-shadow:var(--cm-shadow-3);padding:18px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <i class="ti ti-sparkles" style="font-size:16px;color:var(--cm-accent)"></i>
-        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Generate session with AI</div>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.generate_session_ai','Generate session with AI')}</div>
       </div>
-      <textarea id="gpAiObjective" placeholder="e.g. Hamstring strength with bands, eccentric emphasis, 12 players" style="width:100%;min-height:74px;padding:10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;resize:vertical"></textarea>
+      <textarea id="gpAiObjective" placeholder="${tt('gym_planner.ai_objective_ph','e.g. Hamstring strength with bands, eccentric emphasis, 12 players')}" style="width:100%;min-height:74px;padding:10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:7px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none;resize:vertical"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <input id="gpAiPlayers" type="number" min="1" placeholder="Players" style="width:90px;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
-        <input id="gpAiEmphasis" placeholder="Emphasis (optional)" style="flex:1;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+        <input id="gpAiPlayers" type="number" min="1" placeholder="${tt('common.players','Players')}" style="width:90px;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+        <input id="gpAiEmphasis" placeholder="${tt('gym_planner.emphasis_optional_ph','Emphasis (optional)')}" style="flex:1;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
       </div>
       <div id="gpAiStatus" style="margin-top:8px;font:var(--cm-body-sm);color:var(--cm-fg-muted);min-height:16px"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
-        <button class="cm-btn is-ghost is-sm" onclick="gpCloseAi()">Cancel</button>
-        <button class="cm-btn is-primary is-sm" id="gpAiGenBtn" onclick="gpRunAi()">Generate draft</button>
+        <button class="cm-btn is-ghost is-sm" onclick="gpCloseAi()">${tt('common.cancel','Cancel')}</button>
+        <button class="cm-btn is-primary is-sm" id="gpAiGenBtn" onclick="gpRunAi()">${tt('gym_planner.generate_draft','Generate draft')}</button>
       </div>
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov) gpCloseAi(); });
@@ -712,16 +716,16 @@ async function gpRunAi() {
   const objective = document.getElementById('gpAiObjective').value.trim();
   const status = document.getElementById('gpAiStatus');
   const btn = document.getElementById('gpAiGenBtn');
-  if (!objective) { status.textContent = 'Describe the session objective first.'; return; }
-  btn.disabled = true; status.textContent = 'Loading candidates…';
+  if (!objective) { status.textContent = tt('gym_planner.ai_describe_first','Describe the session objective first.'); return; }
+  btn.disabled = true; status.textContent = tt('gym_planner.ai_loading_candidates','Loading candidates…');
   try {
     const { data: cands, error: cErr } = await window.sb.from('gym_exercises')
       .select('id,name,primary_purpose,purposes,muscle_groups,movement_patterns,equipment_tags')
       .eq('club_id', _gpClubId).not('muscle_groups', 'is', null).limit(150);
     if (cErr) throw cErr;
-    if (!cands || !cands.length) { status.textContent = 'No tagged exercises yet. Tag some in the Gym Library first.'; btn.disabled = false; return; }
+    if (!cands || !cands.length) { status.textContent = tt('gym_planner.ai_no_tagged','No tagged exercises yet. Tag some in the Gym Library first.'); btn.disabled = false; return; }
 
-    status.textContent = 'Generating draft…';
+    status.textContent = tt('gym_planner.ai_generating_draft','Generating draft…');
     const constraints = {};
     const players = parseInt(document.getElementById('gpAiPlayers').value, 10);
     if (players) constraints.players = players;
@@ -779,7 +783,7 @@ async function gpRunAi() {
 
     const cur = gpCollectContent();
     const hasWork = (cur.warmup.rows.length + cur.plyo.rows.length + cur.main.rows.length) > 0;
-    if (hasWork && !confirm('Replace the current session with the AI draft?')) { btn.disabled = false; status.textContent = ''; return; }
+    if (hasWork && !confirm(tt('gym_planner.ai_replace_confirm','Replace the current session with the AI draft?'))) { btn.disabled = false; status.textContent = ''; return; }
 
     const content = {
       warmup: { min: plan.warmup?.min || '', rows: (plan.warmup?.items||[]).map(it => ({ v:[it.name, it.sets||'', it.reps||'', '', it.notes||''], exId: it.exercise_id || null })) },
@@ -796,7 +800,7 @@ async function gpRunAi() {
     if (plan.title) { const t = document.getElementById('gpTitle'); if (t && !t.value) t.value = plan.title; }
     gpCloseAi();
   } catch (err) {
-    status.textContent = 'Error: ' + (err.message || err);
+    status.textContent = tt('gym_planner.error_prefix','Error:') + ' ' + (err.message || err);
     btn.disabled = false;
   }
 }
@@ -811,15 +815,15 @@ function gpBuildTplModal() {
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:520px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
       <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
         <i class="ti ti-template" style="font-size:16px;color:var(--cm-accent)"></i>
-        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Session templates</div>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.session_templates','Session templates')}</div>
         <button onclick="gpCloseTpl()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
       <div style="display:flex;gap:8px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
-        <input id="gpTplName" type="text" placeholder="Template name…" style="flex:1;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
-        <button class="cm-btn is-primary is-sm" onclick="gpSaveTemplate()"><i class="ti ti-device-floppy" style="font-size:13px"></i>Save current</button>
+        <input id="gpTplName" type="text" placeholder="${tt('gym_planner.template_name_ph','Template name…')}" style="flex:1;height:32px;padding:0 10px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
+        <button class="cm-btn is-primary is-sm" onclick="gpSaveTemplate()"><i class="ti ti-device-floppy" style="font-size:13px"></i>${tt('gym_planner.save_current','Save current')}</button>
       </div>
       <div id="gpTplList" style="overflow-y:auto;flex:1;padding:8px"></div>
-      <div id="gpTplFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Loading…</div>
+      <div id="gpTplFoot" style="padding:10px 18px;border-top:1px solid var(--cm-border);font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('common.loading','Loading…')}</div>
     </div>`;
   document.body.appendChild(ov);
 }
@@ -827,7 +831,7 @@ async function gpOpenTemplates() {
   gpBuildTplModal();
   document.getElementById('gpTplOv').style.display = 'flex';
   document.getElementById('gpTplName').value = '';
-  document.getElementById('gpTplFoot').textContent = 'Loading…';
+  document.getElementById('gpTplFoot').textContent = tt('common.loading','Loading…');
   document.getElementById('gpTplList').innerHTML = '';
   await gpLoadTemplates();
 }
@@ -845,29 +849,29 @@ function gpTplCount(c) {
 function gpRenderTemplates() {
   const list = document.getElementById('gpTplList'), foot = document.getElementById('gpTplFoot');
   if (!_gpTpls.length) {
-    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No templates yet. Build a session and click "Save current".</div>`;
-    foot.textContent = '0 templates'; return;
+    list.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_templates','No templates yet. Build a session and click "Save current".')}</div>`;
+    foot.textContent = tt('gym_planner.n_templates', '0 templates', { count:0 }); return;
   }
   list.innerHTML = _gpTpls.map(t => {
     const cnt = gpTplCount(t.content);
     return `<div style="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px">
       <div style="flex:1;min-width:0">
         <div style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(t.name||'—').replace(/</g,'&lt;')}</div>
-        <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${cnt} exercise${cnt!==1?'s':''}</div>
+        <div style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);margin-top:3px">${tt('gym_planner.n_exercises_count', `${cnt} exercise${cnt!==1?'s':''}`, { count:cnt })}</div>
       </div>
-      <button class="cm-btn is-outline is-sm" onclick="gpApplyTemplate('${t.id}')"><i class="ti ti-download" style="font-size:13px"></i>Apply</button>
-      <button class="cm-btn is-ghost is-sm" title="Delete" onclick="gpDeleteTemplate('${t.id}')" style="color:var(--cm-danger)"><i class="ti ti-trash" style="font-size:14px"></i></button>
+      <button class="cm-btn is-outline is-sm" onclick="gpApplyTemplate('${t.id}')"><i class="ti ti-download" style="font-size:13px"></i>${tt('common.apply','Apply')}</button>
+      <button class="cm-btn is-ghost is-sm" title="${tt('common.delete','Delete')}" onclick="gpDeleteTemplate('${t.id}')" style="color:var(--cm-danger)"><i class="ti ti-trash" style="font-size:14px"></i></button>
     </div>`;
   }).join('');
-  foot.textContent = `${_gpTpls.length} template${_gpTpls.length!==1?'s':''}`;
+  foot.textContent = tt('gym_planner.n_templates', `${_gpTpls.length} template${_gpTpls.length!==1?'s':''}`, { count:_gpTpls.length });
 }
 async function gpSaveTemplate() {
   const name = (document.getElementById('gpTplName').value || '').trim();
-  if (!name) { alert('Enter a template name.'); return; }
+  if (!name) { alert(tt('gym_planner.enter_template_name','Enter a template name.')); return; }
   const c = gpCollectContent();
   const content = { warmup: c.warmup, plyo: c.plyo, main: c.main };
   const { error } = await window.sb.from('gym_session_templates').insert({ club_id: _gpClubId, name, content });
-  if (error) { alert('Could not save template: ' + error.message); return; }
+  if (error) { alert(tt('gym_planner.could_not_save_template','Could not save template:') + ' ' + error.message); return; }
   document.getElementById('gpTplName').value = '';
   await gpLoadTemplates();
 }
@@ -880,9 +884,9 @@ async function gpApplyTemplate(id) {
 }
 async function gpDeleteTemplate(id) {
   const t = _gpTpls.find(x => x.id === id);
-  if (!confirm(`Delete template "${t?.name || ''}"?`)) return;
+  if (!confirm(tt('gym_planner.delete_template_confirm', `Delete template "${t?.name || ''}"?`, { name:t?.name || '' }))) return;
   const { error } = await window.sb.from('gym_session_templates').delete().eq('id', id);
-  if (error) { alert('Could not delete: ' + error.message); return; }
+  if (error) { alert(tt('gym_planner.could_not_delete','Could not delete:') + ' ' + error.message); return; }
   await gpLoadTemplates();
 }
 
@@ -891,11 +895,11 @@ function gpAddWarmupRow() {
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
   tr.innerHTML = `<td class="gp-num">${num}</td>
-    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
+    <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><input class="num-input" placeholder="1"></td>
     <td><input placeholder="—"></td>
     <td><input placeholder="—"></td>
-    <td><input placeholder="Notes"></td>
+    <td><input placeholder="${tt('gym_planner.notes','Notes')}"></td>
     <td><button class="btn-x" onclick="gpDeleteRow(this)"><i class="ti ti-x"></i></button></td>`;
   tbody.appendChild(tr);
   tr.querySelector('input').focus();
@@ -907,13 +911,13 @@ function gpAddPlyoRow() {
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
   tr.innerHTML = `<td class="gp-num">${num}</td>
-    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
-    <td><select><option>Intensive</option><option>Extensive</option></select></td>
+    <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
+    <td><select><option>${tt('gym_planner.intensive','Intensive')}</option><option>${tt('gym_planner.extensive','Extensive')}</option></select></td>
     <td><input placeholder="3 × 5"></td>
     <td><input class="num-input" placeholder="0" oninput="gpRecalcTotals()"></td>
     <td><input placeholder="—"></td>
     <td><input placeholder="—"></td>
-    <td><input placeholder="Notes"></td>
+    <td><input placeholder="${tt('gym_planner.notes','Notes')}"></td>
     <td><button class="btn-x" onclick="gpDeleteRow(this)"><i class="ti ti-x"></i></button></td>`;
   tbody.appendChild(tr);
   tr.querySelector('input').focus();
@@ -925,7 +929,7 @@ function gpAddMainRow() {
   const num   = tbody.querySelectorAll('tr').length + 1;
   const tr    = document.createElement('tr');
   tr.innerHTML = `<td class="gp-num">${num}</td>
-    <td><div class="name-cell"><input placeholder="Exercise name"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
+    <td><div class="name-cell"><input placeholder="${tt('gym_planner.exercise_name_ph','Exercise name')}"><button class="btn-lib" onclick="gpOpenLib({input:this.closest('.name-cell').querySelector('input')})">LIB</button></div></td>
     <td><div class="gp-mode"><button class="is-on">SR</button><button>VBT</button></div></td>
     <td><input placeholder="3 × 8" oninput="gpRecalcTotals()"></td>
     <td><input class="num-input" placeholder="—"> <span style="font:500 10px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">kg</span></td>
@@ -953,10 +957,10 @@ function gpAddAdaptRow() {
   if (emptyRow) emptyRow.remove();
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td><input placeholder="Player name · #" style="font-weight:600"></td>
-    <td><input placeholder="Affected exercises"></td>
-    <td><input placeholder="Replacement"></td>
-    <td><input placeholder="Reason / physio notes"></td>`;
+    <td><input placeholder="${tt('gym_planner.player_name_num_ph','Player name · #')}" style="font-weight:600"></td>
+    <td><input placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
+    <td><input placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
+    <td><input placeholder="${tt('gym_planner.reason_physio_notes','Reason / physio notes')}"></td>`;
   tbody.appendChild(tr);
   tr.querySelector('input').focus();
   const ct = document.getElementById('gpAdaptCt');
@@ -969,16 +973,16 @@ function gpAdaptRowHtml(label, affected, replacement, reason, phase, manual) {
   const e = s => String(s==null?'':s).replace(/"/g,'&quot;');
   if (manual) {
     return `<tr>
-      <td><input value="${e(label)}" placeholder="Player name · #" style="font-weight:600"></td>
-      <td><input value="${e(affected)}" placeholder="Affected exercises"></td>
-      <td><input value="${e(replacement)}" placeholder="Replacement"></td>
-      <td><input value="${e(reason)}" placeholder="Reason / physio notes"></td></tr>`;
+      <td><input value="${e(label)}" placeholder="${tt('gym_planner.player_name_num_ph','Player name · #')}" style="font-weight:600"></td>
+      <td><input value="${e(affected)}" placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
+      <td><input value="${e(replacement)}" placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
+      <td><input value="${e(reason)}" placeholder="${tt('gym_planner.reason_physio_notes','Reason / physio notes')}"></td></tr>`;
   }
   return `<tr>
     <td><strong style="font:600 13px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)">${e(label)}</strong><br>
       <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${e(phase)}</span></td>
-    <td><input value="${e(affected)}" placeholder="Affected exercises"></td>
-    <td><input value="${e(replacement)}" placeholder="Replacement"></td>
+    <td><input value="${e(affected)}" placeholder="${tt('gym_planner.affected_exercises','Affected exercises')}"></td>
+    <td><input value="${e(replacement)}" placeholder="${tt('gym_planner.replacement','Replacement')}"></td>
     <td><input value="${e(reason)}" placeholder="—"></td></tr>`;
 }
 function gpCollectAdapt() {
@@ -1002,7 +1006,7 @@ function gpRenderAdaptations(treatments) {
   const rows = [];
   withAdapt.forEach(t => {
     const pl = t.players || {};
-    const name = `${pl.first_name||''} ${pl.last_name||''}`.trim() || 'Unknown';
+    const name = `${pl.first_name||''} ${pl.last_name||''}`.trim() || tt('gym_planner.unknown','Unknown');
     const label = `${name}${pl.number ? ` · #${pl.number}` : ''}`;
     const phase = t.treatment_type || (Array.isArray(t.modalities) ? t.modalities.join(' · ') : (t.modalities||'')) || '—';
     const sv = savedSeeded[label] || {};
@@ -1012,7 +1016,7 @@ function gpRenderAdaptations(treatments) {
     rows.push(gpAdaptRowHtml(s.player||'', s.affected||'', s.replacement||'', s.reason||'', '', true));
   });
   if (!rows.length) {
-    tbody.innerHTML = `<tr data-empty><td colspan="4" style="text-align:center;padding:20px 0;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No physio adaptations for this session.</td></tr>`;
+    tbody.innerHTML = `<tr data-empty><td colspan="4" style="text-align:center;padding:20px 0;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_adaptations','No physio adaptations for this session.')}</td></tr>`;
     if (ct) ct.textContent = '0';
     return;
   }
@@ -1027,25 +1031,27 @@ function gpRenderRoster() {
   const roster  = _gpPlayers.filter(p => _gpRoster.has(p.id));
   const adaptedCount = roster.filter(p => _gpAdaptNotes[p.id]).length;
   if (pillsEl) {
-    const allPill = `<span class="gp-ath-pill is-on" style="cursor:default"><span class="gp-ath-all">All · ${roster.length}</span></span>`;
+    const allPill = `<span class="gp-ath-pill is-on" style="cursor:default"><span class="gp-ath-all">${tt('common.all','All')} · ${roster.length}</span></span>`;
     const pills = roster.map(p => {
       const initials = (`${p.first_name} ${p.last_name}`).split(' ').map(w => w[0]||'').join('').slice(0,2).toUpperCase();
       const surname  = (`${p.first_name} ${p.last_name}`).trim().split(' ').pop();
       const num      = p.number ? ` #${p.number}` : '';
       const pos      = _GP_POS_MAP[(p.position||'').toUpperCase()] || (p.position||'').toUpperCase() || '';
       const an       = _gpAdaptNotes[p.id];
-      const adapt    = an ? ` <span title="${an.replace(/"/g,"'")}" style="color:var(--cm-warning);font-weight:700;cursor:help">·adapt</span>` : '';
-      return `<span class="gp-ath-pill is-on" data-pid="${p.id}" title="Click to remove"><span class="av">${initials}</span><span class="pos">${pos}</span>${surname}${num}${adapt}</span>`;
+      const adapt    = an ? ` <span title="${an.replace(/"/g,"'")}" style="color:var(--cm-warning);font-weight:700;cursor:help">·${tt('gym_planner.adapt_tag','adapt')}</span>` : '';
+      return `<span class="gp-ath-pill is-on" data-pid="${p.id}" title="${tt('gym_planner.click_to_remove','Click to remove')}"><span class="av">${initials}</span><span class="pos">${pos}</span>${surname}${num}${adapt}</span>`;
     }).join('');
     pillsEl.innerHTML = allPill + pills;
     pillsEl.querySelectorAll('.gp-ath-pill[data-pid]').forEach(el => el.addEventListener('click', () => {
       _gpRoster.delete(el.dataset.pid); gpRenderRoster(); gpScheduleSave();
     }));
   }
-  if (ctEl) ctEl.textContent = `${roster.length} selected`;
+  if (ctEl) ctEl.textContent = tt('gym_planner.n_selected', `${roster.length} selected`, { count:roster.length });
   const elAth = document.getElementById('gpTotAthletes'), elAthD = document.getElementById('gpTotAthletesDelta');
   if (elAth)  elAth.textContent  = roster.length || '—';
-  if (elAthD) elAthD.textContent = adaptedCount ? `${roster.length - adaptedCount} standard · ${adaptedCount} adapted` : `${roster.length} standard`;
+  if (elAthD) elAthD.textContent = adaptedCount
+    ? tt('gym_planner.n_standard_n_adapted', `${roster.length - adaptedCount} standard · ${adaptedCount} adapted`, { standard:roster.length - adaptedCount, adapted:adaptedCount })
+    : tt('gym_planner.n_standard', `${roster.length} standard`, { count:roster.length });
 }
 function gpBuildSquadModal() {
   if (_gpSquadBuilt) return; _gpSquadBuilt = true;
@@ -1057,13 +1063,13 @@ function gpBuildSquadModal() {
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:480px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
       <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
         <i class="ti ti-users-plus" style="font-size:16px;color:var(--cm-accent)"></i>
-        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Pick from squad</div>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.pick_from_squad','Pick from squad')}</div>
         <button onclick="gpCloseSquad()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
       <div id="gpSquadList" style="overflow-y:auto;flex:1;padding:6px"></div>
       <div style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-top:1px solid var(--cm-border)">
         <span id="gpSquadFoot" style="font:500 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)"></span>
-        <button class="cm-btn is-primary is-sm" style="margin-left:auto" onclick="gpSquadApply()">Done</button>
+        <button class="cm-btn is-primary is-sm" style="margin-left:auto" onclick="gpSquadApply()">${tt('gym_planner.done','Done')}</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
@@ -1080,14 +1086,14 @@ function gpRenderSquadList() {
   const players = [..._gpPlayers].sort((a,b) => (a.number||999) - (b.number||999) || `${a.last_name||''}`.localeCompare(`${b.last_name||''}`));
   list.innerHTML = players.map(p => {
     const on   = _gpSquadSel.has(p.id);
-    const name = `${p.first_name||''} ${p.last_name||''}`.trim() || 'Unknown';
+    const name = `${p.first_name||''} ${p.last_name||''}`.trim() || tt('gym_planner.unknown','Unknown');
     const num  = p.number ? `#${p.number}` : '';
     const pos  = _GP_POS_MAP[(p.position||'').toUpperCase()] || (p.position||'').toUpperCase() || '';
     const st   = _gpAvailMap[p.id];
     const unavail = st && !['available','partial','limited'].includes(st);
     const adapt   = _gpAdaptNotes[p.id];
     const badge = unavail ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-danger);text-transform:capitalize">${st}</span>`
-                : adapt   ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-warning)">adapt</span>` : '';
+                : adapt   ? `<span style="font:600 10px/1 var(--cm-font-mono);color:var(--cm-warning)">${tt('gym_planner.adapt_tag','adapt')}</span>` : '';
     return `<div class="gp-squad-row" data-pid="${p.id}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:7px;cursor:pointer">
       <i class="ti ${on?'ti-square-check':'ti-square'}" style="font-size:18px;color:${on?'var(--cm-accent)':'var(--cm-fg-faint)'}"></i>
       <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted);min-width:30px">${num}</span>
@@ -1096,7 +1102,7 @@ function gpRenderSquadList() {
       ${badge}
     </div>`;
   }).join('');
-  foot.textContent = `${_gpSquadSel.size} selected`;
+  foot.textContent = tt('gym_planner.n_selected', `${_gpSquadSel.size} selected`, { count:_gpSquadSel.size });
   list.querySelectorAll('.gp-squad-row').forEach(row => {
     row.onmouseenter = () => row.style.background = 'var(--cm-bg-soft)';
     row.onmouseleave = () => row.style.background = 'transparent';
@@ -1200,7 +1206,7 @@ function gpBuildGroupsModal() {
     <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4);width:620px;max-width:95vw;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.2)">
       <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--cm-border)">
         <i class="ti ti-layout-grid" style="font-size:16px;color:var(--cm-accent)"></i>
-        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Load groups</div>
+        <div style="font:600 14px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.load_groups','Load groups')}</div>
         <button onclick="gpCloseGroups()" style="margin-left:auto;background:transparent;border:0;cursor:pointer;color:var(--cm-fg-muted);font-size:18px"><i class="ti ti-x"></i></button>
       </div>
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--cm-border)">
@@ -1213,9 +1219,9 @@ function gpBuildGroupsModal() {
           <input id="gpGrpPct" type="number" min="30" max="100" value="80" style="width:58px;height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
         </div>
         <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
-          <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">Groups</span>
+          <span style="font:600 12px/1 var(--cm-font-sans);color:var(--cm-fg-muted)">${tt('gym_planner.groups','Groups')}</span>
           <select id="gpGrpK" style="height:30px;padding:0 8px;background:var(--cm-bg-soft);border:1px solid var(--cm-border);border-radius:6px;font:var(--cm-body-sm);color:var(--cm-fg);outline:none">
-            <option value="auto">Auto</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            <option value="auto">${tt('gym_planner.auto','Auto')}</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
           </select>
         </div>
       </div>
@@ -1241,11 +1247,11 @@ async function gpOpenGroups() {
 }
 function gpCloseGroups() { const ov = document.getElementById('gpGrpOv'); if (ov) ov.style.display = 'none'; }
 async function gpRefreshGroupData() {
-  document.getElementById('gpGrpBody').innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading…</div>`;
+  document.getElementById('gpGrpBody').innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('common.loading','Loading…')}</div>`;
   _gpGrpRows = await gpLoadGroupRows(_gpGrpMode);
   const variants = [...new Set(_gpGrpRows.map(r => r.evaluation_type))].sort();
   const sel = document.getElementById('gpGrpVariant');
-  sel.innerHTML = variants.length ? variants.map(v => `<option value="${v.replace(/"/g,'&quot;')}">${v}</option>`).join('') : `<option value="">— No tests —</option>`;
+  sel.innerHTML = variants.length ? variants.map(v => `<option value="${v.replace(/"/g,'&quot;')}">${v}</option>`).join('') : `<option value="">${tt('gym_planner.no_tests','— No tests —')}</option>`;
   if (!variants.includes(_gpGrpVariant)) _gpGrpVariant = variants[0] || '';
   sel.value = _gpGrpVariant;
   gpRenderGroups();
@@ -1253,8 +1259,8 @@ async function gpRefreshGroupData() {
 function gpRenderGroups() {
   const body = document.getElementById('gpGrpBody');
   const squadIds = new Set(_gpPlayers.map(p => p.id));
-  if (!squadIds.size) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No players in this team/category.</div>`; return; }
-  if (!_gpGrpVariant) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No ${_gpGrpMode==='vbt'?'VBT':'1RM'} tests found. Load tests in Evaluations first.</div>`; return; }
+  if (!squadIds.size) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_players_team','No players in this team/category.')}</div>`; return; }
+  if (!_gpGrpVariant) { body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${tt('gym_planner.no_tests_found', `No ${_gpGrpMode==='vbt'?'VBT':'1RM'} tests found. Load tests in Evaluations first.`, { test:_gpGrpMode==='vbt'?'VBT':'1RM' })}</div>`; return; }
   // latest value per player for the selected variant (rows already date-desc)
   const latest = {}; let unit = '';
   _gpGrpRows.forEach(r => { if (r.evaluation_type === _gpGrpVariant && squadIds.has(r.player_id) && !(r.player_id in latest)) { latest[r.player_id] = parseFloat(r.value); if (!unit && r.unit) unit = r.unit; } });
@@ -1264,8 +1270,8 @@ function gpRenderGroups() {
   if (!entries.length) {
     const testedInClub = new Set(_gpGrpRows.filter(r => r.evaluation_type === _gpGrpVariant).map(r => r.player_id)).size;
     const msg = testedInClub
-      ? `Found this test for ${testedInClub} player(s) in the club, but none belong to this team/category. Check their category in Squad.`
-      : `This test has no numeric values saved yet.`;
+      ? tt('gym_planner.test_found_wrong_team', `Found this test for ${testedInClub} player(s) in the club, but none belong to this team/category. Check their category in Squad.`, { count:testedInClub })
+      : tt('gym_planner.test_no_values','This test has no numeric values saved yet.');
     body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">${msg}</div>`;
     return;
   }
@@ -1275,7 +1281,10 @@ function gpRenderGroups() {
   const COLORS = ['#3b82f6','#10b981','#f59e0b','#a855f7','#ef4444'];
   const isRM = _gpGrpMode === 'rm';
   const fmt = v => Number.isInteger(v) ? v : v.toFixed(1);
-  let html = `<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">${entries.length} player${entries.length>1?'s':''} · ${k} groups${isRM?` · target ${_gpGrpPct}% RM`:''}</div>`;
+  const _pl = tt('gym_planner.n_players_count', `${entries.length} player${entries.length>1?'s':''}`, { count:entries.length });
+  const _gr = tt('gym_planner.n_groups_count', `${k} groups`, { count:k });
+  const _tgt = isRM ? ' · ' + tt('gym_planner.target_pct_rm', `target ${_gpGrpPct}% RM`, { pct:_gpGrpPct }) : '';
+  let html = `<div style="font:500 12px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin-bottom:6px">${_pl} · ${_gr}${_tgt}</div>`;
   groups.forEach((g, i) => {
     const vals = g.map(e => isRM ? e.value * _gpGrpPct/100 : e.value);
     const lo = fmt(Math.min(...vals)), hi = fmt(Math.max(...vals));
@@ -1284,12 +1293,12 @@ function gpRenderGroups() {
     html += `<div class="gp-grp-card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <span style="width:9px;height:9px;border-radius:50%;background:${COLORS[i%COLORS.length]}"></span>
-        <span style="font:700 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">Group ${String.fromCharCode(65+i)}</span>
+        <span style="font:700 13px/1 var(--cm-font-sans);color:var(--cm-fg-strong)">${tt('gym_planner.group_label', `Group ${String.fromCharCode(65+i)}`, { letter:String.fromCharCode(65+i) })}</span>
         <span style="font:500 11px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">${g.length} · ${range}</span>
       </div>
       <div>${chips}</div></div>`;
   });
-  if (noData.length) html += `<div style="margin-top:8px;font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">No test data (${noData.length}): ${noData.map(nameOf).join(', ')}</div>`;
+  if (noData.length) html += `<div style="margin-top:8px;font:500 11px/1.4 var(--cm-font-mono);color:var(--cm-fg-muted)">${tt('gym_planner.no_test_data', `No test data (${noData.length})`, { count:noData.length })}: ${noData.map(nameOf).join(', ')}</div>`;
   body.innerHTML = html;
 }
 
@@ -1335,7 +1344,7 @@ function gpUpdateAu() {
   const elV = document.getElementById('gpTotAu');
   const elN = document.getElementById('gpTotAuNote');
   if (elV) elV.innerHTML = au ? `${au}<sub>AU</sub>` : '—<sub>AU</sub>';
-  if (elN) elN.textContent = (rpe && !dur) ? 'set duration first' : (dur && !rpe) ? 'set RPE above' : '';
+  if (elN) elN.textContent = (rpe && !dur) ? tt('gym_planner.set_duration_first','set duration first') : (dur && !rpe) ? tt('gym_planner.set_rpe_above','set RPE above') : '';
 }
 
 async function gpLoadDay(dateStr) {
@@ -1348,8 +1357,8 @@ async function gpLoadDay(dateStr) {
   const mcSel = document.getElementById('gpMicrocycle');
   if (mcSel) {
     mcSel.innerHTML = _gpMicrocycles.length
-      ? _gpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${m.name}${m.rival ? ` · vs ${m.rival}` : ''}</option>`).join('')
-      : '<option value="">— No microcycles —</option>';
+      ? _gpMicrocycles.map(m => `<option value="${m.id}"${m.id === mc?.id ? ' selected' : ''}>${m.name}${m.rival ? ` · ${tt('gym_planner.vs','vs')} ${m.rival}` : ''}</option>`).join('')
+      : `<option value="">${tt('gym_planner.no_microcycles','— No microcycles —')}</option>`;
   }
 
   const mdSel = document.getElementById('gpMatchDay');
@@ -1416,7 +1425,7 @@ function gpMarkCalFields() {
     el.classList.toggle('is-cal-sourced', _gpCalFields.has(id));
     if (_gpCalFields.has(id) && !el.dataset.calWarn) {
       el.dataset.calWarn = '1';
-      el.addEventListener('change', () => { if (_gpCalFields.has(id)) gpToast('This value comes from the Calendar — change it there to keep things in sync.'); });
+      el.addEventListener('change', () => { if (_gpCalFields.has(id)) gpToast(tt('gym_planner.calendar_sync_toast','This value comes from the Calendar — change it there to keep things in sync.')); });
     }
   });
 }
@@ -1473,16 +1482,16 @@ function _gpUpdatePublishBtn() {
   const btn = document.getElementById('gpPublishBtn');
   if (!btn) return;
   if (_gpPublished) {
-    btn.innerHTML = '<i class="ti ti-circle-check" style="font-size:14px"></i>Published';
+    btn.innerHTML = `<i class="ti ti-circle-check" style="font-size:14px"></i>${tt('gym_planner.published','Published')}`;
     btn.classList.remove('is-primary'); btn.classList.add('is-success');
   } else {
-    btn.innerHTML = '<i class="ti ti-share-2" style="font-size:14px"></i>Publish';
+    btn.innerHTML = `<i class="ti ti-share-2" style="font-size:14px"></i>${tt('gym_planner.publish','Publish')}`;
     btn.classList.remove('is-success'); btn.classList.add('is-primary');
   }
 }
 
 async function gpPublish() {
-  if (!_gpCurrentSessionId) { await gpAutoSave(); if (!_gpCurrentSessionId) { alert('Save the session first.'); return; } }
+  if (!_gpCurrentSessionId) { await gpAutoSave(); if (!_gpCurrentSessionId) { alert(tt('gym_planner.save_session_first','Save the session first.')); return; } }
   const next = !_gpPublished;
   const { error } = await window.sb.from('training_sessions').update({ published: next }).eq('id', _gpCurrentSessionId).eq('club_id', _gpClubId);
   if (!error) { _gpPublished = next; _gpUpdatePublishBtn(); }
@@ -1534,7 +1543,7 @@ function gpRenderPrintSheet() {
         ${teamName?`<div style="font:500 11px ${MONO};letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;margin-top:2px">${esc(teamName)}</div>`:''}</div>
       </div>
       <div style="text-align:right">
-        <div style="font:800 13px ${FONT};letter-spacing:.1em;text-transform:uppercase;color:var(--club-accent)">Gym session</div>
+        <div style="font:800 13px ${FONT};letter-spacing:.1em;text-transform:uppercase;color:var(--club-accent)">${esc(tt('gym_planner.print_gym_session','Gym session'))}</div>
         <div style="font:500 12px ${MONO};color:#5B6470;margin-top:3px">${esc(dateLabel)}</div>
       </div>
     </div><div style="height:2px;background:#15181D;margin:12px 0 14px"></div>`;
@@ -1542,21 +1551,17 @@ function gpRenderPrintSheet() {
     // 2) Session line (title + MD + orientation chips) + meta grid
     const title = val('gpTitle');
     const md = val('gpMatchDay');
-    const chipColor = txt => { const t=(txt||'').toLowerCase();
-      if (t.startsWith('activation')) return '#10B981';
-      if (t.startsWith('hypertrophy')) return '#2563EB';
-      if (t.startsWith('max')) return '#B91C1C';
-      if (t.startsWith('power')) return '#7C3AED';
-      if (t.startsWith('rsi')) return '#F59E0B';
-      if (t.startsWith('recovery')) return '#0D9488';
-      return accent; };
-    const chips = [...document.querySelectorAll('.gp-or-pill.is-on')].map(el => (el.textContent||'').trim()).filter(Boolean);
-    const chipHtml = txt => `<span style="display:inline-flex;align-items:center;gap:5px;border:1px solid #E7E7E4;border-radius:999px;padding:3px 9px;font:600 10.5px ${FONT};color:#15181D"><span style="width:7px;height:7px;border-radius:50%;background:${chipColor(txt)}"></span>${esc(txt)}</span>`;
+    const ORIENT_COLOR = { activation:'#10B981', hypertrophy:'#2563EB', max:'#B91C1C', power:'#7C3AED', rsi:'#F59E0B', recovery:'#0D9488' };
+    const chips = [...document.querySelectorAll('.gp-or-pill.is-on')].map(el => ({
+      label: (el.textContent||'').trim(),
+      color: ORIENT_COLOR[el.dataset.orient] || accent
+    })).filter(c => c.label);
+    const chipHtml = c => `<span style="display:inline-flex;align-items:center;gap:5px;border:1px solid #E7E7E4;border-radius:999px;padding:3px 9px;font:600 10.5px ${FONT};color:#15181D"><span style="width:7px;height:7px;border-radius:50%;background:${c.color}"></span>${esc(c.label)}</span>`;
 
     const cells = [];
-    const loc = val('gpLocation'); if (loc) cells.push({l:'Location · equipment', v:esc(loc), span:2});
-    const focus = val('gpFocus');  if (focus) cells.push({l:'Focus', v:esc(focus), span:1});
-    const wuMin = val('gpWarmupMin'); if (wuMin) cells.push({l:'Warm-up', v:esc(wuMin)+' min', span:1});
+    const loc = val('gpLocation'); if (loc) cells.push({l:tt('gym_planner.location_equipment','Location · equipment'), v:esc(loc), span:2});
+    const focus = val('gpFocus');  if (focus) cells.push({l:tt('gym_planner.focus','Focus'), v:esc(focus), span:1});
+    const wuMin = val('gpWarmupMin'); if (wuMin) cells.push({l:tt('gym_planner.warmup','Warm-up'), v:esc(wuMin)+' '+tt('gym_planner.unit_min','min'), span:1});
 
     const sessionLine = (title || md || chips.length) ? `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:${cells.length?'10px':'0'}">
       <div>${title?`<span style="font:700 16px ${FONT};color:#15181D">${esc(title)}</span>`:''}${md?`<span style="font:700 11px ${MONO};color:var(--club-accent);margin-left:${title?'8px':'0'}">${esc(md)}</span>`:''}</div>
@@ -1571,7 +1576,7 @@ function gpRenderPrintSheet() {
     </div>` : '';
 
     // 3) KPI strip
-    const kpis = [['Warm-up',kv(g('gpTotWarmup'))],['Contacts',kv(g('gpTotPlyo'))],['Main sets',kv(g('gpTotMain'))],['Tonnage',kv(g('gpTotTonnage'))],['Athletes',kv(g('gpTotAthletes'))],['Planned AU',kv(g('gpTotAu')),true]];
+    const kpis = [[tt('gym_planner.warmup','Warm-up'),kv(g('gpTotWarmup'))],[tt('gym_planner.contacts','Contacts'),kv(g('gpTotPlyo'))],[tt('gym_planner.main_sets','Main sets'),kv(g('gpTotMain'))],[tt('gym_planner.tonnage','Tonnage'),kv(g('gpTotTonnage'))],[tt('gym_planner.athletes','Athletes'),kv(g('gpTotAthletes'))],[tt('gym_planner.planned_au','Planned AU'),kv(g('gpTotAu')),true]];
     const kpiStrip = `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#E7E7E4;border:1px solid #E7E7E4;border-radius:10px;overflow:hidden;margin-bottom:16px">
       ${kpis.map(([l,v,acc])=>`<div style="background:#fff;padding:10px 6px;text-align:center">
         <div style="font:700 18px ${MONO};color:${acc?'var(--club-accent)':'#15181D'}">${esc(v)}</div>
@@ -1582,7 +1587,7 @@ function gpRenderPrintSheet() {
     // 4) Notes band
     const notes = val('gpNotes');
     const notesBand = notes ? `<div style="border:1px solid #E7E7E4;border-radius:10px;background:#FBFBFA;padding:9px 13px;margin-bottom:14px">
-      <div style="font:600 8.5px/1.2 ${MONO};letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:3px">Notes</div>
+      <div style="font:600 8.5px/1.2 ${MONO};letter-spacing:.08em;text-transform:uppercase;color:#9CA3AF;margin-bottom:3px">${esc(tt('gym_planner.notes','Notes'))}</div>
       <div style="font:500 11.5px/1.45 ${FONT};color:#3C4149">${esc(notes).replace(/\n/g,'<br>')}</div>
     </div>` : '';
 
@@ -1590,7 +1595,7 @@ function gpRenderPrintSheet() {
     const roster = (_gpPlayers||[]).filter(p => _gpRoster.has(p.id));
     const lastName = p => (`${p.first_name||''} ${p.last_name||''}`.trim()).split(' ').pop() || '';
     const athletesBlock = roster.length ? `<div style="margin-bottom:16px">
-      ${sectionTitle(`Athletes · ${roster.length}`)}
+      ${sectionTitle(`${tt('gym_planner.athletes','Athletes')} · ${roster.length}`)}
       <div style="font:400 12px ${FONT};color:#15181D;line-height:1.7">${roster.map(p=>`<span style="white-space:nowrap;margin-right:12px"><span style="color:#9CA3AF;font-family:${MONO};font-size:10.5px">${esc(p.number??'—')}</span> <b style="font-weight:600">${esc(lastName(p))}</b></span>`).join('')}</div>
     </div>` : '';
 
@@ -1615,7 +1620,7 @@ function gpRenderPrintSheet() {
     // WARM-UP — pills
     const wuRows = readRows('gpWarmupBody').filter(r=>r.name);
     const warmupBlock = wuRows.length ? `<div style="margin-bottom:16px">
-      ${sectionTitle(`Warm-up${wuMin?` · ${wuMin} min`:''}`)}
+      ${sectionTitle(`${tt('gym_planner.warmup','Warm-up')}${wuMin?` · ${wuMin} ${tt('gym_planner.unit_min','min')}`:''}`)}
       <div style="display:flex;flex-wrap:wrap;gap:6px">${wuRows.map(r=>`<span style="border:1px solid #E7E7E4;border-radius:999px;padding:4px 11px;font:500 11.5px ${FONT};color:#15181D">${esc(r.name)}</span>`).join('')}</div>
     </div>` : '';
 
@@ -1623,9 +1628,9 @@ function gpRenderPrintSheet() {
     const plyoRows = readRows('gpPlyoBody').filter(r=>r.name);
     const plyContacts = kv(g('gpTotPlyo'));
     const plyoBlock = plyoRows.length ? `<div style="margin-bottom:16px">
-      ${sectionTitle(`Plyometrics · ${plyoRows.length}${plyContacts!=='—'?` · ${plyContacts} contacts`:''}`)}
+      ${sectionTitle(`${tt('gym_planner.plyometrics','Plyometrics')} · ${plyoRows.length}${plyContacts!=='—'?` · ${plyContacts} ${tt('gym_planner.contacts_word','contacts')}`:''}`)}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${plyoRows.map(r=>{
-        const params=[]; if(r.c3)params.push({l:'Sets×reps',v:r.c3}); if(r.c4)params.push({l:'Contacts',v:r.c4});
+        const params=[]; if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.contacts','Contacts'),v:r.c4});
         return exCard({name:r.name, params, note:r.c7, tag:'POW', tagColor:'#7C3AED', exId:r.exId});
       }).join('')}</div>
     </div>` : '';
@@ -1634,18 +1639,18 @@ function gpRenderPrintSheet() {
     const mainRows = readRows('gpMainBody').filter(r=>r.name);
     const mSets = kv(g('gpTotMain')), mTon = kv(g('gpTotTonnage'));
     const mainBlock = mainRows.length ? `<div style="margin-bottom:16px">
-      ${sectionTitle(`Main work · ${mainRows.length}${mSets!=='—'?` · ${mSets} sets`:''}${mTon!=='—'?` · ${mTon}`:''}`)}
+      ${sectionTitle(`${tt('gym_planner.main_work','Main work')} · ${mainRows.length}${mSets!=='—'?` · ${mSets} ${tt('gym_planner.sets_word','sets')}`:''}${mTon!=='—'?` · ${mTon}`:''}`)}
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${mainRows.map(r=>{
-        const params=[]; if(r.c3)params.push({l:'Sets×reps',v:r.c3}); if(r.c4)params.push({l:'Load',v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
-        const note = r.c7 ? `Tempo ${r.c7}` : '';
+        const params=[]; if(r.c3)params.push({l:tt('gym_planner.sets_reps_short','Sets×reps'),v:r.c3}); if(r.c4)params.push({l:tt('gym_planner.load','Load'),v:r.c4}); if(r.c5 && r.c5!=='—')params.push({l:'%1RM',v:r.c5});
+        const note = r.c7 ? `${tt('gym_planner.tempo','Tempo')} ${r.c7}` : '';
         return exCard({name:r.name, params, note, tag:'STR', tagColor:'#B91C1C', exId:r.exId});
       }).join('')}</div>
     </div>` : '';
 
     // 7) Footer
-    const footMid = [...chips]; if (md) footMid.push(md);
+    const footMid = chips.map(c => c.label); if (md) footMid.push(md);
     const footer = `<div style="margin-top:auto;display:flex;justify-content:space-between;gap:10px;padding-top:9px;border-top:1px solid #E7E7E4;font:500 9.5px ${MONO};color:#A3AAB3">
-      <span>ClavaMetrics · Gym Session Plan</span>
+      <span>ClavaMetrics · ${esc(tt('gym_planner.print_gym_session_plan','Gym Session Plan'))}</span>
       <span>${esc(footMid.join(' · '))}</span>
       <span>${esc(clubName)}${teamName?' · '+esc(teamName):''}</span>
     </div>`;
@@ -1661,7 +1666,7 @@ window.addEventListener('beforeprint', gpRenderPrintSheet);
 
 async function gpExportPDF() {
   const btn = document.querySelector('[onclick="gpExportPDF()"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  if (btn) { btn.disabled = true; btn.textContent = tt('gym_planner.generating','Generating…'); }
   const host = document.getElementById('gpPrintSheet');
   try {
     const { default: html2canvas } = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.min.js');
@@ -1682,10 +1687,10 @@ async function gpExportPDF() {
     }
     pdf.save(`${_gpCurrentDate}_gym-plan.pdf`);
   } catch(e) {
-    alert('PDF export failed. Use Print → Save as PDF instead.');
+    alert(tt('gym_planner.pdf_export_failed','PDF export failed. Use Print → Save as PDF instead.'));
   } finally {
     if (host) host.style.cssText = '';
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-file-type-pdf" style="font-size:14px"></i>Export PDF'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = `<i class="ti ti-file-type-pdf" style="font-size:14px"></i>${tt('gym_planner.export_pdf','Export PDF')}`; }
   }
 }
 
@@ -1733,6 +1738,24 @@ async function gpExportPDF() {
     const el = document.getElementById(id); if (el) el.addEventListener('input', gpScheduleSave);
   });
   document.getElementById('gpAdaptBody').addEventListener('input', gpScheduleSave);
+
+  // Re-render JS-generated chrome when the language changes (static tags are
+  // handled by the runtime; these are computed strings/dates).
+  document.addEventListener('cm:langchanged', () => {
+    try {
+      if (_gpCurrentDate) {
+        const fmt = _gpFmt(_gpCurrentDate);
+        const cr = document.getElementById('gpCrumbDate'); if (cr) cr.textContent = fmt;
+        const mc = _gpMicrocycles.find(m => m.start_date <= _gpCurrentDate && _gpCurrentDate <= m.end_date);
+        const pl = document.getElementById('gpPagerLabel');
+        if (pl) pl.innerHTML = `<i class="ti ti-calendar-event"></i>${fmt}${mc ? `<span class="sub">${mc.name}</span>` : ''}`;
+      }
+      gpRecalcTotals();
+      gpRenderRoster();
+      _gpUpdatePublishBtn();
+      gpRenderPrintSheet();
+    } catch (_) {}
+  });
 })().catch(console.error);
 
   async function gpInitTeamSwitch() {
@@ -1745,7 +1768,7 @@ async function gpExportPDF() {
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     _gpTeams = teams;
     const sel = document.getElementById('gpTeamSelect');
-    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    if (!teams.length) { sel.innerHTML=`<option value="">${tt('gym_planner.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _gpTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_gpTeamId?'selected':''}>${t.name}</option>`).join('');
