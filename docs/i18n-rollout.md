@@ -157,7 +157,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Video Detail.html
 
 ### Fase 4 — Rendimiento
-- ⬜ Load Monitor.html
+- ✅ Load Monitor.html
 - ⬜ Gym Planner.html
 - ⬜ Gym Library.html
 - ⬜ GPS Analysis.html  *(la más grande — dividí en tandas por sección si hace falta)*

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Load Monitor — ClavaMetrics</title>
+<title data-i18n="load_monitor.page_title">Load Monitor — ClavaMetrics</title>
 <link rel="stylesheet" href="clavametrics.css">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#15803D">
@@ -317,20 +317,20 @@
     <div class="hub-topbar">
       <div style="display:flex;align-items:center;gap:7px">
         <i class="ti ti-users-group" style="font-size:16px;color:var(--cm-fg-muted)"></i>
-        <select id="lmTeamSelect" onchange="lmOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="">Loading…</option></select>
+        <select id="lmTeamSelect" onchange="lmOnTeamChange()" style="height:34px;padding:0 10px;background:var(--cm-surface);color:var(--cm-fg-strong);border:1px solid var(--cm-border);border-radius:8px;font:600 13px/1 var(--cm-font-sans);cursor:pointer"><option value="" data-i18n="common.loading">Loading…</option></select>
       </div>
       <div class="hub-crumb">
-        <i class="ti ti-home"></i><span>Performance</span><span class="sep">/</span>
-        <span style="color:var(--cm-fg-strong);font-weight:600">Load monitor</span>
+        <i class="ti ti-home"></i><span data-i18n="load_monitor.crumb_performance">Performance</span><span class="sep">/</span>
+        <span style="color:var(--cm-fg-strong);font-weight:600" data-i18n="load_monitor.crumb_title">Load monitor</span>
       </div>
       <div class="hub-search">
         <i class="ti ti-search"></i>
-        <input placeholder="Search players, sessions…">
+        <input data-i18n-ph="load_monitor.search_ph" placeholder="Search players, sessions…">
       </div>
       <div class="actions">
-        <button class="cm-icon-btn" title="Notifications"><i class="ti ti-bell"></i></button>
-        <button class="cm-icon-btn" title="Help"><i class="ti ti-help"></i></button>
-        <button class="cm-icon-btn" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
+        <button class="cm-icon-btn" data-i18n-attr="title:load_monitor.notifications" title="Notifications"><i class="ti ti-bell"></i></button>
+        <button class="cm-icon-btn" data-i18n-attr="title:load_monitor.help" title="Help"><i class="ti ti-help"></i></button>
+        <button class="cm-icon-btn" data-i18n-attr="title:load_monitor.settings" title="Settings" data-open-settings><i class="ti ti-settings"></i></button>
       </div>
     </div>
 
@@ -338,17 +338,17 @@
 
       <header class="lm-head">
         <div>
-          <h1>Load Monitor</h1>
-          <div class="ctx" id="lmCtx"><strong>28d</strong> · connecting…</div>
+          <h1 data-i18n="load_monitor.h1">Load Monitor</h1>
+          <div class="ctx" id="lmCtx"><strong>28d</strong> · <span data-i18n="load_monitor.connecting">connecting…</span></div>
         </div>
         <div class="meta">
           <div class="lm-segs">
-            <button class="lm-seg">7d</button>
-            <button class="lm-seg is-on">28d</button>
-            <button class="lm-seg">Microcycle</button>
-            <button class="lm-seg">Season</button>
+            <button class="lm-seg" data-period="7d">7d</button>
+            <button class="lm-seg is-on" data-period="28d">28d</button>
+            <button class="lm-seg" data-period="Microcycle" data-i18n="load_monitor.microcycle">Microcycle</button>
+            <button class="lm-seg" data-period="Season" data-i18n="load_monitor.season">Season</button>
           </div>
-          <button class="cm-btn is-outline is-sm" id="lmExportBtn"><i class="ti ti-file-export" style="font-size:14px"></i>Export</button>
+          <button class="cm-btn is-outline is-sm" id="lmExportBtn"><i class="ti ti-file-export" style="font-size:14px"></i><span data-i18n="common.export">Export</span></button>
         </div>
       </header>
 
@@ -360,7 +360,7 @@
           <div class="p" id="lmAlertP"></div>
         </div>
         <div class="actions">
-          <button class="cm-btn is-sm">View players<i class="ti ti-arrow-right" style="font-size:14px"></i></button>
+          <button class="cm-btn is-sm"><span data-i18n="load_monitor.view_players">View players</span><i class="ti ti-arrow-right" style="font-size:14px"></i></button>
           <button class="cm-icon-btn"><i class="ti ti-x"></i></button>
         </div>
       </div>
@@ -368,11 +368,11 @@
       <!-- KPI strip -->
       <div class="lm-kpis">
         <div class="lm-kpi">
-          <div class="lm-kpi-l"><i class="ti ti-chart-line"></i>Squad avg ACWR<span class="help"><i class="ti ti-info-circle"></i></span></div>
+          <div class="lm-kpi-l"><i class="ti ti-chart-line"></i><span data-i18n="load_monitor.kpi_squad_avg_acwr">Squad avg ACWR</span><span class="help"><i class="ti ti-info-circle"></i></span></div>
           <div class="lm-kpi-v" id="lmKpiAcwr">—</div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d" id="lmAcwrDelta" style="display:none"></span>
-            <span>sweet-spot 0.8–1.3</span>
+            <span data-i18n="load_monitor.sweet_spot_range">sweet-spot 0.8–1.3</span>
           </div>
           <div class="lm-zonebar">
             <div class="z green"></div><div class="z amber"></div><div class="z red"></div>
@@ -383,18 +383,18 @@
           </svg>
         </div>
         <div class="lm-kpi">
-          <div class="lm-kpi-l"><i class="ti ti-flame"></i>In danger zone</div>
+          <div class="lm-kpi-l"><i class="ti ti-flame"></i><span data-i18n="load_monitor.kpi_in_danger_zone">In danger zone</span></div>
           <div class="lm-kpi-v" id="lmKpiDanger">— <sub>/ —</sub></div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d" id="lmDangerDelta" style="display:none"></span>
-            <span>vs 48 h ago</span>
+            <span data-i18n="load_monitor.vs_48h_ago">vs 48 h ago</span>
           </div>
           <svg class="lm-kpi-sp" viewBox="0 0 84 36" preserveAspectRatio="none">
             <polyline points="0,28 14,26 28,22 42,24 56,18 70,12 84,8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </div>
         <div class="lm-kpi">
-          <div class="lm-kpi-l"><i class="ti ti-heartbeat"></i>Wellness avg<span class="help"><i class="ti ti-info-circle"></i></span></div>
+          <div class="lm-kpi-l"><i class="ti ti-heartbeat"></i><span data-i18n="load_monitor.kpi_wellness_avg">Wellness avg</span><span class="help"><i class="ti ti-info-circle"></i></span></div>
           <div class="lm-kpi-v" id="lmKpiWellness">— <sub>/ 10</sub></div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d" id="lmWellDelta" style="display:none"></span>
@@ -405,7 +405,7 @@
           </svg>
         </div>
         <div class="lm-kpi">
-          <div class="lm-kpi-l"><i class="ti ti-activity"></i>Session RPE avg<span class="help"><i class="ti ti-info-circle"></i></span></div>
+          <div class="lm-kpi-l"><i class="ti ti-activity"></i><span data-i18n="load_monitor.kpi_session_rpe_avg">Session RPE avg</span><span class="help"><i class="ti ti-info-circle"></i></span></div>
           <div class="lm-kpi-v" id="lmKpiRpe">— <sub>/ 10</sub></div>
           <div class="lm-kpi-t">
             <span class="lm-kpi-d warn"><i class="ti ti-arrow-up-right"></i>+0.4</span>
@@ -423,27 +423,27 @@
         <!-- ACWR chart -->
         <div class="lm-card">
           <div class="lm-card-h">
-            <h3>Acute : Chronic workload ratio</h3>
-            <span class="sub">28 days · squad average</span>
+            <h3 data-i18n="load_monitor.acwr_title">Acute : Chronic workload ratio</h3>
+            <span class="sub" data-i18n="load_monitor.acwr_sub">28 days · squad average</span>
             <div class="right">
               <div class="lm-legend">
-                <span class="it"><span class="sw" style="background:var(--cm-accent)"></span>Acute (7‑day rolling)</span>
-                <span class="it"><span class="sw" style="background:var(--cm-fg-muted);opacity:0.6"></span>Chronic (28‑day rolling)</span>
-                <span class="it"><span class="sw dash"></span>Sweet‑spot</span>
+                <span class="it"><span class="sw" style="background:var(--cm-accent)"></span><span data-i18n="load_monitor.legend_acute">Acute (7‑day rolling)</span></span>
+                <span class="it"><span class="sw" style="background:var(--cm-fg-muted);opacity:0.6"></span><span data-i18n="load_monitor.legend_chronic">Chronic (28‑day rolling)</span></span>
+                <span class="it"><span class="sw dash"></span><span data-i18n="load_monitor.legend_sweet_spot">Sweet‑spot</span></span>
               </div>
-              <button class="cm-icon-btn" id="lmChartDlBtn" title="Download PNG"><i class="ti ti-download"></i></button>
-              <button class="cm-icon-btn" id="lmChartMaxBtn" title="Fullscreen"><i class="ti ti-maximize"></i></button>
+              <button class="cm-icon-btn" id="lmChartDlBtn" data-i18n-attr="title:load_monitor.download_png" title="Download PNG"><i class="ti ti-download"></i></button>
+              <button class="cm-icon-btn" id="lmChartMaxBtn" data-i18n-attr="title:load_monitor.fullscreen" title="Fullscreen"><i class="ti ti-maximize"></i></button>
             </div>
           </div>
           <div class="lm-pillline">
-            <span class="pill green"><span class="d"></span>0.8 – 1.3 sweet‑spot</span>
-            <span class="pill warn"><span class="d"></span>1.3 – 1.5 overreach</span>
-            <span class="pill red"><span class="d"></span>&gt; 1.5 danger</span>
-            <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)">Squad avg today · <strong id="lmAcwrToday" style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
+            <span class="pill green"><span class="d"></span><span data-i18n="load_monitor.pill_sweet_spot">0.8 – 1.3 sweet‑spot</span></span>
+            <span class="pill warn"><span class="d"></span><span data-i18n="load_monitor.pill_overreach">1.3 – 1.5 overreach</span></span>
+            <span class="pill red"><span class="d"></span><span data-i18n="load_monitor.pill_danger">&gt; 1.5 danger</span></span>
+            <span style="margin-left:auto;font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"><span data-i18n="load_monitor.squad_avg_today">Squad avg today</span> · <strong id="lmAcwrToday" style="color:var(--cm-warning);font-weight:600">1.18</strong></span>
           </div>
           <div class="lm-card-b" style="padding-top:4px;position:relative;height:360px;overflow:visible">
             <canvas id="acwrChart" style="display:none"></canvas>
-            <div id="acwrEmpty" style="display:none;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:var(--cm-body-sm)">No RPE data in the last 28 days</div>
+            <div id="acwrEmpty" style="display:none;align-items:center;justify-content:center;height:100%;color:var(--cm-fg-muted);font:var(--cm-body-sm)" data-i18n="load_monitor.no_rpe_28d">No RPE data in the last 28 days</div>
             <!-- static SVG shown until JS replaces it -->
             <svg id="acwrSvg" viewBox="0 0 880 360" preserveAspectRatio="none" style="width:100%;height:360px;display:block" font-family="Geist, ui-sans-serif, system-ui, sans-serif">
 
@@ -623,19 +623,19 @@
           <!-- ACWR distribution -->
           <div class="lm-card">
             <div class="lm-card-h">
-              <h3>ACWR distribution</h3>
-              <span class="sub" id="lmDistSub">loading…</span>
+              <h3 data-i18n="load_monitor.dist_title">ACWR distribution</h3>
+              <span class="sub" id="lmDistSub" data-i18n="load_monitor.loading_lc">loading…</span>
               <div class="right lm-dropdown">
                 <button class="cm-icon-btn" id="lmDistMenuBtn"><i class="ti ti-dots"></i></button>
                 <div class="lm-dropdown-menu" id="lmDistMenu">
-                  <button id="lmDistViewTable"><i class="ti ti-table"></i>View as table</button>
-                  <button id="lmDistExportPng"><i class="ti ti-photo"></i>Export PNG</button>
+                  <button id="lmDistViewTable"><i class="ti ti-table"></i><span data-i18n="load_monitor.view_as_table">View as table</span></button>
+                  <button id="lmDistExportPng"><i class="ti ti-photo"></i><span data-i18n="load_monitor.export_png">Export PNG</span></button>
                   <div class="dm-divider"></div>
-                  <div class="dm-label">Change period</div>
-                  <button data-period="7d"><i class="ti ti-calendar"></i>7 days</button>
-                  <button data-period="28d"><i class="ti ti-calendar"></i>28 days</button>
-                  <button data-period="Microcycle"><i class="ti ti-refresh"></i>Microcycle</button>
-                  <button data-period="Season"><i class="ti ti-calendar-stats"></i>Season</button>
+                  <div class="dm-label" data-i18n="load_monitor.change_period">Change period</div>
+                  <button data-period="7d"><i class="ti ti-calendar"></i><span data-i18n="load_monitor.7_days">7 days</span></button>
+                  <button data-period="28d"><i class="ti ti-calendar"></i><span data-i18n="load_monitor.28_days">28 days</span></button>
+                  <button data-period="Microcycle"><i class="ti ti-refresh"></i><span data-i18n="load_monitor.microcycle">Microcycle</span></button>
+                  <button data-period="Season"><i class="ti ti-calendar-stats"></i><span data-i18n="load_monitor.season">Season</span></button>
                 </div>
               </div>
             </div>
@@ -654,10 +654,10 @@
                   <text x="21" y="26" text-anchor="middle" font-family="Geist Mono, ui-monospace, monospace" font-size="3" fill="var(--cm-fg-muted)">PLAYERS</text>
                 </svg>
                 <div class="lm-dist-legend">
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-success)"></span><span class="lbl">Sweet-spot</span><span class="ct" id="lmDistSweet">—</span></div>
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-warning)"></span><span class="lbl">Overreach</span><span class="ct" id="lmDistOver">—</span></div>
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-danger)"></span><span class="lbl">Danger</span><span class="ct" id="lmDistDanger">—</span></div>
-                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-bg-sunk);border:1px solid var(--cm-border-strong)"></span><span class="lbl">No data</span><span class="ct" id="lmDistNoData">0</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-success)"></span><span class="lbl" data-i18n="load_monitor.zone_sweet_spot">Sweet-spot</span><span class="ct" id="lmDistSweet">—</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-warning)"></span><span class="lbl" data-i18n="load_monitor.zone_overreach">Overreach</span><span class="ct" id="lmDistOver">—</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-danger)"></span><span class="lbl" data-i18n="load_monitor.zone_danger">Danger</span><span class="ct" id="lmDistDanger">—</span></div>
+                  <div class="lm-dist-row"><span class="sw" style="background:var(--cm-bg-sunk);border:1px solid var(--cm-border-strong)"></span><span class="lbl" data-i18n="load_monitor.zone_no_data">No data</span><span class="ct" id="lmDistNoData">0</span></div>
                 </div>
               </div>
               <div id="lmDistTable"></div>
@@ -667,17 +667,17 @@
           <!-- Wellness today -->
           <div class="lm-card">
             <div class="lm-card-h">
-              <h3>Wellness today</h3>
+              <h3 data-i18n="load_monitor.wellness_today">Wellness today</h3>
               <span class="sub" id="lmWellHead">— of — submitted</span>
-              <div class="right"><button class="cm-icon-btn" id="lmWellNavBtn" title="Go to Wellness"><i class="ti ti-arrow-up-right"></i></button></div>
+              <div class="right"><button class="cm-icon-btn" id="lmWellNavBtn" data-i18n-attr="title:load_monitor.go_to_wellness" title="Go to Wellness"><i class="ti ti-arrow-up-right"></i></button></div>
             </div>
             <div class="lm-card-b">
               <div class="lm-wellbars" id="lmWellBars">
-                <div class="lm-wellbar"><span class="l">Sleep</span><span class="b"><span class="bf" style="width:78%;background:var(--cm-success)"></span></span><span class="v">7.8<sub>/10</sub></span></div>
-                <div class="lm-wellbar"><span class="l">Mood</span><span class="b"><span class="bf" style="width:82%;background:var(--cm-success)"></span></span><span class="v">8.2<sub>/10</sub></span></div>
-                <div class="lm-wellbar"><span class="l">Fatigue</span><span class="b"><span class="bf" style="width:64%;background:var(--cm-warning)"></span></span><span class="v">6.4<sub>/10</sub></span></div>
-                <div class="lm-wellbar"><span class="l">Stress</span><span class="b"><span class="bf" style="width:71%;background:var(--cm-success)"></span></span><span class="v">7.1<sub>/10</sub></span></div>
-                <div class="lm-wellbar"><span class="l">Soreness</span><span class="b"><span class="bf" style="width:58%;background:var(--cm-warning)"></span></span><span class="v">5.8<sub>/10</sub></span></div>
+                <div class="lm-wellbar"><span class="l" data-i18n="load_monitor.dim_sleep">Sleep</span><span class="b"><span class="bf" style="width:78%;background:var(--cm-success)"></span></span><span class="v">7.8<sub>/10</sub></span></div>
+                <div class="lm-wellbar"><span class="l" data-i18n="load_monitor.dim_mood">Mood</span><span class="b"><span class="bf" style="width:82%;background:var(--cm-success)"></span></span><span class="v">8.2<sub>/10</sub></span></div>
+                <div class="lm-wellbar"><span class="l" data-i18n="load_monitor.dim_fatigue">Fatigue</span><span class="b"><span class="bf" style="width:64%;background:var(--cm-warning)"></span></span><span class="v">6.4<sub>/10</sub></span></div>
+                <div class="lm-wellbar"><span class="l" data-i18n="load_monitor.dim_stress">Stress</span><span class="b"><span class="bf" style="width:71%;background:var(--cm-success)"></span></span><span class="v">7.1<sub>/10</sub></span></div>
+                <div class="lm-wellbar"><span class="l" data-i18n="load_monitor.dim_soreness">Soreness</span><span class="b"><span class="bf" style="width:58%;background:var(--cm-warning)"></span></span><span class="v">5.8<sub>/10</sub></span></div>
               </div>
             </div>
           </div>
@@ -688,17 +688,17 @@
       <!-- Player table -->
       <div class="lm-card">
         <div class="lm-card-h">
-          <h3>Player load</h3>
-          <span class="sub" id="lmPlayerLoadSub">loading…</span>
+          <h3 data-i18n="load_monitor.player_load">Player load</h3>
+          <span class="sub" id="lmPlayerLoadSub" data-i18n="load_monitor.loading_lc">loading…</span>
           <div class="right">
             <div class="lm-dropdown">
-              <button class="cm-icon-btn" id="lmSortBtn" title="Sort"><i class="ti ti-arrows-sort"></i></button>
+              <button class="cm-icon-btn" id="lmSortBtn" data-i18n-attr="title:load_monitor.sort" title="Sort"><i class="ti ti-arrows-sort"></i></button>
               <div class="lm-dropdown-menu" id="lmSortMenu">
-                <div class="dm-label">Sort by</div>
-                <button data-sort="acwr" class="sort-opt is-active"><i class="ti ti-chart-bar"></i>ACWR (highest first)</button>
-                <button data-sort="zone" class="sort-opt"><i class="ti ti-alert-triangle"></i>Zone (danger first)</button>
-                <button data-sort="name" class="sort-opt"><i class="ti ti-sort-az"></i>Name (A → Z)</button>
-                <button data-sort="pos" class="sort-opt"><i class="ti ti-shirt-sport"></i>Position</button>
+                <div class="dm-label" data-i18n="load_monitor.sort_by">Sort by</div>
+                <button data-sort="acwr" class="sort-opt is-active"><i class="ti ti-chart-bar"></i><span data-i18n="load_monitor.sort_acwr">ACWR (highest first)</span></button>
+                <button data-sort="zone" class="sort-opt"><i class="ti ti-alert-triangle"></i><span data-i18n="load_monitor.sort_zone">Zone (danger first)</span></button>
+                <button data-sort="name" class="sort-opt"><i class="ti ti-sort-az"></i><span data-i18n="load_monitor.sort_name">Name (A → Z)</span></button>
+                <button data-sort="pos" class="sort-opt"><i class="ti ti-shirt-sport"></i><span data-i18n="common.position">Position</span></button>
               </div>
             </div>
             <button class="cm-icon-btn"><i class="ti ti-columns-3"></i></button>
@@ -706,40 +706,40 @@
         </div>
 
         <div class="lm-tablebar">
-          <button class="lm-pill-filter is-on">All<span class="ct" id="lmPillAll">—</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-danger)"></span>Danger<span class="ct" id="lmPillDanger">—</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-warning)"></span>Overreach<span class="ct" id="lmPillOver">—</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-success)"></span>Sweet-spot<span class="ct" id="lmPillSweet">—</span></button>
-          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-info)"></span>Underloaded<span class="ct" id="lmPillUnder">—</span></button>
+          <button class="lm-pill-filter is-on"><span data-i18n="common.all">All</span><span class="ct" id="lmPillAll">—</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-danger)"></span><span data-i18n="load_monitor.zone_danger">Danger</span><span class="ct" id="lmPillDanger">—</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-warning)"></span><span data-i18n="load_monitor.zone_overreach">Overreach</span><span class="ct" id="lmPillOver">—</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-success)"></span><span data-i18n="load_monitor.zone_sweet_spot">Sweet-spot</span><span class="ct" id="lmPillSweet">—</span></button>
+          <button class="lm-pill-filter"><span class="dot" style="background:var(--cm-info)"></span><span data-i18n="load_monitor.zone_underloaded">Underloaded</span><span class="ct" id="lmPillUnder">—</span></button>
           <div class="grow"></div>
-          <span style="font:var(--cm-meta);color:var(--cm-fg-muted)">Group by</span>
-          <button class="lm-pill-filter is-on">Position</button>
-          <button class="lm-pill-filter">Status</button>
-          <button class="lm-pill-filter">Age</button>
+          <span style="font:var(--cm-meta);color:var(--cm-fg-muted)" data-i18n="load_monitor.group_by">Group by</span>
+          <button class="lm-pill-filter is-on" data-i18n="common.position">Position</button>
+          <button class="lm-pill-filter" data-i18n="load_monitor.group_status">Status</button>
+          <button class="lm-pill-filter" data-i18n="load_monitor.group_age">Age</button>
         </div>
 
         <table class="lm-table">
           <thead>
             <tr>
               <th class="col-num" data-sort="num"># <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
-              <th data-sort="name">Player <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
-              <th class="col-pos" data-sort="pos">Pos <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th data-sort="name"><span data-i18n="common.player">Player</span> <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-pos" data-sort="pos"><span data-i18n="load_monitor.col_pos">Pos</span> <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
               <th class="col-acwr" data-sort="acwr">ACWR <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
-              <th class="col-rpe" data-sort="rpe">Session RPE <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
-              <th class="col-wellness" data-sort="wellness">Wellness <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
-              <th data-sort="ac">Acute / Chronic (7d : 28d) <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
-              <th class="col-zone" data-sort="zone">Zone <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-rpe" data-sort="rpe"><span data-i18n="load_monitor.col_session_rpe">Session RPE</span> <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-wellness" data-sort="wellness"><span data-i18n="load_monitor.col_wellness">Wellness</span> <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th data-sort="ac"><span data-i18n="load_monitor.col_acute_chronic">Acute / Chronic (7d : 28d)</span> <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
+              <th class="col-zone" data-sort="zone"><span data-i18n="load_monitor.col_zone">Zone</span> <i class="ti ti-arrows-up-down lm-sort-i"></i></th>
             </tr>
           </thead>
           <tbody id="lmTbody">
-            <tr><td colspan="8" style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)">Loading player load data…</td></tr>
+            <tr><td colspan="8" style="padding:24px;text-align:center;color:var(--cm-fg-muted);font:var(--cm-body-sm)" data-i18n="load_monitor.loading_player_data">Loading player load data…</td></tr>
           </tbody>
         </table>
 
         <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--cm-border);background:var(--cm-bg-soft);font:var(--cm-meta);color:var(--cm-fg-muted)">
-          <span id="lmTableFoot">Loading…</span>
+          <span id="lmTableFoot" data-i18n="common.loading">Loading…</span>
           <div style="flex:1"></div>
-          <button class="cm-btn is-ghost is-sm" id="lmLoadMoreBtn" style="display:none">Load remaining<i class="ti ti-arrow-down" style="font-size:14px"></i></button>
+          <button class="cm-btn is-ghost is-sm" id="lmLoadMoreBtn" style="display:none"><span data-i18n="load_monitor.load_remaining">Load remaining</span><i class="ti ti-arrow-down" style="font-size:14px"></i></button>
         </div>
       </div>
 
@@ -751,7 +751,7 @@
 <div class="lm-modal-overlay" id="lmChartModal" style="display:none">
   <div class="lm-modal">
     <div class="lm-modal-h">
-      <h3>Acute : Chronic workload ratio</h3>
+      <h3 data-i18n="load_monitor.acwr_title">Acute : Chronic workload ratio</h3>
       <span id="lmModalSub" style="font:500 12px/1 var(--cm-font-mono);color:var(--cm-fg-muted)"></span>
       <button class="cm-icon-btn" id="lmModalClose" style="margin-left:auto"><i class="ti ti-x"></i></button>
     </div>
@@ -766,6 +766,30 @@
 <div id="settings-host"></div>
 
 <script>
+  function tt(key, fallbackEN, vars) {
+    const v = (window.CM_I18N && CM_I18N.t) ? CM_I18N.t(key, vars) : null;
+    return (v && v !== key) ? v : (fallbackEN != null ? fallbackEN : key);
+  }
+  function lmLocale() { return (window.CM_I18N && CM_I18N.current) ? CM_I18N.current : 'en'; }
+  // Zone → localized label (UI only; the underlying ACWR value/logic stays canonical).
+  function lmZoneLabel(zone) {
+    return {
+      danger:     tt('load_monitor.zone_danger', 'Danger'),
+      overreach:  tt('load_monitor.zone_overreach', 'Overreach'),
+      sweet:      tt('load_monitor.zone_sweet_spot', 'Sweet-spot'),
+      under:      tt('load_monitor.zone_underloaded', 'Underloaded'),
+      nodata:     tt('load_monitor.zone_no_data', 'No data')
+    }[zone];
+  }
+  function lmDimLabel(key) {
+    return {
+      Sleep:    tt('load_monitor.dim_sleep', 'Sleep'),
+      Mood:     tt('load_monitor.dim_mood', 'Mood'),
+      Fatigue:  tt('load_monitor.dim_fatigue', 'Fatigue'),
+      Stress:   tt('load_monitor.dim_stress', 'Stress'),
+      Soreness: tt('load_monitor.dim_soreness', 'Soreness')
+    }[key] || key;
+  }
 (async () => {
   if (!(await window.guardModule())) return;
 
@@ -841,20 +865,24 @@
     : (nonNullDims.length ? nonNullDims.reduce((a,b)=>a+b,0)/nonNullDims.length : null);
 
   const submittedToday = new Set(wellnessList.map(w => w.player_id)).size;
-  document.getElementById('lmWellSub').textContent  = `${submittedToday} of ${total} submitted today`;
-  document.getElementById('lmWellHead').textContent = `${submittedToday} of ${total} submitted`;
+  function renderWellHeads() {
+    document.getElementById('lmWellSub').textContent  = tt('load_monitor.n_of_n_submitted_today', `${submittedToday} of ${total} submitted today`, { done: submittedToday, total });
+    document.getElementById('lmWellHead').textContent = tt('load_monitor.n_of_n_submitted', `${submittedToday} of ${total} submitted`, { done: submittedToday, total });
+  }
+  renderWellHeads();
   if (hasHooper) {
     const hooperVals = wellnessList.map(w => w.hooper_index).filter(v => v != null).map(Number);
     const avgHooper  = hooperVals.length ? hooperVals.reduce((a,b)=>a+b,0)/hooperVals.length : null;
     const lmKpiW = document.getElementById('lmKpiWellness');
     lmKpiW.innerHTML = avgHooper != null ? `${avgHooper.toFixed(1)} <sub>/ 28</sub>` : `— <sub>/ 28</sub>`;
-    lmKpiW.title = 'Hooper Index · lower = better';
+    lmKpiW.title = tt('load_monitor.hooper_tooltip', 'Hooper Index · lower = better');
   } else {
     document.getElementById('lmKpiWellness').innerHTML = avgReadiness != null
       ? `${avgReadiness.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
   }
 
   const wellBars = document.getElementById('lmWellBars');
+  function renderWellBars() {
   if (hasHooper) {
     // Solo los 4 ítems Hooper (1–7, alto = malo), promediando filas con hooper_index.
     const hooperRows = wellnessList.filter(w => w.hooper_index != null);
@@ -867,27 +895,29 @@
     const moodAvg = avgDim(hooperRows, ['mood']);
     wellBars.innerHTML = hDims.map(d => {
       const val = avgDim(hooperRows, d.keys);
-      if (val == null) return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"></span><span class="v">—</span></div>`;
+      if (val == null) return `<div class="lm-wellbar"><span class="l">${lmDimLabel(d.label)}</span><span class="b"></span><span class="v">—</span></div>`;
       const pct = Math.round(val/7*100);
       const col = val>=6 ? 'var(--cm-danger)' : val>=4 ? 'var(--cm-warning)' : 'var(--cm-success)';
-      return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"><span class="bf" style="width:${pct}%;background:${col}"></span></span><span class="v">${val.toFixed(1)}<sub>/7</sub></span></div>`;
+      return `<div class="lm-wellbar"><span class="l">${lmDimLabel(d.label)}</span><span class="b"><span class="bf" style="width:${pct}%;background:${col}"></span></span><span class="v">${val.toFixed(1)}<sub>/7</sub></span></div>`;
     }).join('') +
     (moodAvg != null
-      ? `<div class="lm-wellbar"><span class="l">Mood</span><span class="b"><span class="bf" style="width:${Math.round(moodAvg/7*100)}%;background:var(--cm-fg-muted)"></span></span><span class="v">${moodAvg.toFixed(1)}<sub>/7</sub></span></div>`
-      : `<div class="lm-wellbar"><span class="l">Mood</span><span class="b"></span><span class="v">—</span></div>`);
+      ? `<div class="lm-wellbar"><span class="l">${lmDimLabel('Mood')}</span><span class="b"><span class="bf" style="width:${Math.round(moodAvg/7*100)}%;background:var(--cm-fg-muted)"></span></span><span class="v">${moodAvg.toFixed(1)}<sub>/7</sub></span></div>`
+      : `<div class="lm-wellbar"><span class="l">${lmDimLabel('Mood')}</span><span class="b"></span><span class="v">—</span></div>`);
   } else if (wellnessList.length && dimAvgs.some(v => v != null)) {
     wellBars.innerHTML = wDims.map((d, i) => {
       const val = dimAvgs[i];
-      if (val == null) return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"></span><span class="v">—</span></div>`;
+      if (val == null) return `<div class="lm-wellbar"><span class="l">${lmDimLabel(d.label)}</span><span class="b"></span><span class="v">—</span></div>`;
       const pct = Math.round(val * 10);
       const col = val>=7 ? 'var(--cm-success)' : val>=5 ? 'var(--cm-warning)' : 'var(--cm-danger)';
-      return `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"><span class="bf" style="width:${pct}%;background:${col}"></span></span><span class="v">${val.toFixed(1)}<sub>/10</sub></span></div>`;
+      return `<div class="lm-wellbar"><span class="l">${lmDimLabel(d.label)}</span><span class="b"><span class="bf" style="width:${pct}%;background:${col}"></span></span><span class="v">${val.toFixed(1)}<sub>/10</sub></span></div>`;
     }).join('');
   } else {
     wellBars.innerHTML = wDims.map(d =>
-      `<div class="lm-wellbar"><span class="l">${d.label}</span><span class="b"></span><span class="v">—</span></div>`
+      `<div class="lm-wellbar"><span class="l">${lmDimLabel(d.label)}</span><span class="b"></span><span class="v">—</span></div>`
     ).join('');
   }
+  }
+  renderWellBars();
 
   // ── State ──────────────────────────────────────────────────────────────────
   let currentPeriod     = '28d';
@@ -913,8 +943,8 @@
           { type:'line', data:Array(n).fill(1.5), borderColor:'rgba(220,38,38,0.45)', borderDash:[4,3], borderWidth:1.5, pointRadius:0, yAxisID:'y', order:4 },
           { type:'line', data:Array(n).fill(1.3), borderColor:'rgba(217,119,6,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
           { type:'line', data:Array(n).fill(0.8), borderColor:'rgba(34,197,94,0.35)', borderDash:[3,3], borderWidth:1,   pointRadius:0, yAxisID:'y', order:4 },
-          { type:'bar',  label:'Session load',   data:sessionLoads, backgroundColor:'rgba(34,197,94,0.12)', borderColor:'rgba(34,197,94,0.2)', borderWidth:1, borderRadius:2, yAxisID:'y2', order:5 },
-          { type:'line', label:'Squad avg ACWR', data:acwrTrend, borderColor:accent, backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2.5, pointRadius:3.5, pointHoverRadius:6, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5, tension:0.3, fill:true, spanGaps:true, yAxisID:'y', order:1 }
+          { type:'bar',  label:tt('load_monitor.chart_session_load','Session load'),   data:sessionLoads, backgroundColor:'rgba(34,197,94,0.12)', borderColor:'rgba(34,197,94,0.2)', borderWidth:1, borderRadius:2, yAxisID:'y2', order:5 },
+          { type:'line', label:tt('load_monitor.kpi_squad_avg_acwr','Squad avg ACWR'), data:acwrTrend, borderColor:accent, backgroundColor:'rgba(34,197,94,0.07)', borderWidth:2.5, pointRadius:3.5, pointHoverRadius:6, pointBackgroundColor:accent, pointBorderColor:'#fff', pointBorderWidth:1.5, tension:0.3, fill:true, spanGaps:true, yAxisID:'y', order:1 }
         ]
       },
       options: {
@@ -924,7 +954,7 @@
         plugins:     { legend: { display:false } },
         scales: {
           y:  { min:0, max:2.2, position:'left',  grid:{ color:'rgba(128,128,128,0.1)' }, ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:11 }, callback: v => v.toFixed(1) }, title:{ display:true, text:'ACWR', color:'rgba(128,128,128,0.5)', font:{ size:10 } } },
-          y2: { position:'right', grid:{ display:false }, max:maxLoad*3, ticks:{ color:'rgba(128,128,128,0.45)', font:{ size:10 }, callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v }, title:{ display:true, text:'Load (AU)', color:'rgba(128,128,128,0.4)', font:{ size:10 } } },
+          y2: { position:'right', grid:{ display:false }, max:maxLoad*3, ticks:{ color:'rgba(128,128,128,0.45)', font:{ size:10 }, callback: v => v >= 1000 ? (v/1000).toFixed(0)+'k' : v }, title:{ display:true, text:tt('load_monitor.axis_load_au','Load (AU)'), color:'rgba(128,128,128,0.4)', font:{ size:10 } } },
           x:  { grid:{ color:'rgba(128,128,128,0.08)' }, ticks:{ color:'rgba(128,128,128,0.65)', font:{ size:10 }, maxTicksLimit:12 } }
         }
       }
@@ -1009,7 +1039,7 @@
       const noteTxt = (w && w.note) ? w.note : '';
       const ackd = w && w.acknowledged_at;
       const flag = (areas.length || noteTxt)
-        ? `<span class="lm-flag${ackd?' is-ack':''}" onclick="lmOpenAction('${w.id}','${(fullName||'').replace(/'/g,"\\'")}','${areas.join(',')}','${(noteTxt||'').replace(/'/g,"\\'").replace(/</g,'&lt;')}','${p.id}',${ackd?'true':'false'})" title="${ackd?'Revisado':'Click para accionar'}"><i class="ti ti-${ackd?'circle-check':'alert-triangle'}"></i><span class="lm-tip">${areas.length?`<div class="areas">${areas.join(', ')}</div>`:''}${noteTxt?noteTxt.replace(/</g,'&lt;'):'Sin nota'}${ackd?'<div style="margin-top:4px;color:#86efac">✓ Revisado</div>':''}</span></span>`
+        ? `<span class="lm-flag${ackd?' is-ack':''}" onclick="lmOpenAction('${w.id}','${(fullName||'').replace(/'/g,"\\'")}','${areas.join(',')}','${(noteTxt||'').replace(/'/g,"\\'").replace(/</g,'&lt;')}','${p.id}',${ackd?'true':'false'})" title="${ackd?tt('load_monitor.reviewed','Reviewed'):tt('load_monitor.click_to_act','Click to act')}"><i class="ti ti-${ackd?'circle-check':'alert-triangle'}"></i><span class="lm-tip">${areas.length?`<div class="areas">${areas.join(', ')}</div>`:''}${noteTxt?noteTxt.replace(/</g,'&lt;'):tt('load_monitor.no_note','No note')}${ackd?`<div style="margin-top:4px;color:#86efac">✓ ${tt('load_monitor.reviewed','Reviewed')}</div>`:''}</span></span>`
         : '';
       const hooper = w ? w.hooper_index : null;
       const cellWell = hooper != null
@@ -1027,11 +1057,11 @@
         ? `<td><span class="lm-cell-v" style="font:500 12px/1 var(--cm-font-mono)">${Math.round(acuteLoad)} / ${chronicLoad}</span></td>`
         : `<td><span class="lm-cell-v" style="color:var(--cm-fg-faint)">— / —</span></td>`;
       const zonePill = acwr != null
-        ? (acwr>1.5 ? `<span class="lm-zone-pill red"><span class="d"></span>Danger</span>`
-          : acwr>1.3 ? `<span class="lm-zone-pill over"><span class="d"></span>Overreach</span>`
-          : acwr>=0.8 ? `<span class="lm-zone-pill opt"><span class="d"></span>Sweet‑spot</span>`
-          : `<span class="lm-zone-pill under"><span class="d"></span>Underloaded</span>`)
-        : `<span class="lm-zone-pill under"><span class="d"></span>No data</span>`;
+        ? (acwr>1.5 ? `<span class="lm-zone-pill red"><span class="d"></span>${lmZoneLabel('danger')}</span>`
+          : acwr>1.3 ? `<span class="lm-zone-pill over"><span class="d"></span>${lmZoneLabel('overreach')}</span>`
+          : acwr>=0.8 ? `<span class="lm-zone-pill opt"><span class="d"></span>${lmZoneLabel('sweet')}</span>`
+          : `<span class="lm-zone-pill under"><span class="d"></span>${lmZoneLabel('under')}</span>`)
+        : `<span class="lm-zone-pill under"><span class="d"></span>${lmZoneLabel('nodata')}</span>`;
 
       return `<tr>
         <td><span style="font:600 13px/1 var(--cm-font-mono)">${p.number??'—'}</span></td>
@@ -1042,9 +1072,14 @@
       </tr>`;
     }).join('');
 
-    const sortLabel = { acwr:'ACWR ↓', zone:'Zone', name:'A–Z', pos:'Position' }[sortMode] || 'ACWR ↓';
-    document.getElementById('lmPlayerLoadSub').textContent = `${total} players · sorted by ${sortLabel}`;
-    document.getElementById('lmTableFoot').innerHTML = `Showing <strong style="color:var(--cm-fg)">${total}</strong> of ${total} players`;
+    const sortLabel = {
+      acwr: 'ACWR ↓',
+      zone: tt('load_monitor.col_zone', 'Zone'),
+      name: 'A–Z',
+      pos:  tt('common.position', 'Position')
+    }[sortMode] || 'ACWR ↓';
+    document.getElementById('lmPlayerLoadSub').textContent = tt('load_monitor.n_players_sorted_by', `${total} players · sorted by ${sortLabel}`, { count: total, sort: sortLabel });
+    document.getElementById('lmTableFoot').innerHTML = tt('load_monitor.showing_n_of_n', `Showing <strong style="color:var(--cm-fg)">${total}</strong> of ${total} players`, { shown: `<strong style="color:var(--cm-fg)">${total}</strong>`, total });
     document.getElementById('lmLoadMoreBtn').style.display = 'none';
   }
 
@@ -1131,7 +1166,7 @@
           .map(p => {
             const acwr  = acwrByPlayer[p.id];
             const zone  = acwr == null ? 'under' : acwr>1.5?'red':acwr>1.3?'over':acwr>=0.8?'opt':'under';
-            const label = acwr == null ? 'No data' : acwr>1.5?'Danger':acwr>1.3?'Overreach':acwr>=0.8?'Sweet-spot':'Underloaded';
+            const label = acwr == null ? lmZoneLabel('nodata') : acwr>1.5?lmZoneLabel('danger'):acwr>1.3?lmZoneLabel('overreach'):acwr>=0.8?lmZoneLabel('sweet'):lmZoneLabel('under');
             return `<div class="dt-row">
               <span class="dt-name">${((p.first_name||'')[0]||'')}. ${p.last_name||''}</span>
               <span class="lm-zone-pill ${zone}" style="font-size:10px;height:18px"><span class="d"></span>${label}</span>
@@ -1141,7 +1176,7 @@
       }
     }
     const btn = document.getElementById('lmDistViewTable');
-    if (btn) btn.textContent = distTableVisible ? '⬅ Back to donut' : 'View as table';
+    if (btn) btn.textContent = distTableVisible ? tt('load_monitor.back_to_donut', '⬅ Back to donut') : tt('load_monitor.view_as_table', 'View as table');
   }
 
   // Cache de sessionsData por fetchFrom. 7d/Microcycle/28d comparten fetchFrom (from28dStr)
@@ -1231,7 +1266,8 @@
     document.getElementById('lmKpiRpe').innerHTML = rpe7dAvg != null
       ? `${rpe7dAvg.toFixed(1)} <sub>/ 10</sub>` : `— <sub>/ 10</sub>`;
     document.getElementById('lmRpeSub').textContent = rpe7dAvg != null
-      ? `avg last 7 days · ${rpe7dScores.length} records` : 'no sessions last 7 days';
+      ? tt('load_monitor.rpe_avg_7d', `avg last 7 days · ${rpe7dScores.length} records`, { count: rpe7dScores.length })
+      : tt('load_monitor.no_sessions_7d', 'no sessions last 7 days');
 
     ['lmPillAll','lmPillDanger','lmPillOver','lmPillSweet','lmPillUnder'].forEach((id, i) => {
       const el = document.getElementById(id);
@@ -1241,9 +1277,9 @@
     const banner = document.getElementById('lmAlertBanner');
     if (dangerPlayers.length > 0 || overPlayers.length > 0) {
       const parts = [];
-      if (dangerPlayers.length > 0) parts.push(`${dangerPlayers.length} in danger`);
-      if (overPlayers.length > 0)   parts.push(`${overPlayers.length} in overreach`);
-      document.getElementById('lmAlertH').textContent = parts.join(' · ') + ' zone';
+      if (dangerPlayers.length > 0) parts.push(tt('load_monitor.n_in_danger', `${dangerPlayers.length} in danger`, { count: dangerPlayers.length }));
+      if (overPlayers.length > 0)   parts.push(tt('load_monitor.n_in_overreach', `${overPlayers.length} in overreach`, { count: overPlayers.length }));
+      document.getElementById('lmAlertH').textContent = tt('load_monitor.alert_zone_suffix', `${parts.join(' · ')} zone`, { list: parts.join(' · ') });
       const allAt = [...dangerPlayers, ...overPlayers];
       document.getElementById('lmAlertP').textContent = allAt.map(p => `${p.first_name||''} ${p.last_name||''}`.trim()).join(' · ');
       banner.style.display = 'flex';
@@ -1266,14 +1302,15 @@
       document.getElementById('lmDistOver').textContent   = overPlayers.length;
       document.getElementById('lmDistDanger').textContent = dangerPlayers.length;
       document.getElementById('lmDistNoData').textContent = noDataPlayers.length;
-      document.getElementById('lmDistSub').textContent    = `today, n=${total}`;
+      document.getElementById('lmDistSub').textContent    = tt('load_monitor.dist_today_n', `today, n=${total}`, { total });
     }
 
     const ctxEl = document.getElementById('lmCtx');
     if (ctxEl) {
       const alertCount = dangerPlayers.length + overPlayers.length;
-      const alertStr   = alertCount > 0 ? ` · ${alertCount} alert${alertCount>1?'s':''}` : '';
-      ctxEl.innerHTML  = `<strong>${period}</strong>${alertStr} · ${total} players`;
+      const alertStr   = alertCount > 0 ? ` · ${tt('load_monitor.n_alerts', `${alertCount} alert${alertCount>1?'s':''}`, { count: alertCount })}` : '';
+      const playersStr = tt('load_monitor.n_players', `${total} players`, { count: total });
+      ctxEl.innerHTML  = `<strong>${period}</strong>${alertStr} · ${playersStr}`;
     }
 
     // ACWR chart
@@ -1290,7 +1327,7 @@
 
       const labels = sessForChart.map(s => {
         const d = new Date(s.session_date + 'T12:00:00');
-        return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+        return d.toLocaleDateString(lmLocale(), { day:'numeric', month:'short' });
       });
       const n = labels.length;
 
@@ -1331,7 +1368,7 @@
     btn.addEventListener('click', async () => {
       document.querySelectorAll('.lm-segs .lm-seg').forEach(b => b.classList.remove('is-on'));
       btn.classList.add('is-on');
-      await loadData(btn.textContent.trim());
+      await loadData(btn.dataset.period || btn.textContent.trim());
     });
   });
 
@@ -1355,7 +1392,7 @@
     if (!lastChartData) return;
     const modal = document.getElementById('lmChartModal');
     modal.style.display = 'flex';
-    document.getElementById('lmModalSub').textContent = `${currentPeriod} · squad average`;
+    document.getElementById('lmModalSub').textContent = tt('load_monitor.period_squad_average', `${currentPeriod} · squad average`, { period: currentPeriod });
     const mc = document.getElementById('acwrChartModal');
     if (acwrModalChart) { acwrModalChart.destroy(); acwrModalChart = null; }
     const { labels, n, acwrTrend, sessionLoads, accent, maxLoad } = lastChartData;
@@ -1385,7 +1422,7 @@
     btn.addEventListener('click', async () => {
       const p = btn.dataset.period;
       document.getElementById('lmDistMenu').classList.remove('is-open');
-      document.querySelectorAll('.lm-segs .lm-seg').forEach(b => b.classList.toggle('is-on', b.textContent.trim() === p));
+      document.querySelectorAll('.lm-segs .lm-seg').forEach(b => b.classList.toggle('is-on', (b.dataset.period || b.textContent.trim()) === p));
       await loadData(p);
     });
   });
@@ -1425,14 +1462,23 @@
 
   await loadData('28d');
   updateSortHeaders();
+
+  // Re-render everything the JS builds when the language changes (static tags are
+  // handled by sidebar.js; here we redo dynamic labels, chart date axis, tables…).
+  document.addEventListener('cm:langchanged', () => {
+    renderWellHeads();
+    renderWellBars();
+    loadData(currentPeriod);
+    updateSortHeaders();
+  });
 })().catch(console.error);
 
   let _lmAct = {};
   window.lmOpenAction = function(wid, name, areas, note, playerId, ackd) {
     _lmAct = { wid, name, areas, note, playerId };
-    document.getElementById('lmActName').textContent = name || 'Jugador';
-    document.getElementById('lmActAreas').textContent = areas ? areas.replace(/,/g, ', ') : 'Sin zona';
-    document.getElementById('lmActNote').textContent = note || 'Sin nota';
+    document.getElementById('lmActName').textContent = name || tt('load_monitor.player_generic', 'Player');
+    document.getElementById('lmActAreas').textContent = areas ? areas.replace(/,/g, ', ') : tt('load_monitor.no_area', 'No area');
+    document.getElementById('lmActNote').textContent = note || tt('load_monitor.no_note', 'No note');
     document.getElementById('lmActAck').style.display = ackd ? 'none' : 'flex';
     document.getElementById('lmActBackdrop').style.display = 'flex';
   };
@@ -1444,7 +1490,7 @@
       if (error) throw error;
       lmCloseAction();
       location.reload();
-    } catch (e) { alert('Error: ' + e.message); btn.disabled = false; }
+    } catch (e) { alert(tt('load_monitor.error_msg', `Error: ${e.message}`, { msg: e.message })); btn.disabled = false; }
   };
   window.lmCreateFollowup = async function() {
     const btn = document.getElementById('lmActFollow'); btn.disabled = true;
@@ -1465,9 +1511,9 @@
       if (error) throw error;
       try { await window.sb.rpc('acknowledge_wellness', { p_wellness_id: _lmAct.wid }); } catch {}
       lmCloseAction();
-      alert('Seguimiento creado en Injuries ✓');
+      alert(tt('load_monitor.followup_created', 'Follow-up created in Injuries ✓'));
       location.reload();
-    } catch (e) { alert('Error al crear seguimiento: ' + e.message); btn.disabled = false; }
+    } catch (e) { alert(tt('load_monitor.followup_error', `Error creating follow-up: ${e.message}`, { msg: e.message })); btn.disabled = false; }
   };
 
   let _lmTeamId = null;
@@ -1480,7 +1526,7 @@
     let teams = await window.getTeams(clubId);
     if (!full) { let mine=[]; try{mine=(await window.sb.rpc('my_team_ids')).data||[];}catch{} const s=new Set(mine); teams=teams.filter(t=>s.has(t.id)); }
     const sel = document.getElementById('lmTeamSelect');
-    if (!teams.length) { sel.innerHTML='<option value="">No teams</option>'; return; }
+    if (!teams.length) { sel.innerHTML=`<option value="">${tt('load_monitor.no_teams','No teams')}</option>`; return; }
     const saved = sessionStorage.getItem('cal_active_team');
     _lmTeamId = (saved && teams.some(t=>t.id===saved)) ? saved : teams[0].id;
     sel.innerHTML = teams.map(t=>`<option value="${t.id}" ${t.id===_lmTeamId?'selected':''}>${t.name}</option>`).join('');
@@ -1523,14 +1569,14 @@
   <div style="background:var(--cm-surface);border:1px solid var(--cm-border);border-radius:var(--cm-r-4,14px);width:420px;max-width:94vw;box-shadow:0 24px 80px rgba(0,0,0,.2);padding:22px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <span style="width:34px;height:34px;border-radius:9px;background:var(--cm-danger,#ef4444);color:#fff;display:flex;align-items:center;justify-content:center"><i class="ti ti-alert-triangle" style="font-size:18px"></i></span>
-      <div style="font:700 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="lmActName">Jugador</div>
+      <div style="font:700 16px/1.2 var(--cm-font-sans);color:var(--cm-fg-strong)" id="lmActName" data-i18n="load_monitor.player_generic">Player</div>
     </div>
     <div style="font:500 13px/1.4 var(--cm-font-sans);color:var(--cm-fg-muted);margin:8px 0 4px"><strong style="color:var(--cm-danger,#ef4444);text-transform:capitalize" id="lmActAreas">—</strong></div>
     <div style="font:400 13px/1.5 var(--cm-font-sans);color:var(--cm-fg);background:var(--cm-bg-soft);border-radius:8px;padding:10px 12px;margin-bottom:18px" id="lmActNote">—</div>
     <div style="display:flex;flex-direction:column;gap:10px">
-      <button id="lmActFollow" onclick="lmCreateFollowup()" style="width:100%;height:42px;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--cm-danger,#ef4444);color:#fff;border:none;border-radius:9px;font:600 13.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-medical-cross" style="font-size:16px"></i>Crear seguimiento en Injuries</button>
-      <button id="lmActAck" onclick="lmMarkSeen()" style="width:100%;height:42px;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;color:var(--cm-fg);border:1px solid var(--cm-border);border-radius:9px;font:600 13.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-circle-check" style="font-size:16px"></i>Marcar como visto</button>
-      <button onclick="lmCloseAction()" style="width:100%;height:38px;background:transparent;color:var(--cm-fg-muted);border:none;font:500 13px/1 var(--cm-font-sans);cursor:pointer">Cancelar</button>
+      <button id="lmActFollow" onclick="lmCreateFollowup()" style="width:100%;height:42px;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--cm-danger,#ef4444);color:#fff;border:none;border-radius:9px;font:600 13.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-medical-cross" style="font-size:16px"></i><span data-i18n="load_monitor.create_followup">Create follow-up in Injuries</span></button>
+      <button id="lmActAck" onclick="lmMarkSeen()" style="width:100%;height:42px;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;color:var(--cm-fg);border:1px solid var(--cm-border);border-radius:9px;font:600 13.5px/1 var(--cm-font-sans);cursor:pointer"><i class="ti ti-circle-check" style="font-size:16px"></i><span data-i18n="load_monitor.mark_as_seen">Mark as seen</span></button>
+      <button onclick="lmCloseAction()" style="width:100%;height:38px;background:transparent;color:var(--cm-fg-muted);border:none;font:500 13px/1 var(--cm-font-sans);cursor:pointer" data-i18n="common.cancel">Cancel</button>
     </div>
   </div>
 </div>
