@@ -130,7 +130,7 @@ El agente hace la **primera ⬜** salvo que se le pida otra.
 - ✅ Login.html
 - ✅ Register.html
 - ✅ Onboarding.html
-- ⬜ set-password.html
+- ✅ set-password.html
 
 ### Fase 2 — App de uso diario
 - ✅ Wellness.html
